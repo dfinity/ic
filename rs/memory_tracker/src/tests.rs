@@ -1,14 +1,14 @@
-use std::io::Write;
+use std::{alloc::Layout, io::Write};
 
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::{
     page_map::{test_utils::base_only_storage_layout, TestPageAllocatorFileDescriptorImpl},
     PageIndex, PageMap,
 };
-use ic_sys::{PageBytes, PAGE_SIZE};
+use ic_sys::{PageBytes, HUGE_PAGE_SIZE, PAGE_SIZE};
 use ic_types::{Height, NumBytes, NumOsPages};
 use libc::c_void;
-use nix::sys::mman::{mmap, MapFlags, ProtFlags};
+use nix::sys::mman::{mprotect, ProtFlags};
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
@@ -58,17 +58,23 @@ fn setup(
     }
     page_map.update(&pages);
 
+    // Align memory to the huge page boundary so the tests are deterministic.
+    let len = memory_pages * PAGE_SIZE;
     let memory = unsafe {
-        mmap(
-            std::ptr::null_mut(),
-            memory_pages * PAGE_SIZE,
-            ProtFlags::PROT_NONE,
-            MapFlags::MAP_PRIVATE | MapFlags::MAP_ANON,
-            -1,
-            0,
-        )
-        .unwrap()
+        std::alloc::alloc(
+            Layout::from_size_align(len, HUGE_PAGE_SIZE).unwrap_or_else(|err| {
+                panic!("Error creating allocation layout size:{len} align:{HUGE_PAGE_SIZE}: {err}")
+            }),
+        ) as *mut c_void
     };
+    unsafe {
+        mprotect(memory, len, ProtFlags::PROT_NONE).unwrap_or_else(|err| {
+            panic!(
+                "Error protecting memory addr:{:#x} length:{len}: {err}",
+                memory as usize
+            )
+        });
+    }
 
     let tracker = SigsegvMemoryTracker::new(
         memory,
@@ -848,6 +854,113 @@ fn page_bitmap_restrict_to_predicted_stops_at_start() {
     assert_eq!(
         PageIndex::new(3)..PageIndex::new(6),
         bitmap.restrict_range_to_predicted(3.into(), PageIndex::new(3)..PageIndex::new(15)),
+    );
+}
+
+#[test]
+fn addr_range_from_round_trip() {
+    with_setup(0, 10, vec![], DirtyPageTracking::Ignore, |tracker, _| {
+        let orig_range = PageIndex::new(2)..PageIndex::new(3);
+        let addr_range = tracker.addr_range_from(&orig_range);
+
+        let new_start = tracker.page_index_from(addr_range.start as *mut libc::c_void);
+        let new_end = tracker.page_index_from(addr_range.end as *mut libc::c_void);
+        assert_eq!(orig_range, new_start..new_end);
+    });
+}
+
+#[test]
+fn addr_range_from_corner_cases() {
+    with_setup(0, 10, vec![], DirtyPageTracking::Ignore, |tracker, _| {
+        let orig_range = PageIndex::new(0)..PageIndex::new(30);
+
+        let addr_range = tracker.addr_range_from(&orig_range);
+        assert!(addr_range.start < addr_range.end);
+        assert_eq!(addr_range.end - addr_range.start, 30 * PAGE_SIZE);
+    });
+}
+
+#[test]
+#[should_panic(expected = "Error checking page:1 ∈ range:2..3")]
+fn try_align_to_hugepage_panics_when_faulting_page_is_below_range() {
+    with_setup(0, 10, vec![], DirtyPageTracking::Ignore, |tracker, _| {
+        let faulting_page = PageIndex::new(1);
+        let range = PageIndex::new(2)..PageIndex::new(3);
+        let _aligned_range = tracker.try_align_to_hugepage(faulting_page, range);
+    });
+}
+
+#[test]
+#[should_panic(expected = "Error checking page:1 ∈ range:0..1")]
+fn try_align_to_hugepage_panics_when_faulting_page_is_above_range() {
+    with_setup(0, 10, vec![], DirtyPageTracking::Ignore, |tracker, _| {
+        let faulting_page = PageIndex::new(1);
+        let range = PageIndex::new(0)..PageIndex::new(1);
+        let _aligned_range = tracker.try_align_to_hugepage(faulting_page, range);
+    });
+}
+
+const PAGES_IN_HUGEPAGE: usize = HUGE_PAGE_SIZE / PAGE_SIZE;
+
+#[test]
+fn try_align_to_hugepage_stops_at_hugepage_boundary() {
+    with_setup(
+        0,
+        PAGES_IN_HUGEPAGE * 3,
+        vec![],
+        DirtyPageTracking::Ignore,
+        |tracker, _| {
+            let faulting_page = PageIndex::new(0);
+            let orig_range = PageIndex::new(0)..PageIndex::new(1);
+            assert_eq!(
+                orig_range,
+                tracker.try_align_to_hugepage(faulting_page, orig_range.clone())
+            );
+
+            let faulting_page = PageIndex::new(1);
+            let orig_range = PageIndex::new(0)..PageIndex::new(2);
+            assert_eq!(
+                orig_range,
+                tracker.try_align_to_hugepage(faulting_page, orig_range.clone())
+            );
+
+            let n = PAGES_IN_HUGEPAGE as u64;
+
+            let faulting_page = PageIndex::new(n);
+            let orig_range = PageIndex::new(n - 1)..PageIndex::new(n + 1);
+            assert_eq!(
+                PageIndex::new(n)..PageIndex::new(n + 1),
+                tracker.try_align_to_hugepage(faulting_page, orig_range)
+            );
+
+            let faulting_page = PageIndex::new(n - 1);
+            let orig_range = PageIndex::new(n - 1)..PageIndex::new(n + 1);
+            assert_eq!(
+                PageIndex::new(n - 1)..PageIndex::new(n),
+                tracker.try_align_to_hugepage(faulting_page, orig_range)
+            );
+
+            let faulting_page = PageIndex::new(n);
+            let orig_range = PageIndex::new(n - 1)..PageIndex::new(2 * n + 1);
+            assert_eq!(
+                PageIndex::new(n)..PageIndex::new(2 * n),
+                tracker.try_align_to_hugepage(faulting_page, orig_range)
+            );
+
+            let faulting_page = PageIndex::new(n - 1);
+            let orig_range = PageIndex::new(n - 1)..PageIndex::new(2 * n + 1);
+            assert_eq!(
+                PageIndex::new(n - 1)..PageIndex::new(2 * n),
+                tracker.try_align_to_hugepage(faulting_page, orig_range)
+            );
+
+            let faulting_page = PageIndex::new(2 * n);
+            let orig_range = PageIndex::new(n - 1)..PageIndex::new(2 * n + 1);
+            assert_eq!(
+                PageIndex::new(n)..PageIndex::new(2 * n + 1),
+                tracker.try_align_to_hugepage(faulting_page, orig_range)
+            );
+        },
     );
 }
 
