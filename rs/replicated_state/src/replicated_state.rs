@@ -1304,9 +1304,6 @@ impl ReplicatedState {
         canister_states
             .retain(|canister_id, _| routing_table.route(canister_id.get()) == Some(subnet_id));
 
-        // Retain only the canister snapshots belonging to the local canisters.
-        canister_snapshots.split(|canister_id| canister_states.contains_key(&canister_id));
-
         // All subnet messages (ingress and canister) only remain on subnet A' because:
         //
         //  * Message Routing would drop a response from subnet B to a request it had
@@ -1323,7 +1320,13 @@ impl ReplicatedState {
 
         // Obtain a new metadata state for subnet B. No-op for subnet A' (apart from
         // setting the split marker).
-        let metadata = metadata.split(subnet_id, new_subnet_batch_time)?;
+        let mut metadata = metadata.split(subnet_id, new_subnet_batch_time)?;
+
+        // Retain only the canister snapshots belonging to the local canisters.
+        canister_snapshots.split(
+            |canister_id| canister_states.contains_key(&canister_id),
+            &mut metadata.unflushed_checkpoint_operations,
+        );
 
         Ok(Self {
             canister_states,
