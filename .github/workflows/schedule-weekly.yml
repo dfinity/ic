@@ -18,6 +18,7 @@ jobs:
       options: >-
         -e NODE_NAME
         -v /cache:/cache
+        --mount type=volume,chown=true,destination=/tmp/zig-cache
     timeout-minutes: 60 # 1 hour
     steps:
       - name: Checkout

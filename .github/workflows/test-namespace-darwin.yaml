@@ -29,6 +29,11 @@ jobs:
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
       - uses: actions/checkout@v4
 
+    - name: Set up zig cache
+        run: |
+          mkdir -p /tmp/zig-cache
+      - uses: actions/checkout@v4
+
       # Build and test, excluding 'upload' jobs that are not required on macOS (used in reproducibility tests)
       - name: Test
         run: |

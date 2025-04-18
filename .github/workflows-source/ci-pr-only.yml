@@ -34,6 +34,7 @@ anchors:
       <<: *image
       options: >-
         -e NODE_NAME
+        --mount type=volume,chown=true,destination=/tmp/zig-cache
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
