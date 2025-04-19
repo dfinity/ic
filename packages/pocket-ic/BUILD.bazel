@@ -12,6 +12,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-certification",
     "@crate_index//:ic-management-canister-types",
     "@crate_index//:ic-transport-types",
+    "@crate_index//:once_cell",
     "@crate_index//:reqwest",
     "@crate_index//:schemars",
     "@crate_index//:serde",
@@ -27,6 +28,7 @@ DEPENDENCIES = [
     "@crate_index//:tracing",
     "@crate_index//:tracing-appender",
     "@crate_index//:tracing-subscriber",
+    "@crate_index//:uuid",
 ]
 
 MACRO_DEPENDENCIES = [

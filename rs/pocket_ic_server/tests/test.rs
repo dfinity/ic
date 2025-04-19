@@ -16,7 +16,7 @@ use pocket_ic::common::rest::{
     CreateHttpGatewayResponse, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
     HttpsConfig, InstanceConfig, SubnetConfigSet, SubnetKind, Topology,
 };
-use pocket_ic::{update_candid, PocketIc, PocketIcBuilder, PocketIcState};
+use pocket_ic::{update_candid, PocketIc, PocketIcBuilder, PocketIcState, TEST_DRIVER_UUID};
 use rcgen::{CertificateParams, KeyPair};
 use registry_canister::init::RegistryCanisterInitPayload;
 use reqwest::blocking::Client;
@@ -30,18 +30,19 @@ use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::time::Duration;
 use tempfile::{NamedTempFile, TempDir};
+use uuid::Uuid;
 
 pub const LOCALHOST: &str = "127.0.0.1";
 
 fn start_server_helper(
-    test_driver_pid: Option<u32>,
+    test_driver_uuid: Option<&Uuid>,
     log_levels: Option<String>,
     capture_stdout: bool,
     capture_stderr: bool,
 ) -> (Url, Child) {
     let bin_path = std::env::var_os("POCKET_IC_BIN").expect("Missing PocketIC binary");
-    let port_file_path = if let Some(test_driver_pid) = test_driver_pid {
-        std::env::temp_dir().join(format!("pocket_ic_{}.port", test_driver_pid))
+    let port_file_path = if let Some(test_driver_uuid) = test_driver_uuid {
+        std::env::temp_dir().join(format!("pocket_ic_{}.port", test_driver_uuid))
     } else {
         NamedTempFile::new().unwrap().into_temp_path().to_path_buf()
     };
@@ -77,8 +78,7 @@ fn start_server_helper(
 }
 
 pub fn start_server() -> Url {
-    let test_driver_pid = std::process::id();
-    start_server_helper(Some(test_driver_pid), None, false, false).0
+    start_server_helper(Some(&TEST_DRIVER_UUID), None, false, false).0
 }
 
 const COUNTER_WAT: &str = r#"

@@ -28,6 +28,7 @@ hex = { workspace = true }
 ic-certification = { workspace = true }
 ic-management-canister-types = { workspace = true }
 ic-transport-types = { workspace = true }
+once_cell = "1.18.0"
 reqwest = { workspace = true }
 schemars = "0.8.16"
 serde = { workspace = true }
@@ -44,6 +45,7 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 wslpath = "0.0.2"
