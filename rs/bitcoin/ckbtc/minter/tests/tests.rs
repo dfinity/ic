@@ -1969,6 +1969,15 @@ fn test_retrieve_btc_with_approval() {
 
     ckbtc.finalize_transaction(tx);
     assert_eq!(ckbtc.await_finalization(block_index, 10), txid);
+
+    ckbtc
+        .check_minter_metrics()
+        .assert_contains_metric_matching(
+            r#"ckbtc_minter_sign_with_ecdsa_latency_bucket\{result="success",le="(\d+|\+Inf)"\} 1 \d+"#,
+        )
+        .assert_does_not_contain_metric_matching(
+            r#"ckbtc_minter_sign_with_ecdsa_latency_bucket\{result="failure",le="(\d+|\+Inf)"\} 1 \d+"#
+        );
 }
 
 #[test]
@@ -2074,6 +2083,15 @@ fn test_retrieve_btc_with_approval_from_subaccount() {
             status_v2: Some(ckbtc.retrieve_btc_status_v2(block_index))
         }]
     );
+
+    ckbtc
+        .check_minter_metrics()
+        .assert_contains_metric_matching(
+            r#"ckbtc_minter_sign_with_ecdsa_latency_bucket\{result="success",le="(\d+|\+Inf)"\} 1 \d+"#,
+        )
+        .assert_does_not_contain_metric_matching(
+            r#"ckbtc_minter_sign_with_ecdsa_latency_bucket\{result="failure",le="(\d+|\+Inf)"\} 1 \d+"#
+        );
 }
 
 #[test]

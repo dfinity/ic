@@ -1,7 +1,7 @@
 mod update_balance {
-    use crate::management::{get_utxos, CallError, CallSource};
-    use crate::metrics::LatencyHistogram;
+    use crate::management::{get_utxos, sign_with_ecdsa, CallError, CallSource};
     use crate::metrics::{Histogram, NumUtxoPages};
+    use crate::metrics::{LatencyHistogram, MetricsResult};
     use crate::state::{audit, eventlog::EventType, mutate_state, read_state, SuspendedReason};
     use crate::test_fixtures::{
         ecdsa_public_key, get_uxos_response, ignored_utxo, init_args, init_state, ledger_account,
@@ -16,6 +16,8 @@ mod update_balance {
     use crate::{storage, GetUtxosResponse, Timestamp};
     use ic_btc_checker::CheckTransactionResponse;
     use ic_btc_interface::{Page, Utxo};
+    use ic_cdk::api::call::RejectionCode;
+    use ic_management_canister_types_private::BoundedVec;
     use icrc_ledger_types::icrc1::account::Account;
     use std::iter;
     use std::time::Duration;
@@ -506,6 +508,90 @@ mod update_balance {
             let &LatencyHistogram(histogram) = histograms
                 .get(&(num_pages, call_source))
                 .expect("No histogram for given call source and number of pages");
+            histogram
+        })
+    }
+
+    #[tokio::test]
+    async fn should_observe_sign_with_ecdsa_metrics() {
+        init_state_with_ecdsa_public_key();
+
+        async fn sign_with_ecdsa_with_latency(
+            latency: Duration,
+            result: MetricsResult,
+        ) -> Result<Vec<u8>, CallError> {
+            let key_name = "test_key".to_string();
+            let derivation_path = BoundedVec::new(vec![]);
+            let message_hash = [0u8; 32];
+
+            let mut runtime = MockCanisterRuntime::new();
+
+            mock_increasing_time(&mut runtime, NOW, latency);
+
+            let mock_result = match result {
+                MetricsResult::Ok => Ok(vec![]),
+                MetricsResult::Err => Err(CallError::from_cdk_error(
+                    "sign_with_ecdsa",
+                    (RejectionCode::Unknown, "mock error".to_string()),
+                )),
+            };
+            runtime.expect_sign_with_ecdsa().return_const(mock_result);
+
+            sign_with_ecdsa(key_name, derivation_path, message_hash, &runtime).await
+        }
+
+        let sign_with_ecdsa_ms = [
+            500, 1_000, 1_250, 2_500, 3_250, 4_000, 8_000, 15_000, 50_000,
+        ];
+        for millis in &sign_with_ecdsa_ms {
+            let result =
+                sign_with_ecdsa_with_latency(Duration::from_millis(*millis), MetricsResult::Ok)
+                    .await;
+            assert!(result.is_ok());
+        }
+
+        let result =
+            sign_with_ecdsa_with_latency(Duration::from_millis(5_000), MetricsResult::Err).await;
+        assert!(result.is_err());
+
+        let histogram = sign_with_ecdsa_histogram(MetricsResult::Ok);
+        assert_eq!(
+            histogram.iter().collect::<Vec<_>>(),
+            vec![
+                (1_000., 2.),
+                (2_000., 1.),
+                (4_000., 3.),
+                (6_000., 0.),
+                (8_000., 1.),
+                (12_000., 0.),
+                (20_000., 1.),
+                (f64::INFINITY, 1.)
+            ]
+        );
+        assert_eq!(histogram.sum(), sign_with_ecdsa_ms.iter().sum::<u64>());
+
+        let histogram = sign_with_ecdsa_histogram(MetricsResult::Err);
+        assert_eq!(
+            histogram.iter().collect::<Vec<_>>(),
+            vec![
+                (1_000., 0.),
+                (2_000., 0.),
+                (4_000., 0.),
+                (6_000., 1.),
+                (8_000., 0.),
+                (12_000., 0.),
+                (20_000., 0.),
+                (f64::INFINITY, 0.)
+            ]
+        );
+        assert_eq!(histogram.sum(), 5_000);
+    }
+
+    fn sign_with_ecdsa_histogram(result: MetricsResult) -> Histogram<8> {
+        crate::metrics::SIGN_WITH_ECDSA_LATENCY.with_borrow(|histograms| {
+            let &LatencyHistogram(histogram) = histograms
+                .get(&result)
+                .expect("No histogram for given metric result");
             histogram
         })
     }

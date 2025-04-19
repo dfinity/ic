@@ -907,9 +907,13 @@ pub async fn sign_transaction(
 
         let sighash = sighasher.sighash(input, &pkhash);
 
-        let sec1_signature =
-            management::sign_with_ecdsa(key_name.clone(), DerivationPath::new(path), sighash)
-                .await?;
+        let sec1_signature = management::sign_with_ecdsa(
+            key_name.clone(),
+            DerivationPath::new(path),
+            sighash,
+            &IC_CANISTER_RUNTIME,
+        )
+        .await?;
 
         signed_inputs.push(tx::SignedInput {
             signature: signature::EncodedSignature::from_sec1(&sec1_signature),
@@ -1247,6 +1251,13 @@ pub trait CanisterRuntime {
         to: Account,
         memo: Memo,
     ) -> Result<u64, UpdateBalanceError>;
+
+    async fn sign_with_ecdsa(
+        &self,
+        key_name: String,
+        derivation_path: DerivationPath,
+        message_hash: [u8; 32],
+    ) -> Result<Vec<u8>, CallError>;
 }
 
 #[derive(Copy, Clone)]
@@ -1293,6 +1304,29 @@ impl CanisterRuntime for IcCanisterRuntime {
         memo: Memo,
     ) -> Result<u64, UpdateBalanceError> {
         updates::update_balance::mint(amount, to, memo).await
+    }
+
+    async fn sign_with_ecdsa(
+        &self,
+        key_name: String,
+        derivation_path: DerivationPath,
+        message_hash: [u8; 32],
+    ) -> Result<Vec<u8>, CallError> {
+        use ic_cdk::api::management_canister::ecdsa::{
+            EcdsaCurve, EcdsaKeyId, SignWithEcdsaArgument,
+        };
+
+        ic_cdk::api::management_canister::ecdsa::sign_with_ecdsa(SignWithEcdsaArgument {
+            message_hash: message_hash.to_vec(),
+            derivation_path: derivation_path.into_inner(),
+            key_id: EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: key_name.clone(),
+            },
+        })
+        .await
+        .map(|(result,)| result.signature)
+        .map_err(|err| CallError::from_cdk_error("sign_with_ecdsa", err))
     }
 }
 
