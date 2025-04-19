@@ -37,7 +37,6 @@ use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
 use num_traits::cast::ToPrimitive;
 use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
-use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use rosetta_core::identifiers::NetworkIdentifier;
 use std::collections::HashMap;
@@ -301,9 +300,7 @@ impl RosettaTestingEnvironmentBuilder {
                 .install_canister(
                     governance_canister,
                     governance_canister_wasm.bytes().to_vec(),
-                    GovernanceCanisterInitPayloadBuilder::new()
-                        .build()
-                        .encode_to_vec(),
+                    Encode!(&GovernanceCanisterInitPayloadBuilder::new().build()).unwrap(),
                     Some(governance_canister_controller),
                 )
                 .await;

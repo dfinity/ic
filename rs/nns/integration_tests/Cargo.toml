@@ -11,10 +11,6 @@ name = "mem-utils-test-canister"
 path = "test_canisters/mem_utils_test.rs"
 
 [[bin]]
-name = "governance-mem-test-canister"
-path = "test_canisters/governance_mem_test_canister.rs"
-
-[[bin]]
 name = "unstoppable-canister"
 path = "test_canisters/unstoppable_canister.rs"
 

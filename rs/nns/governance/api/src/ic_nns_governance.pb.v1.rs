@@ -1,6 +1,7 @@
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::protobuf::AccountIdentifier;
+use std::collections::BTreeMap;
 
 /// The entity that owns the nodes that run the network.
 ///
@@ -2982,20 +2983,17 @@ pub mod update_canister_settings {
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
 /// across upgrades of the NNS governance system.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-#[compare_default]
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Default, Debug,
+)]
 pub struct Governance {
     /// Current set of neurons.
-    #[prost(btree_map = "fixed64, message", tag = "1")]
-    pub neurons: ::prost::alloc::collections::BTreeMap<u64, Neuron>,
+    pub neurons: BTreeMap<u64, Neuron>,
     /// Proposals.
-    #[prost(btree_map = "uint64, message", tag = "2")]
-    pub proposals: ::prost::alloc::collections::BTreeMap<u64, ProposalData>,
+    pub proposals: BTreeMap<u64, ProposalData>,
     /// The transfers that have been made to stake new neurons, but
     /// haven't been claimed by the user, yet.
-    #[prost(message, repeated, tag = "3")]
     pub to_claim_transfers: Vec<NeuronStakeTransfer>,
     /// Also known as the 'normal voting period'. The maximum time a
     /// proposal (of a topic with "normal" voting period) is open for
@@ -3004,13 +3002,10 @@ pub struct Governance {
     /// rejected.
     ///
     /// See also `short_voting_period_seconds`.
-    #[prost(uint64, tag = "5")]
     pub wait_for_quiet_threshold_seconds: u64,
     /// The network economics configuration parameters.
-    #[prost(message, optional, tag = "8")]
     pub economics: Option<NetworkEconomics>,
     /// The last reward event. Should never be missing.
-    #[prost(message, optional, tag = "9")]
     pub latest_reward_event: Option<RewardEvent>,
     /// Set of in-flight neuron ledger commands.
     ///
@@ -3032,15 +3027,12 @@ pub struct Governance {
     /// Because we know exactly what was going on, we should have the
     /// information necessary to reconcile the state, using custom code
     /// added on upgrade, if necessary.
-    #[prost(map = "fixed64, message", tag = "10")]
     pub in_flight_commands: ::std::collections::HashMap<u64, governance::NeuronInFlightCommand>,
     /// The timestamp, in seconds since the unix epoch, at which `canister_init` was run for
     /// the governance canister, considered
     /// the genesis of the IC for reward purposes.
-    #[prost(uint64, tag = "11")]
     pub genesis_timestamp_seconds: u64,
     /// The entities that own the nodes running the IC.
-    #[prost(message, repeated, tag = "12")]
     pub node_providers: Vec<NodeProvider>,
     /// Default followees
     ///
@@ -3051,7 +3043,6 @@ pub struct Governance {
     /// map are present in the initial set of neurons.
     ///
     /// Default following can be changed via proposal.
-    #[prost(map = "int32, message", tag = "13")]
     pub default_followees: ::std::collections::HashMap<i32, neuron::Followees>,
     /// The maximum time a proposal of a topic with *short voting period*
     /// is open for voting. If a proposal on a topic with short voting
@@ -3062,7 +3053,6 @@ pub struct Governance {
     /// rate should not be voted on if they're days old because exchange rates
     /// fluctuate regularly. Currently, only proposals to set the exchange rate
     /// use the short voting period, and such proposals are deprecated.
-    #[prost(uint64, tag = "14")]
     pub short_voting_period_seconds: u64,
     /// The maximum time a proposal of a topic with *private voting period*
     /// is open for voting. If a proposal on a topic with short voting
@@ -3072,29 +3062,20 @@ pub struct Governance {
     /// NeuronManagement proposals. These proposals are not meant to be voted on
     /// by the general public and have limited impact, so a different voting period
     /// is appropriate.
-    #[prost(uint64, optional, tag = "25")]
     pub neuron_management_voting_period_seconds: Option<u64>,
-    #[prost(message, optional, tag = "15")]
     pub metrics: Option<governance::GovernanceCachedMetrics>,
-    #[prost(message, optional, tag = "16")]
     pub most_recent_monthly_node_provider_rewards: Option<MonthlyNodeProviderRewards>,
     /// Cached value for the maturity modulation as calculated each day.
-    #[prost(int32, optional, tag = "17")]
     pub cached_daily_maturity_modulation_basis_points: Option<i32>,
     /// The last time that the maturity modulation value was updated.
-    #[prost(uint64, optional, tag = "18")]
     pub maturity_modulation_last_updated_at_timestamp_seconds: Option<u64>,
     /// Whether the heartbeat function is currently spawning neurons, meaning
     /// that it should finish before being called again.
-    #[prost(bool, optional, tag = "19")]
     pub spawning_neurons: Option<bool>,
-    #[prost(message, optional, tag = "20")]
     pub making_sns_proposal: Option<governance::MakingSnsProposal>,
     /// Local cache for XDR-related conversion rates (the source of truth is in the CMC canister).
-    #[prost(message, optional, tag = "26")]
     pub xdr_conversion_rate: Option<XdrConversionRate>,
     /// The summary of restore aging event.
-    #[prost(message, optional, tag = "27")]
     pub restore_aging_summary: Option<RestoreAgingSummary>,
 }
 /// Nested message and enum types in `Governance`.
@@ -3399,51 +3380,6 @@ pub struct ListProposalInfoResponse {
     pub proposal_info: Vec<ProposalInfo>,
 }
 
-/// The same as ListNeurons, but only used in list_neurons_pb, which is deprecated.
-/// This is temporarily split out so that the API changes to list_neurons do not have to
-/// follow both candid and protobuf standards for changes, which simplifies the API design
-/// considerably.
-///
-/// This type should be removed when list_neurons_pb is finally deprecated.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ListNeuronsProto {
-    /// The neurons to get information about. The "requested list"
-    /// contains all of these neuron IDs.
-    #[prost(fixed64, repeated, packed = "false", tag = "1")]
-    pub neuron_ids: Vec<u64>,
-    /// If true, the "requested list" also contains the neuron ID of the
-    /// neurons that the calling principal is authorized to read.
-    #[prost(bool, tag = "2")]
-    pub include_neurons_readable_by_caller: bool,
-    /// Whether to also include empty neurons readable by the caller. This field only has an effect
-    /// when `include_neurons_readable_by_caller` is true. If a neuron's id already exists in the
-    /// `neuron_ids` field, then the neuron will be included in the response regardless of the value
-    /// of this field. The default value is false (i.e. `None` is treated as `Some(false)`). Here,
-    /// being "empty" means 0 stake, 0 maturity and 0 staked maturity.
-    #[prost(bool, optional, tag = "3")]
-    pub include_empty_neurons_readable_by_caller: Option<bool>,
-    /// If this is set to true, and a neuron in the "requested list" has its
-    /// visibility set to public, then, it will (also) be included in the
-    /// full_neurons field in the response (which is of type ListNeuronsResponse).
-    /// Note that this has no effect on which neurons are in the "requested list".
-    /// In particular, this does not cause all public neurons to become part of the
-    /// requested list. In general, you probably want to set this to true, but
-    /// since this feature was added later, it is opt in to avoid confusing
-    /// existing (unmigrated) callers.
-    #[prost(bool, optional, tag = "4")]
-    pub include_public_neurons_in_full_neurons: Option<bool>,
-    /// If this is set, we return the batch of neurons at a given page, using the `page_size` to
-    /// determine how many neurons are returned in each page.
-    #[prost(uint64, optional, tag = "5")]
-    pub page_number: Option<u64>,
-    /// If this is set, we use the page limit provided to determine how large pages will be.
-    /// This cannot be greater than MAX_LIST_NEURONS_RESULTS, which is set to 500.
-    /// If not set, this defaults to MAX_LIST_NEURONS_RESULTS.
-    #[prost(uint64, optional, tag = "6")]
-    pub page_size: Option<u64>,
-}
 /// A request to list neurons. The "requested list", i.e., the list of
 /// neuron IDs to retrieve information about, is the union of the list
 /// of neurons listed in `neuron_ids` and, if `caller_neurons` is true,
