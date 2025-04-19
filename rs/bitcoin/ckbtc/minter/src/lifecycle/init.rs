@@ -63,6 +63,11 @@ pub struct InitArgs {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[deprecated(note = "use btc_checker_principal instead")]
     pub kyt_principal: Option<CanisterId>,
+
+    /// The expiration duration in seconds) for cached entries in
+    /// the get_utxos cache.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub get_utxos_cache_expiration_seconds: Option<u64>,
 }
 
 pub fn init(args: InitArgs) {
