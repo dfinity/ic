@@ -61,7 +61,7 @@ fn setup(env: TestEnv) {
                         pre_signatures_to_create_in_advance: 5,
                         key_id: MasterPublicKeyId::Ecdsa(make_key(KEY_ID1)),
                     }],
-                    signature_request_timeout_ns: None,
+                    request_timeout_ns: None,
                     idkg_key_rotation_period_ms: None,
                 }),
         )

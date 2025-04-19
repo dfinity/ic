@@ -204,8 +204,8 @@ impl AdminHelper {
             if let Some(idkg_key_rotation_period_ms) = config.idkg_key_rotation_period_ms {
                 ic_admin.add_argument("idkg-key-rotation-period-ms", idkg_key_rotation_period_ms);
             }
-            if let Some(signature_request_timeout_ns) = config.signature_request_timeout_ns {
-                ic_admin.add_argument("signature-request-timeout-ns", signature_request_timeout_ns);
+            if let Some(request_timeout_ns) = config.request_timeout_ns {
+                ic_admin.add_argument("request-timeout-ns", request_timeout_ns);
             }
         }
 
@@ -468,7 +468,7 @@ mod tests {
                     max_queue_size: 32,
                 },
             ],
-            signature_request_timeout_ns: Some(123_456),
+            request_timeout_ns: Some(123_456),
             idkg_key_rotation_period_ms: Some(321_654),
         };
         let result = fake_admin_helper_with_neuron_args()
@@ -503,7 +503,7 @@ mod tests {
                 {\"subnet_id\":\"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\",\"key_id\":\"ecdsa:Secp256k1:test_key_1\",\"pre_signatures_to_create_in_advance\":\"77\",\"max_queue_size\":\"30\"},\
                 {\"subnet_id\":\"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\",\"key_id\":\"schnorr:Bip340Secp256k1:test_key_2\",\"pre_signatures_to_create_in_advance\":\"12\",\"max_queue_size\":\"32\"}]' \
             --idkg-key-rotation-period-ms 321654 \
-            --signature-request-timeout-ns 123456 \
+            --request-timeout-ns 123456 \
             --replacement-nodes \"nqpqw-cp42a-rmdsx-fpui3-ncne5-kzq6o-m67an-w25cx-zu636-lcf2v-fqe\" \
             --registry-store-uri https://fake_registry_store_uri.com/ \
             --registry-store-hash fake_registry_store_hash \

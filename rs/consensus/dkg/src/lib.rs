@@ -1578,7 +1578,7 @@ mod tests {
                                 pre_signatures_to_create_in_advance: 20,
                                 max_queue_size: 20,
                             }],
-                            signature_request_timeout_ns: None,
+                            request_timeout_ns: None,
                             idkg_key_rotation_period_ms: None,
                         })
                         .build(),
@@ -2069,7 +2069,7 @@ mod tests {
                 pre_signatures_to_create_in_advance: 20,
                 max_queue_size: 20,
             }],
-            signature_request_timeout_ns: None,
+            request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         }
     }

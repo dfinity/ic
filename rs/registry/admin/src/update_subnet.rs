@@ -129,10 +129,10 @@ pub(crate) struct ProposeToUpdateSubnetCmd {
     pub chain_key_signing_disable: Option<Vec<String>>,
 
     /// Configuration for chain key:
-    /// The number of nanoseconds that a chain key signature request will time out.
-    /// If none is specified, no request will time out.
+    /// The number of nanoseconds after which a chain key request will time out.
+    /// If none is specified, requests do not time out.
     #[clap(long)]
-    pub signature_request_timeout_ns: Option<u64>,
+    pub request_timeout_ns: Option<u64>,
 
     /// Configuration for chain key:
     /// idkg key rotation period of a single node in milliseconds.
@@ -225,14 +225,14 @@ impl ProposeToUpdateSubnetCmd {
     ) -> do_update_subnet::UpdateSubnetPayload {
         let chain_key_config = if self.chain_key_configs_to_generate.is_none()
             && self.idkg_key_rotation_period_ms.is_none()
-            && self.signature_request_timeout_ns.is_none()
+            && self.request_timeout_ns.is_none()
         {
             None
         } else {
-            let signature_request_timeout_ns = self.signature_request_timeout_ns.or(subnet_record
+            let request_timeout_ns = self.request_timeout_ns.or(subnet_record
                 .chain_key_config
                 .as_ref()
-                .and_then(|c| c.signature_request_timeout_ns));
+                .and_then(|c| c.request_timeout_ns));
 
             let idkg_key_rotation_period_ms = self.idkg_key_rotation_period_ms.or(subnet_record
                 .chain_key_config
@@ -265,7 +265,7 @@ impl ProposeToUpdateSubnetCmd {
 
             Some(do_update_subnet::ChainKeyConfig {
                 key_configs,
-                signature_request_timeout_ns,
+                request_timeout_ns,
                 idkg_key_rotation_period_ms,
             })
         };
@@ -413,7 +413,7 @@ mod tests {
             chain_key_configs_to_generate: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
-            signature_request_timeout_ns: None,
+            request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
             features: None,
             ssh_readonly_access: None,
@@ -446,7 +446,7 @@ mod tests {
                         max_queue_size: 888,
                     },
                 ],
-                signature_request_timeout_ns: Some(111_111),
+                request_timeout_ns: Some(111_111),
                 idkg_key_rotation_period_ms: Some(111),
             }),
             ..Default::default()
@@ -470,7 +470,7 @@ mod tests {
 
         let chain_key_signing_disable = Some(vec!["ecdsa:Secp256k1:some_key_name_4".to_string()]);
 
-        let signature_request_timeout_ns = Some(222_222);
+        let request_timeout_ns = Some(222_222);
         let idkg_key_rotation_period_ms = Some(222);
 
         // Run code under test
@@ -478,7 +478,7 @@ mod tests {
             chain_key_configs_to_generate,
             chain_key_signing_enable,
             chain_key_signing_disable,
-            signature_request_timeout_ns,
+            request_timeout_ns,
             idkg_key_rotation_period_ms,
             ..empty_propose_to_update_subnet_cmd(subnet_id)
         };
@@ -527,7 +527,7 @@ mod tests {
                             max_queue_size: Some(154),
                         },
                     ],
-                    signature_request_timeout_ns: Some(222_222),
+                    request_timeout_ns: Some(222_222),
                     idkg_key_rotation_period_ms: Some(222),
                 }),
                 chain_key_signing_enable: Some(vec![MasterPublicKeyId::Ecdsa(EcdsaKeyId {
@@ -566,13 +566,13 @@ mod tests {
         .to_string();
         let chain_key_configs_to_generate = Some(chain_key_configs_to_generate);
 
-        let signature_request_timeout_ns = Some(111);
+        let request_timeout_ns = Some(111);
         let idkg_key_rotation_period_ms = Some(222);
 
         // Run code under test
         let cmd = ProposeToUpdateSubnetCmd {
             chain_key_configs_to_generate,
-            signature_request_timeout_ns,
+            request_timeout_ns,
             idkg_key_rotation_period_ms,
             ..empty_propose_to_update_subnet_cmd(subnet_id)
         };
@@ -599,7 +599,7 @@ mod tests {
                             max_queue_size: Some(154),
                         },
                     ],
-                    signature_request_timeout_ns: Some(111),
+                    request_timeout_ns: Some(111),
                     idkg_key_rotation_period_ms: Some(222),
                 }),
                 ..make_empty_update_payload(subnet_id)
@@ -621,7 +621,7 @@ mod tests {
                     pre_signatures_to_create_in_advance: 111_111,
                     max_queue_size: 222_222,
                 }],
-                signature_request_timeout_ns: Some(888_888),
+                request_timeout_ns: Some(888_888),
                 idkg_key_rotation_period_ms: Some(999_999),
             }),
             ..Default::default()
@@ -641,13 +641,13 @@ mod tests {
         .to_string();
         let chain_key_configs_to_generate = Some(chain_key_configs_to_generate);
 
-        let signature_request_timeout_ns = Some(888);
+        let request_timeout_ns = Some(888);
         let idkg_key_rotation_period_ms = Some(999);
 
         // Run code under test
         let cmd = ProposeToUpdateSubnetCmd {
             chain_key_configs_to_generate,
-            signature_request_timeout_ns,
+            request_timeout_ns,
             idkg_key_rotation_period_ms,
             ..empty_propose_to_update_subnet_cmd(subnet_id)
         };
@@ -676,7 +676,7 @@ mod tests {
                             max_queue_size: Some(444),
                         },
                     ],
-                    signature_request_timeout_ns: Some(888),
+                    request_timeout_ns: Some(888),
                     idkg_key_rotation_period_ms: Some(999),
                 }),
                 ..make_empty_update_payload(subnet_id)

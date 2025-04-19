@@ -654,7 +654,7 @@ pub(crate) fn create_data_payload_helper_2(
     idkg_payload.uid_generator.update_height(height)?;
 
     let request_expiry_time = chain_key_config
-        .signature_request_timeout_ns
+        .request_timeout_ns
         .and_then(|timeout| context_time.checked_sub(Duration::from_nanos(timeout)));
 
     signatures::update_signature_agreements(
@@ -2204,7 +2204,7 @@ mod tests {
                     pre_signatures_to_create_in_advance: 1,
                     max_queue_size: 1,
                 }],
-                signature_request_timeout_ns: Some(100000),
+                request_timeout_ns: Some(100000),
                 ..ChainKeyConfig::default()
             };
 
@@ -2296,7 +2296,7 @@ mod tests {
                     pre_signatures_to_create_in_advance: 1,
                     max_queue_size: 1,
                 }],
-                signature_request_timeout_ns: Some(100000),
+                request_timeout_ns: Some(100000),
                 ..ChainKeyConfig::default()
             };
 
@@ -2444,7 +2444,7 @@ mod tests {
                     pre_signatures_to_create_in_advance: 1,
                     max_queue_size: 1,
                 }],
-                signature_request_timeout_ns: Some(100000),
+                request_timeout_ns: Some(100000),
                 ..ChainKeyConfig::default()
             };
 
