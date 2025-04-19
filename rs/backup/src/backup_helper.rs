@@ -773,14 +773,15 @@ impl BackupHelper {
                 let timestamp = Utc::now().timestamp();
                 let (top_height, _) = fetch_top_height(&pack_dir);
                 let packed_file = format!(
-                    "{}/{:010}_{:012}_{}.tgz",
+                    "{}/{:010}_{:012}_{}.txz",
                     work_dir_str, timestamp, top_height, replica_version
                 );
                 let mut cmd = Command::new("tar");
-                cmd.arg("czvf");
+                cmd.arg("cJvf");
                 cmd.arg(&packed_file);
                 cmd.arg("-C").arg(&work_dir);
                 cmd.arg(&replica_version);
+                cmd.env("XZ_OPT", "-9");
                 debug!(self.log, "Will execute: {:?}", cmd);
                 exec_cmd(&mut cmd).map_err(|err| format!("Error packing artifacts: {:?}", err))?;
 
@@ -1166,7 +1167,7 @@ mod tests {
 
         // Only the artifacts from the earliest replica version are moved to the cold storage.
         assert_eq!(cold_storage_dirs.len(), 1);
-        assert!(cold_storage_dirs[0].ends_with("_000000000150_replica_version_1.tgz"));
+        assert!(cold_storage_dirs[0].ends_with("_000000000150_replica_version_1.txz"));
 
         let artifacts_dirs = collect_and_sort_dir_entries(&backup_helper.spool_dir());
 
