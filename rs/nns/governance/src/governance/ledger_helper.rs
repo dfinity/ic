@@ -7,6 +7,8 @@ use crate::{
 
 use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nns_common::pb::v1::NeuronId;
+use icp_ledger::AccountIdentifier;
+use icrc_ledger_types::icrc1::account::Account;
 
 #[cfg(feature = "tla")]
 use super::tla::TLA_INSTRUMENTATION_STATE;
@@ -169,5 +171,44 @@ impl NeuronStakeTransferOperation {
     fn amount_from_source_e8s(&self) -> u64 {
         self.amount_to_target_e8s
             .saturating_add(self.transaction_fees_e8s)
+    }
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct MintIcpOperation {
+    account: Account,
+    amount_e8s: u64,
+}
+
+impl MintIcpOperation {
+    pub fn new(account: Account, amount_e8s: u64) -> Self {
+        Self {
+            amount_e8s,
+            account,
+        }
+    }
+
+    /// Mints ICP by calling ledger.
+    pub async fn mint_icp_with_ledger(
+        self,
+        ledger: &dyn IcpLedger,
+        now_seconds: u64,
+    ) -> Result<(), GovernanceError> {
+        let _ = ledger
+            .transfer_funds(
+                self.amount_e8s,
+                0,
+                None,
+                AccountIdentifier::from(self.account),
+                now_seconds,
+            )
+            .await
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Failed to mint ICP: {}", err),
+                )
+            })?;
+        Ok(())
     }
 }

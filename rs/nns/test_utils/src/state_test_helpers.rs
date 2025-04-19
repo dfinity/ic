@@ -43,16 +43,17 @@ use ic_nns_governance_api::pb::v1::{
         self,
         claim_or_refresh::{self, MemoAndController},
         configure::Operation,
-        AddHotKey, ClaimOrRefresh, Configure, Disburse, Follow, IncreaseDissolveDelay,
-        JoinCommunityFund, LeaveCommunityFund, RegisterVote, RemoveHotKey, Split, StakeMaturity,
+        AddHotKey, ClaimOrRefresh, Configure, Disburse, DisburseMaturity, Follow,
+        IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund, RegisterVote, RemoveHotKey,
+        Split, StakeMaturity,
     },
     manage_neuron_response::{self, ClaimOrRefreshResponse},
-    Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
-    Governance, GovernanceError, InstallCodeRequest, ListNeurons, ListNeuronsResponse,
-    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfo,
-    ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
-    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction,
-    ProposalActionRequest, ProposalInfo, RewardNodeProviders, Topic, Vote,
+    Account as GovernanceAccount, Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
+    GetNeuronsFundAuditInfoResponse, Governance, GovernanceError, InstallCodeRequest, ListNeurons,
+    ListNeuronsResponse, ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse,
+    ListProposalInfo, ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest,
+    ManageNeuronRequest, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics,
+    NnsFunction, ProposalActionRequest, ProposalInfo, RewardNodeProviders, Topic, Vote,
 };
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
@@ -1109,6 +1110,24 @@ pub fn nns_start_dissolving(
         sender,
         neuron_id,
         Operation::StartDissolving(nns_governance_pb::manage_neuron::StartDissolving {}),
+    )
+}
+
+pub fn nns_disburse_maturity(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+    percentage_to_disburse: u32,
+    to_account: Option<GovernanceAccount>,
+) -> ManageNeuronResponse {
+    manage_neuron(
+        state_machine,
+        sender,
+        neuron_id,
+        ManageNeuronCommandRequest::DisburseMaturity(DisburseMaturity {
+            percentage_to_disburse,
+            to_account,
+        }),
     )
 }
 

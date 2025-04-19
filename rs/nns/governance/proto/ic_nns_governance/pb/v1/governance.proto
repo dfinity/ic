@@ -2100,6 +2100,7 @@ message Governance {
       ManageNeuron.Merge merge = 10;
       ic_nns_common.pb.v1.NeuronId spawn = 20;
       SyncCommand sync_command = 21;
+      FinalizeDisburseMaturity finalize_disburse_maturity = 22;
     }
   }
 
@@ -2746,4 +2747,12 @@ message VotingPowerTotal {
 
   // The total potential voting power.
   uint64 total_potential_voting_power = 2;
+}
+
+message FinalizeDisburseMaturity {
+  // The amount of ICPs to be disbursed in e8s.
+  uint64 amount_to_be_disbursed_e8s = 1;
+
+  // The account to which to transfer the ICPs.
+  Account to_account = 2;
 }
