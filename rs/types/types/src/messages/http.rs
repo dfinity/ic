@@ -341,6 +341,7 @@ impl HttpRequestContent for Query {
     fn ingress_expiry(&self) -> u64 {
         match self.source {
             QuerySource::User { ingress_expiry, .. } => ingress_expiry,
+            QuerySource::Canister { .. } => 0,
             QuerySource::System => 0,
         }
     }
@@ -348,6 +349,7 @@ impl HttpRequestContent for Query {
     fn nonce(&self) -> Option<Vec<u8>> {
         match &self.source {
             QuerySource::User { nonce, .. } => nonce.clone(),
+            QuerySource::Canister { .. } => None,
             QuerySource::System => None,
         }
     }

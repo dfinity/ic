@@ -48,7 +48,7 @@ use crate::{
     signature::*,
     CanisterId, CountBytes, RegistryVersion, Time,
 };
-use ic_base_types::{NumBytes, PrincipalId};
+use ic_base_types::{CanisterIdError, NumBytes, PrincipalId};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
@@ -100,17 +100,21 @@ pub type CanisterHttpRequestId = CallbackId;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct Transform {
+    pub canister_id: CanisterId,
     pub method_name: String,
     #[serde(with = "serde_bytes")]
     pub context: Vec<u8>,
 }
 
-impl From<TransformContext> for Transform {
-    fn from(item: TransformContext) -> Self {
-        Transform {
+impl TryFrom<TransformContext> for Transform {
+    type Error = CanisterIdError;
+
+    fn try_from(item: TransformContext) -> Result<Self, CanisterIdError> {
+        Ok(Transform {
+            canister_id: CanisterId::try_from(PrincipalId::from(item.function.0.principal))?,
             method_name: item.function.0.method,
             context: item.context,
-        }
+        })
     }
 }
 
@@ -155,6 +159,10 @@ impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestConte
                 .map(|transform| transform.context.clone()),
             http_method: pb_metadata::HttpMethod::from(&context.http_method).into(),
             time: context.time.as_nanos_since_unix_epoch(),
+            transform_canister_id: context
+                .transform
+                .as_ref()
+                .map(|transform| transform.canister_id.into()),
         }
     }
 }
@@ -166,28 +174,23 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
         let request: Request =
             try_from_option_field(context.request, "CanisterHttpRequestContext::request")?;
 
-        let transform_method_name = context.transform_method_name.map(From::from);
-        let transform_context = context.transform_context.map(From::from);
-        let transform = match (transform_method_name, transform_context) {
-            (Some(method_name), Some(context)) => Some(Transform {
-                method_name,
-                context,
-            }),
-            // Might happen for an already serialized transform context that
-            // contained only the method name, i.e. before the context field
-            // was added. Can be squashed to the case below after the change
-            // has been fully rolled out.
-            (Some(method_name), None) => Some(Transform {
-                method_name,
-                context: vec![],
-            }),
-            (None, Some(_)) => {
-                return Err(ProxyDecodeError::MissingField(
-                    "CanisterHttpRequestContext is missing the transform method.",
-                ))
-            }
-            (None, None) => None,
-        };
+        let transform_canister_id =
+            if let Some(transform_canister_id) = context.transform_canister_id {
+                CanisterId::try_from(transform_canister_id)?
+            } else {
+                request.sender
+            };
+        let transform_context = context
+            .transform_context
+            .map(From::from)
+            .unwrap_or_default();
+        let transform = context
+            .transform_method_name
+            .map(|transform_method_name| Transform {
+                canister_id: transform_canister_id,
+                method_name: transform_method_name,
+                context: transform_context,
+            });
 
         Ok(CanisterHttpRequestContext {
             request,
@@ -274,16 +277,6 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
 
     fn try_from(input: (Time, &Request, CanisterHttpRequestArgs)) -> Result<Self, Self::Error> {
         let (time, request, args) = input;
-        if let Some(transform_principal_id) = args.transform_principal() {
-            if request.sender.get() != transform_principal_id {
-                return Err(CanisterHttpRequestContextError::TransformPrincipalId(
-                    InvalidTransformPrincipalId {
-                        expected_principal_id: request.sender.get(),
-                        actual_principal_id: transform_principal_id,
-                    },
-                ));
-            }
-        };
 
         let max_response_bytes = match args.max_response_bytes {
             Some(max_response_bytes) => {
@@ -313,6 +306,16 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
             request_body.as_ref().unwrap_or(&vec![]),
         )?;
 
+        let transform = if let Some(transform) = args.transform {
+            Some(
+                transform
+                    .try_into()
+                    .map_err(CanisterHttpRequestContextError::TransformPrincipalId)?,
+            )
+        } else {
+            None
+        };
+
         Ok(CanisterHttpRequestContext {
             request: request.clone(),
             url: args.url,
@@ -333,7 +336,7 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
                 HttpMethod::POST => CanisterHttpMethod::POST,
                 HttpMethod::HEAD => CanisterHttpMethod::HEAD,
             },
-            transform: args.transform.map(From::from),
+            transform,
             time,
         })
     }
@@ -365,20 +368,12 @@ pub struct InvalidMaxResponseBytes {
     given: u64,
 }
 
-/// The error occurs when the [`PrincipalId`] of the transform
-/// function is invalid
-#[derive(Debug)]
-pub struct InvalidTransformPrincipalId {
-    expected_principal_id: PrincipalId,
-    actual_principal_id: PrincipalId,
-}
-
 /// Errors that can occur when converting from (time, request, [`CanisterHttpRequestArgs`]) to
 /// an [`CanisterHttpRequestContext`].
 #[derive(Debug)]
 pub enum CanisterHttpRequestContextError {
     MaxResponseBytes(InvalidMaxResponseBytes),
-    TransformPrincipalId(InvalidTransformPrincipalId),
+    TransformPrincipalId(CanisterIdError),
     UrlTooLong(usize),
     TooManyHeaders(usize),
     TooLongHeaderName(usize),
@@ -400,8 +395,8 @@ impl From<CanisterHttpRequestContextError> for UserError {
             CanisterHttpRequestContextError::TransformPrincipalId(err) => UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "transform principal id expected to be {}, got {}",
-                    err.expected_principal_id, err.actual_principal_id,
+                    "transform principal id is invalid: {}",
+                    err
                 ),
             ),
             CanisterHttpRequestContextError::UrlTooLong(url_size) => UserError::new(
@@ -667,6 +662,8 @@ mod tests {
 
     use super::*;
 
+    use ic_types_test_utils::ids::canister_test_id;
+
     use strum::IntoEnumIterator;
 
     #[test]
@@ -681,6 +678,7 @@ mod tests {
             max_response_bytes: None,
             http_method: CanisterHttpMethod::GET,
             transform: Some(Transform {
+                canister_id: canister_test_id(1),
                 method_name: "willchange".to_string(),
                 context: vec![],
             }),
@@ -723,6 +721,7 @@ mod tests {
             max_response_bytes: None,
             http_method: CanisterHttpMethod::GET,
             transform: Some(Transform {
+                canister_id: canister_test_id(1),
                 method_name: "willchange".to_string(),
                 context: vec![],
             }),

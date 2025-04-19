@@ -220,7 +220,7 @@ impl<'a> QueryContext<'a> {
         };
 
         match query.source {
-            QuerySource::System => {
+            QuerySource::Canister { .. } | QuerySource::System => {
                 if let WasmMethod::CompositeQuery(_) = &method {
                     info!(
                         self.log,
@@ -280,7 +280,7 @@ impl<'a> QueryContext<'a> {
         };
 
         match query.source {
-            QuerySource::System => {
+            QuerySource::Canister { .. } | QuerySource::System => {
                 let instructions_consumed = instructions_before - self.round_limits.instructions;
                 if instructions_consumed >= RoundInstructions::from(100_000_000) {
                     info!(

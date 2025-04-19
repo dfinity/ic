@@ -11,6 +11,8 @@ use std::convert::TryFrom;
 /// Represents the source of a query that is sent to a canister.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum QuerySource {
+    /// A query sent by a canister (e.g., calling a transform function of a canister http outcall).
+    Canister { canister_id: CanisterId },
     /// A query sent by the IC to itself.
     System,
     /// A query sent by an end user.
@@ -25,6 +27,7 @@ impl QuerySource {
     pub fn user_id(&self) -> UserId {
         let principal_id = match self {
             QuerySource::User { user_id, .. } => user_id.get(),
+            QuerySource::Canister { canister_id } => canister_id.get(),
             QuerySource::System => IC_00.get(),
         };
         UserId::from(principal_id)
@@ -60,6 +63,17 @@ impl Query {
                 user_id.get().into_vec(),
                 nonce.as_deref(),
             )),
+            QuerySource::Canister { canister_id } => {
+                MessageId::from(representation_independent_hash_call_or_query(
+                    CallOrQuery::Query,
+                    self.receiver.get().into_vec(),
+                    &self.method_name,
+                    self.method_payload.clone(),
+                    0,
+                    canister_id.get().into_vec(),
+                    None,
+                ))
+            }
             QuerySource::System => MessageId::from(representation_independent_hash_call_or_query(
                 CallOrQuery::Query,
                 self.receiver.get().into_vec(),
