@@ -15,7 +15,7 @@ rust_library(
     name = "config_types_compatibility_lib",
     srcs = glob(
         ["src/**/*.rs"],
-        exclude = ["src/bin/**/*.rs"],
+        exclude = ["src/main.rs"],
     ),
     crate_name = "config_types_compatibility_lib",
     visibility = ["//rs:ic-os-pkg"],
@@ -30,7 +30,7 @@ filegroup(
 
 rust_binary(
     name = "generate_config_types_fixture",
-    srcs = ["src/bin/generate_config_fixture.rs"],
+    srcs = ["src/main.rs"],
     crate_name = "generate_config_types_fixture",
     visibility = ["//rs:ic-os-pkg"],
     deps = [

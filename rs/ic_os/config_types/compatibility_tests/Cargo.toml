@@ -12,4 +12,4 @@ macaddr = { workspace = true }
 
 [[bin]]
 name = "generate_config_types_fixture"
-path = "src/bin/generate_config_fixture.rs"
+path = "src/main.rs"
