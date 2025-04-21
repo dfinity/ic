@@ -43,17 +43,13 @@ fn test_field_removal_protection() {
 
 #[test]
 fn test_version_increment() {
-    let registry_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("schema_history.json");
+    let previous_version = get_previous_version();
 
-    if registry_path.exists() {
-        let previous_version = get_previous_version();
-
-        if CONFIG_VERSION != previous_version {
-            assert!(
-                version_greater_than(CONFIG_VERSION, &previous_version),
-                "Config version must be greater than previous version"
-            );
-        }
+    if CONFIG_VERSION != previous_version {
+        assert!(
+            version_greater_than(CONFIG_VERSION, &previous_version),
+            "Config version must be greater than previous version"
+        );
     }
 }
 
