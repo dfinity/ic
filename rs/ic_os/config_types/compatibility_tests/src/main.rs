@@ -19,7 +19,6 @@ fn main() {
 
 /// Get the repository root directory by looking for the .git directory
 fn get_repo_root() -> Result<PathBuf, std::io::Error> {
-    // Start from the current directory
     let mut current_dir = std::env::current_dir()?;
 
     // Look for the .git directory by walking up the directory tree
