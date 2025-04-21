@@ -1680,7 +1680,16 @@ impl ExecutionEnvironment {
                     .config
                     .canister_snapshot_download
                 {
-                    FlagStatus::Disabled => Ok((vec![], None)),
+                    FlagStatus::Disabled => {
+                        let canister_id = args.get_canister_id();
+                        self.read_snapshot_data(
+                            *msg.sender(),
+                            &mut state,
+                            args,
+                            registry_settings.subnet_size,
+                        )
+                            .map(|res| (res, Some(canister_id)))
+                    },
                     FlagStatus::Enabled => {
                         let canister_id = args.get_canister_id();
                         self.read_snapshot_data(
