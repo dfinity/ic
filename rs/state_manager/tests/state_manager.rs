@@ -445,11 +445,13 @@ fn lazy_wasms() {
     let args = ReadCanisterSnapshotDataArgs::new(
         canister_id,
         snapshot_id,
-        CanisterSnapshotDataKind::WasmModule { offset: 0, size: 1 },
+        CanisterSnapshotDataKind::WasmModule { offset: 0, size: 10 },
     );
-    let _ = env
+    let res = env
         .read_canister_snapshot_data(&args)
         .expect("Error reading snapshot data");
+    eprintln!("res: {:?}", res);
+
     eprintln!("8: {}", wasm_files_by_source("canister", &env));
     eprintln!("8: {}", wasm_files_by_source("snapshot", &env));
     eprintln!();
