@@ -11,7 +11,7 @@ use crate::{
         },
         remove_neuron_from_follower_index, FollowerIndex,
     },
-    following::ValidatedSetFollowing,
+    following::{self, ValidatedSetFollowing},
     logs::{ERROR, INFO},
     neuron::{
         NeuronState, RemovePermissionsStatus, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
@@ -1790,6 +1790,15 @@ impl Governance {
         let include_reward_status: HashSet<i32> =
             request.include_reward_status.iter().cloned().collect();
         let include_status: HashSet<i32> = request.include_status.iter().cloned().collect();
+        let include_topics: HashSet<Option<Topic>> = request
+            .include_topics
+            .iter()
+            .map(|topic_selector| {
+                topic_selector
+                    .topic
+                    .and_then(|topic| Topic::try_from(topic).ok())
+            })
+            .collect();
         let now = self.env.now();
         let filter_all = |data: &ProposalData| -> bool {
             let action = data.action;
@@ -1805,6 +1814,11 @@ impl Governance {
             }
             // Filter out proposals by decision status.
             if !(include_status.is_empty() || include_status.contains(&(data.status() as i32))) {
+                return false;
+            }
+            // Filter out proposals by topic.
+            let topic = data.topic.and_then(|topic| Topic::try_from(topic).ok());
+            if !(include_topics.is_empty() || include_topics.contains(&topic)) {
                 return false;
             }
 
@@ -1840,6 +1854,7 @@ impl Governance {
         ListProposalsResponse {
             proposals: proposal_info,
             include_ballots_by_caller: Some(true),
+            include_topic_filtering: Some(true),
         }
     }
 
@@ -3807,7 +3822,7 @@ impl Governance {
     ///   as voting required, i.e., permission `Vote`)
     /// - the list of followers is not too long (does not exceed max_followees_per_function
     ///   as defined in the nervous system parameters)
-    fn follow(
+    pub fn follow(
         &mut self,
         id: &NeuronId,
         caller: &PrincipalId,
@@ -3901,7 +3916,7 @@ impl Governance {
         }
     }
 
-    fn set_following(
+    pub fn set_following(
         &mut self,
         id: &NeuronId,
         caller: &PrincipalId,
@@ -3917,6 +3932,16 @@ impl Governance {
         // Check that the caller is authorized to change followers (same authorization
         // as voting required).
         neuron.check_authorized(caller, NeuronPermissionType::Vote)?;
+
+        let mentioned_topics = set_following
+            .topic_following
+            .iter()
+            .filter_map(|followees_for_topic| {
+                followees_for_topic
+                    .topic
+                    .and_then(|topic_id| Topic::try_from(topic_id).ok())
+            })
+            .collect::<BTreeSet<_>>();
 
         // First, validate the requested followee modifications in isolation.
 
@@ -3935,13 +3960,64 @@ impl Governance {
             neuron.topic_followees.replace(new_topic_followees);
         }
 
-        // TODO[NNS1-3582]: Update the follower index.
+        // Third, update the followee index for this neuron.
+        remove_neuron_from_follower_index(&mut self.topic_follower_index, neuron);
+        add_neuron_to_follower_index(&mut self.topic_follower_index, neuron);
 
-        // TODO[NNS1-3582]: Enable following on topics.
-        Err(GovernanceError::new_with_message(
-            ErrorType::InvalidCommand,
-            "SetFollowing is not supported yet.".to_string(),
-        ))
+        // Fourth, remove any legacy following (based on individual proposal types under the topics
+        // that were modified by this command).
+        for topic in &mentioned_topics {
+            let native_functions = topic.native_functions();
+            let custom_functions = GovernanceProto::get_custom_functions_for_topic(
+                &self.proto.id_to_nervous_system_functions,
+                *topic,
+            );
+            for function in native_functions.union(&custom_functions) {
+                neuron.followees.remove(function);
+
+                legacy::remove_neuron_from_function_followee_index_for_function(
+                    &mut self.function_followee_index,
+                    neuron,
+                    *function,
+                );
+            }
+        }
+
+        // Lastly, remove legacy catch-all following if either this command specifies following for
+        // all topics, or if this neuron follows on all topics (which can happen by executing
+        // multiple set-following commands).
+        let this_neurons_topics = neuron
+            .topic_followees
+            .iter()
+            .flat_map(|topic_followees| {
+                topic_followees
+                    .topic_id_to_followees
+                    .keys()
+                    .filter_map(|topic_id| Topic::try_from(*topic_id).ok())
+            })
+            .collect::<BTreeSet<_>>();
+
+        let this_neurons_follows_on_all_non_critical_topics =
+            following::NON_CRITICAL_TOPICS.is_subset(&this_neurons_topics);
+
+        let this_command_specifies_all_non_critical_topics =
+            following::NON_CRITICAL_TOPICS.is_subset(&mentioned_topics);
+
+        if this_neurons_follows_on_all_non_critical_topics
+            || this_command_specifies_all_non_critical_topics
+        {
+            let catchall_function = u64::from(&Action::Unspecified(Empty {}));
+
+            neuron.followees.remove(&catchall_function);
+
+            legacy::remove_neuron_from_function_followee_index_for_function(
+                &mut self.function_followee_index,
+                neuron,
+                catchall_function,
+            );
+        }
+
+        Ok(())
     }
 
     /// Configures a given neuron (specified by the given neuron id).

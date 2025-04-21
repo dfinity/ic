@@ -7,7 +7,11 @@ use canister_test::PrincipalId;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
-    driver::{ic::InternetComputer, nested::NestedVms, test_env::TestEnv, test_env_api::*},
+    driver::{
+        farm::HostFeature, ic::InternetComputer, nested::NestedVms, test_env::TestEnv,
+        test_env_api::*,
+    },
+    retry_with_msg,
     util::block_on,
 };
 use ic_types::hostos_version::HostosVersion;
@@ -19,6 +23,8 @@ use util::{
     check_hostos_version, elect_hostos_version, setup_nested_vm, start_nested_vm,
     update_nodes_hostos_version,
 };
+
+use anyhow::bail;
 
 const HOST_VM_NAME: &str = "host-1";
 
@@ -34,6 +40,12 @@ pub fn config(env: TestEnv) {
 
     // Setup "testnet"
     InternetComputer::new()
+        // The Farm hosts in the dm1 DC run:
+        // Ubuntu-24.04, libvirt-10.0.0 and QEMU-8.2.2 while the other (older) Farm hosts run
+        // Ubuntu-20.04, libvirt-6.6.0  and QEMU-5.0.0.
+        // If the host VM is allocated to these older hosts the nested guest VM often runs into soft CPU lockups.
+        // So we temporarily require that this test is hosted in dm1 until the other Farm hosts are upgraded to Ubuntu 24.04.
+        .with_required_host_features(vec![HostFeature::DC("dm1".to_string())])
         .add_fast_single_node_subnet(SubnetType::System)
         .with_mainnet_config()
         .with_api_boundary_nodes(1)
@@ -133,6 +145,19 @@ pub fn upgrade_hostos(env: TestEnv) {
     ));
     info!(logger, "Elected target HostOS version");
 
+    info!(logger, "Retrieving the current boot ID from the host before we upgrade so we can determine when it rebooted post upgrade...");
+    let retrieve_host_boot_id = || {
+        host.block_on_bash_script("journalctl -q --list-boots | tail -n1 | awk '{print $2}'")
+            .unwrap()
+            .trim()
+            .to_string()
+    };
+    let host_boot_id_pre_upgrade = retrieve_host_boot_id();
+    info!(
+        logger,
+        "Host boot ID pre upgrade: '{}'", host_boot_id_pre_upgrade
+    );
+
     info!(
         logger,
         "Upgrading node '{}' to '{}'", node_id, target_version
@@ -146,7 +171,31 @@ pub fn upgrade_hostos(env: TestEnv) {
     // The HostOS upgrade is applied with a reboot to the host machine.
     // Wait for the host to reboot before checking Orchestrator dashboard status
     info!(logger, "Waiting for the HostOS upgrade to apply...");
-    std::thread::sleep(std::time::Duration::from_secs(180));
+
+    retry_with_msg!(
+        format!(
+            "Waiting until the host's boot ID changes from its pre upgrade value of '{}'",
+            host_boot_id_pre_upgrade
+        ),
+        logger.clone(),
+        Duration::from_secs(5 * 60),
+        Duration::from_secs(5),
+        || {
+            let host_boot_id = retrieve_host_boot_id();
+            if host_boot_id != host_boot_id_pre_upgrade {
+                info!(
+                    logger,
+                    "Host boot ID changed from '{}' to '{}'",
+                    host_boot_id_pre_upgrade,
+                    host_boot_id
+                );
+                Ok(())
+            } else {
+                bail!("Host boot ID is still '{}'", host_boot_id_pre_upgrade)
+            }
+        }
+    )
+    .unwrap();
 
     info!(logger, "Waiting for Orchestrator dashboard...");
     host.await_orchestrator_dashboard_accessible().unwrap();

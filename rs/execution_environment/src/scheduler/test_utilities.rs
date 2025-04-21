@@ -946,6 +946,8 @@ impl SchedulerTestBuilder {
             self.scheduler_config.upload_wasm_chunk_instructions,
             self.scheduler_config
                 .canister_snapshot_baseline_instructions,
+            self.scheduler_config
+                .canister_snapshot_data_baseline_instructions,
         );
         let scheduler = SchedulerImpl::new(
             self.scheduler_config,

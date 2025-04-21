@@ -10,6 +10,48 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 
 INSERT NEW RELEASES HERE
 
+
+# 2025-04-11: Proposal 136224
+
+http://dashboard.internetcomputer.org/proposal/136224
+
+## Added
+
+* Governance now gets node provider rewards from the Node Reward Canister in test builds.
+
+## Changed
+
+* The `_pb` methods now always panic.
+
+
+# 2025-04-05: Proposal 136071
+
+http://dashboard.internetcomputer.org/proposal/136071
+
+## Changed
+
+* Disable Neuron's Funds for ongoing SNSs, as approved in
+  proposal [135970](https://dashboard.internetcomputer.org/proposal/135970).
+
+## Removed
+
+* The `topic_followee_index` in the heap is removed, along with the flag
+  `USE_STABLE_MEMORY_FOLLOWING_INDEX` that was set to true in the proposal 135063.
+
+# 2025-03-28: Proposal 136006
+
+http://dashboard.internetcomputer.org/proposal/136006
+
+## Added
+
+* The `init` method now supports candid decoding in addition to protobuf. Protobuf decoding will be
+  removed in the future, giving clients time to migrate.
+
+## Changed
+
+* Increased the probability of failure from 70% to 90% for the deprecated _pb methods.
+* Increase the neurons limit to 500K now that neurons are stored in stable memory.
+
 # 2025-03-25: Proposal 135955
 
 https://dashboard.internetcomputer.org/proposal/135955
