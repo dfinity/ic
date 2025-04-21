@@ -2658,3 +2658,40 @@ fn non_empty_state_and_read_only_state() {
         .with_read_only_state(&read_only_state)
         .build();
 }
+
+#[test]
+fn stack_overflow() {
+    const STACK_OVERFLOW_WAT: &str = r#"
+        (module
+            (func $f (export "canister_update foo")
+                ;; Define many local variables to quickly overflow the stack
+                (local i64) (local i64) (local i64) (local i64) (local i64)
+                (local i64) (local i64) (local i64) (local i64) (local i64)
+                (local i64) (local i64) (local i64) (local i64) (local i64)
+                (local i64) (local i64) (local i64) (local i64) (local i64)
+                ;; call "f" recursively
+                (call $f)
+            )
+            (memory 0)
+        )
+    "#;
+    let stack_overflow_wasm = wat::parse_str(STACK_OVERFLOW_WAT).unwrap();
+
+    let pic = PocketIc::new();
+
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    pic.install_canister(canister_id, stack_overflow_wasm, vec![], None);
+
+    let err = pic
+        .update_call(
+            canister_id,
+            Principal::anonymous(),
+            "foo",
+            encode_one(()).unwrap(),
+        )
+        .unwrap_err();
+    assert!(err
+        .reject_message
+        .contains("Canister trapped: stack overflow"));
+}
