@@ -62,7 +62,6 @@ MACRO_DEPENDENCIES = [
 BASE_DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/canister_client/sender",
-    "//rs/config",
     "//rs/crypto",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/nervous_system/clients",

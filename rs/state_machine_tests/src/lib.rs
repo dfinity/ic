@@ -7,6 +7,7 @@ use ic_config::{
     adapters::AdaptersConfig,
     bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig,
     execution_environment::Config as HypervisorConfig,
+    flag_status::FlagStatus,
     message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES},
     state_manager::LsmtConfig,
     subnet_config::SubnetConfig,
@@ -49,6 +50,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types_private::{
     self as ic00, CanisterIdRecord, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
 };
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
@@ -61,7 +63,7 @@ use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{
     registry::{
-        crypto::v1::{ChainKeySigningSubnetList, PublicKey as PublicKeyProto, X509PublicKeyCert},
+        crypto::v1::{ChainKeyEnabledSubnetList, PublicKey as PublicKeyProto, X509PublicKeyCert},
         node::v1::{ConnectionEndpoint, NodeRecord},
         provisional_whitelist::v1::ProvisionalWhitelist as PbProvisionalWhitelist,
         replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
@@ -82,7 +84,7 @@ use ic_registry_client_helpers::{
 };
 use ic_registry_keys::{
     make_blessed_replica_versions_key, make_canister_migrations_record_key,
-    make_catch_up_package_contents_key, make_chain_key_signing_subnet_list_key,
+    make_catch_up_package_contents_key, make_chain_key_enabled_subnet_list_key,
     make_crypto_node_key, make_crypto_tls_cert_key, make_node_record_key,
     make_provisional_whitelist_record_key, make_replica_version_key, make_routing_table_record_key,
     ROOT_SUBNET_ID_KEY,
@@ -271,9 +273,9 @@ pub fn add_global_registry_records(
             .collect();
         registry_data_provider
             .add(
-                &make_chain_key_signing_subnet_list_key(&key_id),
+                &make_chain_key_enabled_subnet_list_key(&key_id),
                 registry_version,
-                Some(ChainKeySigningSubnetList { subnets }),
+                Some(ChainKeyEnabledSubnetList { subnets }),
             )
             .unwrap();
     }
@@ -960,6 +962,8 @@ pub struct StateMachineBuilder {
     is_ecdsa_signing_enabled: bool,
     is_schnorr_signing_enabled: bool,
     is_vetkd_enabled: bool,
+    is_snapshot_download_enabled: bool,
+    is_snapshot_upload_enabled: bool,
     features: SubnetFeatures,
     runtime: Option<Arc<Runtime>>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
@@ -993,6 +997,8 @@ impl StateMachineBuilder {
             is_ecdsa_signing_enabled: true,
             is_schnorr_signing_enabled: true,
             is_vetkd_enabled: true,
+            is_snapshot_download_enabled: false,
+            is_snapshot_upload_enabled: false,
             features: SubnetFeatures {
                 http_requests: true,
                 ..SubnetFeatures::default()
@@ -1195,6 +1201,20 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_snapshot_download_enabled(self, is_snapshot_download_enabled: bool) -> Self {
+        Self {
+            is_snapshot_download_enabled,
+            ..self
+        }
+    }
+
+    pub fn with_snapshot_upload_enabled(self, is_snapshot_upload_enabled: bool) -> Self {
+        Self {
+            is_snapshot_upload_enabled,
+            ..self
+        }
+    }
+
     pub fn with_log_level(self, log_level: Option<Level>) -> Self {
         Self { log_level, ..self }
     }
@@ -1232,6 +1252,8 @@ impl StateMachineBuilder {
             self.is_ecdsa_signing_enabled,
             self.is_schnorr_signing_enabled,
             self.is_vetkd_enabled,
+            self.is_snapshot_download_enabled,
+            self.is_snapshot_upload_enabled,
             self.features,
             self.runtime.unwrap_or_else(|| {
                 tokio::runtime::Builder::new_current_thread()
@@ -1575,6 +1597,8 @@ impl StateMachine {
         is_ecdsa_signing_enabled: bool,
         is_schnorr_signing_enabled: bool,
         is_vetkd_enabled: bool,
+        is_snapshot_download_enabled: bool,
+        is_snapshot_upload_enabled: bool,
         features: SubnetFeatures,
         runtime: Arc<Runtime>,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
@@ -1591,10 +1615,16 @@ impl StateMachine {
 
         let metrics_registry = MetricsRegistry::new();
 
-        let (mut subnet_config, hypervisor_config) = match config {
+        let (mut subnet_config, mut hypervisor_config) = match config {
             Some(config) => (config.subnet_config, config.hypervisor_config),
             None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
         };
+        if is_snapshot_download_enabled {
+            hypervisor_config.canister_snapshot_download = FlagStatus::Enabled;
+        }
+        if is_snapshot_upload_enabled {
+            hypervisor_config.canister_snapshot_upload = FlagStatus::Enabled;
+        }
         if let Some(ecdsa_signature_fee) = ecdsa_signature_fee {
             subnet_config
                 .cycles_account_manager_config
@@ -3246,6 +3276,52 @@ impl StateMachine {
             WasmResult::Reply(data) => Ok(data),
             WasmResult::Reject(reason) => {
                 panic!("load_canister_snapshot call rejected: {}", reason)
+            }
+        })?
+    }
+
+    pub fn read_canister_snapshot_metadata(
+        &self,
+        args: &ReadCanisterSnapshotMetadataArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        let state = self.state_manager.get_latest_state().take();
+        let sender = state
+            .canister_state(&args.get_canister_id())
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap();
+        self.execute_ingress_as(
+            sender,
+            ic00::IC_00,
+            Method::ReadCanisterSnapshotMetadata,
+            args.encode(),
+        )
+        .map(|res| match res {
+            WasmResult::Reply(data) => Ok(data),
+            WasmResult::Reject(reason) => {
+                panic!("read_canister_snapshot_metadata call rejected: {}", reason)
+            }
+        })?
+    }
+
+    pub fn read_canister_snapshot_data(
+        &self,
+        args: &ReadCanisterSnapshotDataArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        let state = self.state_manager.get_latest_state().take();
+        let sender = state
+            .canister_state(&args.get_canister_id())
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap();
+        self.execute_ingress_as(
+            sender,
+            ic00::IC_00,
+            Method::ReadCanisterSnapshotData,
+            args.encode(),
+        )
+        .map(|res| match res {
+            WasmResult::Reply(data) => Ok(data),
+            WasmResult::Reject(reason) => {
+                panic!("read_canister_snapshot_data call rejected: {}", reason)
             }
         })?
     }
