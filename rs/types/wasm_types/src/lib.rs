@@ -305,6 +305,8 @@ impl WasmFileStorage {
 
     fn len(&self) -> usize {
         eprintln!("calling init_or_die from len(), is_loaded? : {}", self.is_loaded());
+        let bt = std::backtrace::Backtrace::capture();
+        eprintln!("{bt}");
         self.init_or_die().len()
     }
 }
