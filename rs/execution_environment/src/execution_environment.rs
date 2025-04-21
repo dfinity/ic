@@ -454,6 +454,8 @@ impl ExecutionEnvironment {
     ///
     /// Time complexity: `O(|canisters|)`.
     pub fn subnet_available_memory(&self, state: &ReplicatedState) -> SubnetAvailableMemory {
+        eprintln!("Check subnet_available_memory");
+
         let memory_taken = state.memory_taken();
         SubnetAvailableMemory::new(
             self.config.subnet_memory_capacity.get() as i64

@@ -767,7 +767,11 @@ impl ReplicatedState {
                 (
                     match canister.memory_allocation() {
                         MemoryAllocation::Reserved(bytes) => bytes,
-                        MemoryAllocation::BestEffort => canister.execution_memory_usage(),
+                        MemoryAllocation::BestEffort =>
+                            {
+                                eprintln!("Check memory taken for canister {} with best effort allocation", canister.canister_id());
+                                canister.execution_memory_usage()
+                            }
                     },
                     canister
                         .system_state
