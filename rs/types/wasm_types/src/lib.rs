@@ -73,12 +73,12 @@ impl CanisterModule {
     pub fn new_from_file(
         wasm_file_layout: Box<dyn MemoryMappableWasmFile + Send + Sync>,
         module_hash: WasmHash,
-    ) -> Self {
-        let module = ModuleStorage::from_file(wasm_file_layout);
-        Self {
+    ) -> std::io::Result<Self> {
+        let module = ModuleStorage::from_file(wasm_file_layout)?;
+        Ok(Self {
             module,
             module_hash: module_hash.0,
-        }
+        })
     }
 
     /// If this module is backed by a file, return the path to that file.
@@ -253,6 +253,7 @@ enum ModuleStorage {
 #[derive(Clone)]
 pub struct WasmFileStorage {
     path: PathBuf,
+    len: usize,
     file: Arc<Mutex<Option<Box<dyn MemoryMappableWasmFile + Send + Sync>>>>,
     mmap: Arc<OnceLock<ic_sys::mmap::ScopedMmap>>,
 }
@@ -268,12 +269,16 @@ impl fmt::Debug for WasmFileStorage {
 impl WasmFileStorage {
     /// The only constructor to creates a new `WasmFileStorage`
     /// that will lazily load the provided wasm file.
-    pub fn lazy_load(wasm_file: Box<dyn MemoryMappableWasmFile + Send + Sync>) -> Self {
-        Self {
+    pub fn lazy_load(
+        wasm_file: Box<dyn MemoryMappableWasmFile + Send + Sync>,
+    ) -> std::io::Result<Self> {
+        let len = std::fs::metadata(wasm_file.path())?.len() as usize;
+        Ok(Self {
             path: wasm_file.path().to_path_buf(),
+            len,
             file: Arc::new(Mutex::new(Some(wasm_file))),
             mmap: Arc::new(OnceLock::new()),
-        }
+        })
     }
 
     /// Returns a reference to the mmap, initializing it on first access.
@@ -290,7 +295,9 @@ impl WasmFileStorage {
                 .deref_mut()
                 .take()
                 .expect("WasmFileStorage::init_or_die: file already taken");
-            file.mmap_file().expect("Failed to mmap file")
+            let mmap = file.mmap_file().expect("Failed to mmap file");
+            debug_assert_eq!(mmap.len(), self.len);
+            mmap
         })
     }
 
@@ -299,21 +306,21 @@ impl WasmFileStorage {
     }
 
     fn as_slice(&self) -> &[u8] {
-        eprintln!("calling init_or_die from as_slice(), is_loaded? : {}", self.is_loaded());
+        eprintln!(
+            "calling init_or_die from as_slice(), is_loaded? : {}",
+            self.is_loaded()
+        );
         self.init_or_die().as_slice()
     }
 
     fn len(&self) -> usize {
-        eprintln!("calling init_or_die from len(), is_loaded? : {}", self.is_loaded());
-        let bt = std::backtrace::Backtrace::capture();
-        eprintln!("{bt}");
-        self.init_or_die().len()
+        self.len
     }
 }
 
 impl ModuleStorage {
-    fn from_file(file: Box<dyn MemoryMappableWasmFile + Send + Sync>) -> Self {
-        Self::File(WasmFileStorage::lazy_load(file))
+    fn from_file(file: Box<dyn MemoryMappableWasmFile + Send + Sync>) -> std::io::Result<Self> {
+        Ok(Self::File(WasmFileStorage::lazy_load(file)?))
     }
 
     fn as_slice(&self) -> &[u8] {

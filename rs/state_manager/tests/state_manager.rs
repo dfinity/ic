@@ -401,7 +401,6 @@ fn lazy_wasms() {
     eprintln!("1: {}", wasm_files_by_source("snapshot", &env));
     eprintln!();
 
-
     env.tick();
     eprintln!("2: {}", wasm_files_by_source("canister", &env));
     eprintln!("2: {}", wasm_files_by_source("snapshot", &env));
@@ -423,7 +422,6 @@ fn lazy_wasms() {
     eprintln!("5: {}", wasm_files_by_source("snapshot", &env));
     eprintln!();
 
-
     let snapshot_id = env
         .take_canister_snapshot(TakeCanisterSnapshotArgs {
             canister_id: canister_id.into(),
@@ -435,17 +433,18 @@ fn lazy_wasms() {
     eprintln!("6: {}", wasm_files_by_source("snapshot", &env));
     eprintln!();
 
-
     env.tick();
     eprintln!("7: {}", wasm_files_by_source("canister", &env));
     eprintln!("7: {}", wasm_files_by_source("snapshot", &env));
     eprintln!();
 
-
     let args = ReadCanisterSnapshotDataArgs::new(
         canister_id,
         snapshot_id,
-        CanisterSnapshotDataKind::WasmModule { offset: 0, size: 10 },
+        CanisterSnapshotDataKind::WasmModule {
+            offset: 0,
+            size: 10,
+        },
     );
     let res = env
         .read_canister_snapshot_data(&args)
@@ -456,12 +455,10 @@ fn lazy_wasms() {
     eprintln!("8: {}", wasm_files_by_source("snapshot", &env));
     eprintln!();
 
-
     env.tick();
     eprintln!("9: {}", wasm_files_by_source("canister", &env));
     eprintln!("9: {}", wasm_files_by_source("snapshot", &env));
     eprintln!();
-
 }
 
 #[test]

@@ -2527,11 +2527,21 @@ impl<T> WasmFile<T>
 where
     T: ReadPolicy,
 {
-    pub fn lazy_load_with_module_hash(self, module_hash: WasmHash) -> CanisterModule
+    pub fn lazy_load_with_module_hash(
+        self,
+        module_hash: WasmHash,
+    ) -> Result<CanisterModule, LayoutError>
     where
         T: Send + Sync + 'static,
     {
-        CanisterModule::new_from_file(Box::new(self), module_hash)
+        let path = self.path.clone();
+        CanisterModule::new_from_file(Box::new(self), module_hash).map_err(|err| {
+            LayoutError::IoError {
+                path,
+                message: "Failed to load wasm file lazily".to_string(),
+                io_err: err,
+            }
+        })
     }
 
     /// Hardlink the (readonly) file from `src` to `dst`.
