@@ -23,7 +23,7 @@ bazel test //rs/ic_os/config_types:config_types_test
 ### Adding New Fields
 1. Make the field optional with a default value
 2. Increment `CONFIG_VERSION` in `lib.rs`
-3. Generate new fixture: `bazel run //rs/ic_os/config_types/compatibility_tests:generate_config_fixture`
+3. Generate new fixture: `bazel run //rs/ic_os/config_types/compatibility_tests:generate_config_types_fixture`
 
 ### Removing Fields
 1. First PR:
@@ -36,7 +36,7 @@ bazel test //rs/ic_os/config_types:config_types_test
 
 ### Generating New Fixtures
 ```bash
-bazel run //rs/ic_os/config_types/compatibility_tests:generate_config_fixture
+bazel run //rs/ic_os/config_types/compatibility_tests:generate_config_types_fixture
 ```
 
 ## Directory Structure
