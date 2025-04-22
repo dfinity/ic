@@ -43,7 +43,7 @@ impl TokenInfo {
             decimals,
             ledger_id,
             rosetta_metrics: RosettaMetrics::new(
-                display_name(symbol.clone(), ledger_id),
+                display_name(symbol, ledger_id),
                 canister_id_str,
             ),
         }
@@ -95,7 +95,7 @@ impl StorageClient {
         if let Some(token_info) = &self.token_info {
             token_info.rosetta_metrics.clone()
         } else {
-            RosettaMetrics::new("unkown".to_string(), "unkown".to_string())
+            RosettaMetrics::new("unknown".to_string(), "unknown".to_string())
         }
     }
 
