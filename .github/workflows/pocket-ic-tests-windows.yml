@@ -6,6 +6,7 @@ on:
       - rs/pocket_ic_server/**
   schedule:
     - cron: "0 1 * * *"
+
 # runs for the same workflow are cancelled on PRs but not on master
 # explanation: on push to master head_ref is not set, so we want it to fall back to run_id so it is not cancelled
 concurrency:
@@ -18,7 +19,7 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 90
     runs-on:
       labels: dind-large
@@ -64,7 +65,7 @@ jobs:
           
   pocket-ic-tests-on-windows:
     name: PocketIC Tests on Windows
-    needs: [bazel-build]
+    needs: [bazel-build-pocket-ic]
     runs-on: windows-2022
     steps:
       - name: Checkout
