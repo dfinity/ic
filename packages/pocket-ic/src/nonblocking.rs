@@ -7,6 +7,8 @@ use crate::common::rest::{
     RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
     RawTime, RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
 };
+#[cfg(windows)]
+use crate::wsl_path;
 pub use crate::DefaultEffectiveCanisterIdError;
 use crate::{
     copy_dir, start_or_reuse_server, IngressStatusResult, PocketIcBuilder, PocketIcState,
@@ -184,7 +186,12 @@ impl PocketIc {
 
         let instance_config = InstanceConfig {
             subnet_config_set,
+            #[cfg(not(windows))]
             state_dir: state_dir.as_ref().map(|state_dir| state_dir.state_dir()),
+            #[cfg(windows)]
+            state_dir: state_dir
+                .as_ref()
+                .map(|state_dir| wsl_path(&state_dir.state_dir(), "state directory").into()),
             nonmainnet_features,
             log_level: log_level.map(|l| l.to_string()),
             bitcoind_addr,

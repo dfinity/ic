@@ -23,6 +23,8 @@ use reqwest::header::CONTENT_LENGTH;
 use reqwest::{Method, StatusCode};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+#[cfg(windows)]
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::{io::Read, time::SystemTime};
 
 // 2T cycles
@@ -370,8 +372,8 @@ fn test_get_and_set_and_advance_time() {
     pic.add_cycles(canister, INIT_CYCLES);
     pic.install_canister(canister, test_canister_wasm(), vec![], None);
 
-    let unix_time_secs = 1650000000;
-    let time = Time::from_nanos_since_unix_epoch(unix_time_secs);
+    let unix_time_nanos = 1650000000000000000;
+    let time = Time::from_nanos_since_unix_epoch(unix_time_nanos);
     pic.set_time(time);
     // time is not certified so `query_and_check_time` would fail here
     assert_eq!(pic.get_time(), time);
@@ -382,8 +384,8 @@ fn test_get_and_set_and_advance_time() {
     query_and_check_time(&pic, canister);
     assert_eq!(pic.get_time(), time + std::time::Duration::from_nanos(1));
 
-    let unix_time_secs = 1700000000;
-    let time = Time::from_nanos_since_unix_epoch(unix_time_secs);
+    let unix_time_nanos = 1700000000000000000;
+    let time = Time::from_nanos_since_unix_epoch(unix_time_nanos);
     pic.set_certified_time(time);
     query_and_check_time(&pic, canister);
     assert_eq!(pic.get_time(), time);
@@ -1691,6 +1693,8 @@ async fn test_get_default_effective_canister_id_nonblocking() {
 
     let subnet_id = pic.get_subnet(canister_id).await.unwrap();
     assert!(pic.topology().await.get_app_subnets().contains(&subnet_id));
+
+    pic.drop().await;
 }
 
 #[test]
@@ -2203,8 +2207,8 @@ fn call_ingress_expiry() {
     pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
 
     // submit an update call via /api/v2/canister/.../call using an ingress expiry in the future
-    let unix_time_secs = 2272143600; // Wed Jan 01 2042 00:00:00 GMT+0100
-    let time = Time::from_nanos_since_unix_epoch(unix_time_secs);
+    let unix_time_nanos = 2272143600000000000; // Wed Jan 01 2042 00:00:00 GMT+0100
+    let time = Time::from_nanos_since_unix_epoch(unix_time_nanos);
     pic.set_certified_time(time);
     let ingress_expiry = pic.get_time().as_nanos_since_unix_epoch() + 240_000_000_000;
     let (resp, msg_id) = call_request(&pic, ingress_expiry, canister_id);
@@ -2534,6 +2538,19 @@ fn test_http_methods() {
         Method::HEAD,
         Method::PATCH,
     ] {
+        // Windows doesn't automatically resolve localhost subdomains.
+        #[cfg(windows)]
+        let client = Client::builder()
+            .resolve(
+                &host,
+                SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                    pic.get_server_url().port().unwrap(),
+                ),
+            )
+            .build()
+            .unwrap();
+        #[cfg(not(windows))]
         let client = Client::new();
         let res = client.request(method.clone(), url.clone()).send().unwrap();
         // The test canister rejects all request to the path `/` with `StatusCode::BAD_REQUEST`
@@ -2607,12 +2624,14 @@ async fn state_handle_async() {
         .build_async()
         .await;
     assert!(pic1.canister_exists(canister_id).await);
+    pic1.drop().await;
 
     let pic2 = PocketIcBuilder::new()
         .with_read_only_state(&state)
         .build_async()
         .await;
     assert!(pic2.canister_exists(canister_id).await);
+    pic2.drop().await;
 }
 
 #[test]
