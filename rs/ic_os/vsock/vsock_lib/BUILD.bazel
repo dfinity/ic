@@ -4,14 +4,14 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/http_utils",
     "@crate_index//:anyhow",
     "@crate_index//:regex",
-    "@crate_index//:reqwest",
     "@crate_index//:rusb",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
-    "@crate_index//:sha2",
     "@crate_index//:tempfile",
+    "@crate_index//:tokio",
     "@crate_index//:vsock",
 ]
 

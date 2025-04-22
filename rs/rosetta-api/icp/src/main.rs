@@ -66,6 +66,12 @@ struct Opt {
     not_whitelisted: bool,
     #[clap(long = "expose-metrics")]
     expose_metrics: bool,
+    #[clap(
+        long = "watchdog-timeout-seconds",
+        default_value = "60",
+        help = "Timeout in seconds for sync watchdog"
+    )]
+    watchdog_timeout_seconds: u64,
 
     #[cfg(feature = "rosetta-blocks")]
     #[clap(long = "enable-rosetta-blocks")]
@@ -231,6 +237,7 @@ async fn main() -> std::io::Result<()> {
         not_whitelisted,
         expose_metrics,
         blockchain,
+        watchdog_timeout_seconds,
         ..
     } = opt;
 
@@ -267,12 +274,17 @@ async fn main() -> std::io::Result<()> {
     let req_handler = RosettaRequestHandler::new(blockchain, ledger.clone());
 
     info!("Network id: {:?}", req_handler.network_id());
+    info!(
+        "Configuring watchdog with timeout of {} seconds",
+        watchdog_timeout_seconds
+    );
     let serv = RosettaApiServer::new(
         ledger,
         req_handler,
         addr,
         opt.listen_port_file,
         expose_metrics,
+        watchdog_timeout_seconds,
     )
     .expect("Error creating RosettaApiServer");
 
