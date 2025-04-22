@@ -1146,14 +1146,10 @@ impl NeuronStore {
         })
     }
 
-    /// Returns the finalization timestamp of the next maturity disbursement. Returns `None` if
-    /// there is no maturity disbursement at all.
-    pub fn get_next_maturity_disbursement_finalization_timestamp(&self) -> Option<u64> {
-        with_stable_neuron_indexes(|indexes| {
-            indexes
-                .maturity_disbursement()
-                .get_next_finalization_timestamp()
-        })
+    /// Returns the finalization timestamp and the neuron id of the next maturity disbursement.
+    /// Returns `None` if there is no maturity disbursement at all.
+    pub fn get_next_maturity_disbursement(&self) -> Option<(u64, NeuronId)> {
+        with_stable_neuron_indexes(|indexes| indexes.maturity_disbursement().get_next_entry())
     }
 
     /// Validates a batch of neurons in stable neuron store are all inactive.

@@ -1,4 +1,5 @@
 use calculate_distributable_rewards::CalculateDistributableRewardsTask;
+use finalize_maturity_disbursements::FinalizeMaturityDisbursementsTask;
 use ic_metrics_encoder::MetricsEncoder;
 use ic_nervous_system_timer_task::{
     RecurringAsyncTask, RecurringSyncTask, TimerTaskMetricsRegistry,
@@ -12,6 +13,7 @@ use crate::{canister_state::GOVERNANCE, storage::VOTING_POWER_SNAPSHOTS};
 
 mod calculate_distributable_rewards;
 mod distribute_rewards;
+mod finalize_maturity_disbursements;
 mod prune_following;
 mod seeding;
 mod snapshot_voting_power;
@@ -25,6 +27,7 @@ pub fn schedule_tasks() {
     CalculateDistributableRewardsTask::new(&GOVERNANCE).schedule(&METRICS_REGISTRY);
     PruneFollowingTask::new(&GOVERNANCE).schedule(&METRICS_REGISTRY);
     SnapshotVotingPowerTask::new(&GOVERNANCE, &VOTING_POWER_SNAPSHOTS).schedule(&METRICS_REGISTRY);
+    FinalizeMaturityDisbursementsTask::new(&GOVERNANCE).schedule(&METRICS_REGISTRY);
 
     run_distribute_rewards_periodic_task();
 }

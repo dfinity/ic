@@ -2098,8 +2098,12 @@ message Governance {
       ManageNeuron.ClaimOrRefresh claim_or_refresh_neuron = 8;
       ManageNeuron.Configure configure = 9;
       ManageNeuron.Merge merge = 10;
+
+      // Below are not really `ManageNeuron` commands but determined by the context of where the
+      // neuron lock is needed. Ideally, we'd like to rename from `command` to `lock`
       ic_nns_common.pb.v1.NeuronId spawn = 20;
       SyncCommand sync_command = 21;
+      FinalizeDisburseMaturity finalize_disburse_maturity = 22;
     }
   }
 
@@ -2746,4 +2750,18 @@ message VotingPowerTotal {
 
   // The total potential voting power.
   uint64 total_potential_voting_power = 2;
+}
+
+message FinalizeDisburseMaturity {
+  // The finalization timestamp of the disbursement.
+  uint64 finalization_timestamp_seconds = 1;
+
+  // The amount of ICPs to be disbursed in e8s.
+  uint64 amount_to_be_disbursed_e8s = 2;
+
+  // The account to which to transfer the ICPs.
+  Account to_account = 3;
+
+  // The original amount of maturity to be disbursed (before maturity modulation).
+  uint64 original_maturity_e8s = 4;
 }

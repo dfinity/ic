@@ -1,14 +1,24 @@
 use super::*;
 
 use crate::{
-    neuron::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::Subaccount,
+    governance::Environment,
+    neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
+    pb::v1::{Governance as GovernanceProto, Subaccount},
+    temporarily_enable_disburse_maturity,
+    test_utils::{MockEnvironment, MockRandomness},
 };
 
-use std::collections::BTreeMap;
+use futures::FutureExt;
+use ic_nervous_system_canisters::{cmc::MockCMC, ledger::MockIcpLedger};
+use ic_nervous_system_common::NervousSystemError;
+use icp_ledger::AccountIdentifier;
+use mockall::Sequence;
+use std::{collections::BTreeMap, sync::Arc};
 
 static NOW_SECONDS: u64 = 1_234_567_890;
 static CONTROLLER: PrincipalId = PrincipalId::new_user_test_id(1);
+static DEFAULT_MATURITY_MODULATION_BASIS_POINTS: i32 = 100; // 1%
+static RETRY_DELAY: Duration = Duration::from_secs(3600);
 
 fn create_neuron_builder() -> NeuronBuilder {
     NeuronBuilder::new(
@@ -299,8 +309,8 @@ fn test_initiate_maturity_disbursement_disbursement_too_small() {
         .build();
     neuron_store.add_neuron(neuron).unwrap();
 
-    // 1% of 1_050_000 is 10_500, with -5% maturity modulation, the worst case
-    // disbursement is 10_500 * 0.95 = 9_975 < 10_000.
+    // 1% of 10_500_000_000 is 105_000_000, with -5% maturity modulation, the worst case
+    // disbursement is 105_000_000 * 0.95 = 99_750_000 < 1e8.
     assert_eq!(
         initiate_maturity_disbursement(
             &mut neuron_store,
@@ -318,4 +328,254 @@ fn test_initiate_maturity_disbursement_disbursement_too_small() {
             worst_case_maturity_modulation_basis_points: -500,
         })
     );
+}
+
+thread_local! {
+    static MOCK_ENVIRONMENT: Arc<MockEnvironment> = Arc::new(
+        MockEnvironment::new(Default::default(), NOW_SECONDS));
+    static TEST_GOVERNANCE: RefCell<Governance> = RefCell::new(Governance::new_uninitialized(
+        MOCK_ENVIRONMENT.with(|env| env.clone()),
+        Arc::new(MockIcpLedger::default()),
+        Arc::new(MockCMC::default()),
+        Box::new(MockRandomness::new()),
+    ));
+}
+
+fn advance_time(seconds: u64) {
+    MOCK_ENVIRONMENT.with(|env| {
+        let now = env.now();
+        env.now_setter()(now + seconds);
+    });
+}
+
+struct MintIcpExpectation {
+    pub amount_e8s: u64,
+    pub to_account: AccountIdentifier,
+    pub should_succeed: bool,
+}
+
+fn mock_ledger(expectations: Vec<MintIcpExpectation>) -> MockIcpLedger {
+    let mut mock_ledger = MockIcpLedger::new();
+
+    if expectations.is_empty() {
+        mock_ledger.expect_transfer_funds().never();
+        return mock_ledger;
+    }
+
+    let mut seq = Sequence::new();
+    for expectation in expectations {
+        let MintIcpExpectation {
+            amount_e8s,
+            to_account,
+            should_succeed,
+        } = expectation;
+        mock_ledger
+            .expect_transfer_funds()
+            .withf(
+                move |actual_amount_e8s,
+                      actual_fees_e8s,
+                      actual_from_subaccount,
+                      actual_to_account,
+                      _memo| {
+                    *actual_amount_e8s == amount_e8s
+                        && *actual_fees_e8s == 0
+                        && actual_from_subaccount.is_none()
+                        && *actual_to_account == to_account
+                },
+            )
+            .times(1)
+            .in_sequence(&mut seq)
+            .returning(move |_, _, _, _, _| {
+                if should_succeed {
+                    Ok(0)
+                } else {
+                    Err(NervousSystemError::new())
+                }
+            });
+    }
+    mock_ledger
+}
+
+fn set_governance_for_test(
+    neurons: Vec<Neuron>,
+    mock_ledger: MockIcpLedger,
+    maturity_modulation: i32,
+) {
+    let mut governance = Governance::new(
+        GovernanceProto {
+            cached_daily_maturity_modulation_basis_points: Some(maturity_modulation),
+            ..Default::default()
+        },
+        MOCK_ENVIRONMENT.with(|env| env.clone()),
+        Arc::new(mock_ledger),
+        Arc::new(MockCMC::default()),
+        Box::new(MockRandomness::new()),
+    );
+    for neuron in neurons {
+        governance.neuron_store.add_neuron(neuron).unwrap();
+    }
+
+    TEST_GOVERNANCE.set(governance);
+}
+
+#[tokio::test]
+async fn test_finalize_maturity_disbursement_successful() {
+    // Step 1: Set up the test environment
+    let _t = temporarily_enable_disburse_maturity();
+    set_governance_for_test(
+        vec![create_neuron_builder().build()],
+        mock_ledger(vec![MintIcpExpectation {
+            amount_e8s: 1_010_000_000,
+            to_account: AccountIdentifier::from(CONTROLLER),
+            should_succeed: true,
+        }]),
+        DEFAULT_MATURITY_MODULATION_BASIS_POINTS,
+    );
+
+    // Step 2: Initiate the maturity disbursement
+    assert_eq!(
+        TEST_GOVERNANCE.with_borrow_mut(|governance| {
+            initiate_maturity_disbursement(
+                &mut governance.neuron_store,
+                &CONTROLLER,
+                &NeuronId { id: 1 },
+                &DisburseMaturity {
+                    percentage_to_disburse: 1,
+                    to_account: None,
+                },
+                NOW_SECONDS,
+            )
+        }),
+        Ok(1_000_000_000)
+    );
+
+    // Step 3: Advance time to 1 second before the disbursement, and verify that the next
+    // disbursement is 1 second away.
+    let delay = TEST_GOVERNANCE
+        .with_borrow(|governance| get_delay_until_next_finalization(governance, RETRY_DELAY));
+    assert_eq!(delay, Duration::from_secs(DISBURSEMENT_DELAY_SECONDS));
+    advance_time(delay.as_secs() - 1);
+    finalize_maturity_disbursement(&TEST_GOVERNANCE)
+        .now_or_never()
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        TEST_GOVERNANCE
+            .with_borrow(|governance| get_delay_until_next_finalization(governance, RETRY_DELAY))
+            .as_secs(),
+        1
+    );
+
+    // Step 4: Advance time to the disbursement time, and verify that the next disbursement is 7 days away.
+    advance_time(1);
+    finalize_maturity_disbursement(&TEST_GOVERNANCE)
+        .now_or_never()
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        TEST_GOVERNANCE
+            .with_borrow(|governance| get_delay_until_next_finalization(governance, RETRY_DELAY))
+            .as_secs(),
+        DISBURSEMENT_DELAY_SECONDS
+    );
+}
+
+#[tokio::test]
+async fn test_finalize_maturity_disbursement_no_maturity_modulation() {
+    // Step 1: Set up the test environment without maturity modulation.
+    let _t = temporarily_enable_disburse_maturity();
+    set_governance_for_test(
+        vec![create_neuron_builder().build()],
+        MockIcpLedger::default(),
+        DEFAULT_MATURITY_MODULATION_BASIS_POINTS,
+    );
+    TEST_GOVERNANCE.with_borrow_mut(|governance| {
+        governance
+            .heap_data
+            .cached_daily_maturity_modulation_basis_points = None;
+    });
+
+    // Step 2: Initiate the maturity disbursement and advance to disbursement time.
+    assert_eq!(
+        TEST_GOVERNANCE.with_borrow_mut(|governance| {
+            initiate_maturity_disbursement(
+                &mut governance.neuron_store,
+                &CONTROLLER,
+                &NeuronId { id: 1 },
+                &DisburseMaturity {
+                    percentage_to_disburse: 1,
+                    to_account: None,
+                },
+                NOW_SECONDS,
+            )
+        }),
+        Ok(1_000_000_000)
+    );
+    advance_time(DISBURSEMENT_DELAY_SECONDS);
+
+    // Step 4: Finalize the maturity disbursement and verify that it fails.
+    let result = finalize_maturity_disbursement(&TEST_GOVERNANCE)
+        .now_or_never()
+        .unwrap();
+    assert_eq!(
+        result,
+        Err(FinalizeMaturityDisbursementError::NoMaturityModulation)
+    );
+}
+
+#[tokio::test]
+async fn test_finalize_maturity_disbursement_ledger_failure() {
+    // Step 1: Set up the test environment with a ledger which will fail the first minting attempt
+    // but will succeed on the second.
+    let _t = temporarily_enable_disburse_maturity();
+    set_governance_for_test(
+        vec![create_neuron_builder().build()],
+        mock_ledger(vec![
+            MintIcpExpectation {
+                amount_e8s: 1_010_000_000,
+                to_account: AccountIdentifier::from(CONTROLLER),
+                should_succeed: false,
+            },
+            MintIcpExpectation {
+                amount_e8s: 1_010_000_000,
+                to_account: AccountIdentifier::from(CONTROLLER),
+                should_succeed: true,
+            },
+        ]),
+        DEFAULT_MATURITY_MODULATION_BASIS_POINTS,
+    );
+
+    // Step 2: Initiate the maturity disbursement and advance to disbursement time.
+    assert_eq!(
+        TEST_GOVERNANCE.with_borrow_mut(|governance| {
+            initiate_maturity_disbursement(
+                &mut governance.neuron_store,
+                &CONTROLLER,
+                &NeuronId { id: 1 },
+                &DisburseMaturity {
+                    percentage_to_disburse: 1,
+                    to_account: None,
+                },
+                NOW_SECONDS,
+            )
+        }),
+        Ok(1_000_000_000)
+    );
+    advance_time(DISBURSEMENT_DELAY_SECONDS);
+
+    // Step 3: Finalize the maturity disbursement and verify that it fails.
+    let result = finalize_maturity_disbursement(&TEST_GOVERNANCE)
+        .now_or_never()
+        .unwrap();
+    let Err(FinalizeMaturityDisbursementError::FailToMintIcp { neuron_id, reason }) = result else {
+        panic!("Expected a FailToMintIcp error, but got: {:?}", result);
+    };
+    assert_eq!(neuron_id, NeuronId { id: 1 });
+    assert!(reason.contains("Failed to mint ICP"));
+
+    // Step 4: Finalize the maturity disbursement again and verify that it succeeds.
+    finalize_maturity_disbursement(&TEST_GOVERNANCE)
+        .now_or_never()
+        .unwrap()
+        .unwrap();
 }
