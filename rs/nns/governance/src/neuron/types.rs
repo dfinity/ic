@@ -3,7 +3,6 @@ use crate::{
         LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
         MAX_NEURON_RECENT_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON,
     },
-    is_voting_power_adjustment_enabled,
     neuron::{combine_aged_stakes, dissolve_state_and_age::DissolveStateAndAge, neuron_stake_e8s},
     neuron_store::NeuronStoreError,
     pb::v1::{
@@ -304,15 +303,13 @@ impl Neuron {
     ) -> u64 {
         // Main inputs to main calculation.
 
-        let adjustment_factor: Decimal = if is_voting_power_adjustment_enabled() {
+        let adjustment_factor: Decimal = {
             let time_since_last_refreshed = Duration::from_secs(
                 now_seconds.saturating_sub(self.voting_power_refreshed_timestamp_seconds),
             );
 
             voting_power_economics
                 .deciding_voting_power_adjustment_factor(time_since_last_refreshed)
-        } else {
-            Decimal::from(1)
         };
 
         let potential_voting_power = self.potential_voting_power(now_seconds);
@@ -1144,6 +1141,17 @@ impl Neuron {
     ) {
         self.maturity_disbursements_in_progress
             .push(maturity_disbursement);
+    }
+
+    /// Pops the first maturity disbursement in progress.
+    #[cfg(test)]
+    pub fn pop_maturity_disbursement_in_progress(&mut self) -> Option<MaturityDisbursement> {
+        if self.maturity_disbursements_in_progress.is_empty() {
+            None
+        } else {
+            // This is safe because we know that the vector is not empty.
+            Some(self.maturity_disbursements_in_progress.remove(0))
+        }
     }
 }
 
