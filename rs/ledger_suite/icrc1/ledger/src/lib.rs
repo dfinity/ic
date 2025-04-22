@@ -77,6 +77,7 @@ const METADATA_FEE: &str = "icrc1:fee";
 const METADATA_MAX_MEMO_LENGTH: &str = "icrc1:max_memo_length";
 const METADATA_PUBLIC_ALLOWANCES: &str = "icrc103:public_allowances";
 const METADATA_MAX_TAKE_ALLOWANCES: &str = "icrc103:max_take_value";
+const DEFAULT_MAX_TAKE_ALLOWANCES: u64 = 100;
 
 #[cfg(not(feature = "u256-tokens"))]
 pub type Tokens = ic_icrc1_tokens_u64::U64;
@@ -877,7 +878,7 @@ impl Ledger {
     }
 
     pub fn max_take_allowances(&self) -> u64 {
-        100u64
+        DEFAULT_MAX_TAKE_ALLOWANCES
     }
 
     pub fn metadata(&self) -> Vec<(String, Value)> {
@@ -1194,14 +1195,31 @@ pub fn balances_len() -> u64 {
     BALANCES_MEMORY.with_borrow(|balances| balances.len())
 }
 
-pub fn get_allowances(from: Account, spender: Account, max_results: u64, now: u64) -> Allowances {
+pub fn get_allowances(
+    from: Account,
+    spender: Option<Account>,
+    max_results: u64,
+    now: u64,
+) -> Allowances {
     let mut result = vec![];
+    let prev_spender = match spender {
+        Some(spender) => spender,
+        None => Account {
+            owner: Principal::from_slice(&[0u8; 0]),
+            subaccount: None,
+        },
+    };
     ALLOWANCES_MEMORY.with_borrow(|allowances| {
         let account_spender = AccountSpender {
             account: from,
-            spender,
+            spender: prev_spender,
         };
         for allowance in allowances.range(account_spender..) {
+            if let Some(spender) = spender {
+                if allowance.0.spender == spender {
+                    continue;
+                }
+            }
             if result.len() >= max_results as usize {
                 break;
             }

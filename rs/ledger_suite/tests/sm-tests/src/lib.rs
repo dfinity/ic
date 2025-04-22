@@ -31,6 +31,9 @@ use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc::generic_value::Value as GenericValue;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
+use icrc_ledger_types::icrc103::get_allowances::{
+    Allowances, GetAllowancesArgs, GetAllowancesError,
+};
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
@@ -3668,6 +3671,135 @@ where
         ErrorCode::CanisterCalledTrap,
         "the minting account cannot delegate mints",
     );
+}
+
+fn list_allowances(
+    env: &StateMachine,
+    ledger: CanisterId,
+    from: Account,
+    spender: Option<Account>,
+    take: Option<u64>,
+) -> Result<Allowances, GetAllowancesError> {
+    let take = match take {
+        Some(take) => Some(Nat::from(take)),
+        None => None,
+    };
+    let args = GetAllowancesArgs {
+        from_account: Some(from),
+        prev_spender: spender,
+        take,
+    };
+    Decode!(
+        &env.execute_ingress_as(
+            from.owner.into(),
+            ledger,
+            "icrc103_get_allowances",
+            Encode!(&args)
+            .unwrap()
+        )
+        .expect("failed to list allowances")
+        .bytes(),
+        Result<Allowances, GetAllowancesError>
+    )
+    .expect("failed to decode icrc103_get_allowances response")
+}
+
+pub fn test_approval_listing<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let approver1 = PrincipalId::new_user_test_id(1);
+    let spender = PrincipalId::new_user_test_id(3);
+
+    let from_sub_1 = Account {
+        owner: approver1.0,
+        subaccount: Some([1; 32]),
+    };
+
+    let (env, canister_id) = setup(
+        ledger_wasm,
+        encode_init_args,
+        vec![(Account::from(approver1.0), 100_000), (from_sub_1, 100_000)],
+    );
+
+    let create_subaccount = |sub: Option<u64>| match sub {
+        Some(sub) => {
+            let mut subaccount = [0u8; 32];
+            for (index, byte) in sub.to_be_bytes().iter().enumerate() {
+                subaccount[index] = *byte;
+            }
+            Some(subaccount)
+        }
+        None => None,
+    };
+
+    let create_args =
+        |from_sub: Option<u64>, spender: PrincipalId, spender_sub: Option<u64>| ApproveArgs {
+            from_subaccount: create_subaccount(from_sub),
+            spender: Account {
+                owner: spender.0.into(),
+                subaccount: create_subaccount(spender_sub),
+            },
+            amount: Nat::from(1u64),
+            expected_allowance: None,
+            expires_at: None,
+            fee: Some(Nat::from(FEE)),
+            memo: None,
+            created_at_time: None,
+        };
+
+    let create_approval = |from: PrincipalId,
+                           from_sub: Option<u64>,
+                           spender: PrincipalId,
+                           spender_sub: Option<u64>| {
+        let approve_args = create_args(from_sub, spender, spender_sub);
+        let _ = send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
+    };
+    for i in 1..10 {
+        create_approval(approver1, None, spender, Some(i));
+    }
+    let allowances = list_allowances(
+        &env,
+        canister_id,
+        Account {
+            owner: approver1.0.into(),
+            subaccount: None,
+        },
+        None,
+        None,
+    )
+    .expect("failed to list approvals");
+
+    for i in 1..10 {
+        assert_eq!(
+            allowances[i - 1].to_spender.subaccount,
+            create_subaccount(Some(i as u64))
+        );
+    }
+
+    let allowances = list_allowances(
+        &env,
+        canister_id,
+        Account {
+            owner: approver1.0.into(),
+            subaccount: None,
+        },
+        Some(Account {
+            owner: spender.0.into(),
+            subaccount: create_subaccount(Some(5)),
+        }),
+        None,
+    )
+    .expect("failed to list approvals");
+
+    assert_eq!(allowances.len(), 4);
+
+    for i in 6..10 {
+        assert_eq!(
+            allowances[i - 6].to_spender.subaccount,
+            create_subaccount(Some(i as u64))
+        );
+    }
 }
 
 pub fn expect_icrc2_disabled(

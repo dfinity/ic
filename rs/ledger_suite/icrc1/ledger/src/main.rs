@@ -1111,13 +1111,6 @@ async fn icrc103_get_allowances(arg: GetAllowancesArgs) -> Result<Allowances, Ge
             subaccount: None,
         },
     };
-    let spender_account = match arg.prev_spender {
-        Some(spender) => spender,
-        None => Account {
-            owner: Principal::from_slice(&[0u8; 0]),
-            subaccount: None,
-        },
-    };
     let max_results = arg.take.unwrap_or(Nat::from(u64::MAX));
     let max_results = std::cmp::min(
         max_results.0.to_u64().unwrap(),
@@ -1125,7 +1118,7 @@ async fn icrc103_get_allowances(arg: GetAllowancesArgs) -> Result<Allowances, Ge
     );
     Ok(get_allowances(
         from_account,
-        spender_account,
+        arg.prev_spender,
         max_results,
         ic_cdk::api::time(),
     ))

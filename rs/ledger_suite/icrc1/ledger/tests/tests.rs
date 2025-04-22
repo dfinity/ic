@@ -455,6 +455,11 @@ fn test_approve_from_minter() {
 }
 
 #[test]
+fn test_approval_listing() {
+    ic_ledger_suite_state_machine_tests::test_approval_listing(ledger_wasm(), encode_init_args);
+}
+
+#[test]
 fn test_transfer_from_smoke() {
     ic_ledger_suite_state_machine_tests::test_transfer_from_smoke(ledger_wasm(), encode_init_args);
 }
