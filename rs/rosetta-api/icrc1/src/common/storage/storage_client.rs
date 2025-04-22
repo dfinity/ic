@@ -42,10 +42,7 @@ impl TokenInfo {
             symbol: symbol.clone(),
             decimals,
             ledger_id,
-            rosetta_metrics: RosettaMetrics::new(
-                display_name(symbol, ledger_id),
-                canister_id_str,
-            ),
+            rosetta_metrics: RosettaMetrics::new(display_name(symbol, ledger_id), canister_id_str),
         }
     }
 
