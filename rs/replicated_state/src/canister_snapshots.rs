@@ -3,7 +3,7 @@ use crate::{
         execution_state::Memory, system_state::wasm_chunk_store::WasmChunkStore,
         WASM_PAGE_SIZE_IN_BYTES,
     },
-    metadata_state::UnflushedCheckpointOperations,
+    metadata_state::UnflushedCheckpointOps,
     page_map::Buffer,
     CanisterState, NumWasmPages, PageMap,
 };
@@ -63,10 +63,10 @@ impl CanisterSnapshots {
         &mut self,
         snapshot_id: SnapshotId,
         snapshot: Arc<CanisterSnapshot>,
-        unflushed_changes: &mut UnflushedCheckpointOperations,
+        unflushed_changes: &mut UnflushedCheckpointOps,
     ) -> SnapshotId {
         let canister_id = snapshot.canister_id();
-        unflushed_changes.create_snapshot(canister_id, snapshot_id);
+        unflushed_changes.take_snapshot(canister_id, snapshot_id);
         self.memory_usage += snapshot.size();
         self.snapshots.insert(snapshot_id, snapshot);
         let snapshot_ids = self.snapshot_ids.entry(canister_id).or_default();
@@ -101,7 +101,7 @@ impl CanisterSnapshots {
     pub fn remove(
         &mut self,
         snapshot_id: SnapshotId,
-        unflushed_changes: &mut UnflushedCheckpointOperations,
+        unflushed_changes: &mut UnflushedCheckpointOps,
     ) -> Option<Arc<CanisterSnapshot>> {
         let removed_snapshot = self.snapshots.remove(&snapshot_id);
         match removed_snapshot {
@@ -136,7 +136,7 @@ impl CanisterSnapshots {
     pub fn delete_snapshots(
         &mut self,
         canister_id: CanisterId,
-        unflushed_changes: &mut UnflushedCheckpointOperations,
+        unflushed_changes: &mut UnflushedCheckpointOps,
     ) {
         if let Some(snapshot_ids) = self.snapshot_ids.get(&canister_id).cloned() {
             for snapshot_id in snapshot_ids {
@@ -207,12 +207,12 @@ impl CanisterSnapshots {
     /// Splitting the canister snapshot is decided based on the new canister list
     /// hosted by the *subnet A'* or *subnet B*.
     /// A snapshot associated with a canister not hosted by the local subnet
-    /// will be discarded. A delete `UnflushedCheckpointOperation` will also be triggered to
+    /// will be discarded. A delete `UnflushedCheckpointOp` will also be triggered to
     /// apply the changes during checkpoint time.
     pub(crate) fn split<F>(
         &mut self,
         is_local_canister: F,
-        unflushed_changes: &mut UnflushedCheckpointOperations,
+        unflushed_changes: &mut UnflushedCheckpointOps,
     ) where
         F: Fn(CanisterId) -> bool,
     {
@@ -541,7 +541,7 @@ mod tests {
         let canister_id = canister_test_id(0);
         let (snapshot_id, snapshot) = fake_canister_snapshot(canister_id, 1);
         let mut snapshot_manager = CanisterSnapshots::default();
-        let mut unflushed_changes = UnflushedCheckpointOperations::default();
+        let mut unflushed_changes = UnflushedCheckpointOps::default();
         assert_eq!(snapshot_manager.snapshots.len(), 0);
         assert_eq!(unflushed_changes.len(), 0);
         assert_eq!(snapshot_manager.snapshot_ids.len(), 0);
@@ -607,7 +607,7 @@ mod tests {
     #[test]
     fn test_memory_usage_correctly_updated_while_adding_and_removing_snapshots() {
         let canister_id = canister_test_id(0);
-        let mut unflushed_changes = UnflushedCheckpointOperations::default();
+        let mut unflushed_changes = UnflushedCheckpointOps::default();
         let (first_snapshot_id, first_snapshot) = fake_canister_snapshot(canister_id, 1);
         let snapshot1_size = first_snapshot.size();
         let mut snapshots = BTreeMap::new();

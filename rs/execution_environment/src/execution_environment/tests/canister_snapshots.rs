@@ -20,7 +20,7 @@ use ic_replicated_state::{
         system_state::{wasm_chunk_store::CHUNK_SIZE, CyclesUseCase},
         WASM_PAGE_SIZE_IN_BYTES,
     },
-    metadata_state::UnflushedCheckpointOperation,
+    metadata_state::UnflushedCheckpointOp,
     CanisterState, ExecutionState, SchedulerState,
 };
 use ic_sys::PAGE_SIZE;
@@ -1688,12 +1688,12 @@ fn load_canister_snapshot_succeeds() {
     let unflushed_changes = test
         .state_mut()
         .metadata
-        .unflushed_checkpoint_operations
+        .unflushed_checkpoint_ops
         .take();
     assert_eq!(unflushed_changes.len(), 2);
     let expected_unflushed_changes = vec![
-        UnflushedCheckpointOperation::CreateSnapshot(canister_id, snapshot_id),
-        UnflushedCheckpointOperation::RestoreSnapshot(canister_id, snapshot_id),
+        UnflushedCheckpointOp::TakeSnapshot(canister_id, snapshot_id),
+        UnflushedCheckpointOp::LoadSnapshot(canister_id, snapshot_id),
     ];
     assert_eq!(expected_unflushed_changes, unflushed_changes);
 }

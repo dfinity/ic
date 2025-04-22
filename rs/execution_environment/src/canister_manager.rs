@@ -875,7 +875,7 @@ impl CanisterManager {
         let canister_to_delete = state.take_canister_state(&canister_id_to_delete).unwrap();
         state.canister_snapshots.delete_snapshots(
             canister_to_delete.canister_id(),
-            &mut state.metadata.unflushed_checkpoint_operations,
+            &mut state.metadata.unflushed_checkpoint_ops,
         );
 
         // Leftover cycles in the balance are considered `consumed`.
@@ -1589,7 +1589,7 @@ impl CanisterManager {
         if let Some(replace_snapshot) = replace_snapshot {
             state.canister_snapshots.remove(
                 replace_snapshot,
-                &mut state.metadata.unflushed_checkpoint_operations,
+                &mut state.metadata.unflushed_checkpoint_ops,
             );
             canister.system_state.snapshots_memory_usage = canister
                 .system_state
@@ -1624,7 +1624,7 @@ impl CanisterManager {
         state.canister_snapshots.push(
             snapshot_id,
             Arc::new(new_snapshot),
-            &mut state.metadata.unflushed_checkpoint_operations,
+            &mut state.metadata.unflushed_checkpoint_ops,
         );
         canister.system_state.snapshots_memory_usage = canister
             .system_state
@@ -1833,8 +1833,8 @@ impl CanisterManager {
         );
         state
             .metadata
-            .unflushed_checkpoint_operations
-            .restore_snapshot(canister_id, snapshot_id);
+            .unflushed_checkpoint_ops
+            .load_snapshot(canister_id, snapshot_id);
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
             new_canister.scheduler_state.heap_delta_debit = new_canister
@@ -1914,7 +1914,7 @@ impl CanisterManager {
         }
         let old_snapshot = state.canister_snapshots.remove(
             delete_snapshot_id,
-            &mut state.metadata.unflushed_checkpoint_operations,
+            &mut state.metadata.unflushed_checkpoint_ops,
         );
         // Already confirmed that `old_snapshot` exists.
         let old_snapshot_size = old_snapshot.unwrap().size();

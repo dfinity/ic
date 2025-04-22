@@ -961,7 +961,7 @@ impl SchedulerImpl {
         for canister_id in uninstalled_canisters {
             state.canister_snapshots.delete_snapshots(
                 canister_id,
-                &mut state.metadata.unflushed_checkpoint_operations,
+                &mut state.metadata.unflushed_checkpoint_ops,
             );
         }
 

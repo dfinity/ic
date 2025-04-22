@@ -1325,7 +1325,7 @@ impl ReplicatedState {
         // Retain only the canister snapshots belonging to the local canisters.
         canister_snapshots.split(
             |canister_id| canister_states.contains_key(&canister_id),
-            &mut metadata.unflushed_checkpoint_operations,
+            &mut metadata.unflushed_checkpoint_ops,
         );
 
         Ok(Self {
