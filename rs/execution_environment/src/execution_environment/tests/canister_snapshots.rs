@@ -1685,11 +1685,7 @@ fn load_canister_snapshot_succeeds() {
             snapshot_taken_at_timestamp
         )
     );
-    let unflushed_changes = test
-        .state_mut()
-        .metadata
-        .unflushed_checkpoint_ops
-        .take();
+    let unflushed_changes = test.state_mut().metadata.unflushed_checkpoint_ops.take();
     assert_eq!(unflushed_changes.len(), 2);
     let expected_unflushed_changes = vec![
         UnflushedCheckpointOp::TakeSnapshot(canister_id, snapshot_id),
