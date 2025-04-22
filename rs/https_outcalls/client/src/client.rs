@@ -220,7 +220,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                               Err((_, msg)) => msg.len(),
                             };
                             if transform_result_size as u64 > max_response_size_bytes {
-                              info!(log, "Canister http transform result size {} exceeds the `max_response_size` of {}.", transform_result_size, max_response_size_bytes);
+                              info!(log, "Canister http transform result size {} on canister {} exceeds the `max_response_size` of {}.", transform_result_size, request_sender, max_response_size_bytes);
                             }
                             transform_result?
                         }
