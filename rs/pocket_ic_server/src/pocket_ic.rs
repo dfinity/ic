@@ -495,10 +495,10 @@ impl PocketIcSubnets {
             // exported functions limits
             hypervisor_config
                 .embedders_config
-                .max_number_exported_functions = 10_000;
+                .max_number_exported_functions = 100_000;
             hypervisor_config
                 .embedders_config
-                .max_sum_exported_function_name_lengths = 200_000;
+                .max_sum_exported_function_name_lengths = 2_000_000;
         }
         // bound PocketIc resource consumption
         hypervisor_config.embedders_config.max_sandbox_count = 64;
