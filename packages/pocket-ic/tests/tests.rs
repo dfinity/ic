@@ -10,19 +10,23 @@ use ic_management_canister_types::{
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::{Call, ReadState};
 use pocket_ic::common::rest::{BlockmakerConfigs, RawSubnetBlockmaker, TickConfigs};
+#[cfg(not(windows))]
+use pocket_ic::query_candid;
 use pocket_ic::{
     common::rest::{
         BlobCompression, CanisterHttpReply, CanisterHttpResponse, MockCanisterHttpResponse,
         RawEffectivePrincipal, RawMessageId, SubnetKind,
     },
-    query_candid, update_candid, DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult,
-    PocketIc, PocketIcBuilder, PocketIcState, RejectCode,
+    update_candid, DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult, PocketIc,
+    PocketIcBuilder, PocketIcState, RejectCode,
 };
 use reqwest::blocking::Client;
 use reqwest::header::CONTENT_LENGTH;
 use reqwest::{Method, StatusCode};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+#[cfg(windows)]
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::{io::Read, time::SystemTime};
 
 // 2T cycles
@@ -354,6 +358,7 @@ fn test_multiple_large_xnet_payloads() {
     }
 }
 
+#[cfg(not(windows))]
 fn query_and_check_time(pic: &PocketIc, test_canister: Principal) {
     let current_time = pic
         .get_time()
@@ -371,6 +376,9 @@ fn query_and_check_time(pic: &PocketIc, test_canister: Principal) {
     assert_eq!(current_time, t.0 as u128);
 }
 
+// The precision of SystemTime on Windows is not good enough for this test to pass:
+// https://doc.rust-lang.org/std/time/struct.SystemTime.html#platform-specific-behavior
+#[cfg(not(windows))]
 #[test]
 fn test_get_and_set_and_advance_time() {
     let pic = PocketIc::new();
@@ -1700,6 +1708,8 @@ async fn test_get_default_effective_canister_id_nonblocking() {
 
     let subnet_id = pic.get_subnet(canister_id).await.unwrap();
     assert!(pic.topology().await.get_app_subnets().contains(&subnet_id));
+
+    pic.drop().await;
 }
 
 #[test]
@@ -2553,6 +2563,19 @@ fn test_http_methods() {
         Method::HEAD,
         Method::PATCH,
     ] {
+        // Windows doesn't automatically resolve localhost subdomains.
+        #[cfg(windows)]
+        let client = Client::builder()
+            .resolve(
+                &host,
+                SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                    pic.get_server_url().port().unwrap(),
+                ),
+            )
+            .build()
+            .unwrap();
+        #[cfg(not(windows))]
         let client = Client::new();
         let res = client.request(method.clone(), url.clone()).send().unwrap();
         // The test canister rejects all request to the path `/` with `StatusCode::BAD_REQUEST`
@@ -2626,12 +2649,14 @@ async fn state_handle_async() {
         .build_async()
         .await;
     assert!(pic1.canister_exists(canister_id).await);
+    pic1.drop().await;
 
     let pic2 = PocketIcBuilder::new()
         .with_read_only_state(&state)
         .build_async()
         .await;
     assert!(pic2.canister_exists(canister_id).await);
+    pic2.drop().await;
 }
 
 #[test]
