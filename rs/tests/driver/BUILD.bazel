@@ -36,8 +36,8 @@ rust_library(
     ],
     deps = [
         # Keep sorted.
-        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//packages/ic-http-types",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/artifact_pool",
         "//rs/canister_client",
         "//rs/canister_client/sender",

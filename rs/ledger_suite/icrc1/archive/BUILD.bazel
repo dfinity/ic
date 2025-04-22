@@ -23,8 +23,8 @@ package(default_visibility = ["//visibility:public"])
         version = "0.9.0",
         deps = [
             # Keep sorted.
-            "//packages/icrc-ledger-types:icrc_ledger_types",
             "//packages/ic-http-types",
+            "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",

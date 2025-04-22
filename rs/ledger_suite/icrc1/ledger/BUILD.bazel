@@ -118,8 +118,8 @@ package(default_visibility = ["//visibility:public"])
         service_file = ":ledger.did",
         deps = [
             # Keep sorted.
-            "//packages/icrc-ledger-types:icrc_ledger_types",
             "//packages/ic-http-types",
+            "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
@@ -392,8 +392,8 @@ rust_test(
         results_file = "canbench_results/canbench" + name_suffix + ".yml",
         deps = [
             # Keep sorted.
-            "//packages/icrc-ledger-types:icrc_ledger_types",
             "//packages/ic-http-types",
+            "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",

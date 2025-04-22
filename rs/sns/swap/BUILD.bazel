@@ -14,8 +14,8 @@ filegroup(
 # See rs/nervous_system/feature_test.md
 DEPENDENCIES = [
     # Keep sorted.
-    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//packages/ic-http-types",
+    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/nervous_system/canisters",
