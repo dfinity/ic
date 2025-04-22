@@ -1,5 +1,5 @@
 {
-  "checksum": "13a91f70268e5fbbd051e6a7064350f093482963e714d3dd1b539cef03041333",
+  "checksum": "74d8c142a00cfd41793699e4d9ef002be36819e8f8aed7454da436c5b66e5b26",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -15613,7 +15613,7 @@
         "Git": {
           "remote": "https://github.com/bytecodealliance/wasmtime",
           "commitish": {
-            "Rev": "89ebd4531016170ca8b18d41cd873cd2cc1cdff9"
+            "Rev": "292fce81accf2b3b816635481fab602cee7fcc2b"
           },
           "strip_prefix": "cranelift/assembler-x64",
           "patch_args": [
@@ -15699,7 +15699,7 @@
         "Git": {
           "remote": "https://github.com/bytecodealliance/wasmtime",
           "commitish": {
-            "Rev": "89ebd4531016170ca8b18d41cd873cd2cc1cdff9"
+            "Rev": "292fce81accf2b3b816635481fab602cee7fcc2b"
           },
           "strip_prefix": "cranelift/assembler-x64/meta"
         }
@@ -15740,7 +15740,7 @@
         "Git": {
           "remote": "https://github.com/bytecodealliance/wasmtime",
           "commitish": {
-            "Rev": "89ebd4531016170ca8b18d41cd873cd2cc1cdff9"
+            "Rev": "292fce81accf2b3b816635481fab602cee7fcc2b"
           },
           "strip_prefix": "cranelift/bforest"
         }
@@ -15790,7 +15790,7 @@
         "Git": {
           "remote": "https://github.com/bytecodealliance/wasmtime",
           "commitish": {
-            "Rev": "89ebd4531016170ca8b18d41cd873cd2cc1cdff9"
+            "Rev": "292fce81accf2b3b816635481fab602cee7fcc2b"
           },
           "strip_prefix": "cranelift/bitset"
         }
@@ -15855,7 +15855,7 @@
         "Git": {
           "remote": "https://github.com/bytecodealliance/wasmtime",
           "commitish": {
-            "Rev": "89ebd4531016170ca8b18d41cd873cd2cc1cdff9"
+            "Rev": "292fce81accf2b3b816635481fab602cee7fcc2b"
           },
           "strip_prefix": "cranelift/codegen"
         }
@@ -16009,7 +16009,7 @@
         "Git": {
           "remote": "https://github.com/bytecodealliance/wasmtime",
           "commitish": {
-            "Rev": "89ebd4531016170ca8b18d41cd873cd2cc1cdff9"
+            "Rev": "292fce81accf2b3b816635481fab602cee7fcc2b"
           },
           "strip_prefix": "cranelift/codegen/meta",
           "patch_args": [
@@ -16080,7 +16080,7 @@
         "Git": {
           "remote": "https://github.com/bytecodealliance/wasmtime",
           "commitish": {
-            "Rev": "89ebd4531016170ca8b18d41cd873cd2cc1cdff9"
+            "Rev": "292fce81accf2b3b816635481fab602cee7fcc2b"
           },
           "strip_prefix": "cranelift/codegen/shared"
         }
@@ -16121,7 +16121,7 @@
         "Git": {
           "remote": "https://github.com/bytecodealliance/wasmtime",
           "commitish": {
-            "Rev": "89ebd4531016170ca8b18d41cd873cd2cc1cdff9"
+            "Rev": "292fce81accf2b3b816635481fab602cee7fcc2b"
           },
           "strip_prefix": "cranelift/control"
         }
@@ -16178,7 +16178,7 @@
         "Git": {
           "remote": "https://github.com/bytecodealliance/wasmtime",
           "commitish": {
-            "Rev": "89ebd4531016170ca8b18d41cd873cd2cc1cdff9"
+            "Rev": "292fce81accf2b3b816635481fab602cee7fcc2b"
           },
           "strip_prefix": "cranelift/entity"
         }
@@ -16249,7 +16249,7 @@
         "Git": {
           "remote": "https://github.com/bytecodealliance/wasmtime",
           "commitish": {
-            "Rev": "89ebd4531016170ca8b18d41cd873cd2cc1cdff9"
+            "Rev": "292fce81accf2b3b816635481fab602cee7fcc2b"
           },
           "strip_prefix": "cranelift/frontend"
         }
@@ -16318,7 +16318,7 @@
         "Git": {
           "remote": "https://github.com/bytecodealliance/wasmtime",
           "commitish": {
-            "Rev": "89ebd4531016170ca8b18d41cd873cd2cc1cdff9"
+            "Rev": "292fce81accf2b3b816635481fab602cee7fcc2b"
           },
           "strip_prefix": "cranelift/isle/isle",
           "patch_args": [
@@ -16400,7 +16400,7 @@
         "Git": {
           "remote": "https://github.com/bytecodealliance/wasmtime",
           "commitish": {
-            "Rev": "89ebd4531016170ca8b18d41cd873cd2cc1cdff9"
+            "Rev": "292fce81accf2b3b816635481fab602cee7fcc2b"
           },
           "strip_prefix": "cranelift/native"
         }
@@ -57730,7 +57730,7 @@
         "Git": {
           "remote": "https://github.com/bytecodealliance/wasmtime",
           "commitish": {
-            "Rev": "89ebd4531016170ca8b18d41cd873cd2cc1cdff9"
+            "Rev": "292fce81accf2b3b816635481fab602cee7fcc2b"
           },
           "strip_prefix": "pulley"
         }
@@ -86910,7 +86910,7 @@
         "Git": {
           "remote": "https://github.com/bytecodealliance/wasmtime",
           "commitish": {
-            "Rev": "89ebd4531016170ca8b18d41cd873cd2cc1cdff9"
+            "Rev": "292fce81accf2b3b816635481fab602cee7fcc2b"
           },
           "strip_prefix": "crates/wasmtime"
         }
@@ -87350,7 +87350,7 @@
         "Git": {
           "remote": "https://github.com/bytecodealliance/wasmtime",
           "commitish": {
-            "Rev": "89ebd4531016170ca8b18d41cd873cd2cc1cdff9"
+            "Rev": "292fce81accf2b3b816635481fab602cee7fcc2b"
           },
           "strip_prefix": "crates/asm-macros"
         }
@@ -87400,7 +87400,7 @@
         "Git": {
           "remote": "https://github.com/bytecodealliance/wasmtime",
           "commitish": {
-            "Rev": "89ebd4531016170ca8b18d41cd873cd2cc1cdff9"
+            "Rev": "292fce81accf2b3b816635481fab602cee7fcc2b"
           },
           "strip_prefix": "crates/cranelift"
         }
@@ -87531,7 +87531,7 @@
         "Git": {
           "remote": "https://github.com/bytecodealliance/wasmtime",
           "commitish": {
-            "Rev": "89ebd4531016170ca8b18d41cd873cd2cc1cdff9"
+            "Rev": "292fce81accf2b3b816635481fab602cee7fcc2b"
           },
           "strip_prefix": "crates/environ"
         }
@@ -87651,7 +87651,7 @@
         "Git": {
           "remote": "https://github.com/bytecodealliance/wasmtime",
           "commitish": {
-            "Rev": "89ebd4531016170ca8b18d41cd873cd2cc1cdff9"
+            "Rev": "292fce81accf2b3b816635481fab602cee7fcc2b"
           },
           "strip_prefix": "crates/fiber"
         }
@@ -87773,7 +87773,7 @@
         "Git": {
           "remote": "https://github.com/bytecodealliance/wasmtime",
           "commitish": {
-            "Rev": "89ebd4531016170ca8b18d41cd873cd2cc1cdff9"
+            "Rev": "292fce81accf2b3b816635481fab602cee7fcc2b"
           },
           "strip_prefix": "crates/jit-icache-coherence"
         }
@@ -87840,7 +87840,7 @@
         "Git": {
           "remote": "https://github.com/bytecodealliance/wasmtime",
           "commitish": {
-            "Rev": "89ebd4531016170ca8b18d41cd873cd2cc1cdff9"
+            "Rev": "292fce81accf2b3b816635481fab602cee7fcc2b"
           },
           "strip_prefix": "crates/math"
         }
@@ -87896,7 +87896,7 @@
         "Git": {
           "remote": "https://github.com/bytecodealliance/wasmtime",
           "commitish": {
-            "Rev": "89ebd4531016170ca8b18d41cd873cd2cc1cdff9"
+            "Rev": "292fce81accf2b3b816635481fab602cee7fcc2b"
           },
           "strip_prefix": "crates/slab"
         }
@@ -87937,7 +87937,7 @@
         "Git": {
           "remote": "https://github.com/bytecodealliance/wasmtime",
           "commitish": {
-            "Rev": "89ebd4531016170ca8b18d41cd873cd2cc1cdff9"
+            "Rev": "292fce81accf2b3b816635481fab602cee7fcc2b"
           },
           "strip_prefix": "crates/versioned-export-macros"
         }
@@ -87995,7 +87995,7 @@
         "Git": {
           "remote": "https://github.com/bytecodealliance/wasmtime",
           "commitish": {
-            "Rev": "89ebd4531016170ca8b18d41cd873cd2cc1cdff9"
+            "Rev": "292fce81accf2b3b816635481fab602cee7fcc2b"
           },
           "strip_prefix": "crates/winch"
         }
@@ -89113,7 +89113,7 @@
         "Git": {
           "remote": "https://github.com/bytecodealliance/wasmtime",
           "commitish": {
-            "Rev": "89ebd4531016170ca8b18d41cd873cd2cc1cdff9"
+            "Rev": "292fce81accf2b3b816635481fab602cee7fcc2b"
           },
           "strip_prefix": "winch/codegen"
         }
