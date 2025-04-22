@@ -37,10 +37,10 @@ package(default_visibility = ["//visibility:public"])
             # Keep sorted.
             "//packages/ic-ethereum-types",
             "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//packages/ic-http-types",
             "//rs/crypto/sha2",
             "//rs/ledger_suite/icrc1/index-ng",
             "//rs/ledger_suite/icrc1/ledger",
-            "//rs/rust_canisters/http_types",
             "//rs/types/base_types",
             "//rs/types/management_canister_types",
             "@crate_index//:candid",
@@ -122,7 +122,7 @@ rust_test(
         deps = [
             # Keep sorted.
             ":ledger_suite_orchestrator" + name_suffix,
-            "//rs/rust_canisters/http_types",
+            "//packages/ic-http-types",
             "@crate_index//:askama",
             "@crate_index//:candid",
             "@crate_index//:ic-canister-log",
@@ -166,10 +166,10 @@ rust_ic_test(
         # Keep sorted.
         ":ledger_suite_orchestrator",
         "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/ic-http-types",
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/ethereum/ledger-suite-orchestrator/test_utils",
         "//rs/ledger_suite/icrc1/ledger",
-        "//rs/rust_canisters/http_types",
         "//rs/state_machine_tests",
         "//rs/types/base_types",
         "//rs/types/management_canister_types",

@@ -15,6 +15,7 @@ filegroup(
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//packages/ic-http-types",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/nervous_system/canisters",
@@ -24,7 +25,6 @@ DEPENDENCIES = [
     "//rs/nervous_system/proto",
     "//rs/nervous_system/runtime",
     "//rs/rust_canisters/canister_log",
-    "//rs/rust_canisters/http_types",
     "//rs/sns/governance",
     "//rs/types/base_types",
     "//rs/utils",

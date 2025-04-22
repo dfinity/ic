@@ -73,7 +73,6 @@ canister-test = { path = "../../rust_canisters/canister_test" }
 crossbeam-channel = { workspace = true }
 hex = { workspace = true }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
-ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-cbor = { workspace = true }
 ic-certificate-verification = { workspace = true }
 ic-certification = { workspace = true }
@@ -81,6 +80,7 @@ ic-config = { path = "../../config" }
 ic-crypto = { path = "../../crypto" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-error-types = { path = "../../../packages/ic-error-types" }
+ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }

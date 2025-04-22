@@ -13,13 +13,13 @@ filegroup(
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//packages/ic-http-types",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
     "//rs/rust_canisters/canister_log",
-    "//rs/rust_canisters/http_types",
     "//rs/sns/swap",  # TODO[NNS1-2282]
     "//rs/types/base_types",
     "//rs/types/management_canister_types",

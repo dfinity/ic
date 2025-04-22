@@ -160,11 +160,11 @@ impl TargetCanister {
             TargetCanister::IcpIndex => {
                 vec![
                     PathBuf::from("packages/icrc-ledger_types"),
+                    PathBuf::from("packages/ic-http-types"),
                     PathBuf::from("rs/ledger_suite/icp/index"),
                     PathBuf::from("rs/ledger_suite/icp/src"),
                     PathBuf::from("rs/ledger_suite/common/ledger_canister_core/src"),
                     PathBuf::from("rs/ledger_suite/common/ledger_core"),
-                    PathBuf::from("rs/rust_canisters/http_types"),
                     PathBuf::from("rs/rust_canisters/canister_log"),
                 ]
             }
