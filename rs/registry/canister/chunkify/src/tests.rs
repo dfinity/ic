@@ -1,6 +1,80 @@
 use super::*;
-use ic_registry_transport::pb::v1::{registry_mutation, Precondition};
-use std::{cell::RefCell, rc::Rc};
+use ic_registry_transport::pb::v1::{
+    high_capacity_registry_value, registry_mutation, HighCapacityRegistryValue, Precondition,
+};
+use prost::Message;
+use std::{cell::RefCell, iter::repeat, rc::Rc};
+
+// This also indirectly tests dechunkify, because decode_high_capacity_registry_value calls that.
+#[test]
+fn test_decode_high_capacity_registry_value() {
+    let small_value = Precondition {
+        key: b"this is key".to_vec(),
+        expected_version: 42,
+    };
+    let small_value_content = Some(high_capacity_registry_value::Content::Value(
+        small_value.encode_to_vec(),
+    ));
+
+    let key = repeat(b"hello ")
+        .take(500_000)
+        .flatten()
+        .cloned()
+        .collect::<Vec<u8>>();
+    assert_eq!(key.len(), 3_000_000);
+
+    let big_value = Precondition {
+        key,
+        expected_version: 43,
+    };
+
+    let memory = Rc::new(RefCell::new(Vec::<u8>::new()));
+    let mut chunks = Chunks::init(memory);
+
+    let chunk_content_sha256s: Vec<Vec<u8>> =
+        chunks.upsert_monolithic_blob(big_value.encode_to_vec());
+    let lens = chunk_content_sha256s
+        .iter()
+        .map(|hash| hash.len())
+        .collect::<Vec<usize>>();
+    assert_eq!(lens, vec![32, 32]);
+
+    let big_value_content = Some(high_capacity_registry_value::Content::LargeValueChunkKeys(
+        LargeValueChunkKeys {
+            chunk_content_sha256s,
+        },
+    ));
+
+    let mut version = 42_000; // This has no effect on the result, but is needed anyway.
+    let empty_decoded_value = Some(Precondition::decode(&[][..]).unwrap());
+    for (content, expected_output) in [
+        (
+            Some(high_capacity_registry_value::Content::DeletionMarker(true)),
+            None,
+        ),
+        (small_value_content, Some(small_value)),
+        (big_value_content, Some(big_value)),
+        // These are degenerate cases, and are treated like empty value.
+        (None, empty_decoded_value.clone()),
+        (
+            Some(high_capacity_registry_value::Content::DeletionMarker(false)),
+            empty_decoded_value,
+        ),
+    ] {
+        version += 1;
+        let timestamp_seconds = version + 123_000_000;
+
+        let input = HighCapacityRegistryValue {
+            version,
+            content,
+            timestamp_seconds,
+        };
+
+        let observed_output = decode_high_capacity_registry_value(&input, &chunks);
+
+        assert_eq!(observed_output, expected_output);
+    }
+}
 
 #[test]
 fn test_chunkify_composite_mutation() {

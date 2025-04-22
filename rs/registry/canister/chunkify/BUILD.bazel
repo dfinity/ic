@@ -7,6 +7,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/chunks",
     "//rs/registry/transport",
     "@crate_index//:ic-stable-structures",
+    "@crate_index//:prost",
 ]
 
 DEV_DEPENDENCIES = [
