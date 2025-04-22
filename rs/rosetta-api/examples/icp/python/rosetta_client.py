@@ -92,7 +92,7 @@ class RosettaClient:
             print(f"Received response:\n{json.dumps(ret, indent=2)}")
         return ret
 
-    def get_account_identifier(self, verbose=False):
+    def get_account_identifier(self, public_key=None, neuron_index=None, verbose=False):
         """
         Derive the account identifier from the compressed public key.
         
@@ -102,16 +102,24 @@ class RosettaClient:
         Returns:
             str: The account identifier.
         """
+
+        if not public_key and not self.compressed_public_key:
+            raise Exception("Either public_key or compressed_public_key must be provided to get_account_identifier")
+        
+        public_key = public_key if public_key else { "hex_bytes": self.compressed_public_key, "curve_type": self.curve_type }
+        
         payload = {
             "network_identifier": {
                 "blockchain": "Internet Computer",
                 "network": self.network
             },
-            "public_key": {
-                "hex_bytes": self.compressed_public_key,
-                "curve_type": self.curve_type
-            }
+            "public_key": public_key
         }
+        if neuron_index:
+            payload["metadata"] = {
+                "account_type": "neuron",
+                "neuron_index": neuron_index
+            }
         res = self._send('construction/derive', payload, verbose=verbose)
         return res['account_identifier']['address']
     
