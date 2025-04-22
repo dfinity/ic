@@ -19940,6 +19940,8 @@ version = "0.9.0"
 dependencies = [
  "actix-web-prom",
  "anyhow",
+ "axum 0.8.1",
+ "bytes",
  "candid",
  "hex",
  "ic-agent",
@@ -19957,6 +19959,8 @@ dependencies = [
  "serde_json",
  "serde_with 1.14.0",
  "tokio",
+ "tower 0.5.2",
+ "tower-http 0.6.2",
  "tracing",
 ]
 
