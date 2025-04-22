@@ -23,7 +23,7 @@ use reqwest::header::CONTENT_LENGTH;
 use reqwest::{Method, StatusCode};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use std::{io::Read, time::SystemTime};
+use std::{io::Read, sync::OnceLock, time::SystemTime};
 
 // 2T cycles
 const INIT_CYCLES: u128 = 2_000_000_000_000;
@@ -2657,4 +2657,49 @@ fn non_empty_state_and_read_only_state() {
         .with_state(state)
         .with_read_only_state(&read_only_state)
         .build();
+}
+
+const MAINNET_CANISTER_ID: Principal =
+    Principal::from_slice(&[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01]);
+
+static POCKET_IC_STATE: OnceLock<PocketIcState> = OnceLock::new();
+
+fn init_state() -> &'static PocketIcState {
+    POCKET_IC_STATE.get_or_init(|| {
+        // create a PocketIC instance used to bootstrap the state to be used in multiple tests later
+        let state = PocketIcState::new();
+        let pic = PocketIcBuilder::new()
+            .with_nns_subnet()
+            .with_state(state)
+            .build();
+
+        // set up the state to be used in multiple tests later
+        pic.create_canister_with_id(None, None, MAINNET_CANISTER_ID)
+            .unwrap();
+
+        // serialize and expose the state
+        pic.drop_and_take_state().unwrap()
+    })
+}
+
+#[test]
+fn pocket_ic_shared_state_1() {
+    // mount the state created before
+    let pic1 = PocketIcBuilder::new()
+        .with_read_only_state(init_state())
+        .build();
+
+    // assert that the state is initialized
+    assert!(pic1.canister_exists(MAINNET_CANISTER_ID));
+}
+
+#[test]
+fn pocket_ic_shared_state_2() {
+    // mount the state created before
+    let pic2 = PocketIcBuilder::new()
+        .with_read_only_state(init_state())
+        .build();
+
+    // assert that the state is initialized
+    assert!(pic2.canister_exists(MAINNET_CANISTER_ID));
 }

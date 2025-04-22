@@ -661,3 +661,59 @@ To test the VetKd feature, you need to create a PocketIC instance with II or fid
         .with_nonmainnet_features(true) // the VetKd feature is not available on mainnet yet
         .build();
 ```
+
+## Running multiple tests from the same state
+
+To speed up running a test suite, it is possible to run multiple tests from the same state
+that is only created once at the very beginning and then reused by the individual tests
+without interference between the individual tests.
+An example of a such setup:
+
+```rust
+use std::sync::OnceCell;
+
+const MAINNET_CANISTER_ID: Principal =
+    Principal::from_slice(&[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01]);
+
+static POCKET_IC_STATE: OnceLock<PocketIcState> = OnceLock::new();
+
+fn init_state() -> &'static PocketIcState {
+    POCKET_IC_STATE.get_or_init(|| {
+        // create a PocketIC instance used to bootstrap the state to be used in multiple tests later
+        let state = PocketIcState::new();
+        let pic = PocketIcBuilder::new()
+            .with_nns_subnet()
+            .with_state(state)
+            .build();
+
+        // set up the state to be used in multiple tests later
+        pic.create_canister_with_id(None, None, MAINNET_CANISTER_ID)
+            .unwrap();
+
+        // serialize and expose the state
+        pic.drop_and_take_state().unwrap()
+    })
+}
+
+#[test]
+fn pocket_ic_shared_state_1() {
+    // mount the state created before
+    let pic1 = PocketIcBuilder::new()
+        .with_read_only_state(init_state())
+        .build();
+
+    // assert that the state is initialized
+    assert!(pic1.canister_exists(MAINNET_CANISTER_ID));
+}
+
+#[test]
+fn pocket_ic_shared_state_2() {
+    // mount the state created before
+    let pic2 = PocketIcBuilder::new()
+        .with_read_only_state(init_state())
+        .build();
+
+    // assert that the state is initialized
+    assert!(pic2.canister_exists(MAINNET_CANISTER_ID));
+}
+```
