@@ -10,7 +10,7 @@ use crate::common::rest::{
 pub use crate::DefaultEffectiveCanisterIdError;
 use crate::{
     copy_dir, start_or_reuse_server, IngressStatusResult, PocketIcBuilder, PocketIcState,
-    RejectResponse,
+    RejectResponse, Time,
 };
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
@@ -40,7 +40,7 @@ use std::fs::{read_dir, File};
 use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 use tracing::{debug, instrument, warn};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
@@ -365,7 +365,7 @@ impl PocketIc {
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn auto_progress(&self) -> Url {
         let now = std::time::SystemTime::now();
-        self.set_certified_time(now).await;
+        self.set_certified_time(now.into()).await;
         let endpoint = "auto_progress";
         let auto_progress_config = AutoProgressConfig {
             artificial_delay_ms: None,
@@ -544,23 +544,20 @@ impl PocketIc {
 
     /// Get the current time of the IC.
     #[instrument(ret, skip(self), fields(instance_id=self.instance_id))]
-    pub async fn get_time(&self) -> SystemTime {
+    pub async fn get_time(&self) -> Time {
         let endpoint = "read/get_time";
         let result: RawTime = self.get(endpoint).await;
-        SystemTime::UNIX_EPOCH + Duration::from_nanos(result.nanos_since_epoch)
+        Time::from_nanos_since_unix_epoch(result.nanos_since_epoch)
     }
 
     /// Set the current time of the IC, on all subnets.
     #[instrument(skip(self), fields(instance_id=self.instance_id, time = ?time))]
-    pub async fn set_time(&self, time: SystemTime) {
+    pub async fn set_time(&self, time: Time) {
         let endpoint = "update/set_time";
         self.post::<(), _>(
             endpoint,
             RawTime {
-                nanos_since_epoch: time
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .expect("Time went backwards")
-                    .as_nanos() as u64,
+                nanos_since_epoch: time.as_nanos_since_unix_epoch(),
             },
         )
         .await;
@@ -568,15 +565,12 @@ impl PocketIc {
 
     /// Set the current certified time of the IC, on all subnets.
     #[instrument(skip(self), fields(instance_id=self.instance_id, time = ?time))]
-    pub async fn set_certified_time(&self, time: SystemTime) {
+    pub async fn set_certified_time(&self, time: Time) {
         let endpoint = "update/set_certified_time";
         self.post::<(), _>(
             endpoint,
             RawTime {
-                nanos_since_epoch: time
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .expect("Time went backwards")
-                    .as_nanos() as u64,
+                nanos_since_epoch: time.as_nanos_since_unix_epoch(),
             },
         )
         .await;
@@ -1416,13 +1410,7 @@ impl PocketIc {
         ];
         let paths = vec![path.clone()];
         let content = ReadState {
-            ingress_expiry: self
-                .get_time()
-                .await
-                .duration_since(std::time::SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos() as u64
-                + 240_000_000_000,
+            ingress_expiry: self.get_time().await.as_nanos_since_unix_epoch() + 240_000_000_000,
             sender: Principal::anonymous(),
             paths,
         };

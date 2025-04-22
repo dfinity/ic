@@ -16,7 +16,7 @@ use pocket_ic::{
         RawEffectivePrincipal, RawMessageId, SubnetKind,
     },
     query_candid, update_candid, DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult,
-    PocketIc, PocketIcBuilder, PocketIcState, RejectCode,
+    PocketIc, PocketIcBuilder, PocketIcState, RejectCode, Time,
 };
 use reqwest::blocking::Client;
 use reqwest::header::CONTENT_LENGTH;
@@ -355,20 +355,10 @@ fn test_multiple_large_xnet_payloads() {
 }
 
 fn query_and_check_time(pic: &PocketIc, test_canister: Principal) {
-    let current_time = pic
-        .get_time()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let current_time = pic.get_time().as_nanos_since_unix_epoch();
     let t: (u64,) = query_candid(pic, test_canister, "time", ((),)).unwrap();
-    assert_eq!(
-        pic.get_time()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos(),
-        current_time
-    );
-    assert_eq!(current_time, t.0 as u128);
+    assert_eq!(pic.get_time().as_nanos_since_unix_epoch(), current_time);
+    assert_eq!(current_time, t.0);
 }
 
 #[test]
@@ -381,7 +371,7 @@ fn test_get_and_set_and_advance_time() {
     pic.install_canister(canister, test_canister_wasm(), vec![], None);
 
     let unix_time_secs = 1650000000;
-    let time = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs);
+    let time = Time::from_nanos_since_unix_epoch(unix_time_secs);
     pic.set_time(time);
     // time is not certified so `query_and_check_time` would fail here
     assert_eq!(pic.get_time(), time);
@@ -393,7 +383,7 @@ fn test_get_and_set_and_advance_time() {
     assert_eq!(pic.get_time(), time + std::time::Duration::from_nanos(1));
 
     let unix_time_secs = 1700000000;
-    let time = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs);
+    let time = Time::from_nanos_since_unix_epoch(unix_time_secs);
     pic.set_certified_time(time);
     query_and_check_time(&pic, canister);
     assert_eq!(pic.get_time(), time);
@@ -425,9 +415,10 @@ fn set_time_into_past() {
     let pic = PocketIc::new();
 
     let now = SystemTime::now();
-    pic.set_time(now + std::time::Duration::from_secs(1));
+    let future = now + std::time::Duration::from_secs(1);
+    pic.set_time(future.into());
 
-    pic.set_time(now);
+    pic.set_time(now.into());
 }
 
 #[test]
@@ -2171,12 +2162,7 @@ fn read_state_request_status(
     let path = vec!["request_status".into(), Label::from_bytes(msg_id)];
     let paths = vec![path.clone()];
     let content = ReadState {
-        ingress_expiry: pic
-            .get_time()
-            .duration_since(std::time::SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos() as u64
-            + 240_000_000_000,
+        ingress_expiry: pic.get_time().as_nanos_since_unix_epoch() + 240_000_000_000,
         sender: Principal::anonymous(),
         paths,
     };
@@ -2218,14 +2204,9 @@ fn call_ingress_expiry() {
 
     // submit an update call via /api/v2/canister/.../call using an ingress expiry in the future
     let unix_time_secs = 2272143600; // Wed Jan 01 2042 00:00:00 GMT+0100
-    let time = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs);
+    let time = Time::from_nanos_since_unix_epoch(unix_time_secs);
     pic.set_certified_time(time);
-    let ingress_expiry = pic
-        .get_time()
-        .duration_since(std::time::SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos() as u64
-        + 240_000_000_000;
+    let ingress_expiry = pic.get_time().as_nanos_since_unix_epoch() + 240_000_000_000;
     let (resp, msg_id) = call_request(&pic, ingress_expiry, canister_id);
     assert_eq!(resp.status(), reqwest::StatusCode::ACCEPTED);
 
