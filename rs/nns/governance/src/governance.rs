@@ -6901,13 +6901,6 @@ impl Governance {
         })
     }
 
-    pub fn batch_adjust_neurons_storage(
-        &mut self,
-        next: std::ops::Bound<NeuronId>,
-    ) -> std::ops::Bound<NeuronId> {
-        self.neuron_store.batch_adjust_neurons_storage(next)
-    }
-
     /// Recompute cached metrics once per day
     pub fn should_compute_cached_metrics(&self) -> bool {
         if let Some(metrics) = self.heap_data.metrics.as_ref() {

@@ -54,7 +54,7 @@ use prost::Message;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::sync::Arc;
-use std::{boxed::Box, ops::Bound, time::Duration};
+use std::{boxed::Box, time::Duration};
 
 #[cfg(not(feature = "tla"))]
 use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
@@ -74,31 +74,11 @@ const WASM_PAGES_RESERVED_FOR_UPGRADES_MEMORY: u64 = 65_536;
 pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 
 fn schedule_timers() {
-    schedule_adjust_neurons_storage(Duration::from_nanos(0), Bound::Unbounded);
     schedule_spawn_neurons();
     schedule_unstake_maturity_of_dissolved_neurons();
     schedule_neuron_data_validation();
     schedule_vote_processing();
     schedule_tasks();
-}
-
-// The interval before adjusting neuron storage for the next batch of neurons starting from last
-// neuron id scanned in the last batch.
-const ADJUST_NEURON_STORAGE_BATCH_INTERVAL: Duration = Duration::from_secs(5);
-// The interval before adjusting neuron storage for the next round starting from the smallest neuron
-// id.
-const ADJUST_NEURON_STORAGE_ROUND_INTERVAL: Duration = Duration::from_secs(3600);
-
-fn schedule_adjust_neurons_storage(delay: Duration, next: Bound<NeuronIdProto>) {
-    ic_cdk_timers::set_timer(delay, move || {
-        let next = governance_mut().batch_adjust_neurons_storage(next);
-        let next_delay = if next == Bound::Unbounded {
-            ADJUST_NEURON_STORAGE_ROUND_INTERVAL
-        } else {
-            ADJUST_NEURON_STORAGE_BATCH_INTERVAL
-        };
-        schedule_adjust_neurons_storage(next_delay, next);
-    });
 }
 
 const SPAWN_NEURONS_INTERVAL: Duration = Duration::from_secs(60);

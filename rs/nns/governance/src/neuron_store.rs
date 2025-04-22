@@ -520,21 +520,6 @@ impl NeuronStore {
         self.remove_neuron_from_indexes(&neuron_to_remove);
     }
 
-    /// Adjusts the storage location of neurons, since active neurons might become inactive due to
-    /// passage of time.
-    pub fn batch_adjust_neurons_storage(&mut self, next: Bound<NeuronId>) -> Bound<NeuronId> {
-        #[cfg(target_arch = "wasm32")]
-        static MAX_NUM_INSTRUCTIONS_PER_BATCH: u64 = 1_000_000_000;
-
-        #[cfg(target_arch = "wasm32")]
-        let carry_on = || ic_cdk::api::instruction_counter() < MAX_NUM_INSTRUCTIONS_PER_BATCH;
-
-        #[cfg(not(target_arch = "wasm32"))]
-        let carry_on = || true;
-
-        groom_some_neurons(self, |_| {}, next, carry_on)
-    }
-
     fn remove_neuron_from_indexes(&mut self, neuron: &Neuron) {
         if let Err(error) = with_stable_neuron_indexes_mut(|indexes| indexes.remove_neuron(neuron))
         {

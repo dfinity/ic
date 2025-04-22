@@ -12,7 +12,6 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use maplit::{btreemap, btreeset, hashmap, hashset};
 use num_traits::bounds::LowerBounded;
 use pretty_assertions::assert_eq;
-use std::cell::Cell;
 
 // Value is 6 months ahead of when this code was written. For realism, and to
 // make sure this is "long" after we release periodic confirmation.
@@ -1023,55 +1022,6 @@ fn test_get_non_empty_neuron_ids_readable_by_caller() {
 }
 
 #[test]
-fn test_batch_adjust_neurons_storage() {
-    // This test doesn't make sense after neurons are migrated completely to stable memory.
-    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
-    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
-
-    // Step 1.1: set up an empty neuron store.
-    let mut neuron_store = NeuronStore::new(BTreeMap::new());
-
-    // Step 1.2: set up 5 active neurons with stake
-    for i in 1..=5 {
-        let neuron = simple_neuron_builder(i)
-            .with_cached_neuron_stake_e8s(1)
-            .with_dissolve_state_and_age(DissolveStateAndAge::DissolvingOrDissolved {
-                when_dissolved_timestamp_seconds: neuron_store.now(),
-            })
-            .build();
-        neuron_store.add_neuron(neuron).unwrap();
-    }
-
-    // Step 1.3: set up 5 active neurons without stake, which will become inactive when the time is
-    // advanced.
-    for i in 6..=10 {
-        let neuron = active_neuron_builder(i, neuron_store.now()).build();
-        neuron_store.add_neuron(neuron).unwrap();
-    }
-
-    // Step 1.4: warp time so that the neuron becomes inactive without modification.
-    warp_time_to_make_neuron_inactive(&mut neuron_store);
-
-    // Step 1.5: define a lambda which always returns false, for checking instructions.
-    let always_true = || true;
-
-    // Step 1.6: make sure the counts of neurons in heap and stable are expected.
-    assert_eq!(neuron_store.heap_neuron_store_len(), 10);
-    assert_eq!(neuron_store.stable_neuron_store_len(), 0);
-
-    // Step 2: adjust the storage of neurons and verifies the counts.
-    let next_neuron_id = groom_some_neurons(
-        &mut neuron_store,
-        |_| {},
-        Bound::Excluded(NeuronId { id: 0 }),
-        always_true,
-    );
-    assert_eq!(next_neuron_id, Bound::Unbounded);
-    assert_eq!(neuron_store.heap_neuron_store_len(), 5);
-    assert_eq!(neuron_store.stable_neuron_store_len(), 5);
-}
-
-#[test]
 fn test_unstake_maturity() {
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
     let now_seconds = neuron_store.now();
@@ -1116,62 +1066,6 @@ fn test_unstake_maturity() {
     for id in 1..=5 {
         assert!(!neuron_has_staked_maturity(&neuron_store, id));
     }
-}
-
-#[test]
-fn test_batch_adjust_neurons_storage_exceeds_instructions_limit() {
-    // This test doesn't make sense after neurons are migrated completely to stable memory.
-    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
-    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
-
-    // Step 1.1: set up an empty neuron store.
-    let mut neuron_store = NeuronStore::new(BTreeMap::new());
-
-    // Step 1.2: set up 5 active neurons without stake, which will become inactive when the time is
-    // advanced.
-    for i in 1..=5 {
-        let neuron = active_neuron_builder(i, neuron_store.now()).build();
-        neuron_store.add_neuron(neuron).unwrap();
-    }
-
-    // Step 1.4: warp time so that the neuron becomes inactive without modification.
-    warp_time_to_make_neuron_inactive(&mut neuron_store);
-
-    // Step 1.5: make sure the counts of neurons in heap and stable are expected.
-    assert_eq!(neuron_store.heap_neuron_store_len(), 5);
-    assert_eq!(neuron_store.stable_neuron_store_len(), 0);
-
-    // Step 2: adjust the storage of neurons for the first 10 neurons, however, the `carry_on`
-    // returns false for the 3rd time it's called, allowing `groom_some_neurons` continue 2 times,
-    // moving only 3 neurons.
-    let counter = Cell::new(0);
-    let next_neuron_id = groom_some_neurons(
-        &mut neuron_store,
-        |_| {},
-        Bound::Excluded(NeuronId { id: 0 }),
-        || {
-            counter.set(counter.get() + 1);
-            counter.get() <= 2
-        },
-    );
-    assert_eq!(next_neuron_id, Bound::Excluded(NeuronId { id: 3 }));
-    assert_eq!(neuron_store.heap_neuron_store_len(), 2);
-    assert_eq!(neuron_store.stable_neuron_store_len(), 3);
-
-    // Step 3: adjust the storage of neurons for the rest of 4 neurons and verifies the counts.
-    let counter = Cell::new(0);
-    let next_neuron_id = groom_some_neurons(
-        &mut neuron_store,
-        |_| {},
-        Bound::Excluded(NeuronId { id: 3 }),
-        || {
-            counter.set(counter.get() + 1);
-            counter.get() <= 2
-        },
-    );
-    assert_eq!(next_neuron_id, Bound::Unbounded);
-    assert_eq!(neuron_store.heap_neuron_store_len(), 0);
-    assert_eq!(neuron_store.stable_neuron_store_len(), 5);
 }
 
 #[test]
