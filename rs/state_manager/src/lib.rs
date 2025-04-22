@@ -1138,7 +1138,7 @@ fn switch_to_checkpoint(
                 .wasm_binary
                 .module_hash()
                 .into(),
-        );
+        )?;
         debug_assert_eq!(wasm_binary.file_loading_status(), Some(false));
         new_snapshot.execution_snapshot_mut().wasm_binary = wasm_binary;
     }
@@ -1152,7 +1152,7 @@ fn switch_to_checkpoint(
             let embedder_cache = Arc::clone(&tip_state.wasm_binary.embedder_cache);
             let wasm_binary = canister_layout
                 .wasm()
-                .lazy_load_with_module_hash(tip_state.wasm_binary.binary.module_hash().into());
+                .lazy_load_with_module_hash(tip_state.wasm_binary.binary.module_hash().into())?;
             debug_assert_eq!(
                 tip_state.wasm_binary.binary.as_slice(),
                 wasm_binary.as_slice()
