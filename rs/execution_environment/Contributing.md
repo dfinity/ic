@@ -1,9 +1,9 @@
 = Introducing a new Management Canister API or changing an existing one:
 
 1. Specify the new API or make the required changes to an existing one in the [portal](https://github.com/dfinity/portal) repository. Typically, you would want to make changes in the [following file](https://github.com/dfinity/portal/blob/master/docs/references/ic-interface-spec.md). Additionally, make sure you update the [Candid interface](https://github.com/dfinity/portal/blob/master/docs/references/_attachments/ic.did) of the Management Canister accordingly. Furthermore, make sure to provide motivation for the new API or changes you're making and how it would benefit the ICP protocol.
-2. The public Management Canister [types](https://crates.io/crates/ic-management-canister-types) would need to be updated. Inform *@eng-sdk* of the work required.
-3. The Rust CDK would need to be updated: [Rust Canister Development Kit](https://github.com/dfinity/cdk-rs). Inform *@eng-sdk* of the work required.
-4. Motoko would need to be updated: [Motoko](https://github.com/dfinity/motoko). Inform *@eng-motoko* of the work required.
+2. The public Management Canister [types](https://crates.io/crates/ic-management-canister-types) needs to be updated. Inform *@eng-sdk* of the work required.
+3. The Rust CDK needs to be updated: [Rust Canister Development Kit](https://github.com/dfinity/cdk-rs). Inform *@eng-sdk* of the work required.
+4. Motoko needs to be updated: [Motoko](https://github.com/dfinity/motoko). Inform *@eng-motoko* of the work required.
 5. Add any new types or update existing ones in `types/management_canister_types`.
 6. Implement the new API in `execution_environment` crate. Main parts that need to be updated: the core implementation in the `canister_manager` module as well as wiring up the new API in `ExecutionEnvironment` so that it is accessible from the outside.
 7. Tests: add any required tests to cover the new or updated functionality. Typically, these tests can be written using the `ExecutionTest` framework. In some cases, you might need to use State Machine tests, e.g. if you would need to test things like inter-canister calls or special features like HTTPS outcalls or threshold signatures that require interaction with the Consensus layer.
