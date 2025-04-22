@@ -5,7 +5,7 @@
 set -x
 
 # Usage
-# ./bin/afl_test.sh //rs/embedders/fuzz:execute_with_wasm_executor_afl /path/to/testcase
+# ./bin/fuzzing/afl_test.sh //rs/embedders/fuzz:execute_with_wasm_executor_afl /path/to/testcase
 
 AFL_BAZEL_TARGET=$1
 TEST_INPUT=$2

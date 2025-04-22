@@ -21,7 +21,7 @@ use ic_types::{
     messages::{CertificateDelegation, Query, QuerySource, Request},
     CanisterId, NumBytes,
 };
-use std::{sync::Arc, time::Instant};
+use std::time::Instant;
 use tokio::{
     runtime::Handle,
     sync::{
@@ -30,7 +30,7 @@ use tokio::{
             error::{TryRecvError, TrySendError},
             Receiver, Sender,
         },
-        OnceCell,
+        watch,
     },
 };
 use tonic::{transport::Channel, Code};
@@ -63,7 +63,7 @@ pub struct CanisterHttpAdapterClientImpl {
     query_service: QueryExecutionService,
     metrics: Metrics,
     subnet_type: SubnetType,
-    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
+    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
 }
 
 impl CanisterHttpAdapterClientImpl {
@@ -74,7 +74,7 @@ impl CanisterHttpAdapterClientImpl {
         inflight_requests: usize,
         metrics_registry: MetricsRegistry,
         subnet_type: SubnetType,
-        delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
+        delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
     ) -> Self {
         let (tx, rx) = channel(inflight_requests);
         let metrics = Metrics::new(&metrics_registry);
@@ -122,7 +122,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         let query_handler = self.query_service.clone();
         let metrics = self.metrics.clone();
         let subnet_type = self.subnet_type;
-        let delegation_from_nns = self.delegation_from_nns.get().cloned();
+        let delegation_from_nns = self.delegation_from_nns.borrow().clone();
 
         // Spawn an async task that sends the canister http request to the adapter and awaits the response.
         // After receiving the response from the adapter an optional transform is applied by doing an upcall to execution.
@@ -303,7 +303,7 @@ async fn transform_adapter_response(
 
     // Query to execution.
     let query = Query {
-        source: QuerySource::Anonymous,
+        source: QuerySource::System,
         receiver: transform_canister,
         method_name: transform.method_name.to_string(),
         method_payload,
@@ -500,7 +500,7 @@ mod tests {
         }
     }
 
-    fn setup_anonymous_query_mock() -> (
+    fn setup_system_query_mock() -> (
         QueryExecutionService,
         Handle<(Query, Option<CertificateDelegation>), QueryExecutionResponse>,
     ) {
@@ -555,12 +555,14 @@ mod tests {
         .await;
 
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
-        let (svc, mut handle) = setup_anonymous_query_mock();
+        let (svc, mut handle) = setup_system_query_mock();
 
         tokio::spawn(async move {
             let (_, rsp) = handle.next_request().await.unwrap();
             rsp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable));
         });
+
+        let (_, rx) = watch::channel(None);
 
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
@@ -569,7 +571,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            Arc::new(OnceCell::new()),
+            rx,
         );
 
         assert_eq!(client.try_receive(), Err(TryReceiveError::Empty));
@@ -608,12 +610,14 @@ mod tests {
         let mock_grpc_channel =
             setup_adapter_mock(Err((Code::Unavailable, "adapter unavailable".to_string()))).await;
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
-        let (svc, mut handle) = setup_anonymous_query_mock();
+        let (svc, mut handle) = setup_system_query_mock();
 
         tokio::spawn(async move {
             let (_, rsp) = handle.next_request().await.unwrap();
             rsp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable));
         });
+
+        let (_, rx) = watch::channel(None);
 
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
@@ -622,7 +626,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            Arc::new(OnceCell::new()),
+            rx,
         );
 
         assert_eq!(
@@ -660,7 +664,7 @@ mod tests {
         }))
         .await;
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
-        let (svc, mut handle) = setup_anonymous_query_mock();
+        let (svc, mut handle) = setup_system_query_mock();
 
         tokio::spawn(async move {
             let (req, rsp) = handle.next_request().await.unwrap();
@@ -676,6 +680,8 @@ mod tests {
             )));
         });
 
+        let (_, rx) = watch::channel(None);
+
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
@@ -683,7 +689,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            Arc::new(OnceCell::new()),
+            rx,
         );
 
         assert_eq!(
@@ -728,12 +734,14 @@ mod tests {
         )))
         .await;
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
-        let (svc, mut handle) = setup_anonymous_query_mock();
+        let (svc, mut handle) = setup_system_query_mock();
 
         tokio::spawn(async move {
             let (_, rsp) = handle.next_request().await.unwrap();
             rsp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable));
         });
+
+        let (_, rx) = watch::channel(None);
 
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
@@ -742,7 +750,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            Arc::new(OnceCell::new()),
+            rx,
         );
 
         assert_eq!(
@@ -794,7 +802,7 @@ mod tests {
         }))
         .await;
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
-        let (svc, mut handle) = setup_anonymous_query_mock();
+        let (svc, mut handle) = setup_system_query_mock();
 
         let adapter_h = adapter_headers.clone();
         let adapter_b = adapter_body.clone();
@@ -821,6 +829,8 @@ mod tests {
             )));
         });
 
+        let (_, rx) = watch::channel(None);
+
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
@@ -828,10 +838,10 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            Arc::new(OnceCell::new()),
+            rx,
         );
 
-        // Specify a transform_method name such that the client calls the anonymous query handler.
+        // Specify a transform_method name such that the client calls the system query handler.
         assert_eq!(
             client.send(build_mock_canister_http_request(
                 420,
@@ -863,7 +873,7 @@ mod tests {
         assert_eq!(client.try_receive(), Err(TryReceiveError::Empty));
     }
 
-    // Test case for anonymous query rejection. The client should pass through the rejection received from the query handler.
+    // Test case for system query rejection. The client should pass through the rejection received from the query handler.
     #[tokio::test]
     async fn test_client_transform_reject() {
         let adapter_body = "<html>
@@ -887,12 +897,14 @@ mod tests {
         }))
         .await;
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
-        let (svc, mut handle) = setup_anonymous_query_mock();
+        let (svc, mut handle) = setup_system_query_mock();
 
         tokio::spawn(async move {
             let (_, rsp) = handle.next_request().await.unwrap();
             rsp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable));
         });
+
+        let (_, rx) = watch::channel(None);
 
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
@@ -901,10 +913,10 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
-            Arc::new(OnceCell::new()),
+            rx,
         );
 
-        // Specify a transform_method name such that the client calls the anonymous query handler.
+        // Specify a transform_method name such that the client calls the system query handler.
         assert_eq!(
             client.send(build_mock_canister_http_request(
                 420,
@@ -941,12 +953,14 @@ mod tests {
         let mock_grpc_channel =
             setup_adapter_mock(Err((Code::Unavailable, "adapter unavailable".to_string()))).await;
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
-        let (svc, mut handle) = setup_anonymous_query_mock();
+        let (svc, mut handle) = setup_system_query_mock();
 
         tokio::spawn(async move {
             let (_, rsp) = handle.next_request().await.unwrap();
             rsp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable));
         });
+
+        let (_, rx) = watch::channel(None);
 
         // Create a client with a capacity of 2.
         let mut client = CanisterHttpAdapterClientImpl::new(
@@ -956,7 +970,7 @@ mod tests {
             2,
             MetricsRegistry::default(),
             SubnetType::Application,
-            Arc::new(OnceCell::new()),
+            rx,
         );
 
         assert_eq!(client.try_receive(), Err(TryReceiveError::Empty));

@@ -14,8 +14,8 @@ use ic_protobuf::registry::{
     node_rewards::v2::UpdateNodeRewardsTableProposalPayload,
 };
 use ic_registry_canister_api::{
-    AddNodePayload, Chunk, GetChunkRequest, UpdateNodeDirectlyPayload,
-    UpdateNodeIPv4ConfigDirectlyPayload,
+    AddNodePayload, Chunk, GetChunkRequest, GetNodeProvidersMonthlyXdrRewardsRequest,
+    UpdateNodeDirectlyPayload, UpdateNodeIPv4ConfigDirectlyPayload,
 };
 use ic_registry_transport::{
     deserialize_atomic_mutate_request, deserialize_get_changes_since_request,
@@ -912,15 +912,17 @@ fn get_node_providers_monthly_xdr_rewards() {
     check_caller_is_governance_and_log("get_node_providers_monthly_xdr_rewards");
     over(
         candid_one,
-        |()| -> Result<NodeProvidersMonthlyXdrRewards, String> {
-            get_node_providers_monthly_xdr_rewards_()
+        |request: Option<GetNodeProvidersMonthlyXdrRewardsRequest>| -> Result<NodeProvidersMonthlyXdrRewards, String> {
+            get_node_providers_monthly_xdr_rewards_(request)
         },
     )
 }
 
 #[candid_method(query, rename = "get_node_providers_monthly_xdr_rewards")]
-fn get_node_providers_monthly_xdr_rewards_() -> Result<NodeProvidersMonthlyXdrRewards, String> {
-    registry().get_node_providers_monthly_xdr_rewards()
+fn get_node_providers_monthly_xdr_rewards_(
+    arg: Option<GetNodeProvidersMonthlyXdrRewardsRequest>,
+) -> Result<NodeProvidersMonthlyXdrRewards, String> {
+    registry().get_node_providers_monthly_xdr_rewards(arg.unwrap_or_default())
 }
 
 #[export_name = "canister_query get_api_boundary_node_ids"]

@@ -87,7 +87,7 @@ impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
 
         let result = effective_records
             .into_iter()
-            .filter_map(|(key, value)| value.is_some().then_some(f(key, value)))
+            .filter_map(|(key, value)| value.is_some().then(|| f(key, value)))
             .collect();
         Ok(result)
     }

@@ -41,8 +41,9 @@ _wasm_backtrace_canister::ic0_trap::outer
 fn env_with_backtrace_canister_and_visibility(
     feature_enabled: FlagStatus,
     visibility: LogVisibilityV2,
+    canister_name: &str,
 ) -> (StateMachine, CanisterId) {
-    let wasm = canister_test::Project::cargo_bin_maybe_from_env("backtrace_canister", &[]);
+    let wasm = canister_test::Project::cargo_bin_maybe_from_env(canister_name, &[]);
     let mut hypervisor_config = HypervisorConfig::default();
     hypervisor_config
         .embedders_config
@@ -76,7 +77,11 @@ fn env_with_backtrace_canister_and_visibility(
 }
 
 fn env_with_backtrace_canister(feature_enabled: FlagStatus) -> (StateMachine, CanisterId) {
-    env_with_backtrace_canister_and_visibility(feature_enabled, LogVisibilityV2::Controllers)
+    env_with_backtrace_canister_and_visibility(
+        feature_enabled,
+        LogVisibilityV2::Controllers,
+        "backtrace_canister",
+    )
 }
 
 /// Check that calling `method` returns an error with code `code`, `message` and
@@ -119,6 +124,41 @@ fn unreachable_instr_backtrace() {
 #[test]
 fn no_backtrace_without_feature() {
     let (env, canister_id) = env_with_backtrace_canister(FlagStatus::Disabled);
+    let result = env
+        .execute_ingress_as(
+            CONTROLLER,
+            canister_id,
+            "unreachable",
+            Encode!(&()).unwrap(),
+        )
+        .unwrap_err();
+    result.assert_contains(
+        ErrorCode::CanisterTrapped,
+        "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister trapped: unreachable",
+    );
+    assert!(
+        !result.description().contains("Backtrace"),
+        "Result message: {} cointains unexpected 'Backtrace'",
+        result.description(),
+    );
+    let logs = env.canister_log(canister_id);
+    for log in logs.records() {
+        let log = std::str::from_utf8(&log.content).unwrap();
+        assert!(
+            !log.contains("Backtrace"),
+            "Canister log: {} cointains unexpected 'Backtrace'",
+            log,
+        );
+    }
+}
+
+#[test]
+fn no_backtrace_without_name_section() {
+    let (env, canister_id) = env_with_backtrace_canister_and_visibility(
+        FlagStatus::Enabled,
+        LogVisibilityV2::Controllers,
+        "backtrace_canister_without_names",
+    );
     let result = env
         .execute_ingress_as(
             CONTROLLER,
@@ -212,8 +252,11 @@ mod visibility {
         error_code: ErrorCode,
         backtrace: &str,
     ) {
-        let (env, canister_id) =
-            env_with_backtrace_canister_and_visibility(FlagStatus::Enabled, visibility);
+        let (env, canister_id) = env_with_backtrace_canister_and_visibility(
+            FlagStatus::Enabled,
+            visibility,
+            "backtrace_canister",
+        );
         // Call from anonymous principal
         let result = env
             .execute_ingress_as(caller, canister_id, method, Encode!(&()).unwrap())

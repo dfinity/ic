@@ -9,14 +9,16 @@ on the process that this file is part of, see
 
 ## Added
 
-## Changed
+* A timer task is added to take daily snapshots of voting power for standard proposals.
 
-* The `_pb` methods now always panic.
+## Changed
 
 ## Deprecated
 
 ## Removed
 
 ## Fixed
+
+* Turned off `DisburseMaturity` that was incorrectly turned on before.
 
 ## Security
