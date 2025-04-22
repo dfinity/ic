@@ -3823,9 +3823,9 @@ fn ic0_trap_preserves_some_cycles() {
     );
 }
 
-// If method is not exported, `execute_anonymous_query` fails.
+// If method is not exported, `execute_system_query` fails.
 #[test]
-fn canister_anonymous_query_method_not_exported() {
+fn canister_system_query_method_not_exported() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
@@ -3833,7 +3833,7 @@ fn canister_anonymous_query_method_not_exported() {
             (export "memory" (memory $memory))
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
-    let result = test.anonymous_query(canister_id, "http_transform", vec![], vec![]);
+    let result = test.system_query(canister_id, "http_transform", vec![], vec![]);
     assert_eq!(
         result,
         Err(
@@ -3843,9 +3843,9 @@ fn canister_anonymous_query_method_not_exported() {
     );
 }
 
-// Using `execute_anonymous_query` to execute transform function on a http response succeeds.
+// Using `execute_system_query` to execute transform function on a http response succeeds.
 #[test]
-fn canister_anonymous_query_transform_http_response() {
+fn canister_system_query_transform_http_response() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
@@ -3881,7 +3881,7 @@ fn canister_anonymous_query_transform_http_response() {
         body: vec![0, 1, 2],
     };
     let payload = Encode!(&canister_http_response).unwrap();
-    let result = test.anonymous_query(canister_id, "http_transform", payload, vec![]);
+    let result = test.system_query(canister_id, "http_transform", payload, vec![]);
     let transformed_canister_http_response = Decode!(
         result.unwrap().bytes().as_slice(),
         CanisterHttpResponsePayload

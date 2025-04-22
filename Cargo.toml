@@ -6,6 +6,7 @@ members = [
     "packages/icrc-ledger-client",
     "packages/icrc-ledger-client-cdk",
     "packages/icrc-ledger-types",
+    "packages/ic-http-types",
     "packages/ic-dummy-getrandom-for-wasm",
     "packages/ic-ed25519",
     "packages/ic-ethereum-types",

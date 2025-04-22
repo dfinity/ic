@@ -551,7 +551,7 @@ fn decode_initial_dealings(data: &[u8]) -> Result<InitialIDkgDealings, InvalidID
                 ReshareChainKeyResponse::IDkg(initial_idkg_dealings) => initial_idkg_dealings,
                 ReshareChainKeyResponse::NiDkg(_) => {
                     return Err(InvalidIDkgPayloadReason::DecodingError(
-                        "Found an IDkg response".to_string(),
+                        "Found an NiDkg response".to_string(),
                     ))
                 }
             }

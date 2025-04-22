@@ -177,6 +177,10 @@ struct Args {
     /// The file to use for storing logs.
     #[arg(long = "log-file", default_value = "log/rosetta-api.log")]
     log_file: PathBuf,
+
+    /// Timeout in seconds for sync watchdog. If no synchronization is attempted within this time, the sync thread will be restarted.
+    #[arg(long = "watchdog-timeout-seconds", default_value = "60")]
+    watchdog_timeout_seconds: u64,
 }
 
 impl Args {
@@ -547,6 +551,11 @@ async fn main() -> Result<()> {
             let span = tracing::info_span!("sync", token = %token_name);
             let span_watchdog = span.clone();
 
+            info!(
+                "Configuring watchdog for {} with timeout of {} seconds",
+                token_name, args.watchdog_timeout_seconds
+            );
+
             tokio::spawn(
                 async move {
                     // First heartbeat might take hours until the ledger is initially synced,
@@ -554,7 +563,7 @@ async fn main() -> Result<()> {
                     // during the initial synchronization.
                     let skip_first_hearbeat = true;
                     let mut watchdog = WatchdogThread::new(
-                        Duration::from_secs(MAX_BLOCK_SYNC_WAIT_SECS),
+                        Duration::from_secs(args.watchdog_timeout_seconds),
                         Some(Arc::new(|| {
                             info!("Watchdog triggered restart for a sync thread");
                         })),
