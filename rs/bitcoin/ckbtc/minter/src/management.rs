@@ -272,13 +272,9 @@ pub async fn sign_with_ecdsa<R: CanisterRuntime>(
         .sign_with_ecdsa(key_name, derivation_path, message_hash)
         .await;
 
+    observe_sign_with_ecdsa_latency(&result, start_time, runtime.time());
+
     result
-        .inspect(|_| {
-            observe_sign_with_ecdsa_latency(MetricsResult::Ok, start_time, runtime.time());
-        })
-        .inspect_err(|_| {
-            observe_sign_with_ecdsa_latency(MetricsResult::Err, start_time, runtime.time());
-        })
 }
 
 /// Check if the given Bitcoin address is blocked.

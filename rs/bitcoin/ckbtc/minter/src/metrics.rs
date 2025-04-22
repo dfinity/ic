@@ -147,10 +147,14 @@ pub fn observe_update_call_latency(num_new_utxos: usize, start_ns: u64, end_ns: 
     });
 }
 
-pub fn observe_sign_with_ecdsa_latency(result: MetricsResult, start_ns: u64, end_ns: u64) {
+pub fn observe_sign_with_ecdsa_latency<T, E>(result: &Result<T, E>, start_ns: u64, end_ns: u64) {
+    let metric_result = match result {
+        Ok(_) => MetricsResult::Ok,
+        Err(_) => MetricsResult::Err,
+    };
     SIGN_WITH_ECDSA_LATENCY.with_borrow_mut(|metrics| {
         metrics
-            .entry(result)
+            .entry(metric_result)
             .or_insert(LatencyHistogram(Histogram::new(
                 &BUCKETS_SIGN_WITH_ECDSA_MS,
             )))
