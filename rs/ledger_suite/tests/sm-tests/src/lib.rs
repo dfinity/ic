@@ -3680,14 +3680,10 @@ fn list_allowances(
     spender: Option<Account>,
     take: Option<u64>,
 ) -> Result<Allowances, GetAllowancesError> {
-    let take = match take {
-        Some(take) => Some(Nat::from(take)),
-        None => None,
-    };
     let args = GetAllowancesArgs {
         from_account: Some(from),
         prev_spender: spender,
-        take,
+        take: take.map(Nat::from),
     };
     Decode!(
         &env.execute_ingress_as(
@@ -3737,7 +3733,7 @@ where
         |from_sub: Option<u64>, spender: PrincipalId, spender_sub: Option<u64>| ApproveArgs {
             from_subaccount: create_subaccount(from_sub),
             spender: Account {
-                owner: spender.0.into(),
+                owner: spender.0,
                 subaccount: create_subaccount(spender_sub),
             },
             amount: Nat::from(1u64),
@@ -3762,7 +3758,7 @@ where
         &env,
         canister_id,
         Account {
-            owner: approver1.0.into(),
+            owner: approver1.0,
             subaccount: None,
         },
         None,
@@ -3781,11 +3777,11 @@ where
         &env,
         canister_id,
         Account {
-            owner: approver1.0.into(),
+            owner: approver1.0,
             subaccount: None,
         },
         Some(Account {
-            owner: spender.0.into(),
+            owner: spender.0,
             subaccount: create_subaccount(Some(5)),
         }),
         None,
