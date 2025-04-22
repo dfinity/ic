@@ -1,6 +1,6 @@
 //! This module contains async functions for interacting with the management canister.
 use crate::logs::P0;
-use crate::metrics::{observe_get_utxos_latency, observe_sign_with_ecdsa_latency, MetricsResult};
+use crate::metrics::{observe_get_utxos_latency, observe_sign_with_ecdsa_latency};
 use crate::{tx, CanisterRuntime, ECDSAPublicKey, GetUtxosRequest, GetUtxosResponse, Network};
 use candid::{CandidType, Principal};
 use ic_btc_checker::{
