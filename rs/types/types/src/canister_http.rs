@@ -839,7 +839,8 @@ mod validate_http_headers_and_body_tests {
     #[test]
     fn test_headers_at_max_total_size() {
         // We'll keep the size of the header name and value to sum up to MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH.
-        let headers_needed = MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE / MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH;
+        let headers_needed =
+            MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE / MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH;
 
         let headers = (0..headers_needed)
             .map(|i| {
@@ -847,7 +848,8 @@ mod validate_http_headers_and_body_tests {
                 HttpHeader {
                     name: header_name.clone(),
                     // Going over a single byte for each header value should do it.
-                    value: "a".repeat(MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH - header_name.len()),
+                    value: "a"
+                        .repeat(MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH - header_name.len()),
                 }
             })
             .collect::<Vec<_>>();
@@ -912,9 +914,8 @@ mod validate_http_headers_and_body_tests {
 
     #[test]
     fn test_headers_total_size_too_large() {
-        let header_size = MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH;
-        // The total header size limit is 48KB which divides by 8KB
-        let headers_needed = MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE / header_size;
+        let headers_needed =
+            MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE / MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH;
 
         let headers = (0..headers_needed)
             .map(|i| {
@@ -922,7 +923,8 @@ mod validate_http_headers_and_body_tests {
                 HttpHeader {
                     name: header_name.clone(),
                     // Going over a single byte for each header value should do it.
-                    value: "a".repeat(header_size - header_name.len() + 1),
+                    value: "a"
+                        .repeat(MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH - header_name.len() + 1),
                 }
             })
             .collect::<Vec<_>>();
