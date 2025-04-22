@@ -11482,6 +11482,7 @@ dependencies = [
  "ic-types",
  "maplit",
  "prost 0.13.4",
+ "serde_json",
 ]
 
 [[package]]
@@ -13116,6 +13117,7 @@ dependencies = [
  "clap 4.5.27",
  "dfx-core",
  "futures",
+ "hex",
  "ic-agent",
  "ic-base-types",
  "ic-canister-client-sender",
@@ -13143,6 +13145,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "reqwest 0.12.12",
+ "rust_decimal",
  "serde",
  "slog",
  "tempfile",
@@ -23279,6 +23282,7 @@ name = "vsock_lib"
 version = "1.0.0"
 dependencies = [
  "anyhow",
+ "ic-http-utils",
  "regex",
  "reqwest 0.12.12",
  "rusb",
@@ -23286,6 +23290,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.8",
  "tempfile",
+ "tokio",
  "vsock",
 ]
 

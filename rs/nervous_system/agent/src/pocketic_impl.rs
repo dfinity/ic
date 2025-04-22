@@ -3,8 +3,8 @@ use std::time::Duration;
 use crate::management_canister::requests::{
     CanisterStatusArgs, DeleteCanisterArgs, StopCanisterArgs, StoredChunksArgs, UploadChunkArgs,
 };
-use crate::Request;
 use crate::{CallCanisters, CanisterInfo, ProgressNetwork};
+use crate::{CallCanistersWithStoppedCanisterError, Request};
 use candid::Principal;
 use ic_management_canister_types::{CanisterStatusResult, DefiniteCanisterSettings};
 use pocket_ic::common::rest::RawEffectivePrincipal;
@@ -181,7 +181,9 @@ impl CallCanisters for PocketIcAgent<'_> {
     fn caller(&self) -> Result<Principal, Self::Error> {
         Ok(self.sender)
     }
+}
 
+impl CallCanistersWithStoppedCanisterError for PocketIcAgent<'_> {
     fn is_canister_stopped_error(&self, err: &Self::Error) -> bool {
         self.pocket_ic.is_canister_stopped_error(err)
     }
@@ -211,7 +213,9 @@ impl CallCanisters for PocketIc {
     fn caller(&self) -> Result<Principal, Self::Error> {
         Ok(Principal::anonymous())
     }
+}
 
+impl CallCanistersWithStoppedCanisterError for PocketIc {
     fn is_canister_stopped_error(&self, err: &Self::Error) -> bool {
         match err {
             PocketIcCallError::PocketIc(err) => {
