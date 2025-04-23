@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [lib]
-name = "canister-http-correctness-tests-lib"
+name = "canister_http_correctness_tests_lib"
 path = "canister_http_correctness_tests_lib.rs"
 
 [dependencies]
