@@ -68,40 +68,27 @@ fn config_structure_changed(fixtures_dir: &Path) -> bool {
     let existing_hostos_fixture = fixtures_dir.join(format!("hostos_v{}.json", CONFIG_VERSION));
     let existing_guestos_fixture = fixtures_dir.join(format!("guestos_v{}.json", CONFIG_VERSION));
 
-    // Check if hostos config has changed
-    let hostos_changed = match serde_json::from_reader::<_, HostOSConfig>(
-        fs::File::open(&existing_hostos_fixture).unwrap_or_else(|_| {
-            panic!(
-                "Failed to open existing hostos fixture: {}",
-                existing_hostos_fixture.display()
-            )
-        }),
-    ) {
-        Ok(existing_config) => {
-            existing_config.network_settings != new_fixture.hostos_config.network_settings
-                || existing_config.icos_settings != new_fixture.hostos_config.icos_settings
-                || existing_config.hostos_settings != new_fixture.hostos_config.hostos_settings
-                || existing_config.guestos_settings != new_fixture.hostos_config.guestos_settings
+    // Helper function to check if a config has changed
+    fn check_config_changed<T: serde::de::DeserializeOwned + PartialEq>(
+        file_path: &Path,
+        new_config: &T,
+    ) -> bool {
+        match serde_json::from_reader::<_, T>(
+            fs::File::open(file_path).unwrap_or_else(|_| {
+                panic!("Failed to open existing fixture: {}", file_path.display())
+            }),
+        ) {
+            Ok(existing_config) => existing_config != *new_config,
+            Err(_) => true, // If we can't parse the existing fixture, assume structure changed
         }
-        Err(_) => true, // If we can't parse the existing fixture, assume structure changed
-    };
+    }
+
+    // Check if hostos config has changed
+    let hostos_changed = check_config_changed(&existing_hostos_fixture, &new_fixture.hostos_config);
 
     // Check if guestos config has changed
-    let guestos_changed = match serde_json::from_reader::<_, GuestOSConfig>(
-        fs::File::open(&existing_guestos_fixture).unwrap_or_else(|_| {
-            panic!(
-                "Failed to open existing guestos fixture: {}",
-                existing_guestos_fixture.display()
-            )
-        }),
-    ) {
-        Ok(existing_config) => {
-            existing_config.network_settings != new_fixture.guestos_config.network_settings
-                || existing_config.icos_settings != new_fixture.guestos_config.icos_settings
-                || existing_config.guestos_settings != new_fixture.guestos_config.guestos_settings
-        }
-        Err(_) => true, // If we can't parse the existing fixture, assume structure changed
-    };
+    let guestos_changed =
+        check_config_changed(&existing_guestos_fixture, &new_fixture.guestos_config);
 
     hostos_changed || guestos_changed
 }
