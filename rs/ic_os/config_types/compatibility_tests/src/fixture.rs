@@ -72,14 +72,14 @@ fn config_structure_changed(fixtures_dir: &Path) -> bool {
         existing_fixture_path: &Path,
         new_config: &T,
     ) -> bool {
-        match serde_json::from_reader::<_, T>(fs::File::open(existing_fixture_path).unwrap_or_else(
-            |_| {
-                panic!(
-                    "Failed to open existing fixture: {}",
-                    existing_fixture_path.display()
-                )
-            },
-        )) {
+        let file = fs::File::open(existing_fixture_path).unwrap_or_else(|_| {
+            panic!(
+                "Failed to open existing fixture: {}",
+                existing_fixture_path.display()
+            )
+        });
+
+        match serde_json::from_reader::<_, T>(file) {
             Ok(existing_config) => existing_config != *new_config,
             Err(_) => true, // If we can't parse the existing fixture, assume structure changed
         }
