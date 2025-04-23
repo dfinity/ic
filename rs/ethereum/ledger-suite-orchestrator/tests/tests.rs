@@ -82,7 +82,7 @@ fn should_spawn_ledger_with_correct_init_args() {
             ),
             (
                 "icrc103:max_take_value".to_string(),
-                LedgerMetadataValue::from(100u64),
+                LedgerMetadataValue::from(500u64),
             ),
         ]);
 }
