@@ -5,8 +5,6 @@ Wants=network-online.target
 After=network-online.target
 After=bootstrap-ic-node.service
 Wants=bootstrap-ic-node.service
-After=update-config.service
-Wants=update-config.service
 # We must wait for var to be mounted over before interacting with it
 After=var.mount
 Wants=var.mount

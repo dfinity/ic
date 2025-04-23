@@ -5,8 +5,6 @@ Before=systemd-networkd.service
 After=systemd-tmpfiles-setup.service
 Wants=dev-ipmi0.device
 After=dev-ipmi0.device
-After=update-config.service
-Wants=update-config.service
 
 [Service]
 Type=oneshot
