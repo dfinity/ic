@@ -680,7 +680,7 @@ async fn fetch_blocks_via_icrc3() -> Option<u64> {
 
 fn set_build_index_timer(after: Duration) -> TimerId {
     ic_cdk_timers::set_timer_interval(after, || {
-        ic_cdk::spawn(async {
+        ic_cdk::futures::spawn(async {
             let _ = build_index().await;
         })
     })

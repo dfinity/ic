@@ -5,7 +5,7 @@ use crate::governance::{
 use async_trait::async_trait;
 use candid::{Decode, Encode};
 use ic_base_types::CanisterId;
-use ic_cdk::spawn;
+use ic_cdk::futures::spawn;
 use ic_nervous_system_canisters::cmc::CMCCanister;
 use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
 use ic_nervous_system_runtime::CdkRuntime;
