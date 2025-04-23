@@ -60,6 +60,9 @@ git log --format="%C(auto) %h %s" 0d96610b842ca721e50169c65bdfbc5d6d3d8b67..512c
 
 #### Archive
 
+No changes since last version (`0d96610b842ca721e50169c65bdfbc5d6d3d8b67`).
+
+
 ```
 git log --format="%C(auto) %h %s" 0d96610b842ca721e50169c65bdfbc5d6d3d8b67..512cf412f33d430b79f42330518166d14fc6884e -- rs/ledger_suite/icrc1/archive
  
