@@ -14,7 +14,7 @@ use ic_management_canister_types_private::{
 };
 use ic_protobuf::registry::subnet::v1::chain_key_initialization::Initialization;
 use ic_protobuf::registry::{
-    crypto::v1::ChainKeySigningSubnetList,
+    crypto::v1::ChainKeyEnabledSubnetList,
     subnet::v1::{CatchUpPackageContents, ChainKeyInitialization, SubnetListRecord, SubnetRecord},
 };
 use ic_registry_keys::{
