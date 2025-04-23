@@ -104,6 +104,10 @@ impl Registry {
         Self::default()
     }
 
+    pub fn store(&self) -> &RegistryMap {
+        &self.store
+    }
+
     /// Returns the deltas applied since `version`, exclusive; optionally
     /// limited to the subsequent `max_versions` (i.e. changes applied in
     /// versions `(version, version + max_versions]`).

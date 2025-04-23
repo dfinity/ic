@@ -23,7 +23,7 @@ use ic_registry_transport::{
     pb::v1::{
         registry_error::Code, CertifiedResponse, RegistryAtomicMutateResponse, RegistryError,
         RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
-        RegistryGetLatestVersionResponse, RegistryGetValueResponse,
+        RegistryGetLatestVersionResponse, RegistryGetValueResponse, RegistryValueV2, RegistryValue,
     },
     serialize_atomic_mutate_response, serialize_get_changes_since_response,
     serialize_get_value_response,
@@ -201,6 +201,29 @@ fn canister_post_upgrade() {
 }
 
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
+
+#[export_name = "canister_query assert_RegistryValue_survives_round_trip"]
+fn assert_it_works() {
+    over(candid, |_: ()| -> String{
+        let mut count = 0;
+        for values in registry().store().values() {
+            for v in values {
+                let blob = v.encode_to_vec();
+                let v2 = RegistryValueV2::decode(blob.as_slice()).unwrap();
+                let blob = v2.encode_to_vec();
+                let copy = RegistryValue::decode(blob.as_slice()).unwrap();
+                /*pretty_assertions::*/assert_eq!(&copy, v);
+
+                count += 1;
+                if count % 250 == 0 {
+                    println!("Number of RegistryValues verified: {}", count);
+                }
+            }
+        }
+
+        "Yay!".to_string()
+    });
+}
 
 #[export_name = "canister_query get_changes_since"]
 fn get_changes_since() {

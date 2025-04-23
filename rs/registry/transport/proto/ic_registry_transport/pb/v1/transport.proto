@@ -213,6 +213,20 @@ message RegistryValue {
   bool deletion_marker = 3;
 }
 
+message RegistryValueV2 {
+  uint64 version = 2;
+
+  oneof content {
+    bytes value = 1;
+    bool deletion_marker = 3;
+    LargeValueChunkKeys large_value_chunk_keys = 4;
+  }
+}
+
+message LargeValueChunkKeys {
+  repeated bytes chunk_content_sha256s = 1;
+}
+
 // A sequence of changes made to a key in the registry.
 message RegistryDelta {
   bytes key = 1;

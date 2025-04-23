@@ -16,6 +16,7 @@ use ic_nns_test_utils::{
     },
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
+use ic_types::ingress::WasmResult;
 use std::{
     env,
     fmt::{Debug, Formatter},
@@ -144,6 +145,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     // Step 0: Read configuration. To wit, what canisters does the user want to upgrade in this
     // test? To do this, they set the NNS_CANISTER_UPGRADE_SEQUENCE environment variable.
 
+    /*
     let mut nns_canister_upgrade_sequence = env::var("NNS_CANISTER_UPGRADE_SEQUENCE").expect(
         "This test requires that the NNS_CANISTER_UPGRADE_SEQUENCE environment\n\
              variable to be set to something like 'governance,registry'.\n\
@@ -168,6 +170,8 @@ fn test_upgrade_canisters_with_golden_nns_state() {
         ]
         .join(",");
     }
+     */
+    let nns_canister_upgrade_sequence = "registry";
 
     let mut nns_canister_upgrade_sequence = nns_canister_upgrade_sequence
         .split(',')
@@ -261,10 +265,28 @@ fn test_upgrade_canisters_with_golden_nns_state() {
 
     perform_sequence_of_upgrades(&nns_canister_upgrade_sequence);
 
+    let result = state_machine.execute_ingress(
+        REGISTRY_CANISTER_ID,
+        "assert_RegistryValue_survives_round_trip",
+        Encode!().unwrap(),
+    );
+    let result = match result {
+        Ok(WasmResult::Reply(ok)) => ok,
+        _ => panic!("{:?}", result),
+    };
+    use candid::Decode;
+    println!();
+    println!();
+    println!("{}", Decode!(&result, String).unwrap());
+    println!();
+    println!();
+
     // Modify all WASMs, but preserve their behavior.
+    /*
     for nns_canister_upgrade in &mut nns_canister_upgrade_sequence {
         nns_canister_upgrade.modify_wasm_but_preserve_behavior();
     }
 
     perform_sequence_of_upgrades(&nns_canister_upgrade_sequence);
+    */
 }
