@@ -65,40 +65,43 @@ fn current_fixture_versions_exist(fixtures_dir: &Path) -> bool {
 fn config_structure_changed(fixtures_dir: &Path) -> bool {
     let new_fixture = ConfigFixture::generate_for_version(CONFIG_VERSION);
 
-    let hostos_path = fixtures_dir.join(format!("hostos_v{}.json", CONFIG_VERSION));
-    let guestos_path = fixtures_dir.join(format!("guestos_v{}.json", CONFIG_VERSION));
+    let existing_hostos_fixture = fixtures_dir.join(format!("hostos_v{}.json", CONFIG_VERSION));
+    let existing_guestos_fixture = fixtures_dir.join(format!("guestos_v{}.json", CONFIG_VERSION));
 
-    // Try to read the existing fixtures
-    let hostos_fixture: Result<HostOSConfig, _> = serde_json::from_reader(
-        fs::File::open(hostos_path)
-            .unwrap_or_else(|_| panic!("Failed to open existing hostos fixture")),
-    );
+    // Check if hostos config has changed
+    let hostos_changed = match serde_json::from_reader::<_, HostOSConfig>(
+        fs::File::open(&existing_hostos_fixture).unwrap_or_else(|_| {
+            panic!(
+                "Failed to open existing hostos fixture: {}",
+                existing_hostos_fixture.display()
+            )
+        }),
+    ) {
+        Ok(existing_config) => {
+            existing_config.network_settings != new_fixture.hostos_config.network_settings
+                || existing_config.icos_settings != new_fixture.hostos_config.icos_settings
+                || existing_config.hostos_settings != new_fixture.hostos_config.hostos_settings
+                || existing_config.guestos_settings != new_fixture.hostos_config.guestos_settings
+        }
+        Err(_) => true, // If we can't parse the existing fixture, assume structure changed
+    };
 
-    let guestos_fixture: Result<GuestOSConfig, _> = serde_json::from_reader(
-        fs::File::open(guestos_path)
-            .unwrap_or_else(|_| panic!("Failed to open existing guestos fixture")),
-    );
-
-    // If we can't parse the existing fixtures, assume the structure has changed
-    if hostos_fixture.is_err() || guestos_fixture.is_err() {
-        return true;
-    }
-
-    let hostos_fixture = hostos_fixture.unwrap();
-    let guestos_fixture = guestos_fixture.unwrap();
-
-    // Compare the new config with the existing config
-    // We ignore the config_version field since that's what we're checking
-    let hostos_changed = hostos_fixture.network_settings
-        != new_fixture.hostos_config.network_settings
-        || hostos_fixture.icos_settings != new_fixture.hostos_config.icos_settings
-        || hostos_fixture.hostos_settings != new_fixture.hostos_config.hostos_settings
-        || hostos_fixture.guestos_settings != new_fixture.hostos_config.guestos_settings;
-
-    let guestos_changed = guestos_fixture.network_settings
-        != new_fixture.guestos_config.network_settings
-        || guestos_fixture.icos_settings != new_fixture.guestos_config.icos_settings
-        || guestos_fixture.guestos_settings != new_fixture.guestos_config.guestos_settings;
+    // Check if guestos config has changed
+    let guestos_changed = match serde_json::from_reader::<_, GuestOSConfig>(
+        fs::File::open(&existing_guestos_fixture).unwrap_or_else(|_| {
+            panic!(
+                "Failed to open existing guestos fixture: {}",
+                existing_guestos_fixture.display()
+            )
+        }),
+    ) {
+        Ok(existing_config) => {
+            existing_config.network_settings != new_fixture.guestos_config.network_settings
+                || existing_config.icos_settings != new_fixture.guestos_config.icos_settings
+                || existing_config.guestos_settings != new_fixture.guestos_config.guestos_settings
+        }
+        Err(_) => true, // If we can't parse the existing fixture, assume structure changed
+    };
 
     hostos_changed || guestos_changed
 }
@@ -158,7 +161,6 @@ fn generate_test_base_config(
         vm_cpu: "host".to_string(),
         vm_nr_of_vcpus: 4,
         verbose: false,
-        test: true,
     };
 
     let guestos_settings = GuestOSSettings::default();
