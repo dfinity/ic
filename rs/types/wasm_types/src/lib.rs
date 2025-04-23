@@ -87,6 +87,30 @@ impl CanisterModule {
         }
     }
 
+    /// Overwrite the module at `offset` with `buf`. This may invalidate the
+    /// module, and will change its hash. It's useful for uploading a module
+    /// chunk by chunk.
+    /// Returns the original module if `offset` + `buf.len()` > `module.len()`.
+    pub fn write(self, buf: &Vec<u8>, offset: usize) -> Result<Self, Self> {
+        let CanisterModule {
+            module,
+            module_hash,
+        } = self;
+        match module.write(buf, offset) {
+            Ok(module) => {
+                let module_hash = ic_crypto_sha2::Sha256::hash(module.as_slice());
+                Ok(Self {
+                    module,
+                    module_hash,
+                })
+            }
+            Err(module) => Err(Self {
+                module,
+                module_hash,
+            }),
+        }
+    }
+
     pub fn as_slice(&self) -> &[u8] {
         self.module.as_slice()
     }
@@ -235,6 +259,33 @@ impl ModuleStorage {
             // This is safe because the file is read-only.
             Self::File(_, mmap) => mmap.as_slice(),
         }
+    }
+
+    /// Overwrites the module bytes from `offset` with `buf`.
+    /// Returns the original module if `offset` + `buf.len()` exceeds the
+    /// length of the module.
+    ///
+    /// This may invalidate the module, but is useful for uploading a
+    /// module chunk by chunk.
+    fn write(self, buf: &Vec<u8>, offset: usize) -> Result<Self, Self> {
+        let mut arc = match self {
+            ModuleStorage::Memory(bytes) => bytes,
+            ModuleStorage::File(path, mmap) => {
+                // If the operation would fail, don't change file representation
+                // to memory representation.
+                if mmap.len() < offset + buf.len() {
+                    return Err(ModuleStorage::File(path, mmap));
+                }
+                Arc::new(mmap.as_slice().to_vec())
+            }
+        };
+        let inner = Arc::make_mut(&mut arc);
+        let end = offset + buf.len();
+        if inner.len() < end {
+            return Err(ModuleStorage::Memory(arc));
+        }
+        inner[offset..end].copy_from_slice(buf);
+        Ok(ModuleStorage::Memory(arc))
     }
 
     fn len(&self) -> usize {
