@@ -571,12 +571,16 @@ fn create_config_disk_image(
         cmd.arg("--elasticsearch_hosts")
             .arg(elasticsearch_hosts.join(" "));
     }
+
+    // --bitcoind_addr indicates the local bitcoin node that the bitcoin adapter should be connected to in the system test environment.
     if let Ok(arg) = test_env.read_json_object::<String, _>(BITCOIND_ADDR_PATH) {
         cmd.arg("--bitcoind_addr").arg(arg);
     }
+    // --jaeger_addr indicates the local Jaeger node that the nodes should be connected to in the system test environment.
     if let Ok(arg) = test_env.read_json_object::<String, _>(JAEGER_ADDR_PATH) {
         cmd.arg("--jaeger_addr").arg(arg);
     }
+    // --socks_proxy indicates that a socks proxy is available to the system test environment.
     if let Ok(arg) = test_env.read_json_object::<String, _>(SOCKS_PROXY_PATH) {
         cmd.arg("--socks_proxy").arg(arg);
     }
