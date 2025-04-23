@@ -1790,6 +1790,15 @@ impl Governance {
         let include_reward_status: HashSet<i32> =
             request.include_reward_status.iter().cloned().collect();
         let include_status: HashSet<i32> = request.include_status.iter().cloned().collect();
+        let include_topics: HashSet<Option<Topic>> = request
+            .include_topics
+            .iter()
+            .map(|topic_selector| {
+                topic_selector
+                    .topic
+                    .and_then(|topic| Topic::try_from(topic).ok())
+            })
+            .collect();
         let now = self.env.now();
         let filter_all = |data: &ProposalData| -> bool {
             let action = data.action;
@@ -1805,6 +1814,11 @@ impl Governance {
             }
             // Filter out proposals by decision status.
             if !(include_status.is_empty() || include_status.contains(&(data.status() as i32))) {
+                return false;
+            }
+            // Filter out proposals by topic.
+            let topic = data.topic.and_then(|topic| Topic::try_from(topic).ok());
+            if !(include_topics.is_empty() || include_topics.contains(&topic)) {
                 return false;
             }
 
@@ -1840,6 +1854,7 @@ impl Governance {
         ListProposalsResponse {
             proposals: proposal_info,
             include_ballots_by_caller: Some(true),
+            include_topic_filtering: Some(true),
         }
     }
 
@@ -3382,6 +3397,18 @@ impl Governance {
             .get_topic_and_criticality_for_action(action)
             .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidProposal, err))?;
 
+        let Some(proposal_topic) = proposal_topic else {
+            let message = format!(
+                "Proposal type with action {:?} must be assigned a topic before such proposals can \
+                 be submitted. Please submit `SetTopicsForCustomProposals` to do this.",
+                proposal.action
+            );
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                message,
+            ));
+        };
+
         // Voting duration parameters.
         let voting_duration_parameters =
             action.voting_duration_parameters(nervous_system_parameters, proposal_criticality);
@@ -3481,7 +3508,7 @@ impl Governance {
             // TODO(NNS1-2731): Delete this.
             is_eligible_for_rewards: true,
             action_auxiliary,
-            topic: proposal_topic.map(i32::from),
+            topic: Some(i32::from(proposal_topic)),
         };
 
         proposal_data.wait_for_quiet_state = Some(WaitForQuietState {
@@ -3513,7 +3540,7 @@ impl Governance {
             &self.proto.neurons,
             now_seconds,
             &mut proposal_data.ballots,
-            proposal_topic.unwrap_or_default(),
+            proposal_topic,
         );
 
         // Finally, add this proposal as an open proposal.
@@ -3807,7 +3834,7 @@ impl Governance {
     ///   as voting required, i.e., permission `Vote`)
     /// - the list of followers is not too long (does not exceed max_followees_per_function
     ///   as defined in the nervous system parameters)
-    fn follow(
+    pub fn follow(
         &mut self,
         id: &NeuronId,
         caller: &PrincipalId,
@@ -3901,7 +3928,7 @@ impl Governance {
         }
     }
 
-    fn set_following(
+    pub fn set_following(
         &mut self,
         id: &NeuronId,
         caller: &PrincipalId,

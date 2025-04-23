@@ -85,9 +85,10 @@ use std::{
     sync::{mpsc::channel, Arc},
     thread,
     thread::JoinHandle,
-    time::{Duration, SystemTime},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use strum_macros::EnumIter;
+use tempfile::TempDir;
 use thiserror::Error;
 use tokio::runtime::Runtime;
 use tracing::{instrument, warn};
@@ -104,13 +105,58 @@ const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
 
 const LOCALHOST: &str = "127.0.0.1";
 
+enum PocketIcStateKind {
+    /// A persistent state dir managed by the user.
+    StateDir(PathBuf),
+    /// A fresh temporary directory used if the user does not provide
+    /// a persistent state directory managed by the user.
+    /// The temporary directory is deleted when `PocketIcState` is dropped
+    /// unless `PocketIcState` is turned into a persistent state
+    /// at the path given by `PocketIcState::into_path`.
+    TempDir(TempDir),
+}
+
+pub struct PocketIcState {
+    state: PocketIcStateKind,
+}
+
+impl PocketIcState {
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        let temp_dir = TempDir::new().unwrap();
+        Self {
+            state: PocketIcStateKind::TempDir(temp_dir),
+        }
+    }
+
+    pub fn new_from_path(state_dir: PathBuf) -> Self {
+        Self {
+            state: PocketIcStateKind::StateDir(state_dir),
+        }
+    }
+
+    pub fn into_path(self) -> PathBuf {
+        match self.state {
+            PocketIcStateKind::StateDir(state_dir) => state_dir,
+            PocketIcStateKind::TempDir(temp_dir) => temp_dir.into_path(),
+        }
+    }
+
+    pub(crate) fn state_dir(&self) -> PathBuf {
+        match &self.state {
+            PocketIcStateKind::StateDir(state_dir) => state_dir.clone(),
+            PocketIcStateKind::TempDir(temp_dir) => temp_dir.path().to_path_buf(),
+        }
+    }
+}
+
 pub struct PocketIcBuilder {
     config: Option<ExtendedSubnetConfigSet>,
     server_binary: Option<PathBuf>,
     server_url: Option<Url>,
     max_request_time_ms: Option<u64>,
     read_only_state_dir: Option<PathBuf>,
-    state_dir: Option<PathBuf>,
+    state_dir: Option<PocketIcState>,
     nonmainnet_features: bool,
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
@@ -185,12 +231,17 @@ impl PocketIcBuilder {
     }
 
     pub fn with_state_dir(mut self, state_dir: PathBuf) -> Self {
+        self.state_dir = Some(PocketIcState::new_from_path(state_dir));
+        self
+    }
+
+    pub fn with_state(mut self, state_dir: PocketIcState) -> Self {
         self.state_dir = Some(state_dir);
         self
     }
 
-    pub fn with_read_only_state_dir(mut self, read_only_state_dir: PathBuf) -> Self {
-        self.read_only_state_dir = Some(read_only_state_dir);
+    pub fn with_read_only_state(mut self, read_only_state_dir: &PocketIcState) -> Self {
+        self.read_only_state_dir = Some(read_only_state_dir.state_dir());
         self
     }
 
@@ -353,6 +404,63 @@ impl PocketIcBuilder {
     }
 }
 
+/// Representation of system time as duration since UNIX epoch
+/// with cross-platform nanosecond precision.
+#[derive(Copy, Clone, PartialEq, PartialOrd)]
+pub struct Time(Duration);
+
+impl Time {
+    /// Number of nanoseconds since UNIX EPOCH.
+    pub fn as_nanos_since_unix_epoch(&self) -> u64 {
+        self.0.as_nanos().try_into().unwrap()
+    }
+
+    pub const fn from_nanos_since_unix_epoch(nanos: u64) -> Self {
+        Time(Duration::from_nanos(nanos))
+    }
+}
+
+impl std::fmt::Debug for Time {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let nanos_since_unix_epoch = self.as_nanos_since_unix_epoch();
+        write!(f, "{}", nanos_since_unix_epoch)
+    }
+}
+
+impl std::ops::Add<Duration> for Time {
+    type Output = Time;
+    fn add(self, dur: Duration) -> Time {
+        Time(self.0 + dur)
+    }
+}
+
+impl From<SystemTime> for Time {
+    fn from(time: SystemTime) -> Self {
+        Self::from_nanos_since_unix_epoch(
+            time.duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+                .try_into()
+                .unwrap(),
+        )
+    }
+}
+
+impl TryFrom<Time> for SystemTime {
+    type Error = String;
+
+    fn try_from(time: Time) -> Result<SystemTime, String> {
+        let nanos = time.as_nanos_since_unix_epoch();
+        let system_time = UNIX_EPOCH + Duration::from_nanos(nanos);
+        let roundtrip: Time = system_time.into();
+        if roundtrip.as_nanos_since_unix_epoch() == nanos {
+            Ok(system_time)
+        } else {
+            Err(format!("Converting UNIX timestamp {} in nanoseconds to SystemTime failed due to losing precision", nanos))
+        }
+    }
+}
+
 /// Main entry point for interacting with PocketIC.
 pub struct PocketIc {
     pocket_ic: PocketIcAsync,
@@ -402,7 +510,7 @@ impl PocketIc {
         server_binary: Option<PathBuf>,
         max_request_time_ms: Option<u64>,
         read_only_state_dir: Option<PathBuf>,
-        state_dir: Option<PathBuf>,
+        state_dir: Option<PocketIcState>,
         nonmainnet_features: bool,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
@@ -437,6 +545,10 @@ impl PocketIc {
             runtime: Arc::new(runtime),
             thread: Some(thread),
         }
+    }
+
+    pub fn drop_and_take_state(mut self) -> Option<PocketIcState> {
+        self.pocket_ic.take_state_internal()
     }
 
     /// Returns the URL of the PocketIC server on which this PocketIC instance is running.
@@ -634,21 +746,21 @@ impl PocketIc {
 
     /// Get the current time of the IC.
     #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id))]
-    pub fn get_time(&self) -> SystemTime {
+    pub fn get_time(&self) -> Time {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.get_time().await })
     }
 
     /// Set the current time of the IC, on all subnets.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, time = ?time))]
-    pub fn set_time(&self, time: SystemTime) {
+    pub fn set_time(&self, time: Time) {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.set_time(time).await })
     }
 
     /// Set the current certified time of the IC, on all subnets.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, time = ?time))]
-    pub fn set_certified_time(&self, time: SystemTime) {
+    pub fn set_certified_time(&self, time: Time) {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.set_certified_time(time).await })
     }

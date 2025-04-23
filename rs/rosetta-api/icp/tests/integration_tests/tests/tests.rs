@@ -23,7 +23,7 @@ use rosetta_core::objects::ObjectMap;
 use serde::Deserialize;
 use std::path::PathBuf;
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use tempfile::TempDir;
 use url::Url;
 
@@ -546,7 +546,8 @@ async fn test_rosetta_blocks_enabled_after_first_block() {
     ])
     .await;
 
-    let rosetta_block1_expected_time_ts = TimeStamp::from(env.pocket_ic.get_time().await);
+    let system_time: SystemTime = env.pocket_ic.get_time().await.try_into().unwrap();
+    let rosetta_block1_expected_time_ts = TimeStamp::from(system_time);
     let rosetta_block1_expected_time_millis =
         rosetta_block1_expected_time_ts.as_nanos_since_unix_epoch() / 1_000_000;
 
@@ -704,7 +705,8 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
     ])
     .await;
 
-    let rosetta_block1_expected_time_ts = TimeStamp::from(env.pocket_ic.get_time().await);
+    let system_time: SystemTime = env.pocket_ic.get_time().await.try_into().unwrap();
+    let rosetta_block1_expected_time_ts = TimeStamp::from(system_time);
     let rosetta_block1_expected_time_millis =
         rosetta_block1_expected_time_ts.as_nanos_since_unix_epoch() / 1_000_000;
 
