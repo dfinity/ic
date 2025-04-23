@@ -55,7 +55,7 @@ pub(crate) fn with_chunks<R>(f: impl FnOnce(&Chunks<VM>) -> R) -> R {
     })
 }
 
-/// Encodes the argument.
+/* DO NOT MERGE - /// Encodes the argument.
 ///
 /// If the input is too large, this "chunkifies" it. That is, instead of
 /// inlining value, it is replaced with a LargeValueChunkKeys, which points to
@@ -73,14 +73,19 @@ pub(crate) fn maybe_chunkify_and_encode(original_mutation: RegistryAtomicMutateR
 
     let upgraded_mutation = maybe_chunkify(original_mutation);
 
-    // TODO(Nikola.Milosavljevic@dfinity.org): Populate timestamp_seconds field.
-
     upgraded_mutation.encode_to_vec()
 }
+*/
 
-fn maybe_chunkify(
+/// DO NOT MERGE - Document.
+pub(crate) fn chunkify_composite_mutation_if_too_large(
     original_mutation: RegistryAtomicMutateRequest,
 ) -> HighCapacityRegistryAtomicMutateRequest {
+    // If chunking is not enabled, simply transcribe.
+    if !is_chunkifying_large_values_enabled() {
+        return HighCapacityRegistryAtomicMutateRequest::from(original_mutation);
+    }
+
     // Panic if the input is too large.
     if original_mutation.encoded_len() > MAX_CHUNKABLE_ATOMIC_MUTATION_LEN {
         let first_key = original_mutation
