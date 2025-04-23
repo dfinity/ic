@@ -157,6 +157,11 @@ docker run  --name=bitcoind-node -d \
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(10))
+                .add_nodes(1),
+        )
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_dkg_interval_length(Height::from(10))
                 .with_features(SubnetFeatures {
                     http_requests: true,
                     ..SubnetFeatures::default()
@@ -166,12 +171,6 @@ docker run  --name=bitcoind-node -d \
         .use_specified_ids_allocation_range()
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
-
-    env.topology_snapshot().subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
-    });
 }
 
 pub fn setup(env: TestEnv) {
@@ -329,6 +328,13 @@ pub fn subnet_sys(env: &TestEnv) -> SubnetSnapshot {
     env.topology_snapshot()
         .subnets()
         .find(|s| s.subnet_type() == SubnetType::System)
+        .unwrap()
+}
+
+pub fn subnet_app(env: &TestEnv) -> SubnetSnapshot {
+    env.topology_snapshot()
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
         .unwrap()
 }
 
