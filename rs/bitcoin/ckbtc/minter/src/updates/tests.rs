@@ -13,9 +13,9 @@ mod update_balance {
     use crate::updates::update_balance::{
         SuspendedUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
     };
-    use crate::{storage, GetUtxosResponse, Timestamp};
+    use crate::{storage, CanisterRuntime, GetUtxosResponse, Timestamp};
     use ic_btc_checker::{CheckTransactionResponse, CheckTransactionStatus};
-    use ic_btc_interface::{Page, Utxo};
+    use ic_btc_interface::Utxo;
     use ic_cdk::api::call::RejectionCode;
     use ic_management_canister_types_private::BoundedVec;
     use icrc_ledger_types::icrc1::account::Account;
@@ -351,6 +351,7 @@ mod update_balance {
                 vec![
                     NOW,                         // start time of `update_balance` method
                     NOW,                         // start time of `get_utxos` method
+                    NOW.saturating_add(latency), // time used by `get_utxos_cache.insert
                     NOW.saturating_add(latency), // end time of `get_utxos` method
                     NOW.saturating_add(latency), // time used to triage processable UTXOs
                     NOW.saturating_add(latency), // event timestamp
@@ -438,7 +439,7 @@ mod update_balance {
                         let next_page = if idx == num_pages - 1 {
                             None
                         } else {
-                            Some(Page::new())
+                            Some(vec![idx as u8].into())
                         };
                         Ok(GetUtxosResponse {
                             next_page: next_page.clone(),
@@ -456,6 +457,7 @@ mod update_balance {
         }
 
         async fn get_utxos_with_latency(
+            now: &mut Timestamp,
             latency: Duration,
             account_utxos: Vec<Utxo>,
             num_pages: usize,
@@ -472,8 +474,8 @@ mod update_balance {
                 account_utxos,
                 num_pages,
             );
-            mock_increasing_time(&mut runtime, NOW, latency);
-            Ok(get_utxos(
+            mock_increasing_time(&mut runtime, *now, latency);
+            let utxos = get_utxos(
                 btc_network,
                 &address,
                 min_confirmations,
@@ -481,13 +483,19 @@ mod update_balance {
                 &runtime,
             )
             .await?
-            .utxos)
+            .utxos;
+            // The following is to make sure time sequence is strictly increasing
+            *now = runtime.time().into();
+            *now = now.saturating_add(Duration::from_secs(1));
+            Ok(utxos)
         }
 
+        let mut now = NOW;
         // get_utxos calls with 1 page
         let get_utxos_latencies_ms = [0, 100, 499, 500, 2_250, 3_000, 3_400, 4_000, 8_000, 100_000];
         for millis in &get_utxos_latencies_ms {
             let result = get_utxos_with_latency(
+                &mut now,
                 Duration::from_millis(*millis),
                 vec![utxo()],
                 1,
@@ -499,7 +507,8 @@ mod update_balance {
 
         // get_utxos calls with 3 pages
         let result = get_utxos_with_latency(
-            Duration::from_millis(3_500),
+            &mut now,
+            Duration::from_millis(1_200),
             vec![utxo()],
             3,
             CallSource::Minter,
@@ -537,7 +546,66 @@ mod update_balance {
                 (f64::INFINITY, 0.)
             ]
         );
-        assert_eq!(histogram.sum(), 3_500);
+        assert_eq!(histogram.sum(), 3_600);
+    }
+
+    #[tokio::test]
+    async fn should_observe_get_utxos_cache_metrics() {
+        init_state_with_ecdsa_public_key();
+        mutate_state(|s| {
+            s.get_utxos_cache
+                .set_expiration(Duration::from_millis(2500))
+        });
+
+        async fn get_utxos_with_no_latency(
+            now: Timestamp,
+            account_utxos: Vec<Utxo>,
+            call_source: CallSource,
+        ) -> Result<Vec<Utxo>, CallError> {
+            let account = ledger_account();
+            let (btc_network, min_confirmations) =
+                read_state(|s| (s.btc_network, s.min_confirmations));
+            let address = read_state(|s| account_to_p2wpkh_address_from_state(s, &account));
+            let mut runtime = MockCanisterRuntime::new();
+            mock_get_utxos_for_account(&mut runtime, account, account_utxos);
+            mock_constant_time(&mut runtime, now, 3);
+            Ok(get_utxos(
+                btc_network,
+                &address,
+                min_confirmations,
+                call_source,
+                &runtime,
+            )
+            .await?
+            .utxos)
+        }
+
+        let mut now = NOW;
+        // get_utxos calls with 1 page
+        let get_utxos_latencies_ms = [100, 499, 500, 2_250, 3_000, 3_400, 4_000, 8_000, 100_000];
+        for millis in &get_utxos_latencies_ms {
+            let result = get_utxos_with_no_latency(now, vec![utxo()], CallSource::Minter).await;
+            now = now.saturating_add(Duration::from_millis(*millis));
+            assert_eq!(result, Ok(vec![utxo()]));
+        }
+        assert_eq!(
+            crate::metrics::GET_UTXOS_MINTER_CALLS.with(|calls| calls.get()),
+            get_utxos_latencies_ms.len() as u64
+        );
+        // Because the latency between each call to `get_utxos` follows the above
+        // `get_utxos_latencies_ms` setting, there are only 3 cache hits for the
+        // 2nd, 3rd and 4th call. By the time of 5th call (at time 3349ms), the
+        // cached entry (at time 0ms) is already considered expired for an expiry
+        // setting of 2500ms. All later calls are more than 2500ms inbetween. So
+        // in totally we have 3 hits.
+        assert_eq!(
+            crate::metrics::GET_UTXOS_CACHE_HITS.with(|calls| calls.get()),
+            3,
+        );
+        assert_eq!(
+            crate::metrics::GET_UTXOS_CACHE_MISSES.with(|calls| calls.get()),
+            6,
+        );
     }
 
     fn get_utxos_latency_histogram(
@@ -800,11 +868,10 @@ mod update_balance {
         start: Timestamp,
         interval: Duration,
     ) {
-        let increment = move |time: Timestamp| time.saturating_add(interval);
         let mut current_time = start;
         runtime.expect_time().returning(move || {
             let previous_time = current_time;
-            current_time = increment(current_time);
+            current_time = current_time.saturating_add(interval);
             previous_time.as_nanos_since_unix_epoch()
         });
     }
