@@ -69,7 +69,6 @@ function read_config_variables() {
     vm_memory=$(get_config_value '.hostos_settings.vm_memory')
     vm_cpu=$(get_config_value '.hostos_settings.vm_cpu')
     vm_nr_of_vcpus=$(get_config_value '.hostos_settings.vm_nr_of_vcpus')
-
 }
 
 function assemble_config_media() {
