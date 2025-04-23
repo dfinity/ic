@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 mod fixture;
 
+pub use fixture::generate_fixtures;
 pub use fixture::ConfigFixture;
 
 pub fn version_greater_than(v1: &str, v2: &str) -> bool {

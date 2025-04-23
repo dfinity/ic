@@ -53,6 +53,68 @@ impl ConfigFixture {
     }
 }
 
+/// Checks if fixtures for the current version already exist
+fn current_fixture_versions_exist(fixtures_dir: &Path) -> bool {
+    let hostos_path = fixtures_dir.join(format!("hostos_v{}.json", CONFIG_VERSION));
+    let guestos_path = fixtures_dir.join(format!("guestos_v{}.json", CONFIG_VERSION));
+
+    hostos_path.exists() && guestos_path.exists()
+}
+
+/// Checks if the current config_types structure has changed compared to the existing fixture version
+fn config_structure_changed(fixtures_dir: &Path) -> bool {
+    let new_fixture = ConfigFixture::generate_for_version(CONFIG_VERSION);
+
+    let hostos_path = fixtures_dir.join(format!("hostos_v{}.json", CONFIG_VERSION));
+    let guestos_path = fixtures_dir.join(format!("guestos_v{}.json", CONFIG_VERSION));
+
+    // Try to read the existing fixtures
+    let hostos_fixture: Result<HostOSConfig, _> = serde_json::from_reader(
+        fs::File::open(hostos_path)
+            .unwrap_or_else(|_| panic!("Failed to open existing hostos fixture")),
+    );
+
+    let guestos_fixture: Result<GuestOSConfig, _> = serde_json::from_reader(
+        fs::File::open(guestos_path)
+            .unwrap_or_else(|_| panic!("Failed to open existing guestos fixture")),
+    );
+
+    // If we can't parse the existing fixtures, assume the structure has changed
+    if hostos_fixture.is_err() || guestos_fixture.is_err() {
+        return true;
+    }
+
+    let hostos_fixture = hostos_fixture.unwrap();
+    let guestos_fixture = guestos_fixture.unwrap();
+
+    // Compare the new config with the existing config
+    // We ignore the config_version field since that's what we're checking
+    let hostos_changed = hostos_fixture.network_settings
+        != new_fixture.hostos_config.network_settings
+        || hostos_fixture.icos_settings != new_fixture.hostos_config.icos_settings
+        || hostos_fixture.hostos_settings != new_fixture.hostos_config.hostos_settings
+        || hostos_fixture.guestos_settings != new_fixture.hostos_config.guestos_settings;
+
+    let guestos_changed = guestos_fixture.network_settings
+        != new_fixture.guestos_config.network_settings
+        || guestos_fixture.icos_settings != new_fixture.guestos_config.icos_settings
+        || guestos_fixture.guestos_settings != new_fixture.guestos_config.guestos_settings;
+
+    hostos_changed || guestos_changed
+}
+
+/// Generates fixtures for the current version, enforcing version increment if config_types has been modified
+pub fn generate_fixtures(fixtures_dir: &Path) -> std::io::Result<()> {
+    if current_fixture_versions_exist(fixtures_dir) && config_structure_changed(fixtures_dir) {
+        eprintln!("Error: CONFIG_VERSION in lib.rs ({}) already has fixtures, but the config structure has changed.", CONFIG_VERSION);
+        eprintln!("Please increment config_types CONFIG_VERSION before generating new fixtures.");
+        std::process::exit(1);
+    }
+
+    let fixture = ConfigFixture::generate_for_version(CONFIG_VERSION);
+    fixture.save_to_directory(fixtures_dir)
+}
+
 fn generate_test_base_config(
     version: &str,
 ) -> (
@@ -96,6 +158,7 @@ fn generate_test_base_config(
         vm_cpu: "host".to_string(),
         vm_nr_of_vcpus: 4,
         verbose: false,
+        test: true,
     };
 
     let guestos_settings = GuestOSSettings::default();

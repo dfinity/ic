@@ -1,5 +1,5 @@
 use config_types::CONFIG_VERSION;
-use config_types_compatibility_lib::ConfigFixture;
+use config_types_compatibility_lib::generate_fixtures;
 use std::path::PathBuf;
 
 fn main() {
@@ -7,14 +7,15 @@ fn main() {
 
     let fixtures_dir = repo_root.join("rs/ic_os/config_types/compatibility_tests/fixtures");
 
-    println!("Generating fixture for version {}", CONFIG_VERSION);
-
-    let fixture = ConfigFixture::generate_for_version(CONFIG_VERSION);
-    fixture
-        .save_to_directory(&fixtures_dir)
-        .expect("Failed to save fixture");
-
-    println!("Successfully generated fixture files in {:?}", fixtures_dir);
+    if let Err(e) = generate_fixtures(&fixtures_dir) {
+        eprintln!("Error generating fixtures: {}", e);
+        std::process::exit(1);
+    }
+    println!(
+        "Generated fixtures for version {} in {}",
+        CONFIG_VERSION,
+        fixtures_dir.display()
+    );
 }
 
 /// Get the repository root directory by looking for the .git directory
