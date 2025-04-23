@@ -68,29 +68,29 @@ fn config_structure_changed(fixtures_dir: &Path) -> bool {
     let existing_hostos_fixture = fixtures_dir.join(format!("hostos_v{}.json", CONFIG_VERSION));
     let existing_guestos_fixture = fixtures_dir.join(format!("guestos_v{}.json", CONFIG_VERSION));
 
-    // Helper function to check if a config has changed
     fn check_config_changed<T: serde::de::DeserializeOwned + PartialEq>(
-        file_path: &Path,
+        existing_fixture_path: &Path,
         new_config: &T,
     ) -> bool {
-        match serde_json::from_reader::<_, T>(
-            fs::File::open(file_path).unwrap_or_else(|_| {
-                panic!("Failed to open existing fixture: {}", file_path.display())
-            }),
-        ) {
+        match serde_json::from_reader::<_, T>(fs::File::open(existing_fixture_path).unwrap_or_else(
+            |_| {
+                panic!(
+                    "Failed to open existing fixture: {}",
+                    existing_fixture_path.display()
+                )
+            },
+        )) {
             Ok(existing_config) => existing_config != *new_config,
             Err(_) => true, // If we can't parse the existing fixture, assume structure changed
         }
     }
 
-    // Check if hostos config has changed
-    let hostos_changed = check_config_changed(&existing_hostos_fixture, &new_fixture.hostos_config);
-
-    // Check if guestos config has changed
-    let guestos_changed =
+    let hostos_config_changed =
+        check_config_changed(&existing_hostos_fixture, &new_fixture.hostos_config);
+    let guestos_config_changed =
         check_config_changed(&existing_guestos_fixture, &new_fixture.guestos_config);
 
-    hostos_changed || guestos_changed
+    hostos_config_changed || guestos_config_changed
 }
 
 /// Generates fixtures for the current version, enforcing version increment if config_types has been modified
