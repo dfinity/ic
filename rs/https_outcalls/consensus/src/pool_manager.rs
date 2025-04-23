@@ -34,7 +34,6 @@ use std::{
 pub type CanisterHttpAdapterClient =
     Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send>;
 
-//TODO(SOCKS_PROXY_DL): Make this 100.
 /// The probability of using api boundary node addresses for SOCKS proxy dark launch.
 const REGISTRY_SOCKS_PROXY_DARK_LAUNCH_PERCENTAGE: u32 = 100;
 
