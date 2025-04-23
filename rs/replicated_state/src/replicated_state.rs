@@ -6,14 +6,14 @@ use super::{
     },
 };
 use crate::{
-    canister_snapshots::CanisterSnapshots,
+    canister_snapshots::{CanisterSnapshot, CanisterSnapshots},
     canister_state::{
         queues::{CanisterInput, CanisterQueuesLoopDetector},
         system_state::{push_input, CanisterOutputQueuesIterator},
     },
     CanisterQueues,
 };
-use ic_base_types::PrincipalId;
+use ic_base_types::{PrincipalId, SnapshotId};
 use ic_btc_replica_types::BitcoinAdapterResponse;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::messaging::{
@@ -1250,6 +1250,31 @@ impl ReplicatedState {
             debug_assert_eq!(self.best_effort_message_memory_taken(), memory_usage);
         }
         (shed_messages, shed_message_bytes, cycles_lost)
+    }
+
+    /// Adds a new snapshot to the list of snapshots.
+    pub fn take_snapshot(
+        &mut self,
+        snapshot_id: SnapshotId,
+        snapshot: Arc<CanisterSnapshot>,
+    ) -> SnapshotId {
+        self.canister_snapshots.push(
+            snapshot_id,
+            snapshot,
+            &mut self.metadata.unflushed_checkpoint_ops,
+        )
+    }
+
+    /// Delete a snapshot from the list of snapshots.
+    pub fn delete_snapshot(&mut self, snapshot_id: SnapshotId) -> Option<Arc<CanisterSnapshot>> {
+        self.canister_snapshots
+            .remove(snapshot_id, &mut self.metadata.unflushed_checkpoint_ops)
+    }
+
+    /// Delete all snapshots belonging to the given canister id.
+    pub fn delete_snapshots(&mut self, canister_id: CanisterId) {
+        self.canister_snapshots
+            .delete_snapshots(canister_id, &mut self.metadata.unflushed_checkpoint_ops)
     }
 
     /// Splits the replicated state as part of subnet splitting phase 1, retaining

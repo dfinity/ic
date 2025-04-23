@@ -959,9 +959,7 @@ impl SchedulerImpl {
         // Delete any snapshots associated with the canister
         // that ran out of cycles.
         for canister_id in uninstalled_canisters {
-            state
-                .canister_snapshots
-                .delete_snapshots(canister_id, &mut state.metadata.unflushed_checkpoint_ops);
+            state.delete_snapshots(canister_id);
         }
 
         // Send rejects to any requests that were forcibly closed while uninstalling.

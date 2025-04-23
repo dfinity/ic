@@ -386,11 +386,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
     let snapshot =
         CanisterSnapshot::from_canister(state.canister_state(&CANISTER_1).unwrap(), state.time())
             .unwrap();
-    state.canister_snapshots.push(
-        snapshot_id,
-        Arc::new(snapshot),
-        &mut state.metadata.unflushed_checkpoint_ops,
-    );
+    state.take_snapshot(snapshot_id, Arc::new(snapshot));
 
     // Make subnet_queues non-empty
     state

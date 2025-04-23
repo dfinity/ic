@@ -59,7 +59,9 @@ impl CanisterSnapshots {
     ///
     /// Additionally, adds a new item to the `unflushed_changes`
     /// which represents the new backup accumulated since the last flush to the disk.
-    pub fn push(
+    ///
+    /// External callers should call `ReplicatedState::take_snapshot` instead.
+    pub(crate) fn push(
         &mut self,
         snapshot_id: SnapshotId,
         snapshot: Arc<CanisterSnapshot>,
@@ -98,7 +100,9 @@ impl CanisterSnapshots {
     ///
     /// Additionally, adds a new item to the `unflushed_changes`
     /// which represents the deleted backup since the last flush to the disk.
-    pub fn remove(
+    ///
+    /// External callers should call `ReplicatedState::delete_checkpoint` instead.
+    pub(crate) fn remove(
         &mut self,
         snapshot_id: SnapshotId,
         unflushed_changes: &mut UnflushedCheckpointOps,
@@ -133,7 +137,9 @@ impl CanisterSnapshots {
     ///
     /// Additionally, new items are added to the `unflushed_changes`,
     /// representing the deleted backups since the last flush to the disk.
-    pub fn delete_snapshots(
+    ///
+    /// External callers should call `ReplicatedState::delete_snapshots` instead.
+    pub(crate) fn delete_snapshots(
         &mut self,
         canister_id: CanisterId,
         unflushed_changes: &mut UnflushedCheckpointOps,
