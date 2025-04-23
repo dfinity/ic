@@ -91,24 +91,19 @@ impl CanisterModule {
     /// module, and will change its hash. It's useful for uploading a module
     /// chunk by chunk.
     /// Returns the original module if `offset` + `buf.len()` > `module.len()`.
-    pub fn write(self, buf: &Vec<u8>, offset: usize) -> Result<Self, Self> {
+    pub fn write(&mut self, buf: &[u8], offset: usize) -> Result<(), String> {
         let CanisterModule {
             module,
-            module_hash,
+            module_hash: _,
         } = self;
-        match module.write(buf, offset) {
+        match module.clone().write(buf, offset) {
             Ok(module) => {
-                let module_hash = ic_crypto_sha2::Sha256::hash(module.as_slice());
-                Ok(Self {
-                    module,
-                    module_hash,
-                })
+                self.module_hash = ic_crypto_sha2::Sha256::hash(module.as_slice());
+                self.module = module;
             }
-            Err(module) => Err(Self {
-                module,
-                module_hash,
-            }),
+            Err(_) => return Err("Offset + slice length exceeds module length.".to_string()),
         }
+        Ok(())
     }
 
     pub fn as_slice(&self) -> &[u8] {
@@ -267,7 +262,7 @@ impl ModuleStorage {
     ///
     /// This may invalidate the module, but is useful for uploading a
     /// module chunk by chunk.
-    fn write(self, buf: &Vec<u8>, offset: usize) -> Result<Self, Self> {
+    fn write(self, buf: &[u8], offset: usize) -> Result<Self, Self> {
         let mut arc = match self {
             ModuleStorage::Memory(bytes) => bytes,
             ModuleStorage::File(path, mmap) => {
