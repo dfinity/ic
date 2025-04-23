@@ -15,7 +15,7 @@ Using a value of the `PocketIc` struct, you interact with the IC itself, e.g. vi
 ```rust
 // IC interface excerpt
 fn root_key(&self) -> Option<Vec<u8>>
-fn set_time(&self, time: SystemTime)
+fn set_time(&self, time: Time)
 fn create_canister(&self) -> CanisterId
 fn install_canister(&self, canister_id: CanisterId, wasm_module: Vec<u8>, ...)  
 ...
@@ -582,7 +582,7 @@ Now we create a PocketIC instance configured with the Bitcoin subnet and the `bi
 Because the `bitcoind` process uses the real time, we set the time of the PocketIC instance to be the current time:
 
 ```rust
-    pic.set_time(SystemTime::now());
+    pic.set_time(SystemTime::now().into());
 ```
 
 Next we deploy the bitcoin testnet canister (canister ID `g4xu7-jiaaa-aaaan-aaaaq-cai`) on the bitcoin subnet and configure it with `Network::Regtest`
@@ -720,3 +720,20 @@ fn pocket_ic_shared_state_2() {
     assert!(pic2.canister_exists(MAINNET_CANISTER_ID));
 }
 ```
+
+## Time
+
+The `pocket-ic` crate defines the type `Time` to represent the time of a PocketIC instance
+with nanosecond precision on all supported platforms (Windows, MacOS, Linux).
+The PocketIC time is used in the functions `PocketIc::get_time`, `PocketIc::set_time`, and `PocketIc::set_certified_time`.
+
+A PocketIC time can be created from a UNIX timestamp in nanoseconds using
+the function `Time::from_nanos_since_unix_epoch` and converted back to
+a UNIX timestamp in nanoseconds using the function `Time::as_nanos_since_unix_epoch`.
+
+A `system_time: SystemTime` can be converted into `Time` using `system_into.into()`.
+A `time: Time` can be converted into `SystemTime` using `time.try_into()`
+which fails with an error if the conversion would lead to loss of precision (e.g., on Windows).
+
+Finally, PocketIC times can be compared (for both equality and ordering)
+and a `Duration` can be added to a PocketIC time.
