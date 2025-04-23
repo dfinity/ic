@@ -765,11 +765,11 @@ url = { version = "2.5.3", features = ["serde"] }
 uuid = { version = "1.11.0", features = ["v4", "serde"] }
 walkdir = "2.3.3"
 walrus = "0.23.2"
-wasm-encoder = { version = "0.224.0", features = ["wasmparser"] }
-wasmparser = "0.224.0"
-wasmprinter = "0.224.0"
-wast = "224.0.0"
-wat = "1.224.0"
+wasm-encoder = { version = "0.229.0", features = ["wasmparser"] }
+wasmparser = "0.229.0"
+wasmprinter = "0.229.0"
+wast = "229.0.0"
+wat = "1.229.0"
 which = "6.0.3"
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.16.0" }
