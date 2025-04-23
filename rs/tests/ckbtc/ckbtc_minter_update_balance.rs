@@ -280,8 +280,7 @@ pub fn test_update_balance(env: TestEnv) {
 
         // We create a new agent with a different identity
         // to have caller != new_caller
-        let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
-        let mut mutable_agent = agent;
+        let mut mutable_agent = assert_create_agent(app_node.get_public_url().as_str()).await;
         let mut rng = ChaChaRng::from_rng(OsRng).unwrap();
         let identity = Secp256k1Identity::from_private_key(SecretKey::random(&mut rng));
         mutable_agent.set_identity(identity);
