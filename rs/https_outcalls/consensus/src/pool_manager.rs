@@ -36,7 +36,7 @@ pub type CanisterHttpAdapterClient =
 
 //TODO(SOCKS_PROXY_DL): Make this 100.
 /// The probability of using api boundary node addresses for SOCKS proxy dark launch.
-const REGISTRY_SOCKS_PROXY_DARK_LAUNCH_PERCENTAGE: u32 = 10;
+const REGISTRY_SOCKS_PROXY_DARK_LAUNCH_PERCENTAGE: u32 = 100;
 
 /// [`CanisterHttpPoolManagerImpl`] implements the pool and state monitoring
 /// functionality that is necessary to ensure that http requests are made and
