@@ -1,7 +1,5 @@
 [Unit]
 Description=Generate Firewall Configuration
-After=update-config.service
-Wants=update-config.service
 # We must also wait for storage permission fixup to have finished.
 After=setup-permissions.service
 Wants=setup-permissions.service

@@ -3,8 +3,6 @@ Description=Generate network config
 After=systemd-modules-load.service
 After=systemd-udev-settle.service
 Wants=systemd-udev-settle.service
-After=update-config.service
-Wants=update-config.service
 Before=systemd-networkd.service
 
 [Service]
