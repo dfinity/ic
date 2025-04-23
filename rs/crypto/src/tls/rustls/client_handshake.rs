@@ -26,11 +26,7 @@ pub fn client_config(
 ) -> Result<ClientConfig, TlsConfigError> {
     let self_tls_cert =
         tls_cert_from_registry(registry_client.as_ref(), self_node_id, registry_version)?;
-    let self_tls_cert_key_id = KeyId::try_from(&self_tls_cert).map_err(|error| {
-        TlsConfigError::MalformedSelfCertificate {
-            internal_error: format!("Cannot instantiate KeyId: {:?}", error),
-        }
-    })?;
+    let self_tls_cert_key_id = KeyId::from(&self_tls_cert);
     let ed25519_signing_key =
         CspServerEd25519SigningKey::new(self_tls_cert_key_id, Arc::clone(vault));
     let server_cert_verifier = NodeServerCertVerifier::new(

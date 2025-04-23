@@ -32,7 +32,7 @@ use ic_base_types::{subnet_id_into_protobuf, subnet_id_try_from_protobuf};
 use ic_crypto_sha2::Sha256;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::types::v1 as pb_types;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},

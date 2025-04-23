@@ -1,10 +1,9 @@
 //! Prunes a replicated state, as part of a subnet split.
 use crate::{
     checkpoint::{
-        load_checkpoint, make_unvalidated_checkpoint,
-        validate_checkpoint_and_remove_unverified_marker,
+        flush_canister_snapshots_and_page_maps, load_checkpoint, make_unvalidated_checkpoint,
+        validate_and_finalize_checkpoint_and_remove_unverified_marker,
     },
-    flush_canister_snapshots_and_page_maps,
     tip::spawn_tip_thread,
     StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS,
 };
@@ -189,12 +188,7 @@ fn write_checkpoint(
 
     let mut tip_handler = state_layout.capture_tip_handler();
     tip_handler
-        .reset_tip_to(
-            &state_layout,
-            old_cp,
-            config.lsmt_config.lsmt_status,
-            Some(thread_pool),
-        )
+        .reset_tip_to(&state_layout, old_cp, Some(thread_pool))
         .map_err(|e| e.to_string())?;
     let (_tip_thread, tip_channel) = spawn_tip_thread(
         log,
@@ -208,22 +202,18 @@ fn write_checkpoint(
     let new_height = old_height.increment();
 
     // We need to flush to handle the deletion of canister snapshots.
-    flush_canister_snapshots_and_page_maps(
-        state,
-        new_height,
-        &tip_channel,
-        &metrics.checkpoint_metrics,
-    );
+    flush_canister_snapshots_and_page_maps(state, new_height, &tip_channel);
 
     let (cp_layout, _has_downgrade) = make_unvalidated_checkpoint(
         state,
         new_height,
         &tip_channel,
         &metrics.checkpoint_metrics,
-        config.lsmt_config.lsmt_status,
+        fd_factory.clone(),
     )
     .map_err(|e| format!("Failed to write checkpoint: {}", e))?;
-    validate_checkpoint_and_remove_unverified_marker(
+
+    validate_and_finalize_checkpoint_and_remove_unverified_marker(
         &cp_layout,
         None,
         SubnetType::Application,

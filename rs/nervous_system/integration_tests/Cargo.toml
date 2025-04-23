@@ -13,7 +13,9 @@ candid = { workspace = true }
 cycles-minting-canister = { path = "../../nns/cmc" }
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
+ic-management-canister-types = { workspace = true }
 ic-nervous-system-agent = { path = "../agent" }
 ic-nervous-system-clients = { path = "../clients" }
 ic-nervous-system-common = { path = "../common" }
@@ -23,7 +25,10 @@ ic-nervous-system-runtime = { path = "../runtime" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-governance = { path = "../../nns/governance" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
+ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-sns-governance = { path = "../../sns/governance" }
+ic-sns-governance-api = { path = "../../sns/governance/api" }
+ic-sns-cli = { path = "../../sns/cli" }
 ic-sns-root = { path = "../../sns/root" }
 ic-sns-swap = { path = "../../sns/swap" }
 icp-ledger = { path = "../../ledger_suite/icp" }
@@ -31,23 +36,25 @@ icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
 lifeline = { path = "../../nns/handlers/lifeline/impl" }
+pretty_assertions = { workspace = true }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 prost = { workspace = true }
 rust_decimal = "1.36.0"
 rust_decimal_macros = "1.36.0"
+tempfile = { workspace = true }
 tokio = { workspace = true }
-
+url = { workspace = true }
 
 # Dependencies required to compile the tests.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 assert_matches = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
-ic-error-types = { path = "../../types/error_types" }
+ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-icrc1 = { path = "../../ledger_suite/icrc1/" }
 ic-icrc1-index-ng = { path = "../../ledger_suite/icrc1/index-ng" }
 ic-icrc1-tokens-u64 = { path = "../../ledger_suite/icrc1/tokens_u64" }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-nervous-system-common-test-keys = { path = "../common/test_keys" }
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-nervous-system-root = { path = "../root" }

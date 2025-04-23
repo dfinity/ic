@@ -2,40 +2,43 @@ use crate::{
     as_num_instructions,
     canister_manager::{
         uninstall_canister, AddCanisterChangeToHistory, CanisterManager, CanisterManagerError,
-        CanisterMgrConfig, InstallCodeContext, StopCanisterResult, WasmSource,
+        CanisterMgrConfig, DtsInstallCodeResult, InstallCodeContext, StopCanisterResult,
+        WasmSource, MAX_SLICE_SIZE_BYTES,
     },
-    canister_settings::{CanisterSettings, CanisterSettingsBuilder},
-    execution_environment::{as_round_instructions, RoundCounters},
+    canister_settings::CanisterSettings,
+    execution_environment::{as_round_instructions, CompilationCostHandling, RoundCounters},
     hypervisor::Hypervisor,
     types::{IngressResponse, Response},
     IngressHistoryWriterImpl, RoundLimits,
 };
 use assert_matches::assert_matches;
-use candid::Decode;
+use candid::{CandidType, Decode, Encode};
 use ic_base_types::{NumSeconds, PrincipalId};
 use ic_config::{
     execution_environment::{
         Config, CANISTER_GUARANTEED_CALLBACK_QUOTA, DEFAULT_WASM_MEMORY_LIMIT,
-        SUBNET_CALLBACK_SOFT_LIMIT,
+        MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, SUBNET_CALLBACK_SOFT_LIMIT,
     },
     flag_status::FlagStatus,
     subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
-use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
-use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
+use ic_embedders::{
+    wasm_utils::instrumentation::{instruction_to_cost, WasmMemoryType},
+    wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits},
+};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, SubnetAvailableMemory};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
     CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, ChunkHash,
     ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2, Method,
-    NodeMetricsHistoryArgs, NodeMetricsHistoryResponse, Payload, StoredChunksArgs,
-    StoredChunksReply, SubnetInfoArgs, SubnetInfoResponse, UpdateSettingsArgs, UploadChunkArgs,
-    UploadChunkReply, WasmMemoryPersistence,
+    NodeMetricsHistoryArgs, NodeMetricsHistoryResponse, OnLowWasmMemoryHookStatus, Payload,
+    StoredChunksArgs, StoredChunksReply, SubnetInfoArgs, SubnetInfoResponse, UpdateSettingsArgs,
+    UploadChunkArgs, UploadChunkReply, WasmMemoryPersistence,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -44,14 +47,11 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::system_state::{wasm_chunk_store, CyclesUseCase},
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
-    page_map::{self, TestPageAllocatorFileDescriptorImpl},
-    testing::CanisterQueuesTesting,
-    testing::SystemStateTesting,
-    CallContextManager, CallOrigin, CanisterState, CanisterStatus, NumWasmPages, PageMap,
-    ReplicatedState, SystemState,
+    page_map::TestPageAllocatorFileDescriptorImpl,
+    testing::{CanisterQueuesTesting, SystemStateTesting},
+    CallContextManager, CallOrigin, CanisterState, CanisterStatus, NumWasmPages, ReplicatedState,
 };
 use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig};
-use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     state_manager::FakeStateManager,
@@ -63,14 +63,12 @@ use ic_test_utilities_execution_environment::{
     wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
 };
 use ic_test_utilities_state::{
-    get_running_canister, get_running_canister_with_args, get_stopped_canister,
-    get_stopped_canister_with_controller, get_stopping_canister,
-    get_stopping_canister_with_controller, CallContextBuilder, CanisterStateBuilder,
-    ReplicatedStateBuilder,
+    get_running_canister, get_stopped_canister, get_stopped_canister_with_controller,
+    get_stopping_canister, CallContextBuilder, CanisterStateBuilder, ReplicatedStateBuilder,
 };
 use ic_test_utilities_types::{
     ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
-    messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder},
+    messages::{IngressBuilder, RequestBuilder},
 };
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -78,12 +76,13 @@ use ic_types::{
     nominal_cycles::NominalCycles,
     time::UNIX_EPOCH,
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
-    NumInstructions, SubnetId, Time, UserId,
+    NumInstructions, SubnetId, UserId,
 };
-use ic_wasm_types::{CanisterModule, WasmValidationError};
+use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset};
-use more_asserts::{assert_ge, assert_lt};
+use more_asserts::{assert_ge, assert_le, assert_lt};
+use serde::Deserialize;
 use std::{collections::BTreeSet, convert::TryFrom, mem::size_of, path::Path, sync::Arc};
 
 use super::InstallCodeResult;
@@ -104,6 +103,20 @@ const MINIMAL_WASM: [u8; 8] = [
 ];
 
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
+
+// Ensure the slice, with extra room for Candid encoding, fits within 2 MiB.
+#[test]
+fn test_slice() {
+    let slice = vec![42; MAX_SLICE_SIZE_BYTES as usize];
+    #[derive(Deserialize, CandidType)]
+    struct S {
+        #[serde(with = "serde_bytes")]
+        x: Vec<u8>,
+    }
+    let x = S { x: slice };
+    let encoded = Encode!(&x).unwrap();
+    assert_le!(encoded.len(), 2 * 1024 * 1024);
+}
 
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory = SubnetAvailableMemory::new(
@@ -173,24 +186,9 @@ impl InstallCodeContextBuilder {
         self
     }
 
-    pub fn wasm_module(mut self, wasm_module: Vec<u8>) -> Self {
-        self.ctx.wasm_source = WasmSource::CanisterModule(CanisterModule::new(wasm_module));
-        self
-    }
-
     #[allow(dead_code)]
     pub fn arg(mut self, arg: Vec<u8>) -> Self {
         self.ctx.arg = arg;
-        self
-    }
-
-    pub fn compute_allocation(mut self, compute_allocation: ComputeAllocation) -> Self {
-        self.ctx.compute_allocation = Some(compute_allocation);
-        self
-    }
-
-    pub fn memory_allocation(mut self, memory_allocation: MemoryAllocation) -> Self {
-        self.ctx.memory_allocation = Some(memory_allocation);
         self
     }
 
@@ -256,7 +254,6 @@ impl CanisterManagerBuilder {
             Config::default(),
             &metrics_registry,
             self.subnet_id,
-            subnet_type,
             no_op_logger(),
             Arc::clone(&cycles_account_manager),
             SchedulerConfig::application_subnet().dirty_page_overhead,
@@ -315,7 +312,9 @@ fn canister_manager_config(
         SchedulerConfig::application_subnet().upload_wasm_chunk_instructions,
         ic_config::embedders::Config::default().wasm_max_size,
         SchedulerConfig::application_subnet().canister_snapshot_baseline_instructions,
+        SchedulerConfig::application_subnet().canister_snapshot_data_baseline_instructions,
         DEFAULT_WASM_MEMORY_LIMIT,
+        MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
     )
 }
 
@@ -351,7 +350,7 @@ fn install_code(
     Option<CanisterState>,
 ) {
     let instruction_limit = NumInstructions::new(round_limits.instructions.get() as u64);
-    let execution_parameters = ExecutionParameters {
+    let mut execution_parameters = ExecutionParameters {
         instruction_limits: InstructionLimits::new(
             FlagStatus::Disabled,
             instruction_limit,
@@ -386,17 +385,57 @@ fn install_code(
         invalid_canister_state_error: &no_op_counter,
         ingress_with_cycles_error: &no_op_counter,
     };
-    let (result, instructions_used, canister) = canister_manager.install_code(
+
+    let time = state.time();
+    let network_topology = state.metadata.network_topology.clone();
+
+    let old_canister = state.take_canister_state(&context.canister_id).unwrap();
+    execution_parameters.compute_allocation = old_canister.scheduler_state.compute_allocation;
+    execution_parameters.canister_memory_limit = match old_canister.memory_allocation() {
+        MemoryAllocation::Reserved(bytes) => bytes,
+        MemoryAllocation::BestEffort => execution_parameters.canister_memory_limit,
+    };
+
+    let dts_result = canister_manager.install_code_dts(
         context,
         CanisterCall::Ingress(Arc::new(ingress)),
         InstallCodeCallId::new(0),
-        state,
+        None,
+        old_canister,
+        time,
+        "NOT_USED".into(),
+        &network_topology,
         execution_parameters,
         round_limits,
+        CompilationCostHandling::CountFullAmount,
         round_counters,
         SMALL_APP_SUBNET_MAX_SIZE,
         Config::default().dirty_page_logging,
     );
+    // Canister manager tests do not trigger DTS executions.
+    let (result, instructions_used, canister) = match dts_result {
+        DtsInstallCodeResult::Finished {
+            mut canister,
+            call_id: _,
+            message: _,
+            instructions_used,
+            result,
+        } => {
+            canister.update_on_low_wasm_memory_hook_condition();
+            (result, instructions_used, Some(canister))
+        }
+        DtsInstallCodeResult::Paused {
+            canister: _,
+            paused_execution,
+            ingress_status: _,
+        } => {
+            unreachable!(
+                "Unexpected paused execution in canister manager tests: {:?}",
+                paused_execution
+            );
+        }
+    };
+
     let instructions_left = instruction_limit - instructions_used.min(instruction_limit);
     (instructions_left, result, canister)
 }
@@ -414,437 +453,198 @@ where
 
 #[test]
 fn install_canister_makes_subnet_oversubscribed() {
-    with_setup(|canister_manager, mut state, _| {
-        let sender = canister_test_id(42).get();
-        let sender_subnet_id = subnet_test_id(1);
-        let compute_allocation_used = state.total_compute_allocation();
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used,
-        };
-        let canister_id1 = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings {
-                    freezing_threshold: Some(1.into()),
-                    ..CanisterSettings::default()
-                },
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
-        let canister_id2 = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings {
-                    freezing_threshold: Some(1.into()),
-                    ..CanisterSettings::default()
-                },
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
-        let canister_id3 = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings {
-                    freezing_threshold: Some(1.into()),
-                    ..CanisterSettings::default()
-                },
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
-
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_id1)
-                .compute_allocation(ComputeAllocation::try_from(50).unwrap())
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id1 = test
+        .create_canister_with_settings(
+            *INITIAL_CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_freezing_threshold(1)
                 .build(),
-            &mut state,
-            &mut round_limits,
-        );
-        assert!(res.1.is_ok());
-        state.put_canister_state(res.2.unwrap());
-
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_id2)
-                .compute_allocation(ComputeAllocation::try_from(25).unwrap())
+        )
+        .unwrap();
+    let canister_id2 = test
+        .create_canister_with_settings(
+            *INITIAL_CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_freezing_threshold(1)
                 .build(),
-            &mut state,
-            &mut round_limits,
-        );
-        assert!(res.1.is_ok());
-        state.put_canister_state(res.2.unwrap());
-
-        let instructions_left = as_num_instructions(round_limits.instructions);
-        let (num_instructions, res, canister) = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_id3)
-                .wasm_module(UNIVERSAL_CANISTER_WASM.to_vec())
-                .compute_allocation(ComputeAllocation::try_from(30).unwrap())
+        )
+        .unwrap();
+    let canister_id3 = test
+        .create_canister_with_settings(
+            *INITIAL_CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_freezing_threshold(1)
                 .build(),
-            &mut state,
-            &mut round_limits,
-        );
-        assert_eq!(
-            (num_instructions, res),
-            (
-                instructions_left,
-                Err(CanisterManagerError::SubnetComputeCapacityOverSubscribed {
-                    requested: ComputeAllocation::try_from(30).unwrap(),
-                    available: 24
-                })
-            )
-        );
+        )
+        .unwrap();
 
-        // Canister state should still be returned.
-        assert_eq!(canister.unwrap().canister_id(), canister_id3);
-    });
+    test.install_code_v2(InstallCodeArgsV2::new(
+        CanisterInstallModeV2::Install,
+        canister_id1,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        Some(50),
+        None,
+    ))
+    .unwrap();
+
+    test.install_code_v2(InstallCodeArgsV2::new(
+        CanisterInstallModeV2::Install,
+        canister_id2,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        Some(25),
+        None,
+    ))
+    .unwrap();
+
+    let err = test
+        .install_code_v2(InstallCodeArgsV2::new(
+            CanisterInstallModeV2::Install,
+            canister_id3,
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            Some(30),
+            None,
+        ))
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
+    assert!(err.description().contains(
+        "Canister requested a compute allocation of 30% which \
+            cannot be satisfied because the Subnet's remaining compute capacity is 24%"
+    ));
 }
 
 #[test]
 fn upgrade_non_existing_canister_fails() {
-    with_setup(|canister_manager, mut state, _| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let canister_id = canister_test_id(0);
-        assert_eq!(
-            install_code(
-                &canister_manager,
-                InstallCodeContextBuilder::default()
-                    .mode(CanisterInstallModeV2::Upgrade(None))
-                    .wasm_module(UNIVERSAL_CANISTER_WASM.to_vec(),)
-                    .build(),
-                &mut state,
-                &mut round_limits,
-            ),
-            (
-                MAX_NUM_INSTRUCTIONS,
-                Err(CanisterManagerError::CanisterNotFound(canister_id)),
-                None
-            )
-        );
-    });
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = canister_test_id(0);
+    let err = test
+        .upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterNotFound);
+    assert!(err
+        .description()
+        .contains(&format!("Canister {} not found", canister_id)));
 }
 
 #[test]
 fn upgrade_canister_with_no_wasm_fails() {
-    with_setup(|canister_manager, mut state, _| {
-        let sender = canister_test_id(1).get();
-        let sender_subnet_id = subnet_test_id(1);
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let canister_id = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
-
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .mode(CanisterInstallModeV2::Upgrade(None))
-                .wasm_module(UNIVERSAL_CANISTER_WASM.to_vec())
-                .build(),
-            &mut state,
-            &mut round_limits,
-        );
-        assert_eq!(
-            (res.0, res.1),
-            (
-                MAX_NUM_INSTRUCTIONS,
-                Err(CanisterManagerError::Hypervisor(
-                    canister_id,
-                    HypervisorError::WasmModuleNotFound
-                ))
-            )
-        );
-    });
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
+    let err = test
+        .upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterWasmModuleNotFound);
+    assert!(err
+        .description()
+        .contains("the canister contains no Wasm module"));
 }
 
 #[test]
 fn can_update_compute_allocation_during_upgrade() {
-    with_setup(|canister_manager, mut state, _| {
-        // Create a new canister.
-        let sender = canister_test_id(1).get();
-        let sender_subnet_id = subnet_test_id(1);
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let canister_id1 = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                sender_subnet_id,
-                Cycles::new(2_000_000_000_000_000),
-                CanisterSettings {
-                    freezing_threshold: Some(1.into()),
-                    ..CanisterSettings::default()
-                },
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.create_canister(Cycles::from(u64::MAX));
 
-        // Install the canister with allocation of 60%.
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_id1)
-                .compute_allocation(ComputeAllocation::try_from(60).unwrap())
-                .build(),
-            &mut state,
-            &mut round_limits,
-        );
-        assert!(res.1.is_ok());
-        state.put_canister_state(res.2.unwrap());
+    // Install the canister with allocation of 60%.
+    test.install_code_v2(InstallCodeArgsV2::new(
+        CanisterInstallModeV2::Install,
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        Some(60),
+        None,
+    ))
+    .unwrap();
+    assert_eq!(
+        test.canister_state(canister_id).compute_allocation(),
+        ComputeAllocation::try_from(60).unwrap()
+    );
 
-        assert_eq!(
-            state
-                .canister_state(&canister_id1)
-                .unwrap()
-                .scheduler_state
-                .compute_allocation,
-            ComputeAllocation::try_from(60).unwrap()
-        );
-
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_id1)
-                .compute_allocation(ComputeAllocation::try_from(80).unwrap())
-                .mode(CanisterInstallModeV2::Upgrade(None))
-                .build(),
-            &mut state,
-            &mut round_limits,
-        );
-        // Upgrade the canister to allocation of 80%.
-        assert!(res.1.is_ok());
-
-        assert_eq!(res.2.as_ref().unwrap().canister_id(), canister_id1);
-        assert_eq!(
-            res.2.unwrap().scheduler_state.compute_allocation,
-            ComputeAllocation::try_from(80).unwrap()
-        );
-    });
+    // Upgrade the canister to allocation of 80%.
+    test.install_code_v2(InstallCodeArgsV2::new(
+        CanisterInstallModeV2::Upgrade(None),
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        Some(80),
+        None,
+    ))
+    .unwrap();
+    assert_eq!(
+        test.canister_state(canister_id).compute_allocation(),
+        ComputeAllocation::try_from(80).unwrap()
+    );
 }
 
 #[test]
 fn upgrading_canister_makes_subnet_oversubscribed() {
-    with_setup(|canister_manager, mut state, _| {
-        let sender = canister_test_id(27).get();
-        let sender_subnet_id = subnet_test_id(1);
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let initial_cycles = Cycles::new(30_000_000_000_000);
-        let canister_id1 = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                sender_subnet_id,
-                initial_cycles,
-                CanisterSettings {
-                    freezing_threshold: Some(1.into()),
-                    ..CanisterSettings::default()
-                },
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
-        let canister_id2 = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                sender_subnet_id,
-                initial_cycles,
-                CanisterSettings {
-                    freezing_threshold: Some(1.into()),
-                    ..CanisterSettings::default()
-                },
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
-        let canister_id3 = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                sender_subnet_id,
-                initial_cycles,
-                CanisterSettings {
-                    freezing_threshold: Some(1.into()),
-                    ..CanisterSettings::default()
-                },
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::from(u64::MAX);
+    let canister_id1 = test.create_canister(initial_cycles);
+    let canister_id2 = test.create_canister(initial_cycles);
+    let canister_id3 = test.create_canister(initial_cycles);
 
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_id1)
-                .compute_allocation(ComputeAllocation::try_from(50).unwrap())
-                .build(),
-            &mut state,
-            &mut round_limits,
-        );
-        state.put_canister_state(res.2.unwrap());
-        assert!(res.1.is_ok());
+    // Install canisters with a total compute allocation below subnet capacity.
+    test.install_code_v2(InstallCodeArgsV2::new(
+        CanisterInstallModeV2::Install,
+        canister_id1,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        Some(50),
+        None,
+    ))
+    .unwrap();
+    test.install_code_v2(InstallCodeArgsV2::new(
+        CanisterInstallModeV2::Install,
+        canister_id2,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        Some(25),
+        None,
+    ))
+    .unwrap();
+    test.install_code_v2(InstallCodeArgsV2::new(
+        CanisterInstallModeV2::Install,
+        canister_id3,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        Some(20),
+        None,
+    ))
+    .unwrap();
 
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_id2)
-                .compute_allocation(ComputeAllocation::try_from(25).unwrap())
-                .build(),
-            &mut state,
-            &mut round_limits,
-        );
-        state.put_canister_state(res.2.unwrap());
-        assert!(res.1.is_ok());
+    let err = test
+        .install_code_v2(InstallCodeArgsV2::new(
+            CanisterInstallModeV2::Upgrade(None),
+            canister_id3,
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            Some(30),
+            None,
+        ))
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
+    assert!(err.description().contains(
+        "Canister requested a compute allocation of 30% which \
+            cannot be satisfied because the Subnet's remaining compute capacity is 24%"
+    ));
 
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_id3)
-                .compute_allocation(ComputeAllocation::try_from(20).unwrap())
-                .build(),
-            &mut state,
-            &mut round_limits,
-        );
-        assert!(res.1.is_ok());
-        state.put_canister_state(res.2.unwrap());
-
-        let instructions_left = as_num_instructions(round_limits.instructions);
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_id3)
-                .wasm_module(UNIVERSAL_CANISTER_WASM.to_vec())
-                .compute_allocation(ComputeAllocation::try_from(30).unwrap())
-                .mode(CanisterInstallModeV2::Upgrade(None))
-                .build(),
-            &mut state,
-            &mut round_limits,
-        );
-        assert_eq!(
-            (res.0, res.1),
-            (
-                instructions_left,
-                Err(CanisterManagerError::SubnetComputeCapacityOverSubscribed {
-                    requested: ComputeAllocation::try_from(30).unwrap(),
-                    available: 24,
-                })
-            )
-        );
-
-        state.put_canister_state(res.2.unwrap());
-
-        assert_eq!(
-            state
-                .canister_state(&canister_id1)
-                .unwrap()
-                .scheduler_state
-                .compute_allocation,
-            ComputeAllocation::try_from(50).unwrap()
-        );
-        assert_eq!(
-            state
-                .canister_state(&canister_id2)
-                .unwrap()
-                .scheduler_state
-                .compute_allocation,
-            ComputeAllocation::try_from(25).unwrap()
-        );
-        assert_eq!(
-            state
-                .canister_state(&canister_id3)
-                .unwrap()
-                .scheduler_state
-                .compute_allocation,
-            ComputeAllocation::try_from(20).unwrap()
-        );
-    });
+    // Compute allocations remained unchanged after the failed upgrade.
+    assert_eq!(
+        test.canister_state(canister_id1).compute_allocation(),
+        ComputeAllocation::try_from(50).unwrap()
+    );
+    assert_eq!(
+        test.canister_state(canister_id2).compute_allocation(),
+        ComputeAllocation::try_from(25).unwrap()
+    );
+    assert_eq!(
+        test.canister_state(canister_id3).compute_allocation(),
+        ComputeAllocation::try_from(20).unwrap()
+    );
 }
 
 #[test]
@@ -916,566 +716,338 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
 
 #[test]
 fn can_update_memory_allocation_during_upgrade() {
-    with_setup(|canister_manager, mut state, _| {
-        let sender = canister_test_id(13).get();
-        let sender_subnet_id = subnet_test_id(1);
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: SubnetAvailableMemory::new(
-                MEMORY_CAPACITY.get() as i64,
-                MEMORY_CAPACITY.get() as i64,
-                MEMORY_CAPACITY.get() as i64,
-            ),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let canister_id = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
 
-        let initial_memory_allocation =
-            MemoryAllocation::try_from(NumBytes::from(1 << 30)).unwrap();
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_id)
-                .memory_allocation(initial_memory_allocation)
-                .build(),
-            &mut state,
-            &mut round_limits,
-        );
-        assert!(res.1.is_ok());
-        state.put_canister_state(res.2.unwrap());
+    let initial_memory_allocation = 1 << 30;
+    test.install_code_v2(InstallCodeArgsV2::new(
+        CanisterInstallModeV2::Install,
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        None,
+        Some(initial_memory_allocation),
+    ))
+    .unwrap();
+    assert_eq!(
+        test.canister_state(canister_id)
+            .memory_allocation()
+            .bytes()
+            .get(),
+        initial_memory_allocation
+    );
 
-        assert_eq!(
-            state
-                .canister_state(&canister_id)
-                .unwrap()
-                .memory_allocation(),
-            initial_memory_allocation
-        );
-
-        let final_memory_allocation = MemoryAllocation::try_from(NumBytes::from(2 << 30)).unwrap();
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_id)
-                .memory_allocation(final_memory_allocation)
-                .mode(CanisterInstallModeV2::Upgrade(None))
-                .build(),
-            &mut state,
-            &mut round_limits,
-        );
-        assert!(res.1.is_ok());
-        state.put_canister_state(res.2.unwrap());
-
-        assert_eq!(
-            state
-                .canister_state(&canister_id)
-                .unwrap()
-                .memory_allocation(),
-            final_memory_allocation,
-        );
-    });
+    let final_memory_allocation = 2 << 30;
+    test.install_code_v2(InstallCodeArgsV2::new(
+        CanisterInstallModeV2::Upgrade(None),
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        None,
+        Some(final_memory_allocation),
+    ))
+    .unwrap();
+    assert_eq!(
+        test.canister_state(canister_id)
+            .memory_allocation()
+            .bytes()
+            .get(),
+        final_memory_allocation
+    );
 }
 
 #[test]
 fn install_code_preserves_messages() {
-    with_setup(|canister_manager, mut state, _| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let canister_id = 0;
-        let num_messages = 10;
-        let sender = canister_test_id(1).get();
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
 
-        // Create a new canister.
-        let mut canister_state_builder = CanisterStateBuilder::new()
-            .with_controller(sender)
-            .with_canister_id(canister_test_id(canister_id))
-            .with_cycles(*INITIAL_CYCLES);
+    // Induct some messages without executing them (since manual execution mode
+    // is set).
+    let num_messages = 10;
+    for _ in 0..num_messages {
+        test.ingress_raw(canister_id, "foo", vec![]);
+    }
 
-        for i in 0..num_messages {
-            canister_state_builder = canister_state_builder.with_ingress(
-                (
-                    SignedIngressBuilder::new()
-                        .canister_id(canister_test_id(canister_id))
-                        .nonce(i)
-                        .build(),
-                    None,
-                )
-                    .into(),
-            );
-        }
-        state.put_canister_state(canister_state_builder.build());
+    // Install the canister.
+    test.install_code_v2(InstallCodeArgsV2::new(
+        CanisterInstallModeV2::Install,
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        None,
+        None,
+    ))
+    .unwrap();
 
-        // Install the canister with new wasm.
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_test_id(0))
-                .wasm_module(UNIVERSAL_CANISTER_WASM.to_vec())
-                .build(),
-            &mut state,
-            &mut round_limits,
-        );
-        assert_matches!(res.1, Ok(_));
-        state.put_canister_state(res.2.unwrap());
-
-        // Check the ingress messages are still in the queue.
-        let canister = state
-            .canister_state(&canister_test_id(0))
-            .expect("Failed to find the canister");
-        assert_eq!(
-            canister.system_state.queues().ingress_queue_size() as u64,
-            num_messages
-        );
-    });
+    // Ingress messages should still be in the canister's input queue.
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .queues()
+            .ingress_queue_size() as u64,
+        num_messages
+    );
 }
 
 #[test]
 fn can_create_canister() {
-    with_setup(|canister_manager, mut state, _| {
-        let canister = canister_test_id(50).get();
-        let sender_subnet_id = subnet_test_id(1);
-        let expected_generated_id1 = CanisterId::from(0);
-        let expected_generated_id2 = CanisterId::from(1);
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        assert_eq!(
-            canister_manager
-                .create_canister(
-                    canister_change_origin_from_principal(&canister),
-                    sender_subnet_id,
-                    *INITIAL_CYCLES,
-                    CanisterSettings::default(),
-                    MAX_NUMBER_OF_CANISTERS,
-                    &mut state,
-                    SMALL_APP_SUBNET_MAX_SIZE,
-                    &mut round_limits,
-                    ResourceSaturation::default(),
-                    &no_op_counter(),
-                )
-                .0
-                .unwrap(),
-            expected_generated_id1
-        );
-        assert_eq!(
-            canister_manager
-                .create_canister(
-                    canister_change_origin_from_principal(&canister),
-                    sender_subnet_id,
-                    *INITIAL_CYCLES,
-                    CanisterSettings::default(),
-                    MAX_NUMBER_OF_CANISTERS,
-                    &mut state,
-                    SMALL_APP_SUBNET_MAX_SIZE,
-                    &mut round_limits,
-                    ResourceSaturation::default(),
-                    &no_op_counter(),
-                )
-                .0
-                .unwrap(),
-            expected_generated_id2
-        );
-        assert_eq!(state.canister_states.len(), 2);
-    });
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let expected_generated_id1 = CanisterId::from(0);
+    let expected_generated_id2 = CanisterId::from(1);
+
+    let canister_id1 = test.create_canister(*INITIAL_CYCLES);
+    assert_eq!(canister_id1, expected_generated_id1);
+
+    let canister_id2 = test.create_canister(*INITIAL_CYCLES);
+    assert_eq!(canister_id2, expected_generated_id2);
+
+    assert_eq!(test.state().canister_states.len(), 2);
 }
 
 #[test]
 fn create_canister_fails_if_not_enough_cycles_are_sent_with_the_request() {
-    with_setup(|canister_manager, mut state, _| {
-        let canister = canister_test_id(50).get();
-        let sender_subnet_id = subnet_test_id(1);
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
+    let mut test = ExecutionTestBuilder::new().build();
 
-        assert_eq!(
-            canister_manager.create_canister(
-                canister_change_origin_from_principal(&canister),
-                sender_subnet_id,
-                Cycles::new(100),
-                CanisterSettings::default(),
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            ),
-            (
-                Err(CanisterManagerError::CreateCanisterNotEnoughCycles {
-                    sent: Cycles::new(100),
-                    required: cycles_account_manager
-                        .canister_creation_fee(SMALL_APP_SUBNET_MAX_SIZE),
-                }),
-                Cycles::new(100),
-            ),
-        );
-        assert_eq!(state.canister_states.len(), 0);
-    });
+    let canister_id = test
+        .universal_canister_with_cycles(*INITIAL_CYCLES)
+        .unwrap();
+
+    let create_canister_args = CreateCanisterArgs {
+        settings: None,
+        sender_canister_version: None,
+    }
+    .encode();
+    let payload = wasm()
+        .call_simple(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(create_canister_args)
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+    let result = test.ingress(canister_id, "update", payload).unwrap();
+
+    match result {
+        WasmResult::Reply(_) => panic!("expected reject"),
+        WasmResult::Reject(msg) => {
+            assert!(
+                msg.contains("but only 0 cycles were received with the create_canister request")
+            );
+        }
+    }
+    assert_eq!(test.state().canister_states.len(), 1);
 }
 
 #[test]
 fn can_create_canister_with_extra_cycles() {
-    with_setup(|canister_manager, mut state, _| {
-        let canister = canister_test_id(30).get();
-        let sender_subnet_id = subnet_test_id(1);
-        let expected_generated_id1 = CanisterId::from(0);
-        let cycles: u64 = 1_000_000_000_200;
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        assert_eq!(
-            canister_manager
-                .create_canister(
-                    canister_change_origin_from_principal(&canister),
-                    sender_subnet_id,
-                    Cycles::from(cycles),
-                    CanisterSettings::default(),
-                    MAX_NUMBER_OF_CANISTERS,
-                    &mut state,
-                    SMALL_APP_SUBNET_MAX_SIZE,
-                    &mut round_limits,
-                    ResourceSaturation::default(),
-                    &no_op_counter(),
-                )
-                .0
-                .unwrap(),
-            expected_generated_id1
-        );
-        assert_eq!(state.canister_states.len(), 1);
-    });
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test
+        .universal_canister_with_cycles(*INITIAL_CYCLES)
+        .unwrap();
+
+    let create_canister_args = CreateCanisterArgs {
+        settings: None,
+        sender_canister_version: None,
+    }
+    .encode();
+    let cycles = Cycles::from(1_000_000_000_200u64);
+    let payload = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(create_canister_args)
+                .on_reply(wasm().message_payload().append_and_reply()),
+            cycles,
+        )
+        .build();
+    let result = test.ingress(canister_id, "update", payload);
+    let _ = get_reply(result);
+    assert_eq!(test.state().canister_states.len(), 2);
 }
 
 #[test]
 fn cannot_install_non_empty_canister() {
-    with_setup(|canister_manager, mut state, _| {
-        let sender = canister_test_id(1).get();
-        let sender_subnet_id = subnet_test_id(1);
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let canister_id = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
+    let mut test = ExecutionTestBuilder::new().build();
 
-        // Install a wasm module. Should succeed.
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_id)
-                .build(),
-            &mut state,
-            &mut round_limits,
-        );
-        assert!(res.1.is_ok());
-        state.put_canister_state(res.2.unwrap());
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
+    test.install_code_v2(InstallCodeArgsV2::new(
+        CanisterInstallModeV2::Install,
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        None,
+        None,
+    ))
+    .unwrap();
 
-        let instructions_left = as_num_instructions(round_limits.instructions);
-        // Install again. Should fail.
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_id)
-                .wasm_module(UNIVERSAL_CANISTER_WASM.to_vec())
-                .build(),
-            &mut state,
-            &mut round_limits,
-        );
-        state.put_canister_state(res.2.unwrap());
-        assert_eq!(
-            (res.0, res.1),
-            (
-                instructions_left,
-                Err(CanisterManagerError::CanisterNonEmpty(canister_id))
-            )
-        );
-
-        // Canister should still be in the replicated state.
-        assert!(state.canister_state(&canister_id).is_some());
-    });
+    let err = test
+        .install_code_v2(InstallCodeArgsV2::new(
+            CanisterInstallModeV2::Install,
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            None,
+        ))
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterNonEmpty);
+    assert!(err.description().contains(&format!(
+        "Canister {} cannot be installed because the canister is not empty",
+        canister_id
+    )));
 }
 
 #[test]
 fn install_code_with_wrong_controller_fails() {
-    with_setup(|canister_manager, mut state, _| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        // Create a canister with canister_test_id 1 as controller.
-        let canister_id = canister_manager
-            .create_canister(
-                canister_change_origin_from_canister(&canister_test_id(1)),
-                subnet_test_id(1),
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
+    let mut test = ExecutionTestBuilder::new().build();
 
-        for mode in CanisterInstallModeV2::iter() {
-            // Try to install_code with canister_test_id 2. Should fail.
-            let res = install_code(
-                &canister_manager,
-                InstallCodeContextBuilder::default()
-                    .sender(canister_test_id(2).get())
-                    .canister_id(canister_id)
-                    .wasm_module(UNIVERSAL_CANISTER_WASM.to_vec())
-                    .mode(*mode)
-                    .build(),
-                &mut state,
-                &mut round_limits,
-            );
-            state.put_canister_state(res.2.unwrap());
-            assert_eq!(
-                (res.0, res.1),
-                (
-                    MAX_NUM_INSTRUCTIONS,
-                    Err(CanisterManagerError::CanisterInvalidController {
-                        canister_id,
-                        controllers_expected: btreeset! {canister_test_id(1).get()},
-                        controller_provided: canister_test_id(2).get(),
-                    })
-                )
-            );
+    let canister_id = test
+        .universal_canister_with_cycles(*INITIAL_CYCLES)
+        .unwrap();
 
-            // Canister should still be in the replicated state.
-            assert!(state.canister_state(&canister_id).is_some());
-        }
-    });
+    // Switch user id so the request comes from a non-controller.
+    test.set_user_id(user_test_id(42));
+
+    let err = test
+        .install_code_v2(InstallCodeArgsV2::new(
+            CanisterInstallModeV2::Upgrade(None),
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            None,
+        ))
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
+    assert!(err.description().contains(&format!(
+        "Only the controllers of the canister {} can control it",
+        canister_id
+    )));
 }
 
 #[test]
 fn create_canister_sets_correct_allocations() {
-    with_setup(|canister_manager, mut state, _| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
+    let mut test = ExecutionTestBuilder::new().build();
 
-        let mem_alloc = MemoryAllocation::Reserved(NumBytes::new(1024 * 1024 * 1024));
-        let compute_alloc = ComputeAllocation::try_from(50).unwrap();
-        let settings = CanisterSettings {
-            compute_allocation: Some(compute_alloc),
-            memory_allocation: Some(mem_alloc),
-            freezing_threshold: Some(1.into()),
-            ..Default::default()
-        };
-        let canister_id = canister_manager
-            .create_canister(
-                canister_change_origin_from_canister(&canister_test_id(1)),
-                subnet_test_id(1),
-                *INITIAL_CYCLES,
-                settings,
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
+    let compute_allocation = 50;
+    let memory_allocation = 1024 * 1024 * 1024;
+    let canister_id = test
+        .create_canister_with_settings(
+            Cycles::from(u64::MAX),
+            CanisterSettingsArgsBuilder::new()
+                .with_compute_allocation(compute_allocation)
+                .with_memory_allocation(memory_allocation)
+                .build(),
+        )
+        .unwrap();
 
-        let canister = state.canister_state(&canister_id).unwrap();
-        assert_eq!(canister.memory_allocation(), mem_alloc);
-        assert_eq!(canister.scheduler_state.compute_allocation, compute_alloc);
-    });
+    let canister_state = test.canister_state(canister_id);
+    assert_eq!(
+        canister_state.compute_allocation().as_percent(),
+        compute_allocation
+    );
+    assert_eq!(
+        canister_state.memory_allocation().bytes().get(),
+        memory_allocation
+    );
 }
 
 #[test]
 fn create_canister_updates_consumed_cycles_metric_correctly() {
-    with_setup(|canister_manager, mut state, _| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let canister_id = canister_manager
-            .create_canister(
-                canister_change_origin_from_canister(&canister_test_id(1)),
-                subnet_test_id(1),
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
+    let mut test = ExecutionTestBuilder::new().build();
 
-        let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-        let creation_fee = cycles_account_manager.canister_creation_fee(SMALL_APP_SUBNET_MAX_SIZE);
-        let canister = state.canister_state(&canister_id).unwrap();
-        assert_eq!(
-            canister.system_state.canister_metrics.consumed_cycles.get(),
-            creation_fee.get()
-        );
-        assert_eq!(
-            canister
-                .system_state
-                .canister_metrics
-                .get_consumed_cycles_by_use_cases()
-                .get(&CyclesUseCase::CanisterCreation)
-                .unwrap()
-                .get(),
-            creation_fee.get()
-        );
-        assert_eq!(
-            canister.system_state.balance(),
-            *INITIAL_CYCLES - creation_fee
+    let canister_id = test
+        .universal_canister_with_cycles(*INITIAL_CYCLES * 2u64)
+        .unwrap();
+
+    let create_canister_args = CreateCanisterArgs {
+        settings: None,
+        sender_canister_version: None,
+    }
+    .encode();
+    let payload = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(create_canister_args)
+                .on_reply(wasm().message_payload().append_and_reply()),
+            *INITIAL_CYCLES,
         )
-    });
+        .build();
+
+    test.ingress(canister_id, "update", payload).unwrap();
+
+    let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
+    let creation_fee = cycles_account_manager.canister_creation_fee(SMALL_APP_SUBNET_MAX_SIZE);
+    // There's only 2 canisters on the subnet, so the one created from the first one
+    // with have the test id corresponding to `1`.
+    let canister = test.canister_state(canister_test_id(1));
+    assert_eq!(
+        canister.system_state.canister_metrics.consumed_cycles.get(),
+        creation_fee.get()
+    );
+    assert_eq!(
+        canister
+            .system_state
+            .canister_metrics
+            .get_consumed_cycles_by_use_cases()
+            .get(&CyclesUseCase::CanisterCreation)
+            .unwrap()
+            .get(),
+        creation_fee.get()
+    );
+    assert_eq!(
+        canister.system_state.balance(),
+        *INITIAL_CYCLES - creation_fee
+    );
 }
 
 #[test]
 fn provisional_create_canister_has_no_creation_fee() {
-    with_setup(|canister_manager, mut state, _| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let canister_id = canister_manager
-            .create_canister_with_cycles(
-                canister_change_origin_from_canister(&canister_test_id(1)),
-                Some(INITIAL_CYCLES.get()),
-                CanisterSettings::default(),
-                None,
-                &mut state,
-                &ProvisionalWhitelist::All,
-                MAX_NUMBER_OF_CANISTERS,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &no_op_counter(),
-            )
-            .unwrap();
+    let mut test = ExecutionTestBuilder::new().build();
 
-        let canister = state.canister_state(&canister_id).unwrap();
-        assert_eq!(
-            canister.system_state.canister_metrics.consumed_cycles.get(),
-            NominalCycles::default().get()
-        );
-        assert_eq!(
-            canister
-                .system_state
-                .canister_metrics
-                .get_consumed_cycles_by_use_cases()
-                .get(&CyclesUseCase::CanisterCreation),
-            None
-        );
-        assert_eq!(canister.system_state.balance(), *INITIAL_CYCLES)
-    });
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
+
+    let canister = test.canister_state(canister_id);
+    assert_eq!(
+        canister.system_state.canister_metrics.consumed_cycles,
+        NominalCycles::default(),
+    );
+    assert_eq!(
+        canister
+            .system_state
+            .canister_metrics
+            .get_consumed_cycles_by_use_cases()
+            .get(&CyclesUseCase::CanisterCreation),
+        None
+    );
+    assert_eq!(canister.system_state.balance(), *INITIAL_CYCLES);
 }
 
 #[test]
 fn reinstall_on_empty_canister_succeeds() {
-    with_setup(|canister_manager, mut state, _| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let sender = canister_test_id(42).get();
-        let canister_id = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                subnet_test_id(1),
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
+    let mut test = ExecutionTestBuilder::new().build();
 
-        // Reinstalling an empty canister should succeed.
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_id)
-                .mode(CanisterInstallModeV2::Reinstall)
-                .build(),
-            &mut state,
-            &mut round_limits,
-        );
-        assert!(res.1.is_ok());
-        state.put_canister_state(res.2.unwrap());
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
 
-        // Canister should still be in the replicated state.
-        assert!(state.canister_state(&canister_id).is_some());
-    });
+    let result = test.install_code_v2(InstallCodeArgsV2::new(
+        CanisterInstallModeV2::Reinstall,
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        None,
+        None,
+    ));
+
+    let _ = get_reply(result);
+
+    // Canister should still be in the replicated state.
+    assert!(test.state().canister_state(&canister_id).is_some());
 }
 
 const COUNTER_WAT: &str = r#"
@@ -1539,232 +1111,108 @@ fn install_calls_canister_start_and_canister_init() {
 
 #[test]
 fn install_puts_canister_back_after_invalid_wasm() {
-    with_setup(|canister_manager, mut state, _| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        // Use an invalid wasm code (import memory from an invalid module).
-        let wasm =
-            wat::parse_str(r#"(module (import "foo" "memory" (memory (;0;) 529)))"#).unwrap();
-        let wasm_len = wasm.len();
+    let mut test = ExecutionTestBuilder::new().build();
 
-        let sender = canister_test_id(1).get();
-        let sender_subnet_id = subnet_test_id(1);
-        let canister_id = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
 
-        // Installation should be rejected.
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_id)
-                .wasm_module(wasm)
-                .build(),
-            &mut state,
-            &mut round_limits,
-        );
-        state.put_canister_state(res.2.unwrap());
-        assert_eq!(
-            (res.0, res.1),
-            (
-                MAX_NUM_INSTRUCTIONS
-                    - Config::default()
-                        .embedders_config
-                        .cost_to_compile_wasm_instruction
-                        * wasm_len as u64,
-                Err(CanisterManagerError::Hypervisor(
-                    canister_id,
-                    HypervisorError::InvalidWasm(WasmValidationError::InvalidImportSection(
-                        "Only memory imported from env.memory is allowed.".to_string()
-                    ))
-                ))
-            )
-        );
+    // Use an invalid wasm code (import memory from an invalid module).
+    let wasm = wat::parse_str(r#"(module (import "foo" "memory" (memory (;0;) 529)))"#).unwrap();
+    let err = test
+        .install_code_v2(InstallCodeArgsV2::new(
+            CanisterInstallModeV2::Install,
+            canister_id,
+            wasm.to_vec(),
+            vec![],
+            None,
+            None,
+        ))
+        .unwrap_err();
 
-        // Canister should still be in the replicated state.
-        assert!(state.canister_state(&canister_id).is_some());
-    });
+    assert_eq!(err.code(), ErrorCode::CanisterInvalidWasm);
+    assert!(err
+        .description()
+        .contains("Canister's Wasm module is not valid"));
+    // Canister should still be in the replicated state.
+    assert!(test.state().canister_state(&canister_id).is_some());
 }
 
 #[test]
 fn reinstall_clears_stable_memory() {
-    with_setup(|canister_manager, mut state, _| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let sender = canister_test_id(42).get();
-        let sender_subnet_id = subnet_test_id(1);
-        let canister_id = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
+    let mut test = ExecutionTestBuilder::new().build();
 
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_id)
-                .build(),
-            &mut state,
-            &mut round_limits,
-        );
-        assert!(res.1.is_ok());
-        state.put_canister_state(res.2.unwrap());
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
+    test.install_code_v2(InstallCodeArgsV2::new(
+        CanisterInstallModeV2::Install,
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        None,
+        None,
+    ))
+    .unwrap();
 
-        // Write something into the canister's stable memory.
-        let mut canister = state.take_canister_state(&canister_id).unwrap();
-        assert_eq!(
-            canister
-                .execution_state
-                .as_ref()
-                .unwrap()
-                .stable_memory
-                .size,
-            NumWasmPages::new(0)
-        );
-        canister
-            .execution_state
-            .as_mut()
-            .unwrap()
-            .stable_memory
-            .size = NumWasmPages::new(1);
-        let mut buf = page_map::Buffer::new(PageMap::new_for_testing());
-        buf.write(&[1; 10], 0);
-        canister
-            .execution_state
-            .as_mut()
-            .unwrap()
-            .stable_memory
-            .page_map
-            .update(&buf.dirty_pages().collect::<Vec<_>>());
+    let data = [1, 2, 3, 5, 8, 13];
+    let payload = wasm()
+        .stable_grow(1)
+        .stable_write(42, &data)
+        .reply()
+        .build();
+    test.ingress(canister_id, "update", payload).unwrap();
 
-        state.put_canister_state(canister);
+    assert_eq!(
+        test.execution_state(canister_id).stable_memory.size.get(),
+        1
+    );
 
-        // Reinstall the canister.
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_id)
-                .mode(CanisterInstallModeV2::Reinstall)
-                .build(),
-            &mut state,
-            &mut round_limits,
-        );
-        assert!(res.1.is_ok());
-        state.put_canister_state(res.2.unwrap());
+    // Reinstall the canister, should clear its stable memory.
+    test.install_code_v2(InstallCodeArgsV2::new(
+        CanisterInstallModeV2::Reinstall,
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        None,
+        None,
+    ))
+    .unwrap();
 
-        // Stable memory should now be empty.
-        let canister = state.take_canister_state(&canister_id).unwrap();
-        assert_eq!(
-            canister
-                .execution_state
-                .as_ref()
-                .unwrap()
-                .stable_memory
-                .size,
-            NumWasmPages::new(0)
-        );
-    });
+    assert_eq!(
+        test.execution_state(canister_id).stable_memory.size.get(),
+        0
+    );
 }
 
 #[test]
 fn stop_a_running_canister() {
-    with_setup(|canister_manager, mut state, _| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let sender = canister_test_id(1);
-        let sender_subnet_id = subnet_test_id(1);
-        let canister_id = canister_manager
-            .create_canister(
-                canister_change_origin_from_canister(&sender),
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
+    let mut test = ExecutionTestBuilder::new().build();
 
-        // When created, a canister is initially running.
-        assert_eq!(
-            state.canister_state(&canister_id).unwrap().status(),
-            CanisterStatusType::Running
-        );
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
 
-        // Stop the canister.
-        let stop_context = StopCanisterContext::Canister {
-            sender,
-            reply_callback: CallbackId::new(0),
-            call_id: Some(StopCanisterCallId::new(0)),
-            cycles: Cycles::zero(),
-            deadline: NO_DEADLINE,
-        };
-        assert_eq!(
-            canister_manager.stop_canister(canister_id, stop_context.clone(), &mut state),
-            StopCanisterResult::RequestAccepted
-        );
+    // When created, a canister is initially running.
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Running
+    );
 
-        // Canister should now have the "stopping" status with empty call contexts.
-        assert_eq!(
-            state
-                .canister_state(&canister_id)
-                .unwrap()
-                .system_state
-                .get_status(),
-            &CanisterStatus::Stopping {
-                stop_contexts: vec![stop_context],
-                call_context_manager: CallContextManager::default(),
-            }
-        );
+    let message_id = test.stop_canister(canister_id);
 
-        // It should also be ready to stop.
-        assert!(state
-            .canister_state(&canister_id)
-            .unwrap()
-            .system_state
-            .ready_to_stop());
-    });
+    // Canister should now have the "stopping" status with empty call contexts.
+    assert_eq!(
+        test.canister_state(canister_id).system_state.get_status(),
+        &CanisterStatus::Stopping {
+            stop_contexts: vec![StopCanisterContext::Ingress {
+                sender: test.user_id(),
+                message_id,
+                call_id: Some(StopCanisterCallId::new(0)),
+            }],
+            call_context_manager: CallContextManager::default(),
+        }
+    );
+
+    // It should also be ready to stop.
+    assert!(test
+        .canister_state(canister_id)
+        .system_state
+        .ready_to_stop());
 }
 
 #[test]
@@ -1840,167 +1288,101 @@ fn stop_a_stopped_canister_from_another_canister() {
 
 #[test]
 fn stop_a_canister_with_incorrect_controller() {
-    with_setup(|canister_manager, mut state, _| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let msg_id = message_test_id(0);
-        let sender = canister_test_id(1).get();
-        let sender_subnet_id = subnet_test_id(1);
-        let canister_id = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
+    let mut test = ExecutionTestBuilder::new().build();
 
-        // When created, a canister is initially running.
-        assert_eq!(
-            state.canister_state(&canister_id).unwrap().status(),
-            CanisterStatusType::Running
-        );
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
 
-        // Stop the canister by a sender who isn't the controller.
-        let other_sender = user_test_id(1);
-        let stop_context = StopCanisterContext::Ingress {
-            sender: other_sender,
-            message_id: msg_id,
-            call_id: Some(StopCanisterCallId::new(0)),
-        };
+    // When created, a canister is initially running.
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Running
+    );
 
-        assert_eq!(
-            canister_manager.stop_canister(canister_id, stop_context, &mut state),
-            StopCanisterResult::Failure {
-                cycles_to_return: Cycles::zero(),
-                error: CanisterManagerError::CanisterInvalidController {
-                    canister_id,
-                    controllers_expected: btreeset! {sender},
-                    controller_provided: other_sender.get(),
-                }
-            }
-        );
-    });
+    // Switch the user so the stop request comes from a non-controller.
+    test.set_user_id(user_test_id(42));
+
+    let err = test
+        .subnet_message(
+            Method::StopCanister,
+            CanisterIdRecord::from(canister_id).encode(),
+        )
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
+    assert!(err.description().contains(&format!(
+        "Only the controllers of the canister {} can control it",
+        canister_id
+    )));
+    // Canister should still be running.
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Running
+    );
 }
 
 #[test]
 fn stop_a_non_existing_canister() {
-    with_setup(|canister_manager, mut state, _| {
-        let canister_id = canister_test_id(0);
+    let mut test = ExecutionTestBuilder::new().build();
 
-        assert_eq!(
-            canister_manager.stop_canister(
-                canister_id,
-                StopCanisterContext::Ingress {
-                    sender: user_test_id(1),
-                    message_id: message_test_id(0),
-                    call_id: Some(StopCanisterCallId::new(0)),
-                },
-                &mut state
-            ),
-            StopCanisterResult::Failure {
-                cycles_to_return: Cycles::zero(),
-                error: CanisterManagerError::CanisterNotFound(canister_id),
-            }
-        );
-    });
+    let non_existing_canister_id = canister_test_id(1);
+    let err = test
+        .subnet_message(
+            Method::StopCanister,
+            CanisterIdRecord::from(non_existing_canister_id).encode(),
+        )
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::CanisterNotFound);
+    assert!(err
+        .description()
+        .contains(&format!("Canister {} not found", non_existing_canister_id)));
 }
 
 #[test]
 fn start_a_canister_with_incorrect_controller() {
-    with_setup(|canister_manager, mut state, _| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let sender = canister_test_id(1).get();
-        let sender_subnet_id = subnet_test_id(1);
-        let canister_id = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
+    let mut test = ExecutionTestBuilder::new().build();
 
-        // Start the canister by a sender who isn't the controller.
-        let other_sender = user_test_id(1).get();
-        let canister = state.canister_state_mut(&canister_id).unwrap();
-        assert_eq!(
-            canister_manager.start_canister(other_sender, canister),
-            Err(CanisterManagerError::CanisterInvalidController {
-                canister_id,
-                controllers_expected: btreeset! {sender},
-                controller_provided: other_sender,
-            })
-        );
-    });
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
+
+    // Switch the user so the start request comes from a non-controller.
+    test.set_user_id(user_test_id(42));
+
+    let err = test
+        .subnet_message(
+            Method::StartCanister,
+            CanisterIdRecord::from(canister_id).encode(),
+        )
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
+    assert!(err.description().contains(&format!(
+        "Only the controllers of the canister {} can control it",
+        canister_id
+    )));
 }
 
 #[test]
 fn starting_an_already_running_canister_keeps_it_running() {
-    with_setup(|canister_manager, mut state, _| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let sender = canister_test_id(42).get();
-        let sender_subnet_id = subnet_test_id(1);
-        let canister_id = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
+    let mut test = ExecutionTestBuilder::new().build();
 
-        // When created, a canister is initially running.
-        assert_eq!(
-            state.canister_state(&canister_id).unwrap().status(),
-            CanisterStatusType::Running
-        );
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
+    // When created, a canister is initially running.
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Running
+    );
 
-        // Start the canister. Since it's already running, the canister should
-        // remain running.
-        let canister = state.canister_state_mut(&canister_id).unwrap();
-        canister_manager.start_canister(sender, canister).unwrap();
-
-        assert_eq!(
-            state.canister_state(&canister_id).unwrap().status(),
-            CanisterStatusType::Running
-        );
-    });
+    // Start the canister. Since it's already running, the canister should
+    // remain running.
+    test.subnet_message(
+        Method::StartCanister,
+        CanisterIdRecord::from(canister_id).encode(),
+    )
+    .unwrap();
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Running
+    );
 }
 
 #[test]
@@ -2071,115 +1453,57 @@ fn start_a_stopping_canister_with_stop_contexts() {
 
 #[test]
 fn get_canister_status_with_incorrect_controller() {
-    with_setup(|canister_manager, mut state, _| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let sender = canister_test_id(1).get();
-        let sender_subnet_id = subnet_test_id(1);
-        let canister_id = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
+    let mut test = ExecutionTestBuilder::new().build();
 
-        // Get the status of the canister by a sender who isn't the controller.
-        let other_sender = user_test_id(1).get();
-        let canister = state.canister_state_mut(&canister_id).unwrap();
-        assert_eq!(
-            canister_manager.get_canister_status(other_sender, canister, SMALL_APP_SUBNET_MAX_SIZE),
-            Err(CanisterManagerError::CanisterInvalidController {
-                canister_id,
-                controllers_expected: btreeset! {sender},
-                controller_provided: other_sender,
-            })
-        );
-    });
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
+
+    // Switch the user so the canister_status request comes from a non-controller.
+    test.set_user_id(user_test_id(42));
+
+    let err = test.canister_status(canister_id).unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
+    assert!(err.description().contains(&format!(
+        "Only the controllers of the canister {} can control it",
+        canister_id
+    )));
 }
 
 #[test]
 fn get_canister_status_of_running_canister() {
-    with_setup(|canister_manager, mut state, _| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let sender = canister_test_id(1).get();
-        let sender_subnet_id = subnet_test_id(1);
-        let canister_id = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
+    let mut test = ExecutionTestBuilder::new().build();
 
-        let canister = state.canister_state_mut(&canister_id).unwrap();
-        let status = canister_manager
-            .get_canister_status(sender, canister, SMALL_APP_SUBNET_MAX_SIZE)
-            .unwrap()
-            .status();
-        assert_eq!(status, CanisterStatusType::Running);
-    });
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
+    let result = test.canister_status(canister_id);
+
+    let reply = get_reply(result);
+    let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
+    assert_eq!(status.status(), CanisterStatusType::Running);
 }
 
 #[test]
 fn get_canister_status_of_self() {
-    with_setup(|canister_manager, mut state, _| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let sender = canister_test_id(1).get();
-        let sender_subnet_id = subnet_test_id(1);
-        let canister_id = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
+    let mut test = ExecutionTestBuilder::new().build();
 
-        let canister = state.canister_state_mut(&canister_id).unwrap();
-        let status = canister_manager
-            .get_canister_status(canister_id.get(), canister, SMALL_APP_SUBNET_MAX_SIZE)
-            .unwrap()
-            .status();
-        assert_eq!(status, CanisterStatusType::Running);
-    });
+    let canister_id = test
+        .universal_canister_with_cycles(*INITIAL_CYCLES)
+        .unwrap();
+
+    let payload = wasm()
+        .call_simple(
+            CanisterId::ic_00(),
+            Method::CanisterStatus,
+            call_args()
+                .other_side(CanisterIdRecord::from(canister_id).encode())
+                .on_reply(wasm().message_payload().append_and_reply()),
+        )
+        .build();
+
+    let result = test.ingress(canister_id, "update", payload);
+
+    let reply = get_reply(result);
+    let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
+    assert_eq!(status.status(), CanisterStatusType::Running);
 }
 
 #[test]
@@ -2218,279 +1542,195 @@ fn get_canister_status_of_stopping_canister() {
 
 #[test]
 fn set_controller_with_incorrect_controller() {
-    with_setup(|canister_manager, state, _| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let canister_id = canister_test_id(0);
-        let mut canister = get_running_canister(canister_id);
+    let mut test = ExecutionTestBuilder::new().build();
 
-        let wrong_controller = user_test_id(0).get();
-        let right_controller = user_test_id(1).get();
-        let new_controller = user_test_id(2).get();
+    let controller = test.user_id();
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
 
-        // Set the controller from the wrong controller. Should fail.
-        assert_eq!(
-            canister_manager.update_settings(
-                Time::from_nanos_since_unix_epoch(777),
-                canister_change_origin_from_principal(&wrong_controller),
-                CanisterSettingsBuilder::new()
-                    .with_controllers(vec![new_controller])
-                    .build(),
-                &mut canister,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                SMALL_APP_SUBNET_MAX_SIZE,
-            ),
-            Err(CanisterManagerError::CanisterInvalidController {
-                canister_id,
-                controllers_expected: btreeset! {right_controller},
-                controller_provided: wrong_controller,
-            })
-        );
+    // Switch the user to attempt to set controllers with a non-controller.
+    test.set_user_id(user_test_id(42));
 
-        // Controller hasn't changed.
-        assert_eq!(
-            canister.system_state.controllers,
-            btreeset! {right_controller}
-        );
-    });
+    let err = test
+        .set_controller(canister_id, user_test_id(1).get())
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
+    assert!(err.description().contains(&format!(
+        "Only the controllers of the canister {} can control it",
+        canister_id
+    )));
+    // List of controllers should not have changed.
+    assert_eq!(
+        test.canister_state(canister_id).controllers(),
+        &btreeset! {controller.get()}
+    );
 }
 
 #[test]
 fn set_controller_with_correct_controller() {
-    with_setup(|canister_manager, state, _| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let canister_id = canister_test_id(0);
-        let mut canister = get_running_canister(canister_id);
+    let mut test = ExecutionTestBuilder::new().build();
 
-        let controller = user_test_id(1).get();
-        let new_controller = user_test_id(2).get();
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
 
-        // Set the controller from the correct controller. Should succeed.
-        assert!(canister_manager
-            .update_settings(
-                Time::from_nanos_since_unix_epoch(777),
-                canister_change_origin_from_principal(&controller),
-                CanisterSettingsBuilder::new()
-                    .with_controllers(vec![new_controller])
-                    .build(),
-                &mut canister,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                SMALL_APP_SUBNET_MAX_SIZE,
-            )
-            .is_ok());
+    let new_controller = user_test_id(10).get();
+    test.set_controller(canister_id, new_controller).unwrap();
 
-        // Controller is now the new controller.
-        assert_eq!(
-            canister.system_state.controllers,
-            btreeset! {new_controller}
-        );
-    });
+    // List of controllers should have been updated to the new_controller.
+    assert_eq!(
+        test.canister_state(canister_id).controllers(),
+        &btreeset! {new_controller}
+    );
 }
 
 #[test]
 fn delete_non_existing_canister_fails() {
-    with_setup(|canister_manager, mut state, _| {
-        let canister_id = canister_test_id(0);
-        let controller = canister_test_id(1);
-        let state_before = state.clone();
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = canister_test_id(0);
 
-        assert_eq!(
-            canister_manager.delete_canister(controller.get(), canister_id, &mut state),
-            Err(CanisterManagerError::CanisterNotFound(canister_id))
-        );
-
-        // Assert that state hasn't changed
-        assert_eq!(state, state_before);
-    });
+    let err = test.delete_canister(canister_id).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterNotFound);
+    assert!(err
+        .description()
+        .contains(&format!("Canister {} not found", canister_id)));
 }
 
 #[test]
 fn delete_canister_with_incorrect_controller_fails() {
-    with_setup(|canister_manager, mut state, _| {
-        let canister_id = canister_test_id(0);
-        let canister = get_stopped_canister_with_controller(canister_id, canister_test_id(1).get());
-        state.put_canister_state(canister);
+    let mut test = ExecutionTestBuilder::new().build();
 
-        let wrong_controller = canister_test_id(2);
-        let right_controller = canister_test_id(1).get();
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
 
-        assert_eq!(
-            canister_manager.delete_canister(wrong_controller.get(), canister_id, &mut state),
-            Err(CanisterManagerError::CanisterInvalidController {
-                canister_id,
-                controllers_expected: btreeset! {right_controller},
-                controller_provided: wrong_controller.get(),
-            })
-        );
+    // Switch the user to attempt to delete the canister with a non-controller.
+    test.set_user_id(user_test_id(42));
 
-        // Canister should still be there.
-        assert_matches!(state.canister_state(&canister_id), Some(_));
-    });
+    let err = test.delete_canister(canister_id).unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
+    assert!(err.description().contains(&format!(
+        "Only the controllers of the canister {} can control it",
+        canister_id
+    )));
+    // Canister should still be there.
+    assert!(test.state().canister_state(&canister_id).is_some());
 }
 
 #[test]
 fn delete_running_canister_fails() {
-    with_setup(|canister_manager, mut state, _| {
-        let canister_id = canister_test_id(0);
-        let controller_id = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new().build();
 
-        let canister =
-            get_running_canister_with_args(canister_id, canister_test_id(1).get(), *INITIAL_CYCLES);
-        let controller_canister = get_running_canister(controller_id);
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
 
-        state.put_canister_state(canister);
-        state.put_canister_state(controller_canister);
+    let err = test.delete_canister(canister_id).unwrap_err();
 
-        assert_eq!(
-            canister_manager.delete_canister(controller_id.get(), canister_id, &mut state),
-            Err(CanisterManagerError::DeleteCanisterNotStopped(canister_id))
-        );
-
-        // Canister should still be there.
-        assert_matches!(state.canister_state(&canister_id), Some(_));
-    });
+    assert_eq!(err.code(), ErrorCode::CanisterNotStopped);
+    assert!(err.description().contains(&format!(
+        "Canister {} must be stopped before it is deleted",
+        canister_id
+    ),));
+    // Canister should still be there.
+    assert!(test.state().canister_state(&canister_id).is_some());
 }
 
 #[test]
 fn delete_stopping_canister_fails() {
-    with_setup(|canister_manager, mut state, _| {
-        let canister_id = canister_test_id(0);
-        let controller_id = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new().build();
 
-        let canister =
-            get_stopping_canister_with_controller(canister_id, canister_test_id(1).get());
-        let controller_canister = get_running_canister(controller_id);
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
 
-        state.put_canister_state(canister);
-        state.put_canister_state(controller_canister);
+    let _ = test.stop_canister(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Stopping
+    );
 
-        assert_eq!(
-            canister_manager.delete_canister(controller_id.get(), canister_id, &mut state),
-            Err(CanisterManagerError::DeleteCanisterNotStopped(canister_id))
-        );
+    let err = test.delete_canister(canister_id).unwrap_err();
 
-        // Canister should still be there.
-        assert_matches!(state.canister_state(&canister_id), Some(_));
-    });
+    assert_eq!(err.code(), ErrorCode::CanisterNotStopped);
+    assert!(err.description().contains(&format!(
+        "Canister {} must be stopped before it is deleted",
+        canister_id
+    ),));
+    // Canister should still be there.
+    assert!(test.state().canister_state(&canister_id).is_some());
 }
 
 #[test]
 fn delete_stopped_canister_succeeds() {
-    with_setup(|canister_manager, mut state, _| {
-        let canister_id = canister_test_id(0);
-        let controller_id = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new().build();
 
-        let canister = get_stopped_canister_with_controller(canister_id, canister_test_id(1).get());
-        let controller_canister = get_running_canister(controller_id);
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
 
-        state.put_canister_state(canister);
-        state.put_canister_state(controller_canister);
+    let _ = test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Stopped
+    );
 
-        let controller = canister_test_id(1);
-
-        assert_eq!(
-            canister_manager.delete_canister(controller.get(), canister_id, &mut state),
-            Ok(())
-        );
-
-        // Canister should no longer be there.
-        assert_eq!(state.canister_state(&canister_id), None);
-    });
+    test.delete_canister(canister_id).unwrap();
+    // Canister should no longer be there.
+    assert!(test.state().canister_state(&canister_id).is_none());
 }
 
 #[test]
 fn delete_canister_consumed_cycles_observed() {
-    with_setup(|canister_manager, mut state, _| {
-        let canister_id = canister_test_id(0);
-        let controller_id = canister_test_id(1);
-        let initial_cycles = Cycles::new(5_000_000_000_000);
+    let mut test = ExecutionTestBuilder::new().build();
 
-        let mut canister = CanisterState {
-            system_state: SystemState::new_stopped_for_testing(
-                canister_id,
-                controller_id.get(),
-                initial_cycles,
-                NumSeconds::new(1 << 30),
-            ),
-            execution_state: None,
-            scheduler_state: Default::default(),
-        };
+    let initial_cycles = Cycles::new(5_000_000_000_000);
+    let canister_id = test.create_canister(initial_cycles);
 
-        let controller_canister = get_running_canister(controller_id);
+    // Stop and delete the canister.
+    test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Stopped
+    );
+    test.delete_canister(canister_id).unwrap();
 
-        let cycles_to_consume = Cycles::from(100_000u128);
-        canister
-            .system_state
-            .remove_cycles(cycles_to_consume, CyclesUseCase::Memory);
-
-        let cycles_to_add = Cycles::from(10_000u128);
-        canister
-            .system_state
-            .add_cycles(cycles_to_add, CyclesUseCase::Memory);
-
-        state.put_canister_state(canister);
-        state.put_canister_state(controller_canister);
-
-        assert_eq!(
-            canister_manager.delete_canister(controller_id.get(), canister_id, &mut state),
-            Ok(())
-        );
-
-        let cycles_difference = cycles_to_consume - cycles_to_add;
-
-        assert_eq!(
-            *state
-                .metadata
-                .subnet_metrics
-                .get_consumed_cycles_by_use_case()
-                .get(&CyclesUseCase::Memory)
-                .unwrap(),
-            NominalCycles::from(cycles_difference)
-        );
-
-        assert_eq!(
-            *state
-                .metadata
-                .subnet_metrics
-                .get_consumed_cycles_by_use_case()
-                .get(&CyclesUseCase::DeletedCanisters)
-                .unwrap(),
-            NominalCycles::from(initial_cycles - cycles_difference)
-        );
-    });
+    // Canister should no longer be there.
+    assert!(test.state().canister_state(&canister_id).is_none());
+    // Check that the consumed cycles have been updated correctly.
+    assert_eq!(
+        *test
+            .state()
+            .metadata
+            .subnet_metrics
+            .get_consumed_cycles_by_use_case()
+            .get(&CyclesUseCase::DeletedCanisters)
+            .unwrap(),
+        NominalCycles::from(initial_cycles)
+    );
 }
 
 #[test]
 fn deposit_cycles_succeeds_with_enough_cycles() {
-    with_setup(|_, _, _| {
-        let canister_id = canister_test_id(0);
-        let sender = canister_test_id(1).get();
-        let mut canister = get_running_canister_with_args(canister_id, sender, *INITIAL_CYCLES);
+    let mut test = ExecutionTestBuilder::new().build();
 
-        let cycles_balance_before = canister.system_state.balance();
-        let cycles = Cycles::new(100);
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
+    let deposit_canister = test.universal_canister().unwrap();
 
-        canister
-            .system_state
-            .add_cycles(cycles, CyclesUseCase::NonConsumed);
+    let cycles_balance_before = test.canister_state(canister_id).system_state.balance();
 
-        // Assert that state has changed
-        assert_eq!(
-            canister.system_state.balance(),
-            cycles_balance_before + cycles,
-        );
-    });
+    let cycles_to_deposit = Cycles::new(100);
+    let deposit_cycles_args = CanisterIdRecord::from(canister_id).encode();
+    let payload = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::DepositCycles,
+            call_args()
+                .other_side(deposit_cycles_args)
+                .on_reply(wasm().message_payload().append_and_reply()),
+            cycles_to_deposit,
+        )
+        .build();
+
+    test.ingress(deposit_canister, "update", payload).unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        cycles_balance_before + cycles_to_deposit
+    );
 }
 
 #[test]
@@ -2599,19 +1839,15 @@ fn create_canister_with_invalid_specified_id_creator_in_whitelist() {
 
 #[test]
 fn can_get_canister_balance() {
-    with_setup(|canister_manager, mut state, _| {
-        let canister_id = canister_test_id(0);
-        let sender = canister_test_id(1).get();
-        let cycles = Cycles::new(100);
-        let canister = get_running_canister_with_args(canister_id, sender, cycles);
-        state.put_canister_state(canister);
+    let mut test = ExecutionTestBuilder::new().build();
 
-        let canister = state.canister_state_mut(&canister_id).unwrap();
-        assert_matches!(
-            canister_manager.get_canister_status( sender, canister, SMALL_APP_SUBNET_MAX_SIZE),
-            Ok(res) if res.cycles() == cycles.get()
-        );
-    });
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
+
+    let result = test.canister_status(canister_id);
+
+    let reply = get_reply(result);
+    let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
+    assert_eq!(status.cycles(), INITIAL_CYCLES.get());
 }
 
 #[test]
@@ -2679,159 +1915,96 @@ fn add_cycles_sender_not_in_whitelist() {
 
 #[test]
 fn installing_a_canister_with_not_enough_memory_allocation_fails() {
-    with_setup(|canister_manager, mut state, _| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let sender = canister_test_id(1).get();
-        let sender_subnet_id = subnet_test_id(1);
-        let canister_id = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
+    let mut test = ExecutionTestBuilder::new().build();
 
-        // Give just 10 bytes of memory allocation on top of canister history memory usage
-        // at the beginning of install_code which should result in an error.
-        let canister_history_memory = size_of::<CanisterChange>() + size_of::<PrincipalId>();
-        let memory_allocation =
-            MemoryAllocation::try_from(NumBytes::from(canister_history_memory as u64 + 10))
-                .unwrap();
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_id)
-                .wasm_module(UNIVERSAL_CANISTER_WASM.to_vec())
-                .memory_allocation(memory_allocation)
-                .build(),
-            &mut state,
-            &mut round_limits,
-        );
-        assert_eq!(
-            res.0,
-            MAX_NUM_INSTRUCTIONS - wasm_compilation_cost(&UNIVERSAL_CANISTER_WASM)
-        );
-        assert_matches!(
-            res.1,
-            Err(CanisterManagerError::NotEnoughMemoryAllocationGiven { .. })
-        );
-        state.put_canister_state(res.2.unwrap());
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
 
-        // Install the canister.
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_id)
-                .wasm_module(UNIVERSAL_CANISTER_WASM.to_vec())
-                .build(),
-            &mut state,
-            &mut round_limits,
-        );
-        assert!(res.1.is_ok());
-        state.put_canister_state(res.2.unwrap());
+    // Give just 10 bytes of memory allocation on top of canister history memory usage
+    // at the beginning of install_code which should result in an error.
+    let canister_history_memory = size_of::<CanisterChange>() + size_of::<PrincipalId>();
+    let memory_allocation = canister_history_memory as u64 + 10;
+    let err = test
+        .install_code_v2(InstallCodeArgsV2::new(
+            CanisterInstallModeV2::Install,
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            Some(memory_allocation),
+        ))
+        .unwrap_err();
 
-        // Attempt to re-install with low memory allocation should fail.
-        let instructions_before_reinstall = as_num_instructions(round_limits.instructions);
-        // Give just 50 bytes of memory allocation on top of canister history memory usage
-        // at the beginning of install_code which should result in an error.
-        let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
-        let memory_allocation =
-            MemoryAllocation::try_from(NumBytes::from(canister_history_memory as u64 + 50))
-                .unwrap();
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_id)
-                .mode(CanisterInstallModeV2::Reinstall)
-                .wasm_module(UNIVERSAL_CANISTER_WASM.to_vec())
-                .memory_allocation(memory_allocation)
-                .build(),
-            &mut state,
-            &mut round_limits,
-        );
-        assert_eq!(res.0, instructions_before_reinstall);
-        assert_matches!(
-            res.1,
-            Err(CanisterManagerError::NotEnoughMemoryAllocationGiven { .. })
-        );
-    });
+    assert_eq!(err.code(), ErrorCode::InsufficientMemoryAllocation);
+    assert!(err
+        .description()
+        .contains("Try increasing the canister's memory allocation"));
+
+    // Install the canister without any memory allocation, should succeed.
+    test.install_code_v2(InstallCodeArgsV2::new(
+        CanisterInstallModeV2::Install,
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        None,
+        None,
+    ))
+    .unwrap();
+
+    // Attempt to re-install with low memory allocation should fail.
+    // Give just 50 bytes of memory allocation on top of canister history memory usage
+    // at the beginning of install_code which should result in an error.
+    let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
+    let memory_allocation = canister_history_memory as u64 + 50;
+    let err = test
+        .install_code_v2(InstallCodeArgsV2::new(
+            CanisterInstallModeV2::Reinstall,
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            Some(memory_allocation),
+        ))
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::InsufficientMemoryAllocation);
+    assert!(err
+        .description()
+        .contains("Try increasing the canister's memory allocation"));
 }
 
 #[test]
 fn upgrading_canister_with_not_enough_memory_allocation_fails() {
-    with_setup(|canister_manager, mut state, _| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let sender = canister_test_id(1).get();
-        let sender_subnet_id = subnet_test_id(1);
-        let canister_id = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
+    let mut test = ExecutionTestBuilder::new().build();
 
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_id)
-                .wasm_module(UNIVERSAL_CANISTER_WASM.to_vec())
-                .build(),
-            &mut state,
-            &mut round_limits,
-        );
-        assert!(res.1.is_ok());
-        state.put_canister_state(res.2.unwrap());
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
 
-        // Give just 10 bytes which should be small enough.
-        let memory_allocation = MemoryAllocation::try_from(NumBytes::from(10)).unwrap();
-        assert_matches!(
-            install_code(
-                &canister_manager,
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .canister_id(canister_id)
-                    .wasm_module(UNIVERSAL_CANISTER_WASM.to_vec())
-                    .memory_allocation(memory_allocation)
-                    .mode(CanisterInstallModeV2::Upgrade(None))
-                    .build(),
-                &mut state,
-                &mut round_limits,
-            )
-            .1,
-            Err(CanisterManagerError::NotEnoughMemoryAllocationGiven { .. })
-        );
-    });
+    test.install_code_v2(InstallCodeArgsV2::new(
+        CanisterInstallModeV2::Install,
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        None,
+        None,
+    ))
+    .unwrap();
+
+    // Give just 10 bytes which should be small enough.
+    let memory_allocation = 10;
+    let err = test
+        .install_code_v2(InstallCodeArgsV2::new(
+            CanisterInstallModeV2::Upgrade(None),
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            Some(memory_allocation),
+        ))
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InsufficientMemoryAllocation);
+    assert!(err.description().contains(&format!(
+        "Canister was given {} B memory allocation but at least",
+        memory_allocation,
+    )));
 }
 
 #[test]
@@ -2902,51 +2075,28 @@ fn upgrading_canister_fails_if_memory_capacity_exceeded() {
 
 #[test]
 fn installing_a_canister_with_not_enough_cycles_fails() {
-    with_setup(|canister_manager, mut state, _| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let sender = canister_test_id(1).get();
-        let sender_subnet_id = subnet_test_id(1);
-        let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-        let canister_id = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                sender_subnet_id,
-                // Give the new canister a relatively small number of cycles so it doesn't have
-                // enough to be installed.
-                cycles_account_manager.canister_creation_fee(SMALL_APP_SUBNET_MAX_SIZE)
-                    + Cycles::new(100),
-                CanisterSettings::default(),
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
+    let mut test = ExecutionTestBuilder::new().build();
 
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_id)
-                .wasm_module(UNIVERSAL_CANISTER_WASM.to_vec())
-                .build(),
-            &mut state,
-            &mut round_limits,
-        );
-        assert_eq!(res.0, MAX_NUM_INSTRUCTIONS);
-        assert_matches!(
-            res.1,
-            Err(CanisterManagerError::InstallCodeNotEnoughCycles(_))
-        );
-    });
+    // Give the new canister a relatively small number of cycles so it doesn't have
+    // enough to be installed.
+    let canister_id = test.create_canister(Cycles::new(100));
+
+    let err = test
+        .install_code_v2(InstallCodeArgsV2::new(
+            CanisterInstallModeV2::Install,
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            None,
+        ))
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
+    assert!(err.description().contains(&format!(
+        "Canister installation failed with `Canister {} is out of cycles",
+        canister_id
+    )));
 }
 
 #[test]
@@ -3616,297 +2766,139 @@ fn install_code_preserves_system_state_and_scheduler_state() {
 
 #[test]
 fn lower_memory_allocation_than_usage_fails() {
-    with_setup(|canister_manager, mut state, subnet_id| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let wasm = r#"
-        (module
-            (memory $memory 1)
-        )"#;
-        let wasm = wat::parse_str(wasm).unwrap();
+    let mut test = ExecutionTestBuilder::new().build();
 
-        let sender = canister_test_id(100).get();
-        let canister_id = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
 
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContext {
-                origin: canister_change_origin_from_principal(&sender),
-                canister_id,
-                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
-                arg: vec![],
-                compute_allocation: None,
-                memory_allocation: None,
-                mode: CanisterInstallModeV2::Install,
-            },
-            &mut state,
-            &mut round_limits,
-        );
-        assert!(res.1.is_ok());
-        state.put_canister_state(res.2.unwrap());
+    test.install_code_v2(InstallCodeArgsV2::new(
+        CanisterInstallModeV2::Install,
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        None,
+        None,
+    ))
+    .unwrap();
 
-        let settings = CanisterSettingsBuilder::new()
-            .with_memory_allocation(MemoryAllocation::try_from(NumBytes::from(2)).unwrap())
-            .build();
+    let memory_allocation = 2;
+    let err = test
+        .canister_update_allocations_settings(canister_id, None, Some(memory_allocation))
+        .unwrap_err();
 
-        let canister = state.canister_state_mut(&canister_id).unwrap();
-
-        assert_matches!(
-            canister_manager.update_settings(
-                Time::from_nanos_since_unix_epoch(777),
-                canister_change_origin_from_principal(&sender),
-                settings,
-                canister,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                SMALL_APP_SUBNET_MAX_SIZE,
-            ),
-            Err(CanisterManagerError::NotEnoughMemoryAllocationGiven { .. })
-        );
-    })
+    assert_eq!(err.code(), ErrorCode::InsufficientMemoryAllocation);
+    assert!(err.description().contains(&format!(
+        "Canister was given {} B memory allocation but at least",
+        memory_allocation,
+    )));
 }
 
 #[test]
 fn test_install_when_updating_memory_allocation_via_canister_settings() {
-    with_setup(|canister_manager, mut state, subnet_id| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let wasm = UNIVERSAL_CANISTER_WASM.to_vec();
+    let mut test = ExecutionTestBuilder::new().build();
 
-        let sender = canister_test_id(100).get();
-        let settings = CanisterSettingsBuilder::new()
-            .with_memory_allocation(MemoryAllocation::try_from(NumBytes::from(2)).unwrap())
-            .build();
-        let canister_id = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                subnet_id,
-                *INITIAL_CYCLES,
-                settings,
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
-
-        // The memory allocation is too low, install should fail.
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContext {
-                origin: canister_change_origin_from_principal(&sender),
-                canister_id,
-                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
-                arg: vec![],
-                compute_allocation: None,
-                memory_allocation: None,
-                mode: CanisterInstallModeV2::Install,
-            },
-            &mut state,
-            &mut round_limits,
-        );
-        state.put_canister_state(res.2.unwrap());
-        assert_matches!(
-            res.1,
-            Err(CanisterManagerError::NotEnoughMemoryAllocationGiven { .. })
-        );
-
-        // Update memory allocation to a big enough value via canister settings. The
-        // install should succeed.
-        let settings = CanisterSettingsBuilder::new()
-            .with_memory_allocation(
-                MemoryAllocation::try_from(NumBytes::from(MEMORY_CAPACITY.get() / 2)).unwrap(),
-            )
-            .build();
-
-        let canister = state.canister_state_mut(&canister_id).unwrap();
-
-        canister_manager
-            .update_settings(
-                Time::from_nanos_since_unix_epoch(777),
-                canister_change_origin_from_principal(&sender),
-                settings,
-                canister,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                SMALL_APP_SUBNET_MAX_SIZE,
-            )
-            .unwrap();
-
-        install_code(
-            &canister_manager,
-            InstallCodeContext {
-                origin: canister_change_origin_from_principal(&sender),
-                canister_id,
-                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
-                arg: vec![],
-                compute_allocation: None,
-                memory_allocation: None,
-                mode: CanisterInstallModeV2::Install,
-            },
-            &mut state,
-            &mut round_limits,
-        )
-        .1
+    let memory_allocation = 200;
+    let canister_id = test
+        .create_canister_with_allocation(*INITIAL_CYCLES, None, Some(memory_allocation))
         .unwrap();
-    })
+
+    // The memory allocation is too low, `install_code` should fail.
+    let err = test
+        .install_code_v2(InstallCodeArgsV2::new(
+            CanisterInstallModeV2::Install,
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            None,
+        ))
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InsufficientMemoryAllocation);
+    assert!(err.description().contains(&format!(
+        "Canister was given {} B memory allocation but at least",
+        memory_allocation
+    )));
+
+    // Update memory allocation to a big enough value, `install_code` should succeed.
+    let canister_id = test
+        .create_canister_with_allocation(*INITIAL_CYCLES, None, Some(MEMORY_CAPACITY.get() / 2))
+        .unwrap();
+    test.install_code_v2(InstallCodeArgsV2::new(
+        CanisterInstallModeV2::Install,
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        None,
+        None,
+    ))
+    .unwrap();
 }
 
 #[test]
 fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
-    with_setup(|canister_manager, mut state, subnet_id| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let sender = canister_test_id(100).get();
-        // canister history memory usage at the beginning of attempted upgrade
-        let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
-        let settings = CanisterSettingsBuilder::new()
-            .with_memory_allocation(
-                MemoryAllocation::try_from(NumBytes::from(
-                    WASM_PAGE_SIZE_IN_BYTES + 100 + canister_history_memory as u64,
-                ))
-                .unwrap(),
-            )
-            .build();
-        let wat = r#"
+    let mut test = ExecutionTestBuilder::new().build();
+
+    // canister history memory usage at the beginning of attempted upgrade
+    let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
+    let memory_allocation = WASM_PAGE_SIZE_IN_BYTES + 100 + canister_history_memory as u64;
+    let canister_id = test
+        .create_canister_with_allocation(*INITIAL_CYCLES, None, Some(memory_allocation))
+        .unwrap();
+
+    let wat = r#"
         (module
             (memory $memory 1)
         )"#;
-        let wasm = wat::parse_str(wat).unwrap();
-        let canister_id = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                subnet_id,
-                *INITIAL_CYCLES,
-                settings,
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
+    let wasm = wat::parse_str(wat).unwrap();
+    test.install_code_v2(InstallCodeArgsV2::new(
+        CanisterInstallModeV2::Install,
+        canister_id,
+        wasm.to_vec(),
+        vec![],
+        None,
+        None,
+    ))
+    .unwrap();
 
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContext {
-                origin: canister_change_origin_from_principal(&sender),
-                canister_id,
-                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
-                arg: vec![],
-                compute_allocation: None,
-                memory_allocation: None,
-                mode: CanisterInstallModeV2::Install,
-            },
-            &mut state,
-            &mut round_limits,
-        );
-        assert!(res.1.is_ok());
-        state.put_canister_state(res.2.unwrap());
-
-        // Try to upgrade to a wasm module that has bigger memory requirements. It
-        // should fail...
-        let wat = r#"
+    // Try to upgrade to a wasm module that has bigger memory requirements. It
+    // should fail...
+    let wat = r#"
         (module
             (memory $memory 2)
         )"#;
-        let wasm = wat::parse_str(wat).unwrap();
+    let wasm = wat::parse_str(wat).unwrap();
+    let err = test
+        .install_code_v2(InstallCodeArgsV2::new(
+            CanisterInstallModeV2::Upgrade(None),
+            canister_id,
+            wasm.to_vec(),
+            vec![],
+            None,
+            None,
+        ))
+        .unwrap_err();
 
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContext {
-                origin: canister_change_origin_from_principal(&sender),
-                canister_id,
-                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
-                arg: vec![],
-                compute_allocation: None,
-                memory_allocation: None,
-                mode: CanisterInstallModeV2::Upgrade(None),
-            },
-            &mut state,
-            &mut round_limits,
-        );
-        assert_matches!(
-            res.1,
-            Err(CanisterManagerError::NotEnoughMemoryAllocationGiven { .. })
-        );
-        state.put_canister_state(res.2.unwrap());
+    assert_eq!(err.code(), ErrorCode::InsufficientMemoryAllocation);
+    assert!(err
+        .description()
+        .contains("Canister was given 64.35 KiB memory allocation but at least"));
 
-        // canister history memory usage at the beginning of update_settings
-        let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
-        // Update memory allocation to a big enough value via canister settings. The
-        // upgrade should succeed.
-        let settings = CanisterSettingsBuilder::new()
-            .with_memory_allocation(
-                MemoryAllocation::try_from(NumBytes::from(
-                    WASM_PAGE_SIZE_IN_BYTES * 2 + 100 + canister_history_memory as u64,
-                ))
-                .unwrap(),
-            )
-            .build();
-
-        let canister = state.canister_state_mut(&canister_id).unwrap();
-
-        canister_manager
-            .update_settings(
-                Time::from_nanos_since_unix_epoch(777),
-                canister_change_origin_from_principal(&sender),
-                settings,
-                canister,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                SMALL_APP_SUBNET_MAX_SIZE,
-            )
-            .unwrap();
-
-        install_code(
-            &canister_manager,
-            InstallCodeContext {
-                origin: canister_change_origin_from_principal(&sender),
-                canister_id,
-                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
-                arg: vec![],
-                compute_allocation: None,
-                memory_allocation: None,
-                mode: CanisterInstallModeV2::Upgrade(None),
-            },
-            &mut state,
-            &mut round_limits,
-        )
-        .1
+    // canister history memory usage at the beginning of update_settings
+    let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
+    // Update memory allocation to a big enough value via canister settings. The
+    // upgrade should succeed.
+    let memory_allocation = WASM_PAGE_SIZE_IN_BYTES * 2 + 100 + canister_history_memory as u64;
+    test.canister_update_allocations_settings(canister_id, None, Some(memory_allocation))
         .unwrap();
-    })
+
+    test.install_code_v2(InstallCodeArgsV2::new(
+        CanisterInstallModeV2::Upgrade(None),
+        canister_id,
+        wasm.to_vec(),
+        vec![],
+        None,
+        None,
+    ))
+    .unwrap();
 }
 
 #[test]
@@ -3986,257 +2978,79 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
 
 #[test]
 fn test_install_when_setting_memory_allocation_to_zero() {
-    with_setup(|canister_manager, mut state, subnet_id| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let wasm = UNIVERSAL_CANISTER_WASM.to_vec();
+    let mut test = ExecutionTestBuilder::new().build();
 
-        let sender = canister_test_id(100).get();
-        let settings = CanisterSettings::default();
-        let canister_id = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                subnet_id,
-                *INITIAL_CYCLES,
-                settings,
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
 
-        // Set memory allocation to 0.
-        let settings = CanisterSettingsBuilder::new()
-            .with_memory_allocation(MemoryAllocation::try_from(NumBytes::from(0)).unwrap())
-            .build();
-
-        let canister = state.canister_state_mut(&canister_id).unwrap();
-
-        canister_manager
-            .update_settings(
-                Time::from_nanos_since_unix_epoch(777),
-                canister_change_origin_from_principal(&sender),
-                settings,
-                canister,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                SMALL_APP_SUBNET_MAX_SIZE,
-            )
-            .unwrap();
-
-        install_code(
-            &canister_manager,
-            InstallCodeContext {
-                origin: canister_change_origin_from_principal(&sender),
-                canister_id,
-                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
-                arg: vec![],
-                compute_allocation: None,
-                memory_allocation: None,
-                mode: CanisterInstallModeV2::Install,
-            },
-            &mut state,
-            &mut round_limits,
-        )
-        .1
+    let memory_allocation = 0;
+    test.canister_update_allocations_settings(canister_id, None, Some(memory_allocation))
         .unwrap();
-    })
+    test.install_code_v2(InstallCodeArgsV2::new(
+        CanisterInstallModeV2::Install,
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        None,
+        None,
+    ))
+    .unwrap();
 }
 
 #[test]
 fn test_upgrade_when_setting_memory_allocation_to_zero() {
-    with_setup(|canister_manager, mut state, subnet_id| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let wasm = UNIVERSAL_CANISTER_WASM.to_vec();
+    let mut test = ExecutionTestBuilder::new().build();
 
-        let sender = canister_test_id(100).get();
-        let settings = CanisterSettingsBuilder::new()
-            .with_memory_allocation(
-                MemoryAllocation::try_from(NumBytes::from(MEMORY_CAPACITY.get() / 2)).unwrap(),
-            )
-            .build();
-        let canister_id = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                subnet_id,
-                *INITIAL_CYCLES,
-                settings,
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
 
-        let res = install_code(
-            &canister_manager,
-            InstallCodeContext {
-                origin: canister_change_origin_from_principal(&sender),
-                canister_id,
-                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
-                arg: vec![],
-                compute_allocation: None,
-                memory_allocation: None,
-                mode: CanisterInstallModeV2::Install,
-            },
-            &mut state,
-            &mut round_limits,
-        );
-        assert!(res.1.is_ok());
-        state.put_canister_state(res.2.unwrap());
+    test.install_code_v2(InstallCodeArgsV2::new(
+        CanisterInstallModeV2::Install,
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        None,
+        None,
+    ))
+    .unwrap();
 
-        // Set memory allocation to 0.
-        let settings = CanisterSettingsBuilder::new()
-            .with_memory_allocation(MemoryAllocation::try_from(NumBytes::from(0)).unwrap())
-            .build();
-
-        let canister = state.canister_state_mut(&canister_id).unwrap();
-
-        canister_manager
-            .update_settings(
-                Time::from_nanos_since_unix_epoch(777),
-                canister_change_origin_from_principal(&sender),
-                settings,
-                canister,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                SMALL_APP_SUBNET_MAX_SIZE,
-            )
-            .unwrap();
-
-        install_code(
-            &canister_manager,
-            InstallCodeContext {
-                origin: canister_change_origin_from_principal(&sender),
-                canister_id,
-                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
-                arg: vec![],
-                compute_allocation: None,
-                memory_allocation: None,
-                mode: CanisterInstallModeV2::Upgrade(None),
-            },
-            &mut state,
-            &mut round_limits,
-        )
-        .1
+    let memory_allocation = 0;
+    test.canister_update_allocations_settings(canister_id, None, Some(memory_allocation))
         .unwrap();
-    })
+    test.install_code_v2(InstallCodeArgsV2::new(
+        CanisterInstallModeV2::Upgrade(None),
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        None,
+        None,
+    ))
+    .unwrap();
 }
 
 #[test]
 fn max_number_of_canisters_is_respected_when_creating_canisters() {
-    with_setup(|canister_manager, mut state, _| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let sender = canister_test_id(1).get();
-        let sender_subnet_id = subnet_test_id(1);
+    let max_number_of_canisters = 3;
+    let mut test = ExecutionTestBuilder::new()
+        .with_max_number_of_canisters(max_number_of_canisters)
+        .build();
 
-        // Create 3 canisters with `max_number_of_canisters = 3`, should succeed.
-        canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                3, /* max_number_of_canisters */
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
-        canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                3, /* max_number_of_canisters */
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
-        canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                3, /* max_number_of_canisters */
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
-        assert_eq!(state.num_canisters(), 3);
+    // Create 3 canisters with `max_number_of_canisters = 3`, should succeed.
+    test.create_canister_with_allocation(*INITIAL_CYCLES, None, None)
+        .unwrap();
+    test.create_canister_with_allocation(*INITIAL_CYCLES, None, None)
+        .unwrap();
+    test.create_canister_with_allocation(*INITIAL_CYCLES, None, None)
+        .unwrap();
 
-        // Creating a fourth canister with 3 already created and
-        // `max_number_of_canisters = 3` should fail.
-        let (res, _) = canister_manager.create_canister(
-            canister_change_origin_from_principal(&sender),
-            sender_subnet_id,
-            *INITIAL_CYCLES,
-            CanisterSettings::default(),
-            3, /* max_number_of_canisters */
-            &mut state,
-            SMALL_APP_SUBNET_MAX_SIZE,
-            &mut round_limits,
-            ResourceSaturation::default(),
-            &no_op_counter(),
-        );
-        assert_matches!(
-            res,
-            Err(CanisterManagerError::MaxNumberOfCanistersReached { .. })
-        );
-
-        // Creating a fourth canister with 3 already created and
-        // `max_number_of_canisters = 10` should succeed.
-        canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                10, /* max_number_of_canisters */
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
-        assert_eq!(state.num_canisters(), 4);
-    })
+    // Creating a fourth canister with 3 already created and
+    // `max_number_of_canisters = 3` should fail.
+    let err = test
+        .create_canister_with_allocation(*INITIAL_CYCLES, None, None)
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::MaxNumberOfCanistersReached);
+    assert!(err.description().contains(&format!(
+        "has reached the allowed canister limit of {} canisters",
+        max_number_of_canisters,
+    )));
 }
 
 /// This canister exports a query that returns its canister version.
@@ -5276,6 +4090,8 @@ fn cycles_correct_if_upgrade_succeeds() {
 
     let cycles_before = test.canister_state(id).system_state.balance();
     let execution_cost_before = test.canister_execution_cost(id);
+    // Clear `expected_compiled_wasms` so that the full execution cost is applied
+    test.state_mut().metadata.expected_compiled_wasms.clear();
     test.upgrade_canister(id, wasm.clone()).unwrap();
     let execution_cost = test.canister_execution_cost(id) - execution_cost_before;
     assert_eq!(
@@ -5759,66 +4575,24 @@ fn install_code_cannot_switch_from_reserved_to_best_effort_memory_allocation() {
 
 #[test]
 fn delete_canister_with_non_empty_input_queue_fails() {
-    with_setup(|canister_manager, mut state, _| {
-        let canister_id = canister_test_id(0);
-        let controller_id = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
 
-        let mut canister = get_stopped_canister_with_controller(canister_id, controller_id.get());
-        let controller_canister = get_running_canister(controller_id);
+    let canister_id = test.universal_canister().unwrap();
 
-        // Simulate non-empty input queue.
-        let ingress = IngressBuilder::new()
-            .source(user_test_id(0))
-            .receiver(canister_id)
-            .method_name("foo")
-            .method_payload(vec![])
-            .build();
+    // Send an ingress to the canister but do not execute it.
+    let _ = test.ingress_raw(canister_id, "update", vec![]);
 
-        canister.push_ingress(ingress);
+    // Stop the canister to avoid this condition.
+    test.stop_canister(canister_id);
+    test.process_stopping_canisters();
 
-        state.put_canister_state(canister);
-        state.put_canister_state(controller_canister);
-
-        assert_eq!(
-            canister_manager.delete_canister(controller_id.get(), canister_id, &mut state),
-            Err(CanisterManagerError::DeleteCanisterQueueNotEmpty(
-                canister_id
-            )),
-        );
-    });
-}
-
-#[test]
-fn delete_canister_with_non_empty_output_queue_fails() {
-    with_setup(|canister_manager, mut state, _| {
-        let canister_id = canister_test_id(0);
-        let controller_id = canister_test_id(1);
-
-        let mut canister = get_stopped_canister_with_controller(canister_id, controller_id.get());
-        let controller_canister = get_running_canister(controller_id);
-
-        // Simulate non-empty output queue.
-        canister
-            .push_output_request(
-                RequestBuilder::default()
-                    .sender(canister_id)
-                    .receiver(controller_id)
-                    .build()
-                    .into(),
-                state.time(),
-            )
-            .unwrap();
-
-        state.put_canister_state(canister);
-        state.put_canister_state(controller_canister);
-
-        assert_eq!(
-            canister_manager.delete_canister(controller_id.get(), canister_id, &mut state),
-            Err(CanisterManagerError::DeleteCanisterQueueNotEmpty(
-                canister_id
-            )),
-        );
-    });
+    // Attempting to delete a canister with a non-empty input queue should fail.
+    let err = test.delete_canister(canister_id).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterQueueNotEmpty);
+    assert!(err.description().contains(&format!(
+        "Canister {} has messages in its queues and cannot be deleted now",
+        canister_id,
+    )));
 }
 
 #[test]
@@ -7417,7 +6191,7 @@ fn upload_chunk_fails_when_freeze_threshold_triggered() {
         .subnet_message("upload_chunk", upload_args.encode())
         .unwrap_err();
 
-    assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
+    assert_eq!(error.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
     assert!(
         error
             .description()
@@ -8089,4 +6863,405 @@ fn node_metrics_history_ingress_query_fails() {
             ErrorCode::CanisterMethodNotFound,
             "Query method node_metrics_history not found.",
         );
+}
+
+struct MemoryState {
+    wasm_memory_limit: Option<NumBytes>,
+    wasm_memory_threshold: Option<NumBytes>,
+    memory_allocation: Option<MemoryAllocation>,
+    hook_status: OnLowWasmMemoryHookStatus,
+}
+
+fn helper_update_settings_updates_hook_status(
+    used_wasm_memory_pages: u64,
+    initial_memory_state: MemoryState,
+    updated_memory_state: MemoryState,
+    execute_hook_after_install: bool,
+) {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let mut initial_settings = CanisterSettingsArgsBuilder::new();
+
+    if let Some(MemoryAllocation::Reserved(memory_allocation)) =
+        initial_memory_state.memory_allocation
+    {
+        initial_settings = initial_settings.with_memory_allocation(memory_allocation.get());
+    }
+
+    if let Some(wasm_memory_limit) = initial_memory_state.wasm_memory_limit {
+        initial_settings = initial_settings.with_wasm_memory_limit(wasm_memory_limit.get());
+    }
+
+    if let Some(wasm_memory_threshold) = initial_memory_state.wasm_memory_threshold {
+        initial_settings = initial_settings.with_wasm_memory_threshold(wasm_memory_threshold.get());
+    }
+
+    let canister_id = test
+        .create_canister_with_settings(*INITIAL_CYCLES, initial_settings.build())
+        .unwrap();
+
+    let wat = format!("(module (memory {used_wasm_memory_pages}))");
+
+    let wasm = wat::parse_str(wat).unwrap();
+
+    test.install_canister(canister_id, wasm).unwrap();
+
+    if execute_hook_after_install {
+        test.canister_state_mut(canister_id)
+            .system_state
+            .task_queue
+            .pop_front();
+    }
+
+    assert_eq!(
+        test.canister_state_mut(canister_id)
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        initial_memory_state.hook_status
+    );
+
+    let mut settings = CanisterSettingsArgsBuilder::new();
+
+    if updated_memory_state.wasm_memory_threshold != initial_memory_state.wasm_memory_threshold {
+        if let Some(updated_wasm_memory_threshold) = updated_memory_state.wasm_memory_threshold {
+            settings = settings.with_wasm_memory_threshold(updated_wasm_memory_threshold.get());
+        }
+    }
+
+    if updated_memory_state.wasm_memory_limit != initial_memory_state.wasm_memory_limit {
+        if let Some(updated_wasm_memory_limit) = updated_memory_state.wasm_memory_limit {
+            settings = settings.with_wasm_memory_limit(updated_wasm_memory_limit.get());
+        }
+    }
+
+    if updated_memory_state.memory_allocation != initial_memory_state.memory_allocation {
+        if let Some(MemoryAllocation::Reserved(updated_memory_allocation)) =
+            updated_memory_state.memory_allocation
+        {
+            settings = settings.with_memory_allocation(updated_memory_allocation.get());
+        }
+    }
+
+    let payload = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: settings.build(),
+        sender_canister_version: None,
+    }
+    .encode();
+
+    test.subnet_message(Method::UpdateSettings, payload)
+        .unwrap();
+
+    assert_eq!(
+        test.canister_state_mut(canister_id)
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        updated_memory_state.hook_status
+    );
+}
+
+#[test]
+fn update_wasm_memory_threshold_updates_hook_status_ready_to_not_satisfied() {
+    let used_wasm_memory_pages = 1;
+    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
+    let wasm_memory_limit = used_wasm_memory + 100;
+
+    let initial_wasm_memory_threshold = 150;
+    // wasm_memory_limit - used_wasm_memory < wasm_memory_threshold
+    let initial_hook_status = OnLowWasmMemoryHookStatus::Ready;
+
+    let initial_memory_state = MemoryState {
+        wasm_memory_limit: Some(NumBytes::new(wasm_memory_limit)),
+        wasm_memory_threshold: Some(NumBytes::new(initial_wasm_memory_threshold)),
+        memory_allocation: None,
+        hook_status: initial_hook_status,
+    };
+
+    let updated_wasm_memory_threshold = 50;
+    // wasm_memory_limit - used_wasm_memory > wasm_memory_threshold
+    let updated_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
+
+    let updated_memory_state = MemoryState {
+        wasm_memory_threshold: Some(NumBytes::from(updated_wasm_memory_threshold)),
+        hook_status: updated_hook_status,
+        ..initial_memory_state
+    };
+
+    helper_update_settings_updates_hook_status(
+        used_wasm_memory_pages,
+        initial_memory_state,
+        updated_memory_state,
+        false,
+    );
+}
+
+#[test]
+fn update_wasm_memory_threshold_updates_hook_status_not_satisfied_to_ready() {
+    let used_wasm_memory_pages = 1;
+    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
+    let wasm_memory_limit = used_wasm_memory + 100;
+
+    let initial_wasm_memory_threshold = 50;
+    // wasm_memory_limit - used_wasm_memory > wasm_memory_threshold
+    let initial_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
+
+    let initial_memory_state = MemoryState {
+        wasm_memory_limit: Some(NumBytes::new(wasm_memory_limit)),
+        wasm_memory_threshold: Some(NumBytes::new(initial_wasm_memory_threshold)),
+        memory_allocation: None,
+        hook_status: initial_hook_status,
+    };
+
+    let updated_wasm_memory_threshold = 150;
+    // wasm_memory_limit - used_wasm_memory < wasm_memory_threshold
+    let updated_hook_status = OnLowWasmMemoryHookStatus::Ready;
+
+    let updated_memory_state = MemoryState {
+        wasm_memory_threshold: Some(NumBytes::from(updated_wasm_memory_threshold)),
+        hook_status: updated_hook_status,
+        ..initial_memory_state
+    };
+
+    helper_update_settings_updates_hook_status(
+        used_wasm_memory_pages,
+        initial_memory_state,
+        updated_memory_state,
+        false,
+    );
+}
+
+#[test]
+fn update_wasm_memory_threshold_updates_hook_status_executed_to_not_satisfied() {
+    let used_wasm_memory_pages = 1;
+    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
+    let wasm_memory_limit = used_wasm_memory + 100;
+
+    let initial_wasm_memory_threshold = 150;
+    // wasm_memory_limit - used_wasm_memory < wasm_memory_threshold
+
+    // This will simulate execution of the task.
+    let pop_from_task_queue = true;
+
+    let initial_hook_status = OnLowWasmMemoryHookStatus::Executed;
+
+    let initial_memory_state = MemoryState {
+        wasm_memory_limit: Some(NumBytes::new(wasm_memory_limit)),
+        wasm_memory_threshold: Some(NumBytes::new(initial_wasm_memory_threshold)),
+        memory_allocation: None,
+        hook_status: initial_hook_status,
+    };
+
+    let updated_wasm_memory_threshold = 50;
+    // wasm_memory_limit - used_wasm_memory > wasm_memory_threshold
+    let updated_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
+
+    let updated_memory_state = MemoryState {
+        wasm_memory_threshold: Some(NumBytes::from(updated_wasm_memory_threshold)),
+        hook_status: updated_hook_status,
+        ..initial_memory_state
+    };
+
+    helper_update_settings_updates_hook_status(
+        used_wasm_memory_pages,
+        initial_memory_state,
+        updated_memory_state,
+        pop_from_task_queue,
+    );
+}
+
+#[test]
+fn update_wasm_memory_threshold_updates_hook_status_executed_is_remembered() {
+    let used_wasm_memory_pages = 1;
+    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
+    let wasm_memory_limit = used_wasm_memory + 100;
+
+    let initial_wasm_memory_threshold = 150;
+    // wasm_memory_limit - used_wasm_memory < wasm_memory_threshold
+
+    // This will simulate execution of the task.
+    let pop_from_task_queue = true;
+
+    let initial_hook_status = OnLowWasmMemoryHookStatus::Executed;
+
+    let initial_memory_state = MemoryState {
+        wasm_memory_limit: Some(NumBytes::new(wasm_memory_limit)),
+        wasm_memory_threshold: Some(NumBytes::new(initial_wasm_memory_threshold)),
+        memory_allocation: None,
+        hook_status: initial_hook_status,
+    };
+
+    let updated_wasm_memory_threshold = 149;
+    // wasm_memory_limit - used_wasm_memory < wasm_memory_threshold
+    // Because the hook condition is still satisfied, hook status
+    // should remain `Executed`.
+    let updated_hook_status = OnLowWasmMemoryHookStatus::Executed;
+
+    let updated_memory_state = MemoryState {
+        wasm_memory_threshold: Some(NumBytes::from(updated_wasm_memory_threshold)),
+        hook_status: updated_hook_status,
+        ..initial_memory_state
+    };
+
+    helper_update_settings_updates_hook_status(
+        used_wasm_memory_pages,
+        initial_memory_state,
+        updated_memory_state,
+        pop_from_task_queue,
+    );
+}
+
+#[test]
+fn update_wasm_memory_limit_updates_hook_status_not_satisfied_to_ready() {
+    let used_wasm_memory_pages = 1;
+    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
+    let wasm_memory_threshold = 100;
+
+    let initial_wasm_memory_limit = used_wasm_memory + 150;
+    // wasm_memory_limit - used_wasm_memory > wasm_memory_threshold
+    let initial_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
+
+    let initial_memory_state = MemoryState {
+        wasm_memory_limit: Some(NumBytes::new(initial_wasm_memory_limit)),
+        wasm_memory_threshold: Some(NumBytes::new(wasm_memory_threshold)),
+        memory_allocation: None,
+        hook_status: initial_hook_status,
+    };
+
+    let updated_wasm_memory_limit = used_wasm_memory + 50;
+    // wasm_memory_limit - used_wasm_memory < wasm_memory_threshold
+    let updated_hook_status = OnLowWasmMemoryHookStatus::Ready;
+
+    let updated_memory_state = MemoryState {
+        wasm_memory_limit: Some(NumBytes::from(updated_wasm_memory_limit)),
+        hook_status: updated_hook_status,
+        ..initial_memory_state
+    };
+
+    helper_update_settings_updates_hook_status(
+        used_wasm_memory_pages,
+        initial_memory_state,
+        updated_memory_state,
+        false,
+    );
+}
+
+#[test]
+fn update_wasm_memory_limit_updates_hook_status_ready_to_not_satisfied() {
+    let used_wasm_memory_pages = 1;
+    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
+    let wasm_memory_threshold = 100;
+
+    let initial_wasm_memory_limit = used_wasm_memory + 50;
+    // wasm_memory_limit - used_wasm_memory < wasm_memory_threshold
+    let initial_hook_status = OnLowWasmMemoryHookStatus::Ready;
+
+    let initial_memory_state = MemoryState {
+        wasm_memory_limit: Some(NumBytes::new(initial_wasm_memory_limit)),
+        wasm_memory_threshold: Some(NumBytes::new(wasm_memory_threshold)),
+        memory_allocation: None,
+        hook_status: initial_hook_status,
+    };
+
+    let updated_wasm_memory_limit = used_wasm_memory + 150;
+    // wasm_memory_limit - used_wasm_memory > wasm_memory_threshold
+    let updated_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
+
+    let updated_memory_state = MemoryState {
+        wasm_memory_limit: Some(NumBytes::from(updated_wasm_memory_limit)),
+        hook_status: updated_hook_status,
+        ..initial_memory_state
+    };
+
+    helper_update_settings_updates_hook_status(
+        used_wasm_memory_pages,
+        initial_memory_state,
+        updated_memory_state,
+        false,
+    );
+}
+
+#[test]
+fn update_memory_allocation_updates_hook_status_not_satisfied_to_ready() {
+    let used_wasm_memory_pages = 1;
+    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
+    let wasm_memory_threshold = 1_000;
+    let wasm_memory_limit = 100_000;
+
+    let initial_memory_allocation = used_wasm_memory + 1_500;
+
+    // wasm_memory_capacity = min(wasm_memory_limit, memory_allocation - used_non_wasm_memory)
+    // wasm_memory_capacity - used_wasm_memory > wasm_memory_threshold
+    let initial_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
+
+    let initial_memory_state = MemoryState {
+        wasm_memory_limit: Some(NumBytes::new(wasm_memory_limit)),
+        wasm_memory_threshold: Some(NumBytes::new(wasm_memory_threshold)),
+        memory_allocation: Some(MemoryAllocation::Reserved(NumBytes::from(
+            initial_memory_allocation,
+        ))),
+        hook_status: initial_hook_status,
+    };
+
+    let updated_memory_allocation = used_wasm_memory + 500;
+    // wasm_memory_capacity - used_wasm_memory < wasm_memory_threshold
+    let updated_hook_status = OnLowWasmMemoryHookStatus::Ready;
+
+    let updated_memory_state = MemoryState {
+        memory_allocation: Some(MemoryAllocation::Reserved(NumBytes::from(
+            updated_memory_allocation,
+        ))),
+        hook_status: updated_hook_status,
+        ..initial_memory_state
+    };
+
+    helper_update_settings_updates_hook_status(
+        used_wasm_memory_pages,
+        initial_memory_state,
+        updated_memory_state,
+        false,
+    );
+}
+
+#[test]
+fn update_memory_allocation_updates_hook_status_ready_to_not_satisfied() {
+    let used_wasm_memory_pages = 1;
+    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
+    let wasm_memory_threshold = 1_000;
+    let wasm_memory_limit = 100_000;
+
+    // wasm_memory_capacity = min(wasm_memory_limit, memory_allocation - used_non_wasm_memory)
+
+    let initial_memory_allocation = used_wasm_memory + 500;
+    // wasm_memory_capacity - used_wasm_memory < wasm_memory_threshold
+    let initial_hook_status = OnLowWasmMemoryHookStatus::Ready;
+
+    let initial_memory_state = MemoryState {
+        wasm_memory_limit: Some(NumBytes::new(wasm_memory_limit)),
+        wasm_memory_threshold: Some(NumBytes::new(wasm_memory_threshold)),
+        memory_allocation: Some(MemoryAllocation::Reserved(NumBytes::from(
+            initial_memory_allocation,
+        ))),
+        hook_status: initial_hook_status,
+    };
+
+    let updated_memory_allocation = used_wasm_memory + 1_500;
+    // wasm_memory_capacity - used_wasm_memory > wasm_memory_threshold
+    let updated_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
+
+    let updated_memory_state = MemoryState {
+        memory_allocation: Some(MemoryAllocation::Reserved(NumBytes::from(
+            updated_memory_allocation,
+        ))),
+        hook_status: updated_hook_status,
+        ..initial_memory_state
+    };
+
+    helper_update_settings_updates_hook_status(
+        used_wasm_memory_pages,
+        initial_memory_state,
+        updated_memory_state,
+        false,
+    );
 }

@@ -16,12 +16,13 @@ use ic_icrc1::{
     Operation, Transaction,
 };
 use ic_icrc1_ledger::{
-    balances_len, clear_stable_allowance_data, clear_stable_balances_data, is_ready, ledger_state,
-    panic_if_not_ready, set_ledger_state, LEDGER_VERSION, UPGRADES_MEMORY,
+    balances_len, clear_stable_allowance_data, clear_stable_balances_data,
+    clear_stable_blocks_data, is_ready, ledger_state, panic_if_not_ready, set_ledger_state,
+    LEDGER_VERSION, UPGRADES_MEMORY,
 };
 use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument, LedgerField, LedgerState};
 use ic_ledger_canister_core::ledger::{
-    apply_transaction_no_trimming, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
+    apply_transaction, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
     TransferError as CoreTransferError,
 };
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
@@ -83,6 +84,9 @@ thread_local! {
     static PRE_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
     static POST_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
     static STABLE_UPGRADE_MIGRATION_STEPS: RefCell<u64> = const { RefCell::new(0) };
+    static TOTAL_VOLUME: RefCell<f64> = const { RefCell::new(0f64) };
+    static TOTAL_VOLUME_DENOMINATOR: RefCell<f64> = const { RefCell::new(1f64) };
+    static TOTAL_VOLUME_FEE_IN_DECIMALS: RefCell<f64> = const { RefCell::new(0f64) };
 }
 
 declare_log_buffer!(name = LOG, capacity = 1000);
@@ -125,7 +129,8 @@ fn init(args: LedgerArgument) {
 
 fn init_state(init_args: InitArgs) {
     let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
-    LEDGER.with(|cell| *cell.borrow_mut() = Some(Ledger::from_init_args(&LOG, init_args, now)))
+    LEDGER.with(|cell| *cell.borrow_mut() = Some(Ledger::from_init_args(&LOG, init_args, now)));
+    initialize_total_volume();
 }
 
 // We use 8MiB buffer
@@ -171,6 +176,17 @@ const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 500_000;
 
 #[post_upgrade]
 fn post_upgrade(args: Option<LedgerArgument>) {
+    post_upgrade_internal(args);
+    if is_ready() {
+        // Set the certified data to the root hash of the ledger state, using the correct ICRC-3 labels.
+        // This cannot be called in `post_upgrade_internal`, since that is benchmarked using
+        // canbench, and canbench calls functions as non-replicated queries, and `set_certified_data`
+        // cannot be called in non-replicated queries.
+        ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    }
+}
+
+fn post_upgrade_internal(args: Option<LedgerArgument>) {
     #[cfg(feature = "canbench-rs")]
     let _p = canbench_rs::bench_scope("post_upgrade");
 
@@ -238,6 +254,13 @@ fn post_upgrade(args: Option<LedgerArgument>) {
 
     PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
 
+    initialize_total_volume();
+
+    if upgrade_from_version < 3 {
+        set_ledger_state(LedgerState::Migrating(LedgerField::Blocks));
+        log_message(format!("Upgrading from version {upgrade_from_version} which does not store blocks in stable structures, clearing stable blocks data.").as_str());
+        clear_stable_blocks_data();
+    }
     if upgrade_from_version < 2 {
         set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
         log_message(format!("Upgrading from version {upgrade_from_version} which does not store balances in stable structures, clearing stable balances data.").as_str());
@@ -266,12 +289,22 @@ fn post_upgrade(args: Option<LedgerArgument>) {
     POST_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = instructions_consumed);
 }
 
+fn initialize_total_volume() {
+    let denominator = 10f64.powf(Access::with_ledger(|ledger| ledger.decimals()) as f64);
+    let fee = Access::with_ledger(|ledger| ledger.transfer_fee());
+    TOTAL_VOLUME_DENOMINATOR.with(|n| *n.borrow_mut() = denominator);
+    if fee != Tokens::ZERO {
+        TOTAL_VOLUME_FEE_IN_DECIMALS.with(|n| *n.borrow_mut() = tokens_to_f64(fee) / denominator);
+    }
+}
+
 fn migrate_next_part(instruction_limit: u64) {
     let instructions_migration_start = instruction_counter();
     STABLE_UPGRADE_MIGRATION_STEPS.with(|n| *n.borrow_mut() += 1);
     let mut migrated_allowances = 0;
     let mut migrated_expirations = 0;
     let mut migrated_balances = 0;
+    let mut migrated_blocks = 0;
 
     log_message("Migrating part of the ledger state.");
 
@@ -302,13 +335,20 @@ fn migrate_next_part(instruction_limit: u64) {
                     if ledger.migrate_one_balance() {
                         migrated_balances += 1;
                     } else {
+                        set_ledger_state(LedgerState::Migrating(LedgerField::Blocks));
+                    }
+                }
+                LedgerField::Blocks => {
+                    if ledger.migrate_one_block() {
+                        migrated_blocks += 1;
+                    } else {
                         set_ledger_state(LedgerState::Ready);
                     }
                 }
             }
         }
         let instructions_migration = instruction_counter() - instructions_migration_start;
-        let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances: {migrated_balances}. Migration step instructions: {instructions_migration}, total instructions used in message: {}." ,
+        let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances: {migrated_balances} blocks: {migrated_blocks}. Migration step instructions: {instructions_migration}, total instructions used in message: {}." ,
             instruction_counter());
         if !is_ready() {
             log_message(
@@ -319,6 +359,8 @@ fn migrate_next_part(instruction_limit: u64) {
             });
         } else {
             log_message(format!("Migration completed! {msg}").as_str());
+            // Set the certified data to the root hash of the ledger state, using the correct ICRC-3 labels.
+            ic_cdk::api::set_certified_data(&ledger.root_hash());
         }
     });
 }
@@ -376,6 +418,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         stable_upgrade_migration_steps as f64,
         "Number of steps used to migrate data to stable structures.",
     )?;
+    w.encode_counter(
+        "total_volume",
+        TOTAL_VOLUME.with(|n| *n.borrow()),
+        "Total volume of ledger transactions.",
+    )?;
 
     Access::with_ledger(|ledger| {
         w.encode_gauge(
@@ -390,7 +437,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         )?;
         w.encode_gauge(
             "ledger_transactions",
-            ledger.blockchain().blocks.len() as f64,
+            ledger.blockchain().num_unarchived_blocks() as f64,
             "Total number of transactions stored in the main memory.",
         )?;
         w.encode_gauge(
@@ -402,7 +449,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         // in order to be able to accurately calculate the total transaction rate.
         w.encode_gauge(
             "ledger_total_transactions",
-            ledger.blockchain().num_archived_blocks.saturating_add(ledger.blockchain().blocks.len() as u64) as f64,
+            ledger.blockchain().num_archived_blocks.saturating_add(ledger.blockchain().num_unarchived_blocks()) as f64,
             "Total number of transactions stored in the main memory, plus total number of transactions sent to the archive.",
         )?;
         if is_ready() {
@@ -459,6 +506,50 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         }
         Ok(())
     })
+}
+
+/// Update the total volume of token transactions. Since the total volume counter is an `f64`, it
+/// can handle large amounts, but the accuracy may suffer. Only the rate of increase of the counter
+/// should be used, since the total amount will be reset to zero each time the canister is upgraded.
+fn update_total_volume(amount: Tokens, with_fee: bool) {
+    let mut total_volume = TOTAL_VOLUME.with(|n| *n.borrow());
+    let denominator = TOTAL_VOLUME_DENOMINATOR.with(|n| *n.borrow());
+    if amount != Tokens::ZERO {
+        let amount = tokens_to_f64(amount) / denominator;
+        total_volume = f64_saturating_add(total_volume, amount);
+    }
+    if with_fee {
+        total_volume = f64_saturating_add(
+            total_volume,
+            TOTAL_VOLUME_FEE_IN_DECIMALS.with(|n| *n.borrow()),
+        );
+    }
+    TOTAL_VOLUME.with(|n| *n.borrow_mut() = total_volume);
+}
+
+fn f64_saturating_add(a: f64, b: f64) -> f64 {
+    let sum = a + b;
+
+    if sum.is_infinite() && sum.is_sign_positive() {
+        // If positive infinity, clamp to f64::MAX
+        f64::MAX
+    } else if sum.is_infinite() && sum.is_sign_negative() {
+        // If negative infinity, clamp to f64::MIN
+        f64::MIN
+    } else {
+        // Otherwise, return the regular sum
+        sum
+    }
+}
+
+#[cfg(not(feature = "u256-tokens"))]
+fn tokens_to_f64(tokens: Tokens) -> f64 {
+    tokens.to_u64() as f64
+}
+
+#[cfg(feature = "u256-tokens")]
+fn tokens_to_f64(tokens: Tokens) -> f64 {
+    tokens.to_u256().as_f64()
 }
 
 #[query(hidden = true, decoding_quota = 10000)]
@@ -670,7 +761,8 @@ fn execute_transfer_not_async(
             )
         };
 
-        let (block_idx, _) = apply_transaction_no_trimming(ledger, tx, now, effective_fee)?;
+        let (block_idx, _) = apply_transaction(ledger, tx, now, effective_fee)?;
+        update_total_volume(amount, effective_fee != Tokens::zero());
         Ok(block_idx)
     })
 }
@@ -772,6 +864,10 @@ fn supported_standards() -> Vec<StandardRecord> {
             url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-3".to_string(),
         },
         StandardRecord {
+            name: "ICRC-10".to_string(),
+            url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-10/ICRC-10.md".to_string(),
+        },
+        StandardRecord {
             name: "ICRC-21".to_string(),
             url: "https://github.com/dfinity/wg-identity-authentication/blob/main/topics/ICRC-21/icrc_21_consent_msg.md".to_string(),
         },
@@ -782,6 +878,7 @@ fn supported_standards() -> Vec<StandardRecord> {
 #[query]
 #[candid_method(query)]
 fn get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse {
+    panic_if_not_ready();
     let (start, length) = req
         .as_start_and_length()
         .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
@@ -792,6 +889,7 @@ fn get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse {
 #[query]
 #[candid_method(query)]
 fn get_blocks(req: GetBlocksRequest) -> GetBlocksResponse {
+    panic_if_not_ready();
     let (start, length) = req
         .as_start_and_length()
         .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
@@ -801,6 +899,7 @@ fn get_blocks(req: GetBlocksRequest) -> GetBlocksResponse {
 #[query]
 #[candid_method(query)]
 fn get_data_certificate() -> DataCertificate {
+    panic_if_not_ready();
     let hash_tree = Access::with_ledger(|ledger| ledger.construct_hash_tree());
     let mut tree_buf = vec![];
     ciborium::ser::into_writer(&hash_tree, &mut tree_buf).unwrap();
@@ -867,7 +966,7 @@ fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<u64, A
             memo: arg.memo,
         };
 
-        let (block_idx, _) = apply_transaction_no_trimming(ledger, tx, now, expected_fee_tokens)
+        let (block_idx, _) = apply_transaction(ledger, tx, now, expected_fee_tokens)
             .map_err(convert_transfer_error)
             .map_err(|err| {
                 let err: ApproveError = match err.try_into() {
@@ -878,6 +977,8 @@ fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<u64, A
             })?;
         Ok(block_idx)
     })?;
+
+    update_total_volume(Tokens::zero(), true);
 
     Ok(block_idx)
 }
@@ -919,6 +1020,7 @@ fn icrc3_get_archives(args: GetArchivesArgs) -> GetArchivesResult {
 #[query]
 #[candid_method(query)]
 fn icrc3_get_tip_certificate() -> Option<ICRC3DataCertificate> {
+    panic_if_not_ready();
     let certificate = ByteBuf::from(ic_cdk::api::data_certificate()?);
     let hash_tree = Access::with_ledger(|ledger| ledger.construct_hash_tree());
     let mut tree_buf = vec![];
@@ -961,6 +1063,7 @@ fn icrc3_supported_block_types() -> Vec<icrc_ledger_types::icrc3::blocks::Suppor
 #[query]
 #[candid_method(query)]
 fn icrc3_get_blocks(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
+    panic_if_not_ready();
     Access::with_ledger(|ledger| ledger.icrc3_get_blocks(args))
 }
 

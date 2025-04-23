@@ -46,6 +46,7 @@ use registry_canister::mutations::{
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
+    do_update_api_boundary_nodes_version::UpdateApiBoundaryNodesVersionPayload,
 };
 use slog::{info, Logger};
 use std::{convert::TryFrom, time::Duration};
@@ -594,7 +595,6 @@ pub async fn submit_create_application_subnet_proposal(
         max_number_of_canisters: 4,
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
-        ecdsa_config: None,
         chain_key_config: None,
         // Unused section follows
         ingress_bytes_per_block_soft_cap: Default::default(),
@@ -745,4 +745,44 @@ pub async fn submit_update_nodes_hostos_version_proposal(
     )
     .await
     .expect("submit_update_nodes_hostos_version_proposal failed")
+}
+
+/// Submits a proposal for updating replica software version of the specified
+/// API boundary nodes.
+///
+/// # Arguments
+///
+/// * `governance`          - Governance canister
+/// * `sender`              - Sender of the proposal
+/// * `neuron_id`           - ID of the proposing neuron. This neuron will
+///   automatically vote in favor of the proposal.
+/// * `node_ids`            - Node IDs of the API BNs that should be upgraded.
+/// * `version`             - Replica software version
+///
+/// Eventually returns the identifier of the newly submitted proposal.
+pub async fn submit_update_api_boundary_node_version_proposal(
+    governance: &Canister<'_>,
+    sender: Sender,
+    neuron_id: NeuronId,
+    node_ids: Vec<NodeId>,
+    version: String,
+) -> ProposalId {
+    submit_external_update_proposal_allowing_error(
+        governance,
+        sender,
+        neuron_id,
+        NnsFunction::DeployGuestosToSomeApiBoundaryNodes,
+        UpdateApiBoundaryNodesVersionPayload {
+            node_ids: node_ids.clone(),
+            version: version.clone(),
+        },
+        format!(
+            "Update API boundary nodes ({}) to version {}",
+            node_ids.into_iter().join(", "),
+            version.clone()
+        ),
+        "".to_string(),
+    )
+    .await
+    .expect("submit_update_api_boundary_node_version_proposal failed")
 }

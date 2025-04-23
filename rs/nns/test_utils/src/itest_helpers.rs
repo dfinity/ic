@@ -14,16 +14,10 @@ use canister_test::{
 use cycles_minting_canister::CyclesCanisterInitPayload;
 use dfn_candid::{candid_one, CandidOne};
 use futures::{future::join_all, FutureExt};
-use ic_base_types::CanisterId;
 use ic_canister_client_sender::Sender;
 use ic_config::Config;
-use ic_management_canister_types::CanisterInstallMode;
-use ic_nervous_system_clients::{
-    canister_id_record::CanisterIdRecord,
-    canister_status::{CanisterStatusResult, CanisterStatusType},
-};
+use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
-use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::{
     init::LifelineCanisterInitPayload,
     types::{NeuronId, ProposalId},
@@ -49,7 +43,9 @@ use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayload;
 use std::{future::Future, path::Path, thread, time::SystemTime};
 
-/// All the NNS canisters that exist at genesis.
+/// All the NNS canisters that are use in tests, but not all canisters
+/// on NNS mainnet (there are 4 ledger archives, for example and a ledger index that aren't tested
+/// using this struct)
 #[derive(Clone)]
 pub struct NnsCanisters<'a> {
     // Canisters here are listed in creation order.
@@ -268,7 +264,7 @@ impl NnsCanisters<'_> {
         }
     }
 
-    pub fn all_canisters(&self) -> [&Canister<'_>; NUM_NNS_CANISTERS] {
+    pub fn all_canisters(&self) -> [&Canister<'_>; 10] {
         [
             &self.registry,
             &self.governance,
@@ -448,10 +444,7 @@ pub async fn install_rust_canister_from_path<P: AsRef<Path>>(
 /// Compiles the governance canister, builds it's initial payload and installs
 /// it
 pub async fn install_governance_canister(canister: &mut Canister<'_>, init_payload: Governance) {
-    let mut serialized = Vec::new();
-    init_payload
-        .encode(&mut serialized)
-        .expect("Couldn't serialize init payload.");
+    let serialized = Encode!(&init_payload).expect("Couldn't serialize init payload.");
     install_rust_canister(canister, "governance-canister", &["test"], Some(serialized)).await;
 }
 
@@ -640,6 +633,10 @@ pub async fn install_sns_wasm_canister(
     install_rust_canister(canister, "sns-wasm-canister", &[], Some(encoded)).await;
 }
 
+pub async fn install_node_rewards_canister(canister: &mut Canister<'_>) {
+    install_rust_canister(canister, "node-rewards-canister", &[], None).await;
+}
+
 /// Creates and installs the sns_wasm canister.
 ///
 /// Use None for `cycles` to get max_cycles of normal NNS canisters when not testing cycle-dependent
@@ -714,207 +711,6 @@ pub async fn maybe_upgrade_to_self(canister: &mut Canister<'_>, scenario: Upgrad
     if UpgradeTestingScenario::Always == scenario {
         canister.upgrade_to_self_binary(Vec::new()).await.unwrap()
     }
-}
-
-fn is_gzipped_blob(blob: &[u8]) -> bool {
-    (blob.len() > 4)
-        // Has magic bytes.
-        && (blob[0..2] == [0x1F, 0x8B])
-}
-
-/// Bumps the gzip timestamp of the provided gzipped Wasm.
-/// Results in a functionally identical binary.
-pub fn bump_gzip_timestamp(wasm: &Wasm) -> Wasm {
-    // wasm is gzipped and the subslice [4..8]
-    // is the little endian representation of a timestamp
-    // so we just increment that timestamp
-    let mut new_wasm = wasm.clone().bytes();
-    assert!(is_gzipped_blob(&new_wasm));
-    let t = u32::from_le_bytes(new_wasm[4..8].try_into().unwrap());
-    new_wasm[4..8].copy_from_slice(&(t + 1).to_le_bytes());
-    Wasm::from_bytes(new_wasm)
-}
-
-/// Perform a change on a canister by upgrading it or
-/// reinstalling entirely, depending on the `how` argument.
-/// Argument `wasm` is ensured to have a different
-/// hash relative to the current binary.
-/// In argument `arg` additional arguments can be provided
-/// that serve as input to the upgrade hook or as init arguments
-/// to the fresh installation.
-///
-/// This is an internal method.
-async fn change_nns_canister_by_proposal(
-    how: CanisterInstallMode,
-    canister_id: CanisterId,
-    governance: &Canister<'_>,
-    root: &Canister<'_>,
-    stop_before_installing: bool,
-    wasm: Wasm,
-    arg: Option<Vec<u8>>,
-) {
-    let wasm = wasm.bytes();
-    let new_module_hash = &ic_crypto_sha2::Sha256::hash(&wasm);
-
-    let status: CanisterStatusResult = root
-        .update_(
-            "canister_status",
-            candid_one,
-            CanisterIdRecord::from(canister_id),
-        )
-        .await
-        .unwrap();
-    let old_module_hash = status.module_hash.unwrap();
-    assert_ne!(old_module_hash.as_slice(), new_module_hash, "change_nns_canister_by_proposal: both module hashes prev, cur are the same {:?}, but they should be different for upgrade", old_module_hash);
-
-    let change_canister_request =
-        ChangeCanisterRequest::new(stop_before_installing, how, canister_id)
-            .with_memory_allocation(memory_allocation_of(canister_id))
-            .with_wasm(wasm);
-    let change_canister_request = if let Some(arg) = arg {
-        change_canister_request.with_arg(arg)
-    } else {
-        change_canister_request
-    };
-
-    // Submitting a proposal also implicitly records a vote from the proposer,
-    // which with TEST_NEURON_1 is enough to trigger execution.
-    submit_external_update_proposal(
-        governance,
-        Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
-        NeuronId(TEST_NEURON_1_ID),
-        NnsFunction::NnsCanisterUpgrade,
-        change_canister_request,
-        "Upgrade NNS Canister".to_string(),
-        "<proposal created by change_nns_canister_by_proposal>".to_string(),
-    )
-    .await;
-
-    // Wait 'till the hash matches and the canister is running again.
-    loop {
-        let status: CanisterStatusResult = root
-            .update_(
-                "canister_status",
-                candid_one,
-                CanisterIdRecord::from(canister_id),
-            )
-            .await
-            .unwrap();
-        if status.module_hash.unwrap().as_slice() == new_module_hash
-            && status.status == CanisterStatusType::Running
-        {
-            break;
-        }
-    }
-}
-
-/// Upgrade the given root-controlled canister to the specified Wasm module.
-/// This should only be called in NNS integration tests, where the NNS
-/// canisters have their expected IDs.
-///
-/// This goes through MANY rounds of consensus, so expect it to be slow!
-///
-/// WARNING: this calls `execute_eligible_proposals` on the governance canister,
-/// so it may have side effects!
-pub async fn upgrade_nns_canister_by_proposal(
-    canister: &Canister<'_>,
-    governance: &Canister<'_>,
-    root: &Canister<'_>,
-    stop_before_installing: bool,
-    wasm: Wasm,
-) {
-    change_nns_canister_by_proposal(
-        CanisterInstallMode::Upgrade,
-        canister.canister_id(),
-        governance,
-        root,
-        stop_before_installing,
-        wasm,
-        None,
-    )
-    .await
-}
-
-/// Upgrades an nns canister via proposal, with an argument.
-pub async fn upgrade_nns_canister_with_arg_by_proposal(
-    canister: &Canister<'_>,
-    governance: &Canister<'_>,
-    root: &Canister<'_>,
-    wasm: Wasm,
-    arg: Vec<u8>,
-) {
-    change_nns_canister_by_proposal(
-        CanisterInstallMode::Upgrade,
-        canister.canister_id(),
-        governance,
-        root,
-        false,
-        wasm,
-        Some(arg),
-    )
-    .await
-}
-
-/// Propose and execute the fresh reinstallation of the canister. Wasm
-/// and initialisation arguments can be specified.
-/// This should only be called in NNS integration tests, where the NNS
-/// canisters have their expected IDs.
-///
-/// WARNING: this calls `execute_eligible_proposals` on the governance canister,
-/// so it may have side effects!
-pub async fn reinstall_nns_canister_by_proposal(
-    canister: &Canister<'_>,
-    governance: &Canister<'_>,
-    root: &Canister<'_>,
-    wasm: Wasm,
-    arg: Vec<u8>,
-) {
-    change_nns_canister_by_proposal(
-        CanisterInstallMode::Reinstall,
-        canister.canister_id(),
-        governance,
-        root,
-        true,
-        bump_gzip_timestamp(&wasm),
-        Some(arg),
-    )
-    .await
-}
-
-/// Depending on the testing scenario, upgrade the given root-controlled
-/// canister to itself, or do nothing. This should only be called in NNS
-/// integration tests, where the NNS canisters have their expected IDs.
-///
-/// This goes through MANY rounds of consensus, so expect it to be slow!
-///
-/// WARNING: this calls `execute_eligible_proposals` on the governance canister,
-/// so it may have side effects!
-pub async fn maybe_upgrade_root_controlled_canister_to_self(
-    // nns_canisters is NOT passed by reference because of the canister to upgrade,
-    // for which we have a mutable borrow.
-    nns_canisters: NnsCanisters<'_>,
-    canister: &mut Canister<'_>,
-    stop_before_installing: bool,
-    scenario: UpgradeTestingScenario,
-) {
-    if UpgradeTestingScenario::Always != scenario {
-        return;
-    }
-
-    // Copy the wasm of the canister to upgrade. We'll need it to upgrade back to
-    // it. To observe that the upgrade happens, we need to make the binary different
-    // post-upgrade.
-    let wasm = bump_gzip_timestamp(canister.wasm().unwrap());
-    let wasm_clone = wasm.clone().bytes();
-    upgrade_nns_canister_by_proposal(
-        canister,
-        &nns_canisters.governance,
-        &nns_canisters.root,
-        stop_before_installing,
-        wasm,
-    )
-    .await;
-    canister.set_wasm(wasm_clone);
 }
 
 const UNIVERSAL_CANISTER_YEAH_RESPONSE: &[u8] = b"It worked";

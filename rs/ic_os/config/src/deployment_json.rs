@@ -40,6 +40,11 @@ pub struct Resources {
     #[serde(skip_serializing_if = "Option::is_none")]
     /// Can be "kvm" or "qemu". If None, is treated as "kvm".
     pub cpu: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Maximum number of virtual CPUs allocated for the GuestOS,
+    /// which must be between 1 and the maximum supported by the hypervisor.
+    /// If None, defaults to 64.
+    pub nr_of_vcpus: Option<u32>,
 }
 
 pub fn get_deployment_settings(deployment_json: &Path) -> Result<DeploymentSettings> {
@@ -96,7 +101,8 @@ mod test {
               },
               "resources": {
                 "memory": "490",
-                "cpu": "kvm"
+                "cpu": "kvm",
+                "nr_of_vcpus": null
               }
             }
         )
@@ -115,7 +121,8 @@ mod test {
   },
   "resources": {
     "memory": "490",
-    "cpu": "kvm"
+    "cpu": "kvm",
+    "nr_of_vcpus": null
   }
 }"#;
 
@@ -137,44 +144,10 @@ mod test {
             resources: Resources {
                 memory: 490,
                 cpu: Some("kvm".to_string()),
+                nr_of_vcpus: None,
             },
         }
     });
-
-    const DEPLOYMENT_STR_NO_LOGGING_HOSTS: &str = r#"{
-      "deployment": {
-        "name": "mainnet",
-        "mgmt_mac": null
-      },
-      "logging": {
-        "hosts": ""
-      },
-      "nns": {
-        "url": "https://wiki.internetcomputer.org/"
-      },
-      "resources": {
-        "memory": "490",
-        "cpu": "kvm"
-      }
-    }"#;
-
-    static DEPLOYMENT_STRUCT_NO_LOGGING_HOSTS: Lazy<DeploymentSettings> =
-        Lazy::new(|| DeploymentSettings {
-            deployment: Deployment {
-                name: "mainnet".to_string(),
-                mgmt_mac: None,
-            },
-            logging: Logging {
-                hosts: Default::default(),
-            },
-            nns: Nns {
-                url: vec![Url::parse("https://wiki.internetcomputer.org").unwrap()],
-            },
-            resources: Resources {
-                memory: 490,
-                cpu: Some("kvm".to_string()),
-            },
-        });
 
     #[test]
     fn deserialize_deployment() {
@@ -188,9 +161,5 @@ mod test {
         let parsed_deployment = { serde_json::from_value(DEPLOYMENT_VALUE.clone()).unwrap() };
 
         assert_eq!(*DEPLOYMENT_STRUCT, parsed_deployment);
-
-        let parsed_deployment = { serde_json::from_str(DEPLOYMENT_STR_NO_LOGGING_HOSTS).unwrap() };
-
-        assert_eq!(*DEPLOYMENT_STRUCT_NO_LOGGING_HOSTS, parsed_deployment);
     }
 }

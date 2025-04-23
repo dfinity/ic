@@ -10,8 +10,8 @@ use std::os::raw::c_char;
 #[cfg(target_os = "linux")]
 use {
     nix::{
-        sys::ptrace, sys::ptrace::Options, sys::wait::waitpid, sys::wait::WaitStatus, unistd::fork,
-        unistd::ForkResult, unistd::Pid,
+        sys::ptrace, sys::ptrace::Options, sys::wait::waitpid, sys::wait::WaitPidFlag,
+        sys::wait::WaitStatus, unistd::fork, unistd::ForkResult, unistd::Pid,
     },
     procfs::process::Process,
     std::collections::BTreeSet,
@@ -90,8 +90,17 @@ where
             sandbox();
         }
         Ok(ForkResult::Parent { child }) => {
-            std::thread::sleep(std::time::Duration::from_secs(1));
             let allowed_syscalls: BTreeSet<Sysno> = BTreeSet::from([
+                // Init
+                Sysno::gettid,
+                Sysno::rt_sigprocmask,
+                Sysno::clone,
+                Sysno::sched_yield,
+                Sysno::sched_getaffinity,
+                Sysno::set_robust_list,
+                Sysno::prctl,
+                Sysno::getrandom, // probably due to hashbrown dependency
+                // Execution
                 Sysno::mmap,
                 Sysno::mprotect,
                 Sysno::munmap,
@@ -99,23 +108,34 @@ where
                 Sysno::sendmsg,
                 Sysno::sigaltstack,
                 Sysno::futex,
+                Sysno::fcntl,
                 Sysno::close,
                 Sysno::restart_syscall,
+                Sysno::write,
             ]);
-            let children = get_children(child.into());
-            let threads: Vec<_> = children
-                .iter()
-                .map(|child| {
-                    std::thread::spawn({
+
+            let mut threads: Vec<_> = vec![];
+            let mut visited = BTreeSet::new();
+            while let Ok(WaitStatus::StillAlive) = waitpid(child, Some(WaitPidFlag::WNOHANG)) {
+                let children = get_children(child.into());
+
+                for pid in children {
+                    if visited.contains(&pid) {
+                        continue;
+                    }
+
+                    visited.insert(pid);
+
+                    threads.push(std::thread::spawn({
                         let allowed_syscalls = allowed_syscalls.clone();
-                        let child = *child;
+                        let child = pid;
                         let name = name.to_string();
                         move || {
                             trace(name, Pid::from_raw(child), allowed_syscalls);
                         }
-                    })
-                })
-                .collect();
+                    }));
+                }
+            }
 
             for handle in threads {
                 handle.join().unwrap();

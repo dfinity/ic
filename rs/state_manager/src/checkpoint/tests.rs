@@ -3,7 +3,7 @@ use crate::{spawn_tip_thread, StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS}
 use ic_base_types::NumSeconds;
 use ic_config::state_manager::lsmt_config_default;
 use ic_logger::ReplicaLogger;
-use ic_management_canister_types::CanisterStatusType;
+use ic_management_canister_types_private::CanisterStatusType;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -64,7 +64,7 @@ fn mark_readonly(path: &std::path::Path) -> std::io::Result<()> {
 }
 
 fn make_checkpoint_and_get_state_impl(
-    state: &ReplicatedState,
+    state: &mut ReplicatedState,
     height: Height,
     tip_channel: &Sender<TipRequest>,
     log: &ReplicaLogger,
@@ -74,7 +74,7 @@ fn make_checkpoint_and_get_state_impl(
         height,
         tip_channel,
         &state_manager_metrics(log).checkpoint_metrics,
-        ic_config::state_manager::lsmt_config_default().lsmt_status,
+        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
     .unwrap_or_else(|err| {
         panic!(
@@ -92,7 +92,7 @@ fn make_checkpoint_and_get_state_impl(
 }
 
 fn make_checkpoint_and_get_state(
-    state: &ReplicatedState,
+    state: &mut ReplicatedState,
     height: Height,
     tip_channel: &Sender<TipRequest>,
     log: &ReplicaLogger,
@@ -128,7 +128,7 @@ fn can_make_a_checkpoint() {
             NumSeconds::from(100_000),
         ));
 
-        let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel, &log);
+        let _state = make_checkpoint_and_get_state(&mut state, HEIGHT, &tip_channel, &log);
 
         // Ensure that checkpoint data is now available via layout API.
         assert_eq!(layout.checkpoint_heights().unwrap(), vec![HEIGHT]);
@@ -198,11 +198,11 @@ fn scratchpad_dir_is_deleted_if_checkpointing_failed() {
         let expected_scratchpad_dir = root.join("tmp").join("scratchpad_000000000000002a");
 
         let replicated_state = make_unvalidated_checkpoint(
-            &state,
+            &mut state,
             HEIGHT,
             &tip_channel,
             &state_manager_metrics.checkpoint_metrics,
-            ic_config::state_manager::lsmt_config_default().lsmt_status,
+            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         );
 
         match replicated_state {
@@ -261,7 +261,7 @@ fn can_recover_from_a_checkpoint() {
         let own_subnet_type = SubnetType::Application;
         let mut state = ReplicatedState::new(subnet_test_id(1), own_subnet_type);
         state.put_canister_state(canister_state);
-        let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel, &log);
+        let _state = make_checkpoint_and_get_state(&mut state, HEIGHT, &tip_channel, &log);
 
         let recovered_state = load_checkpoint(
             &layout.checkpoint_verified(HEIGHT).unwrap(),
@@ -336,7 +336,7 @@ fn can_recover_an_empty_state() {
         let own_subnet_type = SubnetType::Application;
 
         let _state = make_checkpoint_and_get_state(
-            &ReplicatedState::new(subnet_test_id(1), own_subnet_type),
+            &mut ReplicatedState::new(subnet_test_id(1), own_subnet_type),
             HEIGHT,
             &tip_channel,
             &log,
@@ -445,7 +445,7 @@ fn can_recover_a_stopping_canister() {
         let own_subnet_type = SubnetType::Application;
         let mut state = ReplicatedState::new(subnet_test_id(1), own_subnet_type);
         state.put_canister_state(canister_state);
-        let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel, &log);
+        let _state = make_checkpoint_and_get_state(&mut state, HEIGHT, &tip_channel, &log);
 
         let recovered_state = load_checkpoint(
             &layout.checkpoint_verified(HEIGHT).unwrap(),
@@ -504,7 +504,7 @@ fn can_recover_a_stopped_canister() {
         let own_subnet_type = SubnetType::Application;
         let mut state = ReplicatedState::new(subnet_test_id(1), own_subnet_type);
         state.put_canister_state(canister_state);
-        let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel, &log);
+        let _state = make_checkpoint_and_get_state(&mut state, HEIGHT, &tip_channel, &log);
 
         let loaded_state = load_checkpoint(
             &layout.checkpoint_verified(HEIGHT).unwrap(),
@@ -557,7 +557,7 @@ fn can_recover_a_running_canister() {
         let own_subnet_type = SubnetType::Application;
         let mut state = ReplicatedState::new(subnet_test_id(1), own_subnet_type);
         state.put_canister_state(canister_state);
-        let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel, &log);
+        let _state = make_checkpoint_and_get_state(&mut state, HEIGHT, &tip_channel, &log);
 
         let recovered_state = load_checkpoint(
             &layout.checkpoint_verified(HEIGHT).unwrap(),
@@ -608,7 +608,7 @@ fn can_recover_subnet_queues() {
         );
 
         let original_state = state.clone();
-        let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel, &log);
+        let _state = make_checkpoint_and_get_state(&mut state, HEIGHT, &tip_channel, &log);
 
         let recovered_state = load_checkpoint(
             &layout.checkpoint_verified(HEIGHT).unwrap(),
@@ -657,7 +657,7 @@ fn empty_protobufs_are_loaded_correctly() {
         );
         state.put_canister_state(canister_state);
 
-        let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel, &log);
+        let _state = make_checkpoint_and_get_state(&mut state, HEIGHT, &tip_channel, &log);
 
         let recovered_state = load_checkpoint(
             &layout.checkpoint_verified(HEIGHT).unwrap(),

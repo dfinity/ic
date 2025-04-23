@@ -26,7 +26,7 @@ use ic_consensus_system_test_utils::{
     set_sandbox_env_vars,
 };
 use ic_recovery::nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs};
-use ic_recovery::{get_node_metrics, util::UploadMethod, RecoveryArgs};
+use ic_recovery::{get_node_metrics, util::DataLocation, RecoveryArgs};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
@@ -40,7 +40,7 @@ use slog::info;
 use std::convert::TryFrom;
 
 const DKG_INTERVAL: u64 = 9;
-const SUBNET_SIZE: usize = 3;
+const SUBNET_SIZE: usize = 4;
 
 pub fn setup(env: TestEnv) {
     InternetComputer::new()
@@ -128,7 +128,7 @@ pub fn test(env: TestEnv) {
         upgrade_image_url: get_ic_os_update_img_test_url().ok(),
         upgrade_image_hash: get_ic_os_update_img_test_sha256().ok(),
         download_node: Some(download_node.get_ip_addr()),
-        upload_method: Some(UploadMethod::Remote(upload_node.get_ip_addr())),
+        upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
         next_step: None,
     };
 
@@ -181,7 +181,7 @@ pub fn test(env: TestEnv) {
         // swap the two nodes, so that download one has highest height in the subnet
         subnet_recovery.params.download_node = Some(upload_node.get_ip_addr());
         subnet_recovery.params.upload_method =
-            Some(UploadMethod::Remote(download_node.get_ip_addr()));
+            Some(DataLocation::Remote(download_node.get_ip_addr()));
         subnet_recovery.recovery.admin_helper.nns_url = download_node.get_public_url();
     }
 

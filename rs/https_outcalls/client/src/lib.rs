@@ -16,8 +16,8 @@ use ic_types::{
     canister_http::{CanisterHttpRequest, CanisterHttpResponse},
     messages::CertificateDelegation,
 };
-use std::{convert::TryFrom, sync::Arc};
-use tokio::{net::UnixStream, sync::OnceCell};
+use std::convert::TryFrom;
+use tokio::{net::UnixStream, sync::watch};
 use tonic::transport::{Endpoint, Uri};
 use tower::service_fn;
 
@@ -29,7 +29,7 @@ pub fn setup_canister_http_client(
     max_canister_http_requests_in_flight: usize,
     log: ReplicaLogger,
     subnet_type: SubnetType,
-    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
+    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
 ) -> Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send> {
     match adapter_config.https_outcalls_uds_path {
         None => {
@@ -78,6 +78,7 @@ pub fn setup_canister_http_client(
                         metrics_registry.clone(),
                         subnet_type,
                         delegation_from_nns,
+                        log,
                     ))
                 }
                 Err(e) => {

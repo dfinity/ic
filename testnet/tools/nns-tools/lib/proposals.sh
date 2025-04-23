@@ -151,7 +151,7 @@ get too old. One reason to run recent builds is so that the next release
 does not have a huge amount of changes in it.'
         fi
     else
-        print_yellow 'No unreleased_changelog.md file for ${CANISTER_NAME}.' >&2
+        print_yellow "No unreleased_changelog.md found at ${UNRELEASED_CHANGELOG_PATH} for ${CANISTER_NAME} " >&2
         print_yellow 'The "Features & Fixes" section will need to be written by hand.' >&2
     fi
 
@@ -173,6 +173,10 @@ __Source code__: [$NEXT_COMMIT][new-commit]
 
 
 ## Features & Fixes
+
+TODO: Review this section. In particular, make sure that it matches the "New
+Commits" section, and does not contain anything extraneous from previous
+proposals. If it seems alright, simply delete this TODO.
 
 $FEATURES_AND_FIXES
 
@@ -319,6 +323,10 @@ __Source code__: [$NEXT_COMMIT][new-commit]
 [new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
 
 ## Features & Fixes
+
+TODO: Review this section. In particular, make sure that it matches the "New
+Commits" section, and does not contain anything extraneous from previous
+proposals. If it seems alright, simply delete this TODO.
 
 $FEATURES_AND_FIXES
 

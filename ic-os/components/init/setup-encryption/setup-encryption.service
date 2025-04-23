@@ -1,8 +1,7 @@
 [Unit]
 Description=Set up encrypted storage on first boot
 DefaultDependencies=no
-After=boot-config.mount
-Requires=boot-config.mount
+RequiresMountsFor=/boot/config
 Before=cryptsetup-pre.target
 Wants=cryptsetup-pre.target
 

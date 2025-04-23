@@ -18,6 +18,7 @@ package(default_visibility = ["//visibility:public"])
         version = "0.1.0",
         deps = [
             # Keep sorted.
+            "//packages/ic-error-types",
             "//packages/ic-ethereum-types",
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/ethereum/cketh/minter",
@@ -28,7 +29,6 @@ package(default_visibility = ["//visibility:public"])
             "//rs/state_machine_tests",
             "//rs/test_utilities/load_wasm",
             "//rs/types/base_types",
-            "//rs/types/error_types",
             "//rs/types/management_canister_types",
             "//rs/types/types",
             "@crate_index//:assert_matches",

@@ -59,7 +59,6 @@ system_test(
     env = NNS_CANISTER_ENV | SNS_CANISTER_ENV | {
         "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
     },
-    flaky = True,
     # TODO[NNS1-2658]: re-enable this test
     tags = [
         "manual",

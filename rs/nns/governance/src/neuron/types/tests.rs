@@ -2,20 +2,141 @@ use super::*;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{
+        self as pb,
         manage_neuron::{SetDissolveTimestamp, StartDissolving},
         VotingPowerEconomics,
     },
-    temporarily_disable_private_neuron_enforcement, temporarily_disable_voting_power_adjustment,
-    temporarily_enable_private_neuron_enforcement, temporarily_enable_voting_power_adjustment,
 };
 use ic_cdk::println;
-
 use ic_nervous_system_common::{E8, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS};
 use icp_ledger::Subaccount;
+use maplit::hashmap;
+use pretty_assertions::assert_eq;
 
 const NOW: u64 = 123_456_789;
 
 const TWELVE_MONTHS_SECONDS: u64 = 30 * 12 * 24 * 60 * 60;
+
+/// Our main goal here is to make sure that recent_ballots is populated
+/// correctly.
+#[test]
+fn test_neuron_into_api() {
+    // Step 1: Prepare "the world". In this case, that just consists of
+    // constructing a native Neuron.
+
+    let some_timestamp_seconds = 1738239721;
+
+    let dissolve_state_and_age = DissolveStateAndAge::NotDissolving {
+        dissolve_delay_seconds: 100,
+        aging_since_timestamp_seconds: some_timestamp_seconds + 30,
+    };
+
+    let mut original_neuron = NeuronBuilder::new(
+        NeuronId { id: 7 },
+        Subaccount::try_from(vec![8_u8; 32].as_slice()).unwrap(),
+        PrincipalId::new_user_test_id(9),
+        dissolve_state_and_age,
+        some_timestamp_seconds + 3, // created_timestamp_seconds
+    )
+    .build();
+
+    // Add ballots.
+    for i in 0..10 {
+        let proposal_id = Some(ProposalId { id: 123_000 + i });
+
+        original_neuron.recent_ballots.push(pb::BallotInfo {
+            proposal_id,
+            vote: Vote::No as i32,
+        });
+    }
+    original_neuron.recent_ballots_next_entry_index = Some(3);
+
+    // Step 2: run code under test.
+    let api_neuron = original_neuron
+        .clone()
+        .into_api(some_timestamp_seconds + 99, &VotingPowerEconomics::DEFAULT);
+
+    // Step 3: Inspect result(s).
+
+    // Survives round trip.
+    assert_eq!(
+        Neuron {
+            // This is checked separately.
+            recent_ballots: vec![],
+            ..Neuron::try_from(api_neuron.clone()).unwrap()
+        },
+        Neuron {
+            recent_ballots: vec![],
+            recent_ballots_next_entry_index: None,
+            visibility: Visibility::Private,
+            ..original_neuron.clone()
+        }
+    );
+
+    // Verify most fields, or at least, the interesting ones.
+    let potential_voting_power =
+        Some(original_neuron.potential_voting_power(some_timestamp_seconds + 99));
+    let deciding_voting_power = Some(
+        original_neuron
+            .deciding_voting_power(&VotingPowerEconomics::DEFAULT, some_timestamp_seconds + 99),
+    );
+    assert_eq!(
+        api::Neuron {
+            recent_ballots: vec![],
+            ..api_neuron.clone()
+        },
+        api::Neuron {
+            // Fields with "interesting" values.
+            id: Some(NeuronId { id: 7 }),
+            account: vec![8_u8; 32],
+            controller: Some(PrincipalId::new_user_test_id(9)),
+            dissolve_state: Some(api::neuron::DissolveState::DissolveDelaySeconds(100)),
+            aging_since_timestamp_seconds: some_timestamp_seconds + 30,
+            created_timestamp_seconds: some_timestamp_seconds + 3,
+            visibility: Some(Visibility::Private as i32),
+            voting_power_refreshed_timestamp_seconds: Some(some_timestamp_seconds + 3),
+
+            // Other fields have default value.
+            hot_keys: vec![],
+            cached_neuron_stake_e8s: 0,
+            neuron_fees_e8s: 0,
+            spawn_at_timestamp_seconds: None,
+            followees: hashmap! {},
+            recent_ballots: vec![],
+            kyc_verified: false,
+            transfer: None,
+            maturity_e8s_equivalent: 0,
+            staked_maturity_e8s_equivalent: None,
+            auto_stake_maturity: None,
+            not_for_profit: false,
+            joined_community_fund_timestamp_seconds: None,
+            known_neuron_data: None,
+            neuron_type: None,
+            potential_voting_power,
+            deciding_voting_power,
+        },
+    );
+
+    // In particular, recent_ballots_next_entry_index is used (indirectly) during conversion.
+    let expected_proposal_ids = vec![
+        123_002, 123_001, 123_000, 123_009, 123_008, 123_007, 123_006, 123_005, 123_004, 123_003,
+    ];
+    assert_eq!(expected_proposal_ids.len(), 10);
+    assert_eq!(
+        api_neuron.recent_ballots,
+        expected_proposal_ids
+            .into_iter()
+            .map(|id| {
+                let proposal_id = Some(ProposalId { id });
+
+                api::BallotInfo {
+                    proposal_id,
+                    vote: Vote::No as i32,
+                }
+            })
+            .collect::<Vec<_>>(),
+    );
+}
 
 #[test]
 fn test_dissolve_state_and_age_conversion() {
@@ -437,63 +558,38 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
     );
 
     // Case 1: visibility is explicitly set.
-    for set_enforcement in [
-        temporarily_enable_private_neuron_enforcement,
-        temporarily_disable_private_neuron_enforcement,
-    ] {
-        let _restore_on_drop = set_enforcement();
+    for visibility in [Visibility::Public, Visibility::Private] {
+        let neuron = builder.clone().with_visibility(visibility).build();
 
-        for visibility in [Visibility::Public, Visibility::Private] {
-            let neuron = builder.clone().with_visibility(Some(visibility)).build();
+        assert_eq!(neuron.visibility(), visibility);
 
-            assert_eq!(neuron.visibility(), Some(visibility),);
+        let neuron_info = neuron.get_neuron_info(
+            &VotingPowerEconomics::DEFAULT,
+            timestamp_seconds,
+            principal_id,
+        );
+        assert_eq!(neuron_info.visibility, Some(visibility as i32),);
 
-            let neuron_info = neuron.get_neuron_info(
-                &VotingPowerEconomics::DEFAULT,
-                timestamp_seconds,
-                principal_id,
-            );
-            assert_eq!(neuron_info.visibility, Some(visibility as i32),);
-
-            let neuron_proto = neuron.into_proto(&VotingPowerEconomics::DEFAULT, timestamp_seconds);
-            assert_eq!(neuron_proto.visibility, Some(visibility as i32),);
-        }
+        assert_eq!(pb::Neuron::from(neuron).visibility, Some(visibility as i32),);
     }
 
     // Case 2: visibility is not set.
+
     let neuron = builder.clone().build();
-    {
-        let _restore_on_drop = temporarily_disable_private_neuron_enforcement();
 
-        assert_eq!(neuron.visibility(), None,);
+    assert_eq!(neuron.visibility(), Visibility::Private);
 
-        let neuron_info = neuron.get_neuron_info(
-            &VotingPowerEconomics::DEFAULT,
-            timestamp_seconds,
-            principal_id,
-        );
-        assert_eq!(neuron_info.visibility, None,);
+    let neuron_info = neuron.get_neuron_info(
+        &VotingPowerEconomics::DEFAULT,
+        timestamp_seconds,
+        principal_id,
+    );
+    assert_eq!(neuron_info.visibility, Some(Visibility::Private as i32),);
 
-        let neuron_proto = neuron
-            .clone()
-            .into_proto(&VotingPowerEconomics::DEFAULT, timestamp_seconds);
-        assert_eq!(neuron_proto.visibility, None,);
-    }
-    {
-        let _restore_on_drop = temporarily_enable_private_neuron_enforcement();
-
-        assert_eq!(neuron.visibility(), Some(Visibility::Private),);
-
-        let neuron_info = neuron.get_neuron_info(
-            &VotingPowerEconomics::DEFAULT,
-            timestamp_seconds,
-            principal_id,
-        );
-        assert_eq!(neuron_info.visibility, Some(Visibility::Private as i32),);
-
-        let neuron_proto = neuron.into_proto(&VotingPowerEconomics::DEFAULT, timestamp_seconds);
-        assert_eq!(neuron_proto.visibility, Some(Visibility::Private as i32),);
-    }
+    assert_eq!(
+        pb::Neuron::from(neuron).visibility,
+        Some(Visibility::Private as i32),
+    );
 
     // Case 3: Known neurons are always public.
     let neuron = builder
@@ -502,32 +598,24 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
             description: Some("neuron description".to_string()),
         }))
         .build();
-    for set_enforcement in [
-        temporarily_enable_private_neuron_enforcement,
-        temporarily_disable_private_neuron_enforcement,
-    ] {
-        let _restore_on_drop = set_enforcement();
 
-        assert_eq!(neuron.visibility(), Some(Visibility::Public),);
+    assert_eq!(neuron.visibility(), Visibility::Public);
 
-        let neuron_info = neuron.get_neuron_info(
-            &VotingPowerEconomics::DEFAULT,
-            timestamp_seconds,
-            principal_id,
-        );
-        assert_eq!(neuron_info.visibility, Some(Visibility::Public as i32),);
+    let neuron_info = neuron.get_neuron_info(
+        &VotingPowerEconomics::DEFAULT,
+        timestamp_seconds,
+        principal_id,
+    );
+    assert_eq!(neuron_info.visibility, Some(Visibility::Public as i32),);
 
-        let neuron_proto = neuron
-            .clone()
-            .into_proto(&VotingPowerEconomics::DEFAULT, timestamp_seconds);
-        assert_eq!(neuron_proto.visibility, Some(Visibility::Public as i32),);
-    }
+    assert_eq!(
+        pb::Neuron::from(neuron.clone()).visibility,
+        Some(Visibility::Public as i32),
+    );
 }
 
 #[test]
-fn test_adjust_voting_power_enabled() {
-    let _restore_on_drop = temporarily_enable_voting_power_adjustment();
-
+fn test_adjust_voting_power() {
     let principal_id = PrincipalId::new_user_test_id(42);
     let created_timestamp_seconds = 1729791574;
 
@@ -616,44 +704,6 @@ fn test_adjust_voting_power_enabled() {
         assert_eq!(
             neuron.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now_seconds),
             0
-        );
-    }
-}
-
-#[test]
-fn test_adjust_voting_power_disabled() {
-    let _restore_on_drop = temporarily_disable_voting_power_adjustment();
-
-    let principal_id = PrincipalId::new_user_test_id(42);
-    let created_timestamp_seconds = 1729791574;
-
-    let neuron = NeuronBuilder::new(
-        NeuronId { id: 42 },
-        Subaccount::try_from(vec![42u8; 32].as_slice()).unwrap(),
-        principal_id,
-        DissolveStateAndAge::NotDissolving {
-            dissolve_delay_seconds: 12 * ONE_MONTH_SECONDS,
-            aging_since_timestamp_seconds: created_timestamp_seconds + 42,
-        },
-        created_timestamp_seconds, // created
-    )
-    .with_cached_neuron_stake_e8s(100 * E8)
-    .build();
-    let original_potential_voting_power = neuron.potential_voting_power(created_timestamp_seconds);
-    assert!(original_potential_voting_power > 0);
-
-    // At all times, deciding voting power is exactly the same as potential
-    // voting power, because adjustment is disabled.
-    for months in [
-        0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 6.001, 6.1, 6.25, 6.5, 6.75, 6.9, 6.999, 7.0, 7.001,
-        7.1, 7.25, 7.5, 8.0, 9.0, 10.0,
-    ] {
-        let now_seconds = created_timestamp_seconds + (months * ONE_MONTH_SECONDS as f64) as u64;
-        let current_potential_voting_power = neuron.potential_voting_power(now_seconds);
-
-        assert_eq!(
-            neuron.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now_seconds),
-            current_potential_voting_power,
         );
     }
 }

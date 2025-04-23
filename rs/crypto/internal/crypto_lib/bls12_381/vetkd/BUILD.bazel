@@ -5,7 +5,6 @@ package(default_visibility = ["//rs/crypto:__subpackages__"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//packages/ic-sha3",
     "//rs/crypto/internal/crypto_lib/bls12_381/type",
     "@crate_index//:rand",
 ]

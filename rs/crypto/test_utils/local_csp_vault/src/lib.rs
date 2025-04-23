@@ -52,6 +52,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgTranscriptOperation,
 };
+use ic_types::crypto::vetkd::VetKdDerivationContext;
 use ic_types::crypto::vetkd::VetKdEncryptedKeyShareContent;
 use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
@@ -227,9 +228,9 @@ mock! {
             &self,
             key_id: KeyId,
             master_public_key: Vec<u8>,
-            encryption_public_key: Vec<u8>,
-            derivation_path: ExtendedDerivationPath,
-            derivation_id: Vec<u8>,
+            transport_public_key: Vec<u8>,
+            context: VetKdDerivationContext,
+            input: Vec<u8>,
         ) -> Result<VetKdEncryptedKeyShareContent, VetKdEncryptedKeyShareCreationVaultError>;
     }
 

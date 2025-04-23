@@ -34,6 +34,7 @@ type DefiniteCanisterSettings = record {
 type LogVisibility = variant {
     controllers;
     public;
+    allowed_viewers : vec principal;
 };
 
 type RetrieveBtcArgs = record {
@@ -207,6 +208,9 @@ type InitArgs = record {
 
     /// The canister id of the KYT canister (deprecated, use btc_checker_principal instead).
     kyt_principal: opt principal;
+
+    /// The expiration duration (in seconds) for cached entries in the get_utxos cache.
+    get_utxos_cache_expiration_seconds: opt nat64;
 };
 
 // The upgrade parameters of the minter canister.
@@ -236,6 +240,9 @@ type UpgradeArgs = record {
 
     /// The canister id of the KYT canister (deprecated, use btc_checker_principal instead).
     kyt_principal: opt principal;
+
+    /// The expiration duration (in seconds) for cached entries in the get_utxos cache.
+    get_utxos_cache_expiration_seconds: opt nat64;
 };
 
 type RetrieveBtcStatus = variant {
@@ -399,6 +406,10 @@ type EventType = variant {
         utxo : Utxo;
         account : Account;
     };
+    checked_utxo_mint_unknown : record {
+        utxo : Utxo;
+        account : Account;
+    };
     ignored_utxo : record { utxo: Utxo; };
     suspended_utxo : record { utxo: Utxo; account: Account; reason: SuspendedReason };
     retrieve_btc_kyt_failed : record {
@@ -431,6 +442,7 @@ service : (minter_arg : MinterArg) -> {
     // endpoint.
     //
     // If the owner is not set, it defaults to the caller's principal.
+    // The resolved owner must be a non-anonymous principal.
     get_btc_address : (record { owner: opt principal; subaccount : opt blob }) -> (text);
 
     // Returns UTXOs of the given account known by the minter (with no

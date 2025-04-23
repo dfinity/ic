@@ -50,11 +50,9 @@ if [ "${config_socks_proxy}" != "" ] && [ "${config_socks_proxy}" != "null" ]; t
     SOCKS_PROXY="${config_socks_proxy}"
 fi
 
-BITCOIN_NETWORK='"testnet"'
-DNS_SEEDS='"testnet-seed.bitcoin.jonasschnelli.ch",
-            "seed.tbtc.petertodd.org",
-            "seed.testnet.bitcoin.sprovoost.nl",
-            "testnet-seed.bluematt.me"'
+BITCOIN_NETWORK='"testnet4"'
+DNS_SEEDS='"seed.testnet4.bitcoin.sprovoost.nl",
+            "seed.testnet4.wiz.biz"'
 
 if [ "$MAINNET" = true ]; then
     BITCOIN_NETWORK='"bitcoin"'

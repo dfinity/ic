@@ -10,7 +10,7 @@ use ic_replicated_state::{
     EmbedderCache, NumWasmPages, PageIndex,
 };
 use ic_sys::{PageBytes, PAGE_SIZE};
-use ic_types::{methods::WasmMethod, NumInstructions};
+use ic_types::{methods::WasmMethod, NumBytes, NumInstructions};
 use ic_wasm_types::{BinaryEncodedWasm, WasmInstrumentationError};
 use serde::{Deserialize, Serialize};
 
@@ -48,6 +48,7 @@ pub struct WasmValidationDetails {
     pub wasm_metadata: WasmMetadata,
     pub largest_function_instruction_count: NumInstructions,
     pub max_complexity: Complexity,
+    pub code_section_size: NumBytes,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
@@ -217,9 +218,7 @@ fn validate_and_instrument(
         module,
         config.cost_to_compile_wasm_instruction,
         config.feature_flags.write_barrier,
-        config.feature_flags.wasm_native_stable_memory,
         config.metering_type,
-        config.subnet_type,
         config.dirty_page_overhead,
         max_wasm_memory_size,
         config.max_stable_memory_size,
@@ -249,6 +248,7 @@ fn compile_inner(
     let largest_function_instruction_count =
         wasm_validation_details.largest_function_instruction_count;
     let max_complexity = wasm_validation_details.max_complexity.0;
+    let code_section_size = wasm_validation_details.code_section_size;
 
     let is_wasm64 = module
         .get_export(crate::wasmtime_embedder::WASM_HEAP_MEMORY_NAME)
@@ -266,6 +266,7 @@ fn compile_inner(
             largest_function_instruction_count,
             compilation_time: timer.elapsed(),
             max_complexity,
+            code_section_size,
         },
         serialized_module,
     ))

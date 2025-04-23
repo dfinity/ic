@@ -4,17 +4,15 @@ mod errors;
 pub use errors::{CanisterBacktrace, CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
 use ic_error_types::UserError;
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
-use ic_sys::{PageBytes, PageIndex};
 use ic_types::{
     consensus::idkg::PreSigId,
-    crypto::canister_threshold_sig::MasterPublicKey,
+    crypto::{canister_threshold_sig::MasterPublicKey, threshold_sig::ni_dkg::NiDkgId},
     ingress::{IngressStatus, WasmResult},
     messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
-    CanisterLog, Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness,
-    ReplicaVersion, Time,
+    Cycles, ExecutionRound, Height, NumInstructions, Randomness, ReplicaVersion, Time,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -22,6 +20,7 @@ use std::{
     convert::{Infallible, TryFrom},
     fmt, ops,
     sync::Arc,
+    time::Duration,
 };
 use strum_macros::EnumIter;
 use thiserror::Error;
@@ -61,6 +60,9 @@ pub struct InstanceStats {
     /// Number of pages loaded by copying the data.
     pub wasm_copy_page_count: usize,
 
+    /// Total time spent in SIGSEGV handler for heap.
+    pub wasm_sigsegv_handler_duration: Duration,
+
     /// Number of accessed OS pages (4KiB) in stable memory.
     pub stable_accessed_pages: usize,
 
@@ -86,6 +88,9 @@ pub struct InstanceStats {
 
     /// Number of pages loaded by copying the data in stable memory.
     pub stable_copy_page_count: usize,
+
+    /// Total time spent in SIGSEGV handler for stable memory.
+    pub stable_sigsegv_handler_duration: Duration,
 }
 
 impl InstanceStats {
@@ -105,10 +110,10 @@ impl InstanceStats {
 pub enum SubnetAvailableMemoryError {
     InsufficientMemory {
         execution_requested: NumBytes,
-        message_requested: NumBytes,
+        guaranteed_response_message_requested: NumBytes,
         wasm_custom_sections_requested: NumBytes,
         available_execution: i64,
-        available_messages: i64,
+        available_guaranteed_response_messages: i64,
         available_wasm_custom_sections: i64,
     },
 }
@@ -147,6 +152,8 @@ pub enum SystemApiCallId {
     CanisterCycleBalance,
     /// Tracker for `ic0.canister_cycle_balance128()`
     CanisterCycleBalance128,
+    /// Tracker for `ic0.canister_liquid_cycle_balance128()`
+    CanisterLiquidCycleBalance128,
     /// Tracker for `ic0.canister_self_copy()`
     CanisterSelfCopy,
     /// Tracker for `ic0.canister_self_size()`
@@ -157,6 +164,18 @@ pub enum SystemApiCallId {
     CanisterVersion,
     /// Tracker for `ic0.certified_data_set()`
     CertifiedDataSet,
+    /// Tracker for `ic0.cost_call()`
+    CostCall,
+    /// Tracker for `ic0.cost_create_canister()`
+    CostCreateCanister,
+    /// Tracker for `ic0.cost_http_request()`
+    CostHttpRequest,
+    /// Tracker for `ic0.cost_sign_with_ecdsa()`
+    CostSignWithEcdsa,
+    /// Tracker for `ic0.cost_sign_with_schnorr()`
+    CostSignWithSchnorr,
+    /// Tracker for `ic0.cost_vetkd_derive_key()`
+    CostVetkdDeriveKey,
     /// Tracker for `ic0.cycles_burn128()`
     CyclesBurn128,
     /// Tracker for `ic0.data_certificate_copy()`
@@ -219,6 +238,10 @@ pub enum SystemApiCallId {
     OutOfInstructions,
     /// Tracker for `ic0.performance_counter()`
     PerformanceCounter,
+    /// Tracker for `ic0.subnet_self_size()`
+    SubnetSelfSize,
+    /// Tracker for `ic0.subnet_self_copy()`
+    SubnetSelfCopy,
     /// Tracker for `ic0.stable64_grow()`
     Stable64Grow,
     /// Tracker for `ic0.stable64_read()`
@@ -253,6 +276,8 @@ pub struct SystemApiCallCounters {
     pub canister_cycle_balance: usize,
     /// Counter for `ic0.canister_cycle_balance128()`
     pub canister_cycle_balance128: usize,
+    /// Counter for `ic0.canister_liquid_cycle_balance128()`
+    pub canister_liquid_cycle_balance128: usize,
     /// Counter for `ic0.time()`
     pub time: usize,
 }
@@ -268,6 +293,9 @@ impl SystemApiCallCounters {
         self.canister_cycle_balance128 = self
             .canister_cycle_balance128
             .saturating_add(rhs.canister_cycle_balance128);
+        self.canister_liquid_cycle_balance128 = self
+            .canister_liquid_cycle_balance128
+            .saturating_add(rhs.canister_liquid_cycle_balance128);
         self.time = self.time.saturating_add(rhs.time);
     }
 }
@@ -286,8 +314,12 @@ pub struct SubnetAvailableMemory {
     /// The execution memory available on the subnet, i.e. the canister memory
     /// (Wasm binary, Wasm memory, stable memory) without message memory.
     execution_memory: i64,
-    /// The memory available for messages.
-    message_memory: i64,
+    /// The memory available for guaranteed response messages.
+    ///
+    /// As opposed to best-effort message memory (which can be reclaimed by shedding
+    /// messages) guaranteed response message memory must be reserved ahead of time
+    /// and is thus subject to availability.
+    guaranteed_response_message_memory: i64,
     /// The memory available for Wasm custom sections.
     wasm_custom_sections_memory: i64,
     /// Specifies the factor by which the subnet available memory was scaled
@@ -299,12 +331,12 @@ pub struct SubnetAvailableMemory {
 impl SubnetAvailableMemory {
     pub fn new(
         execution_memory: i64,
-        message_memory: i64,
+        guaranteed_response_message_memory: i64,
         wasm_custom_sections_memory: i64,
     ) -> Self {
         SubnetAvailableMemory {
             execution_memory,
-            message_memory,
+            guaranteed_response_message_memory,
             wasm_custom_sections_memory,
             // The newly created value is not scaled (divided), which
             // corresponds to the scaling factor of 1.
@@ -317,9 +349,9 @@ impl SubnetAvailableMemory {
         self.execution_memory
     }
 
-    /// Returns the memory available for messages.
-    pub fn get_message_memory(&self) -> i64 {
-        self.message_memory
+    /// Returns the memory available for guaranteed response messages.
+    pub fn get_guaranteed_response_message_memory(&self) -> i64 {
+        self.guaranteed_response_message_memory
     }
 
     /// Returns the memory available for Wasm custom sections, ignoring the
@@ -348,7 +380,7 @@ impl SubnetAvailableMemory {
     pub fn check_available_memory(
         &self,
         execution_requested: NumBytes,
-        message_requested: NumBytes,
+        guaranteed_response_message_requested: NumBytes,
         wasm_custom_sections_requested: NumBytes,
     ) -> Result<(), SubnetAvailableMemoryError> {
         let is_available =
@@ -358,7 +390,10 @@ impl SubnetAvailableMemory {
             };
 
         if is_available(execution_requested, self.execution_memory)
-            && is_available(message_requested, self.message_memory)
+            && is_available(
+                guaranteed_response_message_requested,
+                self.guaranteed_response_message_memory,
+            )
             && is_available(
                 wasm_custom_sections_requested,
                 self.wasm_custom_sections_memory,
@@ -368,10 +403,10 @@ impl SubnetAvailableMemory {
         } else {
             Err(SubnetAvailableMemoryError::InsufficientMemory {
                 execution_requested,
-                message_requested,
+                guaranteed_response_message_requested,
                 wasm_custom_sections_requested,
                 available_execution: self.execution_memory,
-                available_messages: self.message_memory,
+                available_guaranteed_response_messages: self.guaranteed_response_message_memory,
                 available_wasm_custom_sections: self.wasm_custom_sections_memory,
             })
         }
@@ -379,22 +414,23 @@ impl SubnetAvailableMemory {
 
     /// Try to use some memory capacity and fail if not enough is available.
     ///
-    /// `self.execution_memory`, `self.message_memory` and `self.wasm_custom_sections_memory`
+    /// `self.execution_memory`, `self.guaranteed_response_message_memory` and `self.wasm_custom_sections_memory`
     /// are independent of each other. However, this function will not allocate anything if
     /// there is not enough of either one of them (and return an error instead).
     pub fn try_decrement(
         &mut self,
         execution_requested: NumBytes,
-        message_requested: NumBytes,
+        guaranteed_response_message_requested: NumBytes,
         wasm_custom_sections_requested: NumBytes,
     ) -> Result<(), SubnetAvailableMemoryError> {
         self.check_available_memory(
             execution_requested,
-            message_requested,
+            guaranteed_response_message_requested,
             wasm_custom_sections_requested,
         )?;
         self.execution_memory -= execution_requested.get() as i64;
-        self.message_memory -= message_requested.get() as i64;
+        self.guaranteed_response_message_memory -=
+            guaranteed_response_message_requested.get() as i64;
         self.wasm_custom_sections_memory -= wasm_custom_sections_requested.get() as i64;
         Ok(())
     }
@@ -402,11 +438,11 @@ impl SubnetAvailableMemory {
     pub fn increment(
         &mut self,
         execution_amount: NumBytes,
-        message_amount: NumBytes,
+        guaranteed_response_message_amount: NumBytes,
         wasm_custom_sections_amount: NumBytes,
     ) {
         self.execution_memory += execution_amount.get() as i64;
-        self.message_memory += message_amount.get() as i64;
+        self.guaranteed_response_message_memory += guaranteed_response_message_amount.get() as i64;
         self.wasm_custom_sections_memory += wasm_custom_sections_amount.get() as i64;
     }
 
@@ -414,11 +450,11 @@ impl SubnetAvailableMemory {
     pub fn apply_reservation(
         &mut self,
         execution_amount: NumBytes,
-        message_amount: NumBytes,
+        guaranteed_response_message_amount: NumBytes,
         wasm_custom_sections_amount: NumBytes,
     ) {
         self.execution_memory += execution_amount.get() as i64;
-        self.message_memory += message_amount.get() as i64;
+        self.guaranteed_response_message_memory += guaranteed_response_message_amount.get() as i64;
         self.wasm_custom_sections_memory += wasm_custom_sections_amount.get() as i64;
     }
 
@@ -428,11 +464,11 @@ impl SubnetAvailableMemory {
     pub fn revert_reservation(
         &mut self,
         execution_amount: NumBytes,
-        message_amount: NumBytes,
+        guaranteed_response_message_amount: NumBytes,
         wasm_custom_sections_amount: NumBytes,
     ) {
         self.execution_memory -= execution_amount.get() as i64;
-        self.message_memory -= message_amount.get() as i64;
+        self.guaranteed_response_message_memory -= guaranteed_response_message_amount.get() as i64;
         self.wasm_custom_sections_memory -= wasm_custom_sections_amount.get() as i64;
     }
 }
@@ -443,7 +479,7 @@ impl ops::Div<i64> for SubnetAvailableMemory {
     fn div(self, rhs: i64) -> Self::Output {
         Self {
             execution_memory: self.execution_memory / rhs,
-            message_memory: self.message_memory / rhs,
+            guaranteed_response_message_memory: self.guaranteed_response_message_memory / rhs,
             wasm_custom_sections_memory: self.wasm_custom_sections_memory / rhs,
             scaling_factor: self.scaling_factor * rhs,
         }
@@ -539,7 +575,7 @@ pub trait OutOfInstructionsHandler {
 
     // Invoked only when a long execution dirties many memory pages to yield control
     // and start the copy only in a new slice. This is a performance improvement.
-    fn yield_for_dirty_memory_copy(&self, instruction_counter: i64) -> HypervisorResult<i64>;
+    fn yield_for_dirty_memory_copy(&self) -> HypervisorResult<i64>;
 }
 
 /// Indicates the type of stable memory API being used.
@@ -585,12 +621,6 @@ pub trait SystemApi {
 
     /// Returns the amount of instructions needed to copy `num_bytes`.
     fn get_num_instructions_from_bytes(&self, num_bytes: NumBytes) -> NumInstructions;
-
-    /// Returns the indexes of all dirty pages in stable memory.
-    fn stable_memory_dirty_pages(&self) -> Vec<(PageIndex, &PageBytes)>;
-
-    /// Returns the current size of the stable memory in wasm pages.
-    fn stable_memory_size(&self) -> usize;
 
     /// Returns the subnet type the replica runs on.
     fn subnet_type(&self) -> SubnetType;
@@ -821,15 +851,6 @@ pub trait SystemApi {
     /// `ic0.call_*` calls trap.
     fn ic0_call_perform(&mut self) -> HypervisorResult<i32>;
 
-    /// Returns the current size of the stable memory in WebAssembly pages.
-    fn ic0_stable_size(&self) -> HypervisorResult<u32>;
-
-    /// Tries to grow the stable memory by additional_pages many pages
-    /// containing zeros.
-    /// If successful, returns the previous size of the memory (in pages).
-    /// Otherwise, returns -1
-    fn ic0_stable_grow(&mut self, additional_pages: u32) -> HypervisorResult<i32>;
-
     /// Same implementation as `ic0_stable_read`, but doesn't do any bounds
     /// checks on the stable memory size. This is part of the hidden API and
     /// should only be called from instrumented code that has already done the
@@ -842,85 +863,6 @@ pub trait SystemApi {
         size: u64,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
-
-    /// Copies the data referred to by offset/size out of the stable memory and
-    /// replaces the corresponding bytes starting at dst in the canister memory.
-    ///
-    /// This system call traps if dst+size exceeds the size of the WebAssembly
-    /// memory or offset+size exceeds the size of the stable memory.
-    fn ic0_stable_read(
-        &self,
-        dst: u32,
-        offset: u32,
-        size: u32,
-        heap: &mut [u8],
-    ) -> HypervisorResult<()>;
-
-    /// Copies the data referred to by src/size out of the canister and replaces
-    /// the corresponding segment starting at offset in the stable memory.
-    ///
-    /// This system call traps if src+size exceeds the size of the WebAssembly
-    /// memory or offset+size exceeds the size of the stable memory.
-    /// Returns the number of **new** dirty pages created by the write.
-    fn ic0_stable_write(
-        &mut self,
-        offset: u32,
-        src: u32,
-        size: u32,
-        heap: &[u8],
-    ) -> HypervisorResult<()>;
-
-    /// Returns the current size of the stable memory in WebAssembly pages.
-    ///
-    /// It supports bigger stable memory sizes indexed by 64 bit pointers.
-    fn ic0_stable64_size(&self) -> HypervisorResult<u64>;
-
-    /// Tries to grow the stable memory by additional_pages many pages
-    /// containing zeros.
-    /// If successful, returns the previous size of the memory (in pages).
-    /// Otherwise, returns -1
-    ///
-    /// It supports bigger stable memory sizes indexed by 64 bit pointers.
-    fn ic0_stable64_grow(&mut self, additional_pages: u64) -> HypervisorResult<i64>;
-
-    /// Copies the data from location [offset, offset+size) of the stable memory
-    /// to the location [dst, dst+size) in the canister memory.
-    ///
-    /// This system call traps if dst+size exceeds the size of the WebAssembly
-    /// memory or offset+size exceeds the size of the stable memory.
-    ///
-    /// It supports bigger stable memory sizes indexed by 64 bit pointers.
-    fn ic0_stable64_read(
-        &self,
-        dst: u64,
-        offset: u64,
-        size: u64,
-        heap: &mut [u8],
-    ) -> HypervisorResult<()>;
-
-    /// Copies the data from location [src, src+size) of the canister memory to
-    /// location [offset, offset+size) in the stable memory.
-    ///
-    /// This system call traps if src+size exceeds the size of the WebAssembly
-    /// memory or offset+size exceeds the size of the stable memory.
-    ///
-    /// It supports bigger stable memory sizes indexed by 64 bit pointers.
-    /// Returns the number of **new** dirty pages created by the write.
-    fn ic0_stable64_write(
-        &mut self,
-        offset: u64,
-        src: u64,
-        size: u64,
-        heap: &[u8],
-    ) -> HypervisorResult<()>;
-
-    /// Determines the number of dirty pages that a stable write would create
-    /// and the cost for those dirty pages (without actually doing the write).
-    fn dirty_pages_from_stable_write(
-        &self,
-        offset: u64,
-        size: u64,
-    ) -> HypervisorResult<(NumOsPages, NumInstructions)>;
 
     /// The canister can query the IC for the current time.
     fn ic0_time(&mut self) -> HypervisorResult<Time>;
@@ -963,7 +905,7 @@ pub trait SystemApi {
     /// This system call is not part of the public spec and it is invoked when
     /// Wasm execution has a large number of dirty pages that, for performance reasons,
     /// should be copied in a new execution slice.
-    fn yield_for_dirty_memory_copy(&mut self, instruction_counter: i64) -> HypervisorResult<i64>;
+    fn yield_for_dirty_memory_copy(&mut self) -> HypervisorResult<i64>;
 
     /// This system call is not part of the public spec. It's called after a
     /// native `memory.grow` has been executed to check whether there's enough
@@ -1002,6 +944,18 @@ pub trait SystemApi {
     /// and is copied in the canister memory starting
     /// starting at the location `dst`.
     fn ic0_canister_cycle_balance128(
+        &mut self,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// This system call indicates the current liquid cycle balance
+    /// of the canister that the canister can spend without getting frozen.
+    ///
+    /// The amount of cycles is represented by a 128-bit value
+    /// and is copied in the canister memory starting
+    /// starting at the location `dst`.
+    fn ic0_canister_liquid_cycle_balance128(
         &mut self,
         dst: usize,
         heap: &mut [u8],
@@ -1172,6 +1126,134 @@ pub trait SystemApi {
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
+
+    /// This system call returns the amount of cycles that a canister needs to
+    /// be above the freezing threshold in order to successfully make an
+    /// inter-canister call. This includes the base cost for an inter-canister
+    /// call, the cost for each byte transmitted in the request, the cost for
+    /// the transmission of the largest possible response, and the cost for
+    /// executing the largest possible response callback.
+    ///
+    /// The cost is determined by the byte length of the method name and the
+    /// length of the encoded payload.
+    ///
+    /// The amount of cycles is represented by a 128-bit value and is copied
+    /// to the canister memory starting at the location `dst`.
+    fn ic0_cost_call(
+        &self,
+        method_name_size: u64,
+        payload_size: u64,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// This system call indicates the cycle cost of creating a canister on
+    /// the same subnet, i.e., the management canister's `create_canister`.
+    ///
+    /// The amount of cycles is represented by a 128-bit value and is copied
+    /// to the canister memory starting at the location `dst`.
+    fn ic0_cost_create_canister(&self, dst: usize, heap: &mut [u8]) -> HypervisorResult<()>;
+
+    /// This system call indicates the cycle cost of making an http outcall,
+    /// i.e., the management canister's `http_request`.
+    ///
+    /// `request_size` is the sum of the lengths of the variable request parts, as
+    /// documented in the interface specification.
+    /// `max_res_bytes` is the maximum number of response bytes the caller wishes to
+    /// accept.
+    ///
+    /// The amount of cycles is represented by a 128-bit value and is copied
+    /// to the canister memory starting at the location `dst`.
+    fn ic0_cost_http_request(
+        &self,
+        request_size: u64,
+        max_res_bytes: u64,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// This system call indicates the cycle cost of signing with ecdsa,
+    /// i.e., the management canister's `sign_with_ecdsa`, for the key
+    /// (whose name is given by textual representation at heap location `src`
+    /// with byte length `size`) and the provided curve.
+    ///
+    /// Traps if `src`+`size` exceeds the size of the WebAssembly memory.
+    /// Returns 0 on success.
+    /// Returns 1 if an unknown curve variant was provided.
+    /// Returns 2 if the given curve variant does not have a key with the
+    /// name provided via `src`/`size`.
+    ///
+    ///
+    /// The amount of cycles is represented by a 128-bit value and is copied
+    /// to the canister memory starting at the location `dst` if the return
+    /// value is 0.
+    fn ic0_cost_sign_with_ecdsa(
+        &self,
+        src: usize,
+        size: usize,
+        curve: u32,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<u32>;
+
+    /// This system call indicates the cycle cost of signing with schnorr,
+    /// i.e., the management canister's `sign_with_schnorr` for the key
+    /// (whose name is given by textual representation at heap location `src`
+    /// with byte length `size`) and the provided algorithm.
+    ///
+    /// Traps if `src`/`size` exceeds the size of the WebAssembly memory.
+    /// Returns 0 on success.
+    /// Returns 1 if an unknown algorithm variant was provided.
+    /// Returns 2 if the given algorithm variant does not have a key with the
+    /// name provided via `src`/`size`.
+    ///
+    /// The amount of cycles is represented by a 128-bit value and is copied
+    /// to the canister memory starting at the location `dst` if the return
+    /// value is 0.
+    fn ic0_cost_sign_with_schnorr(
+        &self,
+        src: usize,
+        size: usize,
+        algorithm: u32,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<u32>;
+
+    /// This system call indicates the cycle cost of vetkd key derivation,
+    /// i.e., the management canister's `vetkd_derive_key` for the key
+    /// (whose name is given by textual representation at heap location `src`
+    /// with byte length `size`) and the provided curve.
+    ///
+    /// Traps if `src`/`size` exceeds the size of the WebAssembly memory.
+    /// Returns 0 on success.
+    /// Returns 1 if an unknown curve variant was provided.
+    /// Returns 2 if the given curve variant does not have a key with the
+    /// name provided via `src`/`size`.
+    ///
+    /// The amount of cycles is represented by a 128-bit value and is copied
+    /// to the canister memory starting at the location `dst` if the return
+    /// value is 0.
+    fn ic0_cost_vetkd_derive_key(
+        &self,
+        src: usize,
+        size: usize,
+        curve: u32,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<u32>;
+
+    /// Used to look up the size of the subnet Id of the calling canister.
+    fn ic0_subnet_self_size(&self) -> HypervisorResult<usize>;
+
+    /// Used to copy the subnet Id of the calling canister to its heap
+    /// at the location specified by `dst` and `offset`.
+    fn ic0_subnet_self_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -1212,6 +1294,13 @@ pub struct RegistryExecutionSettings {
 pub struct ChainKeySettings {
     pub max_queue_size: u32,
     pub pre_signatures_to_create_in_advance: u32,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
+pub struct ChainKeyData {
+    pub master_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+    pub idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+    pub nidkg_ids: BTreeMap<MasterPublicKeyId, NiDkgId>,
 }
 
 pub trait Scheduler: Send {
@@ -1268,8 +1357,7 @@ pub trait Scheduler: Send {
         &self,
         state: Self::State,
         randomness: Randomness,
-        chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-        idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+        chain_key_data: ChainKeyData,
         replica_version: &ReplicaVersion,
         current_round: ExecutionRound,
         round_summary: Option<ExecutionRoundSummary>,
@@ -1283,11 +1371,10 @@ pub struct WasmExecutionOutput {
     pub wasm_result: Result<Option<WasmResult>, HypervisorError>,
     pub num_instructions_left: NumInstructions,
     pub allocated_bytes: NumBytes,
-    pub allocated_message_bytes: NumBytes,
+    pub allocated_guaranteed_response_message_bytes: NumBytes,
     pub instance_stats: InstanceStats,
     /// How many times each tracked System API call was invoked.
     pub system_api_call_counters: SystemApiCallCounters,
-    pub canister_log: CanisterLog,
 }
 
 impl fmt::Display for WasmExecutionOutput {
@@ -1316,12 +1403,12 @@ mod tests {
     fn test_available_memory() {
         let available = SubnetAvailableMemory::new(20, 10, 4);
         assert_eq!(available.get_execution_memory(), 20);
-        assert_eq!(available.get_message_memory(), 10);
+        assert_eq!(available.get_guaranteed_response_message_memory(), 10);
         assert_eq!(available.get_wasm_custom_sections_memory(), 4);
 
         let available = available / 2;
         assert_eq!(available.get_execution_memory(), 10);
-        assert_eq!(available.get_message_memory(), 5);
+        assert_eq!(available.get_guaranteed_response_message_memory(), 5);
         assert_eq!(available.get_wasm_custom_sections_memory(), 2);
     }
 
@@ -1414,11 +1501,11 @@ mod tests {
 
         let mut available = SubnetAvailableMemory::new(44, 45, 30);
         assert_eq!(available.get_execution_memory(), 44);
-        assert_eq!(available.get_message_memory(), 45);
+        assert_eq!(available.get_guaranteed_response_message_memory(), 45);
         assert_eq!(available.get_wasm_custom_sections_memory(), 30);
         available.increment(NumBytes::from(1), NumBytes::from(2), NumBytes::from(3));
         assert_eq!(available.get_execution_memory(), 45);
-        assert_eq!(available.get_message_memory(), 47);
+        assert_eq!(available.get_guaranteed_response_message_memory(), 47);
         assert_eq!(available.get_wasm_custom_sections_memory(), 33);
     }
 }

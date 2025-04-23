@@ -5,13 +5,15 @@ use async_trait::async_trait;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
-use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError};
+use ic_nervous_system_canisters::cmc::CMC;
+use ic_nervous_system_canisters::ledger::IcpLedger;
+use ic_nervous_system_common::NervousSystemError;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_governance::canister_state::CanisterRandomnessGenerator;
 use ic_nns_governance::{
     governance::{
-        Environment, Governance, HeapGrowthPotential, RngError,
-        HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES,
+        Environment, Governance, HeapGrowthPotential, HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES,
     },
     pb::v1::{
         governance_error::ErrorType,
@@ -30,28 +32,13 @@ use ic_nns_governance_api::pb::v1::{
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use maplit::btreemap;
 use std::convert::TryFrom;
+use std::sync::Arc;
 
 struct DegradedEnv {}
 #[async_trait]
 impl Environment for DegradedEnv {
     fn now(&self) -> u64 {
         111000222
-    }
-
-    fn random_u64(&mut self) -> Result<u64, RngError> {
-        Ok(4) // https://xkcd.com/221
-    }
-
-    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
-        unimplemented!()
-    }
-
-    fn seed_rng(&mut self, _seed: [u8; 32]) {
-        todo!()
-    }
-
-    fn get_rng_seed(&self) -> Option<[u8; 32]> {
-        todo!()
     }
 
     fn execute_nns_function(&self, _: u64, _: &ExecuteNnsFunction) -> Result<(), GovernanceError> {
@@ -100,7 +87,7 @@ impl IcpLedger for DegradedEnv {
 
 #[async_trait]
 impl CMC for DegradedEnv {
-    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
+    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
         unimplemented!()
     }
 }
@@ -143,9 +130,10 @@ fn fixture_two_neurons_second_is_bigger() -> GovernanceProto {
 fn degraded_governance() -> Governance {
     Governance::new(
         fixture_two_neurons_second_is_bigger(),
-        Box::new(DegradedEnv {}),
-        Box::new(DegradedEnv {}),
-        Box::new(DegradedEnv {}),
+        Arc::new(DegradedEnv {}),
+        Arc::new(DegradedEnv {}),
+        Arc::new(DegradedEnv {}),
+        Box::new(CanisterRandomnessGenerator::new()),
     )
 }
 

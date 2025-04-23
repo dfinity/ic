@@ -19,7 +19,7 @@ use ic_consensus_threshold_sig_system_test_utils::{
     get_public_key_with_logger, get_signature_with_logger, make_key, verify_signature,
 };
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterIdRecord, MasterPublicKeyId, ProvisionalCreateCanisterWithCyclesArgs,
 };
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
@@ -29,8 +29,7 @@ use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{
     governance::submit_external_update_proposal, itest_helpers::install_rust_canister_from_path,
 };
-use ic_registry_subnet_features::SubnetFeatures;
-use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
@@ -49,6 +48,7 @@ use ic_types::Height;
 use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::ArchiveOptions;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
+use registry_canister::mutations::do_update_subnet::{ChainKeyConfig, KeyConfig};
 use slog::{debug, info, Logger};
 use std::{
     env,
@@ -157,6 +157,11 @@ docker run  --name=bitcoind-node -d \
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(10))
+                .add_nodes(1),
+        )
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_dkg_interval_length(Height::from(10))
                 .with_features(SubnetFeatures {
                     http_requests: true,
                     ..SubnetFeatures::default()
@@ -166,12 +171,6 @@ docker run  --name=bitcoind-node -d \
         .use_specified_ids_allocation_range()
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
-
-    env.topology_snapshot().subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
-    });
 }
 
 pub fn setup(env: TestEnv) {
@@ -245,15 +244,19 @@ pub async fn activate_ecdsa_signature(
 }
 
 async fn enable_ecdsa_signing(governance: &Canister<'_>, subnet_id: SubnetId, key_id: EcdsaKeyId) {
+    let key_id = MasterPublicKeyId::Ecdsa(key_id);
+
     // The ECDSA key sharing process requires that a key first be added to a
     // subnet, and then enabling signing with that key must happen in a separate
     // proposal.
     let proposal_payload = UpdateSubnetPayload {
         subnet_id,
-        ecdsa_config: Some(EcdsaConfig {
-            quadruples_to_create_in_advance: 10,
-            key_ids: vec![key_id.clone()],
-            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+        chain_key_config: Some(ChainKeyConfig {
+            key_configs: vec![KeyConfig {
+                key_id: Some(key_id.clone()),
+                pre_signatures_to_create_in_advance: Some(10),
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         }),
@@ -263,7 +266,7 @@ async fn enable_ecdsa_signing(governance: &Canister<'_>, subnet_id: SubnetId, ke
 
     let proposal_payload = UpdateSubnetPayload {
         subnet_id,
-        ecdsa_key_signing_enable: Some(vec![key_id]),
+        chain_key_signing_enable: Some(vec![key_id]),
         ..empty_subnet_update()
     };
     execute_update_subnet_proposal(governance, proposal_payload).await;
@@ -302,9 +305,6 @@ fn empty_subnet_update() -> UpdateSubnetPayload {
         is_halted: None,
         halt_at_cup_height: None,
         features: None,
-        ecdsa_config: None,
-        ecdsa_key_signing_enable: None,
-        ecdsa_key_signing_disable: None,
         chain_key_config: None,
         chain_key_signing_disable: None,
         chain_key_signing_enable: None,
@@ -331,11 +331,19 @@ pub fn subnet_sys(env: &TestEnv) -> SubnetSnapshot {
         .unwrap()
 }
 
+pub fn subnet_app(env: &TestEnv) -> SubnetSnapshot {
+    env.topology_snapshot()
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .unwrap()
+}
+
 pub async fn create_canister_at_id(runtime: &Runtime, specified_id: PrincipalId) -> Canister<'_> {
     let canister_id_record: CanisterIdRecord = runtime
         .get_management_canister()
         .update_(
-            ic_management_canister_types::Method::ProvisionalCreateCanisterWithCycles.to_string(),
+            ic_management_canister_types_private::Method::ProvisionalCreateCanisterWithCycles
+                .to_string(),
             candid,
             (ProvisionalCreateCanisterWithCyclesArgs::new(
                 None,
@@ -394,7 +402,7 @@ pub async fn install_minter(
     info!(&logger, "Installing minter ...");
     #[allow(deprecated)]
     let args = CkbtcMinterInitArgs {
-        btc_network: Network::Regtest.into(),
+        btc_network: ic_ckbtc_minter::Network::Regtest,
         ecdsa_key_name: TEST_KEY_LOCAL.parse().unwrap(),
         retrieve_btc_min_amount: RETRIEVE_BTC_MIN_AMOUNT,
         ledger_id,
@@ -405,6 +413,7 @@ pub async fn install_minter(
         btc_checker_principal: Some(btc_checker_canister_id),
         kyt_principal: None,
         kyt_fee: None,
+        get_utxos_cache_expiration_seconds: None,
     };
 
     let minter_arg = MinterArg::Init(args);

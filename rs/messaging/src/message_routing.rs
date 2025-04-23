@@ -2,7 +2,9 @@ use crate::{
     routing, scheduling,
     state_machine::{StateMachine, StateMachineImpl},
 };
+use ic_config::embedders::BestEffortResponsesFeature;
 use ic_config::execution_environment::{BitcoinConfig, Config as HypervisorConfig};
+use ic_config::message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::{crypto::ErrorReproducibility, execution_environment::ChainKeySettings};
 use ic_interfaces::{
@@ -553,10 +555,13 @@ trait BatchProcessor: Send {
 }
 
 /// Implementation of [`BatchProcessor`].
-struct BatchProcessorImpl {
+struct BatchProcessorImpl<RegistryClient_>
+where
+    RegistryClient_: RegistryClient,
+{
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     state_machine: Box<dyn StateMachine>,
-    registry: Arc<dyn RegistryClient>,
+    registry: Arc<RegistryClient_>,
     bitcoin_config: BitcoinConfig,
     metrics: MessageRoutingMetrics,
     log: ReplicaLogger,
@@ -614,21 +619,24 @@ pub(crate) type NodePublicKeys = BTreeMap<NodeId, Vec<u8>>;
 /// A mapping from node IDs to ApiBoundaryNodeEntry.
 pub(crate) type ApiBoundaryNodes = BTreeMap<NodeId, ApiBoundaryNodeEntry>;
 
-impl BatchProcessorImpl {
+impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
-        ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState> + 'static>,
+        ingress_history_writer: Arc<impl IngressHistoryWriter<State = ReplicatedState> + 'static>,
         scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
         hypervisor_config: HypervisorConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
         subnet_id: SubnetId,
+        max_stream_messages: usize,
+        target_stream_size_bytes: usize,
         metrics: MessageRoutingMetrics,
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
-        registry: Arc<dyn RegistryClient>,
+        registry: Arc<RegistryClient_>,
         malicious_flags: MaliciousFlags,
-    ) -> BatchProcessorImpl {
+    ) -> Self {
         let time_in_stream_metrics = Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
             metrics_registry,
         )));
@@ -656,9 +664,16 @@ impl BatchProcessorImpl {
         ));
         let stream_builder = Box::new(routing::stream_builder::StreamBuilderImpl::new(
             subnet_id,
+            max_stream_messages,
+            target_stream_size_bytes,
             metrics_registry,
             &metrics,
             time_in_stream_metrics,
+            hypervisor_config
+                .embedders_config
+                .feature_flags
+                .best_effort_responses
+                .clone(),
             log.clone(),
         ));
         let state_machine = Box::new(StateMachineImpl::new(
@@ -697,13 +712,13 @@ impl BatchProcessorImpl {
     ///
     /// Returns the total memory usage of the canisters of this subnet.
     fn observe_canisters_memory_usage(&self, state: &ReplicatedState) -> NumBytes {
-        let mut total_memory_usage = NumBytes::from(0);
-        let mut wasm_custom_sections_memory_usage = NumBytes::from(0);
-        let mut canister_history_memory_usage = NumBytes::from(0);
+        let mut total_memory_usage = NumBytes::new(0);
+        let mut wasm_custom_sections_memory_usage = NumBytes::new(0);
+        let mut canister_history_memory_usage = NumBytes::new(0);
         for canister in state.canister_states.values() {
             // Export the total canister memory usage; execution and wasm custom section
             // memory are included in `memory_usage()`; message memory is added separately.
-            total_memory_usage += canister.memory_usage() + canister.message_memory_usage();
+            total_memory_usage += canister.memory_usage() + canister.message_memory_usage().total();
             wasm_custom_sections_memory_usage += canister
                 .execution_state
                 .as_ref()
@@ -1036,7 +1051,7 @@ impl BatchProcessorImpl {
 
         let chain_key_enabled_subnets = self
             .registry
-            .get_chain_key_signing_subnets(registry_version)
+            .get_chain_key_enabled_subnets(registry_version)
             .map_err(|err| registry_error("chain key signing subnets", None, err))?
             .unwrap_or_default();
 
@@ -1072,9 +1087,7 @@ impl BatchProcessorImpl {
             match optional_public_key_proto {
                 Some(public_key_proto) => {
                     // If the public key protobuf is invalid, we continue without stalling the subnet.
-                    match ic_crypto_ed25519::PublicKey::convert_raw_to_der(
-                        &public_key_proto.key_value,
-                    ) {
+                    match ic_ed25519::PublicKey::convert_raw_to_der(&public_key_proto.key_value) {
                         Ok(pk_der) => {
                             node_public_keys.insert(node_id, pk_der);
                         }
@@ -1199,7 +1212,7 @@ impl BatchProcessorImpl {
     }
 }
 
-impl BatchProcessor for BatchProcessorImpl {
+impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<RegistryClient_> {
     #[instrument(skip_all)]
     fn process_batch(&self, batch: Batch) {
         let _process_batch_start = Instant::now();
@@ -1468,14 +1481,14 @@ impl MessageRoutingImpl {
     pub fn new(
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
-        ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState> + 'static>,
+        ingress_history_writer: Arc<impl IngressHistoryWriter<State = ReplicatedState> + 'static>,
         scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
         hypervisor_config: HypervisorConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
         subnet_id: SubnetId,
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
-        registry: Arc<dyn RegistryClient>,
+        registry: Arc<impl RegistryClient + 'static>,
         malicious_flags: MaliciousFlags,
     ) -> Self {
         let metrics = MessageRoutingMetrics::new(metrics_registry);
@@ -1487,6 +1500,11 @@ impl MessageRoutingImpl {
             hypervisor_config,
             cycles_account_manager,
             subnet_id,
+            // Do NOT replace these constants. Stream limits must remain constant on mainnet,
+            // otherwise the payload builder might mistakenly identify subnets as dishonest.
+            // Changes must be carefully considered.
+            MAX_STREAM_MESSAGES,
+            TARGET_STREAM_SIZE_BYTES,
             metrics.clone(),
             metrics_registry,
             log.clone(),
@@ -1508,11 +1526,14 @@ impl MessageRoutingImpl {
     ) -> Self {
         let stream_builder = Box::new(routing::stream_builder::StreamBuilderImpl::new(
             subnet_id,
+            MAX_STREAM_MESSAGES,
+            TARGET_STREAM_SIZE_BYTES,
             metrics_registry,
             &MessageRoutingMetrics::new(metrics_registry),
             Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
                 metrics_registry,
             ))),
+            BestEffortResponsesFeature::Enabled,
             log.clone(),
         ));
 
@@ -1592,8 +1613,7 @@ impl MessageRouting for MessageRoutingImpl {
     }
 }
 
-/// An MessageRouting implementation that processes batches synchronously. Primarily used for
-/// testing.
+/// An MessageRouting implementation that processes batches synchronously. Used for state machine tests.
 pub struct SyncMessageRouting {
     batch_processor: Arc<Mutex<dyn BatchProcessor>>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
@@ -1606,14 +1626,16 @@ impl SyncMessageRouting {
     pub fn new(
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
-        ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState> + 'static>,
+        ingress_history_writer: Arc<impl IngressHistoryWriter<State = ReplicatedState> + 'static>,
         scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
         hypervisor_config: HypervisorConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
         subnet_id: SubnetId,
+        max_stream_messages: usize,
+        target_stream_size_bytes: usize,
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
-        registry: Arc<dyn RegistryClient>,
+        registry: Arc<impl RegistryClient + 'static>,
         malicious_flags: MaliciousFlags,
     ) -> Self {
         let metrics = MessageRoutingMetrics::new(metrics_registry);
@@ -1626,6 +1648,8 @@ impl SyncMessageRouting {
             hypervisor_config,
             cycles_account_manager,
             subnet_id,
+            max_stream_messages,
+            target_stream_size_bytes,
             metrics,
             metrics_registry,
             log.clone(),

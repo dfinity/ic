@@ -19,8 +19,8 @@ rosetta-core = { path = "../../common/rosetta_core" }
 serde = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
-ic-crypto-secp256k1 = { path = "../../../crypto/secp256k1" }
-ic-crypto-ed25519 = { path = "../../../crypto/ed25519" }
+ic-secp256k1 = { path = "../../../../packages/ic-secp256k1" }
+ic-ed25519 = { path = "../../../../packages/ic-ed25519" }
 icp-ledger = { path = "../../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 ic-base-types = { path = "../../../types/base_types" }

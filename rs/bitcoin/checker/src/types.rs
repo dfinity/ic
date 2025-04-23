@@ -1,6 +1,7 @@
 use candid::{CandidType, Deserialize};
+use ic_btc_interface::Txid;
 use serde::Serialize;
-use std::fmt;
+use std::{fmt, str::FromStr};
 
 #[derive(CandidType, Debug, Deserialize, Serialize)]
 pub struct CheckAddressArgs {
@@ -19,9 +20,46 @@ pub struct CheckTransactionArgs {
     pub txid: Vec<u8>,
 }
 
+impl TryFrom<CheckTransactionArgs> for Txid {
+    type Error = String;
+
+    fn try_from(args: CheckTransactionArgs) -> Result<Self, Self::Error> {
+        Txid::try_from(args.txid.as_ref()).map_err(|err| err.to_string())
+    }
+}
+
 #[derive(CandidType, Debug, Deserialize, Serialize)]
 pub struct CheckTransactionStrArgs {
     pub txid: String,
+}
+
+impl TryFrom<CheckTransactionStrArgs> for Txid {
+    type Error = String;
+
+    fn try_from(args: CheckTransactionStrArgs) -> Result<Self, Self::Error> {
+        Txid::from_str(args.txid.as_ref()).map_err(|err| err.to_string())
+    }
+}
+
+#[derive(CandidType, Debug, Deserialize, Serialize)]
+pub enum CheckTransactionQueryArgs {
+    TxIdBin(Vec<u8>),
+    TxIdStr(String),
+}
+
+impl TryFrom<CheckTransactionQueryArgs> for Txid {
+    type Error = String;
+
+    fn try_from(args: CheckTransactionQueryArgs) -> Result<Self, Self::Error> {
+        match args {
+            CheckTransactionQueryArgs::TxIdBin(bytes) => {
+                Txid::try_from(bytes.as_ref()).map_err(|err| err.to_string())
+            }
+            CheckTransactionQueryArgs::TxIdStr(string) => {
+                Txid::from_str(&string).map_err(|err| err.to_string())
+            }
+        }
+    }
 }
 
 #[derive(CandidType, Debug, Clone, Deserialize, Serialize)]
@@ -56,16 +94,6 @@ pub enum CheckTransactionRetriable {
     TransientInternalError(String),
 }
 
-#[derive(CandidType, Debug, Clone, Deserialize, Serialize)]
-pub enum CheckTransactionIrrecoverableError {
-    /// Response size is too large (> `RETRY_MAX_RESPONSE_BYTES`) when fetching the transaction data of a txid.
-    ResponseTooLarge { txid: Vec<u8> },
-    /// Invalid transaction id because it fails to decode.
-    InvalidTransactionId(String),
-    /// Invalid transaction.
-    InvalidTransaction(String),
-}
-
 impl From<CheckTransactionIrrecoverableError> for CheckTransactionResponse {
     fn from(err: CheckTransactionIrrecoverableError) -> CheckTransactionResponse {
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(err))
@@ -81,6 +109,52 @@ impl From<CheckTransactionRetriable> for CheckTransactionResponse {
 impl From<CheckTransactionStatus> for CheckTransactionResponse {
     fn from(status: CheckTransactionStatus) -> CheckTransactionResponse {
         CheckTransactionResponse::Unknown(status)
+    }
+}
+
+impl<E> From<Result<(), E>> for CheckTransactionResponse
+where
+    E: Into<CheckTransactionResponse>,
+{
+    fn from(result: Result<(), E>) -> Self {
+        match result {
+            Ok(()) => Self::Passed,
+            Err(err) => err.into(),
+        }
+    }
+}
+
+#[derive(CandidType, Debug, Clone, Deserialize, Serialize)]
+pub enum CheckTransactionIrrecoverableError {
+    /// Response size is too large (> `RETRY_MAX_RESPONSE_BYTES`) when fetching the transaction data of a txid.
+    ResponseTooLarge { txid: Vec<u8> },
+    /// Invalid transaction id because it fails to decode.
+    InvalidTransactionId(String),
+    /// Invalid transaction.
+    InvalidTransaction(String),
+}
+
+#[derive(CandidType, Debug, Clone, Deserialize, Serialize)]
+pub enum CheckTransactionQueryResponse {
+    /// When check finishes and all input addresses passed.
+    Passed,
+    /// When check finishes and one or more input addresses failed.
+    /// The list of failed addresses are returned as a best effort, which may be non-exhaustive.
+    Failed(Vec<String>),
+    /// The result is not available, but may be obtainable via a call to the non-query version
+    /// of `check_transaction`.
+    Unknown,
+}
+
+impl<E> From<Result<(), E>> for CheckTransactionQueryResponse
+where
+    E: Into<CheckTransactionQueryResponse>,
+{
+    fn from(result: Result<(), E>) -> Self {
+        match result {
+            Ok(()) => Self::Passed,
+            Err(err) => err.into(),
+        }
     }
 }
 

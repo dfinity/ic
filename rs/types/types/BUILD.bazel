@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-error-types",
     "//rs/bitcoin/replica_types",
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/sha2",
@@ -13,7 +14,6 @@ DEPENDENCIES = [
     "//rs/phantom_newtype",
     "//rs/protobuf",
     "//rs/types/base_types",
-    "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/utils",
     "//rs/utils/validate_eq",

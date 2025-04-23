@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-error-types",
     "//rs/config",
     "//rs/cycles_account_manager",
     "//rs/embedders",
@@ -19,11 +20,9 @@ DEPENDENCIES = [
     "//rs/registry/subnet_features",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
-    "//rs/system_api",
     "//rs/test_utilities",
     "//rs/test_utilities/types",
     "//rs/types/base_types",
-    "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/types/types_test_utils",

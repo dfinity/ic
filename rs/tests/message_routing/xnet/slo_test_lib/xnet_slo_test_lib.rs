@@ -28,7 +28,7 @@ use canister_test::{Canister, Runtime};
 use dfn_candid::candid;
 use futures::future::join_all;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet, VmResources};
 use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
@@ -39,6 +39,7 @@ use ic_system_test_driver::util::{block_on, runtime_from_url};
 use slog::info;
 use std::fmt::Display;
 use std::time::Duration;
+use std::vec;
 use systest_message_routing_common::{install_canisters, parallel_async, start_all_canisters};
 use xnet_test::Metrics;
 
@@ -48,7 +49,7 @@ const PAYLOAD_SIZE_BYTES: u64 = 1024;
 /// filling up its output queue). This should be estimated as:
 ///
 /// `queue_capacity / 10 /* max_rounds roundtrip */`
-const MAX_CANISTER_TO_CANISTER_RATE: usize = 30;
+const MAX_CANISTER_TO_CANISTER_RATE: usize = 5;
 const SEND_RATE_THRESHOLD: f64 = 0.3;
 const ERROR_PERCENTAGE_THRESHOLD: f64 = 5.0;
 const TARGETED_LATENCY_SECONDS: u64 = 20;
@@ -58,13 +59,17 @@ pub struct Config {
     subnets: usize,
     nodes_per_subnet: usize,
     runtime: Duration,
-    payload_size_bytes: u64,
+    request_payload_size_bytes: u64,
+    /// Possible call timeouts. `None` for guaranteed response.
+    call_timeouts_seconds: Vec<Option<u32>>,
+    response_payload_size_bytes: u64,
     send_rate_threshold: f64,
     error_percentage_threshold: f64,
     targeted_latency_seconds: u64,
     subnet_to_subnet_rate: usize,
     canisters_per_subnet: usize,
     canister_to_subnet_rate: usize,
+    vm_resources: Option<VmResources>,
     with_prometheus: bool,
 }
 
@@ -106,20 +111,54 @@ impl Config {
             subnets,
             nodes_per_subnet,
             runtime,
-            payload_size_bytes: PAYLOAD_SIZE_BYTES,
+            request_payload_size_bytes: PAYLOAD_SIZE_BYTES,
+            // Default to a mix of guaranteed response and best-effort calls.
+            call_timeouts_seconds: vec![None, Some(u32::MAX)],
+            response_payload_size_bytes: PAYLOAD_SIZE_BYTES,
             send_rate_threshold,
             error_percentage_threshold,
             targeted_latency_seconds,
             subnet_to_subnet_rate,
             canisters_per_subnet,
             canister_to_subnet_rate,
+            vm_resources: None,
             with_prometheus: false,
         }
+    }
+
+    pub fn with_vm_resources(mut self, resources: VmResources) -> Self {
+        self.vm_resources = Some(resources);
+        self
     }
 
     pub fn with_prometheus(self) -> Self {
         let mut config = self.clone();
         config.with_prometheus = true;
+        config
+    }
+
+    pub fn with_call_timeouts(self, timeouts_seconds: &[Option<u32>]) -> Self {
+        let mut config = self.clone();
+        config.call_timeouts_seconds = timeouts_seconds.to_vec();
+        config
+    }
+
+    pub fn with_payload_bytes(self, payload_size_bytes: u64) -> Self {
+        let mut config = self.clone();
+        config.request_payload_size_bytes = payload_size_bytes;
+        config.response_payload_size_bytes = payload_size_bytes;
+        config
+    }
+
+    pub fn with_request_payload_size_bytes(self, request_payload_size_bytes: u64) -> Self {
+        let mut config = self.clone();
+        config.request_payload_size_bytes = request_payload_size_bytes;
+        config
+    }
+
+    pub fn with_response_payload_size_bytes(self, response_payload_size_bytes: u64) -> Self {
+        let mut config = self.clone();
+        config.response_payload_size_bytes = response_payload_size_bytes;
         config
     }
 
@@ -136,8 +175,12 @@ impl Config {
 
 // Generic setup
 fn setup(env: TestEnv, config: Config) {
+    let mut ic = InternetComputer::new();
+    if let Some(resources) = config.vm_resources {
+        ic = ic.with_default_vm_resources(resources);
+    }
     (0..config.subnets)
-        .fold(InternetComputer::new(), |ic, _idx| {
+        .fold(ic, |ic, _idx| {
             ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(config.nodes_per_subnet))
         })
         .setup_and_start(&env)
@@ -226,7 +269,9 @@ pub async fn deploy_and_start<'a, 'b>(
 
     start_all_canisters(
         &canisters,
-        config.payload_size_bytes,
+        config.request_payload_size_bytes,
+        &config.call_timeouts_seconds,
+        config.response_payload_size_bytes,
         config.canister_to_subnet_rate as u64,
     )
     .await;
@@ -234,10 +279,12 @@ pub async fn deploy_and_start<'a, 'b>(
         config.canister_to_subnet_rate * config.canisters_per_subnet * (config.subnets - 1);
     info!(
         logger,
-        "Starting chatter: {} messages/round * {} bytes = {} bytes/round",
+        "Starting chatter: {} messages/round * {}/{} bytes = {} bytes/round",
         msgs_per_round,
-        config.payload_size_bytes,
-        msgs_per_round * config.payload_size_bytes as usize
+        config.request_payload_size_bytes,
+        config.response_payload_size_bytes,
+        msgs_per_round
+            * (config.request_payload_size_bytes + config.response_payload_size_bytes) as usize
     );
 
     canisters

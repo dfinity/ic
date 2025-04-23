@@ -21,7 +21,7 @@ use ic_crypto_utils_threshold_sig_der::{
 };
 use ic_http_utils::file_downloader::{check_file_hash, FileDownloader};
 use ic_interfaces_registry::{RegistryClient, RegistryDataProvider};
-use ic_management_canister_types::CanisterInstallMode;
+use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
 };
@@ -343,8 +343,9 @@ enum SubCommand {
     // Get latest registry version number
     GetRegistryVersion,
 
-    /// Get info about a Replica version
-    GetReplicaVersion(GetReplicaVersionCmd),
+    /// Get info about a GuestOS version
+    #[clap(visible_alias = "get-guestos-version")]
+    GetGuestOSVersion(GetGuestOsVersionCmd),
 
     /// Get the latest routing table.
     GetRoutingTable,
@@ -657,11 +658,13 @@ struct GetNodeListSinceCmd {
     version: u64,
 }
 
-/// Sub-command to fetch a replica version from the registry.
+/// Sub-command to fetch a GuestOS version from the registry.
 #[derive(Parser)]
-struct GetReplicaVersionCmd {
-    /// The Replica version to query
-    replica_version_id: String,
+#[clap(visible_alias = "get-replica-version")]
+struct GetGuestOsVersionCmd {
+    /// The GuestOS version to query
+    #[clap(visible_alias = "replica-version-id")]
+    guestos_version_id: String,
 }
 
 /// Sub-command to submit a proposal to upgrade the replicas running a specific
@@ -671,8 +674,9 @@ struct GetReplicaVersionCmd {
 struct ProposeToDeployGuestosToAllSubnetNodesCmd {
     /// The subnet to update.
     subnet: SubnetDescriptor,
-    /// The new Replica version to use.
-    replica_version_id: String,
+    /// The new GuestOS version to use.
+    #[clap(visible_alias = "replica-version-id")]
+    guestos_version_id: String,
 }
 
 /// Sub-command to submit a proposal to remove node operators.
@@ -711,9 +715,9 @@ impl ProposalTitle for ProposeToDeployGuestosToAllSubnetNodesCmd {
         match &self.proposal_title {
             Some(title) => title.clone(),
             None => format!(
-                "Upgrade subnet: {} to replica version: {}",
+                "Upgrade subnet: {} to GuestOS version: {}",
                 shortened_subnet_string(&self.subnet),
-                self.replica_version_id
+                self.guestos_version_id
             ),
         }
     }
@@ -728,7 +732,7 @@ impl ProposalPayload<DeployGuestosToAllSubnetNodesPayload>
         let subnet_id = self.subnet.get_id(&registry_canister).await;
         DeployGuestosToAllSubnetNodesPayload {
             subnet_id: subnet_id.get(),
-            replica_version_id: self.replica_version_id.clone(),
+            replica_version_id: self.guestos_version_id.clone(),
         }
     }
 }
@@ -739,14 +743,14 @@ impl ProposalPayload<DeployGuestosToAllSubnetNodesPayload>
 #[derive(Clone, Parser, ProposalMetadata)]
 struct ProposeToUpdateUnassignedNodesConfigCmd {}
 
-/// Sub-command to  submit a proposal to deploy a specific replica version to the set of all
+/// Sub-command to submit a proposal to deploy a specific GuestOS version to the set of all
 /// unassigned nodes.
 #[derive_common_proposal_fields]
 #[derive(Parser, ProposalMetadata)]
 struct ProposeToDeployGuestosToAllUnassignedNodesCmd {
-    /// The ID of the replica version that all the unassigned nodes run.
-    #[clap(long)]
-    pub replica_version_id: String,
+    /// The ID of the GuestOS version that all the unassigned nodes should run.
+    #[clap(long, visible_alias = "replica-version-id")]
+    pub guestos_version_id: String,
 }
 
 impl ProposalTitle for ProposeToDeployGuestosToAllUnassignedNodesCmd {
@@ -764,7 +768,7 @@ impl ProposalPayload<DeployGuestosToAllUnassignedNodesPayload>
 {
     async fn payload(&self, _: &Agent) -> DeployGuestosToAllUnassignedNodesPayload {
         DeployGuestosToAllUnassignedNodesPayload {
-            elected_replica_version: self.replica_version_id.clone(),
+            elected_replica_version: self.guestos_version_id.clone(),
         }
     }
 }
@@ -924,13 +928,13 @@ impl ProposalAction for StopCanisterCmd {
     }
 }
 
-/// Sub-command to submit a proposal to update elected replica versions.
+/// Sub-command to submit a proposal to update elected GuestOS versions.
 #[derive_common_proposal_fields]
 #[derive(Parser, ProposalMetadata)]
 struct ProposeToReviseElectedGuestsOsVersionsCmd {
-    #[clap(long)]
-    /// The replica version ID to elect.
-    pub replica_version_to_elect: Option<String>,
+    #[clap(long, visible_alias = "replica-version-to-elect")]
+    /// The GuestOS version ID to elect.
+    pub guestos_version_to_elect: Option<String>,
 
     #[clap(long)]
     /// The hex-formatted SHA-256 hash of the archive served by
@@ -942,18 +946,18 @@ struct ProposeToReviseElectedGuestsOsVersionsCmd {
     /// package that corresponds to this version.
     pub release_package_urls: Vec<String>,
 
-    #[clap(long, num_args(1..))]
-    /// The replica version ids to remove.
-    pub replica_versions_to_unelect: Vec<String>,
+    #[clap(long, num_args(1..), visible_alias = "replica-versions-to-unelect")]
+    /// The GuestOS version ids to remove.
+    pub guestos_versions_to_unelect: Vec<String>,
 }
 
 impl ProposalTitle for ProposeToReviseElectedGuestsOsVersionsCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
-            None => match self.replica_version_to_elect.as_ref() {
-                Some(v) => format!("Elect new replica binary revision (commit {v})"),
-                None => "Retire IC replica version(s)".to_string(),
+            None => match self.guestos_version_to_elect.as_ref() {
+                Some(v) => format!("Elect new GuestOS binary revision (commit {v})"),
+                None => "Retire IC GuestOS version(s)".to_string(),
             },
         }
     }
@@ -965,11 +969,11 @@ impl ProposalPayload<ReviseElectedGuestosVersionsPayload>
 {
     async fn payload(&self, _: &Agent) -> ReviseElectedGuestosVersionsPayload {
         let payload = ReviseElectedGuestosVersionsPayload {
-            replica_version_to_elect: self.replica_version_to_elect.clone(),
+            replica_version_to_elect: self.guestos_version_to_elect.clone(),
             release_package_sha256_hex: self.release_package_sha256_hex.clone(),
             release_package_urls: self.release_package_urls.clone(),
             guest_launch_measurement_sha256_hex: None,
-            replica_versions_to_unelect: self.replica_versions_to_unelect.clone(),
+            replica_versions_to_unelect: self.guestos_versions_to_unelect.clone(),
         };
         payload.validate().expect("Failed to validate payload");
         payload
@@ -1024,14 +1028,6 @@ struct ProposeToChangeNnsCanisterCmd {
     /// If set, it will update the canister's memory allocation to this value.
     /// See `MemoryAllocation` for the semantics of this field.
     memory_allocation: Option<u64>,
-
-    /// Keeping it around so that scripts that alreay pass this flag don't break.
-    #[clap(long, default_value = "true")]
-    use_explicit_action_type: bool,
-
-    /// If true, the proposal will be sent as `ExecuteNnsFunction` instead of `InstallCode`.
-    #[clap(long)]
-    use_legacy_execute_nns_function: bool,
 }
 
 #[async_trait]
@@ -3246,7 +3242,7 @@ async fn propose_to_create_service_nervous_system(
     ));
     let title = cmd.title();
     let summary = cmd.summary.clone().unwrap();
-    let url = parse_proposal_url(cmd.proposal_url.clone());
+    let url = parse_proposal_url(&cmd.proposal_url);
     let proposal = MakeProposalRequest {
         title: Some(title.clone()),
         summary,
@@ -3880,8 +3876,8 @@ async fn main() {
                 .collect();
             println!("{}", serde_json::to_string_pretty(&value).unwrap());
         }
-        SubCommand::GetReplicaVersion(get_replica_version_cmd) => {
-            let key = make_replica_version_key(&get_replica_version_cmd.replica_version_id)
+        SubCommand::GetGuestOSVersion(get_guestos_version_cmd) => {
+            let key = make_replica_version_key(&get_guestos_version_cmd.guestos_version_id)
                 .as_bytes()
                 .to_vec();
             let version = print_and_get_last_value::<ReplicaVersionRecord>(
@@ -3994,11 +3990,11 @@ async fn main() {
                 .try_polling_latest_version(usize::MAX)
                 .unwrap();
 
-            let signing_subnets = registry_client
-                .get_chain_key_signing_subnets(registry_client.get_latest_version())
+            let chain_key_enabled_subnets = registry_client
+                .get_chain_key_enabled_subnets(registry_client.get_latest_version())
                 .unwrap()
                 .unwrap();
-            for (key_id, subnets) in signing_subnets.iter() {
+            for (key_id, subnets) in chain_key_enabled_subnets.iter() {
                 println!("KeyId {:?}: {:?}", key_id, subnets);
             }
         }
@@ -4123,26 +4119,7 @@ async fn main() {
                 opts.nns_public_key_pem_file,
                 sender,
             );
-            if !cmd.use_legacy_execute_nns_function {
-                propose_action_from_command(cmd, canister_client, proposer).await;
-            } else if cmd.canister_id == ROOT_CANISTER_ID {
-                propose_external_proposal_from_command::<
-                    UpgradeRootProposal,
-                    ProposeToChangeNnsCanisterCmd,
-                >(cmd, NnsFunction::NnsRootUpgrade, canister_client, proposer)
-                .await;
-            } else {
-                propose_external_proposal_from_command::<
-                    ChangeCanisterRequest,
-                    ProposeToChangeNnsCanisterCmd,
-                >(
-                    cmd,
-                    NnsFunction::NnsCanisterUpgrade,
-                    canister_client,
-                    proposer,
-                )
-                .await;
-            }
+            propose_action_from_command(cmd, canister_client, proposer).await;
         }
         SubCommand::ProposeToHardResetNnsRootToVersion(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
@@ -5767,7 +5744,7 @@ async fn propose_to_add_or_remove_node_provider(
     let response = canister_client
         .submit_add_or_remove_node_provider_proposal(
             payload,
-            parse_proposal_url(cmd.proposal_url),
+            parse_proposal_url(&cmd.proposal_url),
             title,
             summary,
         )
@@ -6354,12 +6331,14 @@ fn print_proposal<T: Serialize + Debug, Command: ProposalMetadata + ProposalTitl
         struct Proposal<T> {
             title: String,
             summary: String,
+            url: String,
             payload: T,
         }
 
         let serialized = serde_json::to_string_pretty(&Proposal {
             title: cmd.title(),
             summary: cmd.summary(),
+            url: cmd.url(),
             payload,
         })
         .expect("Serialization for the cmd to JSON failed.");
@@ -6367,6 +6346,7 @@ fn print_proposal<T: Serialize + Debug, Command: ProposalMetadata + ProposalTitl
     } else {
         println!("Title: {}\n", cmd.title());
         println!("Summary: {}\n", cmd.summary());
+        println!("URL: {}\n", cmd.url());
         println!("Payload: {:#?}", payload);
     }
 }

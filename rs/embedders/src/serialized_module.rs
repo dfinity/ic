@@ -137,6 +137,18 @@ pub struct InitialStateData {
 ///
 /// This structure owns all internal file descriptors and will close them when
 /// dropped.
+///
+/// # File Safety
+///
+/// When creating an `OnDiskSerializedModule`, the caller passes in two paths.
+/// The caller needs to guarantee that files can be created at these paths and
+/// that afterwards the files will not be mutated.
+///
+/// The files will then be deleted and the resulting `OnDiskSerialisedModule`
+/// will have exclusive ownership of file descriptors pointing to the files. The
+/// descriptors are duplicated when passed to the sandbox for execution (this
+/// happens implicitly when sending over the socket). The files should only be
+/// accessed through mmap - otherwise seeks could interfere with each other.
 #[derive(Debug)]
 pub struct OnDiskSerializedModule {
     /// Bytes of the compilation artifact.
@@ -163,9 +175,9 @@ impl MemoryDiskBytes for OnDiskSerializedModule {
 }
 
 impl OnDiskSerializedModule {
-    /// Serializes data to disk and panics on error. This treats failure to
-    /// serialize the data the same as if we failed to allocate space for it in
-    /// the first place.
+    /// Serializes data to disk and panics on error. The paths must not have
+    /// existing files.  This treats failure to serialize the data the same as
+    /// if we failed to allocate space for it in the first place.
     pub(crate) fn from_serialized_module(
         serialized_module: SerializedModule,
         bytes_path: &Path,
@@ -177,13 +189,24 @@ impl OnDiskSerializedModule {
             data_segments: serialized_module.data_segments,
             wasm_metadata: serialized_module.wasm_metadata,
         };
-        let mut bytes_file = File::create(bytes_path)
-            .expect("Unable to serialize module: failed to create bytes file");
+        let mut bytes_file = File::create_new(bytes_path).unwrap_or_else(|e| match e.kind() {
+            std::io::ErrorKind::AlreadyExists => {
+                panic!("Unable to serialize module: File {bytes_path:?} already exists.")
+            }
+            _ => panic!("Unable to serialize module: failed to create bytes file: {e}"),
+        });
         bytes_file
             .write_all(bytes)
             .expect("Unable to serialize module: failed to write bytes file");
-        let mut initial_state_file = File::create(initial_state_path)
-            .expect("Unable to serialize module: failed to create initial state file");
+        let mut initial_state_file =
+            File::create_new(initial_state_path).unwrap_or_else(|e| match e.kind() {
+                std::io::ErrorKind::AlreadyExists => {
+                    panic!(
+                        "Unable to serialize module: File {initial_state_path:?} already exists."
+                    )
+                }
+                _ => panic!("Unable to serialize module: failed to create initial state file: {e}"),
+            });
         initial_state_file
             .write_all(
                 &bincode::serialize(&initial_state_data)
@@ -225,7 +248,7 @@ impl OnDiskSerializedModule {
     }
 
     /// Map the initial state file and deserialize its contents.
-    pub(crate) fn initial_state_data(&self) -> InitialStateData {
+    pub fn initial_state_data(&self) -> InitialStateData {
         // Mmap the initial state file so that the file descriptor isn't mutated
         // (they might be shared).
         let mmap_size = self

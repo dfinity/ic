@@ -3,7 +3,6 @@ use ic_crypto_sha2::Sha256;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_tree_hash::*;
 use ic_crypto_tree_hash_test_utils::*;
-use proptest::prelude::*;
 use rand::Rng;
 use rand::{CryptoRng, RngCore};
 use std::collections::BTreeMap;
@@ -1375,17 +1374,15 @@ fn tree_with_three_levels() -> HashTreeBuilderImpl {
     builder
 }
 
-proptest! {
-    #[test]
-    fn recompute_digest_for_mixed_hash_tree_iteratively_and_recursively_produces_same_digest(
-        tree in arbitrary::arbitrary_well_formed_mixed_hash_tree()
-    ){
-        let rec_or_error = mixed_hash_tree_digest_recursive(&tree);
-        // ignore the error case, since the iterative algorithm is infallible
-        if let Ok(rec) = rec_or_error {
-            let iter = tree.digest();
-            assert_eq!(rec, iter);
-        }
+#[test_strategy::proptest]
+fn recompute_digest_for_mixed_hash_tree_iteratively_and_recursively_produces_same_digest(
+    #[strategy(arbitrary::arbitrary_well_formed_mixed_hash_tree())] tree: MixedHashTree,
+) {
+    let rec_or_error = mixed_hash_tree_digest_recursive(&tree);
+    // ignore the error case, since the iterative algorithm is infallible
+    if let Ok(rec) = rec_or_error {
+        let iter = tree.digest();
+        assert_eq!(rec, iter);
     }
 }
 

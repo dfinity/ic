@@ -3,15 +3,19 @@ use ic_config::{
     flag_status::FlagStatus, subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::ResourceSaturation;
-use ic_embedders::wasm_utils::compile;
-use ic_embedders::WasmtimeEmbedder;
+use ic_embedders::{
+    wasm_utils::compile,
+    wasmtime_embedder::system_api::{
+        sandbox_safe_system_state::SandboxSafeSystemState, ApiType,
+        DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits, SystemApiImpl,
+    },
+    WasmtimeEmbedder,
+};
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages};
+use ic_replicated_state::{Memory, MessageMemoryUsage, NetworkTopology, NumWasmPages};
 use ic_sys::PAGE_SIZE;
-use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType, SystemApiImpl};
-use ic_system_api::{DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits};
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_state::SystemStateBuilder;
@@ -84,7 +88,7 @@ fn test_api_for_update(
     );
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
-    let canister_current_message_memory_usage = NumBytes::from(0);
+    let canister_current_message_memory_usage = MessageMemoryUsage::ZERO;
 
     SystemApiImpl::new(
         api_type,
@@ -109,11 +113,7 @@ fn test_api_for_update(
             subnet_memory_saturation: ResourceSaturation::default(),
         },
         *MAX_SUBNET_AVAILABLE_MEMORY,
-        EmbeddersConfig::default()
-            .feature_flags
-            .wasm_native_stable_memory,
-        EmbeddersConfig::default().feature_flags.canister_backtrace,
-        EmbeddersConfig::default().max_sum_exported_function_name_lengths,
+        &EmbeddersConfig::default(),
         Memory::new_for_testing(),
         NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::new(instruction_limit)),
@@ -486,13 +486,13 @@ mod tests {
 
     use ic_embedders::{
         wasm_executor::compute_page_delta, wasm_utils::instrumentation::instruction_to_cost,
-        wasm_utils::instrumentation::WasmMemoryType, wasmtime_embedder::CanisterMemoryType,
+        wasm_utils::instrumentation::WasmMemoryType,
+        wasmtime_embedder::system_api::ModificationTracking, wasmtime_embedder::CanisterMemoryType,
     };
     // Get .current() trait method
     use ic_interfaces::execution_environment::{HypervisorError, SystemApi};
     use ic_logger::ReplicaLogger;
     use ic_replicated_state::{PageIndex, PageMap};
-    use ic_system_api::ModificationTracking;
     use ic_test_utilities_types::ids::canister_test_id;
     use proptest::strategy::ValueTree;
 
@@ -886,6 +886,7 @@ mod tests {
                 setup_instruction_overhead()
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
                         .get()
+                    + STABLE_OP_BYTES
             );
         }
 
@@ -929,6 +930,7 @@ mod tests {
                 setup_instruction_overhead()
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
                         .get()
+                    + STABLE_OP_BYTES
                     + SchedulerConfig::system_subnet().dirty_page_overhead.get()
             );
         }
@@ -973,6 +975,7 @@ mod tests {
                 setup_instruction_overhead()
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
                         .get()
+                    + STABLE_OP_BYTES
                     + SchedulerConfig::system_subnet().dirty_page_overhead.get()
             );
         }
@@ -1077,7 +1080,6 @@ mod tests {
         let wasm = wat2wasm(&wat).unwrap();
 
         let config = EmbeddersConfig {
-            subnet_type,
             dirty_page_overhead: match subnet_type {
                 SubnetType::System => SchedulerConfig::system_subnet(),
                 SubnetType::Application => SchedulerConfig::application_subnet(),

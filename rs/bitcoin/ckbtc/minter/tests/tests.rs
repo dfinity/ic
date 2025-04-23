@@ -8,7 +8,7 @@ use ic_btc_checker::{
     BtcNetwork as CheckerBtcNetwork, CheckArg, CheckMode, InitArg as CheckerInitArg,
     UpgradeArg as CheckerUpgradeArg,
 };
-use ic_btc_interface::{Network, Txid};
+use ic_btc_interface::Txid;
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
@@ -23,7 +23,8 @@ use ic_ckbtc_minter::updates::update_balance::{
     PendingUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
 };
 use ic_ckbtc_minter::{
-    Log, MinterInfo, CKBTC_LEDGER_MEMO_SIZE, MIN_RELAY_FEE_PER_VBYTE, MIN_RESUBMISSION_DELAY,
+    Log, MinterInfo, Network, CKBTC_LEDGER_MEMO_SIZE, MIN_RELAY_FEE_PER_VBYTE,
+    MIN_RESUBMISSION_DELAY,
 };
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_metrics_assert::{CanisterHttpQuery, MetricsAssert};
@@ -44,11 +45,12 @@ const TRANSFER_FEE: u64 = 10;
 const MIN_CONFIRMATIONS: u32 = 12;
 const MAX_TIME_IN_QUEUE: Duration = Duration::from_secs(10);
 const WITHDRAWAL_ADDRESS: &str = "bc1q34aq5drpuwy3wgl9lhup9892qp6svr8ldzyy7c";
+const SENDER_ID: PrincipalId = PrincipalId::new_user_test_id(1);
 
 #[allow(deprecated)]
 fn default_init_args() -> CkbtcMinterInitArgs {
     CkbtcMinterInitArgs {
-        btc_network: Network::Regtest.into(),
+        btc_network: Network::Regtest,
         ecdsa_key_name: "master_ecdsa_public_key".into(),
         retrieve_btc_min_amount: 2000,
         ledger_id: CanisterId::from(0),
@@ -59,6 +61,7 @@ fn default_init_args() -> CkbtcMinterInitArgs {
         btc_checker_principal: Some(CanisterId::from(0)),
         kyt_principal: None,
         kyt_fee: None,
+        get_utxos_cache_expiration_seconds: None,
     }
 }
 
@@ -534,18 +537,14 @@ fn test_illegal_caller() {
 
 pub fn get_btc_address(
     env: &StateMachine,
+    sender: PrincipalId,
     minter_id: CanisterId,
     arg: &GetBtcAddressArgs,
 ) -> String {
     Decode!(
-        &env.execute_ingress_as(
-            CanisterId::from_u64(100).into(),
-            minter_id,
-            "get_btc_address",
-            Encode!(arg).unwrap()
-        )
-        .expect("failed to transfer funds")
-        .bytes(),
+        &env.execute_ingress_as(sender, minter_id, "get_btc_address", Encode!(arg).unwrap())
+            .expect("failed to get btc address")
+            .bytes(),
         String
     )
     .expect("failed to decode String response")
@@ -567,6 +566,7 @@ fn test_minter() {
 
     let btc_address_1 = get_btc_address(
         &env,
+        SENDER_ID,
         minter_id,
         &GetBtcAddressArgs {
             owner: None,
@@ -576,6 +576,7 @@ fn test_minter() {
     let address_1 = Address::from_str(&btc_address_1).expect("invalid Bitcoin address");
     let btc_address_2 = get_btc_address(
         &env,
+        SENDER_ID,
         minter_id,
         &GetBtcAddressArgs {
             owner: None,
@@ -584,6 +585,63 @@ fn test_minter() {
     );
     let address_2 = Address::from_str(&btc_address_2).expect("invalid Bitcoin address");
     assert_ne!(address_1, address_2);
+}
+
+#[test]
+fn get_btc_address_from_anonymous_caller_should_succeed() {
+    let env = new_state_machine();
+    let args = MinterArg::Init(default_init_args());
+    let args = Encode!(&args).unwrap();
+    let minter_id = env.install_canister(minter_wasm(), args, None).unwrap();
+
+    let btc_address = get_btc_address(
+        &env,
+        PrincipalId::new_anonymous(),
+        minter_id,
+        &GetBtcAddressArgs {
+            owner: Some(Principal::from(SENDER_ID)),
+            subaccount: None,
+        },
+    );
+    assert!(!btc_address.is_empty());
+}
+
+#[test]
+#[should_panic(expected = "the owner must be non-anonymous")]
+fn get_btc_address_with_anonymous_owner_should_panic() {
+    let env = new_state_machine();
+    let args = MinterArg::Init(default_init_args());
+    let args = Encode!(&args).unwrap();
+    let minter_id = env.install_canister(minter_wasm(), args, None).unwrap();
+
+    get_btc_address(
+        &env,
+        SENDER_ID,
+        minter_id,
+        &GetBtcAddressArgs {
+            owner: Some(Principal::anonymous()),
+            subaccount: None,
+        },
+    );
+}
+
+#[test]
+#[should_panic(expected = "the owner must be non-anonymous")]
+fn get_btc_address_with_empty_owner_and_anonymous_caller_should_panic() {
+    let env = new_state_machine();
+    let args = MinterArg::Init(default_init_args());
+    let args = Encode!(&args).unwrap();
+    let minter_id = env.install_canister(minter_wasm(), args, None).unwrap();
+
+    get_btc_address(
+        &env,
+        PrincipalId::new_anonymous(),
+        minter_id,
+        &GetBtcAddressArgs {
+            owner: None,
+            subaccount: None,
+        },
+    );
 }
 
 fn bitcoin_canister_id(btc_network: Network) -> CanisterId {
@@ -600,11 +658,15 @@ fn bitcoin_canister_id(btc_network: Network) -> CanisterId {
 }
 
 fn install_bitcoin_mock_canister(env: &StateMachine, btc_network: Network) {
+    use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork;
     let cid = bitcoin_canister_id(btc_network);
     env.create_canister_with_cycles(Some(cid.into()), Cycles::new(0), None);
-
-    env.install_existing_canister(cid, bitcoin_mock_wasm(), Encode!(&btc_network).unwrap())
-        .unwrap();
+    env.install_existing_canister(
+        cid,
+        bitcoin_mock_wasm(),
+        Encode!(&BitcoinNetwork::from(btc_network)).unwrap(),
+    )
+    .unwrap();
 }
 
 struct CkBtcSetup {
@@ -655,7 +717,7 @@ impl CkBtcSetup {
             minter_id,
             minter_wasm(),
             Encode!(&MinterArg::Init(CkbtcMinterInitArgs {
-                btc_network: btc_network.into(),
+                btc_network,
                 retrieve_btc_min_amount,
                 ledger_id,
                 max_time_in_queue_nanos: 100,
@@ -1908,6 +1970,15 @@ fn test_retrieve_btc_with_approval() {
 
     ckbtc.finalize_transaction(tx);
     assert_eq!(ckbtc.await_finalization(block_index, 10), txid);
+
+    ckbtc
+        .check_minter_metrics()
+        .assert_contains_metric_matching(
+            r#"ckbtc_minter_sign_with_ecdsa_latency_bucket\{result="success",le="(\d+|\+Inf)"\} 1 \d+"#,
+        )
+        .assert_does_not_contain_metric_matching(
+            r#"ckbtc_minter_sign_with_ecdsa_latency_bucket\{result="failure",le="(\d+|\+Inf)"\} 1 \d+"#
+        );
 }
 
 #[test]
@@ -2013,6 +2084,15 @@ fn test_retrieve_btc_with_approval_from_subaccount() {
             status_v2: Some(ckbtc.retrieve_btc_status_v2(block_index))
         }]
     );
+
+    ckbtc
+        .check_minter_metrics()
+        .assert_contains_metric_matching(
+            r#"ckbtc_minter_sign_with_ecdsa_latency_bucket\{result="success",le="(\d+|\+Inf)"\} 1 \d+"#,
+        )
+        .assert_does_not_contain_metric_matching(
+            r#"ckbtc_minter_sign_with_ecdsa_latency_bucket\{result="failure",le="(\d+|\+Inf)"\} 1 \d+"#
+        );
 }
 
 #[test]

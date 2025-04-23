@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-error-types",
     "//rs/bitcoin/replica_types",
     "//rs/bitcoin/service",
     "//rs/canister_client/sender",
@@ -30,7 +31,6 @@ DEPENDENCIES = [
     "//rs/test_utilities/logger",
     "//rs/test_utilities/types",
     "//rs/types/base_types",
-    "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/utils",

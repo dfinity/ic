@@ -80,7 +80,6 @@ type CreateSubnetPayload = record {
   gossip_pfn_evaluation_period_ms : nat32;
   max_ingress_messages_per_block : nat64;
   max_number_of_canisters : nat64;
-  ecdsa_config : opt EcdsaInitialConfig;
   chain_key_config : opt InitialChainKeyConfig;
   gossip_max_artifact_streams_per_peer : nat32;
   replica_version_id : text;
@@ -198,6 +197,19 @@ type ApiBoundaryNodeIdRecord = record {
   id : opt principal;
 };
 
+type GetChunkRequest = record {
+  content_sha256 : opt blob;
+};
+
+type GetChunkResponse = variant {
+  Ok : Chunk;
+  Err : text;
+};
+
+type Chunk = record {
+  content : opt blob;
+};
+
 type GetNodeOperatorsAndDcsOfNodeProviderResponse = variant {
   Ok : vec record { DataCenterRecord; NodeOperatorRecord };
   Err : text;
@@ -213,6 +225,10 @@ type GetSubnetForCanisterRequest = record { "principal" : opt principal };
 type GetSubnetForCanisterResponse = variant {
   Ok : record { subnet_id : opt principal };
   Err : text;
+};
+
+type GetNodeProvidersMonthlyXdrRewardsRequest = record {
+    registry_version: opt nat64;
 };
 
 type Gps = record { latitude : float32; longitude : float32 };
@@ -255,7 +271,6 @@ type RecoverSubnetPayload = record {
   replacement_nodes : opt vec principal;
   subnet_id : principal;
   registry_store_uri : opt record { text; text; nat64 };
-  ecdsa_config : opt EcdsaInitialConfig;
   chain_key_config : opt InitialChainKeyConfig;
   state_hash : blob;
   time_ns : nat64;
@@ -423,9 +438,6 @@ type UpdateSubnetPayload = record {
   chain_key_config : opt ChainKeyConfig;
   chain_key_signing_enable : opt vec MasterPublicKeyId;
   chain_key_signing_disable : opt vec MasterPublicKeyId;
-  ecdsa_config : opt EcdsaConfig;
-  ecdsa_key_signing_enable : opt vec EcdsaKeyId;
-  ecdsa_key_signing_disable : opt vec EcdsaKeyId;
 };
 
 type ChainKeyConfig = record {
@@ -460,8 +472,9 @@ service : {
   deploy_hostos_to_some_nodes : (DeployHostosToSomeNodes) -> ();
   get_api_boundary_node_ids : (GetApiBoundaryNodeIdsRequest) -> (GetApiBoundaryNodeIdsResponse) query;
   get_build_metadata : () -> (text) query;
+  get_chunk : (GetChunkRequest) -> (GetChunkResponse) query;
   get_node_operators_and_dcs_of_node_provider : (principal) -> (GetNodeOperatorsAndDcsOfNodeProviderResponse) query;
-  get_node_providers_monthly_xdr_rewards : () -> (GetNodeProvidersMonthlyXdrRewardsResponse) query;
+  get_node_providers_monthly_xdr_rewards : (opt GetNodeProvidersMonthlyXdrRewardsRequest) -> (GetNodeProvidersMonthlyXdrRewardsResponse) query;
   get_subnet_for_canister : (GetSubnetForCanisterRequest) -> (GetSubnetForCanisterResponse) query;
   prepare_canister_migration : (PrepareCanisterMigrationPayload) -> ();
   recover_subnet : (RecoverSubnetPayload) -> ();

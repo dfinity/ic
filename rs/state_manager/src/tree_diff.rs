@@ -522,30 +522,50 @@ mod tests {
             .boxed()
     }
 
-    proptest! {
-        #[test]
-        fn tree_diff_against_self_is_empty(tree in arb_tree(4, 3)) {
-            prop_assert!(diff_rose_trees(&tree, &tree).is_empty());
-        }
+    #[test_strategy::proptest]
+    fn tree_diff_against_self_is_empty(
+        #[strategy(arb_tree(
+            4, // max_height
+            3, // max_width
+        ))]
+        tree: RoseHashTree,
+    ) {
+        prop_assert!(diff_rose_trees(&tree, &tree).is_empty());
+    }
 
-        #[test]
-        fn tree_diff_detects_changing_single_hash((tree, idx) in arb_tree_and_leaf_index(4, 3),
-                                                  new_hash in any::<[u8; 32]>().prop_map(Digest)) {
-            let size = num_leaves(&tree);
-            prop_assume!(idx < size);
-            let mut tree_2 = tree.clone();
-            let (path, _old_hash) = modify_leaf_at_index(&mut tree_2, idx, new_hash.clone()).unwrap();
-            let expected_diff = changes(&[(path, Change::InsertLeaf(new_hash))][..]);
-            assert_eq!(diff_rose_trees(&tree, &tree_2), expected_diff);
-        }
+    #[test_strategy::proptest]
+    fn tree_diff_detects_changing_single_hash(
+        #[strategy(arb_tree_and_leaf_index(
+            4, // max_height
+            3, // max_width
+        ))]
+        test_tree: (RoseHashTree, usize),
+        #[strategy(any::<[u8; 32]>())] new_hash: [u8; 32],
+    ) {
+        let (tree, idx) = test_tree;
+        let new_hash = Digest(new_hash);
 
-        #[test]
-        fn tree_diff_detects_removing_a_node((tree, idx) in arb_tree_and_edge_index(4, 3)) {
-            let mut tree_2 = tree.clone();
-            let (path, _node) = remove_edge_at_index(&mut tree_2, idx).unwrap();
-            let expected_diff = changes(&[(path, Change::DeleteSubtree)][..]);
-            assert_eq!(diff_rose_trees(&tree, &tree_2), expected_diff);
-        }
+        let size = num_leaves(&tree);
+        prop_assume!(idx < size);
+        let mut tree_2 = tree.clone();
+        let (path, _old_hash) = modify_leaf_at_index(&mut tree_2, idx, new_hash.clone()).unwrap();
+        let expected_diff = changes(&[(path, Change::InsertLeaf(new_hash))][..]);
+        assert_eq!(diff_rose_trees(&tree, &tree_2), expected_diff);
+    }
+
+    #[test_strategy::proptest]
+    fn tree_diff_detects_removing_a_node(
+        #[strategy(arb_tree_and_edge_index(
+            4, // max_height
+            3, // max_width
+        ))]
+        test_tree: (RoseHashTree, usize),
+    ) {
+        let (tree, idx) = test_tree;
+        let mut tree_2 = tree.clone();
+        let (path, _node) = remove_edge_at_index(&mut tree_2, idx).unwrap();
+        let expected_diff = changes(&[(path, Change::DeleteSubtree)][..]);
+        assert_eq!(diff_rose_trees(&tree, &tree_2), expected_diff);
     }
 
     #[test]

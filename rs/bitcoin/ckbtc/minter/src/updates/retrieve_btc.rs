@@ -22,7 +22,7 @@ use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use num_traits::cast::ToPrimitive;
 
-const MAX_CONCURRENT_PENDING_REQUESTS: usize = 1000;
+const MAX_CONCURRENT_PENDING_REQUESTS: usize = 5000;
 
 /// The arguments of the [retrieve_btc] endpoint.
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -165,7 +165,10 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         ic_cdk::trap("illegal retrieve_btc target");
     }
 
-    let _guard = retrieve_btc_guard(caller)?;
+    let _guard = retrieve_btc_guard(Account {
+        owner: caller,
+        subaccount: None,
+    })?;
     let (min_retrieve_amount, btc_network) =
         read_state(|s| (s.fee_based_retrieve_btc_min_amount, s.btc_network));
 
@@ -269,8 +272,11 @@ pub async fn retrieve_btc_with_approval(
     if args.address == main_address.display(state::read_state(|s| s.btc_network)) {
         ic_cdk::trap("illegal retrieve_btc target");
     }
-
-    let _guard = retrieve_btc_guard(caller)?;
+    let caller_account = Account {
+        owner: caller,
+        subaccount: args.from_subaccount,
+    };
+    let _guard = retrieve_btc_guard(caller_account)?;
     let (min_retrieve_amount, btc_network) =
         read_state(|s| (s.fee_based_retrieve_btc_min_amount, s.btc_network));
     if args.amount < min_retrieve_amount {
@@ -320,10 +326,7 @@ pub async fn retrieve_btc_with_approval(
         status: None,
     };
     let block_index = burn_ckbtcs_icrc2(
-        Account {
-            owner: caller,
-            subaccount: args.from_subaccount,
-        },
+        caller_account,
         args.amount,
         crate::memo::encode(&burn_memo_icrc2).into(),
     )

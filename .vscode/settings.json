@@ -9,4 +9,8 @@
         "editor.formatOnSave": true
     },
     "bazel.buildifierExecutable": "@buildifier",
+    "cSpell.words": [
+        "followee",
+        "followees"
+    ],
 }

@@ -10,7 +10,7 @@ use ic_system_test_driver::driver::{
         AttachImageSpec, CreateVmRequest, Farm, GroupMetadata, GroupSpec, ImageLocation, VmType,
     },
     ic::{Subnet, VmAllocationStrategy},
-    resource::build_empty_image,
+    test_env_api::{get_empty_disk_img_sha256, get_empty_disk_img_url},
 };
 use ic_types::ReplicaVersion;
 use reqwest::blocking::Client;
@@ -27,7 +27,6 @@ use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
 use config_types::DeploymentEnvironment;
-
 const FARM_BASE_URL: &str = "https://farm.dfinity.systems";
 
 /// Deploy a single ICOS VM to Farm
@@ -102,17 +101,14 @@ fn main() {
 
     // Adjust VM configuration for nested setup
     let (image_location, vm_type, vm_size) = if args.nested {
-        // Create an empty image, this will be used as the "main" drive
-        let empty_image_name = "empty.img.tar.zst";
-        let tmp_dir = tempfile::tempdir().unwrap();
-        let empty_image = build_empty_image(tmp_dir.path(), empty_image_name).unwrap();
-        let empty_image_id = farm
-            .upload_file(&group_name, empty_image, empty_image_name)
-            .unwrap();
-
+        let empty_disk_img_url = get_empty_disk_img_url().unwrap();
+        let empty_disk_img_sha256 = get_empty_disk_img_sha256().unwrap();
         (
-            ImageLocation::IcOsImageViaId { id: empty_image_id },
-            VmType::Nested,
+            ImageLocation::IcOsImageViaUrl {
+                url: empty_disk_img_url,
+                sha256: empty_disk_img_sha256,
+            },
+            VmType::Production,
             Some(101.into()), // 101 GibiByte image
         )
     } else {

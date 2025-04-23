@@ -635,7 +635,7 @@ fn test_compute_neuron_metrics_public_neurons() {
     .with_cached_neuron_stake_e8s(100)
     .with_staked_maturity_e8s_equivalent(101)
     .with_maturity_e8s_equivalent(110)
-    .with_visibility(Some(Visibility::Public))
+    .with_visibility(Visibility::Public)
     .with_voting_power_refreshed_timestamp_seconds(now_seconds)
     .build();
 
@@ -696,12 +696,7 @@ fn test_compute_neuron_metrics_public_neurons() {
 
     neuron_store
         .with_neuron(&NeuronId { id: 3 }, |neuron| {
-            assert_eq!(
-                neuron.visibility(),
-                Some(Visibility::Public),
-                "{:#?}",
-                neuron,
-            );
+            assert_eq!(neuron.visibility(), Visibility::Public, "{:#?}", neuron,);
         })
         .unwrap(); // Explode if neuron is not found.
 
@@ -781,7 +776,6 @@ fn test_compute_neuron_metrics_public_neurons() {
 fn test_compute_neuron_metrics_stale_and_expired_voting_power_neurons() {
     // Step 1: Prepare the world.
 
-    let _reset_on_drop = crate::temporarily_enable_voting_power_adjustment();
     let now_seconds = 1718213756;
 
     // Step 1.1: Construct neurons (as described in the docstring).
@@ -803,7 +797,7 @@ fn test_compute_neuron_metrics_stale_and_expired_voting_power_neurons() {
     .with_cached_neuron_stake_e8s(100)
     .with_staked_maturity_e8s_equivalent(101)
     .with_maturity_e8s_equivalent(110)
-    .with_visibility(Some(Visibility::Public))
+    .with_visibility(Visibility::Public)
     .with_voting_power_refreshed_timestamp_seconds(now_seconds)
     .build();
 

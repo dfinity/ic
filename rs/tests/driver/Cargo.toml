@@ -52,7 +52,7 @@ ic-icrc1-ledger = { path = "../../ledger_suite/icrc1/ledger" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-message = { path = "../test_canisters/message" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
@@ -102,7 +102,7 @@ icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 itertools = { workspace = true }
 json5 = "0.4.1"
 k256 = { workspace = true }
-k8s-openapi = { version = "0.22.0", features = ["v1_24"] }
+k8s-openapi = { workspace = true }
 kube = { workspace = true }
 lazy_static = { workspace = true }
 leb128 = "0.2.5"
@@ -128,6 +128,7 @@ ring = { version = "0.17.7", features = ["std"] }
 rosetta-core = { path = "../../rosetta-api/common/rosetta_core" }
 rsa = { workspace = true }
 rust_decimal = "1.36.0"
+schemars = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }

@@ -11,10 +11,12 @@ type GetSaltResponse = variant {
 
 // Comprehensive error for salt retrieval
 type GetSaltError = variant {
+    // Salt generation is still pending. Retry later
+    SaltNotInitialized;
     // Indicates an unauthorized attempt to get the salt
     Unauthorized;
     // Captures all unexpected internal errors during process
-    Internal: text;                 
+    Internal: text;
 };
 
 // Salt response containing salt itself and additional metadata
@@ -41,26 +43,20 @@ type SaltGenerationStrategy = variant {
   // Generates a new salt at 00:00:00 UTC on the first day of the next calendar month
   // Handles calendar edge cases including: transitions between months (December-January), leap years
   StartOfMonth;
-  // Generates a new salt at fixed intervals from an unspecified reference point
-  FixedIntervalSecs: nat64;
 };
 
 // Initialization arguments used when installing/upgrading/reinstalling the canister
-type InitArgs = record {
+type InitArg = record {
+    // If true salt is regenerated immediately and subsequently based on the chosen strategy
+    regenerate_now: bool;
     // Strategy defining salt generation
-    // If specified: 
-    //  - salt is regenerated immediately
-    //  - subsequent strategy is based on the variant
-    // If not specified:
-    //  - preserve previously configured strategy
-    //  - no immediate salt regeneration
-    salt_generation_strategy: opt SaltGenerationStrategy;
+    salt_generation_strategy: SaltGenerationStrategy;
     // Interval (in seconds) for polling API boundary node IDs from the registry
     // The first polling operation occurs immediately
     registry_polling_interval_secs: nat64;
 };
 
-service : (InitArgs) -> {
+service : (InitArg) -> {
   // Fetches the current salt (randomly generated value to be added to data before hashing)
   get_salt: () -> (GetSaltResponse) query;
   // Canister metrics (Http Interface)

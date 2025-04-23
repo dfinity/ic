@@ -139,6 +139,7 @@ impl From<ManageNeuronCommandRequest> for Command {
             ManageNeuronCommandRequest::Merge(v) => Command::Merge(v),
             ManageNeuronCommandRequest::StakeMaturity(v) => Command::StakeMaturity(v),
             ManageNeuronCommandRequest::RefreshVotingPower(v) => Command::RefreshVotingPower(v),
+            ManageNeuronCommandRequest::DisburseMaturity(v) => Command::DisburseMaturity(v),
         }
     }
 }

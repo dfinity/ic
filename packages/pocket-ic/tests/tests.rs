@@ -1,24 +1,30 @@
 use candid::{decode_one, encode_one, CandidType, Decode, Deserialize, Encode, Principal};
 use ic_certification::Label;
-use ic_transport_types::Envelope;
-use ic_transport_types::EnvelopeContent::ReadState;
-use pocket_ic::management_canister::{
-    CanisterIdRecord, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult,
-    HttpRequestResult, ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm,
-    SchnorrPublicKeyArgsKeyId, SchnorrPublicKeyResult, SignWithBip341Aux, SignWithSchnorrAux,
+use ic_management_canister_types::CanisterIdRecord;
+use ic_management_canister_types::{
+    Bip341, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult, HttpRequestResult,
+    NodeMetricsHistoryArgs, NodeMetricsHistoryRecord as NodeMetricsHistoryResultItem,
+    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrAux,
+    SchnorrKeyId as SchnorrPublicKeyArgsKeyId, SchnorrPublicKeyResult,
 };
+use ic_transport_types::Envelope;
+use ic_transport_types::EnvelopeContent::{Call, ReadState};
+use pocket_ic::common::rest::{BlockmakerConfigs, RawSubnetBlockmaker, TickConfigs};
 use pocket_ic::{
     common::rest::{
         BlobCompression, CanisterHttpReply, CanisterHttpResponse, MockCanisterHttpResponse,
-        RawEffectivePrincipal, SubnetKind,
+        RawEffectivePrincipal, RawMessageId, SubnetKind,
     },
     query_candid, update_candid, DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult,
-    PocketIc, PocketIcBuilder, RejectCode,
+    PocketIc, PocketIcBuilder, PocketIcState, RejectCode, Time,
 };
-#[cfg(unix)]
 use reqwest::blocking::Client;
+use reqwest::header::CONTENT_LENGTH;
+use reqwest::{Method, StatusCode};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+#[cfg(windows)]
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::{io::Read, time::SystemTime};
 
 // 2T cycles
@@ -351,20 +357,10 @@ fn test_multiple_large_xnet_payloads() {
 }
 
 fn query_and_check_time(pic: &PocketIc, test_canister: Principal) {
-    let current_time = pic
-        .get_time()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let current_time = pic.get_time().as_nanos_since_unix_epoch();
     let t: (u64,) = query_candid(pic, test_canister, "time", ((),)).unwrap();
-    assert_eq!(
-        pic.get_time()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos(),
-        current_time
-    );
-    assert_eq!(current_time, t.0 as u128);
+    assert_eq!(pic.get_time().as_nanos_since_unix_epoch(), current_time);
+    assert_eq!(current_time, t.0);
 }
 
 #[test]
@@ -376,8 +372,8 @@ fn test_get_and_set_and_advance_time() {
     pic.add_cycles(canister, INIT_CYCLES);
     pic.install_canister(canister, test_canister_wasm(), vec![], None);
 
-    let unix_time_secs = 1650000000;
-    let time = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs);
+    let unix_time_nanos = 1650000000000000000;
+    let time = Time::from_nanos_since_unix_epoch(unix_time_nanos);
     pic.set_time(time);
     // time is not certified so `query_and_check_time` would fail here
     assert_eq!(pic.get_time(), time);
@@ -388,8 +384,8 @@ fn test_get_and_set_and_advance_time() {
     query_and_check_time(&pic, canister);
     assert_eq!(pic.get_time(), time + std::time::Duration::from_nanos(1));
 
-    let unix_time_secs = 1700000000;
-    let time = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs);
+    let unix_time_nanos = 1700000000000000000;
+    let time = Time::from_nanos_since_unix_epoch(unix_time_nanos);
     pic.set_certified_time(time);
     query_and_check_time(&pic, canister);
     assert_eq!(pic.get_time(), time);
@@ -421,9 +417,10 @@ fn set_time_into_past() {
     let pic = PocketIc::new();
 
     let now = SystemTime::now();
-    pic.set_time(now + std::time::Duration::from_secs(1));
+    let future = now + std::time::Duration::from_secs(1);
+    pic.set_time(future.into());
 
-    pic.set_time(now);
+    pic.set_time(now.into());
 }
 
 #[test]
@@ -903,7 +900,7 @@ fn test_schnorr() {
     // We create a PocketIC instance consisting of the NNS, II, and one application subnet.
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
-        .with_ii_subnet() // this subnet has ECDSA keys
+        .with_ii_subnet() // this subnet has threshold keys
         .with_application_subnet()
         .build();
 
@@ -919,22 +916,21 @@ fn test_schnorr() {
     pic.add_cycles(canister, INIT_CYCLES);
     pic.install_canister(canister, test_canister_wasm(), vec![], None);
 
-    // We define the message, derivation path, and ECDSA key ID to use in this test.
+    // We define the message, derivation path, and Merkle root hash.
     let message = b"Hello, world!==================="; // must be of length 32 bytes for BIP340
     let derivation_path = vec!["my message".as_bytes().to_vec()];
-    let some_aux: Option<SignWithSchnorrAux> =
-        Some(SignWithSchnorrAux::Bip341(SignWithBip341Aux {
-            merkle_root_hash: b"Hello, aux!=====================".to_vec(),
-        }));
-    for algorithm in [SchnorrAlgorithm::Bip340Secp256K1, SchnorrAlgorithm::Ed25519] {
+    let some_aux: Option<SchnorrAux> = Some(SchnorrAux::Bip341(Bip341 {
+        merkle_root_hash: b"Hello, aux!=====================".to_vec(),
+    }));
+    for algorithm in [SchnorrAlgorithm::Bip340secp256k1, SchnorrAlgorithm::Ed25519] {
         for name in ["key_1", "test_key_1", "dfx_test_key"] {
             for aux in [None, some_aux.clone()] {
                 let key_id = SchnorrPublicKeyArgsKeyId {
-                    algorithm: algorithm.clone(),
+                    algorithm,
                     name: name.to_string(),
                 };
 
-                // We get the Schnorr public key and signature via update calls to the test canister.
+                // We get the Schnorr public key and signature.
                 let schnorr_public_key = update_candid::<
                     (Option<Principal>, _, _),
                     (Result<SchnorrPublicKeyResult, String>,),
@@ -963,13 +959,13 @@ fn test_schnorr() {
 
                 // We verify the Schnorr signature.
                 match key_id.algorithm {
-                    SchnorrAlgorithm::Bip340Secp256K1 => {
+                    SchnorrAlgorithm::Bip340secp256k1 => {
                         use k256::ecdsa::signature::hazmat::PrehashVerifier;
                         use k256::schnorr::{Signature, VerifyingKey};
                         let bip340_public_key = schnorr_public_key.public_key[1..].to_vec();
                         let public_key = match aux {
                             None => bip340_public_key,
-                            Some(SignWithSchnorrAux::Bip341(bip341_aux)) => {
+                            Some(SchnorrAux::Bip341(bip341_aux)) => {
                                 use bitcoin::hashes::Hash;
                                 use bitcoin::schnorr::TapTweak;
                                 let xonly = bitcoin::util::key::XOnlyPublicKey::from_slice(
@@ -1023,7 +1019,7 @@ fn test_ecdsa() {
     // We create a PocketIC instance consisting of the NNS, II, and one application subnet.
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
-        .with_ii_subnet() // this subnet has ECDSA keys
+        .with_ii_subnet() // this subnet has threshold keys
         .with_application_subnet()
         .build();
 
@@ -1039,17 +1035,19 @@ fn test_ecdsa() {
     pic.add_cycles(canister, INIT_CYCLES);
     pic.install_canister(canister, test_canister_wasm(), vec![], None);
 
-    // We define the message, derivation path, and ECDSA key ID to use in this test.
+    // We define the message and derivation path.
     let message = "Hello, world!".to_string();
+    let derivation_path = vec!["my message".as_bytes().to_vec()];
+
+    // We compute the hash of the message.
     let mut hasher = Sha256::new();
     hasher.update(message);
     let message_hash: Vec<u8> = hasher.finalize().to_vec();
-    let derivation_path = vec!["my message".as_bytes().to_vec()];
 
     for key_id in ["key_1", "test_key_1", "dfx_test_key"] {
         let key_id = key_id.to_string();
 
-        // We get the ECDSA public key and signature via update calls to the test canister.
+        // We get the ECDSA public key and signature.
         let ecsda_public_key = update_candid::<
             (Option<Principal>, Vec<Vec<u8>>, String),
             (Result<EcdsaPublicKeyResult, String>,),
@@ -1083,7 +1081,7 @@ fn test_ecdsa() {
 #[test]
 fn test_ecdsa_disabled() {
     // We create a PocketIC instance consisting of the NNS and one application subnet.
-    // With no II subnet, there's no subnet with ECDSA keys.
+    // With no II and fiduciary subnet, there's no subnet with ECDSA keys.
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_application_subnet()
@@ -1101,15 +1099,17 @@ fn test_ecdsa_disabled() {
     pic.add_cycles(canister, INIT_CYCLES);
     pic.install_canister(canister, test_canister_wasm(), vec![], None);
 
-    // We define the message, derivation path, and ECDSA key ID to use in this test.
+    // We define the message and derivation path.
     let message = "Hello, world!".to_string();
+    let derivation_path = vec!["my message".as_bytes().to_vec()];
+
+    // We compute the hash of the message.
     let mut hasher = Sha256::new();
     hasher.update(message);
     let message_hash: Vec<u8> = hasher.finalize().to_vec();
-    let derivation_path = vec!["my message".as_bytes().to_vec()];
-    let key_id = "dfx_test_key".to_string();
 
     // We attempt to get the ECDSA public key and signature via update calls to the test canister.
+    let key_id = "dfx_test_key".to_string();
     let ecsda_public_key_error = update_candid::<
         (Option<Principal>, Vec<Vec<u8>>, String),
         (Result<EcdsaPublicKeyResult, String>,),
@@ -1137,6 +1137,75 @@ fn test_ecdsa_disabled() {
         .0
         .unwrap_err();
     assert!(ecdsa_signature_err.contains("Requested unknown or disabled threshold key: ecdsa:Secp256k1:dfx_test_key, existing enabled keys: []"));
+}
+
+#[test]
+fn test_vetkd() {
+    use ic_vetkd_utils::{DerivedPublicKey, EncryptedVetKey, TransportSecretKey};
+
+    // We create a PocketIC instance consisting of the II and one application subnet.
+    let pic = PocketIcBuilder::new()
+        .with_ii_subnet() // this subnet has threshold keys
+        .with_application_subnet()
+        .with_nonmainnet_features(true) // the VetKd feature is not available on mainnet yet
+        .build();
+
+    // We retrieve the app subnet ID from the topology.
+    let topology = pic.topology();
+    let app_subnet = topology.get_app_subnets()[0];
+
+    // We create a canister on the app subnet.
+    let canister = pic.create_canister_on_subnet(None, None, app_subnet);
+    assert_eq!(pic.get_subnet(canister), Some(app_subnet));
+
+    // We top up the canister with cycles and install the test canister WASM to them.
+    pic.add_cycles(canister, INIT_CYCLES);
+    pic.install_canister(canister, test_canister_wasm(), vec![], None);
+
+    // We define the context, input, and transport public key.
+    let context = b"My context".to_vec();
+    let input = b"My input".to_vec();
+    let tsk = TransportSecretKey::from_seed([64; 32].to_vec()).unwrap();
+    let transport_public_key = tsk.public_key();
+
+    for key_id in ["key_1", "test_key_1", "dfx_test_key"] {
+        let key_id = key_id.to_string();
+
+        // We get the VetKd public key and encrypted key.
+        let vetkd_public_key =
+            update_candid::<(Option<Principal>, Vec<u8>, String), (Result<Vec<u8>, String>,)>(
+                &pic,
+                canister,
+                "vetkd_public_key",
+                (None, context.clone(), key_id.clone()),
+            )
+            .unwrap()
+            .0
+            .unwrap();
+
+        let vetkd_encryped_key =
+            update_candid::<(Vec<u8>, Vec<u8>, String, Vec<u8>), (Result<Vec<u8>, String>,)>(
+                &pic,
+                canister,
+                "vetkd_derive_key",
+                (
+                    context.clone(),
+                    input.clone(),
+                    key_id.clone(),
+                    transport_public_key.clone(),
+                ),
+            )
+            .unwrap()
+            .0
+            .unwrap();
+
+        // We verify the vetKd encrypted key.
+        let ek = EncryptedVetKey::deserialize(&vetkd_encryped_key).unwrap();
+
+        let dpk = DerivedPublicKey::deserialize(&vetkd_public_key).unwrap();
+
+        ek.decrypt_and_verify(&tsk, &dpk, &input).unwrap();
+    }
 }
 
 #[test]
@@ -1193,6 +1262,44 @@ fn test_canister_http() {
     let http_response: Result<HttpRequestResult, (RejectionCode, String)> =
         decode_one(&reply).unwrap();
     assert_eq!(http_response.unwrap().body, body);
+}
+
+#[test]
+fn test_canister_http_in_live_mode() {
+    // We create a PocketIC instance with an NNS subnet
+    // (the "live" mode requires the NNS subnet).
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+
+    // Enable the "live" mode.
+    let _ = pic.make_live(None);
+
+    // Create a canister and charge it with 2T cycles.
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+
+    // Install the test canister wasm file on the canister.
+    let test_wasm = test_canister_wasm();
+    pic.install_canister(canister_id, test_wasm, vec![], None);
+
+    // Submit an update call to the test canister making a canister http outcall.
+    let call_id = pic
+        .submit_call(
+            canister_id,
+            Principal::anonymous(),
+            "canister_http",
+            encode_one(()).unwrap(),
+        )
+        .unwrap();
+
+    // Await the update call without making additional progress (the PocketIC instance
+    // is already in the "live" mode making progress automatically).
+    let reply = pic.await_call_no_ticks(call_id).unwrap();
+    let http_response: Result<HttpRequestResult, (RejectionCode, String)> =
+        decode_one(&reply).unwrap();
+    http_response.unwrap();
 }
 
 #[test]
@@ -1586,6 +1693,8 @@ async fn test_get_default_effective_canister_id_nonblocking() {
 
     let subnet_id = pic.get_subnet(canister_id).await.unwrap();
     assert!(pic.topology().await.get_app_subnets().contains(&subnet_id));
+
+    pic.drop().await;
 }
 
 #[test]
@@ -1789,20 +1898,38 @@ fn test_canister_snapshots() {
     let reply = call_counter_canister(&pic, canister_id, "read");
     assert_eq!(reply, 2_u32.to_le_bytes().to_vec());
 
-    // We take one more snapshot: since we already have an active snapshot,
-    // taking another snapshot fails unless we specify the active snapshot to be replaced.
     pic.stop_canister(canister_id, None).unwrap();
-    pic.take_canister_snapshot(canister_id, None, None)
-        .unwrap_err();
+    // We take another snapshot replacing the first one.
     let second_snapshot = pic
         .take_canister_snapshot(canister_id, None, Some(first_snapshot.id))
         .unwrap();
     pic.start_canister(canister_id, None).unwrap();
 
-    // Finally, we delete the current snapshot which allows us to take a snapshot without specifying any snapshot to be replaced.
+    // There should only be the second snapshot in the list of canister snapshots.
+    let snapshots = pic.list_canister_snapshots(canister_id, None).unwrap();
+    assert_eq!(snapshots.len(), 1);
+    assert_eq!(snapshots[0].id, second_snapshot.id);
+    assert_eq!(snapshots[0].total_size, second_snapshot.total_size);
+    assert_eq!(
+        snapshots[0].taken_at_timestamp,
+        second_snapshot.taken_at_timestamp
+    );
+
+    // Attempt to take another snapshot without providing a replace_id. The second snapshot
+    // should be still there.
+    pic.stop_canister(canister_id, None).unwrap();
+    let third_snapshot = pic.take_canister_snapshot(canister_id, None, None).unwrap();
+    pic.start_canister(canister_id, None).unwrap();
+    let snapshots = pic.list_canister_snapshots(canister_id, None).unwrap();
+    assert_eq!(snapshots[0].id, second_snapshot.id);
+
+    // Finally, we delete the second snapshot which leaves the canister with the third snapshot
+    // only.
     pic.delete_canister_snapshot(canister_id, None, second_snapshot.id)
         .unwrap();
-    pic.take_canister_snapshot(canister_id, None, None).unwrap();
+    let snapshots = pic.list_canister_snapshots(canister_id, None).unwrap();
+    assert_eq!(snapshots.len(), 1);
+    assert_eq!(snapshots[0].id, third_snapshot.id);
 }
 
 #[test]
@@ -2039,12 +2166,7 @@ fn read_state_request_status(
     let path = vec!["request_status".into(), Label::from_bytes(msg_id)];
     let paths = vec![path.clone()];
     let content = ReadState {
-        ingress_expiry: pic
-            .get_time()
-            .duration_since(std::time::SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos() as u64
-            + 240_000_000_000,
+        ingress_expiry: pic.get_time().as_nanos_since_unix_epoch() + 240_000_000_000,
         sender: Principal::anonymous(),
         paths,
     };
@@ -2072,6 +2194,90 @@ fn read_state_request_status(
         .body(serialized_bytes)
         .send()
         .unwrap()
+}
+
+#[test]
+fn call_ingress_expiry() {
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
+
+    // submit an update call via /api/v2/canister/.../call using an ingress expiry in the future
+    let unix_time_nanos = 2272143600000000000; // Wed Jan 01 2042 00:00:00 GMT+0100
+    let time = Time::from_nanos_since_unix_epoch(unix_time_nanos);
+    pic.set_certified_time(time);
+    let ingress_expiry = pic.get_time().as_nanos_since_unix_epoch() + 240_000_000_000;
+    let (resp, msg_id) = call_request(&pic, ingress_expiry, canister_id);
+    assert_eq!(resp.status(), reqwest::StatusCode::ACCEPTED);
+
+    // execute a round on the PocketIC instance to process that update call
+    pic.tick();
+
+    // check the update call status
+    let raw_message_id = RawMessageId {
+        effective_principal: RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+        message_id: msg_id.to_vec(),
+    };
+    let reply = pic.ingress_status(raw_message_id).unwrap().unwrap();
+    let principal = Decode!(&reply, String).unwrap();
+    assert_eq!(principal, canister_id.to_string());
+
+    // use an invalid ingress expiry
+    let ingress_expiry = SystemTime::now()
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64
+        + 240_000_000_000;
+    let (resp, _msg_id) = call_request(&pic, ingress_expiry, canister_id);
+    assert_eq!(resp.status(), reqwest::StatusCode::BAD_REQUEST);
+    let err = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+    assert!(
+        err.contains("Invalid request expiry: Specified ingress_expiry not within expected range")
+    );
+}
+
+fn call_request(
+    pic: &PocketIc,
+    ingress_expiry: u64,
+    canister_id: Principal,
+) -> (reqwest::blocking::Response, [u8; 32]) {
+    let content = Call {
+        nonce: None,
+        ingress_expiry,
+        sender: Principal::anonymous(),
+        canister_id,
+        method_name: "whoami".to_string(),
+        arg: Encode!(&()).unwrap(),
+    };
+    let envelope = Envelope {
+        content: std::borrow::Cow::Borrowed(&content),
+        sender_pubkey: None,
+        sender_sig: None,
+        sender_delegation: None,
+    };
+
+    let mut serialized_bytes = Vec::new();
+    let mut serializer = serde_cbor::Serializer::new(&mut serialized_bytes);
+    serializer.self_describe().unwrap();
+    envelope.serialize(&mut serializer).unwrap();
+
+    let endpoint = format!(
+        "instances/{}/api/v2/canister/{}/call",
+        pic.instance_id(),
+        canister_id.to_text()
+    );
+    let client = reqwest::blocking::Client::new();
+    let resp = client
+        .post(pic.get_server_url().join(&endpoint).unwrap())
+        .header(reqwest::header::CONTENT_TYPE, "application/cbor")
+        .body(serialized_bytes)
+        .send()
+        .unwrap();
+    (resp, *content.to_request_id())
 }
 
 #[test]
@@ -2213,4 +2419,279 @@ fn test_reject_response_type() {
         // inspect message is always uncertified
         assert!(!err.certified);
     }
+}
+
+#[test]
+fn test_custom_blockmaker_metrics() {
+    const HOURS_IN_SECONDS: u64 = 60 * 60;
+
+    let pocket_ic = PocketIcBuilder::new().with_application_subnet().build();
+    let topology = pocket_ic.topology();
+    let application_subnet = topology.get_app_subnets()[0];
+
+    // Create and install test canister.
+    let canister = pocket_ic.create_canister_on_subnet(None, None, application_subnet);
+    pocket_ic.add_cycles(canister, INIT_CYCLES);
+    pocket_ic.install_canister(canister, test_canister_wasm(), vec![], None);
+
+    let nodes = topology
+        .subnet_configs
+        .get(&application_subnet)
+        .unwrap()
+        .clone();
+
+    let blockmaker_1 = nodes.node_ids[0].clone();
+    let blockmaker_2 = nodes.node_ids[1].clone();
+
+    let subnets_blockmakers = vec![RawSubnetBlockmaker {
+        subnet: application_subnet.into(),
+        blockmaker: blockmaker_1.clone(),
+        failed_blockmakers: vec![blockmaker_2.clone()],
+    }];
+
+    let tick_configs = TickConfigs {
+        blockmakers: Some(BlockmakerConfigs {
+            blockmakers_per_subnet: subnets_blockmakers,
+        }),
+    };
+    let daily_blocks = 5;
+
+    // Blockmaker metrics are recorded in the management canister
+    for _ in 0..daily_blocks {
+        pocket_ic.tick_with_configs(tick_configs.clone());
+    }
+    // Advance time until next day so that management canister can record blockmaker metrics
+    pocket_ic.advance_time(std::time::Duration::from_secs(HOURS_IN_SECONDS * 24));
+    pocket_ic.tick();
+
+    let response = pocket_ic
+        .update_call(
+            canister,
+            Principal::anonymous(),
+            // Calls the node_metrics_history method on the management canister
+            "node_metrics_history_proxy",
+            Encode!(&NodeMetricsHistoryArgs {
+                subnet_id: application_subnet,
+                start_at_timestamp_nanos: 0,
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+    let first_node_metrics = Decode!(&response, Vec<NodeMetricsHistoryResultItem>)
+        .unwrap()
+        .remove(0)
+        .node_metrics;
+
+    let blockmaker_1_metrics = first_node_metrics
+        .iter()
+        .find(|x| x.node_id == Principal::from(blockmaker_1.clone()))
+        .unwrap()
+        .clone();
+    let blockmaker_2_metrics = first_node_metrics
+        .into_iter()
+        .find(|x| x.node_id == Principal::from(blockmaker_2.clone()))
+        .unwrap();
+
+    assert_eq!(blockmaker_1_metrics.num_blocks_proposed_total, daily_blocks);
+    assert_eq!(blockmaker_1_metrics.num_block_failures_total, 0);
+
+    assert_eq!(blockmaker_2_metrics.num_blocks_proposed_total, 0);
+    assert_eq!(blockmaker_2_metrics.num_block_failures_total, daily_blocks);
+}
+
+#[test]
+fn test_http_methods() {
+    // We create a PocketIC instance consisting of the NNS and one application subnet.
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+
+    // We retrieve the app subnet ID from the topology.
+    let topology = pic.topology();
+    let app_subnet = topology.get_app_subnets()[0];
+
+    // We create a canister on the app subnet.
+    let canister = pic.create_canister_on_subnet(None, None, app_subnet);
+    assert_eq!(pic.get_subnet(canister), Some(app_subnet));
+
+    // We top up the canister with cycles and install the test canister WASM to them.
+    pic.add_cycles(canister, INIT_CYCLES);
+    pic.install_canister(canister, test_canister_wasm(), vec![], None);
+
+    // We start the HTTP gateway
+    let endpoint = pic.make_live(None);
+
+    // We request the path `/` with various HTTP methods.
+    // We use raw endpoints as the test canister does not support certification.
+    let gateway_host = endpoint.host().unwrap();
+    let host = format!("{}.raw.{}", canister, gateway_host);
+    let mut url = endpoint;
+    url.set_host(Some(&host)).unwrap();
+    url.set_path("/");
+    for method in [
+        Method::GET,
+        Method::POST,
+        Method::PUT,
+        Method::DELETE,
+        Method::HEAD,
+        Method::PATCH,
+    ] {
+        // Windows doesn't automatically resolve localhost subdomains.
+        #[cfg(windows)]
+        let client = Client::builder()
+            .resolve(
+                &host,
+                SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                    pic.get_server_url().port().unwrap(),
+                ),
+            )
+            .build()
+            .unwrap();
+        #[cfg(not(windows))]
+        let client = Client::new();
+        let res = client.request(method.clone(), url.clone()).send().unwrap();
+        // The test canister rejects all request to the path `/` with `StatusCode::BAD_REQUEST`
+        // and the error message "The request is not supported by the test canister.".
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+        let content_length: usize = res
+            .headers()
+            .get(CONTENT_LENGTH)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .parse()
+            .unwrap();
+        let expected_page = "The request is not supported by the test canister.";
+        assert_eq!(content_length, expected_page.len());
+        let page = String::from_utf8(res.bytes().unwrap().to_vec()).unwrap();
+        if let Method::HEAD = method {
+            assert!(page.is_empty());
+        } else {
+            assert_eq!(page, expected_page);
+        }
+    }
+}
+
+#[test]
+fn state_handle() {
+    let state = PocketIcState::new();
+
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_state(state)
+        .build();
+    let canister_id = pic.create_canister();
+    let state = pic.drop_and_take_state().unwrap();
+
+    let pic = PocketIcBuilder::new().with_state(state).build();
+    assert!(pic.canister_exists(canister_id));
+    let state = pic.drop_and_take_state().unwrap();
+
+    let path = state.into_path();
+    let state = PocketIcState::new_from_path(path);
+
+    let pic1 = PocketIcBuilder::new().with_read_only_state(&state).build();
+    assert!(pic1.canister_exists(canister_id));
+
+    let pic2 = PocketIcBuilder::new().with_read_only_state(&state).build();
+    assert!(pic2.canister_exists(canister_id));
+}
+
+#[tokio::test]
+async fn state_handle_async() {
+    let state = PocketIcState::new();
+
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_state(state)
+        .build_async()
+        .await;
+    let canister_id = pic.create_canister().await;
+    let state = pic.drop_and_take_state().await.unwrap();
+
+    let pic = PocketIcBuilder::new().with_state(state).build_async().await;
+    assert!(pic.canister_exists(canister_id).await);
+    let state = pic.drop_and_take_state().await.unwrap();
+
+    let path = state.into_path();
+    let state = PocketIcState::new_from_path(path);
+
+    let pic1 = PocketIcBuilder::new()
+        .with_read_only_state(&state)
+        .build_async()
+        .await;
+    assert!(pic1.canister_exists(canister_id).await);
+    pic1.drop().await;
+
+    let pic2 = PocketIcBuilder::new()
+        .with_read_only_state(&state)
+        .build_async()
+        .await;
+    assert!(pic2.canister_exists(canister_id).await);
+    pic2.drop().await;
+}
+
+#[test]
+#[should_panic(expected = "PocketIC instance state must be empty if a read-only state is mounted.")]
+fn non_empty_state_and_read_only_state() {
+    let state = PocketIcState::new();
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_state(state)
+        .build();
+    let _canister_id = pic.create_canister();
+    let state = pic.drop_and_take_state().unwrap();
+
+    let read_only_state = PocketIcState::new();
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_state(read_only_state)
+        .build();
+    let _canister_id = pic.create_canister();
+    let read_only_state = pic.drop_and_take_state().unwrap();
+
+    let _pic = PocketIcBuilder::new()
+        .with_state(state)
+        .with_read_only_state(&read_only_state)
+        .build();
+}
+
+#[test]
+fn stack_overflow() {
+    const STACK_OVERFLOW_WAT: &str = r#"
+        (module
+            (func $f (export "canister_update foo")
+                ;; Define many local variables to quickly overflow the stack
+                (local i64) (local i64) (local i64) (local i64) (local i64)
+                (local i64) (local i64) (local i64) (local i64) (local i64)
+                (local i64) (local i64) (local i64) (local i64) (local i64)
+                (local i64) (local i64) (local i64) (local i64) (local i64)
+                ;; call "f" recursively
+                (call $f)
+            )
+            (memory 0)
+        )
+    "#;
+    let stack_overflow_wasm = wat::parse_str(STACK_OVERFLOW_WAT).unwrap();
+
+    let pic = PocketIc::new();
+
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    pic.install_canister(canister_id, stack_overflow_wasm, vec![], None);
+
+    let err = pic
+        .update_call(
+            canister_id,
+            Principal::anonymous(),
+            "foo",
+            encode_one(()).unwrap(),
+        )
+        .unwrap_err();
+    assert!(err
+        .reject_message
+        .contains("Canister trapped: stack overflow"));
 }

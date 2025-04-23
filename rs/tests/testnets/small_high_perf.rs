@@ -1,6 +1,7 @@
-// Set up a testnet containing:
+// Set up a small high performance testnet containing:
 //   one 1-node System and one 1-node Application subnets, single boundary node, and a p8s (with grafana) VM.
-// All replica nodes use the following resources: 64 vCPUs, 480 GiB of RAM, and 2'000 GiB disk.
+// The single system subnet node uses the default: 6 vCPUs, 24 GiB of RAM, and 50 GiB disk,
+// while the single application subnet node uses: 64 vCPUs, 512 GiB of RAM, and 500 GiB disk.
 //
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
 //
@@ -13,7 +14,7 @@
 //
 //   $ ssh -i small_high_perf/_tmp/*/setup/ssh/authorized_priv_keys/admin admin@
 //
-// Note that you can get the  address of the IC node from the ict console output:
+// Note that you can get the address of the IC node from the ict console output:
 //
 //   {
 //     nodes: [
@@ -36,7 +37,7 @@
 
 use anyhow::Result;
 
-use ic_consensus_system_test_utils::rw_message::cert_state_makes_progress_with_retries;
+use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     boundary_node::BoundaryNode,
@@ -44,13 +45,8 @@ use ic_system_test_driver::driver::{
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{
-        await_boundary_node_healthy, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-        NnsInstallationBuilder,
-    },
+    test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, NnsCustomizations},
 };
-use slog::info;
-use std::time::Duration;
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
 
@@ -66,18 +62,22 @@ pub fn setup(env: TestEnv) {
         .start(&env)
         .expect("Failed to start prometheus VM");
     InternetComputer::new()
-        .with_default_vm_resources(VmResources {
-            vcpus: Some(NrOfVCPUs::new(64)),
-            memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
-            boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(2_000)),
-        })
-        .use_specified_ids_allocation_range()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
-        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_default_vm_resources(VmResources {
+                    vcpus: Some(NrOfVCPUs::new(64)),
+                    memory_kibibytes: Some(AmountOfMemoryKiB::new(512_142_680)),
+                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
+                })
+                .add_nodes(1),
+        )
         .setup_and_start(&env)
         .expect("Failed to setup IC under test");
-    await_nodes_healthy(&env);
-    install_nns_canisters_at_ids(&env);
+    install_nns_with_customizations_and_check_progress(
+        env.topology_snapshot(),
+        NnsCustomizations::default(),
+    );
     BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
         .allocate_vm(&env)
         .expect("Allocation of BoundaryNode failed.")
@@ -87,58 +87,4 @@ pub fn setup(env: TestEnv) {
         .expect("failed to setup BoundaryNode VM");
     env.sync_with_prometheus_by_name("", env.get_playnet_url(BOUNDARY_NODE_NAME));
     await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
-}
-
-fn await_nodes_healthy(env: &TestEnv) {
-    info!(
-        &env.logger(),
-        "Checking readiness of all nodes after the IC setup ..."
-    );
-    env.topology_snapshot().subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
-    });
-    info!(&env.logger(), "All nodes are ready, IC setup succeeded.");
-}
-
-pub fn install_nns_canisters_at_ids(env: &TestEnv) {
-    let topology = env.topology_snapshot();
-    let nns_node = topology
-        .root_subnet()
-        .nodes()
-        .next()
-        .expect("there is no NNS node");
-    NnsInstallationBuilder::new()
-        .at_ids()
-        .install(&nns_node, env)
-        .expect("NNS canisters not installed");
-    info!(&env.logger(), "NNS canisters installed");
-
-    for subnet in topology
-        .subnets()
-        .filter(|subnet| subnet.subnet_id != topology.root_subnet_id())
-    {
-        if !subnet.raw_subnet_record().is_halted {
-            info!(
-                env.logger(),
-                "Checking if all the nodes are participating in the subnet {}", subnet.subnet_id
-            );
-            for node in subnet.nodes() {
-                cert_state_makes_progress_with_retries(
-                    &node.get_public_url(),
-                    node.effective_canister_id(),
-                    &env.logger(),
-                    /*timeout=*/ Duration::from_secs(600),
-                    /*backoff=*/ Duration::from_secs(2),
-                );
-            }
-        } else {
-            info!(
-                env.logger(),
-                "Subnet {} is halted. Not checking if all the nodes are participating in the subnet",
-                subnet.subnet_id,
-            );
-        }
-    }
 }

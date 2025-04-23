@@ -308,7 +308,7 @@ class DeploymentError(Exception):
 
 
 def gen_failure(result: invoke.Result, bmc_info: BMCInfo) -> DeploymentError:
-    error_msg = f"Failed on {result.command}: {result.stderr}"
+    error_msg = f"Failure: {result.stderr}"
     return DeploymentError(OperationResult(bmc_info, success=False, error_msg=error_msg))
 
 

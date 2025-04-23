@@ -18,16 +18,14 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
-permissions:
-  pull-requests: write
-  packages: write
-  contents: write
-
 jobs:
   build-base-image:
     name: Build Base Container Image
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      packages: write
+      contents: write
     strategy:
       matrix:
         include:
@@ -71,7 +69,7 @@ jobs:
         uses: docker/setup-buildx-action@a530e948adbeb357dbca95a7f8845d385edf4438 # v3
 
       - name: Login to GHCR
-        uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -106,6 +104,7 @@ jobs:
     name: Update Reference Files PR
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment: CREATE_PR
     needs: [build-base-image]
     if: ${{ github.ref_name == 'master' }}
     steps:
@@ -113,11 +112,13 @@ jobs:
         uses: actions/create-github-app-token@v1
         id: app-token
         with:
-          app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
-          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
+          app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
+          private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
 
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Get Current Date
         id: date

@@ -1,5 +1,5 @@
 use ic_cdk::api::call::RejectionCode;
-use ic_management_canister_types::DerivationPath;
+use ic_management_canister_types_private::DerivationPath;
 use std::fmt;
 
 /// Represents an error from a management canister call, such as

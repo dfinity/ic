@@ -1,9 +1,6 @@
 use assert_matches::assert_matches;
 use ic_base_types::SnapshotId;
-use ic_config::{
-    flag_status::FlagStatus,
-    state_manager::{lsmt_config_default, Config, LsmtConfig},
-};
+use ic_config::state_manager::{lsmt_config_default, Config};
 use ic_crypto_tree_hash::{
     flatmap, sparse_labeled_tree_from_paths, Label, LabeledTree, LookupStatus, MixedHashTree,
     Path as LabelPath,
@@ -13,7 +10,7 @@ use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId, St
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_state_manager::*;
 use ic_logger::replica_logger::no_op_logger;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, InstallChunkedCodeArgs,
     LoadCanisterSnapshotArgs, TakeCanisterSnapshotArgs, UploadChunkArgs,
 };
@@ -40,7 +37,7 @@ use ic_state_manager::{
         },
         StateSync,
     },
-    DirtyPageMap, PageMapType, StateManagerImpl, NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY,
+    StateManagerImpl, NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY,
 };
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities_consensus::fake::FakeVerifier;
@@ -123,57 +120,17 @@ fn stable_memory_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly
 
 /// Combined size of wasm chunk store including overlays.
 fn wasm_chunk_store_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly>) -> u64 {
-    if lsmt_config_default().lsmt_status == FlagStatus::Enabled {
-        canister_layout
-            .wasm_chunk_store()
-            .existing_overlays()
-            .unwrap()
-            .into_iter()
-            .map(|p| std::fs::metadata(p).unwrap().len())
-            .sum::<u64>()
-            + std::fs::metadata(canister_layout.wasm_chunk_store().base())
-                .map_or(0, |metadata| metadata.len())
-    } else {
-        std::fs::metadata(canister_layout.wasm_chunk_store().base())
-            .unwrap()
-            .len()
-    }
-}
-
-/// Whether the base file for vmemory0 exists.
-fn vmemory0_base_exists(
-    state_manager: &StateManagerImpl,
-    canister_id: &CanisterId,
-    height: Height,
-) -> bool {
-    state_manager
-        .state_layout()
-        .checkpoint_verified(height)
-        .unwrap()
-        .canister(canister_id)
-        .unwrap()
-        .vmemory_0()
-        .base()
-        .exists()
-}
-
-/// Number of overlays for vmemory0.
-fn vmemory0_num_overlays(
-    state_manager: &StateManagerImpl,
-    canister_id: &CanisterId,
-    height: Height,
-) -> usize {
-    state_manager
-        .state_layout()
-        .checkpoint_verified(height)
-        .unwrap()
-        .canister(canister_id)
-        .unwrap()
-        .vmemory_0()
+    canister_layout
+        .wasm_chunk_store()
         .existing_overlays()
         .unwrap()
-        .len()
+        .into_iter()
+        .map(|p| std::fs::metadata(p).unwrap().len())
+        .sum::<u64>()
+        + std::fs::metadata(canister_layout.wasm_chunk_store().base())
+            .map_or(0, |metadata| metadata.len())
 }
+
 /// This is a canister that keeps a counter on the heap and allows to increment it.
 /// The counter can also be read and persisted to and loaded from stable memory.
 const TEST_CANISTER: &str = r#"
@@ -364,100 +321,6 @@ fn lsmt_merge_overhead() {
     assert_ne!(state_in_memory(&env), 0.0);
     assert!(last_checkpoint_size(&env) / state_in_memory(&env) > 2.0);
     assert!(last_checkpoint_size(&env) / state_in_memory(&env) <= 2.5);
-}
-
-#[allow(clippy::disallowed_methods)]
-#[test]
-fn skipping_flushing_is_invisible_for_state() {
-    fn skips(env: &StateMachine) -> f64 {
-        env.metrics_registry()
-            .prometheus_registry()
-            .gather()
-            .into_iter()
-            .filter(|x| x.get_name() == "state_manager_page_map_flush_skips")
-            .map(|x| x.get_metric()[0].get_counter().get_value())
-            .next()
-            .unwrap()
-    }
-    fn execute(block_tip: bool) -> CryptoHashOfState {
-        let env = StateMachine::new();
-        env.set_checkpoints_enabled(false);
-
-        let canister_id0 = env.install_canister_wat(TEST_CANISTER, vec![], None);
-        let canister_id1 = env.install_canister_wat(TEST_CANISTER, vec![], None);
-        let canister_id2 = env.install_canister_wat(TEST_CANISTER, vec![], None);
-
-        // One wait occupies the TipHandler thread, the second (nop) makes queue non-empty
-        // to cause flush skips. 0-size channel blocks send in the TipHandler until we call recv()
-        let (send_wait, recv_wait) = crossbeam_channel::bounded::<()>(0);
-        let (send_nop, recv_nop) = crossbeam_channel::unbounded();
-        env.state_manager
-            .test_only_send_wait_to_tip_channel(send_wait);
-        env.state_manager
-            .test_only_send_wait_to_tip_channel(send_nop);
-        if !block_tip {
-            recv_wait.recv().unwrap();
-            recv_nop.recv().unwrap();
-        }
-
-        let wait = || {
-            let (send_wait, recv_wait) = crossbeam_channel::bounded::<()>(0);
-            env.state_manager
-                .test_only_send_wait_to_tip_channel(send_wait);
-            recv_wait.recv().unwrap();
-        };
-
-        let skips_before = skips(&env);
-        env.execute_ingress(canister_id0, "inc", vec![]).unwrap();
-        if !block_tip {
-            wait();
-        }
-        env.execute_ingress(canister_id1, "inc", vec![]).unwrap();
-        if !block_tip {
-            wait();
-        }
-        env.execute_ingress(canister_id2, "inc", vec![]).unwrap();
-        if !block_tip {
-            wait();
-        }
-
-        // Second inc on canister_id0 to trigger overwriting a previously written page.
-        env.execute_ingress(canister_id0, "inc", vec![]).unwrap();
-        if !block_tip {
-            wait();
-        }
-
-        let skips_after = skips(&env);
-        if block_tip {
-            recv_wait.recv().unwrap();
-            recv_nop.recv().unwrap();
-        }
-        env.set_checkpoints_enabled(true);
-        if block_tip {
-            assert_eq!(skips_after - skips_before, 4.0)
-        } else {
-            assert_eq!(skips_after - skips_before, 0.0)
-        }
-        env.tick();
-        read_and_assert_eq(&env, canister_id0, 2);
-        read_and_assert_eq(&env, canister_id1, 1);
-        read_and_assert_eq(&env, canister_id2, 1);
-
-        let env = env.restart_node();
-        env.tick();
-
-        read_and_assert_eq(&env, canister_id0, 2);
-        read_and_assert_eq(&env, canister_id1, 1);
-        read_and_assert_eq(&env, canister_id2, 1);
-
-        env.await_state_hash()
-    }
-
-    // We only skip flushes nondetermistically when `lsmt_storage` is disabled, so this test
-    // makes no sense otherwise.
-    if lsmt_config_default().lsmt_status == FlagStatus::Disabled {
-        assert_eq!(execute(false), execute(true));
-    }
 }
 
 #[test]
@@ -3589,15 +3452,11 @@ fn can_recover_from_corruption_on_state_sync() {
             // The code below prepares all 5 types of corruption.
 
             let canister_90_layout = mutable_cp_layout.canister(&canister_test_id(90)).unwrap();
-            let canister_90_memory = if lsmt_config_default().lsmt_status == FlagStatus::Enabled {
-                canister_90_layout
-                    .vmemory_0()
-                    .existing_overlays()
-                    .unwrap()
-                    .remove(0)
-            } else {
-                canister_90_layout.vmemory_0().base()
-            };
+            let canister_90_memory = canister_90_layout
+                .vmemory_0()
+                .existing_overlays()
+                .unwrap()
+                .remove(0);
             make_mutable(&canister_90_memory).unwrap();
             std::fs::write(&canister_90_memory, b"Garbage").unwrap();
             make_readonly(&canister_90_memory).unwrap();
@@ -3609,29 +3468,20 @@ fn can_recover_from_corruption_on_state_sync() {
 
             let canister_100_layout = mutable_cp_layout.canister(&canister_test_id(100)).unwrap();
 
-            let canister_100_memory = if lsmt_config_default().lsmt_status == FlagStatus::Enabled {
-                canister_100_layout
-                    .vmemory_0()
-                    .existing_overlays()
-                    .unwrap()
-                    .remove(0)
-            } else {
-                canister_100_layout.vmemory_0().base()
-            };
+            let canister_100_memory = canister_100_layout
+                .vmemory_0()
+                .existing_overlays()
+                .unwrap()
+                .remove(0);
             make_mutable(&canister_100_memory).unwrap();
             write_all_at(&canister_100_memory, &[3u8; PAGE_SIZE], 4).unwrap();
             make_readonly(&canister_100_memory).unwrap();
 
-            let canister_100_stable_memory =
-                if lsmt_config_default().lsmt_status == FlagStatus::Enabled {
-                    canister_100_layout
-                        .stable_memory()
-                        .existing_overlays()
-                        .unwrap()
-                        .remove(0)
-                } else {
-                    canister_100_layout.stable_memory().base()
-                };
+            let canister_100_stable_memory = canister_100_layout
+                .stable_memory()
+                .existing_overlays()
+                .unwrap()
+                .remove(0);
             make_mutable(&canister_100_stable_memory).unwrap();
             write_all_at(
                 &canister_100_stable_memory,
@@ -3755,15 +3605,11 @@ fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
                 let canister_layout = state_sync_scratchpad_layout
                     .canister(&canister_test_id(90))
                     .unwrap();
-                let canister_memory = if lsmt_config_default().lsmt_status == FlagStatus::Enabled {
-                    canister_layout
-                        .vmemory_0()
-                        .existing_overlays()
-                        .unwrap()
-                        .remove(0)
-                } else {
-                    canister_layout.vmemory_0().base()
-                };
+                let canister_memory = canister_layout
+                    .vmemory_0()
+                    .existing_overlays()
+                    .unwrap()
+                    .remove(0);
                 make_mutable(&canister_memory).unwrap();
                 std::fs::write(&canister_memory, b"Garbage").unwrap();
 
@@ -4159,169 +4005,6 @@ fn can_short_circuit_state_sync() {
     })
 }
 
-/// Test if `get_dirty_pages` returns correct dirty pages of canisters.
-#[test]
-fn can_get_dirty_pages() {
-    use ic_replicated_state::page_map::PageIndex;
-    use ic_state_manager::get_dirty_pages;
-
-    fn update_state(state: &mut ReplicatedState, canister_id: CanisterId) {
-        let canister_state = state.canister_state_mut(&canister_id).unwrap();
-        canister_state
-            .system_state
-            .wasm_chunk_store
-            .page_map_mut()
-            .update(&[
-                (PageIndex::new(1), &[99u8; PAGE_SIZE]),
-                (PageIndex::new(300), &[99u8; PAGE_SIZE]),
-            ]);
-        let execution_state = canister_state.execution_state.as_mut().unwrap();
-        execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(1), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(300), &[99u8; PAGE_SIZE]),
-        ]);
-        execution_state.stable_memory.page_map.update(&[
-            (PageIndex::new(1), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(300), &[99u8; PAGE_SIZE]),
-        ]);
-    }
-
-    fn drop_page_map(state: &mut ReplicatedState, canister_id: CanisterId) {
-        let canister_state = state.canister_state_mut(&canister_id).unwrap();
-        let execution_state = canister_state.execution_state.as_mut().unwrap();
-        execution_state.wasm_memory.page_map = PageMap::new_for_testing();
-    }
-
-    state_manager_test(|metrics, state_manager| {
-        let (_height, mut state) = state_manager.take_tip();
-        insert_dummy_canister(&mut state, canister_test_id(80));
-        insert_dummy_canister(&mut state, canister_test_id(90));
-        insert_dummy_canister(&mut state, canister_test_id(100));
-
-        update_state(&mut state, canister_test_id(80));
-        let dirty_pages = get_dirty_pages(&state);
-        // dirty_pages should be empty because there is no base checkpoint for the page
-        // deltas and the canister binaries are new.
-        assert!(dirty_pages.is_empty());
-
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
-
-        let (_height, mut state) = state_manager.take_tip();
-        update_state(&mut state, canister_test_id(90));
-        let mut dirty_pages = get_dirty_pages(&state);
-        let mut expected_dirty_pages = vec![
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::WasmMemory(canister_test_id(80)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::StableMemory(canister_test_id(80)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::WasmMemory(canister_test_id(90)),
-                page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
-            },
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::StableMemory(canister_test_id(90)),
-                page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
-            },
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::WasmMemory(canister_test_id(100)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::StableMemory(canister_test_id(100)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::WasmChunkStore(canister_test_id(80)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::WasmChunkStore(canister_test_id(90)),
-                page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
-            },
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::WasmChunkStore(canister_test_id(100)),
-                page_delta_indices: vec![],
-            },
-        ];
-
-        dirty_pages.sort();
-        expected_dirty_pages.sort();
-        assert_eq!(dirty_pages, expected_dirty_pages);
-
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
-
-        let (_height, mut state) = state_manager.take_tip();
-        update_state(&mut state, canister_test_id(100));
-        // It could happen during canister upgrade.
-        drop_page_map(&mut state, canister_test_id(100));
-        update_state(&mut state, canister_test_id(100));
-        replace_wasm(&mut state, canister_test_id(100));
-        let mut dirty_pages = get_dirty_pages(&state);
-        // wasm memory was dropped, but stable memory wasn't
-        let mut expected_dirty_pages = vec![
-            DirtyPageMap {
-                height: height(2),
-                page_type: PageMapType::WasmMemory(canister_test_id(80)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(2),
-                page_type: PageMapType::StableMemory(canister_test_id(80)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(2),
-                page_type: PageMapType::WasmMemory(canister_test_id(90)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(2),
-                page_type: PageMapType::StableMemory(canister_test_id(90)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(2),
-                page_type: PageMapType::StableMemory(canister_test_id(100)),
-                page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
-            },
-            DirtyPageMap {
-                height: height(2),
-                page_type: PageMapType::WasmChunkStore(canister_test_id(80)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(2),
-                page_type: PageMapType::WasmChunkStore(canister_test_id(90)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(2),
-                page_type: PageMapType::WasmChunkStore(canister_test_id(100)),
-                page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
-            },
-        ];
-
-        dirty_pages.sort();
-        expected_dirty_pages.sort();
-        assert_eq!(dirty_pages, expected_dirty_pages);
-
-        assert_error_counters(metrics);
-    })
-}
-
 #[test]
 fn can_reuse_chunk_hashes_when_computing_manifest() {
     use ic_state_manager::manifest::{compute_manifest, validate_manifest};
@@ -4366,19 +4049,11 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
 
         // Second checkpoint can leverage heap chunks computed previously as well as the wasm binary.
         let chunk_bytes = fetch_int_counter_vec(metrics, "state_manager_manifest_chunk_bytes");
-        if lsmt_config_default().lsmt_status == FlagStatus::Enabled {
-            let expected_size_estimate =
-                PAGE_SIZE as u64 * (WASM_PAGES + STABLE_PAGES) + empty_wasm_size() as u64;
-            let size = chunk_bytes[&reused_label] + chunk_bytes[&compared_label];
-            assert!(((expected_size_estimate as f64 * 1.1) as u64) > size);
-            assert!(((expected_size_estimate as f64 * 0.9) as u64) < size);
-        } else {
-            assert_eq!(
-                PAGE_SIZE as u64 * ((NEW_WASM_PAGE + 1) + (NEW_STABLE_PAGE + 1))
-                    + empty_wasm_size() as u64,
-                chunk_bytes[&reused_label] + chunk_bytes[&compared_label]
-            );
-        }
+        let expected_size_estimate =
+            PAGE_SIZE as u64 * (WASM_PAGES + STABLE_PAGES) + empty_wasm_size() as u64;
+        let size = chunk_bytes[&reused_label] + chunk_bytes[&compared_label];
+        assert!(((expected_size_estimate as f64 * 1.1) as u64) > size);
+        assert!(((expected_size_estimate as f64 * 0.9) as u64) < size);
 
         let checkpoint = state_manager
             .state_layout()
@@ -6037,7 +5712,7 @@ fn assert_checkpoints_are_readonly(layout: &StateLayout) {
 #[test]
 fn checkpoints_are_readonly() {
     state_manager_test(|_metrics, state_manager| {
-        // We flush the tip channel so that asychronous tip initialization cannot hide the issue
+        // We flush the tip channel so that asynchronous tip initialization cannot hide the issue
         state_manager.flush_tip_channel();
         assert_checkpoints_are_readonly(state_manager.state_layout());
 
@@ -6085,109 +5760,6 @@ fn checkpoints_are_readonly() {
         state_manager.commit_and_certify(state, height(4), CertificationScope::Full, None);
         state_manager.flush_tip_channel();
         assert_checkpoints_are_readonly(state_manager.state_layout());
-    });
-}
-
-#[test]
-fn can_downgrade_state_sync() {
-    with_test_replica_logger(|log| {
-        let tmp = tmpdir("sm");
-        let mut config = Config::new(tmp.path().into());
-        config.lsmt_config = lsmt_with_sharding();
-        let metrics_registry = MetricsRegistry::new();
-        let own_subnet = subnet_test_id(42);
-        let verifier: Arc<dyn Verifier> = Arc::new(FakeVerifier::new());
-
-        let src_state_manager = Arc::new(StateManagerImpl::new(
-            verifier,
-            own_subnet,
-            SubnetType::Application,
-            log.clone(),
-            &metrics_registry,
-            &config,
-            None,
-            ic_types::malicious_flags::MaliciousFlags::default(),
-        ));
-        let src_state_sync = StateSync::new(src_state_manager.clone(), log);
-
-        let (_height, state) = src_state_manager.take_tip();
-        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
-        wait_for_checkpoint(&*src_state_manager, height(1));
-
-        let (_height, mut state) = src_state_manager.take_tip();
-        insert_dummy_canister(&mut state, canister_test_id(1));
-        let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
-        let execution_state = canister_state.execution_state.as_mut().unwrap();
-        const NEW_WASM_PAGE: u64 = 100;
-        execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(0), &[1u8; PAGE_SIZE]),
-            (PageIndex::new(NEW_WASM_PAGE), &[2u8; PAGE_SIZE]),
-        ]);
-        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
-        let hash = wait_for_checkpoint(&*src_state_manager, height(2));
-
-        assert!(!vmemory0_base_exists(
-            &src_state_manager,
-            &canister_test_id(1),
-            height(2)
-        ));
-        assert!(vmemory0_num_overlays(&src_state_manager, &canister_test_id(1), height(2)) > 0);
-
-        let id = StateSyncArtifactId {
-            height: height(2),
-            hash: hash.get(),
-        };
-
-        let msg = src_state_sync
-            .get(&id)
-            .expect("failed to get state sync messages");
-        with_test_replica_logger(|log| {
-            let tmp = tmpdir("sm");
-            let mut config = Config::new(tmp.path().into());
-            config.lsmt_config = lsmt_disabled();
-            let metrics_registry = MetricsRegistry::new();
-            let own_subnet = subnet_test_id(42);
-            let verifier: Arc<dyn Verifier> = Arc::new(FakeVerifier::new());
-
-            let dst_state_manager = Arc::new(StateManagerImpl::new(
-                verifier,
-                own_subnet,
-                SubnetType::Application,
-                log.clone(),
-                &metrics_registry,
-                &config,
-                None,
-                ic_types::malicious_flags::MaliciousFlags::default(),
-            ));
-            let dst_state_sync = StateSync::new(dst_state_manager.clone(), log);
-            let (_height, state) = dst_state_manager.take_tip();
-            dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
-            wait_for_checkpoint(&*dst_state_manager, height(1));
-            let chunkable =
-                set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
-            pipe_state_sync(msg, chunkable);
-            // Retrieved state has overlays.
-            assert!(!vmemory0_base_exists(
-                &dst_state_manager,
-                &canister_test_id(1),
-                height(2)
-            ));
-            assert!(vmemory0_num_overlays(&dst_state_manager, &canister_test_id(1), height(2)) > 0);
-            assert!(!any_manifest_was_incremental(&metrics_registry));
-            let (_height, state) = dst_state_manager.take_tip();
-            dst_state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
-            wait_for_checkpoint(&*dst_state_manager, height(3));
-            // After one checkpoint interval the state has no overlays.
-            assert!(vmemory0_base_exists(
-                &dst_state_manager,
-                &canister_test_id(1),
-                height(3)
-            ));
-            assert_eq!(
-                vmemory0_num_overlays(&dst_state_manager, &canister_test_id(1), height(3)),
-                0
-            );
-        });
     });
 }
 
@@ -6335,206 +5907,6 @@ fn batch_summary_is_respected_for_writing_overlay_files() {
 }
 
 #[test]
-fn can_downgrade_from_lsmt() {
-    state_manager_restart_test_with_lsmt(
-        lsmt_with_sharding(),
-        |metrics, state_manager, restart_fn| {
-            let (_height, mut state) = state_manager.take_tip();
-
-            insert_dummy_canister(&mut state, canister_test_id(1));
-            let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
-            let execution_state = canister_state.execution_state.as_mut().unwrap();
-
-            const NEW_WASM_PAGE: u64 = 100;
-
-            fn verify_page_map(page_map: &PageMap, value: u8) {
-                assert_eq!(page_map.get_page(PageIndex::new(0)), &[1u8; PAGE_SIZE]);
-                for i in 1..NEW_WASM_PAGE {
-                    assert_eq!(page_map.get_page(PageIndex::new(i)), &[0u8; PAGE_SIZE]);
-                }
-                assert_eq!(
-                    page_map.get_page(PageIndex::new(NEW_WASM_PAGE)),
-                    &[value; PAGE_SIZE]
-                );
-            }
-
-            execution_state.wasm_memory.page_map.update(&[
-                (PageIndex::new(0), &[1u8; PAGE_SIZE]),
-                (PageIndex::new(NEW_WASM_PAGE), &[2u8; PAGE_SIZE]),
-            ]);
-
-            verify_page_map(&execution_state.wasm_memory.page_map, 2u8);
-
-            state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
-            wait_for_checkpoint(&state_manager, height(1));
-
-            assert!(!vmemory0_base_exists(
-                &state_manager,
-                &canister_test_id(1),
-                height(1)
-            ));
-            assert!(vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(1)) > 0);
-
-            let (_height, mut state) = state_manager.take_tip();
-            let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
-            let execution_state = canister_state.execution_state.as_mut().unwrap();
-            verify_page_map(&execution_state.wasm_memory.page_map, 2u8);
-
-            assert_error_counters(metrics);
-
-            // restart the state_manager
-            let (metrics, state_manager) = restart_fn(state_manager, None, lsmt_disabled());
-
-            let (_height, mut state) = state_manager.take_tip();
-            let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
-            let execution_state = canister_state.execution_state.as_mut().unwrap();
-            verify_page_map(&execution_state.wasm_memory.page_map, 2u8);
-
-            state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
-            wait_for_checkpoint(&state_manager, height(2));
-
-            assert!(vmemory0_base_exists(
-                &state_manager,
-                &canister_test_id(1),
-                height(2)
-            ));
-            assert_eq!(
-                vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(2)),
-                0
-            );
-            assert!(!any_manifest_was_incremental(&metrics));
-
-            let (_height, mut state) = state_manager.take_tip();
-            let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
-            let execution_state = canister_state.execution_state.as_mut().unwrap();
-            verify_page_map(&execution_state.wasm_memory.page_map, 2u8);
-
-            state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
-            wait_for_checkpoint(&state_manager, height(3));
-            assert!(any_manifest_was_incremental(&metrics));
-            assert_error_counters(&metrics);
-        },
-    );
-}
-
-#[test]
-fn can_upgrade_to_lsmt() {
-    state_manager_restart_test_with_lsmt(lsmt_disabled(), |metrics, state_manager, restart_fn| {
-        let (_height, mut state) = state_manager.take_tip();
-
-        insert_dummy_canister(&mut state, canister_test_id(1));
-        let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
-        let execution_state = canister_state.execution_state.as_mut().unwrap();
-
-        const NEW_WASM_PAGE: u64 = 100;
-
-        fn verify_page_map(page_map: &PageMap, value: u8) {
-            assert_eq!(page_map.get_page(PageIndex::new(0)), &[1u8; PAGE_SIZE]);
-            for i in 1..NEW_WASM_PAGE {
-                assert_eq!(page_map.get_page(PageIndex::new(i)), &[0u8; PAGE_SIZE]);
-            }
-            assert_eq!(
-                page_map.get_page(PageIndex::new(NEW_WASM_PAGE)),
-                &[value; PAGE_SIZE]
-            );
-        }
-
-        execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(0), &[1u8; PAGE_SIZE]),
-            (PageIndex::new(NEW_WASM_PAGE), &[2u8; PAGE_SIZE]),
-        ]);
-
-        verify_page_map(&execution_state.wasm_memory.page_map, 2u8);
-
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
-        wait_for_checkpoint(&state_manager, height(1));
-
-        assert!(vmemory0_base_exists(
-            &state_manager,
-            &canister_test_id(1),
-            height(1)
-        ));
-        assert_eq!(
-            vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(1)),
-            0
-        );
-
-        let (_height, mut state) = state_manager.take_tip();
-        let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
-        let execution_state = canister_state.execution_state.as_mut().unwrap();
-        verify_page_map(&execution_state.wasm_memory.page_map, 2u8);
-
-        execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(0), &[1u8; PAGE_SIZE]),
-            (PageIndex::new(NEW_WASM_PAGE), &[3u8; PAGE_SIZE]),
-        ]);
-
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
-        wait_for_checkpoint(&state_manager, height(2));
-
-        let (_height, mut state) = state_manager.take_tip();
-        let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
-        let execution_state = canister_state.execution_state.as_mut().unwrap();
-        verify_page_map(&execution_state.wasm_memory.page_map, 3u8);
-
-        assert!(vmemory0_base_exists(
-            &state_manager,
-            &canister_test_id(1),
-            height(2)
-        ));
-        assert_eq!(
-            vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(2)),
-            0
-        );
-
-        assert_error_counters(metrics);
-
-        // restart the state_manager
-        let (metrics, state_manager) = restart_fn(state_manager, None, lsmt_with_sharding());
-
-        let (_height, mut state) = state_manager.take_tip();
-        let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
-        let execution_state = canister_state.execution_state.as_mut().unwrap();
-        verify_page_map(&execution_state.wasm_memory.page_map, 3u8);
-
-        assert!(vmemory0_base_exists(
-            &state_manager,
-            &canister_test_id(1),
-            height(2)
-        ));
-        assert_eq!(
-            vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(2)),
-            0
-        );
-
-        execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(0), &[1u8; PAGE_SIZE]),
-            (PageIndex::new(NEW_WASM_PAGE), &[4u8; PAGE_SIZE]),
-        ]);
-
-        state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
-        wait_for_checkpoint(&state_manager, height(3));
-
-        let (_height, mut state) = state_manager.take_tip();
-        let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
-        let execution_state = canister_state.execution_state.as_mut().unwrap();
-        verify_page_map(&execution_state.wasm_memory.page_map, 4u8);
-
-        assert!(vmemory0_base_exists(
-            &state_manager,
-            &canister_test_id(1),
-            height(3)
-        ));
-        assert!(vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(3)) > 0);
-
-        state_manager.commit_and_certify(state, height(4), CertificationScope::Full, None);
-        wait_for_checkpoint(&state_manager, height(4));
-
-        assert_error_counters(&metrics);
-    });
-}
-
-#[test]
 fn lsmt_shard_size_is_stable() {
     // Changing shard after LSMT launch is dangerous as it would crash merging older sharded files.
     // Change the config with care.
@@ -6637,6 +6009,185 @@ fn can_create_and_delete_canister_snapshot() {
             .raw_path();
         assert!(!snapshot_path.exists());
         assert!(!snapshot_path.parent().unwrap().exists());
+
+        assert_error_counters(metrics);
+    });
+}
+
+#[test]
+fn wasm_binaries_can_be_correctly_switched_from_memory_to_checkpoint() {
+    state_manager_test(|metrics, state_manager| {
+        let (_height, mut state) = state_manager.take_tip();
+        let canister_id = canister_test_id(100);
+
+        // Insert a canister, create a snapshot from it and write checkpoint
+        insert_dummy_canister(&mut state, canister_id);
+
+        let new_snapshot = CanisterSnapshot::from_canister(
+            state.canister_state(&canister_id).unwrap(),
+            state.time(),
+        )
+        .unwrap();
+        let snapshot_id = SnapshotId::from((canister_id, 0));
+        state
+            .canister_snapshots
+            .push(snapshot_id, Arc::new(new_snapshot));
+
+        let canister_wasm_binary = &state
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .as_ref()
+            .unwrap()
+            .wasm_binary
+            .binary;
+
+        let snapshot_wasm_binary = &state
+            .canister_snapshots
+            .get(snapshot_id)
+            .unwrap()
+            .execution_snapshot()
+            .wasm_binary;
+
+        // Before checkpointing, wasm binaries of both the canister and the snapshot are in memory.
+        assert!(canister_wasm_binary.file().is_none());
+        assert!(snapshot_wasm_binary.file().is_none());
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
+
+        let checkpoint_layout = state_manager
+            .state_layout()
+            .checkpoint_verified(height(1))
+            .unwrap();
+        let canister_layout = checkpoint_layout.canister(&canister_id).unwrap();
+        let snapshot_layout = checkpoint_layout.snapshot(&snapshot_id).unwrap();
+
+        let (_height, state) = state_manager.take_tip();
+
+        let canister_wasm_binary = &state
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .as_ref()
+            .unwrap()
+            .wasm_binary
+            .binary;
+
+        let snapshot_wasm_binary = &state
+            .canister_snapshots
+            .get(snapshot_id)
+            .unwrap()
+            .execution_snapshot()
+            .wasm_binary;
+
+        // After checkpointing, wasm binaries of both the canister and the snapshot are backed by files in checkpoint@1
+        // and file contents can be correctly read.
+        assert_eq!(canister_wasm_binary.as_slice(), EMPTY_WASM);
+        assert!(canister_wasm_binary
+            .file()
+            .is_some_and(|path| path == canister_layout.wasm().raw_path()));
+
+        assert_eq!(snapshot_wasm_binary.as_slice(), EMPTY_WASM);
+        assert!(snapshot_wasm_binary
+            .file()
+            .is_some_and(|path| path == snapshot_layout.wasm().raw_path()));
+
+        assert_error_counters(metrics);
+    });
+}
+
+#[test]
+fn wasm_binaries_can_be_correctly_switched_from_checkpoint_to_checkpoint() {
+    state_manager_test(|metrics, state_manager| {
+        let (_height, mut state) = state_manager.take_tip();
+        let canister_id = canister_test_id(100);
+
+        // Insert a canister and a write checkpoint
+        insert_dummy_canister(&mut state, canister_id);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
+
+        let canister_layout = state_manager
+            .state_layout()
+            .checkpoint_verified(height(1))
+            .unwrap()
+            .canister(&canister_id)
+            .unwrap();
+
+        let (_height, mut state) = state_manager.take_tip();
+
+        let canister_wasm_binary = &state
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .as_ref()
+            .unwrap()
+            .wasm_binary
+            .binary;
+
+        // After checkpointing at height 1, wasm binary the canister is backed by file in checkpoint@1.
+        assert_eq!(canister_wasm_binary.as_slice(), EMPTY_WASM);
+        assert!(canister_wasm_binary
+            .file()
+            .is_some_and(|path| path == canister_layout.wasm().raw_path()));
+
+        // We create a snapshot from the canister, which already has wasm binary backed by file on disk.
+        let new_snapshot = CanisterSnapshot::from_canister(
+            state.canister_state(&canister_id).unwrap(),
+            state.time(),
+        )
+        .unwrap();
+        let snapshot_id = SnapshotId::from((canister_id, 0));
+        state
+            .canister_snapshots
+            .push(snapshot_id, Arc::new(new_snapshot));
+
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
+
+        // Remove checkpoint@1
+        drop(canister_layout);
+        state_manager.remove_states_below(height(2));
+        state_manager.flush_deallocation_channel();
+
+        let checkpoint_layout = state_manager
+            .state_layout()
+            .checkpoint_verified(height(2))
+            .unwrap();
+
+        let canister_layout = checkpoint_layout.canister(&canister_id).unwrap();
+        let snapshot_layout = checkpoint_layout.snapshot(&snapshot_id).unwrap();
+
+        let (_height, state) = state_manager.take_tip();
+
+        let canister_wasm_binary = &state
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .as_ref()
+            .unwrap()
+            .wasm_binary
+            .binary;
+
+        let snapshot_wasm_binary = &state
+            .canister_snapshots
+            .get(snapshot_id)
+            .unwrap()
+            .execution_snapshot()
+            .wasm_binary;
+
+        // After checkpointing at height 2, wasm binaries of both the canister and the snapshot are backed by files in checkpoint@2
+        // and file contents can be correctly read.
+        assert_eq!(canister_wasm_binary.as_slice(), EMPTY_WASM);
+        assert!(canister_wasm_binary
+            .file()
+            .is_some_and(|path| path == canister_layout.wasm().raw_path()));
+
+        assert_eq!(snapshot_wasm_binary.as_slice(), EMPTY_WASM);
+        assert!(snapshot_wasm_binary
+            .file()
+            .is_some_and(|path| path == snapshot_layout.wasm().raw_path()));
 
         assert_error_counters(metrics);
     });
@@ -7075,292 +6626,385 @@ fn restore_chunk_store_from_snapshot() {
     assert!(env.execute_ingress(canister_id, "read", vec![],).is_err(),);
 }
 
-proptest! {
-    #[test]
-    fn stream_store_encode_decode(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            Some(size_limit),
-            /* custom destination subnet */
-            None,
-            /* certification verification should succeed  */
-            true,
-            /* modification between encoding and decoding  */
-            |state_manager, slice| {
-                // we do not modify the slice before decoding it again - so this should succeed
-                (state_manager, slice)
-            }
-        );
-    }
+#[test_strategy::proptest]
+fn stream_store_encode_decode(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+    #[strategy(0..20usize)] size_limit: usize,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        Some(size_limit),
+        /* custom destination subnet */
+        None,
+        /* certification verification should succeed  */
+        true,
+        /* modification between encoding and decoding  */
+        |state_manager, slice| {
+            // we do not modify the slice before decoding it again - so this should succeed
+            (state_manager, slice)
+        },
+    );
+}
 
-    #[test]
-    #[should_panic(expected = "InvalidSignature")]
-    fn stream_store_decode_with_modified_hash_fails(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            Some(size_limit),
-            /* custom destination subnet */
-            None,
-            /* certification verification should succeed  */
-            true,
-            /* modification between encoding and decoding  */
-            |state_manager, mut slice| {
-                let mut hash = slice.certification.signed.content.hash.get();
-                *hash.0.first_mut().unwrap() = hash.0.first().unwrap().overflowing_add(1).0;
-                slice.certification.signed.content.hash = CryptoHashOfPartialState::from(hash);
+#[test_strategy::proptest]
+#[should_panic(expected = "InvalidSignature")]
+fn stream_store_decode_with_modified_hash_fails(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+    #[strategy(0..20usize)] size_limit: usize,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        Some(size_limit),
+        /* custom destination subnet */
+        None,
+        /* certification verification should succeed  */
+        true,
+        /* modification between encoding and decoding  */
+        |state_manager, mut slice| {
+            let mut hash = slice.certification.signed.content.hash.get();
+            *hash.0.first_mut().unwrap() = hash.0.first().unwrap().overflowing_add(1).0;
+            slice.certification.signed.content.hash = CryptoHashOfPartialState::from(hash);
 
-                (state_manager, slice)
-            }
-        );
-    }
+            (state_manager, slice)
+        },
+    );
+}
 
-    #[test]
-    #[should_panic(expected = "Failed to deserialize witness")]
-    fn stream_store_decode_with_empty_witness_fails(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            Some(size_limit),
-            /* custom destination subnet */
-            None,
-            /* certification verification should succeed */
-            true,
-            /* modification between encoding and decoding  */
-            |state_manager, mut slice| {
-                slice.merkle_proof = vec![];
+#[test_strategy::proptest]
+#[should_panic(expected = "Failed to deserialize witness")]
+fn stream_store_decode_with_empty_witness_fails(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+    #[strategy(0..20usize)] size_limit: usize,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        Some(size_limit),
+        /* custom destination subnet */
+        None,
+        /* certification verification should succeed */
+        true,
+        /* modification between encoding and decoding  */
+        |state_manager, mut slice| {
+            slice.merkle_proof = vec![];
 
-                (state_manager, slice)
-            }
-        );
-    }
+            (state_manager, slice)
+        },
+    );
+}
 
-    #[test]
-    #[should_panic(expected = "InconsistentPartialTree")]
-    fn stream_store_decode_slice_push_additional_message(stream in arb_stream(0, 10, 0, 10)) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            None,
-            /* custom destination subnet */
-            None,
-            /* certification verification should succeed */
-            true,
-            /* modification between encoding and decoding */
-            |state_manager, slice| {
-                /* generate replacement stream for slice.payload  */
-                modify_encoded_stream_helper(state_manager, slice, |decoded_slice| {
-                    let mut messages = match decoded_slice.messages() {
-                        None => StreamIndexedQueue::default(),
-                        Some(messages) => messages.clone(),
-                    };
+#[test_strategy::proptest]
+#[should_panic(expected = "InconsistentPartialTree")]
+fn stream_store_decode_slice_push_additional_message(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        None,
+        /* custom destination subnet */
+        None,
+        /* certification verification should succeed */
+        true,
+        /* modification between encoding and decoding */
+        |state_manager, slice| {
+            /* generate replacement stream for slice.payload  */
+            modify_encoded_stream_helper(state_manager, slice, |decoded_slice| {
+                let mut messages = match decoded_slice.messages() {
+                    None => StreamIndexedQueue::default(),
+                    Some(messages) => messages.clone(),
+                };
 
-                    let req = RequestBuilder::default()
-                        .sender(CanisterId::unchecked_from_principal(PrincipalId::try_from(&[2][..]).unwrap()))
-                        .receiver(CanisterId::unchecked_from_principal(PrincipalId::try_from(&[3][..]).unwrap()))
-                        .method_name("test".to_string())
-                        .sender_reply_callback(CallbackId::from(999))
-                        .build();
+                let req = RequestBuilder::default()
+                    .sender(CanisterId::unchecked_from_principal(
+                        PrincipalId::try_from(&[2][..]).unwrap(),
+                    ))
+                    .receiver(CanisterId::unchecked_from_principal(
+                        PrincipalId::try_from(&[3][..]).unwrap(),
+                    ))
+                    .method_name("test".to_string())
+                    .sender_reply_callback(CallbackId::from(999))
+                    .build();
 
-                    messages.push(req.into());
+                messages.push(req.into());
 
-                    let signals_end = decoded_slice.header().signals_end();
+                let signals_end = decoded_slice.header().signals_end();
 
-                    Stream::new(messages, signals_end)
-                })
-            }
-        );
-    }
+                Stream::new(messages, signals_end)
+            })
+        },
+    );
+}
 
-    /// Depending on the specific input, may fail with either `InvalidSignature` or
-    /// `InconsistentPartialTree`. Hence, only a generic `should_panic`.
-    #[test]
-    #[should_panic]
-    fn stream_store_decode_slice_modify_message_begin(stream in arb_stream(0, 10, 0, 10)) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            None,
-            /* custom destination subnet */
-            None,
-            /* certification verification should succeed */
-            true,
-            /* modification between encoding and decoding  */
-            |state_manager, slice| {
-                /* generate replacement stream for slice.payload  */
-                modify_encoded_stream_helper(
-                    state_manager,
-                    slice,
-                    |decoded_slice| {
-                    let mut messages = StreamIndexedQueue::with_begin(StreamIndex::from(99999));
-                    let signals_end = decoded_slice.header().signals_end();
+/// Depending on the specific input, may fail with either `InvalidSignature` or
+/// `InconsistentPartialTree`. Hence, only a generic `should_panic`.
+#[test_strategy::proptest]
+#[should_panic]
+fn stream_store_decode_slice_modify_message_begin(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        None,
+        /* custom destination subnet */
+        None,
+        /* certification verification should succeed */
+        true,
+        /* modification between encoding and decoding  */
+        |state_manager, slice| {
+            /* generate replacement stream for slice.payload  */
+            modify_encoded_stream_helper(state_manager, slice, |decoded_slice| {
+                let mut messages = StreamIndexedQueue::with_begin(StreamIndex::from(99999));
+                let signals_end = decoded_slice.header().signals_end();
 
-                    if let Some(decoded_messages) = decoded_slice.messages() {
-                        for (_index, msg) in decoded_messages.iter() {
-                            messages.push(msg.clone());
-                        }
+                if let Some(decoded_messages) = decoded_slice.messages() {
+                    for (_index, msg) in decoded_messages.iter() {
+                        messages.push(msg.clone());
                     }
+                }
 
-                    Stream::new(messages, signals_end)
-                })
-            }
-        );
-    }
+                Stream::new(messages, signals_end)
+            })
+        },
+    );
+}
 
-    #[test]
-    #[should_panic(expected = "InvalidSignature")]
-    fn stream_store_decode_slice_modify_signals_end(stream in arb_stream(0, 10, 0, 10)) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            None,
-            /* custom destination subnet */
-            None,
-            /* certification verification should succeed */
-            true,
-            /* modification between encoding and decoding  */
-            |state_manager, slice| {
-                /* generate replacement stream for slice.payload  */
-                modify_encoded_stream_helper(state_manager, slice, |decoded_slice| {
-                    let messages = decoded_slice.messages()
-                        .unwrap_or(&StreamIndexedQueue::default()).clone();
-                    let signals_end = decoded_slice.header().signals_end() + 99999.into();
+#[test_strategy::proptest]
+#[should_panic(expected = "InvalidSignature")]
+fn stream_store_decode_slice_modify_signals_end(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        None,
+        /* custom destination subnet */
+        None,
+        /* certification verification should succeed */
+        true,
+        /* modification between encoding and decoding  */
+        |state_manager, slice| {
+            /* generate replacement stream for slice.payload  */
+            modify_encoded_stream_helper(state_manager, slice, |decoded_slice| {
+                let messages = decoded_slice
+                    .messages()
+                    .unwrap_or(&StreamIndexedQueue::default())
+                    .clone();
+                let signals_end = decoded_slice.header().signals_end() + 99999.into();
 
-                    Stream::new(messages, signals_end)
-                })
-            }
-        );
-    }
+                Stream::new(messages, signals_end)
+            })
+        },
+    );
+}
 
-    #[test]
-    #[should_panic(expected = "InvalidSignature")]
-    fn stream_store_decode_slice_push_signal(stream in arb_stream(0, 10, 0, 10)) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            None,
-            /* custom destination subnet */
-            None,
-            /* certification verification should succeed */
-            true,
-            /* modification between encoding and decoding  */
-            |state_manager, slice| {
-                /* generate replacement stream for slice.payload  */
-                modify_encoded_stream_helper(state_manager, slice, |decoded_slice| {
-                    let messages = decoded_slice.messages()
-                        .unwrap_or(&StreamIndexedQueue::default()).clone();
-                    let mut signals_end = decoded_slice.header().signals_end();
+#[test_strategy::proptest]
+#[should_panic(expected = "InvalidSignature")]
+fn stream_store_decode_slice_push_signal(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        None,
+        /* custom destination subnet */
+        None,
+        /* certification verification should succeed */
+        true,
+        /* modification between encoding and decoding  */
+        |state_manager, slice| {
+            /* generate replacement stream for slice.payload  */
+            modify_encoded_stream_helper(state_manager, slice, |decoded_slice| {
+                let messages = decoded_slice
+                    .messages()
+                    .unwrap_or(&StreamIndexedQueue::default())
+                    .clone();
+                let mut signals_end = decoded_slice.header().signals_end();
 
-                    signals_end.inc_assign();
+                signals_end.inc_assign();
 
-                    Stream::new(messages, signals_end)
-                })
-            }
-        );
-    }
+                Stream::new(messages, signals_end)
+            })
+        },
+    );
+}
 
-    #[test]
-    #[should_panic(expected = "InvalidDestination")]
-    fn stream_store_decode_with_invalid_destination(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            Some(size_limit),
-            /* custom destination subnet */
-            Some(subnet_test_id(1)),
-            /* certification verification should succeed */
-            true,
-            /* modification between encoding and decoding  */
-            |state_manager, slice| {
-                // Do not modify the slice before decoding it again - the wrong
-                // destination subnet should already make it fail
-                (state_manager, slice)
-            }
-        );
-    }
+#[test_strategy::proptest]
+#[should_panic(expected = "InvalidDestination")]
+fn stream_store_decode_with_invalid_destination(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+    #[strategy(0..20usize)] size_limit: usize,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        Some(size_limit),
+        /* custom destination subnet */
+        Some(subnet_test_id(1)),
+        /* certification verification should succeed */
+        true,
+        /* modification between encoding and decoding  */
+        |state_manager, slice| {
+            // Do not modify the slice before decoding it again - the wrong
+            // destination subnet should already make it fail
+            (state_manager, slice)
+        },
+    );
+}
 
-    #[test]
-    #[should_panic(expected = "InvalidSignature")]
-    fn stream_store_decode_with_rejecting_verifier(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            Some(size_limit),
-            /* custom destination subnet */
-            None,
-            /* certification verification should fail */
-            false,
-            /* modification between encoding and decoding  */
-            |state_manager, slice| {
-                // Do not modify the slice before decoding it again - the signature validation
-                // failure caused by passing the `RejectingVerifier` should already make it fail.
-                (state_manager, slice)
-            }
-        );
-    }
+#[test_strategy::proptest]
+#[should_panic(expected = "InvalidSignature")]
+fn stream_store_decode_with_rejecting_verifier(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+    #[strategy(0..20usize)] size_limit: usize,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        Some(size_limit),
+        /* custom destination subnet */
+        None,
+        /* certification verification should fail */
+        false,
+        /* modification between encoding and decoding  */
+        |state_manager, slice| {
+            // Do not modify the slice before decoding it again - the signature validation
+            // failure caused by passing the `RejectingVerifier` should already make it fail.
+            (state_manager, slice)
+        },
+    );
+}
 
-    /// If both signature verification and slice decoding would fail, we expect to
-    /// see an error about the former.
-    #[test]
-    #[should_panic(expected = "InvalidSignature")]
-    fn stream_store_decode_with_invalid_destination_and_rejecting_verifier(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            Some(size_limit),
-            /* custom destination subnet */
-            Some(subnet_test_id(1)),
-            /* certification verification should fail  */
-            false,
-            /* modification between encoding and decoding  */
-            |state_manager, slice| {
-                // Do not modify the slice, the wrong destination subnet and rejecting verifier
-                // should make it fail regardless.
-                (state_manager, slice)
-            }
-        );
-    }
+/// If both signature verification and slice decoding would fail, we expect to
+/// see an error about the former.
+#[test_strategy::proptest]
+#[should_panic(expected = "InvalidSignature")]
+fn stream_store_decode_with_invalid_destination_and_rejecting_verifier(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+    #[strategy(0..20usize)] size_limit: usize,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        Some(size_limit),
+        /* custom destination subnet */
+        Some(subnet_test_id(1)),
+        /* certification verification should fail  */
+        false,
+        /* modification between encoding and decoding  */
+        |state_manager, slice| {
+            // Do not modify the slice, the wrong destination subnet and rejecting verifier
+            // should make it fail regardless.
+            (state_manager, slice)
+        },
+    );
+}
 
-    #[test]
-    fn stream_store_encode_partial((stream, begin, count) in arb_stream_slice(1, 10, 0, 10), byte_limit in 0..1000usize) {
-        // Partial slice with messages beginning at `begin + 1`.
-        encode_partial_slice_test(
-            stream,
-            begin,
-            begin.increment(),
-            count - 1,
-            byte_limit
-        );
-    }
+#[test_strategy::proptest]
+fn stream_store_encode_partial(
+    #[strategy(arb_stream_slice(
+        1, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    test_slice: (Stream, StreamIndex, usize),
+    #[strategy(0..1000usize)] byte_limit: usize,
+) {
+    let (stream, begin, count) = test_slice;
+    // Partial slice with messages beginning at `begin + 1`.
+    encode_partial_slice_test(stream, begin, begin.increment(), count - 1, byte_limit);
 }
 
 // 1 test case is sufficient to test index validation.
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(1))]
-
-    #[test]
-    #[should_panic(expected = "failed to encode certified stream: InvalidSliceIndices")]
-    fn stream_store_encode_partial_bad_indices((stream, begin, count) in arb_stream_slice(1, 10, 0, 10), byte_limit in 0..1000usize) {
-        // `witness_begin` (`== begin + 1`) after `msg_begin` (`== begin`).
-        encode_partial_slice_test(
-            stream,
-            begin.increment(),
-            begin,
-            count,
-            byte_limit
-        );
-    }
+#[test_strategy::proptest(ProptestConfig::with_cases(1))]
+#[should_panic(expected = "failed to encode certified stream: InvalidSliceIndices")]
+fn stream_store_encode_partial_bad_indices(
+    #[strategy(arb_stream_slice(
+        1, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    test_slice: (Stream, StreamIndex, usize),
+    #[strategy(0..1000usize)] byte_limit: usize,
+) {
+    let (stream, begin, count) = test_slice;
+    // `witness_begin` (`== begin + 1`) after `msg_begin` (`== begin`).
+    encode_partial_slice_test(stream, begin.increment(), begin, count, byte_limit);
 }
 
 /// Test if query stats are correctly aggregated into the canister state.
@@ -7524,7 +7168,7 @@ enum TestCanisterOp {
     CanisterUpgrade,
     CanisterReinstall,
     Checkpoint,
-    RestartWithLSMT(LsmtConfig),
+    Restart,
 }
 
 /// A strategy with an arbitrary enum element, including a selection of update functions
@@ -7540,21 +7184,21 @@ fn arbitrary_test_canister_op() -> impl Strategy<Value = TestCanisterOp> {
         Just(TestCanisterOp::CanisterUpgrade),
         Just(TestCanisterOp::CanisterReinstall),
         Just(TestCanisterOp::Checkpoint),
-        Just(TestCanisterOp::RestartWithLSMT(lsmt_with_sharding())),
-        Just(TestCanisterOp::RestartWithLSMT(lsmt_disabled())),
+        Just(TestCanisterOp::Restart),
     }
 }
 
-proptest! {
-#![proptest_config(ProptestConfig {
+#[test_strategy::proptest(ProptestConfig {
     // Fork to prevent flaky timeouts due to closed sandbox fds
     fork: true,
     // We go for fewer, but longer runs
     ..ProptestConfig::with_cases(5)
 })]
-
-#[test]
-fn random_canister_input_lsmt(ops in proptest::collection::vec(arbitrary_test_canister_op(), 1..50)) {
+fn random_canister_input(
+    #[strategy(proptest::collection::vec(arbitrary_test_canister_op(), 1..50))] ops: Vec<
+        TestCanisterOp,
+    >,
+) {
     /// Execute op against the state machine `env`
     fn execute_op(env: StateMachine, canister_id: CanisterId, op: TestCanisterOp) -> StateMachine {
         match op {
@@ -7579,7 +7223,8 @@ fn random_canister_input_lsmt(ops in proptest::collection::vec(arbitrary_test_ca
             }
             TestCanisterOp::CanisterReinstall => {
                 env.reinstall_canister_wat(canister_id, TEST_CANISTER, vec![]);
-                env.execute_ingress(canister_id, "grow_page", vec![]).unwrap();
+                env.execute_ingress(canister_id, "grow_page", vec![])
+                    .unwrap();
                 env
             }
             TestCanisterOp::Checkpoint => {
@@ -7588,127 +7233,26 @@ fn random_canister_input_lsmt(ops in proptest::collection::vec(arbitrary_test_ca
                 env.set_checkpoints_enabled(false);
                 env
             }
-            TestCanisterOp::RestartWithLSMT(flag) => {
+            TestCanisterOp::Restart => {
                 let env = execute_op(env, canister_id, TestCanisterOp::Checkpoint);
 
-                env.restart_node_with_lsmt_override(Some(flag))
+                env.restart_node_with_lsmt_override(Some(lsmt_with_sharding()))
             }
         }
     }
 
     // Setup two state machines with a single TEST_CANISTER installed.
-    let mut lsmt_env = StateMachineBuilder::new()
+    let mut env = StateMachineBuilder::new()
         .with_lsmt_override(Some(lsmt_with_sharding()))
         .build();
-    let mut base_env = StateMachineBuilder::new()
-        .with_lsmt_override(Some(lsmt_disabled()))
-        .build();
 
-    let canister_id = lsmt_env.install_canister_wat(TEST_CANISTER, vec![], None);
-    let base_canister_id = base_env.install_canister_wat(TEST_CANISTER, vec![], None);
-    prop_assert_eq!(canister_id, base_canister_id);
+    let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
 
-    lsmt_env
-        .execute_ingress(canister_id, "grow_page", vec![])
-        .unwrap();
-    base_env
-        .execute_ingress(canister_id, "grow_page", vec![])
+    env.execute_ingress(canister_id, "grow_page", vec![])
         .unwrap();
 
-    // Execute all operations against both state machines, except never enable LSTM on `base_env`.
+    // Execute all operations the state machine.
     for op in ops {
-        lsmt_env = execute_op(lsmt_env, canister_id, op.clone());
-        if let TestCanisterOp::RestartWithLSMT(_) = op {
-            // With the base environment, we never enable LSMT
-            base_env = execute_op(
-                base_env,
-                canister_id,
-                TestCanisterOp::RestartWithLSMT(lsmt_disabled()),
-            );
-        } else {
-            base_env = execute_op(base_env, canister_id, op);
-        }
-
-        // Querying `read` should always give the same result on both state machines.
-        let lsmt_read = lsmt_env
-            .execute_ingress(canister_id, "read", vec![])
-            .unwrap()
-            .bytes();
-        let base_read = base_env
-            .execute_ingress(canister_id, "read", vec![])
-            .unwrap()
-            .bytes();
-
-        prop_assert_eq!(lsmt_read, base_read);
+        env = execute_op(env, canister_id, op.clone());
     }
-
-    // Restart both of them to non-LSMT, do another checkpoint and check that the canister
-    // files are exactly the same.
-    let reset_to_base = |env| {
-        let env = execute_op(
-            env,
-            canister_id,
-            TestCanisterOp::RestartWithLSMT(lsmt_disabled()),
-        );
-        let env = execute_op(env, canister_id, TestCanisterOp::Checkpoint);
-        env.state_manager.flush_tip_channel();
-        env
-    };
-    lsmt_env = reset_to_base(lsmt_env);
-    base_env = reset_to_base(base_env);
-
-    lsmt_env = execute_op(
-        lsmt_env,
-        canister_id,
-        TestCanisterOp::RestartWithLSMT(lsmt_disabled()),
-    );
-    base_env = execute_op(
-        base_env,
-        canister_id,
-        TestCanisterOp::RestartWithLSMT(lsmt_disabled()),
-    );
-    lsmt_env = execute_op(lsmt_env, canister_id, TestCanisterOp::Checkpoint);
-    base_env = execute_op(base_env, canister_id, TestCanisterOp::Checkpoint);
-    lsmt_env.state_manager.flush_tip_channel();
-    base_env.state_manager.flush_tip_channel();
-
-    let latest_height = *lsmt_env.state_manager.checkpoint_heights().last().unwrap();
-    prop_assert_eq!(
-        latest_height,
-        *base_env.state_manager.checkpoint_heights().last().unwrap()
-    );
-
-    let canister_dir = |env: &StateMachine| {
-        env.state_manager
-            .state_layout()
-            .checkpoint_verified(latest_height)
-            .unwrap()
-            .canister(&canister_id)
-            .unwrap()
-            .raw_path()
-    };
-    let lsmt_dir = canister_dir(&lsmt_env);
-    let base_dir = canister_dir(&base_env);
-
-    let mut lsmt_files: Vec<_> = std::fs::read_dir(lsmt_dir)
-        .unwrap()
-        .map(|file| file.unwrap())
-        .collect();
-    lsmt_files.sort_by_key(|file| file.path());
-    let mut base_files: Vec<_> = std::fs::read_dir(base_dir)
-        .unwrap()
-        .map(|file| file.unwrap())
-        .collect();
-    base_files.sort_by_key(|file| file.path());
-    prop_assert_eq!(lsmt_files.len(), base_files.len());
-    for (lsmt_file, base_file) in lsmt_files.iter().zip(base_files.iter()) {
-        prop_assert_eq!(lsmt_file.file_name(), base_file.file_name());
-        // No directories inside canisters, so no need to be recursive
-        prop_assert!(lsmt_file.file_type().unwrap().is_file());
-        prop_assert!(base_file.file_type().unwrap().is_file());
-        let lsmt_data: Vec<u8> = std::fs::read(lsmt_file.path()).unwrap();
-        let base_data: Vec<u8> = std::fs::read(base_file.path()).unwrap();
-        prop_assert_eq!(lsmt_data, base_data);
-    }
-}
 }

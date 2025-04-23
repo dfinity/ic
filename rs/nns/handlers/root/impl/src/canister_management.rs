@@ -4,7 +4,7 @@ use ic_cdk::{
     api::call::{call_with_payment, RejectionCode},
     call, caller, print,
 };
-use ic_management_canister_types::{CanisterInstallMode::Install, InstallCodeArgs};
+use ic_management_canister_types_private::{CanisterInstallMode::Install, InstallCodeArgs};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     management_canister_client::ManagementCanisterClient,

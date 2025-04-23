@@ -4,16 +4,14 @@
 
 # [Misc]
 /.devcontainer/           @dfinity/idx
+.rclone*                  @dfinity/idx
 /buf.yaml                 @dfinity/ic-message-routing-owners
 /cpp/                     @dfinity/node
 /hs/spec_compliance       @dfinity/research
 /licenses/                @dfinity/idx
 /bin/ict                  @dfinity/idx
 /bin/                     @dfinity/idx
-/bin/afl_test.sh          @dfinity/product-security
-/bin/afl_wrapper.sh       @dfinity/product-security
-/bin/build-all-fuzzers.sh @dfinity/product-security
-/bin/fuzzing_coverage.sh  @dfinity/product-security
+/bin/fuzzing/             @dfinity/product-security
 
 # [Bazel]
 .bazelrc                           @dfinity/idx
@@ -22,7 +20,6 @@
 /bazel/fuzz_testing.bzl            @dfinity/idx @dfinity/product-security
 /BUILD.bazel                       @dfinity/idx
 /third_party/                      @dfinity/idx
-/mainnet-canister-revisions.json   @dfinity/idx @dfinity/nns-team
 /MODULE.bazel                      @dfinity/idx
 /WORKSPACE.bazel                   @dfinity/idx
 
@@ -44,16 +41,22 @@ go_deps.bzl               @dfinity/idx
 /publish/ @dfinity/idx
 
 # [Packages]
-/packages/icrc-cbor/                 @dfinity/finint @dfinity/cross-chain-team
-/packages/icrc-ledger-agent/         @dfinity/finint
-/packages/icrc-ledger-types/         @dfinity/finint
-/packages/ic-ledger-hash-of/         @dfinity/finint
-/packages/pocket-ic/                 @dfinity/pocket-ic
-/packages/ic-ethereum-types/         @dfinity/cross-chain-team
-/packages/ic-metrics-assert/         @dfinity/cross-chain-team
-/packages/ic-sha3/                   @dfinity/crypto-team
-/packages/ic-signature-verification/ @dfinity/crypto-team
-/packages/ic-vetkd-utils/            @dfinity/crypto-team
+/packages/icrc-cbor/                    @dfinity/finint @dfinity/cross-chain-team
+/packages/icrc-ledger-agent/            @dfinity/finint
+/packages/icrc-ledger-types/            @dfinity/finint
+/packages/ic-ledger-hash-of/            @dfinity/finint
+/packages/pocket-ic/                    @dfinity/pocket-ic
+/packages/ic-error-types/               @dfinity/execution
+/packages/ic-dummy-getrandom-for-wasm/  @dfinity/crypto-team
+/packages/ic-ed25519/                   @dfinity/crypto-team
+/packages/ic-ethereum-types/            @dfinity/cross-chain-team
+/packages/ic-hpke/                      @dfinity/crypto-team
+/packages/ic-http-types/                @dfinity/cross-chain-team
+/packages/ic-metrics-assert/            @dfinity/cross-chain-team
+/packages/ic-secp256k1/                 @dfinity/crypto-team
+/packages/ic-sha3/                      @dfinity/crypto-team
+/packages/ic-signature-verification/    @dfinity/crypto-team
+/packages/ic-vetkd-utils/               @dfinity/crypto-team
 
 # [IC-OS]
 /ic-os/                                                                 @dfinity/node
@@ -75,8 +78,10 @@ go_deps.bzl               @dfinity/idx
 /ci/                                                                     @dfinity/idx
 /ci/src/dependencies/                                                    @dfinity/product-security
 /ci/src/dependencies/resources/container_scanner_finding_failover_ignore_list_guestos.txt @dfinity/node
+/ci/tools/repro-check                                                    @dfinity/dre
 /.pre-commit-config.yaml                                                 @dfinity/idx
 /pre-commit/                                                             @dfinity/idx
+/.mergify.yaml                                                           @dfinity/idx
 
 # [Testnet]
 /testnet/                                                  @dfinity/node @dfinity/dre
@@ -85,7 +90,6 @@ go_deps.bzl               @dfinity/idx
 /testnet/env/                                              @dfinity/platform-operations
 /testnet/release/                                          @dfinity/dre
 /testnet/tools/nns-tools/                                  @dfinity/nns-team
-/mainnet-subnet-revisions.json                             @dfinity/consensus @dfinity/dre
 
 # [Rust]
 /rs/                                                    @dfinity/ic-interface-owners
@@ -110,6 +114,7 @@ go_deps.bzl               @dfinity/idx
 /rs/config/                                             @dfinity/consensus
 /rs/config/src/embedders.rs                             @dfinity/execution
 /rs/config/src/execution_environment.rs                 @dfinity/execution
+/rs/config/src/message_routing.rs                       @dfinity/ic-message-routing-owners
 /rs/config/src/state_manager.rs                         @dfinity/ic-message-routing-owners
 /rs/config/src/subnet_config.rs                         @dfinity/execution
 /rs/consensus/                                          @dfinity/consensus
@@ -150,18 +155,18 @@ go_deps.bzl               @dfinity/idx
 /rs/interfaces/src/messaging.rs                         @dfinity/ic-message-routing-owners
 /rs/interfaces/src/p2p.rs                               @dfinity/consensus
 /rs/interfaces/src/p2p/                                 @dfinity/consensus
-/rs/interfaces/src/vetkd.rs                            @dfinity/consensus
+/rs/interfaces/src/vetkd.rs                             @dfinity/consensus
 /rs/interfaces/state_manager/                           @dfinity/ic-message-routing-owners
 /rs/ledger_suite/                                       @dfinity/finint
 /rs/limits/                                             @dfinity/ic-interface-owners
 /rs/memory_tracker/                                     @dfinity/execution
 /rs/messaging/                                          @dfinity/ic-message-routing-owners
 /rs/monitoring/                                         @dfinity/consensus
-/rs/monitoring/backtrace/                               @dfinity/consensus @dfinity/ic-message-routing-owners
 /rs/monitoring/metrics                                  @dfinity/consensus @dfinity/ic-message-routing-owners
 /rs/monitoring/pprof/                                   @dfinity/consensus @dfinity/ic-message-routing-owners
 /rs/nervous_system/                                     @dfinity/nns-team
 /rs/nns/                                                @dfinity/nns-team
+/rs/node_rewards/                                       @dfinity/nns-team @dfinity/dre
 /rs/orchestrator/                                       @dfinity/consensus
 /rs/orchestrator/src/hostos_upgrade.rs                  @dfinity/consensus @dfinity/node
 /rs/p2p/                                                @dfinity/consensus
@@ -223,7 +228,6 @@ go_deps.bzl               @dfinity/idx
 /rs/state_manager/                                      @dfinity/ic-message-routing-owners
 /rs/state_tool/                                         @dfinity/ic-message-routing-owners
 /rs/sys/                                                @dfinity/ic-message-routing-owners @dfinity/execution
-/rs/system_api/                                         @dfinity/execution
 /rs/test_utilities/                                     @dfinity/ic-interface-owners
 /rs/test_utilities/artifact_pool/                       @dfinity/consensus
 /rs/test_utilities/consensus/                           @dfinity/consensus
@@ -250,6 +254,7 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/execution/                                    @dfinity/execution
 /rs/tests/financial_integrations/                       @dfinity/finint
 /rs/tests/message_routing/                              @dfinity/ic-message-routing-owners
+/rs/tests/nested/                                       @dfinity/node
 /rs/tests/networking/                                   @dfinity/consensus
 /rs/tests/nns/                                          @dfinity/nns-team
 /rs/tests/node/                                         @dfinity/node
@@ -284,7 +289,6 @@ go_deps.bzl               @dfinity/idx
 /rs/utils/ensure/                                       @dfinity/finint
 /rs/validator/                                          @dfinity/crypto-team
 /rs/wasm_transform/                                     @dfinity/execution
-/rs/workload_generator/                                 @dfinity/execution
 /rs/xnet/                                               @dfinity/ic-message-routing-owners
 
 # [No-Approvals]
@@ -293,3 +297,5 @@ go_deps.bzl               @dfinity/idx
 Cargo.toml
 .gitignore
 stackage_snapshot.json
+mainnet-canister-revisions.json # this file is auto-approved by github actions, therefore we remove codeowners
+mainnet-icos-revisions.json     # same as above

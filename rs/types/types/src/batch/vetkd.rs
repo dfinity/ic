@@ -10,13 +10,14 @@ use ic_protobuf::{
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryFrom};
+use strum_macros::EnumCount;
 
 use crate::{messages::CallbackId, CountBytes};
 
 use super::{iterator_to_bytes, slice_to_messages};
 
 /// Errors that may occur when handling a VetKd request.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, EnumCount)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum VetKdErrorCode {
     TimedOut = 1,
@@ -24,7 +25,7 @@ pub enum VetKdErrorCode {
 }
 
 /// Consensus may either agree on a successful response, or reject the request.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, EnumCount)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum VetKdAgreement {
     Success(Vec<u8>),

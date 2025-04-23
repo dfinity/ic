@@ -19,6 +19,7 @@ use ic_error_types::{ErrorCode, RejectCode};
 use ic_interfaces::{
     crypto::BasicSigner,
     execution_environment::{QueryExecutionError, QueryExecutionService},
+    time_source::{SysTimeSource, TimeSource},
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, ReplicaLogger};
@@ -31,7 +32,6 @@ use ic_types::{
         HttpQueryResponseReply, HttpRequest, HttpRequestEnvelope, HttpSignedQueryResponse,
         NodeSignature, Query, QueryResponseHash,
     },
-    time::current_time,
     CanisterId, NodeId,
 };
 use ic_validator::HttpRequestVerifier;
@@ -40,7 +40,7 @@ use std::{
     convert::{Infallible, TryFrom},
     sync::Mutex,
 };
-use tokio::sync::OnceCell;
+use tokio::sync::watch;
 use tower::{util::BoxCloneService, ServiceBuilder, ServiceExt};
 
 #[derive(Clone)]
@@ -49,7 +49,8 @@ pub struct QueryService {
     node_id: NodeId,
     signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
-    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
+    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+    time_source: Arc<dyn TimeSource>,
     validator: Arc<dyn HttpRequestVerifier<Query, RegistryRootOfTrustProvider>>,
     registry_client: Arc<dyn RegistryClient>,
     query_execution_service: Arc<Mutex<QueryExecutionService>>,
@@ -61,7 +62,8 @@ pub struct QueryServiceBuilder {
     signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
     malicious_flags: Option<MaliciousFlags>,
-    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
+    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+    time_source: Option<Arc<dyn TimeSource>>,
     ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     query_execution_service: QueryExecutionService,
@@ -69,7 +71,7 @@ pub struct QueryServiceBuilder {
 
 impl QueryService {
     pub(crate) fn route() -> &'static str {
-        "/api/v2/canister/:effective_canister_id/query"
+        "/api/v2/canister/{effective_canister_id}/query"
     }
 }
 
@@ -80,7 +82,7 @@ impl QueryServiceBuilder {
         signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
         registry_client: Arc<dyn RegistryClient>,
         ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
-        delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
+        delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
         query_execution_service: QueryExecutionService,
     ) -> Self {
         Self {
@@ -90,6 +92,7 @@ impl QueryServiceBuilder {
             health_status: None,
             malicious_flags: None,
             delegation_from_nns,
+            time_source: None,
             ingress_verifier,
             registry_client,
             query_execution_service,
@@ -98,6 +101,11 @@ impl QueryServiceBuilder {
 
     pub(crate) fn with_malicious_flags(mut self, malicious_flags: MaliciousFlags) -> Self {
         self.malicious_flags = Some(malicious_flags);
+        self
+    }
+
+    pub fn with_time_source(mut self, time_source: Arc<dyn TimeSource>) -> Self {
+        self.time_source = Some(time_source);
         self
     }
 
@@ -119,6 +127,7 @@ impl QueryServiceBuilder {
                 .health_status
                 .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
             delegation_from_nns: self.delegation_from_nns,
+            time_source: self.time_source.unwrap_or(Arc::new(SysTimeSource::new())),
             validator: build_validator(self.ingress_verifier, self.malicious_flags),
             registry_client: self.registry_client,
             query_execution_service: Arc::new(Mutex::new(self.query_execution_service)),
@@ -143,6 +152,7 @@ pub(crate) async fn query(
         log,
         node_id,
         registry_client,
+        time_source,
         validator,
         health_status,
         signer,
@@ -159,7 +169,7 @@ pub(crate) async fn query(
         );
         return (status, text).into_response();
     }
-    let delegation_from_nns = delegation_from_nns.get().cloned();
+    let delegation_from_nns = delegation_from_nns.borrow().clone();
 
     let registry_version = registry_client.get_latest_version();
 
@@ -188,7 +198,11 @@ pub(crate) async fn query(
     // Since spawn blocking requires 'static we can't use any references
     let request_c = request.clone();
     match tokio::task::spawn_blocking(move || {
-        validator.validate_request(&request_c, current_time(), &root_of_trust_provider)
+        validator.validate_request(
+            &request_c,
+            time_source.get_relative_time(),
+            &root_of_trust_provider,
+        )
     })
     .await
     {

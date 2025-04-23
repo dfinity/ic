@@ -5,17 +5,17 @@ use ic_artifact_pool::{
 use ic_btc_adapter_client::{setup_bitcoin_adapter_clients, BitcoinAdapterClients};
 use ic_btc_consensus::BitcoinPayloadBuilder;
 use ic_config::{artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig, Config};
-use ic_consensus::certification::VerifierImpl;
+use ic_consensus_certification::VerifierImpl;
 use ic_crypto::CryptoComponent;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
+use ic_http_endpoints_public::start_nns_delegation_manager;
 use ic_http_endpoints_xnet::XNetEndpoint;
 use ic_https_outcalls_adapter_client::setup_canister_http_client;
 use ic_interfaces::{
     execution_environment::QueryExecutionService, p2p::artifact_manager::JoinGuard,
     time_source::SysTimeSource,
 };
-use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{info, ReplicaLogger};
@@ -38,8 +38,9 @@ use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
 use std::sync::{Arc, RwLock};
 use tokio::sync::{
     mpsc::{channel, UnboundedSender},
-    watch, OnceCell,
+    watch,
 };
+use tokio_util::sync::CancellationToken;
 
 /// The buffer size for the channel that [`IngressHistoryWriterImpl`] uses to send
 /// the message id and height of messages that complete execution.
@@ -67,7 +68,7 @@ pub fn construct_ic_stack(
     config: Config,
     node_id: NodeId,
     subnet_id: SubnetId,
-    registry: Arc<dyn RegistryClient + Send + Sync>,
+    registry: Arc<impl RegistryClient + 'static>,
     crypto: Arc<CryptoComponent>,
     catch_up_package: Option<pb::CatchUpPackage>,
     tracing_handle: ReloadHandles,
@@ -131,8 +132,6 @@ pub fn construct_ic_stack(
         registry.get_latest_version(),
         registry.as_ref(),
     );
-
-    let delegation_from_nns = Arc::new(OnceCell::new());
 
     // ---------- THE PERSISTED CONSENSUS ARTIFACT POOL DEPS FOLLOW ----------
     // This is the first object that is required for the creation of the IC stack. Initializing the
@@ -207,8 +206,7 @@ pub fn construct_ic_stack(
         &state_manager.state_layout().tmp(),
     );
     // ---------- MESSAGE ROUTING DEPS FOLLOW ----------
-    let certified_stream_store: Arc<dyn CertifiedStreamStore> =
-        Arc::clone(&state_manager) as Arc<_>;
+    let certified_stream_store = Arc::clone(&state_manager);
     let message_router = if config
         .malicious_behaviour
         .malicious_flags
@@ -280,16 +278,32 @@ pub fn construct_ic_stack(
         config.bitcoin_payload_builder_config,
         log.clone(),
     ));
+
+    let cancellation_token = CancellationToken::new();
+
+    // TODO(CON-1492): consider joining on the returned join handle
+    let (_, nns_delegation_watcher) = start_nns_delegation_manager(
+        metrics_registry,
+        config.http_handler.clone(),
+        log.clone(),
+        rt_handle_http.clone(),
+        subnet_id,
+        root_subnet_id,
+        registry.clone(),
+        Arc::clone(&crypto) as Arc<_>,
+        cancellation_token.child_token(),
+    );
+
     // ---------- HTTPS OUTCALLS PAYLOAD BUILDER DEPS FOLLOW ----------
     let canister_http_adapter_client = setup_canister_http_client(
         rt_handle_main.clone(),
         metrics_registry,
         config.adapters_config,
-        execution_services.query_execution_service.clone(),
+        execution_services.https_outcalls_service,
         max_canister_http_requests_in_flight,
         log.clone(),
         subnet_type,
-        delegation_from_nns.clone(),
+        nns_delegation_watcher.clone(),
     );
     // ---------- CONSENSUS AND P2P DEPS FOLLOW ----------
     let state_sync = StateSync::new(state_manager.clone(), log.clone());
@@ -325,6 +339,7 @@ pub fn construct_ic_stack(
         config.nns_registry_replicator.poll_delay_duration_ms,
         max_certified_height_tx,
     );
+
     // ---------- PUBLIC ENDPOINT DEPS FOLLOW ----------
     ic_http_endpoints_public::start_server(
         rt_handle_http.clone(),
@@ -346,11 +361,12 @@ pub fn construct_ic_stack(
         consensus_pool_cache,
         subnet_type,
         config.malicious_behaviour.malicious_flags,
-        delegation_from_nns,
+        nns_delegation_watcher,
         Arc::new(Pprof),
         tracing_handle,
         max_certified_height_rx,
         finalized_ingress_height_rx,
+        cancellation_token.child_token(),
     );
 
     Ok((

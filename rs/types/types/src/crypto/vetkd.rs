@@ -1,9 +1,10 @@
 use crate::crypto::impl_display_using_debug;
 use crate::crypto::threshold_sig::errors::threshold_sig_data_not_found_error::ThresholdSigDataNotFoundError;
 use crate::crypto::threshold_sig::ni_dkg::NiDkgId;
-use crate::crypto::ExtendedDerivationPath;
+use crate::crypto::CryptoError;
 use crate::crypto::HexEncoding;
-use crate::NodeId;
+use crate::crypto::SignedBytesWithoutDomainSeparator;
+use ic_base_types::PrincipalId;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -13,22 +14,22 @@ mod test;
 #[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub struct VetKdArgs {
     pub ni_dkg_id: NiDkgId,
-    pub derivation_path: ExtendedDerivationPath,
     #[serde(with = "serde_bytes")]
-    pub derivation_id: Vec<u8>,
+    pub input: Vec<u8>,
+    pub context: VetKdDerivationContext,
     #[serde(with = "serde_bytes")]
-    pub encryption_public_key: Vec<u8>,
+    pub transport_public_key: Vec<u8>,
 }
 
 impl fmt::Debug for VetKdArgs {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("VetKdArgs")
             .field("ni_dkg_id", &self.ni_dkg_id)
-            .field("derivation_path", &self.derivation_path)
-            .field("derivation_id", &HexEncoding::from(&self.derivation_id))
+            .field("input", &HexEncoding::from(&self.input))
+            .field("context", &self.context)
             .field(
-                "encryption_public_key",
-                &HexEncoding::from(&self.encryption_public_key),
+                "transport_public_key",
+                &HexEncoding::from(&self.transport_public_key),
             )
             .finish()
     }
@@ -46,6 +47,12 @@ impl std::fmt::Debug for VetKdEncryptedKeyShareContent {
     }
 }
 impl_display_using_debug!(VetKdEncryptedKeyShareContent);
+
+impl SignedBytesWithoutDomainSeparator for VetKdEncryptedKeyShareContent {
+    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
+        self.0.clone()
+    }
+}
 
 #[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub struct VetKdEncryptedKeyShare {
@@ -80,28 +87,65 @@ impl std::fmt::Debug for VetKdEncryptedKey {
 }
 impl_display_using_debug!(VetKdEncryptedKey);
 
+/// Metadata used to derive keys for vetKD.
+#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+pub struct VetKdDerivationContext {
+    pub caller: PrincipalId,
+    #[serde(with = "serde_bytes")]
+    pub context: Vec<u8>,
+}
+
+impl std::fmt::Debug for VetKdDerivationContext {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt.debug_struct("VetKdDerivationContext")
+            .field("caller", &self.caller)
+            .field("context", &HexEncoding::from(&self.context))
+            .finish()
+    }
+}
+impl_display_using_debug!(VetKdDerivationContext);
+
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum VetKdKeyShareCreationError {
     ThresholdSigDataNotFound(ThresholdSigDataNotFoundError),
-    SecretKeyNotFound { dkg_id: NiDkgId, key_id: String },
     KeyIdInstantiationError(String),
+    InternalError(String),
+    InvalidArgumentEncryptionPublicKey,
+    KeyShareSigningError(CryptoError),
     TransientInternalError(String),
 }
 impl_display_using_debug!(VetKdKeyShareCreationError);
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum VetKdKeyShareVerificationError {
-    InvalidSignature,
+    ThresholdSigDataNotFound(ThresholdSigDataNotFoundError),
+    VerificationError(CryptoError),
 }
 impl_display_using_debug!(VetKdKeyShareVerificationError);
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum VetKdKeyShareCombinationError {
-    InvalidShares(Vec<NodeId>),
-    UnsatisfiedReconstructionThreshold { threshold: u32, share_count: usize },
+    ThresholdSigDataNotFound(ThresholdSigDataNotFoundError),
+    InvalidArgumentMasterPublicKey,
+    InvalidArgumentEncryptionPublicKey,
+    InvalidArgumentEncryptedKeyShare,
+    IndividualPublicKeyComputationError(CryptoError),
+    CombinationError(String),
+    InternalError(String),
+    UnsatisfiedReconstructionThreshold {
+        threshold: usize,
+        share_count: usize,
+    },
 }
 impl_display_using_debug!(VetKdKeyShareCombinationError);
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub enum VetKdKeyVerificationError {}
+pub enum VetKdKeyVerificationError {
+    InvalidArgumentEncryptedKey,
+    ThresholdSigDataNotFound(ThresholdSigDataNotFoundError),
+    InternalError(String),
+    InvalidArgumentMasterPublicKey,
+    InvalidArgumentEncryptionPublicKey,
+    VerificationError,
+}
 impl_display_using_debug!(VetKdKeyVerificationError);

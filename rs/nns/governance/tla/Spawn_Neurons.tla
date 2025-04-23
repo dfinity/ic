@@ -1,5 +1,5 @@
 ---- MODULE Spawn_Neurons ----
-EXTENDS TLC, Sequences, Naturals, FiniteSets, Variants
+EXTENDS TLC, Sequences, Naturals, FiniteSets, Variants, Common
 
 CONSTANTS
     \* @type: Set($proc);
@@ -21,9 +21,6 @@ CONSTANTS
     MATURITY_BASIS_POINTS
 
 BASIS_POINTS_PER_UNITY == 10000
-
-request(caller, request_args) == [caller |-> caller, method_and_args |-> request_args]
-transfer(from, to, amount, fee) == Variant("Transfer", [from |-> from, to |-> to, amount |-> amount, fee |-> fee])
 
 (*--algorithm Governance_Ledger_Spawn_Neurons {
 
@@ -53,7 +50,8 @@ macro loop_iteration(new_locks) {
             locks := new_locks \union {neuron_id};
             neuron := [ neuron EXCEPT
                         ![neuron_id].maturity = 0,
-                        ![neuron_id].cached_stake = neuron_stake
+                        ![neuron_id].cached_stake = neuron_stake,
+                        ![neuron_id].state = NOT_SPAWNING
                       ];
             governance_to_ledger := Append(governance_to_ledger,
                 request(self, transfer(Minting_Account_Id, account, neuron_stake, 0)));
@@ -70,8 +68,7 @@ process (Spawn_Neurons \in Spawn_Neurons_Process_Ids)
     SpawnNeurons_Start:
         await ~spawning_neurons;
 
-        \* TODO: probably need to model the spawning state
-        ready_to_spawn_ids := {nid \in DOMAIN(neuron) : neuron[nid].maturity > 0};
+        ready_to_spawn_ids := {nid \in DOMAIN(neuron) : neuron[nid].state = SPAWNING };
         await ready_to_spawn_ids # {};
         spawning_neurons := TRUE;
         loop_iteration(locks);
@@ -98,7 +95,7 @@ process (Spawn_Neurons \in Spawn_Neurons_Process_Ids)
 
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "90f0999" /\ chksum(tla) = "313ea5da")
+\* BEGIN TRANSLATION (chksum(pcal) = "89b40435" /\ chksum(tla) = "ac55cf61")
 VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger,
           ledger_to_governance, spawning_neurons, neuron_id,
           ready_to_spawn_ids
@@ -123,7 +120,7 @@ Init == (* Global variables *)
 
 SpawnNeurons_Start(self) == /\ pc[self] = "SpawnNeurons_Start"
                             /\ ~spawning_neurons
-                            /\ ready_to_spawn_ids' = [ready_to_spawn_ids EXCEPT ![self] = {nid \in DOMAIN(neuron) : neuron[nid].maturity > 0}]
+                            /\ ready_to_spawn_ids' = [ready_to_spawn_ids EXCEPT ![self] = {nid \in DOMAIN(neuron) : neuron[nid].state = SPAWNING }]
                             /\ ready_to_spawn_ids'[self] # {}
                             /\ spawning_neurons' = TRUE
                             /\ \E nid \in ready_to_spawn_ids'[self] \ locks:
@@ -133,7 +130,8 @@ SpawnNeurons_Start(self) == /\ pc[self] = "SpawnNeurons_Start"
                                      /\ locks' = (locks \union {neuron_id'[self]})
                                      /\ neuron' = [ neuron EXCEPT
                                                     ![neuron_id'[self]].maturity = 0,
-                                                    ![neuron_id'[self]].cached_stake = neuron_stake
+                                                    ![neuron_id'[self]].cached_stake = neuron_stake,
+                                                    ![neuron_id'[self]].state = NOT_SPAWNING
                                                   ]
                                      /\ governance_to_ledger' =                     Append(governance_to_ledger,
                                                                 request(self, transfer(Minting_Account_Id, account, neuron_stake, 0)))
@@ -162,7 +160,8 @@ SpawnNeurons_Start_WaitForTransfer(self) == /\ pc[self] = "SpawnNeurons_Start_Wa
                                                                        /\ locks' = (new_locks \union {neuron_id'[self]})
                                                                        /\ neuron' = [ neuron EXCEPT
                                                                                       ![neuron_id'[self]].maturity = 0,
-                                                                                      ![neuron_id'[self]].cached_stake = neuron_stake
+                                                                                      ![neuron_id'[self]].cached_stake = neuron_stake,
+                                                                                      ![neuron_id'[self]].state = NOT_SPAWNING
                                                                                     ]
                                                                        /\ governance_to_ledger' =                     Append(governance_to_ledger,
                                                                                                   request(self, transfer(Minting_Account_Id, account, neuron_stake, 0)))

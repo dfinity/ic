@@ -9,24 +9,25 @@ use std::convert::TryFrom;
 ///
 /// ```
 /// use ic_universal_canister::{wasm, management, CallInterface};
-/// use ic_types::Cycles;
 ///
 /// // Create a new canister with some cycles.
-/// wasm().call(management::create_canister(Cycles::from(2_000_000_000_000u64).into_parts()));
+/// wasm().call(management::create_canister(2_000_000_000_000u64));
 ///
 /// // Create a new canister with a specific freezing threshold.
 /// wasm().call(
-///   management::create_canister(Cycles::from(2_000_000_000_000u64).into_parts())
+///   management::create_canister(2_000_000_000_000u64)
 ///      .with_freezing_threshold(1234_u16)
 /// );
 ///
 /// // Create a new canister with custom callbacks.
-/// wasm().call(management::create_canister(Cycles::from(2_000_000_000_000u64).into_parts())
+/// wasm().call(management::create_canister(2_000_000_000_000u64)
 ///   .on_reply(wasm().noop()) // custom on_reply
 ///   .on_reject(wasm().noop()) // custom on_reject
 ///   .on_cleanup(wasm().noop())); // custom on_cleanup
 /// ```
-pub fn create_canister(cycles: (u64, u64)) -> CandidCallBuilder<CreateCanisterArgs> {
+pub fn create_canister<Cycles: Into<u128>>(
+    cycles: Cycles,
+) -> CandidCallBuilder<CreateCanisterArgs> {
     CandidCallBuilder {
         args: CreateCanisterArgs { settings: None },
         call: Call::new(Principal::management_canister(), "create_canister").cycles(cycles),
@@ -160,7 +161,7 @@ pub fn bitcoin_get_balance(
             min_confirmations,
         },
         call: Call::new(Principal::management_canister(), "bitcoin_get_balance")
-            .cycles((0, 100_000_000))
+            .cycles(100_000_000u64)
             .on_reject(wasm().reject_message().reject()),
     }
 }

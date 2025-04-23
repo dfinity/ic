@@ -7,6 +7,7 @@ set -e
 source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
 source /opt/ic/bin/config.sh
+source /opt/ic/bin/config.sh
 
 # Get keyword arguments
 for argument in "${@}"; do
@@ -44,6 +45,7 @@ done
 
 function validate_arguments() {
     if [ "${INPUT}" == "" -o "${OUTPUT}" == "" ]; then
+    if [ "${INPUT}" == "" -o "${OUTPUT}" == "" ]; then
         $0 --help
     fi
 }
@@ -68,6 +70,7 @@ function read_config_variables() {
 
     vm_memory=$(get_config_value '.hostos_settings.vm_memory')
     vm_cpu=$(get_config_value '.hostos_settings.vm_cpu')
+    vm_nr_of_vcpus=$(get_config_value '.hostos_settings.vm_nr_of_vcpus')
 }
 
 function assemble_config_media() {
@@ -105,16 +108,29 @@ function assemble_config_media() {
 function generate_guestos_config() {
     MAC_ADDRESS=$(/opt/ic/bin/hostos_tool generate-mac-address --node-type GuestOS)
 
-    CPU_DOMAIN="kvm"
-    CPU_SPEC="/opt/ic/share/kvm-cpu.xml"
+    # Generate inline CPU spec based on mode
+    CPU_SPEC=$(mktemp)
     if [ "${vm_cpu}" == "qemu" ]; then
         CPU_DOMAIN="qemu"
-        CPU_SPEC="/opt/ic/share/qemu-cpu.xml"
+        cat >"${CPU_SPEC}" <<EOF
+<cpu mode='host-model'/>
+EOF
+    else
+        CPU_DOMAIN="kvm"
+        CORE_COUNT=$((vm_nr_of_vcpus / 4))
+        cat >"${CPU_SPEC}" <<EOF
+<cpu mode='host-passthrough' migratable='off'>
+  <cache mode='passthrough'/>
+  <topology sockets='2' cores='${CORE_COUNT}' threads='2'/>
+  <feature policy="require" name="topoext"/>
+</cpu>
+EOF
     fi
 
     if [ ! -f "${OUTPUT}" ]; then
         mkdir -p "$(dirname "$OUTPUT")"
         sed -e "s@{{ resources_memory }}@${vm_memory}@" \
+            -e "s@{{ nr_of_vcpus }}@${vm_nr_of_vcpus:-64}@" \
             -e "s@{{ mac_address }}@${MAC_ADDRESS}@" \
             -e "s@{{ cpu_domain }}@${CPU_DOMAIN}@" \
             -e "/{{ cpu_spec }}/{r ${CPU_SPEC}" -e "d" -e "}" \
@@ -132,6 +148,8 @@ function generate_guestos_config() {
             "HostOS generate GuestOS config" \
             "gauge"
     fi
+
+    rm -f "${CPU_SPEC}"
 }
 
 function main() {

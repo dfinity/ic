@@ -15,6 +15,7 @@ use http::Request;
 use hyper::StatusCode;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
+use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
@@ -26,7 +27,6 @@ use ic_types::{
         Blob, Certificate, CertificateDelegation, HttpReadStateContent, HttpReadStateResponse,
         HttpRequest, HttpRequestEnvelope, MessageId, ReadState, EXPECTED_MESSAGE_ID_LENGTH,
     },
-    time::current_time,
     CanisterId, PrincipalId, UserId,
 };
 use ic_validator::{CanisterIdSet, HttpRequestVerifier};
@@ -34,15 +34,16 @@ use std::{
     convert::{Infallible, TryFrom},
     sync::Arc,
 };
-use tokio::sync::OnceCell;
+use tokio::sync::watch;
 use tower::{util::BoxCloneService, ServiceBuilder};
 
 #[derive(Clone)]
 pub struct CanisterReadStateService {
     log: ReplicaLogger,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
-    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
+    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    time_source: Arc<dyn TimeSource>,
     validator: Arc<dyn HttpRequestVerifier<ReadState, RegistryRootOfTrustProvider>>,
     registry_client: Arc<dyn RegistryClient>,
 }
@@ -51,15 +52,16 @@ pub struct CanisterReadStateServiceBuilder {
     log: ReplicaLogger,
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
     malicious_flags: Option<MaliciousFlags>,
-    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
+    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    time_source: Option<Arc<dyn TimeSource>>,
     ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
 }
 
 impl CanisterReadStateService {
     pub(crate) fn route() -> &'static str {
-        "/api/v2/canister/:effective_canister_id/read_state"
+        "/api/v2/canister/{effective_canister_id}/read_state"
     }
 }
 
@@ -69,7 +71,7 @@ impl CanisterReadStateServiceBuilder {
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         registry_client: Arc<dyn RegistryClient>,
         ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
-        delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
+        delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
     ) -> Self {
         Self {
             log,
@@ -77,6 +79,7 @@ impl CanisterReadStateServiceBuilder {
             malicious_flags: None,
             delegation_from_nns,
             state_reader,
+            time_source: None,
             ingress_verifier,
             registry_client,
         }
@@ -84,6 +87,11 @@ impl CanisterReadStateServiceBuilder {
 
     pub(crate) fn with_malicious_flags(mut self, malicious_flags: MaliciousFlags) -> Self {
         self.malicious_flags = Some(malicious_flags);
+        self
+    }
+
+    pub fn with_time_source(mut self, time_source: Arc<dyn TimeSource>) -> Self {
+        self.time_source = Some(time_source);
         self
     }
 
@@ -103,6 +111,7 @@ impl CanisterReadStateServiceBuilder {
                 .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
             delegation_from_nns: self.delegation_from_nns,
             state_reader: self.state_reader,
+            time_source: self.time_source.unwrap_or(Arc::new(SysTimeSource::new())),
             validator: build_validator(self.ingress_verifier, self.malicious_flags),
             registry_client: self.registry_client,
         };
@@ -127,6 +136,7 @@ pub(crate) async fn canister_read_state(
         health_status,
         delegation_from_nns,
         state_reader,
+        time_source,
         validator,
         registry_client,
     }): State<CanisterReadStateService>,
@@ -141,7 +151,7 @@ pub(crate) async fn canister_read_state(
         return (status, text).into_response();
     }
 
-    let delegation_from_nns = delegation_from_nns.get().cloned();
+    let delegation_from_nns = delegation_from_nns.borrow().clone();
 
     // Convert the message to a strongly-typed struct.
     let request = match HttpRequest::<ReadState>::try_from(request) {
@@ -165,14 +175,17 @@ pub(crate) async fn canister_read_state(
     // Since spawn blocking requires 'static we can't use any references
     let request_c = request.clone();
     let response = tokio::task::spawn_blocking(move || {
-        let targets =
-            match validator.validate_request(&request_c, current_time(), &root_of_trust_provider) {
-                Ok(targets) => targets,
-                Err(err) => {
-                    let http_err = validation_error_to_http_error(&request, err, &log);
-                    return (http_err.status, http_err.message).into_response();
-                }
-            };
+        let targets = match validator.validate_request(
+            &request_c,
+            time_source.get_relative_time(),
+            &root_of_trust_provider,
+        ) {
+            Ok(targets) => targets,
+            Err(err) => {
+                let http_err = validation_error_to_http_error(&request, err, &log);
+                return (http_err.status, http_err.message).into_response();
+            }
+        };
 
         let certified_state_reader = match state_reader.get_certified_state_snapshot() {
             Some(reader) => reader,

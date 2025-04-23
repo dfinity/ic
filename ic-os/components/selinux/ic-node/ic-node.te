@@ -11,6 +11,9 @@ type ic_replica_exec_t;
 type ic_canister_sandbox_t;
 type ic_canister_sandbox_exec_t;
 
+type ic_compiler_sandbox_t;
+type ic_compiler_sandbox_exec_t;
+
 type ic_http_adapter_t;
 type ic_http_adapter_exec_t;
 
@@ -156,11 +159,6 @@ miscfiles_read_generic_certs(ic_replica_t)
 # Allow using locales
 miscfiles_read_localization(ic_replica_t)
 
-# Allow to turn anonymous memory executable (required for the native code
-# compiled from wasm inside the process). This is obviously not desirable
-# from security POV.
-allow ic_replica_t self : process { execmem };
-
 # Wants to set process group
 allow ic_replica_t self : process { getsched setpgid signal };
 
@@ -227,6 +225,9 @@ create_files_pattern(ic_replica_t, ic_canister_mem_t, ic_canister_mem_t)
 # Allow launching canister sandbox
 domain_auto_transition_pattern(ic_replica_t, ic_canister_sandbox_exec_t, ic_canister_sandbox_t)
 
+# Allow launching compiler sandbox
+domain_auto_transition_pattern(ic_replica_t, ic_compiler_sandbox_exec_t, ic_compiler_sandbox_t)
+
 # Allow inspecting sandbox process /proc files to collect metrics.
 read_files_pattern(ic_replica_t, ic_canister_sandbox_t, ic_canister_sandbox_t)
 
@@ -291,13 +292,6 @@ allow ic_canister_sandbox_t usr_t:dir { getattr open search };
 allow ic_canister_sandbox_t ic_canister_sandbox_exec_t:file { entrypoint execute map read };
 allow ic_canister_sandbox_t ic_canister_sandbox_t:process { fork getsched };
 
-allow ic_canister_sandbox_t ic_canister_sandbox_exec_t : file { entrypoint execute map read };
-
-# Allow to turn anonymous memory executable (required for the native code
-# compiled from wasm inside the process). This is obviously not desirable
-# from security POV.
-allow ic_canister_sandbox_t self : process { execmem };
-
 # Allow to get own scheduler -- that's harmless, obviously.
 allow ic_canister_sandbox_t ic_canister_sandbox_t : process { getsched };
 
@@ -312,9 +306,10 @@ allow ic_canister_sandbox_t ic_replica_t : unix_stream_socket { setopt read writ
 # labelled differently eventually because allowing tmpfs is fairly broad.
 require { type tmpfs_t; }
 allow ic_canister_sandbox_t tmpfs_t : file { map read write getattr };
-# Also allow read-only access to checkpoint files (also given passed via
-# file descriptor from replica).
-allow ic_canister_sandbox_t ic_data_t : file { map read getattr };
+# Also allow read and execute access to checkpoint files (also given passed via
+# file descriptor from replica). Execute is necessary to run the complied Wasm modules
+# stored in the tmp directory in ic_data_t.
+allow ic_canister_sandbox_t ic_data_t : file { map read execute getattr };
 # Allow read/write access to files that back the heap delta for both sandbox and replica
 # The workflow is that the replica creates the files but passes a file descriptor to the sandbox
 # We explicitly do not allow the sandbox to open files because they should only be open by the replica
@@ -390,6 +385,122 @@ dontaudit ic_canister_sandbox_t ic_canister_sandbox_t : process { signal };
 
 # Forbid the sandbox from checking certs
 dontaudit ic_canister_sandbox_t cert_t : file { read };
+
+###############################################################################
+# Compiler sandbox
+
+role system_r types ic_compiler_sandbox_t;
+
+require {
+    type ld_so_cache_t, ld_so_t, lib_t, root_t, usr_t, cpu_online_t, proc_t, sysfs_t, null_device_t;
+    attribute unconfined_domain_type;
+}
+
+allow ic_compiler_sandbox_t etc_t:dir { getattr ioctl lock open read search };
+allow ic_compiler_sandbox_t ld_so_cache_t:file { getattr ioctl lock map open read };
+allow ic_compiler_sandbox_t ld_so_t:file { execute getattr map open read };
+allow ic_compiler_sandbox_t ld_so_t:lnk_file { getattr read };
+allow ic_compiler_sandbox_t lib_t:dir { getattr lock open read search };
+allow ic_compiler_sandbox_t lib_t:file { execute getattr map open read };
+allow ic_compiler_sandbox_t lib_t:lnk_file { getattr read };
+allow ic_compiler_sandbox_t root_t:dir { getattr read search };
+allow ic_compiler_sandbox_t root_t:lnk_file { getattr read };
+allow ic_compiler_sandbox_t unconfined_domain_type:association recvfrom;
+allow ic_compiler_sandbox_t usr_t:dir { getattr open search };
+allow ic_compiler_sandbox_t ic_compiler_sandbox_exec_t:file { entrypoint execute map read };
+allow ic_compiler_sandbox_t ic_compiler_sandbox_t:process { fork getsched };
+
+# Allow to turn anonymous memory executable. This is obviously not desirable
+# from security POV, but it is better than having `execmem` permissions on the
+# canister sandbox because here we are only compiling untrusted user Wasm code -
+# not executing it.
+# This is reqired because the wasmtime compilation function writes the code to
+# an executable region before dumping it to a file. That could be changed, but
+# would require upstreaming a change to wasmtime.
+allow ic_compiler_sandbox_t self : process { execmem };
+
+# Allow to get own scheduler -- that's harmless, obviously.
+allow ic_compiler_sandbox_t ic_compiler_sandbox_t : process { getsched };
+
+# Allow to communicate with replica. We should have the sockets explicitly
+# labeled by replica such that we precisely identify this as the "allowed"
+# communication channel (and such that there is no "accidental" use of any
+# differently labeled channel.
+allow ic_compiler_sandbox_t ic_replica_t : fd use;
+allow ic_compiler_sandbox_t ic_replica_t : unix_stream_socket { setopt read write };
+
+# Allow to access the shared memory area set up by replica. NB this should be
+# labelled differently eventually because allowing tmpfs is fairly broad.
+require { type tmpfs_t; }
+allow ic_compiler_sandbox_t tmpfs_t : file { map read write getattr };
+# Also allow read access to checkpoint files (also given passed via
+# file descriptor from replica).
+allow ic_compiler_sandbox_t ic_data_t : file { map read getattr };
+
+# Wants to read its own control group. Should deny that.
+require { type cgroup_t; }
+dontaudit ic_compiler_sandbox_t cgroup_t : dir { search };
+dontaudit ic_compiler_sandbox_t cgroup_t : file { open read getattr };
+
+# There is a leaked epoll descriptor from orchestrator!
+dontaudit ic_compiler_sandbox_t ic_orchestrator_t : fd { use };
+
+# Allow to use the logging file descriptor inherited from init.
+# This should actually not be allowed, logs should be routed through
+# replica.
+allow ic_compiler_sandbox_t init_t : fd { use };
+allow ic_compiler_sandbox_t init_t : unix_stream_socket { setopt read write };
+
+# Deny access to system information as well as own proc file (would
+# also allow accessing proc files of *other* sandboxes).
+dontaudit ic_compiler_sandbox_t sysfs_t : dir { search };
+dontaudit ic_compiler_sandbox_t cpu_online_t : file { open read };
+dontaudit ic_compiler_sandbox_t ic_compiler_sandbox_t : dir { search };
+dontaudit ic_compiler_sandbox_t ic_compiler_sandbox_t : file { getattr open read };
+allow ic_compiler_sandbox_t null_device_t : chr_file { read };
+dontaudit ic_compiler_sandbox_t proc_t : dir { search };
+dontaudit ic_compiler_sandbox_t proc_t : lnk_file { read };
+dontaudit ic_compiler_sandbox_t ic_compiler_sandbox_t : lnk_file { read };
+
+# Deny accessing system information (tries to access "/proc/sys/kernel/osrelease" for unspecified reasons).
+dontaudit ic_compiler_sandbox_t sysctl_kernel_t : dir { search };
+dontaudit ic_compiler_sandbox_t sysctl_kernel_t : file { getattr open read };
+dontaudit ic_compiler_sandbox_t sysctl_t : dir { search };
+# Runtime wants to read the global memory overcommit settings. Not clear
+# why, it is not supposed to care.
+require { type sysctl_vm_overcommit_t, sysctl_vm_t; }
+dontaudit ic_compiler_sandbox_t sysctl_vm_t : dir { search };
+dontaudit ic_compiler_sandbox_t sysctl_vm_overcommit_t : file { open read };
+
+# Allow our unconfined domain to debug this process
+allow unconfined_domain_type ic_compiler_sandbox_t : dir *;
+allow unconfined_domain_type ic_compiler_sandbox_t : file *;
+allow unconfined_domain_type ic_compiler_sandbox_t : lnk_file *;
+allow unconfined_domain_type ic_compiler_sandbox_t : process *;
+
+# Allow journald to access sandbox proc files. Logger wants
+# to enrich log messages with process information, but it can
+# only do that if it has access to the proc files.
+# Long-term, the logging structure should be different, but make
+# policy reflect reality for now.
+require { type syslogd_t; }
+allow syslogd_t ic_compiler_sandbox_t : dir { getattr open read search };
+allow syslogd_t ic_compiler_sandbox_t : file { open read getattr ioctl};
+allow syslogd_t ic_compiler_sandbox_t : lnk_file { open read getattr ioctl};
+allow syslogd_t ic_compiler_sandbox_t : process { getattr };
+
+# Allow interacting with our own executable.
+require {
+    type bin_t;
+}
+search_dirs_pattern(ic_compiler_sandbox_t, bin_t, bin_t)
+read_files_pattern(ic_compiler_sandbox_t, ic_compiler_sandbox_exec_t, ic_compiler_sandbox_exec_t)
+
+# Do not allow self signaling, as this also allows signaling other sandboxes.
+dontaudit ic_compiler_sandbox_t ic_compiler_sandbox_t : process { signal };
+
+# Forbid the sandbox from checking certs
+dontaudit ic_compiler_sandbox_t cert_t : file { read };
 
 ###############################################################################
 # ic-https-outcalls-adapter

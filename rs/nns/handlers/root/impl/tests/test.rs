@@ -2,7 +2,7 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_management_canister_types::CanisterInstallMode::Upgrade;
+use ic_management_canister_types_private::CanisterInstallMode::Upgrade;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
 };

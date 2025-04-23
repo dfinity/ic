@@ -1081,6 +1081,29 @@ pub mod manage_neuron {
     )]
     pub struct RefreshVotingPower {}
 
+    /// Disburse the maturity of a neuron to any ledger account. If an account
+    /// is not specified, the caller's account will be used. The caller can choose
+    /// a percentage of the current maturity to disburse to the ledger account. The
+    /// resulting amount to disburse must be greater than or equal to the
+    /// transaction fee.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct DisburseMaturity {
+        /// The percentage to disburse, from 1 to 100
+        #[prost(uint32, tag = "1")]
+        pub percentage_to_disburse: u32,
+        /// The (optional) principal to which to transfer the stake.
+        #[prost(message, optional, tag = "2")]
+        pub to_account: ::core::option::Option<super::Account>,
+    }
+
     /// The ID of the neuron to manage. This can either be a subaccount or a neuron ID.
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]
@@ -1124,6 +1147,8 @@ pub mod manage_neuron {
         StakeMaturity(StakeMaturity),
         #[prost(message, tag = "16")]
         RefreshVotingPower(RefreshVotingPower),
+        #[prost(message, tag = "17")]
+        DisburseMaturity(DisburseMaturity),
         // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
     }
 }
@@ -1254,6 +1279,21 @@ pub mod manage_neuron_response {
     )]
     pub struct RefreshVotingPowerResponse {}
 
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct DisburseMaturityResponse {
+        #[prost(uint64, optional, tag = "1")]
+        amount_disbursed_e8s: Option<u64>,
+    }
+
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
@@ -1286,6 +1326,8 @@ pub mod manage_neuron_response {
         StakeMaturity(StakeMaturityResponse),
         #[prost(message, tag = "14")]
         RefreshVotingPower(RefreshVotingPowerResponse),
+        #[prost(message, tag = "15")]
+        DisburseMaturity(DisburseMaturityResponse),
     }
 
     // Below, we should remove `manage_neuron_response::`, but that should be
@@ -1446,6 +1488,16 @@ pub mod manage_neuron_response {
                 )),
             }
         }
+
+        pub fn disburse_maturity_response(amount_disbursed_e8s: u64) -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::DisburseMaturity(
+                    manage_neuron_response::DisburseMaturityResponse {
+                        amount_disbursed_e8s: Some(amount_disbursed_e8s),
+                    },
+                )),
+            }
+        }
     }
 }
 
@@ -1545,6 +1597,8 @@ pub enum ManageNeuronCommandRequest {
     StakeMaturity(manage_neuron::StakeMaturity),
     #[prost(message, tag = "16")]
     RefreshVotingPower(manage_neuron::RefreshVotingPower),
+    #[prost(message, tag = "17")]
+    DisburseMaturity(manage_neuron::DisburseMaturity),
     // KEEP THIS IN SYNC WITH manage_neuron::Command!
 }
 
@@ -2294,6 +2348,17 @@ pub struct VotingPowerEconomics {
     /// Initially, set to 1/12 years.
     #[prost(uint64, optional, tag = "2")]
     pub clear_following_after_seconds: ::core::option::Option<u64>,
+
+    /// The minimum dissolve delay a neuron must have in order to be eligible to vote or
+    /// make proposals.
+    ///
+    /// Neurons with a dissolve delay lower than this threshold will not have
+    /// voting power, even if they are otherwise active.
+    ///
+    /// This value is an essential part of the staking mechanism, promoting
+    /// long-term alignment with the network's governance.
+    #[prost(uint64, optional, tag = "3")]
+    pub neuron_minimum_dissolve_delay_to_vote_seconds: ::core::option::Option<u64>,
 }
 
 /// The thresholds specify the shape of the ideal matching function used by the Neurons' Fund to
@@ -3025,13 +3090,6 @@ pub struct Governance {
     pub spawning_neurons: Option<bool>,
     #[prost(message, optional, tag = "20")]
     pub making_sns_proposal: Option<governance::MakingSnsProposal>,
-    /// Migration related data.
-    #[prost(message, optional, tag = "21")]
-    pub migrations: Option<governance::Migrations>,
-    /// A Structure used during upgrade to store the index of topics for neurons to their followers.
-    /// This is the inverse of what is stored in a Neuron (its followees).
-    #[prost(map = "int32, message", tag = "22")]
-    pub topic_followee_index: ::std::collections::HashMap<i32, governance::FollowersMap>,
     /// Local cache for XDR-related conversion rates (the source of truth is in the CMC canister).
     #[prost(message, optional, tag = "26")]
     pub xdr_conversion_rate: Option<XdrConversionRate>,
@@ -3274,129 +3332,6 @@ pub mod governance {
         #[prost(message, optional, tag = "3")]
         pub proposal: Option<super::Proposal>,
     }
-    /// Progress of a migration that (potentially) is performed over the course of more than one heartbeat call.
-    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Message)]
-    pub struct Migration {
-        /// Migration status.
-        #[prost(enumeration = "migration::MigrationStatus", optional, tag = "1")]
-        pub status: Option<i32>,
-        /// The reason why it failed. Should only be present when the status is FAILED.
-        /// This is only for debugging and it should not be used programmatically (other than its presence).
-        #[prost(string, optional, tag = "2")]
-        pub failure_reason: Option<::prost::alloc::string::String>,
-        /// Migration progress (cursor).
-        #[prost(oneof = "migration::Progress", tags = "3")]
-        pub progress: Option<migration::Progress>,
-    }
-    /// Nested message and enum types in `Migration`.
-    pub mod migration {
-        use super::*;
-
-        #[derive(
-            candid::CandidType,
-            candid::Deserialize,
-            serde::Serialize,
-            comparable::Comparable,
-            Clone,
-            Copy,
-            Debug,
-            PartialEq,
-            Eq,
-            Hash,
-            PartialOrd,
-            Ord,
-            ::prost::Enumeration,
-        )]
-        #[repr(i32)]
-        pub enum MigrationStatus {
-            /// Unspecified.
-            Unspecified = 0,
-            /// Migration is in progress.
-            InProgress = 1,
-            /// Migration succeeded.
-            Succeeded = 2,
-            /// Migration failed.
-            Failed = 3,
-        }
-        impl MigrationStatus {
-            /// String value of the enum field names used in the ProtoBuf definition.
-            ///
-            /// The values are not transformed in any way and thus are considered stable
-            /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-            pub fn as_str_name(&self) -> &'static str {
-                match self {
-                    MigrationStatus::Unspecified => "MIGRATION_STATUS_UNSPECIFIED",
-                    MigrationStatus::InProgress => "MIGRATION_STATUS_IN_PROGRESS",
-                    MigrationStatus::Succeeded => "MIGRATION_STATUS_SUCCEEDED",
-                    MigrationStatus::Failed => "MIGRATION_STATUS_FAILED",
-                }
-            }
-            /// Creates an enum from field names used in the ProtoBuf definition.
-            pub fn from_str_name(value: &str) -> Option<Self> {
-                match value {
-                    "MIGRATION_STATUS_UNSPECIFIED" => Some(Self::Unspecified),
-                    "MIGRATION_STATUS_IN_PROGRESS" => Some(Self::InProgress),
-                    "MIGRATION_STATUS_SUCCEEDED" => Some(Self::Succeeded),
-                    "MIGRATION_STATUS_FAILED" => Some(Self::Failed),
-                    _ => None,
-                }
-            }
-        }
-        /// Migration progress (cursor).
-        #[derive(
-            candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable,
-        )]
-        #[allow(clippy::derive_partial_eq_without_eq)]
-        #[derive(Clone, PartialEq, ::prost::Oneof)]
-        pub enum Progress {
-            /// Last neuron id migrated.
-            #[prost(message, tag = "3")]
-            LastNeuronId(NeuronId),
-        }
-    }
-    /// The status of all on-going (and recently completed) migrations (that take
-    /// place over the course of multiple heartbeat calls).
-    ///
-    /// Each Migration field corresponds to one (ongoing or recently completed) migration.
-    ///
-    /// After a migration is finished, it should be OK to reserve the tag and lose the data.
-    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Message)]
-    pub struct Migrations {
-        /// Migrates neuron indexes to stable storage.
-        #[prost(message, optional, tag = "1")]
-        pub neuron_indexes_migration: Option<Migration>,
-        #[prost(message, optional, tag = "2")]
-        pub copy_inactive_neurons_to_stable_memory_migration: Option<Migration>,
-    }
-    /// A map of followees to their followers.
-    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Message)]
-    pub struct FollowersMap {
-        /// The key is the neuron ID of the followee.
-        #[prost(map = "fixed64, message", tag = "1")]
-        pub followers_map: ::std::collections::HashMap<u64, followers_map::Followers>,
-    }
-    /// Nested message and enum types in `FollowersMap`.
-    pub mod followers_map {
-        use super::*;
-
-        #[derive(
-            candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable,
-        )]
-        #[allow(clippy::derive_partial_eq_without_eq)]
-        #[derive(Clone, PartialEq, ::prost::Message)]
-        pub struct Followers {
-            /// The followers of the neuron with the given ID.
-            /// These values will be non-repeating, and order does not matter.
-            #[prost(message, repeated, tag = "1")]
-            pub followers: Vec<NeuronId>,
-        }
-    }
 }
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -3463,29 +3398,17 @@ pub struct ListProposalInfo {
 pub struct ListProposalInfoResponse {
     pub proposal_info: Vec<ProposalInfo>,
 }
-/// A request to list neurons. The "requested list", i.e., the list of
-/// neuron IDs to retrieve information about, is the union of the list
-/// of neurons listed in `neuron_ids` and, if `caller_neurons` is true,
-/// the list of neuron IDs of neurons for which the caller is the
-/// controller or one of the hot keys.
+
+/// The same as ListNeurons, but only used in list_neurons_pb, which is deprecated.
+/// This is temporarily split out so that the API changes to list_neurons do not have to
+/// follow both candid and protobuf standards for changes, which simplifies the API design
+/// considerably.
 ///
-/// Paging is available if the result set is larger than `MAX_LIST_NEURONS_RESULTS`,
-/// which is currently 500 neurons.  If you are unsure of the number of results in a set,
-/// you can use the `total_pages_available` field in the response to determine how many
-/// additional pages need to be queried.  It will be based on your `page_size` parameter.  
-/// When paging through results, it is good to keep in mind that newly inserted neurons
-/// could be missed if they are inserted between calls to pages, and this could result in missing
-/// a neuron in the combined responses.
-///
-/// If a user provides neuron_ids that do not exist in the request, there is no guarantee that
-/// each page will contain the exactly the page size, even if it is not the final request.  This is
-/// because neurons are retrieved by their neuron_id, and no additional checks are made on the
-/// validity of the neuron_ids provided by the user before deciding which sets of neuron_ids
-/// will be returned in the current page.
+/// This type should be removed when list_neurons_pb is finally deprecated.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ListNeurons {
+pub struct ListNeuronsProto {
     /// The neurons to get information about. The "requested list"
     /// contains all of these neuron IDs.
     #[prost(fixed64, repeated, packed = "false", tag = "1")]
@@ -3496,10 +3419,9 @@ pub struct ListNeurons {
     pub include_neurons_readable_by_caller: bool,
     /// Whether to also include empty neurons readable by the caller. This field only has an effect
     /// when `include_neurons_readable_by_caller` is true. If a neuron's id already exists in the
-    /// `neuron_ids` field, then the neuron will be included in the response regardless of the value of
-    /// this field. Since the previous behavior was to always include empty neurons readable by caller,
-    /// if this field is not provided, it defaults to true, in order to maintain backwards
-    /// compatibility. Here, being "empty" means 0 stake, 0 maturity and 0 staked maturity.
+    /// `neuron_ids` field, then the neuron will be included in the response regardless of the value
+    /// of this field. The default value is false (i.e. `None` is treated as `Some(false)`). Here,
+    /// being "empty" means 0 stake, 0 maturity and 0 staked maturity.
     #[prost(bool, optional, tag = "3")]
     pub include_empty_neurons_readable_by_caller: Option<bool>,
     /// If this is set to true, and a neuron in the "requested list" has its
@@ -3522,6 +3444,73 @@ pub struct ListNeurons {
     #[prost(uint64, optional, tag = "6")]
     pub page_size: Option<u64>,
 }
+/// A request to list neurons. The "requested list", i.e., the list of
+/// neuron IDs to retrieve information about, is the union of the list
+/// of neurons listed in `neuron_ids` and, if `caller_neurons` is true,
+/// the list of neuron IDs of neurons for which the caller is the
+/// controller or one of the hot keys.
+///
+/// Paging is available if the result set is larger than `MAX_LIST_NEURONS_RESULTS`,
+/// which is currently 500 neurons.  If you are unsure of the number of results in a set,
+/// you can use the `total_pages_available` field in the response to determine how many
+/// additional pages need to be queried.  It will be based on your `page_size` parameter.  
+/// When paging through results, it is good to keep in mind that newly inserted neurons
+/// could be missed if they are inserted between calls to pages, and this could result in missing
+/// a neuron in the combined responses.
+///
+/// If a user provides neuron_ids that do not exist in the request, there is no guarantee that
+/// each page will contain the exactly the page size, even if it is not the final request.  This is
+/// because neurons are retrieved by their neuron_id, and no additional checks are made on the
+/// validity of the neuron_ids provided by the user before deciding which sets of neuron_ids
+/// will be returned in the current page.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ListNeurons {
+    /// The neurons to get information about. The "requested list"
+    /// contains all of these neuron IDs.
+    pub neuron_ids: Vec<u64>,
+    /// If true, the "requested list" also contains the neuron ID of the
+    /// neurons that the calling principal is authorized to read.
+    pub include_neurons_readable_by_caller: bool,
+    /// Whether to also include empty neurons readable by the caller. This field only has an effect
+    /// when `include_neurons_readable_by_caller` is true. If a neuron's id already exists in the
+    /// `neuron_ids` field, then the neuron will be included in the response regardless of the value
+    /// of this field. The default value is false (i.e. `None` is treated as `Some(false)`). Here,
+    /// being "empty" means 0 stake, 0 maturity and 0 staked maturity.
+    pub include_empty_neurons_readable_by_caller: Option<bool>,
+    /// If this is set to true, and a neuron in the "requested list" has its
+    /// visibility set to public, then, it will (also) be included in the
+    /// full_neurons field in the response (which is of type ListNeuronsResponse).
+    /// Note that this has no effect on which neurons are in the "requested list".
+    /// In particular, this does not cause all public neurons to become part of the
+    /// requested list. In general, you probably want to set this to true, but
+    /// since this feature was added later, it is opt in to avoid confusing
+    /// existing (unmigrated) callers.
+    pub include_public_neurons_in_full_neurons: Option<bool>,
+    /// If this is set, we return the batch of neurons at a given page, using the `page_size` to
+    /// determine how many neurons are returned in each page.
+    pub page_number: Option<u64>,
+    /// If this is set, we use the page limit provided to determine how large pages will be.
+    /// This cannot be greater than MAX_LIST_NEURONS_RESULTS, which is set to 500.
+    /// If not set, this defaults to MAX_LIST_NEURONS_RESULTS.
+    pub page_size: Option<u64>,
+    /// A list of neurons by subaccounts to return in the response.  If the neurons are not
+    /// found by subaccount, no error is returned, but the page will still be returned.
+    pub neuron_subaccounts: Option<Vec<list_neurons::NeuronSubaccount>>,
+}
+
+pub mod list_neurons {
+    /// A type for the request to list neurons.
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, Debug, PartialEq)]
+    pub struct NeuronSubaccount {
+        #[serde(with = "serde_bytes")]
+        pub subaccount: Vec<u8>,
+    }
+}
+
 /// A response to a `ListNeurons` request.
 ///
 /// The "requested list" is described in `ListNeurons`.
@@ -4127,6 +4116,30 @@ pub mod restore_aging_summary {
         }
     }
 }
+
+/// A Ledger account identified by the owner of the account `of` and
+/// the `subaccount`. If the `subaccount` is not specified then the default
+/// one is used.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Account {
+    /// The owner of the account.
+    #[prost(message, optional, tag = "1")]
+    pub owner: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// The subaccount of the account. If not set then the default
+    /// subaccount (all bytes set to 0) is used.
+    #[prost(message, optional, tag = "2")]
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub subaccount: ::core::option::Option<Vec<u8>>,
+}
+
 /// Proposal types are organized into topics. Neurons can automatically
 /// vote based on following other neurons, and these follow
 /// relationships are defined per topic.

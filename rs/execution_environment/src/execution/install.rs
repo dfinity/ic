@@ -3,7 +3,7 @@
 //! See https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-install_code
 
 use crate::as_round_instructions;
-use crate::canister_manager::{
+use crate::canister_manager::types::{
     DtsInstallCodeResult, InstallCodeContext, PausedInstallCodeExecution,
 };
 use crate::execution::common::{ingress_status_with_processing_state, update_round_limits};
@@ -13,13 +13,15 @@ use crate::execution::install_code::{
 };
 use crate::execution_environment::{RoundContext, RoundLimits};
 use ic_base_types::PrincipalId;
-use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
+use ic_embedders::{
+    wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult},
+    wasmtime_embedder::system_api::ApiType,
+};
 use ic_interfaces::execution_environment::WasmExecutionOutput;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::InstallCodeCallId, CanisterState,
 };
-use ic_system_api::ApiType;
 use ic_types::funds::Cycles;
 use ic_types::messages::{CanisterCall, RequestMetadata};
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};

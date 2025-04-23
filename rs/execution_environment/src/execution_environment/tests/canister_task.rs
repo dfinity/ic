@@ -2,10 +2,11 @@ use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_error_types::RejectCode;
-use ic_management_canister_types::{CanisterSettingsArgsBuilder, CanisterStatusType};
-use ic_management_canister_types::{CanisterUpgradeOptions, WasmMemoryPersistence};
+use ic_management_canister_types_private::{
+    CanisterSettingsArgsBuilder, CanisterStatusType, OnLowWasmMemoryHookStatus,
+};
+use ic_management_canister_types_private::{CanisterUpgradeOptions, WasmMemoryPersistence};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::OnLowWasmMemoryHookStatus;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_replicated_state::page_map::PAGE_SIZE;
@@ -443,6 +444,36 @@ fn global_timer_can_be_reactivated_in_canister_global_timer_method() {
 }
 
 #[test]
+fn wasm64_task_metrics_are_observable() {
+    let env = StateMachine::new();
+    let wasm64_wat = r#"
+        (module
+            (import "ic0" "msg_reply" (func $ic0_msg_reply))
+            (func $test (export "canister_update test")
+                (call $ic0_msg_reply)
+            )
+            (memory i64 1)
+        )"#;
+
+    let canister_id = env.install_canister_wat(wasm64_wat, vec![], None);
+    let result = env.execute_ingress(canister_id, "test", vec![]).unwrap();
+
+    assert_eq!(result, WasmResult::Reply(vec![]));
+
+    // Check if the metric reports a Wasm64 update.
+    let executed_messages = fetch_int_counter_vec(
+        env.metrics_registry(),
+        "sandboxed_execution_executed_message_slices_total",
+    );
+    let update_msg = btreemap! {
+        "api_type".into() => "update".into(),
+        "status".into() => "Success".into(),
+        "wasm_execution_mode".into() => "wasm64".into(),
+    };
+    assert_eq!(1, executed_messages[&update_msg]);
+}
+
+#[test]
 fn system_task_metrics_are_observable() {
     let env = StateMachine::new();
     let canister_id = env
@@ -476,6 +507,7 @@ fn system_task_metrics_are_observable() {
     let heartbeat_no_response = btreemap! {
         "api_type".into() => "heartbeat".into(),
         "status".into() => "NoResponse".into(),
+        "wasm_execution_mode".into() => "wasm32".into(),
     };
     // Includes install code, tick prior the update and 5 ticks
     assert_eq!(7, executed_messages[&heartbeat_no_response]);
@@ -483,6 +515,7 @@ fn system_task_metrics_are_observable() {
     let global_timer_no_response = btreemap! {
         "api_type".into() => "global timer".into(),
         "status".into() => "NoResponse".into(),
+        "wasm_execution_mode".into() => "wasm32".into(),
     };
     // Includes just 5 ticks, as the timer is activated after the update
     assert_eq!(5, executed_messages[&global_timer_no_response]);
@@ -521,12 +554,14 @@ fn global_timer_is_not_set_if_execution_traps() {
     let global_timer_called_trap = btreemap! {
         "api_type".into() => "global timer".into(),
         "status".into() => "CalledTrap".into(),
+        "wasm_execution_mode".into() => "wasm32".into(),
     };
     assert_eq!(1, executed_messages[&global_timer_called_trap]);
 
     let heartbeat_no_response = btreemap! {
         "api_type".into() => "heartbeat".into(),
         "status".into() => "NoResponse".into(),
+        "wasm_execution_mode".into() => "wasm32".into(),
     };
     // Includes install code, tick prior the update and 5 ticks
     assert_eq!(7, executed_messages[&heartbeat_no_response]);
@@ -907,7 +942,7 @@ fn on_low_wasm_memory_hook_is_run_after_freezing() {
     );
 
     // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
-    // The hook condition is triggered.
+    // Hook condition is satisfied.
     // Hence hook should be executed next.
     assert_eq!(
         test.state()
@@ -1058,7 +1093,7 @@ fn on_low_wasm_memory_is_executed_before_message() {
     // First ingress messages gets executed.
     // wasm_memory.size = 1 + 7 = 8
     // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
-    // Hook condition is triggered.
+    // Hook condition is satisfied.
     test.execute_slice(canister_id);
     assert_eq!(
         test.execution_state(canister_id).wasm_memory.size,
@@ -1116,11 +1151,19 @@ fn on_low_wasm_memory_is_executed_after_upgrade_if_condition_holds() {
     // First ingress messages gets executed.
     // wasm_memory.size = 1 + 7 = 8
     // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
-    // Hook condition is triggered.
+    // Hook condition is satisfied.
     test.execute_slice(canister_id);
     assert_eq!(
         test.execution_state(canister_id).wasm_memory.size,
         NumWasmPages::new(8)
+    );
+
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::Ready
     );
 
     let result = test.upgrade_canister_v2(
@@ -1134,10 +1177,19 @@ fn on_low_wasm_memory_is_executed_after_upgrade_if_condition_holds() {
     assert_eq!(result, Ok(()));
 
     // Upgrade is executed, and the wasm_memory size is unchanged.
-    // Hook condition is triggered.
+    // Hook condition is satisfied.
     assert_eq!(
         test.execution_state(canister_id).wasm_memory.size,
         NumWasmPages::new(8)
+    );
+
+    // Status of the hook is still Ready.
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::Ready
     );
 
     // Though we have the second ingress message awaiting to be processed,
@@ -1146,6 +1198,14 @@ fn on_low_wasm_memory_is_executed_after_upgrade_if_condition_holds() {
     assert_eq!(
         test.execution_state(canister_id).wasm_memory.size,
         NumWasmPages::new(13)
+    );
+
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::Executed
     );
 
     // The second ingress message is executed after the hook.
@@ -1192,7 +1252,7 @@ fn on_low_wasm_memory_is_not_executed_after_upgrade_if_condition_becomes_unsatis
     // First ingress messages gets executed.
     // wasm_memory.size = 1 + 3 = 4
     // wasm_capacity - used_wasm_memory > self.wasm_memory_threshold
-    // Hook condition is not triggered.
+    // Hook condition is not satisfied.
     test.execute_slice(canister_id);
     assert_eq!(
         test.execution_state(canister_id).wasm_memory.size,
@@ -1202,13 +1262,20 @@ fn on_low_wasm_memory_is_not_executed_after_upgrade_if_condition_becomes_unsatis
     // Second ingress messages gets executed.
     // wasm_memory.size = 4 + 3 = 7
     // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
-    // Hook condition is triggered.
+    // Hook condition is satisfied.
     test.execute_slice(canister_id);
     assert_eq!(
         test.execution_state(canister_id).wasm_memory.size,
         NumWasmPages::new(7)
     );
-    println!("canister upgrade");
+
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::Ready
+    );
 
     let result = test.upgrade_canister_v2(
         canister_id,
@@ -1219,13 +1286,20 @@ fn on_low_wasm_memory_is_not_executed_after_upgrade_if_condition_becomes_unsatis
         },
     );
     assert_eq!(result, Ok(()));
-    println!("canister upgrade");
 
     // Upgrade is executed, and the wasm_memory size reset to 1.
-    // Hook condition is not triggered.
+    // Hook condition is not satisfied.
     assert_eq!(
         test.execution_state(canister_id).wasm_memory.size,
         NumWasmPages::new(1)
+    );
+
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::ConditionNotSatisfied
     );
 
     // Though the hook was initially scheduled, it is now removed
@@ -1241,6 +1315,262 @@ fn on_low_wasm_memory_is_not_executed_after_upgrade_if_condition_becomes_unsatis
     assert_eq!(
         test.execution_state(canister_id).wasm_memory.size,
         NumWasmPages::new(4)
+    );
+}
+
+#[test]
+fn upgrade_changes_hook_status_to_not_satisfied() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+
+    let update_grow_mem_size = 7;
+    let hook_grow_mem_size = 5;
+
+    let wat: String =
+        get_wat_with_update_and_hook_mem_grow(update_grow_mem_size, hook_grow_mem_size, false);
+
+    let canister_id = test.canister_from_wat(wat.as_str()).unwrap();
+
+    test.canister_update_wasm_memory_limit_and_wasm_memory_threshold(
+        canister_id,
+        (20 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+        (15 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+    )
+    .unwrap();
+
+    // Here we have:
+    // wasm_capacity = wasm_memory_limit = 20 Wasm Pages
+    // wasm_memory_threshold = 15 Wasm Pages
+
+    // Initially wasm_memory.size = 1
+    assert_eq!(
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(1)
+    );
+
+    test.ingress_raw(canister_id, "grow_mem", vec![]);
+
+    // Ingress messages gets executed.
+    // wasm_memory.size = 1 + 7 = 8
+    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // Hook condition is satisfied.
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(8)
+    );
+
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::Ready
+    );
+
+    // Hook is executed
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(13)
+    );
+
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::Executed
+    );
+
+    // Canister upgrade.
+    assert!(test
+        .upgrade_canister_v2(
+            canister_id,
+            wat::parse_str(wat).unwrap(),
+            CanisterUpgradeOptions {
+                skip_pre_upgrade: None,
+                wasm_memory_persistence: None,
+            },
+        )
+        .is_ok());
+
+    // Upgrade is executed, and the wasm_memory size reset to 1.
+    // wasm_capacity - used_wasm_memory > self.wasm_memory_threshold
+    // Hook condition is not satisfied.
+    assert_eq!(
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(1)
+    );
+
+    // Hook status is changed after upgrade.
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::ConditionNotSatisfied
+    );
+}
+
+#[test]
+fn hook_status_remains_executed_if_condition_holds_after_upgrade() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+
+    let update_grow_mem_size = 7;
+    let hook_grow_mem_size = 5;
+
+    let wat: String =
+        get_wat_with_update_and_hook_mem_grow(update_grow_mem_size, hook_grow_mem_size, true);
+
+    let canister_id = test.canister_from_wat(wat.as_str()).unwrap();
+
+    test.canister_update_wasm_memory_limit_and_wasm_memory_threshold(
+        canister_id,
+        (20 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+        (15 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+    )
+    .unwrap();
+
+    // Here we have:
+    // wasm_capacity = wasm_memory_limit = 20 Wasm Pages
+    // wasm_memory_threshold = 15 Wasm Pages
+
+    // Initially wasm_memory.size = 1
+    assert_eq!(
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(1)
+    );
+
+    test.ingress_raw(canister_id, "grow_mem", vec![]);
+    test.ingress_raw(canister_id, "grow_mem", vec![]);
+
+    // First ingress messages gets executed.
+    // wasm_memory.size = 1 + 7 = 8
+    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // Hook condition is satisfied.
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(8)
+    );
+
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::Ready
+    );
+
+    // Hook is executed.
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(13)
+    );
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::Executed
+    );
+
+    // Upgrade canister.
+    let result = test.upgrade_canister_v2(
+        canister_id,
+        wat::parse_str(wat).unwrap(),
+        CanisterUpgradeOptions {
+            skip_pre_upgrade: None,
+            wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+        },
+    );
+    assert_eq!(result, Ok(()));
+
+    // Hook condition is still satisfied.
+    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    assert_eq!(
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(13)
+    );
+
+    // Hence hook status should remain executed.
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::Executed
+    );
+}
+
+#[test]
+fn upgrade_changes_hook_status_to_ready() {
+    let wat = r#"(module
+            (memory 1 20)
+        )"#;
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+
+    let canister_id = test.canister_from_wat(wat).unwrap();
+
+    test.canister_update_wasm_memory_limit_and_wasm_memory_threshold(
+        canister_id,
+        (10 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+        (9 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+    )
+    .unwrap();
+
+    // Here we have:
+    // wasm_capacity = wasm_memory_limit = 10 Wasm Pages
+    // wasm_memory_threshold = 9 Wasm Pages
+
+    // Initially wasm_memory.size = 1
+    // wasm_capacity - used_wasm_memory = wasm_memory_threshold
+    // Hook condition is not satisfied.
+    assert_eq!(
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(1)
+    );
+
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::ConditionNotSatisfied
+    );
+
+    let wat2 = r#"(module
+        (memory 2 2)
+    )"#;
+
+    // Canister upgrade.
+    assert!(test
+        .upgrade_canister_v2(
+            canister_id,
+            wat::parse_str(wat2).unwrap(),
+            CanisterUpgradeOptions {
+                skip_pre_upgrade: None,
+                wasm_memory_persistence: None,
+            },
+        )
+        .is_ok());
+
+    // Upgrade is executed, and the used_wasm_memory size is 2.
+    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // Hook condition is satisfied.
+    assert_eq!(
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(2)
+    );
+
+    // Hook status is changed after upgrade.
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::Ready
     );
 }
 
@@ -1441,5 +1771,74 @@ fn on_low_wasm_memory_is_executed_after_growing_stable_memory() {
     assert_eq!(
         test.execution_state(canister_id).wasm_memory.size,
         NumWasmPages::new(6)
+    );
+}
+
+#[test]
+fn low_wasm_memory_hook_is_run_when_memory_limit_is_exceeded() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+
+    let update_grow_mem_size = 10;
+    let hook_grow_mem_size = 5;
+
+    let wat: String =
+        get_wat_with_update_and_hook_mem_grow(update_grow_mem_size, hook_grow_mem_size, true);
+
+    let canister_id = test.canister_from_wat(wat.as_str()).unwrap();
+
+    // Initially wasm_memory.size = 1
+    assert_eq!(
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(1)
+    );
+
+    test.ingress_raw(canister_id, "grow_mem", vec![]);
+
+    // First ingress messages gets executed.
+    // wasm_memory.size = 1 + 10 = 11
+    test.execute_slice(canister_id);
+
+    assert_eq!(
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(11)
+    );
+
+    // We update `wasm_memory_limit` to be smaller than `used_wasm_memory`.
+    test.canister_update_wasm_memory_limit_and_wasm_memory_threshold(
+        canister_id,
+        (10 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+        (5 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+    )
+    .unwrap();
+
+    // The update will also satisfy condition for `low_wasm_memory` hook.
+    assert_eq!(
+        test.state()
+            .canister_states
+            .get(&canister_id)
+            .unwrap()
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::Ready
+    );
+
+    // Low wasm memory hook is executed.
+    test.execute_slice(canister_id);
+
+    assert_eq!(
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(16)
+    );
+
+    assert_eq!(
+        test.state()
+            .canister_states
+            .get(&canister_id)
+            .unwrap()
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::Executed
     );
 }

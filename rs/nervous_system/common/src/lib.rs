@@ -26,7 +26,6 @@ use std::{
 };
 
 pub mod binary_search;
-pub mod cmc;
 pub mod dfn_core_stable_mem_utils;
 pub mod ledger;
 pub mod ledger_validation;
@@ -168,6 +167,12 @@ impl NervousSystemError {
         NervousSystemError {
             error_message: message.to_string(),
         }
+    }
+}
+
+impl From<NervousSystemError> for String {
+    fn from(value: NervousSystemError) -> Self {
+        value.error_message
     }
 }
 

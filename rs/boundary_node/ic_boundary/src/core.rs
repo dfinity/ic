@@ -6,11 +6,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anonymization_client::{
-    Canister as AnonymizationCanister,
-    CanisterMethodsBuilder as AnonymizationCanisterMethodsBuilder, Track,
-    Tracker as AnonymizationTracker,
-};
 use anyhow::{anyhow, Context, Error};
 use arc_swap::ArcSwapOption;
 use async_scoped::TokioScope;
@@ -49,7 +44,6 @@ use ic_registry_replicator::RegistryReplicator;
 use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, messages::MessageId};
 use nix::unistd::{getpgid, setpgid, Pid};
 use prometheus::Registry;
-use rand::rngs::OsRng;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tower::{limit::ConcurrencyLimitLayer, util::MapResponseLayer, ServiceBuilder};
@@ -73,6 +67,7 @@ use crate::{
     rate_limiting::{generic, RateLimit},
     retry::{retry_request, RetryParams},
     routes::{self, ErrorCause, Health, Lookup, Proxy, ProxyRouter, RootKey},
+    salt_fetcher::AnonymizationSaltFetcher,
     snapshot::{
         generate_stub_snapshot, generate_stub_subnet, RegistrySnapshot, SnapshotPersister,
         Snapshotter,
@@ -447,15 +442,24 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     }
 
     // HTTP Logs Anonymization
-    let tracker = if let Some(v) = cli.obs.obs_log_anonymization_canister_id {
-        let canister = AnonymizationCanister::new(agent.clone().unwrap(), v);
-        let cm = AnonymizationCanisterMethodsBuilder::new(canister)
-            .with_metrics(&metrics_registry)
-            .build();
-        Some(AnonymizationTracker::new(Box::new(OsRng), cm)?)
-    } else {
-        None
-    };
+    let salt_fetcher = cli
+        .obs
+        .obs_log_anonymization_canister_id
+        .and_then(|canister_id| {
+            agent.as_ref().map(|agent| {
+                Arc::new(AnonymizationSaltFetcher::new(
+                    agent.clone(),
+                    canister_id,
+                    cli.obs.obs_log_anonymization_poll_interval,
+                    anonymization_salt,
+                    &metrics_registry,
+                ))
+            })
+        });
+
+    if let Some(fetcher) = salt_fetcher {
+        runners.push(Box::new(fetcher));
+    }
 
     TokioScope::scope_and_block(move |s| {
         if let Some(v) = registry_replicator {
@@ -463,20 +467,9 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                 v.start_polling(cli.registry.registry_nns_urls, nns_pub_key)
                     .await
                     .context("failed to start registry replicator")?
-                    .await
-                    .context("registry replicator failed")?;
+                    .await;
 
                 Ok::<(), Error>(())
-            });
-        }
-
-        // Anonymization Tracker
-        if let Some(mut t) = tracker {
-            s.spawn(async move {
-                t.track(|value| {
-                    anonymization_salt.store(Some(Arc::new(value)));
-                })
-                .await
             });
         }
 
@@ -844,6 +837,8 @@ pub fn setup_router(
         http_client.clone(),
         Arc::clone(&routing_table),
         Arc::clone(&registry_snapshot),
+        cli.health.health_subnets_alive_threshold,
+        cli.health.health_nodes_per_subnet_alive_threshold,
     );
 
     let proxy_router = Arc::new(proxy_router);
@@ -855,13 +850,9 @@ pub fn setup_router(
         proxy_router.clone() as Arc<dyn Health>,
     );
 
-    let query_route = Router::new()
-        .route(routes::PATH_QUERY, {
-            post(routes::handle_canister).with_state(proxy.clone())
-        })
-        .layer(option_layer(cache.map(|x| {
-            middleware::from_fn_with_state(x.clone(), cache_middleware)
-        })));
+    let query_route = Router::new().route(routes::PATH_QUERY, {
+        post(routes::handle_canister).with_state(proxy.clone())
+    });
 
     let call_route = {
         let mut route = Router::new()
@@ -1010,6 +1001,9 @@ pub fn setup_router(
         .layer(common_service_layers.clone())
         .layer(middleware_subnet_lookup.clone())
         .layer(middleware_generic_limiter.clone())
+        .layer(option_layer(cache.map(|x| {
+            middleware::from_fn_with_state(x.clone(), cache_middleware)
+        })))
         .layer(middleware_retry.clone());
 
     let service_subnet_read = ServiceBuilder::new()
@@ -1072,12 +1066,6 @@ impl<T: Run> Run for WithMetrics<T> {
         out
     }
 }
-
-#[allow(dead_code)]
-pub struct WithRetry<T>(
-    pub T,
-    pub Duration, // attempt_interval
-);
 
 pub struct ThrottleParams {
     pub throttle_duration: Duration,

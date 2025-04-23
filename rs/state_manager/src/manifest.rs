@@ -15,18 +15,15 @@ use crate::{
         DEFAULT_CHUNK_SIZE, FILE_CHUNK_ID_OFFSET, FILE_GROUP_CHUNK_ID_OFFSET,
         MAX_SUPPORTED_STATE_SYNC_VERSION,
     },
-    BundledManifest, DirtyPages, ManifestMetrics, CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
+    BundledManifest, ManifestMetrics, CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
     CRITICAL_ERROR_REUSED_CHUNK_HASH, LABEL_VALUE_HASHED, LABEL_VALUE_HASHED_AND_COMPARED,
     LABEL_VALUE_REUSED, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use bit_vec::BitVec;
 use hash::{chunk_hasher, file_hasher, manifest_hasher, ManifestHash};
-use ic_config::flag_status::FlagStatus;
 use ic_crypto_sha2::Sha256;
 use ic_logger::{error, fatal, replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_replicated_state::page_map::StorageLayout;
-use ic_replicated_state::PageIndex;
 use ic_state_layout::{CheckpointLayout, ReadOnly, CANISTER_FILE, UNVERIFIED_CHECKPOINT_MARKER};
 use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
 use ic_types::{crypto::CryptoHash, state_sync::StateSyncVersion, CryptoHashOfState, Height};
@@ -230,9 +227,7 @@ pub struct ManifestDelta {
     pub(crate) target_height: Height,
     /// Wasm memory and stable memory pages that might have changed since the
     /// state at `base_height`.
-    pub(crate) dirty_memory_pages: DirtyPages,
     pub(crate) base_checkpoint: CheckpointLayout<ReadOnly>,
-    pub(crate) lsmt_status: FlagStatus,
 }
 
 /// Groups small files into larger chunks.
@@ -705,61 +700,6 @@ fn default_hash_plan(files: &[FileWithSize], max_chunk_size: u32) -> Vec<ChunkAc
     vec![ChunkAction::Recompute; chunks_total]
 }
 
-fn dirty_chunks_of_file(
-    relative_path: &Path,
-    page_indices: &[PageIndex],
-    files: &[FileWithSize],
-    max_chunk_size: u32,
-    base_manifest: &Manifest,
-) -> Option<BitVec> {
-    if let Ok(index) =
-        files.binary_search_by(|FileWithSize(file_path, _)| file_path.as_path().cmp(relative_path))
-    {
-        let size_bytes = files[index].1;
-        let num_chunks = count_chunks(size_bytes, max_chunk_size);
-        let mut chunks_bitmap = BitVec::from_elem(num_chunks, false);
-
-        for page_index in page_indices {
-            // As the chunk size is a multiple of the page size, at most one chunk could
-            // possibly be affected.
-            let chunk_index = PAGE_SIZE * page_index.get() as usize / max_chunk_size as usize;
-            chunks_bitmap.set(chunk_index, true);
-        }
-
-        // NB. The code below handles the case when the file size increased, but the
-        // dirty pages do not cover the new area.  This should not happen in the current
-        // implementation of PageMap, but we don't want to rely too much on these
-        // implementation details.  So we mark the expanded area as dirty explicitly
-        // instead.
-        let base_file_index = base_manifest
-            .file_table
-            .binary_search_by(|file_info| file_info.relative_path.as_path().cmp(relative_path));
-
-        // This should never happen under normal operation. However, disaster recovery can add
-        // files into checkpoints, so we relax the check in production and return None if the file
-        // is missing in the base manifest. This triggers full re-hashing of the corresponding
-        // file.
-        debug_assert!(
-            base_file_index.is_ok(),
-            "could not find file {} in the base manifest",
-            relative_path.display()
-        );
-
-        let base_file_index = base_file_index.ok()?;
-        let base_file_size = base_manifest.file_table[base_file_index].size_bytes;
-
-        if base_file_size < size_bytes {
-            let from_chunk = count_chunks(base_file_size, max_chunk_size).max(1) - 1;
-            for i in from_chunk..num_chunks {
-                chunks_bitmap.set(i, true);
-            }
-        }
-        Some(chunks_bitmap)
-    } else {
-        None
-    }
-}
-
 /// Computes the bitmap of chunks modified since the base state.
 /// For the files with provided dirty pages, the pages not in the list are assumed unchanged.
 /// The files that are hardlinks of the same inode are not rehashed as they must contain the same
@@ -785,43 +725,6 @@ fn dirty_pages_to_dirty_chunks(
     );
 
     let mut dirty_chunks: BTreeMap<PathBuf, BitVec> = Default::default();
-
-    // If `lsmt_status` is enabled, we shouldn't have populated `dirty_memory_pages` in the first place.
-    debug_assert!(
-        manifest_delta.lsmt_status == FlagStatus::Disabled
-            || manifest_delta.dirty_memory_pages.is_empty()
-    );
-
-    // Any information on dirty pages is not relevant to what files might have changed with
-    // `lsmt_status` enabled.
-    if manifest_delta.lsmt_status == FlagStatus::Disabled {
-        for dirty_page in &manifest_delta.dirty_memory_pages {
-            if dirty_page.height != manifest_delta.base_height {
-                continue;
-            }
-
-            let path = dirty_page
-                .page_type
-                .layout(checkpoint)
-                .map(|layout| layout.base());
-
-            if let Ok(path) = path {
-                let relative_path = path
-                    .strip_prefix(checkpoint.raw_path())
-                    .expect("failed to strip path prefix");
-
-                if let Some(chunks_bitmap) = dirty_chunks_of_file(
-                    relative_path,
-                    &dirty_page.page_delta_indices,
-                    files,
-                    max_chunk_size,
-                    &manifest_delta.base_manifest,
-                ) {
-                    dirty_chunks.insert(relative_path.to_path_buf(), chunks_bitmap);
-                }
-            }
-        }
-    }
 
     // The files with the same inode and device IDs are hardlinks, hence contain exactly the same
     // data.

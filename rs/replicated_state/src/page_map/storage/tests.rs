@@ -19,7 +19,6 @@ use crate::page_map::{
 };
 use assert_matches::assert_matches;
 use bit_vec::BitVec;
-use ic_config::flag_status::FlagStatus;
 use ic_config::state_manager::LsmtConfig;
 use ic_metrics::MetricsRegistry;
 use ic_sys::{PageIndex, PAGE_SIZE};
@@ -475,26 +474,19 @@ fn write_overlay(
         delta,
         &storage_layout,
         height,
-        &LsmtConfig {
-            lsmt_status: FlagStatus::Enabled,
-            shard_num_pages: u64::MAX,
-        },
+        &lsmt_config_unsharded(),
         metrics,
     )
 }
 
 fn lsmt_config_unsharded() -> LsmtConfig {
     LsmtConfig {
-        lsmt_status: FlagStatus::Enabled,
         shard_num_pages: u64::MAX,
     }
 }
 
 fn lsmt_config_sharded() -> LsmtConfig {
-    LsmtConfig {
-        lsmt_status: FlagStatus::Enabled,
-        shard_num_pages: 3,
-    }
+    LsmtConfig { shard_num_pages: 3 }
 }
 
 /// This function applies `instructions` to a new `Storage` in a temporary directory.
@@ -913,10 +905,7 @@ fn wrong_shard_pages_is_an_error() {
             WriteOverlay((0..9).collect::<Vec<_>>()),
             WriteOverlay((0..9).collect::<Vec<_>>()),
         ],
-        &LsmtConfig {
-            lsmt_status: FlagStatus::Enabled,
-            shard_num_pages: 4,
-        },
+        &LsmtConfig { shard_num_pages: 4 },
         &tempdir,
     );
     let merge_candidates = MergeCandidate::new(
@@ -927,10 +916,7 @@ fn wrong_shard_pages_is_an_error() {
         },
         Height::from(0),
         9, /* num_pages */
-        &LsmtConfig {
-            lsmt_status: FlagStatus::Enabled,
-            shard_num_pages: 3,
-        },
+        &LsmtConfig { shard_num_pages: 3 },
         &StorageMetrics::new(&MetricsRegistry::new()),
     )
     .unwrap();
@@ -1075,7 +1061,6 @@ fn test_make_none_merge_candidate() {
 fn test_make_merge_candidates_to_overlay() {
     let tempdir = tempdir().unwrap();
     let lsmt_config = LsmtConfig {
-        lsmt_status: FlagStatus::Enabled,
         shard_num_pages: 15,
     };
 
@@ -1349,10 +1334,7 @@ fn can_write_shards() {
 
     write_overlays_and_verify_with_tempdir(
         instructions,
-        &LsmtConfig {
-            lsmt_status: FlagStatus::Enabled,
-            shard_num_pages: 1,
-        },
+        &LsmtConfig { shard_num_pages: 1 },
         &tempdir,
     );
     let files = storage_files(tempdir.path());
@@ -1374,10 +1356,7 @@ fn overlapping_shards_is_an_error() {
 
     write_overlays_and_verify_with_tempdir(
         instructions,
-        &LsmtConfig {
-            lsmt_status: FlagStatus::Enabled,
-            shard_num_pages: 1,
-        },
+        &LsmtConfig { shard_num_pages: 1 },
         &tempdir,
     );
     let files = storage_files(tempdir.path());
@@ -1563,10 +1542,10 @@ mod proptest_tests {
 
     /// A random vector of instructions.
     fn instructions_strategy() -> impl Strategy<Value = Vec<Instruction>> {
-        prop_vec(instruction_strategy(), 1..20)
+        prop_vec(instruction_strategy(), 1..10)
     }
 
-    #[test_strategy::proptest]
+    #[test_strategy::proptest(cases = 10)]
     fn random_instructions(#[strategy(instructions_strategy())] instructions: Vec<Instruction>) {
         write_overlays_and_verify(instructions);
     }

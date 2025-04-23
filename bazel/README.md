@@ -296,9 +296,11 @@ Mark the test as **flaky** to make Bazel will retry the test up to three times.
 rust_test(
 	name = "foo_test",
   # lines omitted
-	flaky = True",
+	flaky = True",  # flakiness rate of $f% over the last month on $date.
 )
 ```
+
+Where you can retrieve the flakiness rate $f from Superset.
 
 Instruct rust to only run one test in parallel - this can help when multiple
 concurrent test cases collide but may greatly increase the runtime of the tests.
