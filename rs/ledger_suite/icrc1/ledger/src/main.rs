@@ -1103,7 +1103,7 @@ fn is_ledger_ready() -> bool {
 
 #[update]
 #[candid_method(query)]
-async fn icrc103_get_allowances(arg: GetAllowancesArgs) -> Result<Allowances, GetAllowancesError> {
+fn icrc103_get_allowances(arg: GetAllowancesArgs) -> Result<Allowances, GetAllowancesError> {
     let from_account = match arg.from_account {
         Some(from_account) => from_account,
         None => Account {
