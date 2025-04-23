@@ -44,7 +44,6 @@ done
 
 function validate_arguments() {
     if [ "${INPUT}" == "" -o "${OUTPUT}" == "" ]; then
-    if [ "${INPUT}" == "" -o "${OUTPUT}" == "" ]; then
         $0 --help
     fi
 }
