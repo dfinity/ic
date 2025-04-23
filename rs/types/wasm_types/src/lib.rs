@@ -92,7 +92,7 @@ impl CanisterModule {
     /// chunk by chunk.
     /// Returns an error if `offset` + `buf.len()` > `module.len()`.
     pub fn write(&mut self, buf: &[u8], offset: usize) -> Result<(), String> {
-        match self.module.clone().write(buf, offset) {
+        match self.module.write(buf, offset) {
             Ok(module) => {
                 self.module_hash = ic_crypto_sha2::Sha256::hash(module.as_slice());
                 self.module = module;
@@ -258,23 +258,16 @@ impl ModuleStorage {
     ///
     /// This may invalidate the module, but is useful for uploading a
     /// module chunk by chunk.
-    fn write(self, buf: &[u8], offset: usize) -> Result<Self, Self> {
+    fn write(&self, buf: &[u8], offset: usize) -> Result<Self, String> {
+        let end = offset + buf.len();
+        if self.len() < end {
+            return Err("Yesn't".to_string());
+        }
         let mut arc = match self {
-            ModuleStorage::Memory(bytes) => bytes,
-            ModuleStorage::File(path, mmap) => {
-                // If the operation would fail, don't change file representation
-                // to memory representation.
-                if mmap.len() < offset + buf.len() {
-                    return Err(ModuleStorage::File(path, mmap));
-                }
-                Arc::new(mmap.as_slice().to_vec())
-            }
+            ModuleStorage::Memory(bytes) => Arc::clone(bytes),
+            ModuleStorage::File(_path, mmap) => Arc::new(mmap.as_slice().to_vec()),
         };
         let inner = Arc::make_mut(&mut arc);
-        let end = offset + buf.len();
-        if inner.len() < end {
-            return Err(ModuleStorage::Memory(arc));
-        }
         inner[offset..end].copy_from_slice(buf);
         Ok(ModuleStorage::Memory(arc))
     }
