@@ -1455,13 +1455,20 @@ impl<Key: Ord + Clone, Value: Clone> CacheWithExpiration<Key, Value> {
             assert_eq!(self.keys.len(), self.values.len())
         }
     }
-    pub fn insert<T: Into<Timestamp>>(&mut self, key: Key, value: Value, now: T) {
+
+    fn insert_without_prune<T: Into<Timestamp>>(&mut self, key: Key, value: Value, now: T) {
         let timestamp = now.into();
         if let Some(old_timestamp) = self.keys.insert(key.clone(), timestamp) {
             self.values
                 .remove(&Timestamped::new(old_timestamp, key.clone()));
         }
         self.values.insert(Timestamped::new(timestamp, key), value);
+    }
+
+    pub fn insert<T: Into<Timestamp>>(&mut self, key: Key, value: Value, now: T) {
+        let timestamp = now.into();
+        self.prune(timestamp);
+        self.insert_without_prune(key, value, timestamp);
     }
 
     pub fn get<T: Into<Timestamp>>(&self, key: &Key, now: T) -> Option<&Value> {

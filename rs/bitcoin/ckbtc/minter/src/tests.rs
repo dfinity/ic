@@ -1145,7 +1145,7 @@ fn test_cache_expiration_zero() {
     assert_eq!(cache.get(&1, 1), Some(&1));
     assert_eq!(cache.get(&1, 2), None);
 
-    cache.insert(2, 2, 2);
+    cache.insert_without_prune(2, 2, 2);
     assert_eq!(cache.len(), 2);
     assert_eq!(cache.get(&1, 1), Some(&1));
     assert_eq!(cache.get(&1, 2), None);
@@ -1156,7 +1156,7 @@ fn test_cache_expiration_zero() {
     assert_eq!(cache.get(&2, 2), Some(&2));
 
     // This is an update
-    cache.insert(2, 2, 1);
+    cache.insert_without_prune(2, 2, 1);
     assert_eq!(cache.len(), 1);
     assert_eq!(cache.get(&2, 1), Some(&2));
     assert_eq!(cache.get(&2, 2), None);
@@ -1178,16 +1178,22 @@ fn test_cache_expiration_two() {
     assert_eq!(cache.get(&3, 4), Some(&3));
 
     // This is an update
-    cache.insert(2, 2, 4);
+    cache.insert_without_prune(2, 2, 4);
     assert_eq!(cache.len(), 3);
     assert_eq!(cache.get(&2, 4), Some(&2));
 
     // This will remove 1
     cache.prune(4);
     assert_eq!(cache.len(), 2);
-    assert_eq!(cache.get(&1, 3), None);
+    assert_eq!(cache.get(&1, 4), None);
     assert_eq!(cache.get(&2, 4), Some(&2));
     assert_eq!(cache.get(&3, 4), Some(&3));
+
+    // This will prune first and then insert
+    cache.insert(4, 4, 6);
+    assert_eq!(cache.len(), 2);
+    assert_eq!(cache.get(&2, 6), Some(&2));
+    assert_eq!(cache.get(&4, 6), Some(&4));
 }
 
 proptest! {
