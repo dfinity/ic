@@ -92,11 +92,7 @@ impl CanisterModule {
     /// chunk by chunk.
     /// Returns an error if `offset` + `buf.len()` > `module.len()`.
     pub fn write(&mut self, buf: &[u8], offset: usize) -> Result<(), String> {
-        let CanisterModule {
-            module,
-            module_hash: _,
-        } = self;
-        match module.clone().write(buf, offset) {
+        match self.module.clone().write(buf, offset) {
             Ok(module) => {
                 self.module_hash = ic_crypto_sha2::Sha256::hash(module.as_slice());
                 self.module = module;
