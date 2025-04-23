@@ -18,7 +18,6 @@ use std::{collections::BTreeMap, sync::Arc};
 static NOW_SECONDS: u64 = 1_234_567_890;
 static CONTROLLER: PrincipalId = PrincipalId::new_user_test_id(1);
 static DEFAULT_MATURITY_MODULATION_BASIS_POINTS: i32 = 100; // 1%
-static RETRY_DELAY: Duration = Duration::from_secs(3600);
 
 fn create_neuron_builder() -> NeuronBuilder {
     NeuronBuilder::new(
@@ -451,32 +450,25 @@ async fn test_finalize_maturity_disbursement_successful() {
 
     // Step 3: Advance time to 1 second before the disbursement, and verify that the next
     // disbursement is 1 second away.
-    let delay = TEST_GOVERNANCE
-        .with_borrow(|governance| get_delay_until_next_finalization(governance, RETRY_DELAY));
+    let delay = TEST_GOVERNANCE.with_borrow(get_delay_until_next_finalization);
     assert_eq!(delay, Duration::from_secs(DISBURSEMENT_DELAY_SECONDS));
     advance_time(delay.as_secs() - 1);
-    finalize_maturity_disbursement(&TEST_GOVERNANCE)
-        .now_or_never()
-        .unwrap()
-        .unwrap();
     assert_eq!(
-        TEST_GOVERNANCE
-            .with_borrow(|governance| get_delay_until_next_finalization(governance, RETRY_DELAY))
-            .as_secs(),
-        1
+        finalize_maturity_disbursement(&TEST_GOVERNANCE)
+            .now_or_never()
+            .unwrap(),
+        Duration::from_secs(1)
     );
 
-    // Step 4: Advance time to the disbursement time, and verify that the next disbursement is 7 days away.
+    // Step 4: Advance time to the disbursement time, and verify that the next disbursement is 7
+    // days away. There are no real changes, and it is apparent from the fact that only 1 ledger
+    // transfer is allowed from the mock ledger.
     advance_time(1);
-    finalize_maturity_disbursement(&TEST_GOVERNANCE)
-        .now_or_never()
-        .unwrap()
-        .unwrap();
     assert_eq!(
-        TEST_GOVERNANCE
-            .with_borrow(|governance| get_delay_until_next_finalization(governance, RETRY_DELAY))
-            .as_secs(),
-        DISBURSEMENT_DELAY_SECONDS
+        finalize_maturity_disbursement(&TEST_GOVERNANCE)
+            .now_or_never()
+            .unwrap(),
+        Duration::from_secs(DISBURSEMENT_DELAY_SECONDS)
     );
 }
 
@@ -514,7 +506,7 @@ async fn test_finalize_maturity_disbursement_no_maturity_modulation() {
     advance_time(DISBURSEMENT_DELAY_SECONDS);
 
     // Step 4: Finalize the maturity disbursement and verify that it fails.
-    let result = finalize_maturity_disbursement(&TEST_GOVERNANCE)
+    let result = try_finalize_maturity_disbursement(&TEST_GOVERNANCE)
         .now_or_never()
         .unwrap();
     assert_eq!(
@@ -564,7 +556,7 @@ async fn test_finalize_maturity_disbursement_ledger_failure() {
     advance_time(DISBURSEMENT_DELAY_SECONDS);
 
     // Step 3: Finalize the maturity disbursement and verify that it fails.
-    let result = finalize_maturity_disbursement(&TEST_GOVERNANCE)
+    let result = try_finalize_maturity_disbursement(&TEST_GOVERNANCE)
         .now_or_never()
         .unwrap();
     let Err(FinalizeMaturityDisbursementError::FailToMintIcp { neuron_id, reason }) = result else {
@@ -574,7 +566,7 @@ async fn test_finalize_maturity_disbursement_ledger_failure() {
     assert!(reason.contains("Failed to mint ICP"));
 
     // Step 4: Finalize the maturity disbursement again and verify that it succeeds.
-    finalize_maturity_disbursement(&TEST_GOVERNANCE)
+    try_finalize_maturity_disbursement(&TEST_GOVERNANCE)
         .now_or_never()
         .unwrap()
         .unwrap();

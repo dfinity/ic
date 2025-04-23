@@ -340,7 +340,7 @@ fn test_neuron_disburse_maturity() {
     assert!(neuron.maturity_e8s_equivalent > 0, "{:#?}", neuron);
     println!("{:#?}", neuron);
 
-    // Step 3: Call the code under test - disburse maturity.
+    // Step 2: Call the code under test - disburse maturity.
     let disburse_destination = PrincipalId::new_self_authenticating(&[1u8]);
     let disburse_response = nns_disburse_maturity(
         &state_machine,
@@ -361,32 +361,33 @@ fn test_neuron_disburse_maturity() {
     };
     assert!(disburse_maturity_response.amount_disbursed_e8s() > 0);
 
-    // Sanity check: the destination account should be empty before the disbursement is finalized.
-    let balance = icrc1_balance(
-        &state_machine,
-        LEDGER_CANISTER_ID,
-        Account {
-            owner: disburse_destination.0,
-            subaccount: None,
-        },
-    );
-    assert!(balance.get_e8s() == 0, "{}", balance);
+    let get_balance_e8s_of_disburse_destination = || {
+        icrc1_balance(
+            &state_machine,
+            LEDGER_CANISTER_ID,
+            Account {
+                owner: disburse_destination.0,
+                subaccount: None,
+            },
+        )
+        .get_e8s()
+    };
 
-    // Step 4: Wait for 7 days and check that the disbursement was successful.
-    state_machine.advance_time(Duration::from_secs(ONE_DAY_SECONDS * 7));
-    for _ in 0..100 {
-        state_machine.advance_time(Duration::from_secs(1));
-        state_machine.tick();
+    // Step 3: Wait for 7 days and check that the disbursement was successful.
+    for _ in 0..7 {
+        // The destination account should be empty before the disbursement is finalized.
+        assert_eq!(get_balance_e8s_of_disburse_destination(), 0);
+
+        state_machine.advance_time(Duration::from_secs(ONE_DAY_SECONDS));
+
+        // Because of how timer works, the time needs to be "flowing" in order for the tasks to be executed.
+        for _ in 0..20 {
+            state_machine.advance_time(Duration::from_secs(1));
+            state_machine.tick();
+        }
     }
-    let balance = icrc1_balance(
-        &state_machine,
-        LEDGER_CANISTER_ID,
-        Account {
-            owner: disburse_destination.0,
-            subaccount: None,
-        },
-    );
-    assert!(balance.get_e8s() > 0, "{}", balance);
+    let balance = get_balance_e8s_of_disburse_destination();
+    assert!(balance > 0, "{}", balance);
 }
 
 /// If a neuron's controller is added as a hot key and then removed, assert that Governance

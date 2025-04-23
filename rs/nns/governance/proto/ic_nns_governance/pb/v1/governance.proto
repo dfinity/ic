@@ -1103,11 +1103,12 @@ message ManageNeuron {
   // fields in Neuron.
   message RefreshVotingPower {}
 
-  // Disburse the maturity of a neuron to any ledger account. If an account
-  // is not specified, the caller's account will be used. The caller can choose
-  // a percentage of the current maturity to disburse to the ledger account. The
-  // resulting amount to disburse must be greater than or equal to the
-  // transaction fee.
+  // Disburse the maturity of a neuron to any ledger account. If an account is not specified, the
+  // controller's account will be used. The controller can choose a percentage of the current
+  // maturity to disburse to the ledger account. The resulting amount to disburse must be at least 1
+  // ICP. The disbursement has a 7-day delay before it is finalized. At the finalization time, the
+  // maturity modulation will be applied to the amount, which can make the amount [95%, 105%] of the
+  // original amount.
   message DisburseMaturity {
     // The percentage to disburse, from 1 to 100
     uint32 percentage_to_disburse = 1;
@@ -2754,14 +2755,14 @@ message VotingPowerTotal {
 
 message FinalizeDisburseMaturity {
   // The finalization timestamp of the disbursement.
-  uint64 finalization_timestamp_seconds = 1;
+  uint64 finalize_disbursement_timestamp_seconds = 1;
 
   // The amount of ICPs to be disbursed in e8s.
-  uint64 amount_to_be_disbursed_e8s = 2;
+  uint64 amount_to_mint_e8s = 2;
 
   // The account to which to transfer the ICPs.
   Account to_account = 3;
 
   // The original amount of maturity to be disbursed (before maturity modulation).
-  uint64 original_maturity_e8s = 4;
+  uint64 original_maturity_e8s_equivalent = 4;
 }

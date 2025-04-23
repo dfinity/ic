@@ -1273,11 +1273,12 @@ pub mod manage_neuron {
         ::prost::Message,
     )]
     pub struct RefreshVotingPower {}
-    /// Disburse the maturity of a neuron to any ledger account. If an account
-    /// is not specified, the caller's account will be used. The caller can choose
-    /// a percentage of the current maturity to disburse to the ledger account. The
-    /// resulting amount to disburse must be greater than or equal to the
-    /// transaction fee.
+    /// Disburse the maturity of a neuron to any ledger account. If an account is not specified, the
+    /// controller's account will be used. The controller can choose a percentage of the current
+    /// maturity to disburse to the ledger account. The resulting amount to disburse must be at least 1
+    /// ICP. The disbursement has a 7-day delay before it is finalized. At the finalization time, the
+    /// maturity modulation will be applied to the amount, which can make the amount \[95%, 105%\] of the
+    /// original amount.
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -4224,16 +4225,16 @@ pub struct VotingPowerTotal {
 pub struct FinalizeDisburseMaturity {
     /// The finalization timestamp of the disbursement.
     #[prost(uint64, tag = "1")]
-    pub finalization_timestamp_seconds: u64,
+    pub finalize_disbursement_timestamp_seconds: u64,
     /// The amount of ICPs to be disbursed in e8s.
     #[prost(uint64, tag = "2")]
-    pub amount_to_be_disbursed_e8s: u64,
+    pub amount_to_mint_e8s: u64,
     /// The account to which to transfer the ICPs.
     #[prost(message, optional, tag = "3")]
     pub to_account: ::core::option::Option<Account>,
-    /// The amount of maturity to be disbursed (before maturity modulation).
+    /// The original amount of maturity to be disbursed (before maturity modulation).
     #[prost(uint64, tag = "4")]
-    pub original_maturity_e8s: u64,
+    pub original_maturity_e8s_equivalent: u64,
 }
 /// Proposal types are organized into topics. Neurons can automatically
 /// vote based on following other neurons, and these follow

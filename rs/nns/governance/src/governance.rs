@@ -138,7 +138,7 @@ use std::{
 };
 
 pub mod disburse_maturity;
-pub mod ledger_helper;
+mod ledger_helper;
 mod merge_neurons;
 mod split_neuron;
 pub mod test_data;
