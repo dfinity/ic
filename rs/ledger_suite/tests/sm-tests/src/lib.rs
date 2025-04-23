@@ -3700,25 +3700,8 @@ fn list_allowances(
     .expect("failed to decode icrc103_get_allowances response")
 }
 
-pub fn test_approval_listing<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
-where
-    T: CandidType,
-{
-    let approver1 = PrincipalId::new_user_test_id(1);
-    let spender = PrincipalId::new_user_test_id(3);
-
-    let from_sub_1 = Account {
-        owner: approver1.0,
-        subaccount: Some([1; 32]),
-    };
-
-    let (env, canister_id) = setup(
-        ledger_wasm,
-        encode_init_args,
-        vec![(Account::from(approver1.0), 100_000), (from_sub_1, 100_000)],
-    );
-
-    let create_subaccount = |sub: Option<u64>| match sub {
+fn create_subaccount(sub: Option<u64>) -> Option<Subaccount> {
+    match sub {
         Some(sub) => {
             let mut subaccount = [0u8; 32];
             for (index, byte) in sub.to_be_bytes().iter().enumerate() {
@@ -3727,33 +3710,66 @@ where
             Some(subaccount)
         }
         None => None,
-    };
-
-    let create_args =
-        |from_sub: Option<u64>, spender: PrincipalId, spender_sub: Option<u64>| ApproveArgs {
-            from_subaccount: create_subaccount(from_sub),
-            spender: Account {
-                owner: spender.0,
-                subaccount: create_subaccount(spender_sub),
-            },
-            amount: Nat::from(1u64),
-            expected_allowance: None,
-            expires_at: None,
-            fee: Some(Nat::from(FEE)),
-            memo: None,
-            created_at_time: None,
-        };
-
-    let create_approval = |from: PrincipalId,
-                           from_sub: Option<u64>,
-                           spender: PrincipalId,
-                           spender_sub: Option<u64>| {
-        let approve_args = create_args(from_sub, spender, spender_sub);
-        let _ = send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
-    };
-    for i in 1..10 {
-        create_approval(approver1, None, spender, Some(i));
     }
+}
+
+fn create_approve_args(
+    from_sub: Option<u64>,
+    spender: PrincipalId,
+    spender_sub: Option<u64>,
+    amount: u64,
+) -> ApproveArgs {
+    ApproveArgs {
+        from_subaccount: create_subaccount(from_sub),
+        spender: Account {
+            owner: spender.0,
+            subaccount: create_subaccount(spender_sub),
+        },
+        amount: Nat::from(amount),
+        expected_allowance: None,
+        expires_at: None,
+        fee: Some(Nat::from(FEE)),
+        memo: None,
+        created_at_time: None,
+    }
+}
+
+pub fn test_approval_listing<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let approver1 = PrincipalId::new_user_test_id(1);
+    let approver2 = PrincipalId::new_user_test_id(2);
+    let spender = PrincipalId::new_user_test_id(3);
+
+    let from_sub_1 = Account {
+        owner: approver1.0,
+        subaccount: create_subaccount(Some(1)),
+    };
+
+    let (env, canister_id) = setup(
+        ledger_wasm,
+        encode_init_args,
+        vec![
+            (Account::from(approver1.0), 100_000),
+            (Account::from(approver2.0), 100_000),
+            (from_sub_1, 100_000),
+        ],
+    );
+
+    for i in 1..10 {
+        let from_sub = if i < 5 { None } else { Some(1) };
+        let approve_args = create_approve_args(from_sub, spender, Some(i), 1);
+        let _ =
+            send_approval(&env, canister_id, approver1.0, &approve_args).expect("approval failed");
+    }
+    for i in 1..5 {
+        let approve_args = create_approve_args(None, spender, Some(i), 1);
+        let _ =
+            send_approval(&env, canister_id, approver2.0, &approve_args).expect("approval failed");
+    }
+
+    // List all allowances
     let allowances = list_allowances(
         &env,
         canister_id,
@@ -3773,6 +3789,7 @@ where
         );
     }
 
+    // List allowances after a particular spender
     let allowances = list_allowances(
         &env,
         canister_id,
