@@ -764,7 +764,7 @@ turmoil = "0.6.4"
 url = { version = "2.5.3", features = ["serde"] }
 uuid = { version = "1.11.0", features = ["v4", "serde"] }
 walkdir = "2.3.3"
-walrus = "0.23.2"
+walrus = "0.23.3"
 wasm-encoder = { version = "0.229.0", features = ["wasmparser"] }
 wasmparser = "0.229.0"
 wasmprinter = "0.229.0"
