@@ -35,6 +35,7 @@ rust_binary(
     visibility = ["//rs:ic-os-pkg"],
     deps = [
         ":config_types_compatibility_lib",
+        "//rs/ic_os/config_types",
     ],
 )
 

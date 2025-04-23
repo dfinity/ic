@@ -1,5 +1,5 @@
 use config_types::CONFIG_VERSION;
-use config_types_compatibility_tests::ConfigFixture;
+use config_types_compatibility_lib::ConfigFixture;
 use std::path::PathBuf;
 
 fn main() {
