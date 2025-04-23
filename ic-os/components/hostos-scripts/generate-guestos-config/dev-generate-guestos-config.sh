@@ -7,7 +7,6 @@ set -e
 source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
 source /opt/ic/bin/config.sh
-source /opt/ic/bin/config.sh
 
 # Get keyword arguments
 for argument in "${@}"; do
@@ -78,20 +77,7 @@ function assemble_config_media() {
     ipv6_address="$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type GuestOS)"
     /opt/ic/bin/config generate-guestos-config --guestos-ipv6-address "$ipv6_address"
 
-    ipv6_address="$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type GuestOS)"
-    /opt/ic/bin/config generate-guestos-config --guestos-ipv6-address "$ipv6_address"
-
     cmd=(/opt/ic/bin/build-bootstrap-config-image.sh ${MEDIA})
-    cmd+=(--guestos_config "/boot/config/config-guestos.json")
-    if [[ "${use_nns_public_key,,}" == "true" ]]; then
-        cmd+=(--nns_public_key "/boot/config/nns_public_key.pem")
-    fi
-    if [[ "${use_node_operator_private_key,,}" == "true" ]]; then
-        cmd+=(--node_operator_private_key "/boot/config/node_operator_private_key.pem")
-    fi
-    if [[ "${use_ssh_authorized_keys,,}" == "true" ]]; then
-        cmd+=(--accounts_ssh_authorized_keys "/boot/config/ssh_authorized_keys")
-    fi
     cmd+=(--guestos_config "/boot/config/config-guestos.json")
     if [[ "${use_nns_public_key,,}" == "true" ]]; then
         cmd+=(--nns_public_key "/boot/config/nns_public_key.pem")

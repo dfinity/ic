@@ -7,7 +7,6 @@ set -e
 source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
 source /opt/ic/bin/config.sh
-source /opt/ic/bin/config.sh
 
 # Get keyword arguments
 for argument in "${@}"; do
@@ -44,7 +43,6 @@ Arguments:
 done
 
 function validate_arguments() {
-    if [ "${INPUT}" == "" -o "${OUTPUT}" == "" ]; then
     if [ "${INPUT}" == "" -o "${OUTPUT}" == "" ]; then
         $0 --help
     fi

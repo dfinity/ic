@@ -4,12 +4,9 @@
 
 source /opt/ic/bin/config.sh
 
-source /opt/ic/bin/config.sh
-
 function usage() {
     cat <<EOF
 Usage:
-  setup-nftables -i nftables.template -o nftables.conf
   setup-nftables -i nftables.template -o nftables.conf
 
   Generate nftables config from template file.
@@ -25,7 +22,6 @@ function get_ipv6_prefix() {
     IPV6_PREFIX="${IPV6_PREFIX:-::1/128}"             # Default to loopback for easy templating
 }
 
-while getopts "i:o:" OPT; do
 while getopts "i:o:" OPT; do
     case "${OPT}" in
         i)
