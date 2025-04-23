@@ -1073,11 +1073,19 @@ impl Player {
                 &mut invalid_artifacts,
             );
 
+            // We don't want to replay heights strictly above the next CUP.
+            let replay_target_height = match result {
+                Err(backup::ExitPoint::CUPHeightWasFinalized(cup_height)) => {
+                    Some(target_height.unwrap_or(cup_height).min(cup_height))
+                }
+                _ => target_height,
+            };
+
             let last_batch_height = self.deliver_batches(
                 self.message_routing.as_ref(),
                 &PoolReader::new(self.consensus_pool.as_ref().unwrap()),
                 self.membership.as_ref().unwrap(),
-                self.replay_target_height.map(Height::from),
+                replay_target_height,
             );
             self.wait_for_state(last_batch_height);
             if let Some(height) = target_height {
@@ -1214,8 +1222,8 @@ impl Player {
                 self.log,
                 "The state height {} is strictly above the CUP height {}. \
                 Skipping the rest of CUP verification.",
-                last_cup.height(),
-                self.state_manager.latest_state_height()
+                self.state_manager.latest_state_height(),
+                last_cup.height()
             );
             return Ok(());
         }
