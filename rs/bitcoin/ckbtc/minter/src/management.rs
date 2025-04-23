@@ -1,6 +1,6 @@
 //! This module contains async functions for interacting with the management canister.
 use crate::logs::P0;
-use crate::metrics::observe_get_utxos_latency;
+use crate::metrics::{observe_get_utxos_latency, observe_sign_with_ecdsa_latency};
 use crate::{tx, CanisterRuntime, ECDSAPublicKey, GetUtxosRequest, GetUtxosResponse, Network};
 use candid::{CandidType, Principal};
 use ic_btc_checker::{
@@ -168,7 +168,6 @@ pub async fn get_utxos<R: CanisterRuntime>(
         runtime.bitcoin_get_utxos(req).await
     }
 
-    // Record start time of method execution for metrics
     let start_time = runtime.time();
     let request = GetUtxosRequest {
         address: address.clone(),
@@ -261,32 +260,21 @@ pub async fn ecdsa_public_key(
 }
 
 /// Signs a message hash using the tECDSA API.
-pub async fn sign_with_ecdsa(
+pub async fn sign_with_ecdsa<R: CanisterRuntime>(
     key_name: String,
     derivation_path: DerivationPath,
     message_hash: [u8; 32],
+    runtime: &R,
 ) -> Result<Vec<u8>, CallError> {
-    use ic_cdk::api::management_canister::ecdsa::{
-        sign_with_ecdsa, EcdsaCurve, EcdsaKeyId, SignWithEcdsaArgument,
-    };
+    let start_time = runtime.time();
 
-    let result = sign_with_ecdsa(SignWithEcdsaArgument {
-        message_hash: message_hash.to_vec(),
-        derivation_path: derivation_path.into_inner(),
-        key_id: EcdsaKeyId {
-            curve: EcdsaCurve::Secp256k1,
-            name: key_name.clone(),
-        },
-    })
-    .await;
+    let result = runtime
+        .sign_with_ecdsa(key_name, derivation_path, message_hash)
+        .await;
 
-    match result {
-        Ok((reply,)) => Ok(reply.signature),
-        Err((code, msg)) => Err(CallError {
-            method: "sign_with_ecdsa".to_string(),
-            reason: Reason::from_reject(code, msg),
-        }),
-    }
+    observe_sign_with_ecdsa_latency(&result, start_time, runtime.time());
+
+    result
 }
 
 /// Check if the given Bitcoin address is blocked.
