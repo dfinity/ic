@@ -34,7 +34,7 @@ fn test_no_chunkify_small_mutation() {
     };
 
     // Step 2: Call the code under test.
-    let result = maybe_chunkify(original_mutation.clone());
+    let result = chunkify_composite_mutation_if_too_large(original_mutation.clone());
 
     // Step 3: Verify results. Since the input is small, the output is simply a
     // transcription of the input. In particular, there is no chunking.
@@ -61,7 +61,7 @@ fn test_chunkify_reasonably_large_mutation() {
     };
 
     // Step 2: Call the code under test.
-    let result = maybe_chunkify(original_mutation);
+    let result = chunkify_composite_mutation_if_too_large(original_mutation);
 
     // Step 3: Verify results.
 
@@ -111,7 +111,7 @@ fn test_panic_on_hyper_large_mutation() {
     };
 
     // Step 2: Call the code under test.
-    let _explode = maybe_chunkify(original_mutation);
+    let _explode = chunkify_composite_mutation_if_too_large(original_mutation);
 
     // Step 3: Verify results. The previous line is supposed to panic (and this
     // is verified at the top via should_panic).

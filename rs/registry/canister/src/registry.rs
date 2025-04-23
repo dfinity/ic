@@ -993,10 +993,10 @@ mod tests {
 
         let max_value = vec![0; max_mutation_value_size(version, key)];
         let mutations = vec![upsert(key, max_value)];
-        let req = RegistryAtomicMutateRequest {
+        let req = HighCapacityRegistryAtomicMutateRequest::from(RegistryAtomicMutateRequest {
             mutations,
             preconditions: vec![],
-        };
+        });
         registry.changelog_insert(version, req);
 
         // We should have one changelog entry.
@@ -1019,10 +1019,10 @@ mod tests {
 
         let too_large_value = vec![0; max_mutation_value_size(version, key) + 1];
         let mutations = vec![upsert(key, too_large_value)];
-        let req = RegistryAtomicMutateRequest {
+        let req = HighCapacityRegistryAtomicMutateRequest::from(RegistryAtomicMutateRequest {
             mutations,
             preconditions: vec![],
-        };
+        });
 
         registry.changelog_insert(1, req);
     }
