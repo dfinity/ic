@@ -46,6 +46,8 @@ use std::{
 };
 use strum::IntoEnumIterator;
 
+use rosetta_core::metrics::RosettaMetrics;
+
 /// The maximum amount of blocks to retrieve in a single search.
 const MAX_SEARCH_LIMIT: usize = 10_000;
 
@@ -53,6 +55,7 @@ const MAX_SEARCH_LIMIT: usize = 10_000;
 pub struct RosettaRequestHandler {
     blockchain: String,
     ledger: Arc<dyn LedgerAccess + Send + Sync>,
+    rosetta_metrics: RosettaMetrics,
 }
 
 // construction requests are implemented in their own module.
@@ -60,20 +63,35 @@ impl RosettaRequestHandler {
     pub fn new<T: 'static + LedgerAccess + Send + Sync>(
         blockchain: String,
         ledger: Arc<T>,
+        rosetta_metrics: RosettaMetrics,
     ) -> Self {
-        Self { blockchain, ledger }
+        Self {
+            blockchain,
+            ledger,
+            rosetta_metrics,
+        }
     }
 
     pub fn new_with_default_blockchain<T: 'static + LedgerAccess + Send + Sync>(
         ledger: Arc<T>,
     ) -> Self {
-        Self::new(crate::DEFAULT_BLOCKCHAIN.to_string(), ledger)
+        let canister_id = ledger.ledger_canister_id();
+        let canister_id_str = hex::encode(canister_id.get().into_vec());
+        Self::new(
+            crate::DEFAULT_BLOCKCHAIN.to_string(),
+            ledger,
+            RosettaMetrics::new(crate::DEFAULT_TOKEN_SYMBOL.to_string(), canister_id_str),
+        )
     }
 
     pub fn network_id(&self) -> NetworkIdentifier {
         let canister_id = self.ledger.ledger_canister_id();
         let net_id = hex::encode(canister_id.get().into_vec());
         NetworkIdentifier::new(self.blockchain.clone(), net_id)
+    }
+
+    pub fn rosetta_metrics(&self) -> RosettaMetrics {
+        self.rosetta_metrics.clone()
     }
 
     /// Get an Account Balance

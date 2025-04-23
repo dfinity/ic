@@ -121,15 +121,14 @@ impl Registry {
 
             if let Some(initial_chain_key_config) = initial_chain_key_config {
                 // If chain key config is set, we must both update the subnet's chain_key_config
-                // and make sure the subnet is not listed as signing_subnet for keys it no longer
+                // and make sure the subnet is not listed as chain-key-enabled subnet for keys it no longer
                 // holds.
-                let chain_key_signing_disable = {
+                let chain_key_disable = {
                     let new_keys = initial_chain_key_config.key_ids();
                     self.get_keys_that_will_be_removed_from_subnet(subnet_id, new_keys)
                 };
                 mutations.append(
-                    &mut self
-                        .mutations_to_disable_subnet_signing(subnet_id, &chain_key_signing_disable),
+                    &mut self.mutations_to_disable_subnet_chain_key(subnet_id, &chain_key_disable),
                 );
 
                 // Update chain key configuration on subnet record to reflect new holdings.

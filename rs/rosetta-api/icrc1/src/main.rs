@@ -9,6 +9,7 @@ use axum::{
 use clap::{Parser, ValueEnum};
 use ic_agent::{identity::AnonymousIdentity, Agent};
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_icrc_rosetta::common::storage::storage_client::TokenInfo;
 use ic_icrc_rosetta::{
     common::constants::{BLOCK_SYNC_WAIT_SECS, MAX_BLOCK_SYNC_WAIT_SECS},
     common::storage::{storage_client::StorageClient, types::MetadataEntry},
@@ -22,6 +23,7 @@ use ic_icrc_rosetta::{
 use ic_sys::fs::write_string_using_tmp_file;
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
 use lazy_static::lazy_static;
+use rosetta_core::metrics::RosettaMetrics;
 use rosetta_core::watchdog::WatchdogThread;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -177,6 +179,10 @@ struct Args {
     /// The file to use for storing logs.
     #[arg(long = "log-file", default_value = "log/rosetta-api.log")]
     log_file: PathBuf,
+
+    /// Timeout in seconds for sync watchdog. If no synchronization is attempted within this time, the sync thread will be restarted.
+    #[arg(long = "watchdog-timeout-seconds", default_value = "60")]
+    watchdog_timeout_seconds: u64,
 }
 
 impl Args {
@@ -391,19 +397,14 @@ async fn main() -> Result<()> {
 
     let _guard = init_logs(args.log_level, &args.log_file)?;
 
+    // Initialize rosetta metrics with a default canister ID
+    // This will be updated for specific token operations but is required for middleware setup
+    let rosetta_metrics = RosettaMetrics::new("icrc1".to_string(), "icrc1_default".to_string());
+
     let token_defs = extract_token_defs(&args)?;
     let mut token_states = HashMap::new();
 
     for token_def in token_defs.iter() {
-        let storage = Arc::new(match args.store_type {
-            StoreType::InMemory => StorageClient::new_in_memory()?,
-            StoreType::File => {
-                let mut path = args.multi_tokens_store_dir.clone();
-                path.push(format!("{}.db", PrincipalId::from(token_def.ledger_id)));
-                StorageClient::new_persistent(&path).unwrap()
-            }
-        });
-
         let network_url = args.effective_network_url();
 
         let ic_agent = Agent::builder()
@@ -433,6 +434,15 @@ async fn main() -> Result<()> {
             ledger_canister_id: token_def.ledger_id.into(),
         });
 
+        let mut storage = match args.store_type {
+            StoreType::InMemory => StorageClient::new_in_memory()?,
+            StoreType::File => {
+                let mut path = args.multi_tokens_store_dir.clone();
+                path.push(format!("{}.db", PrincipalId::from(token_def.ledger_id)));
+                StorageClient::new_persistent(&path).unwrap()
+            }
+        };
+
         let metadata = load_metadata(token_def, &icrc1_agent, &storage, args.offline).await?;
 
         if token_def.icrc1_symbol.is_some()
@@ -453,11 +463,19 @@ async fn main() -> Result<()> {
             metadata.symbol
         );
 
+        let storage_metadata = metadata.clone();
+
+        storage.initialize(TokenInfo::new(
+            storage_metadata.symbol,
+            storage_metadata.decimals,
+            token_def.ledger_id,
+        ));
+
         let shared_state = Arc::new(AppState {
             icrc1_agent: icrc1_agent.clone(),
             ledger_id: token_def.ledger_id,
             synched: Arc::new(Mutex::new(None)),
-            storage: storage.clone(),
+            storage: Arc::new(storage),
             archive_canister_ids: Arc::new(AsyncMutex::new(vec![])),
             metadata,
         });
@@ -499,6 +517,9 @@ async fn main() -> Result<()> {
         process::exit(0);
     }
 
+    // Create metrics middleware for Axum
+    let metrics_layer = rosetta_metrics.metrics_layer();
+
     let app = Router::new()
         .route("/ready", get(ready))
         .route("/health", get(health))
@@ -520,6 +541,8 @@ async fn main() -> Result<()> {
         .route("/construction/hash", post(construction_hash))
         .route("/construction/payloads", post(construction_payloads))
         .route("/construction/parse", post(construction_parse))
+        // Apply the metrics middleware
+        .layer(metrics_layer)
         // This layer creates a span for each http request and attaches
         // the request_id, HTTP Method and path to it.
         .layer(add_request_span())
@@ -547,15 +570,22 @@ async fn main() -> Result<()> {
             let span = tracing::info_span!("sync", token = %token_name);
             let span_watchdog = span.clone();
 
+            info!(
+                "Configuring watchdog for {} with timeout of {} seconds",
+                token_name, args.watchdog_timeout_seconds
+            );
+
             tokio::spawn(
                 async move {
                     // First heartbeat might take hours until the ledger is initially synced,
                     // so we skip it to avoid the watchdog thread to restart the sync thread
                     // during the initial synchronization.
                     let skip_first_hearbeat = true;
+                    let local_state = Arc::clone(&shared_state);
                     let mut watchdog = WatchdogThread::new(
-                        Duration::from_secs(MAX_BLOCK_SYNC_WAIT_SECS),
-                        Some(Arc::new(|| {
+                        Duration::from_secs(args.watchdog_timeout_seconds),
+                        Some(Arc::new(move || {
+                            local_state.storage.get_metrics().inc_sync_thread_restarts();
                             info!("Watchdog triggered restart for a sync thread");
                         })),
                         skip_first_hearbeat,

@@ -5,10 +5,7 @@ use ic_metrics::MetricsRegistry;
 use ic_query_stats::QueryStatsCollector;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    batch::QueryStats,
-    ingress::WasmResult,
-    messages::{Query, QuerySource},
-    Cycles, MemoryDiskBytes, PrincipalId, Time, UserId,
+    batch::QueryStats, ingress::WasmResult, messages::Query, Cycles, MemoryDiskBytes, Time, UserId,
 };
 use ic_utils_lru_cache::LruCache;
 use prometheus::{Histogram, IntCounter, IntGauge};
@@ -153,10 +150,7 @@ impl MemoryDiskBytes for EntryKey {
 impl From<&Query> for EntryKey {
     fn from(query: &Query) -> Self {
         Self {
-            source: match query.source {
-                QuerySource::User { user_id, .. } => user_id,
-                QuerySource::Anonymous => UserId::from(PrincipalId::default()),
-            },
+            source: query.source.user_id(),
             receiver: query.receiver,
             method_name: query.method_name.clone(),
             method_payload: query.method_payload.clone(),
