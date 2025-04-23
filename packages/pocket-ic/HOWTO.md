@@ -682,8 +682,9 @@ static POCKET_IC_STATE: OnceLock<PocketIcState> = OnceLock::new();
 
 fn init_state() -> &'static PocketIcState {
     POCKET_IC_STATE.get_or_init(|| {
-        // create a PocketIC instance used to bootstrap the state to be used in multiple tests later
+        // create an empty PocketIC state to be set up later
         let state = PocketIcState::new();
+        // create a PocketIC instance used to set up the state
         let pic = PocketIcBuilder::new()
             .with_nns_subnet()
             .with_state(state)
@@ -699,24 +700,24 @@ fn init_state() -> &'static PocketIcState {
 }
 
 #[test]
-fn pocket_ic_shared_state_1() {
-    // mount the state created before
+fn pocket_ic_init_state_1() {
+    // mount the state set up before
     let pic1 = PocketIcBuilder::new()
         .with_read_only_state(init_state())
         .build();
 
-    // assert that the state is initialized
+    // assert that the state is properly set up
     assert!(pic1.canister_exists(MAINNET_CANISTER_ID));
 }
 
 #[test]
-fn pocket_ic_shared_state_2() {
-    // mount the state created before
+fn pocket_ic_init_state_2() {
+    // mount the state set up before
     let pic2 = PocketIcBuilder::new()
         .with_read_only_state(init_state())
         .build();
 
-    // assert that the state is initialized
+    // assert that the state is properly set up
     assert!(pic2.canister_exists(MAINNET_CANISTER_ID));
 }
 ```
