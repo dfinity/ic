@@ -13,6 +13,19 @@ index 769223d38..ac893a084 100644
  
          if !options.exclude_global_allow_pragmas {
              writeln!(
+@@ -453,11 +453,8 @@ impl<L: Length, C> Length for ContextIterWrapper<L, C> {{
+                     ReturnKind::Iterator => String::new(),
+                     ReturnKind::Option => "None".to_string(),
+                     ReturnKind::Plain => format!(
+-                        "unreachable!(\"no rule matched for term {{}} at {{}}; should it be partial?\", {:?}, {:?})",
++                        "unreachable!(\"no rule matched for term {{}}; should it be partial?\", {:?})",
+                         term_name,
+-                        termdata
+-                            .decl_pos
+-                            .pretty_print_line(&self.files)
+                     ),
+                 }
+             };
 @@ -643,13 +640,8 @@ impl<L: Length, C> Length for ContextIterWrapper<L, C> {{
                              stack.push((Self::validate_block(ret_kind, body), "", scope));
                          }

@@ -282,7 +282,7 @@ impl<'a> QueryContext<'a> {
         match query.source {
             QuerySource::System => {
                 let instructions_consumed = instructions_before - self.round_limits.instructions;
-                if instructions_consumed >= RoundInstructions::from(100_000_000) {
+                if instructions_consumed >= RoundInstructions::from(10_000_000) {
                     info!(
                         self.log,
                         "Canister http transform on canister {} consumed {} instructions.",
