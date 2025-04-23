@@ -90,7 +90,7 @@ impl CanisterModule {
     /// Overwrite the module at `offset` with `buf`. This may invalidate the
     /// module, and will change its hash. It's useful for uploading a module
     /// chunk by chunk.
-    /// Returns the original module if `offset` + `buf.len()` > `module.len()`.
+    /// Returns an error if `offset` + `buf.len()` > `module.len()`.
     pub fn write(&mut self, buf: &[u8], offset: usize) -> Result<(), String> {
         let CanisterModule {
             module,
