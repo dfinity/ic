@@ -177,7 +177,7 @@ pub struct SystemMetadata {
     pub blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries,
 
     /// Modifications to the state that have not been applied yet to the next checkpoint.
-    /// This field is transient and is emptied at the beginning of each checkpoint.
+    /// This field is transient and is emptied before writing the next checkpoint.
     pub unflushed_checkpoint_ops: UnflushedCheckpointOps,
 }
 

@@ -1253,28 +1253,39 @@ impl ReplicatedState {
     }
 
     /// Adds a new snapshot to the list of snapshots.
+    ///
+    /// This function is used by the management canister's TakeSnapshot function to change the state.
+    /// Note that the rest of the logic, e.g. constructing the `snapshot` is done in the calling code.
     pub fn take_snapshot(
         &mut self,
         snapshot_id: SnapshotId,
         snapshot: Arc<CanisterSnapshot>,
     ) -> SnapshotId {
-        self.canister_snapshots.push(
-            snapshot_id,
-            snapshot,
-            &mut self.metadata.unflushed_checkpoint_ops,
-        )
+        self.metadata
+            .unflushed_checkpoint_ops
+            .take_snapshot(snapshot.canister_id(), snapshot_id);
+        self.canister_snapshots.push(snapshot_id, snapshot)
     }
 
     /// Delete a snapshot from the list of snapshots.
     pub fn delete_snapshot(&mut self, snapshot_id: SnapshotId) -> Option<Arc<CanisterSnapshot>> {
-        self.canister_snapshots
-            .remove(snapshot_id, &mut self.metadata.unflushed_checkpoint_ops)
+        let result = self.canister_snapshots.remove(snapshot_id);
+        if result.is_some() {
+            self.metadata
+                .unflushed_checkpoint_ops
+                .delete_snapshot(snapshot_id)
+        }
+        result
     }
 
     /// Delete all snapshots belonging to the given canister id.
     pub fn delete_snapshots(&mut self, canister_id: CanisterId) {
-        self.canister_snapshots
-            .delete_snapshots(canister_id, &mut self.metadata.unflushed_checkpoint_ops)
+        let deleted = self.canister_snapshots.delete_snapshots(canister_id);
+        for snapshot_id in deleted {
+            self.metadata
+                .unflushed_checkpoint_ops
+                .delete_snapshot(snapshot_id);
+        }
     }
 
     /// Splits the replicated state as part of subnet splitting phase 1, retaining
@@ -1348,10 +1359,13 @@ impl ReplicatedState {
         let mut metadata = metadata.split(subnet_id, new_subnet_batch_time)?;
 
         // Retain only the canister snapshots belonging to the local canisters.
-        canister_snapshots.split(
-            |canister_id| canister_states.contains_key(&canister_id),
-            &mut metadata.unflushed_checkpoint_ops,
-        );
+        let deleted =
+            canister_snapshots.split(|canister_id| canister_states.contains_key(&canister_id));
+        for snapshot_id in deleted {
+            metadata
+                .unflushed_checkpoint_ops
+                .delete_snapshot(snapshot_id);
+        }
 
         Ok(Self {
             canister_states,

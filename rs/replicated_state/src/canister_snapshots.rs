@@ -3,7 +3,6 @@ use crate::{
         execution_state::Memory, system_state::wasm_chunk_store::WasmChunkStore,
         WASM_PAGE_SIZE_IN_BYTES,
     },
-    metadata_state::UnflushedCheckpointOps,
     page_map::Buffer,
     CanisterState, NumWasmPages, PageMap,
 };
@@ -57,18 +56,13 @@ impl CanisterSnapshots {
 
     /// Adds new snapshot in the collection and assigns a `SnapshotId`.
     ///
-    /// Additionally, adds a new item to the `unflushed_changes`
-    /// which represents the new backup accumulated since the last flush to the disk.
-    ///
     /// External callers should call `ReplicatedState::take_snapshot` instead.
     pub(crate) fn push(
         &mut self,
         snapshot_id: SnapshotId,
         snapshot: Arc<CanisterSnapshot>,
-        unflushed_changes: &mut UnflushedCheckpointOps,
     ) -> SnapshotId {
         let canister_id = snapshot.canister_id();
-        unflushed_changes.take_snapshot(canister_id, snapshot_id);
         self.memory_usage += snapshot.size();
         self.snapshots.insert(snapshot_id, snapshot);
         let snapshot_ids = self.snapshot_ids.entry(canister_id).or_default();
@@ -98,19 +92,11 @@ impl CanisterSnapshots {
 
     /// Remove snapshot identified by `snapshot_id` from the collection of snapshots.
     ///
-    /// Additionally, adds a new item to the `unflushed_changes`
-    /// which represents the deleted backup since the last flush to the disk.
-    ///
-    /// External callers should call `ReplicatedState::delete_checkpoint` instead.
-    pub(crate) fn remove(
-        &mut self,
-        snapshot_id: SnapshotId,
-        unflushed_changes: &mut UnflushedCheckpointOps,
-    ) -> Option<Arc<CanisterSnapshot>> {
+    /// External callers should call `ReplicatedState::delete_snapshot` instead.
+    pub(crate) fn remove(&mut self, snapshot_id: SnapshotId) -> Option<Arc<CanisterSnapshot>> {
         let removed_snapshot = self.snapshots.remove(&snapshot_id);
         match removed_snapshot {
             Some(snapshot) => {
-                unflushed_changes.delete_snapshot(snapshot_id);
                 let canister_id = snapshot.canister_id();
 
                 // The snapshot ID if present in the `self.snapshots`,
@@ -134,21 +120,20 @@ impl CanisterSnapshots {
     }
 
     /// Remove all snapshots identified by `canister_id` from the collections of snapshots.
-    ///
-    /// Additionally, new items are added to the `unflushed_changes`,
-    /// representing the deleted backups since the last flush to the disk.
+    /// Returns the list of deleted snapshots.
     ///
     /// External callers should call `ReplicatedState::delete_snapshots` instead.
-    pub(crate) fn delete_snapshots(
-        &mut self,
-        canister_id: CanisterId,
-        unflushed_changes: &mut UnflushedCheckpointOps,
-    ) {
+    pub(crate) fn delete_snapshots(&mut self, canister_id: CanisterId) -> Vec<SnapshotId> {
+        let mut result = Vec::default();
         if let Some(snapshot_ids) = self.snapshot_ids.get(&canister_id).cloned() {
             for snapshot_id in snapshot_ids {
-                self.remove(snapshot_id, unflushed_changes);
+                let removed = self.remove(snapshot_id);
+                if removed.is_some() {
+                    result.push(snapshot_id)
+                }
             }
         }
+        result
     }
 
     /// Selects the snapshots associated with the provided canister ID.
@@ -213,22 +198,24 @@ impl CanisterSnapshots {
     /// Splitting the canister snapshot is decided based on the new canister list
     /// hosted by the *subnet A'* or *subnet B*.
     /// A snapshot associated with a canister not hosted by the local subnet
-    /// will be discarded. A delete `UnflushedCheckpointOp` will also be triggered to
-    /// apply the changes during checkpoint time.
-    pub(crate) fn split<F>(
-        &mut self,
-        is_local_canister: F,
-        unflushed_changes: &mut UnflushedCheckpointOps,
-    ) where
+    /// will be discarded.
+    ///
+    /// Returns the list of deleted snapshots.
+    pub(crate) fn split<F>(&mut self, is_local_canister: F) -> Vec<SnapshotId>
+    where
         F: Fn(CanisterId) -> bool,
     {
+        let mut result = Vec::default();
         let old_snapshot_ids = self.snapshots.keys().cloned().collect::<Vec<_>>();
         for snapshot_id in old_snapshot_ids {
             // Unwrapping is safe here because `snapshot_id` is part of the keys collection.
             let snapshot = self.snapshots.get(&snapshot_id).unwrap();
             let canister_id = snapshot.canister_id;
             if !is_local_canister(canister_id) {
-                self.remove(snapshot_id, unflushed_changes);
+                let removed = self.remove(snapshot_id);
+                if removed.is_some() {
+                    result.push(snapshot_id)
+                }
             }
         }
 
@@ -239,6 +226,8 @@ impl CanisterSnapshots {
             snapshot_ids: _,
             memory_usage: _,
         } = self;
+
+        result
     }
 
     /// Returns the amount of memory taken by all canister snapshots on
@@ -547,19 +536,11 @@ mod tests {
         let canister_id = canister_test_id(0);
         let (snapshot_id, snapshot) = fake_canister_snapshot(canister_id, 1);
         let mut snapshot_manager = CanisterSnapshots::default();
-        let mut unflushed_changes = UnflushedCheckpointOps::default();
         assert_eq!(snapshot_manager.snapshots.len(), 0);
-        assert_eq!(unflushed_changes.len(), 0);
         assert_eq!(snapshot_manager.snapshot_ids.len(), 0);
 
-        // Pushing new snapshot updates the `unflushed_changes` collection.
-        snapshot_manager.push(
-            snapshot_id,
-            Arc::<CanisterSnapshot>::new(snapshot),
-            &mut unflushed_changes,
-        );
+        snapshot_manager.push(snapshot_id, Arc::<CanisterSnapshot>::new(snapshot));
         assert_eq!(snapshot_manager.snapshots.len(), 1);
-        assert_eq!(unflushed_changes.len(), 1);
         assert_eq!(snapshot_manager.snapshot_ids.len(), 1);
         assert_eq!(
             snapshot_manager
@@ -570,18 +551,10 @@ mod tests {
             1
         );
 
-        let unflushed_changes_vec = unflushed_changes.take();
         assert_eq!(snapshot_manager.snapshots.len(), 1);
-        assert_eq!(unflushed_changes.len(), 0);
-        assert_eq!(unflushed_changes_vec.len(), 1);
 
-        // Deleting snapshot updates the `unflushed_changes` collection.
-        snapshot_manager.remove(snapshot_id, &mut unflushed_changes);
+        snapshot_manager.remove(snapshot_id);
         assert_eq!(snapshot_manager.snapshots.len(), 0);
-        assert_eq!(unflushed_changes.len(), 1);
-        let unflushed_changes_vec = unflushed_changes.take();
-        assert_eq!(unflushed_changes.len(), 0);
-        assert_eq!(unflushed_changes_vec.len(), 1);
         assert_eq!(snapshot_manager.snapshot_ids.len(), 0);
         assert_eq!(snapshot_manager.snapshot_ids.get(&canister_id), None);
     }
@@ -613,7 +586,6 @@ mod tests {
     #[test]
     fn test_memory_usage_correctly_updated_while_adding_and_removing_snapshots() {
         let canister_id = canister_test_id(0);
-        let mut unflushed_changes = UnflushedCheckpointOps::default();
         let (first_snapshot_id, first_snapshot) = fake_canister_snapshot(canister_id, 1);
         let snapshot1_size = first_snapshot.size();
         let mut snapshots = BTreeMap::new();
@@ -623,7 +595,6 @@ mod tests {
         );
         let mut snapshot_manager = CanisterSnapshots::new(snapshots);
         assert_eq!(snapshot_manager.snapshots.len(), 1);
-        assert_eq!(unflushed_changes.len(), 0);
         assert_eq!(snapshot_manager.snapshot_ids.len(), 1);
         assert_eq!(
             snapshot_manager.memory_taken(),
@@ -646,7 +617,6 @@ mod tests {
         snapshot_manager.push(
             second_snapshot_id,
             Arc::<CanisterSnapshot>::new(second_snapshot),
-            &mut unflushed_changes,
         );
         assert_eq!(
             snapshot_manager.memory_taken(),
@@ -658,7 +628,7 @@ mod tests {
         );
 
         // Deleting a snapshot updates the `memory_usage`.
-        snapshot_manager.remove(first_snapshot_id, &mut unflushed_changes);
+        snapshot_manager.remove(first_snapshot_id);
         assert_eq!(
             snapshot_manager.memory_taken(),
             NumBytes::from(snapshot2_size)
@@ -669,7 +639,7 @@ mod tests {
         );
 
         // Deleting the second snapshot brings us back to 0 memory taken.
-        snapshot_manager.remove(second_snapshot_id, &mut unflushed_changes);
+        snapshot_manager.remove(second_snapshot_id);
         assert_eq!(snapshot_manager.memory_taken(), NumBytes::from(0));
         assert_eq!(
             snapshot_manager.compute_memory_usage_by_canister(other_canister_id),
