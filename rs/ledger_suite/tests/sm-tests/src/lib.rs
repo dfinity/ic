@@ -3740,8 +3740,20 @@ where
             approve_pairs.push((approver, spender));
         }
     }
-
     approve_pairs.sort();
+
+    let check_allowances = |allowances: Allowances, idx: usize, owner: Principal| {
+        for i in 0..allowances.len() {
+            let pair = approve_pairs[idx + i];
+            let a = &allowances[i];
+            assert_eq!(a.from_account, *pair.0, "approver failed for {i}");
+            assert_eq!(a.to_spender, *pair.1, "spender failed for {i}");
+        }
+        let next_i = idx + allowances.len();
+        if next_i < approve_pairs.len() {
+            assert_ne!(approve_pairs[next_i].0.owner, owner);
+        }
+    };
 
     let mut prev_from = None;
     for idx in 0..approve_pairs.len() {
@@ -3754,16 +3766,7 @@ where
             };
             let allowances = list_allowances(&env, canister_id, approve_pairs[idx].0.owner, args)
                 .expect("failed to list allowances");
-            for i in 0..allowances.len() {
-                let pair = approve_pairs[idx + i];
-                let a = &allowances[i];
-                assert_eq!(a.from_account, *pair.0, "approver failed for {i}");
-                assert_eq!(a.to_spender, *pair.1, "spender failed for {i}");
-            }
-            let next_i = idx + allowances.len();
-            if next_i < approve_pairs.len() {
-                assert_ne!(approve_pairs[next_i].0.owner, approve_pairs[idx].0.owner);
-            }
+            check_allowances(allowances, idx, approve_pairs[idx].0.owner);
         }
         let args = GetAllowancesArgs {
             from_account: Some(*approve_pairs[idx].0),
@@ -3772,16 +3775,7 @@ where
         };
         let allowances = list_allowances(&env, canister_id, approve_pairs[idx].0.owner, args)
             .expect("failed to list allowances");
-        for i in 0..allowances.len() {
-            let pair = approve_pairs[idx + 1 + i];
-            let a = &allowances[i];
-            assert_eq!(a.from_account, *pair.0, "approver failed for {i}");
-            assert_eq!(a.to_spender, *pair.1, "spender failed for {i}");
-        }
-        let next_i = idx + 1 + allowances.len();
-        if next_i < approve_pairs.len() {
-            assert_ne!(approve_pairs[next_i].0.owner, approve_pairs[idx].0.owner);
-        }
+        check_allowances(allowances, idx + 1, approve_pairs[idx].0.owner);
     }
 }
 
