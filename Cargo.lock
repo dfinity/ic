@@ -14447,6 +14447,7 @@ dependencies = [
  "ic-validate-eq",
  "ic-validate-eq-derive",
  "serde",
+ "tempfile",
 ]
 
 [[package]]

@@ -12,6 +12,7 @@ use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::{
     fmt,
+    io::Write,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -308,4 +309,17 @@ fn test_chunk_write_to_module() {
     module
         .write(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 0)
         .unwrap_err();
+}
+
+#[test]
+fn test_write_module_file() {
+    let mut tmp = tempfile::NamedTempFile::new().unwrap();
+    tmp.write_all(&[0x00, 0x61, 0x73, 0x6d, 0x00, 0x00, 0x00, 0x00])
+        .unwrap();
+    let mut module = CanisterModule::new_from_file(tmp.path().into(), WasmHash([0; 32])).unwrap();
+    module.write(&[9], 5).unwrap();
+    assert_eq!(
+        &[0x00, 0x61, 0x73, 0x6d, 0x00, 0x09, 0x00, 0x00],
+        module.as_slice()
+    );
 }
