@@ -1,7 +1,7 @@
 use ic_cdk::println;
 use ic_nervous_system_chunks::Chunks;
 use ic_registry_transport::pb::v1::{
-    high_capacity_registry_mutation, high_capacity_registry_value,
+    high_capacity_registry_mutation, high_capacity_registry_value, registry_mutation,
     HighCapacityRegistryAtomicMutateRequest, HighCapacityRegistryMutation,
     HighCapacityRegistryValue, LargeValueChunkKeys, RegistryAtomicMutateRequest, RegistryMutation,
 };
@@ -46,6 +46,55 @@ pub fn chunkify_composite_mutation<M: Memory>(
         preconditions,
         timestamp_seconds,
     }
+}
+
+/// Returns the new content (associated with the key), as set by the mutation.
+///
+/// (If the mutation clears the key, None is returned; otherwise, Some is
+/// returned, of course.)
+///
+/// Panics if mutation is invalid. In particular, if the mutation_type field has
+/// some value that cannot be converted from i32 to registry_mutation::Type.
+pub fn dechunkify_prime_mutation_value<M: Memory>(
+    mutation: HighCapacityRegistryMutation,
+    chunks: &Chunks<M>,
+) -> Option<Vec<u8>> {
+    let HighCapacityRegistryMutation {
+        mutation_type,
+        content,
+        key: _,
+    } = mutation;
+
+    let mutation_type = registry_mutation::Type::try_from(mutation_type).unwrap_or_else(|err| {
+        panic!("Invalid mutation_type ({}): {}", mutation_type, err);
+    });
+    // Do not simply do mutation_type == Delete, because this assumes the reader
+    // knows that all other mutation types are not some other flavor of
+    // deletion. Whereas, match forces us to prove in writing that we really
+    // considered all mutation types.
+    let is_delete = match mutation_type {
+        registry_mutation::Type::Delete => true,
+
+        registry_mutation::Type::Insert
+        | registry_mutation::Type::Update
+        | registry_mutation::Type::Upsert => false,
+    };
+    if is_delete {
+        return None;
+    }
+
+    let Some(content) = content else {
+        return Some(vec![]);
+    };
+
+    let value = match content {
+        high_capacity_registry_mutation::Content::Value(value) => value,
+        high_capacity_registry_mutation::Content::LargeValueChunkKeys(large_value_chunk_keys) => {
+            dechunkify(&large_value_chunk_keys, chunks)
+        }
+    };
+
+    Some(value)
 }
 
 /// Gets chunks, concatenates them, and returns the concatenation.
