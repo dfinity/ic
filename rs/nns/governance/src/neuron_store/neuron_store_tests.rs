@@ -190,13 +190,8 @@ fn test_add_neurons() {
 
     // Step 3.1: verify that the active neuron is in the heap, not in the stable neuron store, and
     // can be read.
-    if migrate_active_neurons_to_stable_memory() {
-        assert!(is_neuron_in_stable(active_neuron.id()));
-        assert!(!is_neuron_in_heap(&neuron_store, active_neuron.id()));
-    } else {
-        assert!(!is_neuron_in_stable(active_neuron.id()));
-        assert!(is_neuron_in_heap(&neuron_store, active_neuron.id()));
-    }
+    assert!(is_neuron_in_stable(active_neuron.id()));
+    assert!(!is_neuron_in_heap(&neuron_store, active_neuron.id()));
     let active_neuron_read_result =
         neuron_store.with_neuron(&active_neuron.id(), |neuron| neuron.clone());
     assert_eq!(active_neuron_read_result, Ok(active_neuron.clone()));

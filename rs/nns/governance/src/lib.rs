@@ -200,7 +200,6 @@ pub const DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS: u64 = 1725148800;
 // leave this here indefinitely, but it will just be clutter after a modest
 // amount of time.
 thread_local! {
-    static MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY: Cell<bool> = const { Cell::new(true) };
 
     static DISABLE_NF_FUND_PROPOSALS: Cell<bool>
         = const { Cell::new(cfg!(not(any(feature = "canbench-rs", feature = "test")))) };
@@ -216,22 +215,6 @@ thread_local! {
     // begun. (This occurs in one of the prune_some_following functions.)
     static CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS: Cell<u64> =
         const { Cell::new(0) };
-}
-
-pub fn migrate_active_neurons_to_stable_memory() -> bool {
-    MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY.get()
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_migrate_active_neurons_to_stable_memory() -> Temporary {
-    Temporary::new(&MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY, true)
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_migrate_active_neurons_to_stable_memory() -> Temporary {
-    Temporary::new(&MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY, false)
 }
 
 pub fn are_nf_fund_proposals_disabled() -> bool {

@@ -1,6 +1,5 @@
 use crate::{
     governance::{TimeWarp, LOG_PREFIX},
-    migrate_active_neurons_to_stable_memory,
     neuron::types::Neuron,
     neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
     pb::v1::{
@@ -267,11 +266,6 @@ pub struct NeuronStore {
     // In non-test builds, Box would suffice. However, in test, the containing struct (to wit,
     // NeuronStore) implements additional traits. Therefore, more elaborate wrapping is needed.
     clock: Box<dyn PracticalClock>,
-
-    /// Whether to migrate active neurons to stable memory. This is a temporary flag to change the
-    /// mode of operation for the NeuronStore. Once all neurons are in stable memory, this will be
-    /// removed.
-    migrate_active_neurons_to_stable_memory: bool,
 }
 
 /// Does not use clock, but other than that, behaves as you would expect.
@@ -283,7 +277,6 @@ impl PartialEq for NeuronStore {
         let Self {
             heap_neurons,
             clock: _,
-            migrate_active_neurons_to_stable_memory: _,
         } = self;
 
         *heap_neurons == other.heap_neurons
@@ -295,7 +288,6 @@ impl Default for NeuronStore {
         Self {
             heap_neurons: BTreeMap::new(),
             clock: Box::new(IcClock::new()),
-            migrate_active_neurons_to_stable_memory: false,
         }
     }
 }
@@ -309,7 +301,6 @@ impl NeuronStore {
         let mut neuron_store = Self {
             heap_neurons: BTreeMap::new(),
             clock: Box::new(IcClock::new()),
-            migrate_active_neurons_to_stable_memory: migrate_active_neurons_to_stable_memory(),
         };
 
         // Adds the neurons one by one into neuron store.
@@ -336,7 +327,6 @@ impl NeuronStore {
                 .map(|(id, proto)| (id, Neuron::try_from(proto).unwrap()))
                 .collect(),
             clock,
-            migrate_active_neurons_to_stable_memory: migrate_active_neurons_to_stable_memory(),
         }
     }
 
@@ -420,18 +410,6 @@ impl NeuronStore {
         heap_len + stable_len
     }
 
-    // Returns the target storage location of a neuron. It might not be the actual storage location
-    // if the neuron already exists, for 2 possible reasons: (1) the target storage location logic
-    // has changed, e.g. after an upgrade (2) the neuron was active, but becomes inactive due to
-    // passage of time.
-    fn target_storage_location(&self, neuron: &Neuron) -> StorageLocation {
-        if self.migrate_active_neurons_to_stable_memory || neuron.is_inactive(self.now()) {
-            StorageLocation::Stable
-        } else {
-            StorageLocation::Heap
-        }
-    }
-
     /// Add a new neuron
     pub fn add_neuron(&mut self, neuron: Neuron) -> Result<NeuronId, NeuronStoreError> {
         let neuron_id = neuron.id();
@@ -442,15 +420,10 @@ impl NeuronStore {
             return Err(NeuronStoreError::NeuronAlreadyExists(neuron_id));
         }
 
-        if self.target_storage_location(&neuron) == StorageLocation::Stable {
-            // Write as primary copy in stable storage.
-            with_stable_neuron_store_mut(|stable_neuron_store| {
-                stable_neuron_store.create(neuron.clone())
-            })?;
-        } else {
-            // Write as primary copy in heap.
-            self.heap_neurons.insert(neuron_id.id, neuron.clone());
-        }
+        // Write as primary copy in stable storage.
+        with_stable_neuron_store_mut(|stable_neuron_store| {
+            stable_neuron_store.create(neuron.clone())
+        })?;
 
         // Write to indexes after writing to primary storage as the write to primary storage can
         // fail.
@@ -600,7 +573,6 @@ impl NeuronStore {
         new_neuron: Neuron,
         previous_location: StorageLocation,
     ) -> Result<(), NeuronStoreError> {
-        let target_location = self.target_storage_location(&new_neuron);
         let is_neuron_changed = *old_neuron != new_neuron;
 
         self.validate_neuron(&new_neuron)?;
@@ -614,14 +586,8 @@ impl NeuronStore {
         // - The `self.heap_neurons.insert(..)` can be done outside of the match expression, but
         // since they have different meanings regarding primary/secondary copies, and the logic will
         // diverge as we remove the secondary copy, we call it in the same way in all 4 cases.
-        match (previous_location, target_location) {
-            (StorageLocation::Heap, StorageLocation::Heap) => {
-                // We might be able to improve the performance by comparing and changing each field of neuron separately.
-                if is_neuron_changed {
-                    self.heap_neurons.insert(neuron_id.id, new_neuron);
-                }
-            }
-            (StorageLocation::Heap, StorageLocation::Stable) => {
+        match previous_location {
+            StorageLocation::Heap => {
                 // It is guaranteed that when previous location is Heap, there is not an entry in
                 // stable neuron store. Therefore we want to exist when there is an error in create,
                 // since there is probably a real issue.
@@ -630,15 +596,7 @@ impl NeuronStore {
                 })?;
                 self.heap_neurons.remove(&neuron_id.id);
             }
-            (StorageLocation::Stable, StorageLocation::Heap) => {
-                // Now the neuron in heap becomes its primary copy and the one in stable memory is
-                // the secondary copy.
-                self.heap_neurons.insert(neuron_id.id, new_neuron);
-                with_stable_neuron_store_mut(|stable_neuron_store| {
-                    stable_neuron_store.delete(neuron_id)
-                })?;
-            }
-            (StorageLocation::Stable, StorageLocation::Stable) => {
+            StorageLocation::Stable => {
                 // There should be a previous version in stable storage. Use update and return with
                 // error since it signals a real issue.
                 if is_neuron_changed {
