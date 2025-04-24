@@ -8,6 +8,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/interfaces/registry",
     "//rs/nervous_system/canisters",
+    "//rs/nns/constants",
     "//rs/node_rewards/canister/api",
     "//rs/protobuf",
     "//rs/registry/canister-client",
@@ -29,6 +30,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:candid_parser",
     "@crate_index//:futures-util",
     "@crate_index//:maplit",
+    "@crate_index//:serde_json",
 ]
 
 MACRO_DEPENDENCIES = [

@@ -11,7 +11,6 @@ use cycles_minting_canister::{
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_canister_client_sender::Sender;
-use ic_config::execution_environment::MINIMUM_FREEZING_THRESHOLD;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 // TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
 use ic_management_canister_types_private::{
@@ -440,7 +439,7 @@ fn test_cmc_notify_create_with_settings() {
         &state_machine,
         Some(
             CanisterSettingsArgsBuilder::new()
-                .with_freezing_threshold(MINIMUM_FREEZING_THRESHOLD)
+                .with_freezing_threshold(7)
                 .build(),
         ),
     );
@@ -448,7 +447,7 @@ fn test_cmc_notify_create_with_settings() {
     assert_eq!(status.controllers(), vec![*TEST_USER1_PRINCIPAL]);
     assert_eq!(status.compute_allocation(), 0);
     assert_eq!(status.memory_allocation(), 0);
-    assert_eq!(status.freezing_threshold(), MINIMUM_FREEZING_THRESHOLD);
+    assert_eq!(status.freezing_threshold(), 7);
 
     //specify memory allocation
     let canister = notify_create_canister(
@@ -689,7 +688,7 @@ fn test_cmc_cycles_create_with_settings() {
         Some(
             CanisterSettingsArgsBuilder::new()
                 .with_controllers(vec![*TEST_USER1_PRINCIPAL])
-                .with_freezing_threshold(MINIMUM_FREEZING_THRESHOLD)
+                .with_freezing_threshold(7)
                 .build(),
         ),
         None,
@@ -700,7 +699,7 @@ fn test_cmc_cycles_create_with_settings() {
     assert_eq!(status.controllers(), vec![*TEST_USER1_PRINCIPAL]);
     assert_eq!(status.compute_allocation(), 0);
     assert_eq!(status.memory_allocation(), 0);
-    assert_eq!(status.freezing_threshold(), MINIMUM_FREEZING_THRESHOLD);
+    assert_eq!(status.freezing_threshold(), 7);
 
     //specify memory allocation
     let canister = cmc_create_canister_with_cycles(

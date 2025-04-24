@@ -160,6 +160,11 @@ impl fmt::Display for IPv4Config {
     }
 }
 
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
+pub struct GetNodeProvidersMonthlyXdrRewardsRequest {
+    pub registry_version: Option<u64>,
+}
+
 /// The payload of an update request to add a new node.
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct AddNodePayload {

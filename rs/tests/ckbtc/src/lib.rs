@@ -157,6 +157,11 @@ docker run  --name=bitcoind-node -d \
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(10))
+                .add_nodes(1),
+        )
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_dkg_interval_length(Height::from(10))
                 .with_features(SubnetFeatures {
                     http_requests: true,
                     ..SubnetFeatures::default()
@@ -166,12 +171,6 @@ docker run  --name=bitcoind-node -d \
         .use_specified_ids_allocation_range()
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
-
-    env.topology_snapshot().subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
-    });
 }
 
 pub fn setup(env: TestEnv) {
@@ -332,6 +331,13 @@ pub fn subnet_sys(env: &TestEnv) -> SubnetSnapshot {
         .unwrap()
 }
 
+pub fn subnet_app(env: &TestEnv) -> SubnetSnapshot {
+    env.topology_snapshot()
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .unwrap()
+}
+
 pub async fn create_canister_at_id(runtime: &Runtime, specified_id: PrincipalId) -> Canister<'_> {
     let canister_id_record: CanisterIdRecord = runtime
         .get_management_canister()
@@ -396,7 +402,7 @@ pub async fn install_minter(
     info!(&logger, "Installing minter ...");
     #[allow(deprecated)]
     let args = CkbtcMinterInitArgs {
-        btc_network: Network::Regtest.into(),
+        btc_network: ic_ckbtc_minter::Network::Regtest,
         ecdsa_key_name: TEST_KEY_LOCAL.parse().unwrap(),
         retrieve_btc_min_amount: RETRIEVE_BTC_MIN_AMOUNT,
         ledger_id,
@@ -407,6 +413,7 @@ pub async fn install_minter(
         btc_checker_principal: Some(btc_checker_canister_id),
         kyt_principal: None,
         kyt_fee: None,
+        get_utxos_cache_expiration_seconds: None,
     };
 
     let minter_arg = MinterArg::Init(args);

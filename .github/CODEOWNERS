@@ -11,10 +11,7 @@
 /licenses/                @dfinity/idx
 /bin/ict                  @dfinity/idx
 /bin/                     @dfinity/idx
-/bin/afl_test.sh          @dfinity/product-security
-/bin/afl_wrapper.sh       @dfinity/product-security
-/bin/build-all-fuzzers.sh @dfinity/product-security
-/bin/fuzzing_coverage.sh  @dfinity/product-security
+/bin/fuzzing/             @dfinity/product-security
 
 # [Bazel]
 .bazelrc                           @dfinity/idx
@@ -54,6 +51,7 @@ go_deps.bzl               @dfinity/idx
 /packages/ic-ed25519/                   @dfinity/crypto-team
 /packages/ic-ethereum-types/            @dfinity/cross-chain-team
 /packages/ic-hpke/                      @dfinity/crypto-team
+/packages/ic-http-types/                @dfinity/cross-chain-team
 /packages/ic-metrics-assert/            @dfinity/cross-chain-team
 /packages/ic-secp256k1/                 @dfinity/crypto-team
 /packages/ic-sha3/                      @dfinity/crypto-team
