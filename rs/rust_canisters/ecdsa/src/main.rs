@@ -1,5 +1,5 @@
-use candid::{candid_method, CandidType, Encode};
-use ic_cdk::api::{call::call_raw, print};
+use candid::{candid_method, CandidType};
+use ic_cdk::{api::debug_print, call::Call};
 use ic_cdk_macros::update;
 use ic_management_canister_types_private::{
     DerivationPath, EcdsaCurve, EcdsaKeyId, Method as Ic00Method, SignWithECDSAArgs, IC_00,
@@ -25,32 +25,28 @@ impl Default for Options {
 #[candid_method(update)]
 #[update]
 async fn get_sig(options: Options) {
-    print(format!(
+    debug_print(format!(
         "calling get sig with key {} and derivation path {:?}",
         options.key_name, options.derivation_path,
     ));
-    let response = call_raw(
-        IC_00.into(),
-        &Ic00Method::SignWithECDSA.to_string(),
-        Encode!(&SignWithECDSAArgs {
+    let response = Call::unbounded_wait(IC_00.into(), &Ic00Method::SignWithECDSA.to_string())
+        .with_arg(SignWithECDSAArgs {
             message_hash: [0; 32],
             derivation_path: DerivationPath::new(
                 options
                     .derivation_path
                     .into_iter()
                     .map(ByteBuf::from)
-                    .collect()
+                    .collect(),
             ),
             key_id: EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,
                 name: options.key_name,
             },
         })
-        .unwrap(),
-        1_000_000_000_000,
-    )
-    .await;
-    print(format!("got result {:?}", response));
+        .with_cycles(1_000_000_000_000)
+        .await;
+    debug_print(format!("got result {:?}", response));
 }
 
 // When run on native this prints the candid service definition of this

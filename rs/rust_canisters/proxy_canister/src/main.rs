@@ -6,11 +6,10 @@
 //! otherwise errors out.
 //!
 use candid::Principal;
-use ic_cdk::api::call::RejectionCode;
-use ic_cdk::caller;
+use ic_cdk::api::msg_caller;
 use ic_cdk_macros::{query, update};
 use ic_management_canister_types_private::{
-    CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs,
+    CanisterHttpResponsePayload, HttpHeader, TransformArgs,
 };
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use std::cell::RefCell;
@@ -18,29 +17,25 @@ use std::collections::HashMap;
 
 thread_local! {
     #[allow(clippy::type_complexity)]
-    pub static REMOTE_CALLS: RefCell<HashMap<String, Result<RemoteHttpResponse, (RejectionCode, String)>>>  = RefCell::new(HashMap::new());
+    pub static REMOTE_CALLS: RefCell<HashMap<String, Result<RemoteHttpResponse, (u32, String)>>>  = RefCell::new(HashMap::new());
 }
 
 const MAX_TRANSFORM_SIZE: usize = 2_000_000;
 
 #[update]
-async fn send_request(
-    request: RemoteHttpRequest,
-) -> Result<RemoteHttpResponse, (RejectionCode, String)> {
+async fn send_request(request: RemoteHttpRequest) -> Result<RemoteHttpResponse, (u32, String)> {
     let RemoteHttpRequest { request, cycles } = request;
     let request_url = request.url.clone();
     println!("send_request making IC call.");
-    match ic_cdk::api::call::call_raw(
-        Principal::management_canister(),
-        "http_request",
-        &request.encode(),
-        cycles,
-    )
-    .await
+    match ic_cdk::call::Call::unbounded_wait(Principal::management_canister(), "http_request")
+        .with_arg(request.clone())
+        .with_cycles(cycles as u128)
+        .await
     {
         Ok(raw_response) => {
             println!("send_request returning with success case.");
-            let decoded: CanisterHttpResponsePayload = candid::utils::decode_one(&raw_response)
+            let decoded: CanisterHttpResponsePayload = raw_response
+                .candid()
                 .expect("Failed to decode CanisterHttpResponsePayload");
             let mut response_headers = vec![];
             for header in decoded.headers {
@@ -60,7 +55,9 @@ async fn send_request(
             });
             Result::Ok(response)
         }
-        Err((r, m)) => {
+        Err(ic_cdk::call::CallFailed::CallRejected(rejection)) => {
+            let r = rejection.raw_reject_code();
+            let m: String = rejection.reject_message().into();
             REMOTE_CALLS.with(|results| {
                 let mut writer = results.borrow_mut();
                 writer
@@ -69,13 +66,15 @@ async fn send_request(
             });
             Err((r, m))
         }
+        Err(ic_cdk::call::CallFailed::InsufficientLiquidCycleBalance(_))
+        | Err(ic_cdk::call::CallFailed::CallPerformFailed(_)) => {
+            unreachable!("unexpected error");
+        }
     }
 }
 
 #[query]
-async fn check_response(
-    url: String,
-) -> Option<Result<RemoteHttpResponse, (RejectionCode, String)>> {
+async fn check_response(url: String) -> Option<Result<RemoteHttpResponse, (u32, String)>> {
     println!("check_response being called");
     REMOTE_CALLS.with(|results| {
         let reader = results.borrow();
@@ -125,7 +124,7 @@ fn test_transform_(raw: TransformArgs) -> CanisterHttpResponsePayload {
         },
         HttpHeader {
             name: "caller".to_string(),
-            value: caller().to_string(),
+            value: msg_caller().to_string(),
         },
     ];
     transformed.body = context;

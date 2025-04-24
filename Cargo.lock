@@ -3947,7 +3947,6 @@ dependencies = [
  "ic-management-canister-types-private",
  "serde",
  "serde_bytes",
- "serde_json",
 ]
 
 [[package]]

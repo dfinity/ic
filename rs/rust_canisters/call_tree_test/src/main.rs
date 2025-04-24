@@ -101,12 +101,9 @@ async fn start(arguments: Arguments) -> Vec<Message> {
             });
         }
         futures.push(
-            Call::unbounded_wait(
-                Principal::from_str(&entry.canister_id).unwrap(),
-                "start",
-            )
-            .with_arg(msg)
-            .into_future()
+            Call::unbounded_wait(Principal::from_str(&entry.canister_id).unwrap(), "start")
+                .with_arg(msg)
+                .into_future(),
         );
     }
 
