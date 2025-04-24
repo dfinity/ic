@@ -3755,23 +3755,25 @@ where
         }
     };
 
-    // let prev_account = |account: &Account| {
-    //     if account.subaccount.unwrap() == [0u8; 32] {
-    //         let mut prev_owner = account.owner.clone().as_slice();
-    //         prev_owner[1] -= 1;
-    //         Account {
-    //             owner: Principal::from_slice(prev_owner),
-    //             subaccount: account.subaccount,
-    //         }
-    //     } else {
-    //         let mut prev_subaccount = account.subaccount.unwrap();
-    //         prev_subaccount[31] -= 1;
-    //         Account {
-    //             owner: account.owner,
-    //             subaccount: Some(prev_subaccount),
-    //         }
-    //     }
-    // };
+    let prev_account = |account: &Account| {
+        if account.subaccount.unwrap() == [0u8; 32] {
+            let owner = account.owner.as_slice();
+            let mut prev_owner = [0u8; 2];
+            prev_owner[0] = owner[0];
+            prev_owner[1] = owner[1] - 1;
+            Account {
+                owner: Principal::from_slice(&prev_owner),
+                subaccount: account.subaccount,
+            }
+        } else {
+            let mut prev_subaccount = account.subaccount.unwrap();
+            prev_subaccount[31] -= 1;
+            Account {
+                owner: account.owner,
+                subaccount: Some(prev_subaccount),
+            }
+        }
+    };
 
     let mut prev_from = None;
     for idx in 0..approve_pairs.len() {
@@ -3794,10 +3796,10 @@ where
                 .expect("failed to list allowances");
         check_allowances(allowances, idx + 1, approve_pairs[idx].0.owner);
 
-        // args.prev_spender = Some(prev_account(approve_pairs[idx].1));
-        // let allowances = list_allowances(&env, canister_id, approve_pairs[idx].0.owner, args)
-        //     .expect("failed to list allowances");
-        // check_allowances(allowances, idx + 1, approve_pairs[idx].0.owner);
+        args.prev_spender = Some(prev_account(approve_pairs[idx].1));
+        let allowances = list_allowances(&env, canister_id, approve_pairs[idx].0.owner, args)
+            .expect("failed to list allowances");
+        check_allowances(allowances, idx, approve_pairs[idx].0.owner);
     }
 }
 
