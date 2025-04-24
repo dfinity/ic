@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 8.0.0 - 2025-04-23
+
 ### Added
 - The function `PocketIc::auto_progress_enabled` to determine whether the automatic progress was enabled for the PocketIC instance.
 - The struct `PocketIcState` encapsulating the state of a PocketIC instance persisted in a temporary directory (`PocketIcState::new`)
