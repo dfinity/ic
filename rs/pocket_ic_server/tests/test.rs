@@ -27,7 +27,7 @@ use std::io::Read;
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
-use std::process::{Child, Command};
+use std::process::{Child, Command, Output};
 use std::time::Duration;
 use tempfile::{NamedTempFile, TempDir};
 
@@ -607,14 +607,13 @@ const CANISTER_LOGS_WAT: &str = r#"
     )
 "#;
 
-#[test]
-fn canister_and_replica_logs() {
+fn server_logs(log_level: Level) -> Output {
     const INIT_CYCLES: u128 = 2_000_000_000_000;
     let (server_url, mut out) = start_server_helper(None, None, true, true);
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
         .with_server_url(server_url)
-        .with_log_level(Level::Info)
+        .with_log_level(log_level)
         .build();
 
     let canister_id = pic.create_canister();
@@ -627,57 +626,32 @@ fn canister_and_replica_logs() {
     // kill the server to avoid blocking until TTL is hit
     out.kill().unwrap();
 
-    let mut stdout = String::new();
-    out.stdout
-        .take()
-        .unwrap()
-        .read_to_string(&mut stdout)
-        .unwrap();
+    // wait for the server to exit
+    out.wait_with_output().unwrap()
+}
+
+#[test]
+fn canister_and_replica_logs() {
+    let out = server_logs(Level::Info);
+
+    let stdout = String::from_utf8(out.stdout).unwrap();
     assert!(stdout.contains("Finished executing install_code message on canister CanisterId(lxzze-o7777-77777-aaaaa-cai)"));
 
-    let mut stderr = String::new();
-    out.stderr
-        .take()
-        .unwrap()
-        .read_to_string(&mut stderr)
-        .unwrap();
+    let stderr = String::from_utf8(out.stderr).unwrap();
     assert!(stderr.contains("Logging works!"));
 }
 
 #[test]
 fn canister_and_no_replica_logs() {
-    const INIT_CYCLES: u128 = 2_000_000_000_000;
-    let (server_url, mut out) = start_server_helper(None, None, true, true);
-    let pic = PocketIcBuilder::new()
-        .with_application_subnet()
-        .with_server_url(server_url)
-        .with_log_level(Level::Error)
-        .build();
+    // setting RUST_LOG should have no influence on replica logs
+    std::env::set_var("RUST_LOG", "info");
 
-    let canister_id = pic.create_canister();
-    pic.add_cycles(canister_id, INIT_CYCLES);
-    let canister_logs_wasm = wat::parse_str(CANISTER_LOGS_WAT).unwrap();
-    pic.install_canister(canister_id, canister_logs_wasm, vec![], None);
+    let out = server_logs(Level::Error);
 
-    drop(pic);
-
-    // kill the server to avoid blocking until TTL is hit
-    out.kill().unwrap();
-
-    let mut stdout = String::new();
-    out.stdout
-        .take()
-        .unwrap()
-        .read_to_string(&mut stdout)
-        .unwrap();
+    let stdout = String::from_utf8(out.stdout).unwrap();
     assert!(!stdout.contains("Finished executing install_code message on canister CanisterId(lxzze-o7777-77777-aaaaa-cai)"));
 
-    let mut stderr = String::new();
-    out.stderr
-        .take()
-        .unwrap()
-        .read_to_string(&mut stderr)
-        .unwrap();
+    let stderr = String::from_utf8(out.stderr).unwrap();
     assert!(stderr.contains("Logging works!"));
 }
 
@@ -1654,6 +1628,9 @@ fn http_gateway_route_underscore() {
 
 #[test]
 fn auto_progress() {
+    // setting RUST_LOG should have no influence on server logs
+    std::env::set_var("RUST_LOG", "info");
+
     let (server_url, mut out) = start_server_helper(
         None,
         Some("pocket_ic_server=debug,tower_http=info,axum::rejection=trace".to_string()),

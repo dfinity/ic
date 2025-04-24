@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed
+- The environment variable `RUST_LOG` has no influence on log verbosity:
+  either explicit log levels (if provided) or PocketIC defaults are used.
+
+
+
 ## 9.0.0 - 2025-04-23
 
 ### Added

@@ -174,10 +174,8 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
     fmt,
-    io::{self, stderr},
     net::Ipv6Addr,
     path::{Path, PathBuf},
-    str::FromStr,
     string::ToString,
     sync::{atomic::AtomicU64, Arc, Mutex, RwLock},
     time::{Duration, Instant, SystemTime},
@@ -507,17 +505,8 @@ fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
 
 fn replica_logger(log_level: Option<Level>) -> ReplicaLogger {
     use slog::Drain;
-    if let Some(log_level) = std::env::var("RUST_LOG")
-        .ok()
-        .and_then(|level| Level::from_str(&level).ok())
-        .or(log_level)
-    {
-        let writer: Box<dyn io::Write + Sync + Send> = if std::env::var("LOG_TO_STDERR").is_ok() {
-            Box::new(stderr())
-        } else {
-            Box::new(slog_term::TestStdoutWriter)
-        };
-        let decorator = slog_term::PlainSyncDecorator::new(writer);
+    if let Some(log_level) = log_level {
+        let decorator = slog_term::PlainSyncDecorator::new(slog_term::TestStdoutWriter);
         let drain = slog_term::FullFormat::new(decorator)
             .build()
             .filter_level(log_level)

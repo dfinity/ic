@@ -297,12 +297,10 @@ fn setup_tracing(log_levels: Option<String>) -> Option<WorkerGuard> {
     let mut layers = Vec::new();
 
     let default_log_filter = || {
-        tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-            log_levels
-                .clone()
-                .unwrap_or(DEFAULT_LOG_LEVELS.to_string())
-                .into()
-        })
+        log_levels
+            .clone()
+            .unwrap_or(DEFAULT_LOG_LEVELS.to_string())
+            .into()
     };
 
     layers.push(
