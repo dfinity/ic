@@ -98,13 +98,12 @@ impl CanisterModule {
     /// Returns an error if `offset` + `buf.len()` > `module.len()`.
     pub fn write(&mut self, buf: &[u8], offset: usize) -> Result<(), String> {
         match self.module.write(buf, offset) {
-            Ok(module) => {
+            Ok(()) => {
                 self.recompute_hash.set(true);
-                self.module = module;
+                Ok(())
             }
-            Err(_) => return Err("Offset + slice length exceeds module length.".to_string()),
+            Err(e) => Err(e),
         }
-        Ok(())
     }
 
     pub fn as_slice(&self) -> &[u8] {
@@ -268,10 +267,15 @@ impl ModuleStorage {
     ///
     /// This may invalidate the module, but is useful for uploading a
     /// module chunk by chunk.
-    fn write(&self, buf: &[u8], offset: usize) -> Result<Self, String> {
+    fn write(&mut self, buf: &[u8], offset: usize) -> Result<(), String> {
         let end = offset + buf.len();
         if self.len() < end {
-            return Err("Yesn't".to_string());
+            return Err(format!(
+                "Offset {} + slice length {} exceeds module length {}.",
+                offset,
+                buf.len(),
+                self.len()
+            ));
         }
         let mut arc = match self {
             ModuleStorage::Memory(bytes) => Arc::clone(bytes),
@@ -279,7 +283,8 @@ impl ModuleStorage {
         };
         let inner = Arc::make_mut(&mut arc);
         inner[offset..end].copy_from_slice(buf);
-        Ok(ModuleStorage::Memory(arc))
+        *self = ModuleStorage::Memory(arc);
+        Ok(())
     }
 
     fn len(&self) -> usize {
