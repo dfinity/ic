@@ -3708,13 +3708,13 @@ where
     for pid in 1..NUM_PRINCIPALS + 1 {
         for sub in 0..NUM_SUBACCOUNTS {
             let approver = Account {
-                owner: PrincipalId::new_user_test_id(pid).0,
+                owner: Principal::from_slice(&[pid as u8; 1]),
                 subaccount: Some([sub as u8; 32]),
             };
             approvers.push(approver);
             initial_balances.push((approver, 100_000));
             spenders.push(Account {
-                owner: PrincipalId::new_user_test_id(pid + NUM_PRINCIPALS).0,
+                owner: Principal::from_slice(&[pid as u8 + NUM_PRINCIPALS as u8; 1]),
                 subaccount: Some([sub as u8; 32]),
             });
         }
@@ -3743,23 +3743,25 @@ where
 
     approve_pairs.sort();
 
-    let idx = 1;
-
-    let args = GetAllowancesArgs {
-        from_account: Some(*approve_pairs[idx].0),
-        prev_spender: Some(*approve_pairs[idx].1),
-        take: None,
-    };
-    let allowances = list_allowances(&env, canister_id, approve_pairs[idx].0.owner, args)
-        .expect("failed to list allowances");
-    for i in 0..allowances.len() {
-        let pair = approve_pairs[idx + 1 + i];
-        if pair.0.owner != approve_pairs[idx].0.owner {
-            break;
+    for idx in 0..approve_pairs.len() {
+        let args = GetAllowancesArgs {
+            from_account: Some(*approve_pairs[idx].0),
+            prev_spender: Some(*approve_pairs[idx].1),
+            take: None,
+        };
+        let allowances = list_allowances(&env, canister_id, approve_pairs[idx].0.owner, args)
+            .expect("failed to list allowances");
+        println!("idx {idx}, len result {}", allowances.len());
+        for i in 0..allowances.len() {
+            let pair = approve_pairs[idx + 1 + i];
+            let a = &allowances[i];
+            assert_eq!(a.from_account, *pair.0, "approver failed for {i}");
+            assert_eq!(a.to_spender, *pair.1, "spender failed for {i}");
         }
-        let a = &allowances[i];
-        assert_eq!(a.from_account, *pair.0, "approver failed for {i}");
-        assert_eq!(a.to_spender, *pair.1, "spender failed for {i}");
+        let next_i = idx + 1 + allowances.len();
+        if next_i < approve_pairs.len() {
+            assert_ne!(approve_pairs[next_i].0.owner, approve_pairs[idx].0.owner);
+        }
     }
 }
 

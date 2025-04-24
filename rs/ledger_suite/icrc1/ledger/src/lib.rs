@@ -1214,11 +1214,9 @@ pub fn get_allowances(
             account: from,
             spender: prev_spender,
         };
-        for allowance in allowances.range(account_spender..) {
-            if let Some(spender) = spender {
-                if allowance.0.spender == spender {
-                    continue;
-                }
+        for allowance in allowances.range(account_spender.clone()..) {
+            if spender.is_some() && allowance.0 == account_spender {
+                continue;
             }
             if result.len() >= max_results as usize {
                 break;
