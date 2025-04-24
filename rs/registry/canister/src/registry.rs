@@ -453,11 +453,9 @@ mod tests {
     /// This should bring back the registry in a state indistinguishable
     /// from the one before calling this method.
     fn serialize_then_deserialize(registry: Registry) {
-        let mut serialized = Vec::new();
-        registry
+        let serialized = registry
             .serializable_form()
-            .encode(&mut serialized)
-            .expect("Error encoding registry");
+            .encode_to_vec();
 
         let mut restored = Registry::new();
         restored.from_serializable_form(
