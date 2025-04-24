@@ -11,6 +11,7 @@ use ic_utils::byte_slice_fmt::truncate_and_format;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::{
+    cell::Cell,
     fmt,
     path::{Path, PathBuf},
     sync::Arc,
@@ -57,8 +58,10 @@ pub struct CanisterModule {
     // The Wasm binary.
     #[validate_eq(Ignore)]
     module: ModuleStorage,
+    // If the module was modified, we need to recompute the hash.
+    recompute_hash: Cell<bool>,
     // The Sha256 hash of the binary.
-    module_hash: [u8; WASM_HASH_LENGTH],
+    module_hash: Cell<[u8; WASM_HASH_LENGTH]>,
 }
 
 impl CanisterModule {
@@ -67,7 +70,8 @@ impl CanisterModule {
         let module_hash = ic_crypto_sha2::Sha256::hash(module.as_slice());
         Self {
             module,
-            module_hash,
+            recompute_hash: Cell::new(false),
+            module_hash: Cell::new(module_hash),
         }
     }
 
@@ -75,7 +79,8 @@ impl CanisterModule {
         let module = ModuleStorage::mmap_file(path)?;
         Ok(Self {
             module,
-            module_hash: module_hash.0,
+            recompute_hash: Cell::new(false),
+            module_hash: Cell::new(module_hash.0),
         })
     }
 
@@ -94,7 +99,7 @@ impl CanisterModule {
     pub fn write(&mut self, buf: &[u8], offset: usize) -> Result<(), String> {
         match self.module.write(buf, offset) {
             Ok(module) => {
-                self.module_hash = ic_crypto_sha2::Sha256::hash(module.as_slice());
+                self.recompute_hash.set(true);
                 self.module = module;
             }
             Err(_) => return Err("Offset + slice length exceeds module length.".to_string()),
@@ -123,7 +128,12 @@ impl CanisterModule {
 
     /// Returns the Sha256 hash of this Wasm module.
     pub fn module_hash(&self) -> [u8; WASM_HASH_LENGTH] {
-        self.module_hash
+        if self.recompute_hash.get() {
+            self.recompute_hash.set(false);
+            self.module_hash
+                .set(ic_crypto_sha2::Sha256::hash(self.module.as_slice()))
+        }
+        self.module_hash.get()
     }
 }
 
