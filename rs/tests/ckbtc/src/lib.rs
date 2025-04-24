@@ -19,9 +19,8 @@ use ic_consensus_threshold_sig_system_test_utils::{
     get_public_key_with_logger, get_signature_with_logger, make_key, verify_signature,
 };
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
-use ic_management_canister_types_private::{
-    CanisterIdRecord, MasterPublicKeyId, ProvisionalCreateCanisterWithCyclesArgs,
-};
+use ic_management_canister_types::{CanisterIdRecord, ProvisionalCreateCanisterWithCyclesArgs};
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
@@ -345,16 +344,21 @@ pub async fn create_canister_at_id(runtime: &Runtime, specified_id: PrincipalId)
             ic_management_canister_types_private::Method::ProvisionalCreateCanisterWithCycles
                 .to_string(),
             candid,
-            (ProvisionalCreateCanisterWithCyclesArgs::new(
-                None,
-                Some(specified_id),
-            ),),
+            (ProvisionalCreateCanisterWithCyclesArgs {
+                amount: None,
+                settings: None,
+                specified_id: Some(specified_id.into()),
+                sender_canister_version: None,
+            },),
         )
         .await
         .expect("Fail");
-    let canister_id = canister_id_record.get_canister_id();
-    assert_eq!(canister_id.get(), specified_id);
-    Canister::new(runtime, canister_id)
+    let canister_id = canister_id_record.canister_id;
+    assert_eq!(canister_id, specified_id.into());
+    Canister::new(
+        runtime,
+        CanisterId::try_from_principal_id(PrincipalId(canister_id)).unwrap(),
+    )
 }
 
 /// Create an empty canister.

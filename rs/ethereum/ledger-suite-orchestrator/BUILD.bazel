@@ -49,6 +49,7 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:hex",
             "@crate_index//:ic-canister-log",
             "@crate_index//:ic-cdk",
+            "@crate_index//:ic-management-canister-types",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:ic-stable-structures",
             "@crate_index//:ic0",
