@@ -12,7 +12,6 @@ use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::{
     fmt,
-    io::Write,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -313,6 +312,7 @@ fn test_chunk_write_to_module() {
 
 #[test]
 fn test_write_module_file() {
+    use std::io::Write;
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
     tmp.write_all(&[0x00, 0x61, 0x73, 0x6d, 0x00, 0x00, 0x00, 0x00])
         .unwrap();
