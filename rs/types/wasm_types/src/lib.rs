@@ -301,11 +301,11 @@ fn test_chunk_write_to_module() {
     assert_eq!(&original_module, module.as_slice());
     assert_eq!(original_hash, module.module_hash());
 
-    module.write(&vec![1, 2, 3], 999).unwrap_err();
+    module.write(&[1, 2, 3], 999).unwrap_err();
     module
-        .write(&vec![1, 2, 3], original_module.len() - 1)
+        .write(&[1, 2, 3], original_module.len() - 1)
         .unwrap_err();
     module
-        .write(&vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 0)
+        .write(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 0)
         .unwrap_err();
 }
