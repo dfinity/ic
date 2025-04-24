@@ -15,9 +15,6 @@ use crate::{
         KnownNeuron, ListProposalInfo, NetworkEconomics, Neuron as NeuronProto, NnsFunction,
         Proposal, ProposalData, Topic, Vote,
     },
-    temporarily_disable_allow_active_neurons_in_stable_memory,
-    temporarily_disable_migrate_active_neurons_to_stable_memory,
-    temporarily_enable_allow_active_neurons_in_stable_memory,
     temporarily_enable_migrate_active_neurons_to_stable_memory,
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
@@ -412,36 +409,7 @@ fn make_neuron(
 
 #[bench(raw)]
 fn cascading_vote_stable_everything() -> BenchResult {
-    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
     let _c = temporarily_enable_migrate_active_neurons_to_stable_memory();
-
-    cast_vote_cascade_helper(
-        SetUpStrategy::Chain {
-            num_neurons: 151,
-            num_followees: 15,
-        },
-        Topic::NetworkEconomics,
-    )
-}
-
-#[bench(raw)]
-fn cascading_vote_all_heap() -> BenchResult {
-    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
-    let _c = temporarily_disable_migrate_active_neurons_to_stable_memory();
-
-    cast_vote_cascade_helper(
-        SetUpStrategy::Chain {
-            num_neurons: 151,
-            num_followees: 15,
-        },
-        Topic::NetworkEconomics,
-    )
-}
-
-#[bench(raw)]
-fn cascading_vote_heap_neurons_stable_index() -> BenchResult {
-    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
-    let _c = temporarily_disable_migrate_active_neurons_to_stable_memory();
 
     cast_vote_cascade_helper(
         SetUpStrategy::Chain {
@@ -454,7 +422,6 @@ fn cascading_vote_heap_neurons_stable_index() -> BenchResult {
 
 #[bench(raw)]
 fn single_vote_all_stable() -> BenchResult {
-    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
     let _c = temporarily_enable_migrate_active_neurons_to_stable_memory();
 
     cast_vote_cascade_helper(
@@ -465,7 +432,6 @@ fn single_vote_all_stable() -> BenchResult {
 
 #[bench(raw)]
 fn centralized_following_all_stable() -> BenchResult {
-    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
     let _c = temporarily_enable_migrate_active_neurons_to_stable_memory();
 
     cast_vote_cascade_helper(
@@ -479,7 +445,6 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
     let now_seconds = 1732817584;
     let num_neurons = 100;
 
-    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
     let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
     let neurons = (0..num_neurons)
         .map(|id| {
@@ -533,7 +498,6 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
 fn distribute_rewards_with_stable_neurons() -> BenchResult {
     let now_seconds = 1732817584;
 
-    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
     let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
     let neurons = (0..100)
         .map(|id| {
@@ -697,32 +661,14 @@ fn list_neurons_benchmark() -> BenchResult {
 /// Benchmark list_neurons
 #[bench(raw)]
 fn list_neurons_stable() -> BenchResult {
-    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
     let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
-    list_neurons_benchmark()
-}
-
-/// Benchmark list_neurons
-#[bench(raw)]
-fn list_neurons_heap() -> BenchResult {
-    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
-    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
     list_neurons_benchmark()
 }
 
 /// Benchmark list_neurons
 #[bench(raw)]
 fn list_neurons_by_subaccount_stable() -> BenchResult {
-    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
     let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
-    list_neurons_by_subaccount_benchmark()
-}
-
-/// Benchmark list_neurons
-#[bench(raw)]
-fn list_neurons_by_subaccount_heap() -> BenchResult {
-    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
-    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
     list_neurons_by_subaccount_benchmark()
 }
 
