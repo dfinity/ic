@@ -3743,7 +3743,28 @@ where
 
     approve_pairs.sort();
 
+    let mut prev_from = None;
     for idx in 0..approve_pairs.len() {
+        if prev_from != Some(approve_pairs[idx].0) {
+            prev_from = Some(approve_pairs[idx].0);
+            let args = GetAllowancesArgs {
+                from_account: Some(*approve_pairs[idx].0),
+                prev_spender: None,
+                take: None,
+            };
+            let allowances = list_allowances(&env, canister_id, approve_pairs[idx].0.owner, args)
+                .expect("failed to list allowances");
+            for i in 0..allowances.len() {
+                let pair = approve_pairs[idx + i];
+                let a = &allowances[i];
+                assert_eq!(a.from_account, *pair.0, "approver failed for {i}");
+                assert_eq!(a.to_spender, *pair.1, "spender failed for {i}");
+            }
+            let next_i = idx + allowances.len();
+            if next_i < approve_pairs.len() {
+                assert_ne!(approve_pairs[next_i].0.owner, approve_pairs[idx].0.owner);
+            }
+        }
         let args = GetAllowancesArgs {
             from_account: Some(*approve_pairs[idx].0),
             prev_spender: Some(*approve_pairs[idx].1),
@@ -3751,7 +3772,6 @@ where
         };
         let allowances = list_allowances(&env, canister_id, approve_pairs[idx].0.owner, args)
             .expect("failed to list allowances");
-        println!("idx {idx}, len result {}", allowances.len());
         for i in 0..allowances.len() {
             let pair = approve_pairs[idx + 1 + i];
             let a = &allowances[i];
