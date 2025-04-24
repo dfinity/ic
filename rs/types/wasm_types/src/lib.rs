@@ -11,7 +11,6 @@ use ic_utils::byte_slice_fmt::truncate_and_format;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::{
-    cell::Cell,
     fmt,
     path::{Path, PathBuf},
     sync::Arc,
@@ -58,10 +57,8 @@ pub struct CanisterModule {
     // The Wasm binary.
     #[validate_eq(Ignore)]
     module: ModuleStorage,
-    // If the module was modified, we need to recompute the hash.
-    recompute_hash: Cell<bool>,
     // The Sha256 hash of the binary.
-    module_hash: Cell<[u8; WASM_HASH_LENGTH]>,
+    module_hash: [u8; WASM_HASH_LENGTH],
 }
 
 impl CanisterModule {
@@ -70,8 +67,7 @@ impl CanisterModule {
         let module_hash = ic_crypto_sha2::Sha256::hash(module.as_slice());
         Self {
             module,
-            recompute_hash: Cell::new(false),
-            module_hash: Cell::new(module_hash),
+            module_hash,
         }
     }
 
@@ -79,8 +75,7 @@ impl CanisterModule {
         let module = ModuleStorage::mmap_file(path)?;
         Ok(Self {
             module,
-            recompute_hash: Cell::new(false),
-            module_hash: Cell::new(module_hash.0),
+            module_hash: module_hash.0,
         })
     }
 
@@ -99,7 +94,7 @@ impl CanisterModule {
     pub fn write(&mut self, buf: &[u8], offset: usize) -> Result<(), String> {
         match self.module.write(buf, offset) {
             Ok(()) => {
-                self.recompute_hash.set(true);
+                self.module_hash = ic_crypto_sha2::Sha256::hash(self.module.as_slice());
                 Ok(())
             }
             Err(e) => Err(e),
@@ -127,12 +122,7 @@ impl CanisterModule {
 
     /// Returns the Sha256 hash of this Wasm module.
     pub fn module_hash(&self) -> [u8; WASM_HASH_LENGTH] {
-        if self.recompute_hash.get() {
-            self.recompute_hash.set(false);
-            self.module_hash
-                .set(ic_crypto_sha2::Sha256::hash(self.module.as_slice()))
-        }
-        self.module_hash.get()
+        self.module_hash
     }
 }
 
@@ -293,4 +283,29 @@ impl ModuleStorage {
             ModuleStorage::File(_, mmap) => mmap.len(),
         }
     }
+}
+
+#[test]
+fn test_chunk_write_to_module() {
+    let original_module = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    let original_hash = ic_crypto_sha2::Sha256::hash(original_module.as_slice());
+    let chunk_size = 4;
+    let mut module = CanisterModule::new(original_module.clone());
+    assert_eq!(original_hash, module.module_hash());
+
+    let mut offset = 0;
+    for chunk in original_module.chunks(chunk_size) {
+        module.write(chunk, offset).unwrap();
+        offset += chunk.len();
+    }
+    assert_eq!(&original_module, module.as_slice());
+    assert_eq!(original_hash, module.module_hash());
+
+    module.write(&vec![1, 2, 3], 999).unwrap_err();
+    module
+        .write(&vec![1, 2, 3], original_module.len() - 1)
+        .unwrap_err();
+    module
+        .write(&vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 0)
+        .unwrap_err();
 }
