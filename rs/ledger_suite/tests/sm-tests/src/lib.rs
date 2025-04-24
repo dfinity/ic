@@ -3708,13 +3708,13 @@ where
     for pid in 1..NUM_PRINCIPALS + 1 {
         for sub in 0..NUM_SUBACCOUNTS {
             let approver = Account {
-                owner: Principal::from_slice(&[pid as u8; 3]),
+                owner: PrincipalId::new_user_test_id(pid).0,
                 subaccount: Some([sub as u8; 32]),
             };
             approvers.push(approver);
             initial_balances.push((approver, 100_000));
             spenders.push(Account {
-                owner: Principal::from_slice(&[(pid + NUM_PRINCIPALS) as u8; 3]),
+                owner: PrincipalId::new_user_test_id(pid + NUM_PRINCIPALS).0,
                 subaccount: Some([sub as u8; 32]),
             });
         }
@@ -3722,6 +3722,7 @@ where
 
     let (env, canister_id) = setup(ledger_wasm, encode_init_args, initial_balances);
 
+    let mut approve_pairs = vec![];
     for approver in &approvers {
         for spender in &spenders {
             let approve_args = ApproveArgs {
@@ -3736,21 +3737,29 @@ where
             };
             let _ = send_approval(&env, canister_id, approver.owner, &approve_args)
                 .expect("approval failed");
+            approve_pairs.push((approver, spender));
         }
     }
 
-    for approver in &approvers {
-        let args = GetAllowancesArgs {
-            from_account: None,
-            prev_spender: None,
-            take: None,
-        };
-        let allowances = list_allowances(&env, canister_id, approver.owner, args)
-            .expect("failed to list allowances");
-        assert_eq!(allowances.len(), spenders.len() * NUM_SUBACCOUNTS as usize);
-        // for spender in &spenders {
-        //     for i in 0..TEST_CASES * TEST_CASES {}
-        // }
+    approve_pairs.sort();
+
+    let idx = 1;
+
+    let args = GetAllowancesArgs {
+        from_account: Some(*approve_pairs[idx].0),
+        prev_spender: Some(*approve_pairs[idx].1),
+        take: None,
+    };
+    let allowances = list_allowances(&env, canister_id, approve_pairs[idx].0.owner, args)
+        .expect("failed to list allowances");
+    for i in 0..allowances.len() {
+        let pair = approve_pairs[idx + 1 + i];
+        if pair.0.owner != approve_pairs[idx].0.owner {
+            break;
+        }
+        let a = &allowances[i];
+        assert_eq!(a.from_account, *pair.0, "approver failed for {i}");
+        assert_eq!(a.to_spender, *pair.1, "spender failed for {i}");
     }
 }
 
