@@ -71,15 +71,11 @@ impl CanisterModule {
         }
     }
 
-    pub fn new_from_file(path: PathBuf, module_hash: Option<WasmHash>) -> std::io::Result<Self> {
+    pub fn new_from_file(path: PathBuf, module_hash: WasmHash) -> std::io::Result<Self> {
         let module = ModuleStorage::mmap_file(path)?;
-        // It should only be necessary to compute the hash here when
-        // loading checkpoints written by older replica versions
-        let module_hash =
-            module_hash.map_or_else(|| ic_crypto_sha2::Sha256::hash(module.as_slice()), |h| h.0);
         Ok(Self {
             module,
-            module_hash,
+            module_hash: module_hash.0,
         })
     }
 
@@ -88,6 +84,20 @@ impl CanisterModule {
         match &self.module {
             ModuleStorage::Memory(_) => None,
             ModuleStorage::File(path, _) => Some(path),
+        }
+    }
+
+    /// Overwrite the module at `offset` with `buf`. This may invalidate the
+    /// module, and will change its hash. It's useful for uploading a module
+    /// chunk by chunk.
+    /// Returns an error if `offset` + `buf.len()` > `module.len()`.
+    pub fn write(&mut self, buf: &[u8], offset: usize) -> Result<(), String> {
+        match self.module.write(buf, offset) {
+            Ok(()) => {
+                self.module_hash = ic_crypto_sha2::Sha256::hash(self.module.as_slice());
+                Ok(())
+            }
+            Err(e) => Err(e),
         }
     }
 
@@ -241,10 +251,61 @@ impl ModuleStorage {
         }
     }
 
+    /// Overwrites the module bytes from `offset` with `buf`.
+    /// Returns the original module if `offset` + `buf.len()` exceeds the
+    /// length of the module.
+    ///
+    /// This may invalidate the module, but is useful for uploading a
+    /// module chunk by chunk.
+    fn write(&mut self, buf: &[u8], offset: usize) -> Result<(), String> {
+        let end = offset + buf.len();
+        if self.len() < end {
+            return Err(format!(
+                "Offset {} + slice length {} exceeds module length {}.",
+                offset,
+                buf.len(),
+                self.len()
+            ));
+        }
+        let mut arc = match self {
+            ModuleStorage::Memory(bytes) => Arc::clone(bytes),
+            ModuleStorage::File(_path, mmap) => Arc::new(mmap.as_slice().to_vec()),
+        };
+        let inner = Arc::make_mut(&mut arc);
+        inner[offset..end].copy_from_slice(buf);
+        *self = ModuleStorage::Memory(arc);
+        Ok(())
+    }
+
     fn len(&self) -> usize {
         match &self {
             ModuleStorage::Memory(arc) => arc.len(),
             ModuleStorage::File(_, mmap) => mmap.len(),
         }
     }
+}
+
+#[test]
+fn test_chunk_write_to_module() {
+    let original_module = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    let original_hash = ic_crypto_sha2::Sha256::hash(original_module.as_slice());
+    let chunk_size = 4;
+    let mut module = CanisterModule::new(original_module.clone());
+    assert_eq!(original_hash, module.module_hash());
+
+    let mut offset = 0;
+    for chunk in original_module.chunks(chunk_size) {
+        module.write(chunk, offset).unwrap();
+        offset += chunk.len();
+    }
+    assert_eq!(&original_module, module.as_slice());
+    assert_eq!(original_hash, module.module_hash());
+
+    module.write(&[1, 2, 3], 999).unwrap_err();
+    module
+        .write(&[1, 2, 3], original_module.len() - 1)
+        .unwrap_err();
+    module
+        .write(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 0)
+        .unwrap_err();
 }

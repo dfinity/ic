@@ -9251,6 +9251,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-http-types"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
 name = "ic-http-utils"
 version = "0.9.0"
 dependencies = [
@@ -11307,6 +11316,7 @@ dependencies = [
  "ic-nns-test-utils",
  "ic-nns-test-utils-golden-nns-state",
  "ic-nns-test-utils-macros",
+ "ic-node-rewards-canister-api",
  "ic-protobuf",
  "ic-registry-canister-api",
  "ic-registry-keys",
@@ -11459,6 +11469,7 @@ dependencies = [
  "ic-cdk-timers",
  "ic-interfaces-registry",
  "ic-nervous-system-canisters",
+ "ic-nns-constants",
  "ic-nns-test-utils",
  "ic-node-rewards-canister-api",
  "ic-protobuf",
@@ -11471,6 +11482,7 @@ dependencies = [
  "ic-types",
  "maplit",
  "prost 0.13.4",
+ "serde_json",
 ]
 
 [[package]]
@@ -12221,6 +12233,7 @@ dependencies = [
  "tikv-jemalloc-ctl",
  "tikv-jemallocator",
  "tokio",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
  "wat",
@@ -13104,6 +13117,7 @@ dependencies = [
  "clap 4.5.27",
  "dfx-core",
  "futures",
+ "hex",
  "ic-agent",
  "ic-base-types",
  "ic-canister-client-sender",
@@ -13131,6 +13145,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "reqwest 0.12.12",
+ "rust_decimal",
  "serde",
  "slog",
  "tempfile",
@@ -16819,6 +16834,7 @@ dependencies = [
  "ic-agent",
  "ic-base-types",
  "ic-cdk 0.17.1",
+ "ic-crypto-tree-hash",
  "ic-limits",
  "ic-management-canister-types-private",
  "ic-networking-subnet-update-workload",
@@ -16833,12 +16849,15 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "ic-utils 0.39.3",
+ "ic_consensus_system_test_utils",
+ "leb128",
  "proxy_canister",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "registry-canister",
  "reqwest 0.12.12",
  "serde",
+ "serde_cbor",
  "serde_json",
  "slog",
  "tokio",
@@ -19532,12 +19551,14 @@ dependencies = [
  "ic-nervous-system-common-build-metadata",
  "ic-nervous-system-common-test-keys",
  "ic-nervous-system-string",
+ "ic-nervous-system-temporary",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-test-utils",
  "ic-nns-test-utils-macros",
  "ic-protobuf",
  "ic-registry-canister-api",
+ "ic-registry-canister-chunkify",
  "ic-registry-client-fake",
  "ic-registry-keys",
  "ic-registry-nns-data-provider",
@@ -23263,6 +23284,7 @@ name = "vsock_lib"
 version = "1.0.0"
 dependencies = [
  "anyhow",
+ "ic-http-utils",
  "regex",
  "reqwest 0.12.12",
  "rusb",
@@ -23270,6 +23292,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.8",
  "tempfile",
+ "tokio",
  "vsock",
 ]
 
