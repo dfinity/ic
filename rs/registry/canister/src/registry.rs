@@ -240,7 +240,7 @@ impl Registry {
         // Populate self.store (this is secondary to self.changelog).
         with_chunks(|chunks| {
             for mutation in &composite_mutation.mutations {
-                // TODO( DO NOT MERGE - ticket): Switch to high capacity.
+                // TODO(NNS1-3683): Switch to high capacity.
                 let value = dechunkify_prime_mutation_value(mutation.clone(), chunks);
 
                 let (value, deletion_marker) = match value {
@@ -443,7 +443,6 @@ impl Registry {
                     }
                     // End code to fix ICSUP-2589
 
-                    // DO NOT MERGE - Flag.
                     let mutation = HighCapacityRegistryAtomicMutateRequest::decode(
                         &entry.encoded_mutation[..],
                     )
