@@ -248,6 +248,7 @@ def get_url_content(url: str, timeout_secs: int = 1) -> Optional[str]:
         log.warning(f"Timed out while connecting to {url}")
         return None
 
+
 def check_hostos_power_metrics(ip_address: IPv6Address, timeout_secs: int) -> bool:
     metrics_endpoint = f"https://[{ip_address.exploded}]:9100/metrics"
     log.info(f"Attempting GET on metrics at {metrics_endpoint}...")
@@ -266,6 +267,7 @@ def check_hostos_power_metrics(ip_address: IPv6Address, timeout_secs: int) -> bo
     except StopIteration:
         log.warning("power_average_watts metric not found in HostOS metrics")
         return False
+
 
 def check_guestos_ping_connectivity(ip_address: IPv6Address, timeout_secs: int) -> bool:
     # Ping target with count of 1, STRICT timeout of `timeout_secs`.
@@ -561,13 +563,13 @@ def benchmark_nodes(
         log.info("All benchmarks completed successfully.")
         return True
 
-def check_node_hostos_metrics(
-    bmc_info: BMCInfo
-):
+
+def check_node_hostos_metrics(bmc_info: BMCInfo):
     log.info("Checking HostOS metrics.")
     timeout_secs = 5
     result = check_hostos_power_metrics(bmc_info.hostos_ipv6_address, timeout_secs)
     return OperationResult(bmc_info, success=result)
+
 
 def check_nodes_hostos_metrics(
     bmc_infos: List[BMCInfo],
