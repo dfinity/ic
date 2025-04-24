@@ -232,8 +232,8 @@ impl CanisterSnapshots {
             }
         }
 
-        // Destructure `self` and put it back together, in order for the compiler to
-        // enforce an explicit decision whenever new fields are added.
+        // Destructure `self`, in order for the compiler to enforce explicit
+        // decisions whenever new fields are added.
         let CanisterSnapshots {
             snapshots: _,
             snapshot_ids: _,
