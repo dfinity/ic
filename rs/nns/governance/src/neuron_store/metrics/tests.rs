@@ -2,8 +2,6 @@ use super::*;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{KnownNeuronData, NeuronType},
-    temporarily_disable_migrate_active_neurons_to_stable_memory,
-    temporarily_enable_migrate_active_neurons_to_stable_memory,
 };
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS, ONE_YEAR_SECONDS};
@@ -28,7 +26,8 @@ fn create_test_neuron_builder(
     )
 }
 
-fn test_compute_metrics_helper() {
+#[test]
+fn test_compute_metrics() {
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
     let now = neuron_store.now();
 
@@ -316,22 +315,6 @@ fn test_compute_metrics_helper() {
         },
         expected_metrics,
     );
-}
-
-// Migration stage 1: allow active neurons in stable memory, but not migrating yet.
-#[test]
-fn test_compute_metrics() {
-    let _t = temporarily_disable_migrate_active_neurons_to_stable_memory();
-
-    test_compute_metrics_helper();
-}
-
-// Migration stage 2: allow active neurons in stable memory and new active neurons are in stable memory.
-#[test]
-fn test_compute_metrics_migrate_active_neurons_to_stable_memory() {
-    let _t = temporarily_enable_migrate_active_neurons_to_stable_memory();
-
-    test_compute_metrics_helper();
 }
 
 #[test]
