@@ -3742,16 +3742,16 @@ where
     }
     approve_pairs.sort();
 
-    let check_allowances = |allowances: Allowances, idx: usize, owner: Principal| {
+    let check_allowances = |allowances: Allowances, pair_idx: usize, owner: Principal| {
         for i in 0..allowances.len() {
-            let pair = approve_pairs[idx + i];
-            let a = &allowances[i];
-            assert_eq!(a.from_account, *pair.0, "approver failed for {i}");
-            assert_eq!(a.to_spender, *pair.1, "spender failed for {i}");
+            let allowance = &allowances[i];
+            let pair = approve_pairs[pair_idx + i];
+            assert_eq!(allowance.from_account, *pair.0);
+            assert_eq!(allowance.to_spender, *pair.1);
         }
-        let next_i = idx + allowances.len();
-        if next_i < approve_pairs.len() {
-            assert_ne!(approve_pairs[next_i].0.owner, owner);
+        let next_pair_idx = pair_idx + allowances.len();
+        if next_pair_idx < approve_pairs.len() {
+            assert_ne!(approve_pairs[next_pair_idx].0.owner, owner);
         }
     };
 
