@@ -1,3 +1,4 @@
+use ic_cdk::println;
 use ic_nervous_system_chunks::Chunks;
 use ic_registry_transport::pb::v1::{
     high_capacity_registry_mutation, high_capacity_registry_value,
@@ -86,10 +87,15 @@ where
     R: prost::Message + Default,
     M: Memory,
 {
+    const EMPTY: &[u8] = &[];
+
     let Some(content) = &value.content else {
-        // DO NOT MERGE - Log? Verify that when the `value` PB field is empty,
-        // then the Rust field value.content is set to None.
-        return Some(R::default());
+        println!(
+            "HighCapacityRegistryValue has no content; this is weird. This will be \
+             treated the same as having 0-length content, per PB convention. value:\n{:#?}",
+            value,
+        );
+        return Some(R::decode(EMPTY).unwrap());
     };
 
     let decoded = match content {
@@ -98,11 +104,13 @@ where
                 return None;
             }
 
-            // DO NOT MERGE - Log?
-            // Why this is the right thing to do: If value is not a deletion,
-            // then it must have some value, and it would seem that the value
-            // must be empty.
-            return Some(R::default());
+            println!(
+                "HighCapacityRegistryValue has deletion_marker set to false. This is super weird. \
+                 This will be treated the same as 0-length value, per Protocol Buffers convention. \
+                 value:\n{:#?}",
+                value,
+            );
+            return Some(R::decode(EMPTY).unwrap());
         }
 
         high_capacity_registry_value::Content::Value(value) => R::decode(value.as_slice()),

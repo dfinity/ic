@@ -70,7 +70,8 @@ fn test_decode_high_capacity_registry_value() {
             timestamp_seconds,
         };
 
-        let observed_output = decode_high_capacity_registry_value(&input, &chunks);
+        let observed_output: Option<Precondition> =
+            decode_high_capacity_registry_value(&input, &chunks);
 
         assert_eq!(observed_output, expected_output);
     }

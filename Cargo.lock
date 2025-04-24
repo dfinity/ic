@@ -11818,6 +11818,7 @@ dependencies = [
 name = "ic-registry-canister-chunkify"
 version = "0.9.0"
 dependencies = [
+ "ic-cdk 0.17.1",
  "ic-nervous-system-chunks",
  "ic-registry-transport",
  "ic-stable-structures",
