@@ -724,7 +724,11 @@ def main():
             args.inject_image_domain,
         )
 
-    # Benchmark these nodes, rather than deploy them.
+    if args.benchmark and args.check_hostos_metrics:
+        log.error("Cannot run both benchmark and check_hostos_metrics at the same time. Please choose one.")
+        sys.exit(1)
+
+    # Benchmark the nodes (no deployment)
     if args.benchmark:
         success = benchmark_nodes(
             bmc_infos=bmc_infos,
@@ -740,7 +744,7 @@ def main():
 
         sys.exit(0)
 
-    # Check that all important hostos metrics are available.
+    # Check that all important hostos metrics are available (no deployment)
     if args.check_hostos_metrics:
         success = check_nodes_hostos_metrics(
             bmc_infos=bmc_infos,
