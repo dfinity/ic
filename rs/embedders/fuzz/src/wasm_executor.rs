@@ -105,7 +105,7 @@ fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
 
 #[inline(always)]
 fn setup_execution_state(
-    wasm_binary: Arc<WasmBinary>,
+    wasm_binary: WasmBinary,
     wasm_methods: BTreeSet<WasmMethod>,
     persisted_globals: Vec<Global>,
 ) -> ExecutionState {

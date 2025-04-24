@@ -50,14 +50,16 @@ impl BinaryEncodedWasm {
 /// Currently, we support two kinds of modules:
 ///   * Raw Wasm modules (magic number \0asm)
 ///   * Gzip-compressed Wasm modules (magic number \1f\8b\08)
-// We don't derive `Serialize` and `Deserialize` because this is a binary that is serialized by
-// writing it to a file when creating checkpoints.
+/// We don't derive `Serialize` and `Deserialize` because this is a binary that is serialized by
+/// writing it to a file when creating checkpoints.
+///
+/// The `Clone` implementation should only result in incrementing `Arc` counts.
 #[derive(Clone, ValidateEq)]
 pub struct CanisterModule {
-    // The Wasm binary.
+    /// The Wasm binary.
     #[validate_eq(Ignore)]
     module: ModuleStorage,
-    // The Sha256 hash of the binary.
+    /// The Sha256 hash of the binary.
     module_hash: [u8; WASM_HASH_LENGTH],
 }
 
@@ -83,7 +85,7 @@ impl CanisterModule {
     pub fn file(&self) -> Option<&Path> {
         match &self.module {
             ModuleStorage::Memory(_) => None,
-            ModuleStorage::File(path, _) => Some(path),
+            ModuleStorage::File(arc) => Some(&arc.0),
         }
     }
 
@@ -102,7 +104,7 @@ impl CanisterModule {
     pub fn to_shared_vec(&self) -> Arc<Vec<u8>> {
         match &self.module {
             ModuleStorage::Memory(shared) => Arc::clone(shared),
-            ModuleStorage::File(_, _) => Arc::new(self.as_slice().to_vec()),
+            ModuleStorage::File(_) => Arc::new(self.as_slice().to_vec()),
         }
     }
 
@@ -202,13 +204,15 @@ fn wasmhash_display() {
     assert_eq!(expected, format!("{}", hash));
 }
 
-// We introduce another enum instead of making `BinaryEncodedWasm` an enum to
-// keep constructors private. We want `BinaryEncodedWasm` to be visible, but not
-// its structure.
+/// We introduce another enum instead of making `BinaryEncodedWasm` an enum to
+/// keep constructors private. We want `BinaryEncodedWasm` to be visible, but not
+/// its structure.
+///
+/// The `Clone` implementation should only result in incrementing `Arc` counts.
 #[derive(Clone)]
 enum ModuleStorage {
     Memory(Arc<Vec<u8>>),
-    File(PathBuf, Arc<ic_sys::mmap::ScopedMmap>),
+    File(Arc<(PathBuf, ic_sys::mmap::ScopedMmap)>),
 }
 
 impl ModuleStorage {
@@ -224,7 +228,7 @@ impl ModuleStorage {
             ));
         }
         match ic_sys::mmap::ScopedMmap::from_readonly_file(&f, len as usize) {
-            Ok(mmap) => Ok(Self::File(path, Arc::new(mmap))),
+            Ok(mmap) => Ok(Self::File(Arc::new((path, mmap)))),
             Err(_) => Err(io::Error::last_os_error()),
         }
     }
@@ -233,14 +237,14 @@ impl ModuleStorage {
         match &self {
             Self::Memory(arc) => arc.as_slice(),
             // This is safe because the file is read-only.
-            Self::File(_, mmap) => mmap.as_slice(),
+            Self::File(arc) => arc.1.as_slice(),
         }
     }
 
     fn len(&self) -> usize {
         match &self {
             ModuleStorage::Memory(arc) => arc.len(),
-            ModuleStorage::File(_, mmap) => mmap.len(),
+            ModuleStorage::File(arc) => arc.1.len(),
         }
     }
 }
