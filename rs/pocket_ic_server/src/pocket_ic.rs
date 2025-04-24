@@ -1624,6 +1624,7 @@ fn process_mock_canister_https_response(
                 MetricsRegistry::new(),
                 subnet.get_subnet_type(),
                 delegation_rx.clone(),
+                subnet.replica_logger.clone(),
             );
             client
                 .send(AdapterCanisterHttpRequest {

@@ -15,6 +15,12 @@ use std::cell::RefCell;
 use std::sync::Arc;
 use std::thread::LocalKey;
 
+#[cfg(test)]
+mod test;
+
+/// This struct represents the API for the canister.  API methods should be implemented in
+/// main.rs and defer the important work to the methods in this struct, essentially passing
+/// through arguments and responses with almost no logic.
 pub struct NodeRewardsCanister {
     registry_client: Arc<dyn CanisterRegistryClient>,
 }
@@ -88,7 +94,7 @@ impl NodeRewardsCanister {
                 version,
             )
             .map_err(|e| format!("Could not find NodeRewardsTable: {e:?}"))?
-            .ok_or_else(|| "NodeRewardsTable is missing".to_string())?;
+            .ok_or_else(|| "Node Rewards Table was not found in the Registry".to_string())?;
 
             let node_operators = decoded_key_value_pairs_for_prefix::<NodeOperatorRecord>(
                 &*registry_client,
