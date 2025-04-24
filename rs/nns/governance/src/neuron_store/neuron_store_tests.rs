@@ -674,10 +674,7 @@ fn test_maturity_disbursement_index() {
         neuron_store.get_neuron_ids_ready_to_finalize_maturity_disbursement(0),
         btreeset! {}
     );
-    assert_eq!(
-        neuron_store.get_next_maturity_disbursement_finalization_timestamp(),
-        None
-    );
+    assert_eq!(neuron_store.get_next_maturity_disbursement(), None);
 
     // Add 2 disbursements for neuron 1 (finalizing at t = 1 and t = 2), and add 1 disbursement for
     // neuron 2 finalizing at t = 2.
@@ -700,8 +697,8 @@ fn test_maturity_disbursement_index() {
         btreeset! {}
     );
     assert_eq!(
-        neuron_store.get_next_maturity_disbursement_finalization_timestamp(),
-        Some(1)
+        neuron_store.get_next_maturity_disbursement(),
+        Some((1, NeuronId::from_u64(1)))
     );
 
     // At t = 1, neuron 1 is ready to finalize maturity disbursement, and the next maturity.
@@ -732,8 +729,8 @@ fn test_maturity_disbursement_index() {
         btreeset! {NeuronId::from_u64(1), NeuronId::from_u64(2)}
     );
     assert_eq!(
-        neuron_store.get_next_maturity_disbursement_finalization_timestamp(),
-        Some(2)
+        neuron_store.get_next_maturity_disbursement(),
+        Some((2, NeuronId::from_u64(1)))
     );
 
     // After removing the second disbursement for neuron 2, neuron 1 is the only one ready to
@@ -759,10 +756,7 @@ fn test_maturity_disbursement_index() {
         neuron_store.get_neuron_ids_ready_to_finalize_maturity_disbursement(2),
         btreeset! {}
     );
-    assert_eq!(
-        neuron_store.get_next_maturity_disbursement_finalization_timestamp(),
-        None
-    );
+    assert_eq!(neuron_store.get_next_maturity_disbursement(), None);
 }
 
 #[test]
