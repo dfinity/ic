@@ -637,6 +637,7 @@ num-traits = { version = "0.2.12", features = ["libm"] }
 opentelemetry = { version = "0.27.0", features = ["metrics", "trace"] }
 opentelemetry-otlp = { version = "0.27.0", features = ["grpc-tonic"] }
 opentelemetry_sdk = { version = "0.27.0", features = ["trace", "rt-tokio"] }
+orca-wasm = { git = "https://github.com/adambratschikaye/orca", rev = "f43f4c3da6a15837b419bbf8c776e6669140a05f" }
 p256 = { version = "0.13.2", default-features = false, features = [
     "arithmetic",
     "ecdsa",

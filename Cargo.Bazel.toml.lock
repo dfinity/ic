@@ -3535,6 +3535,7 @@ dependencies = [
  "opentelemetry-otlp",
  "opentelemetry-prometheus 0.13.0",
  "opentelemetry_sdk 0.27.1",
+ "orca-wasm",
  "p256",
  "pairing",
  "parking_lot 0.12.1",
@@ -7316,9 +7317,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.20"
+version = "0.4.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5e6163cb8c49088c2c36f57875e58ccd8c87c7427f7fbd50ea6710b2f3f2e8f"
+checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
 
 [[package]]
 name = "logos"
@@ -8504,6 +8505,19 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tracing",
+]
+
+[[package]]
+name = "orca-wasm"
+version = "0.9.1"
+source = "git+https://github.com/adambratschikaye/orca?rev=f43f4c3da6a15837b419bbf8c776e6669140a05f#f43f4c3da6a15837b419bbf8c776e6669140a05f"
+dependencies = [
+ "gimli 0.31.1",
+ "log",
+ "serde_json",
+ "tempfile",
+ "wasm-encoder 0.227.1",
+ "wasmparser 0.227.1",
 ]
 
 [[package]]
@@ -13657,8 +13671,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0f51cad774fb3c9461ab9bccc9c62dfb7388397b5deda31bf40e8108ccd678b2"
 dependencies = [
  "bitflags 2.6.0",
+ "hashbrown 0.15.2",
  "indexmap 2.7.1",
  "semver",
+ "serde",
 ]
 
 [[package]]

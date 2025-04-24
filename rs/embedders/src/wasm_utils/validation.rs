@@ -8,7 +8,7 @@ use ic_replicated_state::canister_state::execution_state::{
     CustomSection, CustomSectionType, WasmMetadata,
 };
 use ic_types::{NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES};
-use ic_wasm_transform::{Body, DataSegment, DataSegmentKind, Module};
+use ic_wasm_transform::{DataSegment, DataSegmentKind, Module};
 use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
 use std::{
     cmp,
@@ -25,7 +25,10 @@ use crate::{
     },
     MAX_WASM_STACK_SIZE, MIN_GUARD_REGION_SIZE,
 };
-use wasmparser::{CompositeInnerType, ExternalKind, FuncType, Operator, TypeRef, ValType};
+use orca_wasm::{
+    ir::types::Body,
+    wasmparser::{CompositeInnerType, ExternalKind, FuncType, Operator, TypeRef, ValType},
+};
 
 const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
@@ -886,7 +889,9 @@ fn set_imports_details(import_details: &mut WasmImportsDetails, import_module: &
 //
 // Returns information about what IC0 methods are imported via
 // `WasmImportsDetails`.
-fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmValidationError> {
+fn validate_import_section(
+    module: &orca_wasm::Module,
+) -> Result<WasmImportsDetails, WasmValidationError> {
     let mut imports_details = WasmImportsDetails::default();
 
     if !module.imports.is_empty() {
@@ -898,7 +903,7 @@ fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmVa
             }
             WasmMemoryType::Wasm64 => get_valid_system_apis_common(ValType::I64),
         };
-        for entry in &module.imports {
+        for entry in module.imports.iter() {
             let import_module = entry.module;
             let field = entry.name;
             match &entry.ty {
@@ -1639,10 +1644,10 @@ fn check_code_section_size(wasm: &BinaryEncodedWasm) -> Result<NumBytes, WasmVal
 pub(super) fn validate_wasm_binary<'a>(
     wasm: &'a BinaryEncodedWasm,
     config: &EmbeddersConfig,
-) -> Result<(WasmValidationDetails, Module<'a>), WasmValidationError> {
+) -> Result<(WasmValidationDetails, orca_wasm::Module<'a>), WasmValidationError> {
     let code_section_size = check_code_section_size(wasm)?;
     can_compile(wasm, config)?;
-    let module = Module::parse(wasm.as_slice(), false)
+    let module = orca_wasm::Module::parse(wasm.as_slice(), false)
         .map_err(|err| WasmValidationError::DecodingError(format!("{}", err)))?;
     let imports_details = validate_import_section(&module)?;
     validate_export_section(

@@ -1,5 +1,5 @@
 {
-  "checksum": "25c10e6215d471775ff9fb7eb0d5eb6cebc749601e7fc80fbd4d2065fcdba76f",
+  "checksum": "8f8f8019a0cfd92184d891b81365c5a2d3058ea42ce0bd8468062cdeb991bd2f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -945,7 +945,7 @@
               "target": "language_tags"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -1132,7 +1132,7 @@
               "target": "futures_core"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -3907,7 +3907,7 @@
               "target": "httparse"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             }
           ],
@@ -4632,7 +4632,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -8462,7 +8462,7 @@
               "target": "jsonrpc"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -8604,7 +8604,7 @@
               "alias": "bitcoincore_rpc"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -12150,7 +12150,7 @@
               "target": "lexical_core"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -15578,7 +15578,7 @@
               "target": "jsonrpc"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -16102,7 +16102,7 @@
               "target": "hashbrown"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -16429,7 +16429,7 @@
               "target": "cranelift_codegen"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -21232,6 +21232,10 @@
               "target": "opentelemetry_sdk"
             },
             {
+              "id": "orca-wasm 0.9.1",
+              "target": "orca_wasm"
+            },
+            {
               "id": "p256 0.13.2",
               "target": "p256"
             },
@@ -23484,7 +23488,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             }
           ],
@@ -23901,7 +23905,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             }
           ],
@@ -23955,7 +23959,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -24011,7 +24015,7 @@
               "target": "env_filter"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             }
           ],
@@ -24512,7 +24516,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -25980,6 +25984,13 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "std"
+          ],
+          "selects": {}
+        },
         "edition": "2018",
         "version": "0.3.0"
       },
@@ -28819,7 +28830,11 @@
         ],
         "crate_features": {
           "common": [
+            "default",
+            "endian-reader",
+            "fallible-iterator",
             "read",
+            "read-all",
             "read-core",
             "std",
             "write"
@@ -28829,8 +28844,16 @@
         "deps": {
           "common": [
             {
+              "id": "fallible-iterator 0.3.0",
+              "target": "fallible_iterator"
+            },
+            {
               "id": "indexmap 2.7.1",
               "target": "indexmap"
+            },
+            {
+              "id": "stable_deref_trait 1.2.0",
+              "target": "stable_deref_trait"
             }
           ],
           "selects": {}
@@ -29374,7 +29397,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -31175,7 +31198,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -32130,7 +32153,7 @@
               "target": "hyper"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -32226,7 +32249,7 @@
               "target": "hyper_util"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -34960,7 +34983,7 @@
               "target": "leb128"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -37841,7 +37864,7 @@
               "target": "itoa"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -37955,7 +37978,7 @@
               "target": "itoa"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -39007,7 +39030,7 @@
               "target": "jni_sys"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -43733,14 +43756,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "log 0.4.20": {
+    "log 0.4.27": {
       "name": "log",
-      "version": "0.4.20",
+      "version": "0.4.27",
       "package_url": "https://github.com/rust-lang/log",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/log/0.4.20/download",
-          "sha256": "b5e6163cb8c49088c2c36f57875e58ccd8c87c7427f7fbd50ea6710b2f3f2e8f"
+          "url": "https://static.crates.io/crates/log/0.4.27/download",
+          "sha256": "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
         }
       },
       "targets": [
@@ -43768,8 +43791,8 @@
           ],
           "selects": {}
         },
-        "edition": "2015",
-        "version": "0.4.20"
+        "edition": "2021",
+        "version": "0.4.27"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -44517,7 +44540,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -44833,7 +44856,7 @@
               "target": "ipnetwork"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -45483,7 +45506,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -45995,7 +46018,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -46144,7 +46167,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             }
           ],
@@ -46541,7 +46564,7 @@
               "target": "hyper_util"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -46849,7 +46872,7 @@
               "target": "httparse"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -46982,7 +47005,7 @@
               "target": "libc"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             }
           ],
@@ -51215,6 +51238,75 @@
       ],
       "license_file": "LICENSE"
     },
+    "orca-wasm 0.9.1": {
+      "name": "orca-wasm",
+      "version": "0.9.1",
+      "package_url": "https://github.com/thesuhas/orca",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/adambratschikaye/orca",
+          "commitish": {
+            "Rev": "f43f4c3da6a15837b419bbf8c776e6669140a05f"
+          }
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "orca_wasm",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "orca_wasm",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "gimli 0.31.1",
+              "target": "gimli"
+            },
+            {
+              "id": "log 0.4.27",
+              "target": "log"
+            },
+            {
+              "id": "serde_json 1.0.132",
+              "target": "serde_json"
+            },
+            {
+              "id": "tempfile 3.12.0",
+              "target": "tempfile"
+            },
+            {
+              "id": "wasm-encoder 0.227.1",
+              "target": "wasm_encoder"
+            },
+            {
+              "id": "wasmparser 0.227.1",
+              "target": "wasmparser"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.9.1"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "ordered-float 2.10.1": {
       "name": "ordered-float",
       "version": "2.10.1",
@@ -52465,7 +52557,7 @@
               "target": "libc"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -55037,7 +55129,7 @@
               "target": "libc"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -55420,7 +55512,7 @@
               "target": "arrayvec"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -57122,7 +57214,7 @@
               "target": "itertools"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -57228,7 +57320,7 @@
               "target": "itertools"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -57909,7 +58001,7 @@
               "target": "cranelift_bitset"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -58214,7 +58306,7 @@
               "target": "env_logger"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -60907,7 +60999,7 @@
               "target": "hashbrown"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -61998,7 +62090,7 @@
                 "target": "ipnet"
               },
               {
-                "id": "log 0.4.20",
+                "id": "log 0.4.27",
                 "target": "log"
               },
               {
@@ -63442,7 +63534,7 @@
                 "target": "ipnet"
               },
               {
-                "id": "log 0.4.20",
+                "id": "log 0.4.27",
                 "target": "log"
               },
               {
@@ -67333,7 +67425,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -67436,7 +67528,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -67558,7 +67650,7 @@
               "target": "brotli_decompressor"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -67692,7 +67784,7 @@
               "target": "http"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -68148,7 +68240,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -70286,7 +70378,7 @@
               "target": "fxhash"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -72775,7 +72867,7 @@
               "target": "colored"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -72888,7 +72980,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -73256,7 +73348,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -73464,7 +73556,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -75438,7 +75530,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -80615,7 +80707,7 @@
               "target": "futures_util"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -81979,7 +82071,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -82281,7 +82373,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -83188,7 +83280,7 @@
               "target": "httparse"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -85230,7 +85322,7 @@
               "target": "leb128"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -85439,7 +85531,7 @@
               "target": "hyper"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -85746,7 +85838,7 @@
               "target": "bumpalo"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -86206,7 +86298,9 @@
         "crate_features": {
           "common": [
             "component-model",
-            "std"
+            "default",
+            "std",
+            "wasmparser"
           ],
           "selects": {}
         },
@@ -86219,6 +86313,10 @@
             {
               "id": "wasm-encoder 0.227.1",
               "target": "build_script_build"
+            },
+            {
+              "id": "wasmparser 0.227.1",
+              "target": "wasmparser"
             }
           ],
           "selects": {}
@@ -86656,11 +86754,40 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "component-model",
+            "default",
+            "features",
+            "hash-collections",
+            "serde",
+            "simd",
+            "std",
+            "validate"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
               "id": "bitflags 2.6.0",
               "target": "bitflags"
+            },
+            {
+              "id": "hashbrown 0.15.2",
+              "target": "hashbrown"
+            },
+            {
+              "id": "indexmap 2.7.1",
+              "target": "indexmap"
+            },
+            {
+              "id": "semver 1.0.22",
+              "target": "semver"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
             },
             {
               "id": "wasmparser 0.227.1",
@@ -86834,7 +86961,7 @@
               "target": "libc"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -87331,7 +87458,7 @@
               "target": "itertools"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -87444,7 +87571,7 @@
               "target": "indexmap"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -94567,6 +94694,7 @@
     "opentelemetry-otlp 0.27.0",
     "opentelemetry-prometheus 0.13.0",
     "opentelemetry_sdk 0.27.1",
+    "orca-wasm 0.9.1",
     "p256 0.13.2",
     "pairing 0.23.0",
     "parking_lot 0.12.1",

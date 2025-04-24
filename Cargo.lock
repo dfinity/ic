@@ -8810,6 +8810,7 @@ dependencies = [
  "more-asserts",
  "nix 0.24.3",
  "num-traits",
+ "orca-wasm",
  "pretty_assertions",
  "prometheus",
  "proptest 1.6.0",
@@ -15836,6 +15837,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "884e2677b40cc8c339eaefcb701c32ef1fd2493d71118dc0ca4b6a736c93bd67"
 
 [[package]]
+name = "leb128fmt"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09edd9e8b54e49e587e4f6295a7d29c3ea94d469cb40ab8ca70b288248a81db2"
+
+[[package]]
 name = "ledger-canister"
 version = "0.9.0"
 dependencies = [
@@ -17536,6 +17543,19 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tracing",
+]
+
+[[package]]
+name = "orca-wasm"
+version = "0.9.1"
+source = "git+https://github.com/adambratschikaye/orca?rev=f43f4c3da6a15837b419bbf8c776e6669140a05f#f43f4c3da6a15837b419bbf8c776e6669140a05f"
+dependencies = [
+ "gimli 0.31.1",
+ "log",
+ "serde_json",
+ "tempfile",
+ "wasm-encoder 0.227.1",
+ "wasmparser 0.227.1",
 ]
 
 [[package]]
@@ -23501,6 +23521,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasm-encoder"
+version = "0.227.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "80bb72f02e7fbf07183443b27b0f3d4144abf8c114189f2e088ed95b696a7822"
+dependencies = [
+ "leb128fmt",
+ "wasmparser 0.227.1",
+]
+
+[[package]]
 name = "wasm-streams"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -23532,6 +23562,19 @@ name = "wasmparser"
 version = "0.224.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65881a664fdd43646b647bb27bf186ab09c05bf56779d40aed4c6dce47d423f5"
+dependencies = [
+ "bitflags 2.8.0",
+ "hashbrown 0.15.2",
+ "indexmap 2.7.1",
+ "semver",
+ "serde",
+]
+
+[[package]]
+name = "wasmparser"
+version = "0.227.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f51cad774fb3c9461ab9bccc9c62dfb7388397b5deda31bf40e8108ccd678b2"
 dependencies = [
  "bitflags 2.8.0",
  "hashbrown 0.15.2",

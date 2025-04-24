@@ -143,10 +143,10 @@ pub enum WasmMemoryType {
     Wasm64,
 }
 
-pub(crate) fn main_memory_type(module: &Module<'_>) -> WasmMemoryType {
+pub(crate) fn main_memory_type(module: &orca_wasm::Module<'_>) -> WasmMemoryType {
     let mut mem_type = WasmMemoryType::Wasm32;
-    if let Some(mem) = module.memories.first() {
-        if mem.memory64 {
+    if let Some(id) = module.get_memory_id() {
+        if module.memories.get_mem_by_id(id).unwrap().ty.memory64 {
             mem_type = WasmMemoryType::Wasm64;
         }
     }
@@ -926,7 +926,7 @@ pub(super) struct SpecialIndices {
 /// Returns an [`InstrumentationOutput`] or an error if the input binary could
 /// not be instrumented.
 pub(super) fn instrument(
-    module: Module<'_>,
+    module: orca_wasm::Module<'_>,
     cost_to_compile_wasm_instruction: NumInstructions,
     write_barrier: FlagStatus,
     metering_type: MeteringType,
