@@ -5240,6 +5240,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "gimli"
+version = "0.32.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93563d740bc9ef04104f9ed6f86f1e3275c2cdafb95664e26584b9ca807a8ffe"
+dependencies = [
+ "fallible-iterator 0.3.0",
+ "indexmap 2.10.0",
+ "stable_deref_trait",
+]
+
+[[package]]
 name = "glob"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9176,6 +9187,7 @@ dependencies = [
  "wasmtime-environ",
  "wast 228.0.0",
  "wat",
+ "wirm",
 ]
 
 [[package]]
@@ -24581,6 +24593,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasm-encoder"
+version = "0.235.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b3bc393c395cb621367ff02d854179882b9a351b4e0c93d1397e6090b53a5c2a"
+dependencies = [
+ "leb128fmt",
+ "wasmparser 0.235.0",
+]
+
+[[package]]
 name = "wasm-streams"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -24642,6 +24664,19 @@ dependencies = [
  "bitflags 2.9.0",
  "indexmap 2.10.0",
  "semver",
+]
+
+[[package]]
+name = "wasmparser"
+version = "0.235.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "161296c618fa2d63f6ed5fffd1112937e803cb9ec71b32b01a76321555660917"
+dependencies = [
+ "bitflags 2.9.0",
+ "hashbrown 0.15.2",
+ "indexmap 2.10.0",
+ "semver",
+ "serde",
 ]
 
 [[package]]
@@ -25436,6 +25471,19 @@ name = "winsafe"
 version = "0.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d135d17ab770252ad95e9a872d365cf3090e3be864a34ab46f48555993efc904"
+
+[[package]]
+name = "wirm"
+version = "1.1.0"
+source = "git+https://github.com/composablesys/wirm?rev=5253da8414fbca9563a429813ee540d35cd6a317#5253da8414fbca9563a429813ee540d35cd6a317"
+dependencies = [
+ "gimli 0.32.0",
+ "log",
+ "serde_json",
+ "tempfile",
+ "wasm-encoder 0.235.0",
+ "wasmparser 0.235.0",
+]
 
 [[package]]
 name = "wit-bindgen-rt"

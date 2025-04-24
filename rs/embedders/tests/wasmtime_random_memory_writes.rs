@@ -28,6 +28,7 @@ use ic_types::{
 };
 use ic_wasm_types::BinaryEncodedWasm;
 use lazy_static::lazy_static;
+use wirm::wasmparser;
 use proptest::prelude::*;
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
@@ -795,6 +796,7 @@ mod tests {
         use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
         use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
         use ic_logger::replica_logger::no_op_logger;
+        use wirm::wasmparser;
 
         // (drop (call $ic0_stable_grow (i32.const 1)))
         // (call $ic0_stable64_read (i64.const 0) (i64.const 0) (i64.const {STABLE_OP_BYTES}))

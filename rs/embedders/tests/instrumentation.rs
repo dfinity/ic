@@ -24,6 +24,7 @@ use ic_types::{
     methods::{FuncRef, WasmMethod},
     NumBytes, NumInstructions,
 };
+use wirm::wasmparser;
 
 /// Assert what the output of wasm instrumentation should be using the [`insta`]
 /// crate.
