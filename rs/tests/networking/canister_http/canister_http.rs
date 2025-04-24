@@ -133,10 +133,7 @@ pub fn stress_setup(env: TestEnv) {
     let mut ic = InternetComputer::new()
         .with_required_host_features(vec![HostFeature::Performance])
         .with_socks_proxy(format!("socks5://[{bn_ipv6}]:1080"))
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .add_nodes(1),
-        );
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1));
     for subnet_size in APP_SUBNET_SIZES {
         ic = ic.add_subnet(
             Subnet::new(SubnetType::Application)
