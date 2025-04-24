@@ -55,7 +55,7 @@ const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
 #[derive(Parser)]
-#[clap(version = "8.0.0")]
+#[clap(version = "9.0.0")]
 struct Args {
     /// The IP address to which the PocketIC server should bind (defaults to 127.0.0.1)
     #[clap(long, short)]
@@ -85,6 +85,13 @@ extern "C" {
 }
 
 fn main() {
+    // Set RUST_MIN_STACK if not yet set:
+    // the default value of 8192000 is set according to `ic-os/components/ic/ic-replica.service`.
+    std::env::set_var(
+        "RUST_MIN_STACK",
+        std::env::var("RUST_MIN_STACK").unwrap_or("8192000".to_string()),
+    );
+
     let current_binary_path = current_binary_path().unwrap();
     let current_binary_name = current_binary_path.file_name().unwrap().to_str().unwrap();
     if current_binary_name != "pocket-ic" && current_binary_name != "pocket-ic-server" {

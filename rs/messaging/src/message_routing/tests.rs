@@ -12,14 +12,14 @@ use ic_interfaces_registry::RegistryValue;
 use ic_interfaces_state_manager::StateReader;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
-use ic_protobuf::registry::crypto::v1::{ChainKeySigningSubnetList, PublicKey as PublicKeyProto};
+use ic_protobuf::registry::crypto::v1::{ChainKeyEnabledSubnetList, PublicKey as PublicKeyProto};
 use ic_protobuf::registry::subnet::v1::SubnetRecord as SubnetRecordProto;
 use ic_protobuf::registry::{
     api_boundary_node::v1::ApiBoundaryNodeRecord, node::v1::IPv4InterfaceConfig,
     node::v1::NodeRecord,
 };
 use ic_registry_client_fake::FakeRegistryClient;
-use ic_registry_keys::make_chain_key_signing_subnet_list_key;
+use ic_registry_keys::make_chain_key_enabled_subnet_list_key;
 use ic_registry_local_registry::LocalRegistry;
 use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, ProtoRegistryDataProviderError};
 use ic_registry_routing_table::{routing_table_insert_subnet, CanisterMigrations, RoutingTable};
@@ -475,10 +475,10 @@ impl RegistryFixture {
 
         for (key_id, subnet_ids) in chain_key_enabled_subnets.iter() {
             self.write_record(
-                &make_chain_key_signing_subnet_list_key(key_id),
+                &make_chain_key_enabled_subnet_list_key(key_id),
                 subnet_ids
                     .as_ref()
-                    .map(|subnet_ids| ChainKeySigningSubnetList {
+                    .map(|subnet_ids| ChainKeyEnabledSubnetList {
                         subnets: subnet_ids
                             .iter()
                             .map(|subnet_id| subnet_id_into_protobuf(*subnet_id))

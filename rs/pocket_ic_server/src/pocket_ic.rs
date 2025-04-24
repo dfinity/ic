@@ -491,6 +491,14 @@ impl PocketIcSubnets {
                 .scheduler_config
                 .max_instructions_per_message_without_dts = instruction_limit;
             hypervisor_config.max_query_call_graph_instructions = instruction_limit;
+
+            // exported functions limits
+            hypervisor_config
+                .embedders_config
+                .max_number_exported_functions = 100_000;
+            hypervisor_config
+                .embedders_config
+                .max_sum_exported_function_name_lengths = 5_000_000;
         }
         // bound PocketIc resource consumption
         hypervisor_config.embedders_config.max_sandbox_count = 64;
@@ -1624,6 +1632,7 @@ fn process_mock_canister_https_response(
                 MetricsRegistry::new(),
                 subnet.get_subnet_type(),
                 delegation_rx.clone(),
+                subnet.replica_logger.clone(),
             );
             client
                 .send(AdapterCanisterHttpRequest {
