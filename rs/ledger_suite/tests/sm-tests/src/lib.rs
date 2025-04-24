@@ -3708,13 +3708,13 @@ where
     for pid in 1..NUM_PRINCIPALS + 1 {
         for sub in 0..NUM_SUBACCOUNTS {
             let approver = Account {
-                owner: Principal::from_slice(&[pid as u8; 1]),
+                owner: Principal::from_slice(&[pid as u8; 2]),
                 subaccount: Some([sub as u8; 32]),
             };
             approvers.push(approver);
             initial_balances.push((approver, 100_000));
             spenders.push(Account {
-                owner: Principal::from_slice(&[pid as u8 + NUM_PRINCIPALS as u8; 1]),
+                owner: Principal::from_slice(&[pid as u8 + NUM_PRINCIPALS as u8; 2]),
                 subaccount: Some([sub as u8; 32]),
             });
         }
@@ -3755,27 +3755,49 @@ where
         }
     };
 
+    // let prev_account = |account: &Account| {
+    //     if account.subaccount.unwrap() == [0u8; 32] {
+    //         let mut prev_owner = account.owner.clone().as_slice();
+    //         prev_owner[1] -= 1;
+    //         Account {
+    //             owner: Principal::from_slice(prev_owner),
+    //             subaccount: account.subaccount,
+    //         }
+    //     } else {
+    //         let mut prev_subaccount = account.subaccount.unwrap();
+    //         prev_subaccount[31] -= 1;
+    //         Account {
+    //             owner: account.owner,
+    //             subaccount: Some(prev_subaccount),
+    //         }
+    //     }
+    // };
+
     let mut prev_from = None;
     for idx in 0..approve_pairs.len() {
-        if prev_from != Some(approve_pairs[idx].0) {
-            prev_from = Some(approve_pairs[idx].0);
-            let args = GetAllowancesArgs {
-                from_account: Some(*approve_pairs[idx].0),
-                prev_spender: None,
-                take: None,
-            };
-            let allowances = list_allowances(&env, canister_id, approve_pairs[idx].0.owner, args)
-                .expect("failed to list allowances");
-            check_allowances(allowances, idx, approve_pairs[idx].0.owner);
-        }
-        let args = GetAllowancesArgs {
+        let mut args = GetAllowancesArgs {
             from_account: Some(*approve_pairs[idx].0),
-            prev_spender: Some(*approve_pairs[idx].1),
+            prev_spender: None,
             take: None,
         };
-        let allowances = list_allowances(&env, canister_id, approve_pairs[idx].0.owner, args)
-            .expect("failed to list allowances");
+        if prev_from != Some(approve_pairs[idx].0) {
+            prev_from = Some(approve_pairs[idx].0);
+            let allowances =
+                list_allowances(&env, canister_id, approve_pairs[idx].0.owner, args.clone())
+                    .expect("failed to list allowances");
+            check_allowances(allowances, idx, approve_pairs[idx].0.owner);
+        }
+
+        args.prev_spender = Some(*approve_pairs[idx].1);
+        let allowances =
+            list_allowances(&env, canister_id, approve_pairs[idx].0.owner, args.clone())
+                .expect("failed to list allowances");
         check_allowances(allowances, idx + 1, approve_pairs[idx].0.owner);
+
+        // args.prev_spender = Some(prev_account(approve_pairs[idx].1));
+        // let allowances = list_allowances(&env, canister_id, approve_pairs[idx].0.owner, args)
+        //     .expect("failed to list allowances");
+        // check_allowances(allowances, idx + 1, approve_pairs[idx].0.owner);
     }
 }
 
