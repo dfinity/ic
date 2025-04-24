@@ -3746,8 +3746,8 @@ where
         for i in 0..allowances.len() {
             let allowance = &allowances[i];
             let pair = approve_pairs[pair_idx + i];
-            assert_eq!(allowance.from_account, *pair.0);
-            assert_eq!(allowance.to_spender, *pair.1);
+            assert_eq!(allowance.from_account, *pair.0, "incorrect from account");
+            assert_eq!(allowance.to_spender, *pair.1, "incorrect spender account");
         }
         let next_pair_idx = pair_idx + allowances.len();
         if next_pair_idx < approve_pairs.len() {
@@ -3784,10 +3784,22 @@ where
         };
         if prev_from != Some(approve_pairs[idx].0) {
             prev_from = Some(approve_pairs[idx].0);
+
             let allowances =
                 list_allowances(&env, canister_id, approve_pairs[idx].0.owner, args.clone())
                     .expect("failed to list allowances");
             check_allowances(allowances, idx, approve_pairs[idx].0.owner);
+
+            args.from_account = Some(prev_account(approve_pairs[idx].0));
+            let allowances =
+                list_allowances(&env, canister_id, approve_pairs[idx].0.owner, args.clone())
+                    .expect("failed to list allowances");
+            if args.from_account.unwrap().owner == approve_pairs[idx].0.owner {
+                check_allowances(allowances, idx, approve_pairs[idx].0.owner);
+            } else {
+                assert_eq!(allowances.len(), 0);
+            }
+            args.from_account = Some(*approve_pairs[idx].0);
         }
 
         args.prev_spender = Some(*approve_pairs[idx].1);
