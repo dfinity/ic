@@ -1,10 +1,11 @@
 //! This module contains a canister used for XNet integration test.
 use candid::{CandidType, Principal};
-use ic_cdk::api::{call::call_raw, id};
+use ic_cdk::{api::canister_self, call::Call};
 use ic_cdk_macros::query;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::cmp::min;
+use std::future::IntoFuture;
 use std::str::FromStr;
 
 const MB: usize = 1 << 20;
@@ -81,18 +82,17 @@ async fn start(arguments: Arguments) -> Vec<Message> {
     let calltrees = arguments.calltrees;
 
     let mut messages = vec![];
-    let this_cid = id().to_string();
+    let this_cid = canister_self().to_string();
 
     touch_memory(arguments.num_pages);
 
     let mut futures = vec![];
     for entry in &calltrees {
-        let msg = serde_json::to_vec(&Arguments {
+        let msg = Arguments {
             calltrees: entry.subtrees.clone(),
             debug: arguments.debug,
             num_pages: arguments.num_pages,
-        })
-        .unwrap();
+        };
 
         if arguments.debug {
             messages.push(Message {
@@ -100,12 +100,14 @@ async fn start(arguments: Arguments) -> Vec<Message> {
                 receiver: entry.canister_id.clone(),
             });
         }
-        futures.push(call_raw(
-            Principal::from_str(&entry.canister_id).unwrap(),
-            "start",
-            msg,
-            0,
-        ));
+        futures.push(
+            Call::unbounded_wait(
+                Principal::from_str(&entry.canister_id).unwrap(),
+                "start",
+            )
+            .with_arg(msg)
+            .into_future()
+        );
     }
 
     for f in futures::future::join_all(futures).await {
@@ -113,8 +115,7 @@ async fn start(arguments: Arguments) -> Vec<Message> {
             Err(_e) => METRICS.with(|m| m.borrow_mut().reject_responses += 1),
             Ok(response) => {
                 if arguments.debug {
-                    let mut returned_messages: Vec<Message> =
-                        serde_json::from_slice(&response).unwrap();
+                    let mut returned_messages: Vec<Message> = response.candid().unwrap();
                     messages.append(&mut returned_messages);
                 }
             }

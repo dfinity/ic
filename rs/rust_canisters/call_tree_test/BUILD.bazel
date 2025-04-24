@@ -8,7 +8,6 @@ DEPENDENCIES = [
     "@crate_index//:futures",
     "@crate_index//:ic-cdk",
     "@crate_index//:serde",
-    "@crate_index//:serde_json",
 ]
 
 MACRO_DEPENDENCIES = [
