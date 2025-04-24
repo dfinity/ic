@@ -1,20 +1,3 @@
-/* tag::catalog[]
-Title:: Test correctness of feature according to spec.
-
-Goal:: Ensure simple HTTP requests can be made from canisters.
-
-Runbook::
-0. Instantiate a universal VM with a webserver
-1. Instantiate an IC with one application subnet with the HTTP feature enabled.
-2. Install NNS canisters
-3. Install the proxy canister
-4. Make an update call to the proxy canister.
-
-Success::
-1. Received http response with status 200.
-
-end::catalog[] */
-
 use anyhow::Result;
 use assert_matches::assert_matches;
 use candid::{decode_one, CandidType, Deserialize, Encode, Principal};

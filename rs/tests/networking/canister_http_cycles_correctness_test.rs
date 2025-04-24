@@ -13,8 +13,7 @@ use ic_system_test_driver::{
     driver::test_env::TestEnv,
     systest,
 };
-
-use canister_http_correctness_tests_lib::*;
+use canister_http_correctness_tests::*;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()

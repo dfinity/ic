@@ -1,4 +1,3 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
@@ -74,28 +73,6 @@ system_test_nns(
     ],
 )
 
-rust_library(
-    name = "canister_http_correctness_tests_lib",
-    testonly = True,
-    srcs = [
-        "canister_http_correctness_tests_lib.rs",
-    ],
-    crate_name = "canister_http_correctness_tests_lib",
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    deps = CANISTER_HTTP_BASE_DEPS + [
-        "//rs/registry/subnet_type",
-        "//rs/rust_canisters/canister_test",
-        "//rs/test_utilities",
-        "//rs/test_utilities/types",
-        "//rs/types/base_types",
-        "//rs/types/types",
-        "@crate_index//:assert_matches",
-        "@crate_index//:ic-agent",
-        "@crate_index//:serde",
-        "@crate_index//:serde_json",
-        "@crate_index//:tokio",
-    ],
-)
 
 system_test_nns(
     name = "canister_http_correctness_test",
@@ -112,7 +89,7 @@ system_test_nns(
         "//rs/rust_canisters/canister_test",
         "//rs/test_utilities",
         "//rs/test_utilities/types",
-        "//rs/tests/networking:canister_http_correctness_tests_lib",
+        "//rs/tests/networking/canister_http_correctness_tests",
         "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:assert_matches",
@@ -138,7 +115,7 @@ system_test_nns(
         "//rs/rust_canisters/canister_test",
         "//rs/test_utilities",
         "//rs/test_utilities/types",
-        "//rs/tests/networking:canister_http_correctness_tests_lib",
+        "//rs/tests/networking/canister_http_correctness_tests",
         "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:assert_matches",

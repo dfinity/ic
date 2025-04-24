@@ -20,7 +20,7 @@ use ic_system_test_driver::{
     driver::group::{SystemTestGroup, SystemTestSubGroup},
     systest,
 };
-use canister_http_correctness_tests_lib::*;
+use canister_http_correctness_tests::*;
 
 
 

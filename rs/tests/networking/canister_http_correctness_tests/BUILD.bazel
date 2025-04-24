@@ -1,0 +1,37 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+CANISTER_HTTP_BASE_DEPS = [
+    # Keep sorted.
+    "//rs/rust_canisters/dfn_candid",
+    "//rs/rust_canisters/proxy_canister:lib",
+    "//rs/tests/driver:ic-system-test-driver",
+    "//rs/tests/networking/canister_http:canister_http",
+    "//rs/types/management_canister_types",
+    "@crate_index//:anyhow",
+    "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:slog",
+]
+
+rust_library(
+    name = "canister_http_correctness_tests",
+    testonly = True,
+    srcs = [
+        "lib.rs",
+    ],
+    crate_name = "canister_http_correctness_tests",
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    deps = CANISTER_HTTP_BASE_DEPS + [
+        "//rs/rust_canisters/canister_test",
+        "//rs/test_utilities",
+        "//rs/test_utilities/types",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:assert_matches",
+        "@crate_index//:ic-agent",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+    ],
+)

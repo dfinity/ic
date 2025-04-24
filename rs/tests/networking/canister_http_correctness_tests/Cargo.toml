@@ -1,0 +1,29 @@
+[package]
+name = "canister_http_correctness_tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+assert_matches = { workspace = true }
+candid = { workspace = true }
+canister-test = { path = "../../../rust_canisters/canister_test" }
+canister_http = { path = "../canister_http" }
+ic-agent = { workspace = true }
+ic-base-types = { path = "../../../types/base_types" }
+ic-cdk = { workspace = true }
+ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
+ic-system-test-driver = { path = "../../driver" }
+ic-test-utilities = { path = "../../../test_utilities" }
+ic-test-utilities-types = { path = "../../../test_utilities/types" }
+ic-types = { path = "../../../types/types" }
+proxy_canister = { path = "../../../rust_canisters/proxy_canister" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[lib]
+name = "canister_http_correctness_tests"
+path = "lib.rs"
