@@ -1,5 +1,4 @@
 use crate::{
-    allow_active_neurons_in_stable_memory,
     governance::{TimeWarp, LOG_PREFIX},
     migrate_active_neurons_to_stable_memory,
     neuron::types::Neuron,
@@ -269,10 +268,6 @@ pub struct NeuronStore {
     // NeuronStore) implements additional traits. Therefore, more elaborate wrapping is needed.
     clock: Box<dyn PracticalClock>,
 
-    // Whether to allow active neurons in stable memory. When this is true, when finding/iterating
-    // through active neurons, we need to check both heap and stable memory.
-    allow_active_neurons_in_stable_memory: bool,
-
     /// Whether to migrate active neurons to stable memory. This is a temporary flag to change the
     /// mode of operation for the NeuronStore. Once all neurons are in stable memory, this will be
     /// removed.
@@ -288,7 +283,6 @@ impl PartialEq for NeuronStore {
         let Self {
             heap_neurons,
             clock: _,
-            allow_active_neurons_in_stable_memory: _,
             migrate_active_neurons_to_stable_memory: _,
         } = self;
 
@@ -301,7 +295,6 @@ impl Default for NeuronStore {
         Self {
             heap_neurons: BTreeMap::new(),
             clock: Box::new(IcClock::new()),
-            allow_active_neurons_in_stable_memory: false,
             migrate_active_neurons_to_stable_memory: false,
         }
     }
@@ -316,7 +309,6 @@ impl NeuronStore {
         let mut neuron_store = Self {
             heap_neurons: BTreeMap::new(),
             clock: Box::new(IcClock::new()),
-            allow_active_neurons_in_stable_memory: allow_active_neurons_in_stable_memory(),
             migrate_active_neurons_to_stable_memory: migrate_active_neurons_to_stable_memory(),
         };
 
@@ -344,7 +336,6 @@ impl NeuronStore {
                 .map(|(id, proto)| (id, Neuron::try_from(proto).unwrap()))
                 .collect(),
             clock,
-            allow_active_neurons_in_stable_memory: allow_active_neurons_in_stable_memory(),
             migrate_active_neurons_to_stable_memory: migrate_active_neurons_to_stable_memory(),
         }
     }
@@ -694,23 +685,18 @@ impl NeuronStore {
         callback: impl for<'b> FnOnce(Box<dyn Iterator<Item = Cow<Neuron>> + 'b>) -> R,
         sections: NeuronSections,
     ) -> R {
-        if self.allow_active_neurons_in_stable_memory {
-            // Note, during migration, we still need heap_neurons, so we chain them onto the iterator
-            with_stable_neuron_store(|stable_store| {
-                let now = self.now();
-                let iter = Box::new(
-                    stable_store
-                        .range_neurons_sections(.., sections)
-                        .filter(|n| !n.is_inactive(now))
-                        .map(Cow::Owned)
-                        .chain(self.heap_neurons.values().map(Cow::Borrowed)),
-                );
-                callback(iter)
-            })
-        } else {
-            let iter = Box::new(self.heap_neurons.values().map(Cow::Borrowed));
+        // Note, during migration, we still need heap_neurons, so we chain them onto the iterator
+        with_stable_neuron_store(|stable_store| {
+            let now = self.now();
+            let iter = Box::new(
+                stable_store
+                    .range_neurons_sections(.., sections)
+                    .filter(|n| !n.is_inactive(now))
+                    .map(Cow::Owned)
+                    .chain(self.heap_neurons.values().map(Cow::Borrowed)),
+            );
             callback(iter)
-        }
+        })
     }
 
     /// Returns the smallest neuron ID that is in range and in self.
@@ -1035,42 +1021,30 @@ impl NeuronStore {
         neuron_id: &NeuronId,
         modify: impl FnOnce(u64) -> Result<u64, String>,
     ) -> Result<(), NeuronStoreError> {
-        // When `allow_active_neurons_in_stable_memory` is true, all the neurons SHOULD be in the stable
-        // neuron store. Therefore, there is no need to move the neuron between heap/stable as it
-        // might become active/inactive due to the change of maturity.
-        if self.allow_active_neurons_in_stable_memory {
-            // The validity of this approach is based on the assumption that none of the neuron
-            // indexes can be affected by its maturity.
-            if self.heap_neurons.contains_key(&neuron_id.id) {
-                self.heap_neurons
-                    .get_mut(&neuron_id.id)
-                    .map(|neuron| -> Result<(), String> {
+        // The validity of this approach is based on the assumption that none of the neuron
+        // indexes can be affected by its maturity.
+        if self.heap_neurons.contains_key(&neuron_id.id) {
+            self.heap_neurons
+                .get_mut(&neuron_id.id)
+                .map(|neuron| -> Result<(), String> {
+                    let new_maturity = modify(neuron.maturity_e8s_equivalent)?;
+                    neuron.maturity_e8s_equivalent = new_maturity;
+                    Ok(())
+                })
+                .transpose()
+                .map_err(|e| NeuronStoreError::InvalidData { reason: e })?
+                .ok_or_else(|| NeuronStoreError::not_found(*neuron_id))
+        } else {
+            with_stable_neuron_store_mut(|stable_neuron_store| {
+                stable_neuron_store
+                    .with_main_part_mut(*neuron_id, |neuron| -> Result<(), String> {
                         let new_maturity = modify(neuron.maturity_e8s_equivalent)?;
                         neuron.maturity_e8s_equivalent = new_maturity;
                         Ok(())
-                    })
-                    .transpose()
-                    .map_err(|e| NeuronStoreError::InvalidData { reason: e })?
-                    .ok_or_else(|| NeuronStoreError::not_found(*neuron_id))
-            } else {
-                with_stable_neuron_store_mut(|stable_neuron_store| {
-                    stable_neuron_store
-                        .with_main_part_mut(*neuron_id, |neuron| -> Result<(), String> {
-                            let new_maturity = modify(neuron.maturity_e8s_equivalent)?;
-                            neuron.maturity_e8s_equivalent = new_maturity;
-                            Ok(())
-                        })?
-                        .map_err(|e| NeuronStoreError::InvalidData { reason: e })?;
-                    Ok(())
-                })
-            }
-        } else {
-            self.with_neuron_mut(neuron_id, |neuron| {
-                let new_maturity = modify(neuron.maturity_e8s_equivalent)
-                    .map_err(|reason| NeuronStoreError::InvalidData { reason })?;
-                neuron.maturity_e8s_equivalent = new_maturity;
+                    })?
+                    .map_err(|e| NeuronStoreError::InvalidData { reason: e })?;
                 Ok(())
-            })?
+            })
         }
     }
 
@@ -1150,42 +1124,6 @@ impl NeuronStore {
     /// Returns `None` if there is no maturity disbursement at all.
     pub fn get_next_maturity_disbursement(&self) -> Option<(u64, NeuronId)> {
         with_stable_neuron_indexes(|indexes| indexes.maturity_disbursement().get_next_entry())
-    }
-
-    /// Validates a batch of neurons in stable neuron store are all inactive.
-    ///
-    /// The batch is defined as the `next_neuron_id` to start and the `batch_size` for the upper
-    /// bound of the number of neurons to validate.
-    ///
-    /// Returns the neuron id the next batch will start with (the neuron id last validated + 1). If
-    /// no neuron is validated in this batch, returns None.
-    pub fn batch_validate_neurons_in_stable_store_are_inactive(
-        &self,
-        next_neuron_id: NeuronId,
-        batch_size: usize,
-    ) -> (Vec<NeuronId>, Option<NeuronId>) {
-        let mut neuron_id_for_next_batch = None;
-        let active_neurons_in_stable_store = with_stable_neuron_store(|stable_neuron_store| {
-            stable_neuron_store
-                .range_neurons(next_neuron_id..)
-                .take(batch_size)
-                .flat_map(|neuron| {
-                    let current_neuron_id = neuron.id();
-                    neuron_id_for_next_batch = current_neuron_id.next();
-
-                    let is_neuron_inactive = neuron.is_inactive(self.now());
-
-                    if self.allow_active_neurons_in_stable_memory || is_neuron_inactive {
-                        None
-                    } else {
-                        // An active neuron in stable neuron store is invalid.
-                        Some(current_neuron_id)
-                    }
-                })
-                .collect()
-        });
-
-        (active_neurons_in_stable_store, neuron_id_for_next_batch)
     }
 
     // Census

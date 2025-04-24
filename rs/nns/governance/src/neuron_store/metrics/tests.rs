@@ -1,11 +1,8 @@
 use super::*;
 use crate::{
-    allow_active_neurons_in_stable_memory,
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{KnownNeuronData, NeuronType},
-    temporarily_disable_allow_active_neurons_in_stable_memory,
     temporarily_disable_migrate_active_neurons_to_stable_memory,
-    temporarily_enable_allow_active_neurons_in_stable_memory,
     temporarily_enable_migrate_active_neurons_to_stable_memory,
 };
 use ic_base_types::PrincipalId;
@@ -263,29 +260,12 @@ fn test_compute_metrics_helper() {
             16 => 6087000000.0,
         },
         not_dissolving_neurons_count_buckets: hashmap! {0 => 3, 2 => 1, 8 => 2, 16 => 1},
-        dissolved_neurons_count: if allow_active_neurons_in_stable_memory() {
-            // This is accurate.
-            4
-        } else {
-            // This is the incorrect behavior when inactive neurons are migrated to stable
-            // memory, which will be fixed once `allow_active_neurons_in_stable_memory` is
-            // turned on.
-            3
-        },
+        dissolved_neurons_count: 4,
         dissolved_neurons_e8s: 5770000000,
         garbage_collectable_neurons_count: 1,
         neurons_with_invalid_stake_count: 1,
         total_staked_e8s: 39_894_000_100,
-        neurons_with_less_than_6_months_dissolve_delay_count:
-            if allow_active_neurons_in_stable_memory() {
-                // This is accurate.
-                7
-            } else {
-                // This is the incorrect behavior when inactive neurons are migrated to stable
-                // memory, which will be fixed once `allow_active_neurons_in_stable_memory` is
-                // turned on.
-                6
-            },
+        neurons_with_less_than_6_months_dissolve_delay_count: 7,
         neurons_with_less_than_6_months_dissolve_delay_e8s: 5870000100,
         community_fund_total_staked_e8s: 234_000_000,
         community_fund_total_maturity_e8s_equivalent: 450_988_012,
@@ -338,20 +318,10 @@ fn test_compute_metrics_helper() {
     );
 }
 
-// In this stage, no active neurons can be in stable memory.
-#[test]
-fn test_compute_metrics() {
-    let _t1 = temporarily_disable_allow_active_neurons_in_stable_memory();
-    let _t2 = temporarily_disable_migrate_active_neurons_to_stable_memory();
-
-    test_compute_metrics_helper();
-}
-
 // Migration stage 1: allow active neurons in stable memory, but not migrating yet.
 #[test]
-fn test_compute_metrics_allow_active_neurons_in_stable_memory() {
-    let _t1 = temporarily_enable_allow_active_neurons_in_stable_memory();
-    let _t2 = temporarily_disable_migrate_active_neurons_to_stable_memory();
+fn test_compute_metrics() {
+    let _t = temporarily_disable_migrate_active_neurons_to_stable_memory();
 
     test_compute_metrics_helper();
 }
@@ -359,8 +329,7 @@ fn test_compute_metrics_allow_active_neurons_in_stable_memory() {
 // Migration stage 2: allow active neurons in stable memory and new active neurons are in stable memory.
 #[test]
 fn test_compute_metrics_migrate_active_neurons_to_stable_memory() {
-    let _t1 = temporarily_enable_allow_active_neurons_in_stable_memory();
-    let _t2 = temporarily_enable_migrate_active_neurons_to_stable_memory();
+    let _t = temporarily_enable_migrate_active_neurons_to_stable_memory();
 
     test_compute_metrics_helper();
 }
