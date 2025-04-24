@@ -1,10 +1,11 @@
 use super::*;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::neuron::Followees,
+    pb::v1::{neuron::Followees, MaturityDisbursement},
     storage::with_stable_neuron_indexes,
     temporarily_disable_allow_active_neurons_in_stable_memory,
     temporarily_disable_migrate_active_neurons_to_stable_memory,
+    temporarily_enable_disburse_maturity,
 };
 use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -643,6 +644,124 @@ fn test_get_neuron_ids_readable_by_caller() {
     assert_eq!(
         neuron_store.get_neuron_ids_readable_by_caller(PrincipalId::new_user_test_id(4)),
         btreeset! {}
+    );
+}
+
+/// Creates a MaturityDisbursement with the given finalize_disbursement_timestamp_seconds. Note that
+/// other values are default and not realistic, but at the leve l of `NeuronStore`, we don't care
+/// about them.
+fn create_maturity_disbursement(
+    finalize_disbursement_timestamp_seconds: u64,
+) -> MaturityDisbursement {
+    MaturityDisbursement {
+        finalize_disbursement_timestamp_seconds,
+        ..Default::default()
+    }
+}
+
+#[test]
+fn test_maturity_disbursement_index() {
+    let _t = temporarily_enable_disburse_maturity();
+
+    // Set up 2 neurons with no maturity disbursements.
+    let mut neuron_store = NeuronStore::new(btreemap! {
+        1 => simple_neuron_builder(1).build(),
+        2 => simple_neuron_builder(2).build(),
+    });
+
+    // No neurons should be ready to finalize maturity disbursement, and the next maturity disbursement doesn't exist.
+    assert_eq!(
+        neuron_store.get_neuron_ids_ready_to_finalize_maturity_disbursement(0),
+        btreeset! {}
+    );
+    assert_eq!(
+        neuron_store.get_next_maturity_disbursement_finalization_timestamp(),
+        None
+    );
+
+    // Add 2 disbursements for neuron 1 (finalizing at t = 1 and t = 2), and add 1 disbursement for
+    // neuron 2 finalizing at t = 2.
+    neuron_store
+        .with_neuron_mut(&NeuronId::from_u64(1), |neuron| {
+            neuron.add_maturity_disbursement_in_progress(create_maturity_disbursement(1));
+            neuron.add_maturity_disbursement_in_progress(create_maturity_disbursement(2));
+        })
+        .unwrap();
+    neuron_store
+        .with_neuron_mut(&NeuronId::from_u64(2), |neuron| {
+            neuron.add_maturity_disbursement_in_progress(create_maturity_disbursement(2));
+        })
+        .unwrap();
+
+    // At t = 0, no neurons are ready to finalize maturity disbursement, and the next maturity
+    // disbursement is at t = 1.
+    assert_eq!(
+        neuron_store.get_neuron_ids_ready_to_finalize_maturity_disbursement(0),
+        btreeset! {}
+    );
+    assert_eq!(
+        neuron_store.get_next_maturity_disbursement_finalization_timestamp(),
+        Some(1)
+    );
+
+    // At t = 1, neuron 1 is ready to finalize maturity disbursement, and the next maturity.
+    assert_eq!(
+        neuron_store.get_neuron_ids_ready_to_finalize_maturity_disbursement(1),
+        btreeset! {NeuronId::from_u64(1)}
+    );
+    // At t = 2, both neurons are ready to finalize maturity disbursement.
+    assert_eq!(
+        neuron_store.get_neuron_ids_ready_to_finalize_maturity_disbursement(2),
+        btreeset! {NeuronId::from_u64(1), NeuronId::from_u64(2)}
+    );
+
+    // After removing the first disbursement for neuron 1, no neurons are ready to finalize
+    // disbursement at t = 1, but both are still ready at t = 2. The next maturity
+    // disbursement becomes t = 2.
+    neuron_store
+        .with_neuron_mut(&NeuronId::from_u64(1), |neuron| {
+            neuron.pop_maturity_disbursement_in_progress().unwrap();
+        })
+        .unwrap();
+    assert_eq!(
+        neuron_store.get_neuron_ids_ready_to_finalize_maturity_disbursement(1),
+        btreeset! {}
+    );
+    assert_eq!(
+        neuron_store.get_neuron_ids_ready_to_finalize_maturity_disbursement(2),
+        btreeset! {NeuronId::from_u64(1), NeuronId::from_u64(2)}
+    );
+    assert_eq!(
+        neuron_store.get_next_maturity_disbursement_finalization_timestamp(),
+        Some(2)
+    );
+
+    // After removing the second disbursement for neuron 2, neuron 1 is the only one ready to
+    // finalize disbursement at t = 2.
+    neuron_store
+        .with_neuron_mut(&NeuronId::from_u64(2), |neuron| {
+            neuron.pop_maturity_disbursement_in_progress().unwrap();
+        })
+        .unwrap();
+    assert_eq!(
+        neuron_store.get_neuron_ids_ready_to_finalize_maturity_disbursement(2),
+        btreeset! {NeuronId::from_u64(1)}
+    );
+
+    // After removing the last disbursement for neuron 1, no neurons are ready to finalize
+    // disbursement at t = 2. The next maturity disbursement becomes None.
+    neuron_store
+        .with_neuron_mut(&NeuronId::from_u64(1), |neuron| {
+            neuron.pop_maturity_disbursement_in_progress().unwrap();
+        })
+        .unwrap();
+    assert_eq!(
+        neuron_store.get_neuron_ids_ready_to_finalize_maturity_disbursement(2),
+        btreeset! {}
+    );
+    assert_eq!(
+        neuron_store.get_next_maturity_disbursement_finalization_timestamp(),
+        None
     );
 }
 

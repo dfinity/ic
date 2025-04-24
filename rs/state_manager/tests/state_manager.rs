@@ -6015,6 +6015,185 @@ fn can_create_and_delete_canister_snapshot() {
 }
 
 #[test]
+fn wasm_binaries_can_be_correctly_switched_from_memory_to_checkpoint() {
+    state_manager_test(|metrics, state_manager| {
+        let (_height, mut state) = state_manager.take_tip();
+        let canister_id = canister_test_id(100);
+
+        // Insert a canister, create a snapshot from it and write checkpoint
+        insert_dummy_canister(&mut state, canister_id);
+
+        let new_snapshot = CanisterSnapshot::from_canister(
+            state.canister_state(&canister_id).unwrap(),
+            state.time(),
+        )
+        .unwrap();
+        let snapshot_id = SnapshotId::from((canister_id, 0));
+        state
+            .canister_snapshots
+            .push(snapshot_id, Arc::new(new_snapshot));
+
+        let canister_wasm_binary = &state
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .as_ref()
+            .unwrap()
+            .wasm_binary
+            .binary;
+
+        let snapshot_wasm_binary = &state
+            .canister_snapshots
+            .get(snapshot_id)
+            .unwrap()
+            .execution_snapshot()
+            .wasm_binary;
+
+        // Before checkpointing, wasm binaries of both the canister and the snapshot are in memory.
+        assert!(canister_wasm_binary.file().is_none());
+        assert!(snapshot_wasm_binary.file().is_none());
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
+
+        let checkpoint_layout = state_manager
+            .state_layout()
+            .checkpoint_verified(height(1))
+            .unwrap();
+        let canister_layout = checkpoint_layout.canister(&canister_id).unwrap();
+        let snapshot_layout = checkpoint_layout.snapshot(&snapshot_id).unwrap();
+
+        let (_height, state) = state_manager.take_tip();
+
+        let canister_wasm_binary = &state
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .as_ref()
+            .unwrap()
+            .wasm_binary
+            .binary;
+
+        let snapshot_wasm_binary = &state
+            .canister_snapshots
+            .get(snapshot_id)
+            .unwrap()
+            .execution_snapshot()
+            .wasm_binary;
+
+        // After checkpointing, wasm binaries of both the canister and the snapshot are backed by files in checkpoint@1
+        // and file contents can be correctly read.
+        assert_eq!(canister_wasm_binary.as_slice(), EMPTY_WASM);
+        assert!(canister_wasm_binary
+            .file()
+            .is_some_and(|path| path == canister_layout.wasm().raw_path()));
+
+        assert_eq!(snapshot_wasm_binary.as_slice(), EMPTY_WASM);
+        assert!(snapshot_wasm_binary
+            .file()
+            .is_some_and(|path| path == snapshot_layout.wasm().raw_path()));
+
+        assert_error_counters(metrics);
+    });
+}
+
+#[test]
+fn wasm_binaries_can_be_correctly_switched_from_checkpoint_to_checkpoint() {
+    state_manager_test(|metrics, state_manager| {
+        let (_height, mut state) = state_manager.take_tip();
+        let canister_id = canister_test_id(100);
+
+        // Insert a canister and a write checkpoint
+        insert_dummy_canister(&mut state, canister_id);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
+
+        let canister_layout = state_manager
+            .state_layout()
+            .checkpoint_verified(height(1))
+            .unwrap()
+            .canister(&canister_id)
+            .unwrap();
+
+        let (_height, mut state) = state_manager.take_tip();
+
+        let canister_wasm_binary = &state
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .as_ref()
+            .unwrap()
+            .wasm_binary
+            .binary;
+
+        // After checkpointing at height 1, wasm binary the canister is backed by file in checkpoint@1.
+        assert_eq!(canister_wasm_binary.as_slice(), EMPTY_WASM);
+        assert!(canister_wasm_binary
+            .file()
+            .is_some_and(|path| path == canister_layout.wasm().raw_path()));
+
+        // We create a snapshot from the canister, which already has wasm binary backed by file on disk.
+        let new_snapshot = CanisterSnapshot::from_canister(
+            state.canister_state(&canister_id).unwrap(),
+            state.time(),
+        )
+        .unwrap();
+        let snapshot_id = SnapshotId::from((canister_id, 0));
+        state
+            .canister_snapshots
+            .push(snapshot_id, Arc::new(new_snapshot));
+
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
+
+        // Remove checkpoint@1
+        drop(canister_layout);
+        state_manager.remove_states_below(height(2));
+        state_manager.flush_deallocation_channel();
+
+        let checkpoint_layout = state_manager
+            .state_layout()
+            .checkpoint_verified(height(2))
+            .unwrap();
+
+        let canister_layout = checkpoint_layout.canister(&canister_id).unwrap();
+        let snapshot_layout = checkpoint_layout.snapshot(&snapshot_id).unwrap();
+
+        let (_height, state) = state_manager.take_tip();
+
+        let canister_wasm_binary = &state
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .as_ref()
+            .unwrap()
+            .wasm_binary
+            .binary;
+
+        let snapshot_wasm_binary = &state
+            .canister_snapshots
+            .get(snapshot_id)
+            .unwrap()
+            .execution_snapshot()
+            .wasm_binary;
+
+        // After checkpointing at height 2, wasm binaries of both the canister and the snapshot are backed by files in checkpoint@2
+        // and file contents can be correctly read.
+        assert_eq!(canister_wasm_binary.as_slice(), EMPTY_WASM);
+        assert!(canister_wasm_binary
+            .file()
+            .is_some_and(|path| path == canister_layout.wasm().raw_path()));
+
+        assert_eq!(snapshot_wasm_binary.as_slice(), EMPTY_WASM);
+        assert!(snapshot_wasm_binary
+            .file()
+            .is_some_and(|path| path == snapshot_layout.wasm().raw_path()));
+
+        assert_error_counters(metrics);
+    });
+}
+
+#[test]
 fn can_create_and_restore_snapshot() {
     fn can_create_and_restore_snapshot_impl(certification_scope: CertificationScope) {
         state_manager_test(|metrics, state_manager| {

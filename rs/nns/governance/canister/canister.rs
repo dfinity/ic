@@ -21,8 +21,7 @@ use ic_nns_constants::LEDGER_CANISTER_ID;
 #[cfg(feature = "test")]
 use ic_nns_governance::governance::TimeWarp as GovTimeWarp;
 use ic_nns_governance::{
-    canister_state::CanisterEnv,
-    canister_state::{governance, governance_mut, set_governance},
+    canister_state::{governance, governance_mut, set_governance, CanisterEnv},
     encode_metrics,
     governance::Governance,
     neuron_data_validation::NeuronDataValidationSummary,

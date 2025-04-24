@@ -182,19 +182,19 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
         )
         .expect("Could not add node record.");
 
-    // Add threshold signing subnet to registry
+    // Add chain-key enabled subnet to registry
     for key_id in test_master_public_key_ids() {
         data_provider
             .add(
-                &ic_registry_keys::make_chain_key_signing_subnet_list_key(&key_id),
+                &ic_registry_keys::make_chain_key_enabled_subnet_list_key(&key_id),
                 registry_version,
                 Some(
-                    ic_protobuf::registry::crypto::v1::ChainKeySigningSubnetList {
+                    ic_protobuf::registry::crypto::v1::ChainKeyEnabledSubnetList {
                         subnets: vec![subnet_id_into_protobuf(subnet_id)],
                     },
                 ),
             )
-            .expect("Could not add chain key signing subnet list");
+            .expect("Could not add chain-key enabled subnet list");
     }
     registry_client.reload();
     registry_client.update_to_latest_version();

@@ -12,6 +12,16 @@
 INSERT NEW RELEASES HERE
 
 
+# 2025-04-11: Proposal 136226
+
+http://dashboard.internetcomputer.org/proposal/136226
+
+## Added
+
+* The Node Reward Canister will now perform the calculations that the Registry canister performs for node provider
+  rewards.
+
+
 # 2025-04-05: Proposal 136072
 
 http://dashboard.internetcomputer.org/proposal/136072
@@ -19,4 +29,3 @@ http://dashboard.internetcomputer.org/proposal/136072
 ## Added
 
 * The Node Reward Canister will now sync changes from the Registry canister.
-
