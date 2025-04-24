@@ -137,7 +137,7 @@ use std::{
     string::ToString,
 };
 
-mod disburse_maturity;
+pub mod disburse_maturity;
 mod ledger_helper;
 mod merge_neurons;
 mod split_neuron;
