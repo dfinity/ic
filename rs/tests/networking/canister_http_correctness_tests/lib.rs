@@ -1479,14 +1479,6 @@ pub fn test_small_maximum_possible_response_size_only_headers(env: TestEnv) {
     let n = 0;
     let url = format!("https://[{}]:20443/{}/{}", webserver_ipv6, "equal_bytes", n);
 
-    //   { Response headers
-    //       date: Jan 1 1970 00:00:00 GMT
-    //       content-type: application/octet-stream
-    //       content-length: 11
-    //       access-control-allow-origin: *
-    //       access-control-allow-credentials: true
-    //   }
-
     let header_size = 142;
     let max_response_bytes = Some(header_size + n);
 
@@ -1516,14 +1508,6 @@ pub fn test_small_maximum_possible_response_size_exceeded_only_headers(env: Test
 
     let n = 0;
     let url = format!("https://[{}]:20443/{}/{}", webserver_ipv6, "equal_bytes", n);
-
-    //   { Response headers
-    //       date: Jan 1 1970 00:00:00 GMT
-    //       content-type: application/octet-stream
-    //       content-length: 0
-    //       access-control-allow-origin: *
-    //       access-control-allow-credentials: true
-    //   }
 
     let header_size = 142;
     let max_response_bytes = Some(header_size + n - 1);
@@ -1669,13 +1653,6 @@ pub fn test_maximum_possible_value_of_max_response_bytes(env: TestEnv) {
         webserver_ipv6, "ascii", "hello_world"
     );
 
-    //   { Response headers
-    //       date: Jan 1 1970 00:00:00 GMT
-    //       content-type: application/octet-stream
-    //       content-length: 11
-    //       access-control-allow-origin: *
-    //       access-control-allow-credentials: true
-    //   }
     let header_size = 143;
     let max_response_bytes = Some(header_size + "hello_world".len() as u64);
 
@@ -1707,14 +1684,6 @@ pub fn test_maximum_possible_value_of_max_response_bytes_exceeded(env: TestEnv) 
         "https://[{}]:20443/{}/{}",
         webserver_ipv6, "ascii", "hello_world"
     );
-
-    //   { Response headers
-    //       date: Jan 1 1970 00:00:00 GMT
-    //       content-type: application/octet-stream
-    //       content-length: 11
-    //       access-control-allow-origin: *
-    //       access-control-allow-credentials: true
-    //   }
 
     let header_size = 143;
     let max_response_bytes = Some(header_size + "hello_world".len() as u64 - 1);
