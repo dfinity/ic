@@ -26,6 +26,7 @@ fn main() {}
 ///
 /// See `test_linear_sequence_call_tree_depth` and `test_multiple_branches_call_tree_depth` in
 /// 'rs/messaging/tests/call_tree_tests.rs' for examples on how to use this canister.
+#[allow(unused_mut)]
 #[update]
 async fn reply_or_defer(mut state: State) -> State {
     loop {
