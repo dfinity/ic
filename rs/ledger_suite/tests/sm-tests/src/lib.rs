@@ -29,7 +29,7 @@ use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, IcpAllowanceArgs};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc::generic_value::Value as GenericValue;
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_types::icrc1::account::{Account, Subaccount, DEFAULT_SUBACCOUNT};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use icrc_ledger_types::icrc103::get_allowances::{
     Allowances, GetAllowancesArgs, GetAllowancesError,
@@ -3945,6 +3945,129 @@ where
         .expect("failed to list allowances");
     assert_eq!(allowances_later.len(), 1);
     assert_eq!(allowances_later[0], allowances[0]);
+}
+
+// Test whether specifying None/DEFAULT_SUBACCOUNT does not affect the results.
+pub fn test_allowance_listing_subaccount<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let approver_none = Account {
+        owner: PrincipalId::new_user_test_id(1).0,
+        subaccount: None,
+    };
+    let approver_default = Account {
+        owner: PrincipalId::new_user_test_id(2).0,
+        subaccount: Some(*DEFAULT_SUBACCOUNT),
+    };
+    let initial_balances = vec![(approver_none, 100_000), (approver_default, 100_000)];
+    let spender_none = Account {
+        owner: PrincipalId::new_user_test_id(3).0,
+        subaccount: None,
+    };
+    let spender_default = Account {
+        owner: PrincipalId::new_user_test_id(3).0,
+        subaccount: Some(*DEFAULT_SUBACCOUNT),
+    };
+
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, initial_balances);
+
+    let approve_args = default_approve_args(spender_none, 1);
+    let block_index = send_approval(&env, canister_id, approver_none.owner, &approve_args)
+        .expect("approval failed");
+    assert_eq!(block_index, 2);
+
+    let mut approve_args = default_approve_args(spender_default, 1);
+    approve_args.from_subaccount = approver_default.subaccount;
+    let block_index = send_approval(&env, canister_id, approver_default.owner, &approve_args)
+        .expect("approval failed");
+    assert_eq!(block_index, 3);
+
+    // Should return the allowance, if we specify `from_account` as when creating approval
+    let args = GetAllowancesArgs {
+        from_account: Some(approver_none),
+        prev_spender: None,
+        take: None,
+    };
+    let allowances = list_allowances(&env, canister_id, approver_none.owner, args.clone())
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), 1);
+
+    // Should return the allowance, if we specify `from_account` with explicit default subaccount.
+    let mut approver_none_default = approver_none.clone();
+    approver_none_default.subaccount = Some(*DEFAULT_SUBACCOUNT);
+    let args = GetAllowancesArgs {
+        from_account: Some(approver_none_default),
+        prev_spender: None,
+        take: None,
+    };
+    let allowances = list_allowances(&env, canister_id, approver_none.owner, args.clone())
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), 1);
+
+    // Should filter out the allowance if subaccount is none
+    let args = GetAllowancesArgs {
+        from_account: Some(approver_none),
+        prev_spender: Some(spender_none),
+        take: None,
+    };
+    let allowances = list_allowances(&env, canister_id, approver_none.owner, args.clone())
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), 0);
+
+    // Should filter out the allowance if subaccount is default
+    let args = GetAllowancesArgs {
+        from_account: Some(approver_none),
+        prev_spender: Some(spender_default),
+        take: None,
+    };
+    let allowances = list_allowances(&env, canister_id, approver_none.owner, args.clone())
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), 0);
+
+    // Should return the allowance, if we specify `from_account` as when creating approval
+    let args = GetAllowancesArgs {
+        from_account: Some(approver_default),
+        prev_spender: None,
+        take: None,
+    };
+    let allowances = list_allowances(&env, canister_id, approver_default.owner, args.clone())
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), 1);
+
+    // Should return the allowance, if we specify `from_account` with none subaccount.
+    let mut approver_default_none = approver_default.clone();
+    approver_default_none.subaccount = None;
+    let args = GetAllowancesArgs {
+        from_account: Some(approver_default_none),
+        prev_spender: None,
+        take: None,
+    };
+    let allowances = list_allowances(&env, canister_id, approver_default.owner, args.clone())
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), 1);
+
+    // Should filter out the allowance if subaccount is none
+    let args = GetAllowancesArgs {
+        from_account: Some(approver_default),
+        prev_spender: Some(spender_none),
+        take: None,
+    };
+    let allowances = list_allowances(&env, canister_id, approver_none.owner, args.clone())
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), 0);
+
+    // Should filter out the allowance if subaccount is default
+    let args = GetAllowancesArgs {
+        from_account: Some(approver_default),
+        prev_spender: Some(spender_default),
+        take: None,
+    };
+    let allowances = list_allowances(&env, canister_id, approver_none.owner, args)
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), 0);
 }
 
 pub fn expect_icrc2_disabled(
