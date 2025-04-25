@@ -10094,6 +10094,7 @@ dependencies = [
  "ic-cdk 0.17.1",
  "ic-icrc1-ledger",
  "ic-ledger-suite-orchestrator",
+ "ic-management-canister-types",
  "ic-management-canister-types-private",
  "ic-metrics-assert",
  "ic-state-machine-tests",
