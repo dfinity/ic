@@ -159,7 +159,7 @@ where
                  value:\n{:#?}",
                 value,
             );
-            return Some(R::decode(EMPTY).unwrap());
+            R::decode(EMPTY)
         }
 
         high_capacity_registry_value::Content::Value(value) => R::decode(value.as_slice()),
