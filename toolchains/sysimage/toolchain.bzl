@@ -52,9 +52,6 @@ def _build_container_base_image_impl(ctx):
     inputs.append(ctx.file.dockerfile)
     args.extend(["--dockerfile", ctx.file.dockerfile.path])
 
-    # Dir mounts prepared in `ci/container/container-run.sh`
-    args.extend(["--tmpfs_container_sys_dir"])
-
     if ctx.attr.build_args:
         args.extend(["--build_args"])
         for build_arg in ctx.attr.build_args:
@@ -130,8 +127,6 @@ def _build_container_filesystem_impl(ctx):
         args.extend(["--base-image-tar-file", ctx.file.base_image_tar_file.path])
         args.extend(["--base-image-tar-file-tag", ctx.attr.base_image_tar_file_tag])
 
-    # Dir mounts prepared in `ci/container/container-run.sh`
-    args.extend(["--tmpfs-container-sys-dir"])
     args.extend(["--no-cache"])
 
     tool = ctx.attr._tool

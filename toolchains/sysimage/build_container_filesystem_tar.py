@@ -4,8 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import atexit
 import os
 import shutil
+import signal
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, TypeVar
@@ -13,9 +16,7 @@ from typing import List, Optional, TypeVar
 import invoke
 
 from toolchains.sysimage.container_utils import (
-    generate_container_command,
     path_owned_by_root,
-    process_temp_sys_dir_args,
     remove_image,
     take_ownership_of_file,
 )
@@ -115,6 +116,11 @@ def export_container_filesystem(container_cmd: str, image_tag: str, destination_
         destination_tar_path
     ), f"'{destination_tar_path}' not owned by root. Remove this and the next line."
     take_ownership_of_file(destination_tar_path)
+
+
+def purge_podman(container_cmd: str):
+    cmd = f"{container_cmd} system prune --all --build --volumes --force"
+    invoke.run(cmd)
 
 
 def resolve_file_args(context_dir: str, file_build_args: List[str]) -> List[str]:
@@ -219,19 +225,6 @@ def get_args():
     )
 
     parser.add_argument(
-        "--temp-container-sys-dir",
-        help="Container engine (podman) will use the specified dir to store its system files. It will remove the files before exiting.",
-        type=str,
-    )
-
-    parser.add_argument(
-        "--tmpfs-container-sys-dir",
-        help="Create and mount a tmpfs to store its system files. It will be unmounted before exiting.",
-        default=False,
-        action="store_true",
-    )
-
-    parser.add_argument(
         "--base-image-tar-file",
         help="Override the base image used by 'podman build'. The 'FROM' line in the target Dockerfile will be ignored",
         default=None,
@@ -261,11 +254,8 @@ def main():
     context_files = args.context_files
     component_files = args.component_files
     no_cache = args.no_cache
-    temp_sys_dir = process_temp_sys_dir_args(args.temp_container_sys_dir, args.tmpfs_container_sys_dir)
 
-    context_dir = os.getenv("ICOS_TMPDIR")
-    if not context_dir:
-        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
+    context_dir = tempfile.mkdtemp()
 
     # Add all context files directly into dir
     for context_file in context_files:
@@ -291,7 +281,14 @@ def main():
     if args.base_image_tar_file:
         base_image_override = BaseImageOverride(Path(args.base_image_tar_file), args.base_image_tar_file_tag)
 
-    container_cmd = generate_container_command("sudo podman ", temp_sys_dir)
+    root = tempfile.mkdtemp()
+    run_root = tempfile.mkdtemp()
+    container_cmd = f"sudo podman --root {root} --runroot {run_root}"
+
+    atexit.register(lambda: purge_podman(container_cmd))
+    signal.signal(signal.SIGTERM, lambda: purge_podman(container_cmd))
+    signal.signal(signal.SIGINT, lambda: purge_podman(container_cmd))
+
     build_and_export(
         container_cmd,
         build_args,
@@ -303,6 +300,8 @@ def main():
         destination_tar_filename,
     )
     remove_image(container_cmd, image_tag)  # No harm removing if in the tmp dir
+
+    # tempfile cleanup is handled by proc_wrapper.sh
 
 
 if __name__ == "__main__":
