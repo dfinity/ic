@@ -16844,6 +16844,7 @@ dependencies = [
  "canister_http",
  "cloner-canister-types",
  "dfn_candid",
+ "futures",
  "ic-agent",
  "ic-base-types",
  "ic-cdk 0.17.1",

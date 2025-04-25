@@ -34,10 +34,13 @@ use ic_http_endpoints_test_agent::*;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
+        boundary_node::{BoundaryNode, BoundaryNodeVm},
         group::SystemTestGroup,
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
-        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
+        test_env_api::{
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+        },
     },
     systest,
     util::{block_on, UniversalCanister},
@@ -48,11 +51,12 @@ use reqwest::Response;
 use slog::{info, Logger};
 
 const CALL_VERSIONS: [Call; 2] = [Call::V2, Call::V3];
+const BOUNDARY_NODE_VM_ID: &str = "boundary-node-1";
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(test))
+        .add_test(systest!(effective_canister_id_spec_test))
         .execute_from_args()?;
 
     Ok(())
@@ -71,10 +75,36 @@ fn setup(env: TestEnv) {
             .nodes()
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
+
+    info!(&env.logger(), "Setting up NNS cniasters");
+    let nns_node = env
+        .topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap();
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &env)
+        .expect("Could not install NNS canisters.");
+
+    info!(&env.logger(), "Setting up a boundary node");
+    BoundaryNode::new(BOUNDARY_NODE_VM_ID.into())
+        .allocate_vm(&env)
+        .expect("failed to allocate boundary node vm")
+        .for_ic(&env, "")
+        .start(&env)
+        .expect("failed to start boundary node vm");
+
+    info!(&env.logger(), "Waiting for BN to become healthy...");
+    env.get_deployed_boundary_node(BOUNDARY_NODE_VM_ID)
+        .expect("failed to get boundary node")
+        .get_snapshot()
+        .expect("failed to get snapshot")
+        .await_status_is_healthy()
+        .expect("failed to await bn healthy status");
 }
 
-// TODO: Name this test correctly
-fn test(env: TestEnv) {
+fn effective_canister_id_spec_test(env: TestEnv) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
 
@@ -95,7 +125,7 @@ fn test(env: TestEnv) {
     let sys_agent = sys_node.build_default_agent();
     let sys_socket_addr = std::net::SocketAddr::new(sys_node.get_ip_addr(), 8080);
 
-    // Get the app subnet, setup an agent and get a cansiter id from the range
+    // Get the app subnet, setup an agent and get a canister id from the range
     let app_subnet = snapshot
         .subnets()
         .find(|subnet| subnet.subnet_type() == SubnetType::Application)
@@ -108,10 +138,12 @@ fn test(env: TestEnv) {
     let app_agent = app_subnet.nodes().next().unwrap().build_default_agent();
 
     block_on(async {
-        // Create three universal canister, two on the system sybnet, one on the app subnet
-        UniversalCanister::new_with_retries(&sys_agent, sys_uc1_id.into(), &logger).await;
-        UniversalCanister::new_with_retries(&sys_agent, sys_uc2_id.into(), &logger).await;
-        UniversalCanister::new_with_retries(&app_agent, app_uc_id, &logger).await;
+        // Create three universal canister, two on the system subnet, one on the app subnet
+        futures::join!(
+            UniversalCanister::new_with_retries(&sys_agent, sys_uc1_id.into(), &logger),
+            UniversalCanister::new_with_retries(&sys_agent, sys_uc2_id.into(), &logger),
+            UniversalCanister::new_with_retries(&app_agent, app_uc_id, &logger),
+        );
 
         let test_canister_ids: [CanisterId; 4] = [
             // Valid destination on same subnet
