@@ -20,6 +20,4 @@ on the process that this file is part of, see
 
 ## Fixed
 
-* Use `StableBTreeMap::init` instead of `::new` for voting power snapshots.
-
 ## Security
