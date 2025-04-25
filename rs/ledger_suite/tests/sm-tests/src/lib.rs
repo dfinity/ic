@@ -3996,7 +3996,7 @@ pub fn test_allowance_listing_subaccount<T>(
     assert_eq!(allowances.len(), 1);
 
     // Should return the allowance, if we specify `from_account` with explicit default subaccount.
-    let mut approver_none_default = approver_none.clone();
+    let mut approver_none_default = approver_none;
     approver_none_default.subaccount = Some(*DEFAULT_SUBACCOUNT);
     let args = GetAllowancesArgs {
         from_account: Some(approver_none_default),
@@ -4038,14 +4038,14 @@ pub fn test_allowance_listing_subaccount<T>(
     assert_eq!(allowances.len(), 1);
 
     // Should return the allowance, if we specify `from_account` with none subaccount.
-    let mut approver_default_none = approver_default.clone();
+    let mut approver_default_none = approver_default;
     approver_default_none.subaccount = None;
     let args = GetAllowancesArgs {
         from_account: Some(approver_default_none),
         prev_spender: None,
         take: None,
     };
-    let allowances = list_allowances(&env, canister_id, approver_default.owner, args.clone())
+    let allowances = list_allowances(&env, canister_id, approver_default.owner, args)
         .expect("failed to list allowances");
     assert_eq!(allowances.len(), 1);
 }
