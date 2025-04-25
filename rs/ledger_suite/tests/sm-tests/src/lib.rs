@@ -3829,6 +3829,113 @@ where
     }
 }
 
+pub fn test_approval_listing_values<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let approver = Account {
+        owner: PrincipalId::new_user_test_id(1).0,
+        subaccount: None,
+    };
+    let approver_sub = Account {
+        owner: PrincipalId::new_user_test_id(2).0,
+        subaccount: Some([2u8; 32]),
+    };
+    let initial_balances = vec![(approver, 100_000), (approver_sub, 100_000)];
+    let spender = Account {
+        owner: PrincipalId::new_user_test_id(3).0,
+        subaccount: None,
+    };
+    let spender_sub = Account {
+        owner: PrincipalId::new_user_test_id(4).0,
+        subaccount: Some([3u8; 32]),
+    };
+
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, initial_balances);
+
+    let approve_args = default_approve_args(spender, 1);
+    let block_index =
+        send_approval(&env, canister_id, approver.owner, &approve_args).expect("approval failed");
+    assert_eq!(block_index, 2);
+
+    let now = system_time_to_nanos(env.time());
+
+    let expiration_far = Some(now + Duration::from_secs(3600).as_nanos() as u64);
+    let mut approve_args = default_approve_args(spender_sub, 2);
+    approve_args.expires_at = expiration_far;
+    let block_index =
+        send_approval(&env, canister_id, approver.owner, &approve_args).expect("approval failed");
+    assert_eq!(block_index, 3);
+
+    let mut approve_args = default_approve_args(spender, 3);
+    approve_args.from_subaccount = approver_sub.subaccount;
+    let block_index = send_approval(&env, canister_id, approver_sub.owner, &approve_args)
+        .expect("approval failed");
+    assert_eq!(block_index, 4);
+
+    let expiration_near = Some(now + Duration::from_secs(10).as_nanos() as u64);
+    let mut approve_args = default_approve_args(spender_sub, 4);
+    approve_args.from_subaccount = approver_sub.subaccount;
+    approve_args.expires_at = expiration_near;
+    let block_index = send_approval(&env, canister_id, approver_sub.owner, &approve_args)
+        .expect("approval failed");
+    assert_eq!(block_index, 5);
+
+    let mut args = GetAllowancesArgs {
+        from_account: Some(approver),
+        prev_spender: None,
+        take: None,
+    };
+
+    let allowances = list_allowances(&env, canister_id, approver.owner, args.clone())
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), 2);
+
+    assert_eq!(allowances[0].from_account, approver);
+    assert_eq!(allowances[0].to_spender, spender);
+    assert_eq!(allowances[0].allowance, Nat::from(1u64));
+    assert_eq!(allowances[0].expires_at, None);
+
+    assert_eq!(allowances[1].from_account, approver);
+    assert_eq!(allowances[1].to_spender, spender_sub);
+    assert_eq!(allowances[1].allowance, Nat::from(2u64));
+    assert_eq!(allowances[1].expires_at, expiration_far);
+
+    args.take = Some(Nat::from(1u64));
+
+    let allowances_take = list_allowances(&env, canister_id, approver.owner, args.clone())
+        .expect("failed to list allowances");
+    assert_eq!(allowances_take.len(), 1);
+    assert_eq!(allowances_take[0], allowances[0]);
+
+    let args = GetAllowancesArgs {
+        from_account: Some(approver_sub),
+        prev_spender: None,
+        take: None,
+    };
+
+    let allowances = list_allowances(&env, canister_id, approver.owner, args.clone())
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), 2);
+
+    assert_eq!(allowances[0].from_account, approver_sub);
+    assert_eq!(allowances[0].to_spender, spender);
+    assert_eq!(allowances[0].allowance, Nat::from(3u64));
+    assert_eq!(allowances[0].expires_at, None);
+
+    assert_eq!(allowances[1].from_account, approver_sub);
+    assert_eq!(allowances[1].to_spender, spender_sub);
+    assert_eq!(allowances[1].allowance, Nat::from(4u64));
+    assert_eq!(allowances[1].expires_at, expiration_near);
+
+    env.advance_time(Duration::from_secs(10));
+
+    let allowances_later = list_allowances(&env, canister_id, approver.owner, args)
+        .expect("failed to list allowances");
+    assert_eq!(allowances_later.len(), 1);
+    assert_eq!(allowances_later[0], allowances[0]);
+}
+
 pub fn expect_icrc2_disabled(
     env: &StateMachine,
     from: PrincipalId,
