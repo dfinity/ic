@@ -1089,7 +1089,7 @@ where
     standards.sort();
     assert_eq!(
         standards,
-        vec!["ICRC-1", "ICRC-10", "ICRC-2", "ICRC-21", "ICRC-3"]
+        vec!["ICRC-1", "ICRC-10", "ICRC-103", "ICRC-2", "ICRC-21", "ICRC-3"]
     );
 }
 
