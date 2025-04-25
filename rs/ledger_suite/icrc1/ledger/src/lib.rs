@@ -1202,20 +1202,22 @@ pub fn get_allowances(
     now: u64,
 ) -> Allowances {
     let mut result = vec![];
-    let prev_spender = match spender {
-        Some(spender) => spender,
-        None => Account {
-            owner: Principal::from_slice(&[0u8; 0]),
-            subaccount: None,
+    let start_account_spender = match spender {
+        Some(spender) => AccountSpender {
+            account: from,
+            spender,
+        },
+        None => AccountSpender {
+            account: from,
+            spender: Account {
+                owner: Principal::from_slice(&[0u8; 0]),
+                subaccount: None,
+            },
         },
     };
     ALLOWANCES_MEMORY.with_borrow(|allowances| {
-        let account_spender = AccountSpender {
-            account: from,
-            spender: prev_spender,
-        };
-        for allowance in allowances.range(account_spender.clone()..) {
-            if spender.is_some() && allowance.0 == account_spender {
+        for allowance in allowances.range(start_account_spender.clone()..) {
+            if spender.is_some() && allowance.0 == start_account_spender {
                 continue;
             }
             if result.len() >= max_results as usize {
