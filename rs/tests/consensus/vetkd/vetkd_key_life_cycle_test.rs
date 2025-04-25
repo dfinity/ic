@@ -1,7 +1,12 @@
 /* tag::catalog[]
 Title:: vetKD end to end tests
 
-Goal:: Test vetkd_public_key and vetkd_derive_key APIs within and across subnets
+Goal:: Test vetkd_public_key and vetkd_derive_key APIs within and across subnets. In particular, ensure that
+  the following high-level properties are satisfied:
+  . Two executions of the vetKD protocol must yield the same (decrypted) vetKey for the same
+    input/context/keyID/canister combination, even if the key derivation happens on another subnet.
+  . Two executions of the vetKD protocol must yield different (decrypted) vetKeys if any of input,
+    context, keyID, canister are different.
 
 Runbook::
 . Setup::
