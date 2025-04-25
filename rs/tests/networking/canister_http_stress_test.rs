@@ -1,7 +1,7 @@
 /* tag::catalog[]
 Title:: Stress test for the http_requests feature
 
-Goal:: Measure the qps of http_requests originating from one canister. The test shuold be run with the following command:
+Goal:: Measure the qps of http_requests originating from one canister. The test should be run with the following command:
 ```
 ict test //rs/tests/networking:canister_http_stress_test -- --test_tmpdir=./canister_http_stress_test
 ```
@@ -47,6 +47,7 @@ use serde::{Deserialize, Serialize};
 use slog::{info, Logger};
 
 const BENCHMARK_REPORT_FILE: &str = "benchmark/benchmark.json";
+const WITH_WARM_UP: bool = true;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct BenchmarkResult {
@@ -60,6 +61,8 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(stress_setup)
         .add_test(systest!(test))
+        // This test takes consistently around 20 mintues, so setting 30 minutes to be safe.
+        .with_timeout_per_test(Duration::from_secs(30 * 60)) 
         .execute_from_args()?;
 
     Ok(())
@@ -97,10 +100,14 @@ pub fn test(env: TestEnv) {
         block_on(async {
             let url = format!("https://[{webserver_ipv6}]:20443");
 
-            // Make an http_outcall once, to establish the session between the adapter and the target server.
-            // This is necessary in order to avoid the server potentially being overloaded by 40 * 500 TCP/TLS handshake requests.
-            test_proxy_canister(&proxy_canister, url.clone(), logger.clone(), 1).await;
+            if WITH_WARM_UP {
+                // Make an http_outcall once, to establish the session between the adapter and the target server.
+                // This is necessary in order to avoid the server potentially being overloaded by 40 * 500 TCP/TLS handshake requests.
+                test_proxy_canister(&proxy_canister, url.clone(), logger.clone(), 1).await;
+            }
+            
             for concurrent_requests in CONCURRENCY_LEVELS {
+                println!("debuggg testing {} nodes, with concurrency {} at time {}", subnet_size, concurrent_requests, std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
                 // For each concurrency level in this subnet, we run the stress test.
                 let (qps, duration) = test_proxy_canister(
                     &proxy_canister,
@@ -137,9 +144,6 @@ async fn do_request(
     logger: &Logger,
     concurrent_requests: u64,
 ) -> Result<Duration, anyhow::Error> {
-    let proxy_canister = proxy_canister.clone();
-    let url = url.clone();
-
     let context = "There is context to be appended in body";
     let res = proxy_canister
         .update_(
@@ -151,7 +155,7 @@ async fn do_request(
             RemoteHttpStressRequest {
                 request: RemoteHttpRequest {
                     request: UnvalidatedCanisterHttpRequestArgs {
-                        url: url.clone(),
+                        url,
                         headers: vec![],
                         body: None,
                         transform: Some(TransformContext {
@@ -172,16 +176,18 @@ async fn do_request(
         .await
         .map_err(|e| anyhow!("Update call to proxy canister failed with {:?}", e))?;
 
-    if !matches!(res, Ok(ref x) if x.response.status == 200 && x.response.body.contains(context)) {
-        bail!("Http request failed response: {:?}", res);
+    match res {
+        Ok(ref x) if x.response.status == 200 && x.response.body.contains(context) => {
+            info!(
+                logger,
+                "All {} concurrent requests succeeded!", concurrent_requests
+            );
+            Ok(x.duration)
+        }
+        _ => {
+            bail!("Http request failed response: {:?}", res);
+        }
     }
-    let res = res.unwrap();
-    info!(
-        logger,
-        "All {} concurrent requests succeeded!", concurrent_requests
-    );
-
-    Ok(res.duration)
 }
 
 // Returns the average qps and average latency of a single request.
@@ -192,11 +198,10 @@ pub async fn test_proxy_canister(
     concurrent_requests: u64,
 ) -> (f64, Duration) {
     let mut experiments = 0;
-    let max_experiments = 2;
     let mut total_duration = Duration::from_secs(0);
 
     // We don't leave the experiment running for much longer than 60 seconds.
-    while total_duration < Duration::from_secs(60) && experiments < max_experiments {
+    while total_duration < Duration::from_secs(60) {
         experiments += 1;
 
         let single_call_duration = ic_system_test_driver::retry_with_msg_async!(
@@ -227,5 +232,5 @@ pub async fn test_proxy_canister(
         experiments,
         qps
     );
-    (qps, total_duration.checked_div(experiments as u32).unwrap())
+    (qps, total_duration / experiments as u32)
 }

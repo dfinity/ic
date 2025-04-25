@@ -1,7 +1,7 @@
 /* tag::catalog[]
 Title:: Soak test for the http_requests feature
 
-Goal:: Measure the evolving qps of http_requests originating from one canister. The test shuold be run with the following command:
+Goal:: Measure the evolving qps of http_requests originating from one canister. The test should be run with the following command:
 ```
 ict testnet create canister_http_soak_test --lifetime-mins=180 --output-dir=./canister_http_soak_test -- --test_tmpdir=./canister_http_soak_test
 ```
@@ -60,7 +60,7 @@ pub fn test(env: TestEnv) {
 
     let app_subnets = get_all_application_subnets(&env);
 
-    for subnet_snapshot in app_subnets.into_iter() {
+    for subnet_snapshot in app_subnets {
         // For each application subnet, we run the soak test.
 
         let node = subnet_snapshot
