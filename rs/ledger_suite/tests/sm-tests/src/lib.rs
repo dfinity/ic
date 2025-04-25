@@ -3758,9 +3758,7 @@ where
     let prev_account = |account: &Account| {
         if account.subaccount.unwrap() == [0u8; 32] {
             let owner = account.owner.as_slice();
-            let mut prev_owner = [0u8; 2];
-            prev_owner[0] = owner[0];
-            prev_owner[1] = owner[1] - 1;
+            let prev_owner = [owner[0], owner[1] - 1];
             Account {
                 owner: Principal::from_slice(&prev_owner),
                 subaccount: account.subaccount,
