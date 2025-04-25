@@ -3821,7 +3821,7 @@ where
             .expect("failed to list allowances");
         check_allowances(allowances, idx + 1, approve_pair.0.owner);
 
-        // Listing with smaller spedner, the current `approve_pair` is included.
+        // Listing with smaller spender, the current `approve_pair` is included.
         args.prev_spender = Some(prev_account(approve_pair.1));
         let allowances = list_allowances(&env, canister_id, approve_pair.0.owner, args)
             .expect("failed to list allowances");
