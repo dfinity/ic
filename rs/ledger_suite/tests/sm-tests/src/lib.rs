@@ -3859,6 +3859,7 @@ where
 
     let (env, canister_id) = setup(ledger_wasm, encode_init_args, initial_balances);
 
+    // Simplest possible approval.
     let approve_args = default_approve_args(spender, 1);
     let block_index =
         send_approval(&env, canister_id, approver.owner, &approve_args).expect("approval failed");
@@ -3866,6 +3867,7 @@ where
 
     let now = system_time_to_nanos(env.time());
 
+    // Spender subaccount, expiration
     let expiration_far = Some(now + Duration::from_secs(3600).as_nanos() as u64);
     let mut approve_args = default_approve_args(spender_sub, 2);
     approve_args.expires_at = expiration_far;
@@ -3873,12 +3875,14 @@ where
         send_approval(&env, canister_id, approver.owner, &approve_args).expect("approval failed");
     assert_eq!(block_index, 3);
 
+    // From subaccount
     let mut approve_args = default_approve_args(spender, 3);
     approve_args.from_subaccount = approver_sub.subaccount;
     let block_index = send_approval(&env, canister_id, approver_sub.owner, &approve_args)
         .expect("approval failed");
     assert_eq!(block_index, 4);
 
+    // From subaccount, spender subaccount, expiration
     let expiration_near = Some(now + Duration::from_secs(10).as_nanos() as u64);
     let mut approve_args = default_approve_args(spender_sub, 4);
     approve_args.from_subaccount = approver_sub.subaccount;
@@ -3920,6 +3924,7 @@ where
         take: None,
     };
 
+    // Here we additionally test listing approvals of another Principal.
     let allowances = list_allowances(&env, canister_id, approver.owner, args.clone())
         .expect("failed to list allowances");
     assert_eq!(allowances.len(), 2);
