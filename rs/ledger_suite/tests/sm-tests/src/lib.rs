@@ -3776,42 +3776,40 @@ where
     };
 
     let mut prev_from = None;
-    for idx in 0..approve_pairs.len() {
+    for (idx, approve_pair) in approve_pairs.iter().enumerate() {
         let mut args = GetAllowancesArgs {
-            from_account: Some(*approve_pairs[idx].0),
+            from_account: Some(*approve_pair.0),
             prev_spender: None,
             take: None,
         };
-        if prev_from != Some(approve_pairs[idx].0) {
-            prev_from = Some(approve_pairs[idx].0);
 
-            let allowances =
-                list_allowances(&env, canister_id, approve_pairs[idx].0.owner, args.clone())
-                    .expect("failed to list allowances");
-            check_allowances(allowances, idx, approve_pairs[idx].0.owner);
+        if prev_from != Some(approve_pair.0) {
+            prev_from = Some(approve_pair.0);
 
-            args.from_account = Some(prev_account(approve_pairs[idx].0));
-            let allowances =
-                list_allowances(&env, canister_id, approve_pairs[idx].0.owner, args.clone())
-                    .expect("failed to list allowances");
-            if args.from_account.unwrap().owner == approve_pairs[idx].0.owner {
-                check_allowances(allowances, idx, approve_pairs[idx].0.owner);
+            let allowances = list_allowances(&env, canister_id, approve_pair.0.owner, args.clone())
+                .expect("failed to list allowances");
+            check_allowances(allowances, idx, approve_pair.0.owner);
+
+            args.from_account = Some(prev_account(approve_pair.0));
+            let allowances = list_allowances(&env, canister_id, approve_pair.0.owner, args.clone())
+                .expect("failed to list allowances");
+            if args.from_account.unwrap().owner == approve_pair.0.owner {
+                check_allowances(allowances, idx, approve_pair.0.owner);
             } else {
                 assert_eq!(allowances.len(), 0);
             }
-            args.from_account = Some(*approve_pairs[idx].0);
+            args.from_account = Some(*approve_pair.0);
         }
 
-        args.prev_spender = Some(*approve_pairs[idx].1);
-        let allowances =
-            list_allowances(&env, canister_id, approve_pairs[idx].0.owner, args.clone())
-                .expect("failed to list allowances");
-        check_allowances(allowances, idx + 1, approve_pairs[idx].0.owner);
-
-        args.prev_spender = Some(prev_account(approve_pairs[idx].1));
-        let allowances = list_allowances(&env, canister_id, approve_pairs[idx].0.owner, args)
+        args.prev_spender = Some(*approve_pair.1);
+        let allowances = list_allowances(&env, canister_id, approve_pair.0.owner, args.clone())
             .expect("failed to list allowances");
-        check_allowances(allowances, idx, approve_pairs[idx].0.owner);
+        check_allowances(allowances, idx + 1, approve_pair.0.owner);
+
+        args.prev_spender = Some(prev_account(approve_pair.1));
+        let allowances = list_allowances(&env, canister_id, approve_pair.0.owner, args)
+            .expect("failed to list allowances");
+        check_allowances(allowances, idx, approve_pair.0.owner);
     }
 }
 
