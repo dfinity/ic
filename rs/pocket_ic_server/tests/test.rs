@@ -60,6 +60,8 @@ fn start_server_helper(
     if capture_stderr {
         cmd.stderr(std::process::Stdio::piped());
     }
+    // setting RUST_LOG should have no influence
+    cmd.env("RUST_LOG", "info");
     let out = cmd.spawn().expect("Failed to start PocketIC binary");
     let url = loop {
         if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone()) {
@@ -643,9 +645,6 @@ fn canister_and_replica_logs() {
 
 #[test]
 fn canister_and_no_replica_logs() {
-    // setting RUST_LOG should have no influence on replica logs
-    std::env::set_var("RUST_LOG", "info");
-
     let out = server_logs(Level::Error);
 
     let stdout = String::from_utf8(out.stdout).unwrap();
@@ -1628,9 +1627,6 @@ fn http_gateway_route_underscore() {
 
 #[test]
 fn auto_progress() {
-    // setting RUST_LOG should have no influence on server logs
-    std::env::set_var("RUST_LOG", "info");
-
     let (server_url, mut out) = start_server_helper(
         None,
         Some("pocket_ic_server=debug,tower_http=info,axum::rejection=trace".to_string()),
