@@ -10510,7 +10510,7 @@ dependencies = [
  "ic-metrics-encoder",
  "ic-nervous-system-runtime",
  "ic-nns-constants",
- "ic-nns-governance-api",
+ "ic-nns-gtc",
  "ic-stable-structures",
  "icp-ledger",
  "icrc-ledger-types",
