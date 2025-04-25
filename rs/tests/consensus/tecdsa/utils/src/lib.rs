@@ -934,7 +934,7 @@ pub fn verify_ecdsa_signature(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
     pk.verify_prehash(msg, &signature).is_ok()
 }
 
-pub fn verify_vetkd(public_key: &[u8], encrypted_key: &[u8], input: &[u8]) -> bool {
+pub fn verify_vetkey(public_key: &[u8], encrypted_key: &[u8], input: &[u8]) -> bool {
     let dpk = DerivedPublicKey::deserialize(public_key).expect("Failed to deserialize public key");
 
     let transport_key = TransportSecretKey::from_seed(VETKD_TRANSPORT_SECRET_KEY_SEED.to_vec())
@@ -958,7 +958,7 @@ pub fn verify_signature(key_id: &MasterPublicKeyId, msg: &[u8], pk: &[u8], sig: 
             SchnorrAlgorithm::Ed25519 => verify_ed25519_signature(pk, sig, msg),
         },
         MasterPublicKeyId::VetKd(key_id) => match key_id.curve {
-            VetKdCurve::Bls12_381_G2 => verify_vetkd(pk, sig, msg),
+            VetKdCurve::Bls12_381_G2 => verify_vetkey(pk, sig, msg),
         },
     };
     assert!(res);
