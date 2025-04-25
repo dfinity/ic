@@ -1,4 +1,4 @@
-use ic_cdk::println;
+use ic_cdk::eprintln;
 use ic_nervous_system_chunks::Chunks;
 use ic_registry_transport::pb::v1::{
     high_capacity_registry_mutation, high_capacity_registry_value, registry_mutation,
@@ -139,7 +139,7 @@ where
     const EMPTY: &[u8] = &[];
 
     let Some(content) = &value.content else {
-        println!(
+        eprintln!(
             "HighCapacityRegistryValue has no content; this is weird. This will be \
              treated the same as having 0-length content, per PB convention. value:\n{:#?}",
             value,
@@ -153,7 +153,7 @@ where
                 return None;
             }
 
-            println!(
+            eprintln!(
                 "HighCapacityRegistryValue has deletion_marker set to false. This is super weird. \
                  This will be treated the same as 0-length value, per Protocol Buffers convention. \
                  value:\n{:#?}",
