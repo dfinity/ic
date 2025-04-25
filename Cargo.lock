@@ -18836,6 +18836,7 @@ name = "proxy_canister"
 version = "0.1.0"
 dependencies = [
  "candid",
+ "futures",
  "ic-cdk 0.17.1",
  "ic-cdk-macros 0.17.1",
  "ic-management-canister-types-private",
