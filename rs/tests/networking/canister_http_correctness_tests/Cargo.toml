@@ -27,3 +27,11 @@ serde_json = { workspace = true }
 [lib]
 name = "canister_http_correctness_tests"
 path = "lib.rs"
+
+[[bin]]
+name = "ic-systest-canister-http-correctness"
+path = "canister_http_correctness_test.rs"
+
+[[bin]]
+name = "ic-systest-canister-http-cycles-correctness"
+path = "canister_http_cycles_correctness_test.rs"

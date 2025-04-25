@@ -23,25 +23,13 @@ fn main() -> Result<()> {
                 .add_test(systest!(test_invalid_domain_name_is_not_refunded))
                 .add_test(systest!(test_non_ascii_url_is_rejected_is_not_refunded))
                 .add_test(systest!(test_invalid_ip_is_not_refunded))
-                // TODO: investigate why test_max_url_length_exceeded is not refunding.
-                // Exceeding the max URL length should actually be refunded based on the old haskell spec test,
-                // but currently the test is failing.
-                // .add_test(systest!(test_max_url_length_exceeded_is_refunded))
                 .add_test(systest!(test_non_existent_transform_function_is_not_refunded))
                 .add_test(systest!(
                     reference_transform_function_exposed_by_different_canister_is_refunded
                 ))
-                // TODO: investigate why test_max_possible_request_size_exceeded_is_refunded is not refunding.
-                // .add_test(systest!(
-                //     test_max_possible_request_size_exceeded_is_refunded
-                // ))
                 .add_test(systest!(
                     test_small_maximum_possible_response_size_exceeded_only_headers_is_not_refunded
                 ))
-                // TODO: investigate
-                // .add_test(systest!(
-                //     test_maximum_possible_value_of_max_response_bytes_exceeded_is_refunded
-                // ))
                 .add_test(systest!(
                     test_http_endpoint_response_is_too_large_with_default_max_response_bytes_is_not_refunded
                 ))
@@ -59,7 +47,14 @@ fn main() -> Result<()> {
                 .add_test(systest!(
                     test_response_header_total_size_over_the_48_kib_limit_is_not_refunded
                 ))
-                // TODO: investigate why these do not work.
+                // TODO: investigate why these tests are currently failing 
+                // .add_test(systest!(test_max_url_length_exceeded_is_refunded))
+                // .add_test(systest!(
+                //     test_max_possible_request_size_exceeded_is_refunded
+                // ))
+                // .add_test(systest!(
+                //     test_maximum_possible_value_of_max_response_bytes_exceeded_is_refunded
+                // ))
                 // .add_test(systest!(test_request_header_name_too_long_is_refunded))
                 // .add_test(systest!(test_request_header_value_too_long_is_refunded))
                 // .add_test(systest!(
@@ -71,36 +66,18 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn test_request_header_name_too_long_is_refunded(env: TestEnv) {
-    is_refunded(env, test_request_header_name_too_long);
-}
-
 fn test_response_header_name_over_limit_is_not_refunded(env: TestEnv) {
     is_not_refunded(env, test_response_header_name_over_limit);
-}
-
-fn test_request_header_value_too_long_is_refunded(env: TestEnv) {
-    is_refunded(env, test_request_header_value_too_long);
 }
 
 fn test_response_header_value_over_limit_is_not_refunded(env: TestEnv) {
     is_not_refunded(env, test_response_header_value_over_limit);
 }
 
-fn test_request_header_total_size_over_the_48_kib_limit_is_refunded(env: TestEnv) {
-    is_refunded(env, test_request_header_total_size_over_the_48_kib_limit);
-}
-
 fn test_response_header_total_size_over_the_48_kib_limit_is_not_refunded(env: TestEnv) {
     is_not_refunded(env, test_response_header_total_size_over_the_48_kib_limit);
 }
 
-fn test_maximum_possible_value_of_max_response_bytes_exceeded_is_refunded(env: TestEnv) {
-    is_refunded(
-        env,
-        test_maximum_possible_value_of_max_response_bytes_exceeded,
-    );
-}
 fn test_small_maximum_possible_response_size_exceeded_only_headers_is_not_refunded(env: TestEnv) {
     is_not_refunded(
         env,
@@ -120,10 +97,6 @@ fn test_invalid_ip_is_not_refunded(env: TestEnv) {
     is_not_refunded(env, test_invalid_ip);
 }
 
-fn test_max_url_length_exceeded_is_refunded(env: TestEnv) {
-    is_refunded(env, test_max_url_length_exceeded);
-}
-
 fn test_non_existent_transform_function_is_not_refunded(env: TestEnv) {
     is_not_refunded(env, test_non_existent_transform_function);
 }
@@ -135,9 +108,6 @@ fn reference_transform_function_exposed_by_different_canister_is_refunded(env: T
     );
 }
 
-fn test_max_possible_request_size_exceeded_is_refunded(env: TestEnv) {
-    is_refunded(env, test_max_possible_request_size_exceeded);
-}
 fn test_http_endpoint_response_is_too_large_with_custom_max_response_bytes_is_not_refunded(
     env: TestEnv,
 ) {
@@ -197,11 +167,48 @@ fn check_refund_status(env: TestEnv, is_refunded: bool, test: fn(TestEnv)) {
         &agent,
     ));
 
-    let balance_diff = initial_balance as i128 - balance as i128;
+    // Even when cycles are being refunded there is still an overhead of cycles being consumed.
+    // This value generally is under 5M, but not always, hence the decision to use 10M as a limit
+    // for checking whether a refund was made or not
     let cycle_cost_overhead = 10_000_000;
+
+    let balance_diff = initial_balance as i128 - balance as i128;
     if is_refunded {
         assert!(balance_diff <= cycle_cost_overhead);
     } else {
         assert!(balance_diff > cycle_cost_overhead);
     }
+}
+
+#[allow(dead_code)]
+fn test_max_url_length_exceeded_is_refunded(env: TestEnv) {
+    is_refunded(env, test_max_url_length_exceeded);
+}
+
+#[allow(dead_code)]
+fn test_max_possible_request_size_exceeded_is_refunded(env: TestEnv) {
+    is_refunded(env, test_max_possible_request_size_exceeded);
+}
+
+#[allow(dead_code)]
+fn test_maximum_possible_value_of_max_response_bytes_exceeded_is_refunded(env: TestEnv) {
+    is_refunded(
+        env,
+        test_maximum_possible_value_of_max_response_bytes_exceeded,
+    );
+}
+
+#[allow(dead_code)]
+fn test_request_header_name_too_long_is_refunded(env: TestEnv) {
+    is_refunded(env, test_request_header_name_too_long);
+}
+
+#[allow(dead_code)]
+fn test_request_header_value_too_long_is_refunded(env: TestEnv) {
+    is_refunded(env, test_request_header_value_too_long);
+}
+
+#[allow(dead_code)]
+fn test_request_header_total_size_over_the_48_kib_limit_is_refunded(env: TestEnv) {
+    is_refunded(env, test_request_header_total_size_over_the_48_kib_limit);
 }
