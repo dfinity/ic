@@ -178,7 +178,7 @@ pub fn global_timer() -> u64 {
 
 pub fn timer<R: CanisterRuntime + 'static>(runtime: R) {
     if let Some(task) = pop_if_ready(&runtime) {
-        ic_cdk::spawn(run_task(task, runtime));
+        ic_cdk::futures::spawn(run_task(task, runtime));
     }
 }
 

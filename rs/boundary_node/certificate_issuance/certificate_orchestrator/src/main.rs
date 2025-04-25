@@ -947,8 +947,10 @@ fn http_request(request: HttpRequest) -> HttpResponse {
         GAUGE_ALLOWED_PRINCIPALS_TOTAL.with(|g| g.borrow_mut().set(tasks.borrow().len() as f64));
     });
 
-    GAUGE_CANISTER_CYCLES_BALANCE
-        .with(|g| g.borrow_mut().set(ic_cdk::api::canister_balance() as f64));
+    GAUGE_CANISTER_CYCLES_BALANCE.with(|g| {
+        g.borrow_mut()
+            .set(ic_cdk::api::canister_cycle_balance() as f64)
+    });
 
     // Export metrics
     let bs = METRICS_REGISTRY.with(|r| {

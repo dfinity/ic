@@ -26,7 +26,7 @@ system_test_nns(
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
-        "@crate_index//:ic_cdk_next",
+        "@crate_index//:ic-management-canister-types",
         "@crate_index//:itertools",
         "@crate_index//:slog",
         "@crate_index//:tokio",

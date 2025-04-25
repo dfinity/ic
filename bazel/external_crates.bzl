@@ -604,23 +604,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "3.0.3",
             ),
             "ic-cdk": crate.spec(
-                version = "^0.17.0",
+                version = "^0.18.0",
             ),
             "ic-cdk-timers": crate.spec(
                 version = "^0.11.0",
             ),
             "ic-cdk-macros": crate.spec(
-                version = "^0.17.0",
-            ),
-            "ic-cdk-macros-next": crate.spec(
-                package = "ic-cdk-macros",
-                git = "https://github.com/dfinity/cdk-rs.git",
-                rev = "4e287ce51636b0e70768c193da38d2fc5324ea15",
-            ),
-            "ic-cdk-next": crate.spec(
-                package = "ic-cdk",
-                git = "https://github.com/dfinity/cdk-rs.git",
-                rev = "4e287ce51636b0e70768c193da38d2fc5324ea15",
+                version = "^0.18.0",
             ),
             "ic-certified-map": crate.spec(
                 version = "^0.3.1",
@@ -645,7 +635,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.1.1",
             ),
             "ic-management-canister-types": crate.spec(
-                version = "0.2.1",
+                version = "0.3.0",
             ),
             "ic_principal": crate.spec(
                 version = "^0.1.1",

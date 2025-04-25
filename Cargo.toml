@@ -579,15 +579,15 @@ ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "686cff6ccd422
 ic-btc-interface = "0.2.2"
 ic-canister-sig-creation = { git = "https://github.com/dfinity/ic-canister-sig-creation", rev = "7f9e931954637526295269155881207f6c832d6d" }
 ic-cbor = "3"
-ic-cdk = "0.17.1"
-ic-cdk-macros = "0.17.0"
+ic-cdk = "0.18.0"
+ic-cdk-macros = "0.18.0"
 ic-cdk-timers = "0.11.0"
 ic-certificate-verification = "3"
 ic-certification = "3"
 ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "469d2daee8b44aadb46400bcb2832d560baf7272" }
 ic-http-certification = "3.0.3"
 ic-http-gateway = "0.2.0"
-ic-management-canister-types = "0.2.1"
+ic-management-canister-types = "0.3.0"
 ic-response-verification = "3"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"

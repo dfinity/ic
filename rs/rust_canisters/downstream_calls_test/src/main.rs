@@ -1,6 +1,5 @@
-use candid::{Decode, Encode};
 use downstream_calls_test::{CallOrResponse, State};
-use ic_cdk::api::call::call_raw;
+use ic_cdk::call::Call;
 use ic_cdk_macros::update;
 
 fn main() {}
@@ -32,22 +31,19 @@ async fn reply_or_defer(mut state: State) -> State {
     loop {
         match state.actions.pop_front() {
             Some(CallOrResponse::Call(canister_id)) => {
-                let response = call_raw(
-                    canister_id.into(),
-                    "reply_or_defer",
-                    Encode!(&State {
+                let response = Call::unbounded_wait(canister_id.into(), "reply_or_defer")
+                    .with_arg(State {
                         actions: state.actions,
                         call_count: state.call_count + 1,
                         current_depth: state.current_depth + 1,
                         depth_total: state.depth_total + state.current_depth,
                     })
-                    .unwrap(),
-                    0,
-                )
-                .await
-                .expect("calling other canister failed");
+                    .await
+                    .expect("calling other canister failed");
 
-                state = Decode!(&response, State).expect("decoding response failed");
+                state = response
+                    .candid::<State>()
+                    .expect("decoding response failed");
             }
             Some(CallOrResponse::Response) | None => {
                 return State {

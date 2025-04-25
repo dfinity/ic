@@ -76,9 +76,9 @@ use disburse_maturity::initiate_maturity_disbursement;
 #[cfg(not(target_arch = "wasm32"))]
 use futures::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_cdk::println;
 #[cfg(target_arch = "wasm32")]
-use ic_cdk::spawn;
+use ic_cdk::futures::spawn;
+use ic_cdk::println;
 use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_common::{

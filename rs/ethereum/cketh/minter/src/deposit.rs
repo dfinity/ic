@@ -126,7 +126,7 @@ async fn mint() {
             INFO,
             "Failed to mint {error_count} events, rescheduling the minting"
         );
-        ic_cdk_timers::set_timer(crate::MINT_RETRY_DELAY, || ic_cdk::spawn(mint()));
+        ic_cdk_timers::set_timer(crate::MINT_RETRY_DELAY, || ic_cdk::futures::spawn(mint()));
     }
 }
 
@@ -329,7 +329,7 @@ pub fn register_deposit_events(
         }
     }
     if read_state(State::has_events_to_mint) {
-        ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::spawn(mint()));
+        ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::futures::spawn(mint()));
     }
     for error in errors {
         if let ReceivedEventError::InvalidEventSource { source, error } = &error {

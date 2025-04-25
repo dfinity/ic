@@ -28,7 +28,7 @@ async fn test_() {
 // #[update]
 // async fn test() {
 //     println!("Playground test was called");
-//     ic_cdk::spawn(async move {
+//     ic_cdk::futures::spawn(async move {
 //         let _: () = ic_cdk::call(ic_cdk::api::id(), "test_2", ()).await.unwrap();
 //     });
 //     ic_cdk_timers::set_timer(Duration::from_millis(0), || {

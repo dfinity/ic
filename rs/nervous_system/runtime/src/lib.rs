@@ -147,7 +147,7 @@ impl Runtime for CdkRuntime {
     }
 
     fn spawn_future<F: 'static + Future<Output = ()>>(future: F) {
-        ic_cdk::spawn(future);
+        ic_cdk::futures::spawn(future);
     }
 
     fn canister_version() -> u64 {

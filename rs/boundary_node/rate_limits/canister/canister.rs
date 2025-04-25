@@ -237,7 +237,7 @@ fn periodically_poll_api_boundary_nodes(interval: u64, canister_api: Arc<dyn Can
 
     ic_cdk_timers::set_timer_interval(interval, move || {
         let canister_api = canister_api.clone();
-        ic_cdk::spawn(async move {
+        ic_cdk::futures::spawn(async move {
             let canister_id = Principal::from(REGISTRY_CANISTER_ID);
 
             let (call_status, message) =

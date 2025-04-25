@@ -883,7 +883,7 @@ impl LedgerAccess for Access {
 /// Canister endpoints
 #[export_name = "canister_update send_pb"]
 fn send_() {
-    ic_cdk::spawn(async move {
+    ic_cdk::futures::spawn(async move {
         ic_cdk::setup();
 
         let SendArgs {
