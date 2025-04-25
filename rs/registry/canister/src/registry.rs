@@ -471,7 +471,10 @@ impl Registry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::flags::temporarily_disable_chunkifying_large_values;
+    use crate::flags::{
+        temporarily_disable_chunkifying_large_values, temporarily_enable_chunkifying_large_values,
+    };
+    use ic_registry_canister_chunkify::dechunkify;
     use ic_registry_transport::{delete, insert, update, upsert};
     use rand::{Rng, SeedableRng};
     use rand_distr::{Alphanumeric, Distribution, Poisson, Uniform};
@@ -1227,5 +1230,105 @@ Average length of the values: {} (desired: {})",
         );
 
         max_value_size
+    }
+
+    #[test]
+    fn test_big_mutation_survives_upgrade() {
+        let _restore_on_drop = temporarily_enable_chunkifying_large_values();
+        const MOD: u64 = u8::MAX as u64 + 1;
+
+        // Step 1: Prepare the world
+
+        // Step 1.1: Populate original Registry.
+        let original_value = (0_u64..5_000_000)
+            .map(|i| {
+                let result = 57 * i + 42;
+                (result % MOD) as u8
+            })
+            .collect::<Vec<u8>>();
+        let mutation = RegistryMutation {
+            mutation_type: Type::Insert as i32,
+            key: b"this is key".to_vec(),
+            value: original_value.clone(),
+        };
+        let mut original_registry = Registry::new();
+        apply_mutations_skip_invariant_checks(&mut original_registry, vec![mutation]);
+
+        // Step 1.2: Verify contents of original Registry.
+
+        // Step 1.2.1: Verify original_registry.store.
+        let store = &original_registry.store;
+        assert_eq!(store.len(), 1, "{:#?}", store);
+        let history: &VecDeque<RegistryValue> = store.get(&b"this is key".to_vec()).unwrap();
+        assert_eq!(history.len(), 1, "{:#?}", history);
+        assert_eq!(
+            history.front().unwrap(),
+            &RegistryValue {
+                value: original_value.clone(),
+                version: 1,
+                deletion_marker: false,
+            },
+        );
+
+        // Step 1.2.2: Verify original_registry.changelog.
+        let changelog = &original_registry.changelog;
+
+        assert_eq!(
+            changelog.iter().collect::<Vec<_>>().len(),
+            1,
+            "{:#?}",
+            changelog
+        );
+
+        let composite_mutation = HighCapacityRegistryAtomicMutateRequest::decode(
+            changelog
+                .get(EncodedVersion::from(1).as_ref())
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap();
+
+        let mutations = &composite_mutation.mutations;
+        assert_eq!(mutations.len(), 1, "{:#?}", composite_mutation);
+        let prime_mutation = mutations.first().unwrap();
+        let large_value_chunk_keys = match &prime_mutation.content {
+            Some(high_capacity_registry_mutation::Content::LargeValueChunkKeys(ok)) => ok,
+            _ => panic!("{:#?}", prime_mutation),
+        };
+        assert_eq!(
+            large_value_chunk_keys.chunk_content_sha256s.len(),
+            3,
+            "{:?}",
+            large_value_chunk_keys
+        );
+        let reconstituted_monolithic_blob =
+            with_chunks(|chunks| dechunkify(large_value_chunk_keys, chunks));
+        assert_eq!(reconstituted_monolithic_blob.len(), original_value.len());
+        // assert_eq is not used here, because it would generate a MBs of spam.
+        assert!(reconstituted_monolithic_blob == original_value);
+
+        assert_eq!(
+            composite_mutation,
+            HighCapacityRegistryAtomicMutateRequest {
+                preconditions: vec![],
+                timestamp_seconds: 0,
+                mutations: vec![HighCapacityRegistryMutation {
+                    key: b"this is key".to_vec(),
+                    mutation_type: Type::Upsert as i32,
+                    content: Some(
+                        high_capacity_registry_mutation::Content::LargeValueChunkKeys(
+                            large_value_chunk_keys.clone(),
+                        )
+                    ),
+                }],
+            },
+        );
+
+        // Step 2: Call code under test. Simulate (Registry) canister upgrade.
+        let mut upgraded_registry = Registry::new();
+        upgraded_registry.from_serializable_form(original_registry.serializable_form());
+
+        // Step 3: Verify result(s): Verify that upgrade resulted in no data loss.
+        assert_eq!(upgraded_registry, original_registry);
     }
 }
