@@ -46,6 +46,7 @@ const CONTENT_TOO_LARGE_STATUS: u16 = 413;
 /// 1. System subnet with a single node
 /// 2. Application subnet with a single node
 /// 3. Boundary node
+///
 /// and installs [`UniversalCanister`]s on the subnets.
 fn setup(env: TestEnv) {
     InternetComputer::new()
@@ -114,7 +115,7 @@ fn send_request(
     message_size: u64,
     call: RequestType,
 ) -> Result<(), AgentError> {
-    let node = get_first_node(&env, subnet_type);
+    let node = get_first_node(env, subnet_type);
     let deployed_boundary_node = env.get_deployed_boundary_node(BOUNDARY_NODE_NAME).unwrap();
     let boundary_node_vm = deployed_boundary_node.get_snapshot().unwrap();
     let agent = boundary_node_vm.build_default_agent();
