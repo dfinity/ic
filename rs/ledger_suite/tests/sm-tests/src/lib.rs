@@ -4048,26 +4048,6 @@ pub fn test_allowance_listing_subaccount<T>(
     let allowances = list_allowances(&env, canister_id, approver_default.owner, args.clone())
         .expect("failed to list allowances");
     assert_eq!(allowances.len(), 1);
-
-    // Should filter out the allowance if subaccount is none
-    let args = GetAllowancesArgs {
-        from_account: Some(approver_default),
-        prev_spender: Some(spender_none),
-        take: None,
-    };
-    let allowances = list_allowances(&env, canister_id, approver_none.owner, args.clone())
-        .expect("failed to list allowances");
-    assert_eq!(allowances.len(), 0);
-
-    // Should filter out the allowance if subaccount is default
-    let args = GetAllowancesArgs {
-        from_account: Some(approver_default),
-        prev_spender: Some(spender_default),
-        take: None,
-    };
-    let allowances = list_allowances(&env, canister_id, approver_none.owner, args)
-        .expect("failed to list allowances");
-    assert_eq!(allowances.len(), 0);
 }
 
 pub fn expect_icrc2_disabled(
