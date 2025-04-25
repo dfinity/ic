@@ -1,6 +1,13 @@
+load("//rs/tests:common.bzl", "CANISTER_HTTP_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test_nns")
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
+
+PROXY_CANISTER_RUNTIME_DEPS = [
+    # Keep sorted.
+    "//rs/rust_canisters/proxy_canister:proxy_canister",
+]
 
 CANISTER_HTTP_BASE_DEPS = [
     # Keep sorted.
@@ -33,5 +40,57 @@ rust_library(
         "@crate_index//:ic-agent",
         "@crate_index//:serde",
         "@crate_index//:serde_json",
+    ],
+)
+
+system_test_nns(
+    name = "canister_http_correctness_test",
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
+    deps = CANISTER_HTTP_BASE_DEPS + [
+        ":canister_http_correctness_tests",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/test_utilities",
+        "//rs/test_utilities/types",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:assert_matches",
+        "@crate_index//:ic-agent",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test_nns(
+    name = "canister_http_cycles_correctness_test",
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
+    deps = CANISTER_HTTP_BASE_DEPS + [
+        ":canister_http_correctness_tests",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/test_utilities",
+        "//rs/test_utilities/types",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:assert_matches",
+        "@crate_index//:ic-agent",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:tokio",
     ],
 )
