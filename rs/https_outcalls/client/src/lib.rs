@@ -78,6 +78,7 @@ pub fn setup_canister_http_client(
                         metrics_registry.clone(),
                         subnet_type,
                         delegation_from_nns,
+                        log,
                     ))
                 }
                 Err(e) => {

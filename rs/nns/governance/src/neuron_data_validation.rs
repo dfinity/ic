@@ -1,5 +1,4 @@
 use crate::{
-    allow_active_neurons_in_stable_memory,
     neuron::Neuron,
     neuron_store::NeuronStore,
     pb::v1::Topic,
@@ -20,10 +19,6 @@ use std::{
 
 const MAX_VALIDATION_AGE_SECONDS: u64 = 60 * 60 * 24;
 const MAX_EXAMPLE_ISSUES_COUNT: usize = 10;
-// On average, checking whether an entry exists in a StableBTreeMap takes ~130K instructions, and a
-// neuron on average has ~40 entries (1 main neuron data + 11.3 followees + 1.2 hot key +
-// 26.2 recent ballots). Using batch size = 10 keeps the overall instructions under 60M.
-const INACTIVE_NEURON_VALIDATION_CHUNK_SIZE: usize = 10;
 
 #[derive(Clone, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum ValidationIssue {
@@ -224,12 +219,6 @@ impl ValidationInProgress {
         tasks.push_back(Box::new(CardinalitiesValidationTask::<
             KnownNeuronIndexValidator,
         >::new()));
-
-        if !allow_active_neurons_in_stable_memory() {
-            tasks.push_back(Box::new(StableNeuronStoreValidator::new(
-                INACTIVE_NEURON_VALIDATION_CHUNK_SIZE,
-            )));
-        }
 
         Self {
             started_time_seconds: now,
@@ -639,43 +628,6 @@ impl CardinalityAndRangeValidator for KnownNeuronIndexValidator {
     }
 }
 
-/// A validator to validate that all neurons in stable storage are inactive.
-struct StableNeuronStoreValidator {
-    next_neuron_id: Option<NeuronId>,
-    chunk_size: usize,
-}
-
-impl StableNeuronStoreValidator {
-    fn new(chunk_size: usize) -> Self {
-        Self {
-            next_neuron_id: Some(NeuronId { id: 0 }),
-            chunk_size,
-        }
-    }
-}
-
-impl ValidationTask for StableNeuronStoreValidator {
-    fn is_done(&self) -> bool {
-        self.next_neuron_id.is_none()
-    }
-
-    fn validate_next_chunk(&mut self, neuron_store: &NeuronStore) -> Vec<ValidationIssue> {
-        let next_neuron_id = match self.next_neuron_id.take() {
-            Some(next_neuron_id) => next_neuron_id,
-            None => return vec![],
-        };
-
-        let (invalid_neuron_ids, neuron_id_for_next_batch) = neuron_store
-            .batch_validate_neurons_in_stable_store_are_inactive(next_neuron_id, self.chunk_size);
-
-        self.next_neuron_id = neuron_id_for_next_batch;
-        invalid_neuron_ids
-            .into_iter()
-            .map(ValidationIssue::ActiveNeuronInStableStorage)
-            .collect()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -687,8 +639,7 @@ mod tests {
     use crate::{
         neuron::{DissolveStateAndAge, NeuronBuilder},
         pb::v1::{neuron::Followees, KnownNeuronData},
-        storage::{with_stable_neuron_indexes_mut, with_stable_neuron_store_mut},
-        temporarily_disable_allow_active_neurons_in_stable_memory,
+        storage::with_stable_neuron_indexes_mut,
     };
 
     thread_local! {
@@ -992,71 +943,6 @@ mod tests {
             "{:?}",
             issue_groups
         );
-    }
-
-    #[test]
-    fn test_validator_invalid_issues_active_neuron_in_stable() {
-        let _t = temporarily_disable_allow_active_neurons_in_stable_memory();
-
-        // Step 1: Cause an issue with active neuron in stable storage.
-        // Step 1.1 First create it as an inactive neuron so it can be added to stable storage.
-        let inactive_neuron = next_test_neuron()
-            .with_cached_neuron_stake_e8s(0)
-            .with_dissolve_state_and_age(DissolveStateAndAge::DissolvingOrDissolved {
-                when_dissolved_timestamp_seconds: 1,
-            })
-            .build();
-
-        let mut active_neuron = inactive_neuron.clone();
-        active_neuron.cached_neuron_stake_e8s = 1;
-
-        let neuron_store =
-            NeuronStore::new(btreemap! {inactive_neuron.id().id => inactive_neuron.clone()});
-        // Make the neuron active while it's still in stable storage, to cause the issue with stable neuron store validation.
-        with_stable_neuron_store_mut(|stable_neuron_store| {
-            stable_neuron_store
-                .update(&inactive_neuron, active_neuron)
-                .unwrap()
-        });
-
-        // Step 2: Validate and get validation summary.
-        let mut validator = NeuronDataValidator::new();
-        let mut now = 1;
-        while validator.maybe_validate(now, &neuron_store) {
-            now += 1;
-        }
-        let summary = validator.summary();
-
-        // Step 3: Check validation summary for current issues. It has 4 issues related to primary
-        // data missing from indexes, and 2 issues for cardinality mismatches for subaccount and
-        // known neuron, since those are checked for exact matches.
-        let issue_groups = summary.current_issues_summary.unwrap().issue_groups;
-        assert_eq!(issue_groups.len(), 1);
-        assert!(
-            issue_groups
-                .iter()
-                .any(|issue_group| issue_group.issues_count == 1
-                    && issue_group.example_issues[0]
-                        == ValidationIssue::ActiveNeuronInStableStorage(inactive_neuron.id())),
-            "{:?}",
-            issue_groups
-        );
-
-        // Step 4: check that previous issues is empty and no running validation.
-        assert_eq!(summary.previous_issues_summary, None);
-        assert_eq!(summary.current_validation_started_time_seconds, None);
-
-        // Step 5: resume validation by advancing `now` that's passed in.
-        now += MAX_VALIDATION_AGE_SECONDS + 1;
-        assert!(validator.maybe_validate(now, &neuron_store));
-
-        // Step 6: check that previous_issues now have values and there is a running validation.
-        let summary = validator.summary();
-        assert_eq!(
-            summary.previous_issues_summary.unwrap().issue_groups.len(),
-            1
-        );
-        assert_eq!(summary.current_validation_started_time_seconds, Some(now));
     }
 
     #[test]
