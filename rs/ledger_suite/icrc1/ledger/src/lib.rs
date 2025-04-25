@@ -77,7 +77,7 @@ const METADATA_FEE: &str = "icrc1:fee";
 const METADATA_MAX_MEMO_LENGTH: &str = "icrc1:max_memo_length";
 const METADATA_PUBLIC_ALLOWANCES: &str = "icrc103:public_allowances";
 const METADATA_MAX_TAKE_ALLOWANCES: &str = "icrc103:max_take_value";
-const DEFAULT_MAX_TAKE_ALLOWANCES: u64 = 500;
+const MAX_TAKE_ALLOWANCES: u64 = 500;
 
 #[cfg(not(feature = "u256-tokens"))]
 pub type Tokens = ic_icrc1_tokens_u64::U64;
@@ -878,7 +878,7 @@ impl Ledger {
     }
 
     pub fn max_take_allowances(&self) -> u64 {
-        DEFAULT_MAX_TAKE_ALLOWANCES
+        MAX_TAKE_ALLOWANCES
     }
 
     pub fn metadata(&self) -> Vec<(String, Value)> {
