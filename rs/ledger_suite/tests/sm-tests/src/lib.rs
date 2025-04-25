@@ -3722,6 +3722,10 @@ where
 
     let (env, canister_id) = setup(ledger_wasm, encode_init_args, initial_balances);
 
+    // Create approvals between all (approver, spender) pairs from `approvers` and `spenders`.
+    // Additionally store all pairs in an array in sorted order in `approve_pairs`.
+    // This allows us to check if the allowances returned by the `icrc103_get_allowances`
+    // endpoint are correct - they will always form a contiguous subarray of `approve_pairs`.
     let mut approve_pairs = vec![];
     for approver in &approvers {
         for spender in &spenders {
@@ -3740,8 +3744,11 @@ where
             approve_pairs.push((approver, spender));
         }
     }
-    approve_pairs.sort();
+    assert!(approve_pairs.is_sorted());
 
+    // Check if given allowances match the elements of `approve_pairs` starting at index `pair_index`.
+    // Additionally check that the next element in `approve_pairs` has a different `from.owner`
+    // and could not be part of the same response of `icrc103_get_allowances`.
     let check_allowances = |allowances: Allowances, pair_idx: usize, owner: Principal| {
         for i in 0..allowances.len() {
             let allowance = &allowances[i];
@@ -3755,6 +3762,10 @@ where
         }
     };
 
+    // Create an Account that is lexicographically smaller than the given Account.
+    // In the above Account generation scheme, the returned account will fall
+    // between two approvers or spenders - we only modify the second byte of
+    // the owner slice or the last byte of the subaccount slice.
     let prev_account = |account: &Account| {
         if account.subaccount.unwrap() == [0u8; 32] {
             let owner = account.owner.as_slice();
@@ -3784,10 +3795,15 @@ where
         if prev_from != Some(approve_pair.0) {
             prev_from = Some(approve_pair.0);
 
+            // Listing without specifying the spender.
             let allowances = list_allowances(&env, canister_id, approve_pair.0.owner, args.clone())
                 .expect("failed to list allowances");
             check_allowances(allowances, idx, approve_pair.0.owner);
 
+            // List from a smaller `from_account`. If the smaller `from_account` has a different owner
+            // the result list is empty - we don't have any approvals for that owner.
+            // If the smaller `from_account` has a different subaccount, the result is the same
+            // as listing for current `from_account` - the smaller subaccount does not match any account we generated.
             args.from_account = Some(prev_account(approve_pair.0));
             let allowances = list_allowances(&env, canister_id, approve_pair.0.owner, args.clone())
                 .expect("failed to list allowances");
@@ -3799,11 +3815,13 @@ where
             args.from_account = Some(*approve_pair.0);
         }
 
+        // Listing with spender specified, the current `approve_pair` is skipped.
         args.prev_spender = Some(*approve_pair.1);
         let allowances = list_allowances(&env, canister_id, approve_pair.0.owner, args.clone())
             .expect("failed to list allowances");
         check_allowances(allowances, idx + 1, approve_pair.0.owner);
 
+        // Listing with smaller spedner, the current `approve_pair` is included.
         args.prev_spender = Some(prev_account(approve_pair.1));
         let allowances = list_allowances(&env, canister_id, approve_pair.0.owner, args)
             .expect("failed to list allowances");
