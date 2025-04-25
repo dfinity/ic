@@ -10510,7 +10510,7 @@ dependencies = [
  "ic-metrics-encoder",
  "ic-nervous-system-runtime",
  "ic-nns-constants",
- "ic-nns-governance-api",
+ "ic-nns-gtc",
  "ic-stable-structures",
  "icp-ledger",
  "icrc-ledger-types",
@@ -18838,6 +18838,7 @@ name = "proxy_canister"
 version = "0.1.0"
 dependencies = [
  "candid",
+ "futures",
  "ic-cdk 0.17.1",
  "ic-cdk-macros 0.17.1",
  "ic-management-canister-types-private",
