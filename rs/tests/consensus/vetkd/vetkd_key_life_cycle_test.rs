@@ -338,7 +338,7 @@ async fn derive_vetkey_with_canister<R: Rng>(
 
     EncryptedVetKey::deserialize(&encrypted_vetkey)
         .expect("Failed to deserialize encrypted key")
-        .decrypt_and_verify(&tsk, &verification_key, input)
+        .decrypt_and_verify(&tsk, verification_key, input)
         .expect("Failed to decrypt derived key")
 }
 
