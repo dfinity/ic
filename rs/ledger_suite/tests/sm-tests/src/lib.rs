@@ -3694,8 +3694,12 @@ fn list_allowances(
     .expect("failed to decode icrc103_get_allowances response")
 }
 
-pub fn test_approval_listing<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
-where
+// The test focuses on testing whether given an (approver, spender) pair the correct
+// sequence of allowances is returned.
+pub fn test_allowance_listing_sequences<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
     T: CandidType,
 {
     const NUM_PRINCIPALS: u64 = 3;
@@ -3829,7 +3833,9 @@ where
     }
 }
 
-pub fn test_approval_listing_values<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+// The test focuses on testing if the returned allowances have the correct
+// values for all fields (from, spender, amount, expiration).
+pub fn test_allowance_listing_values<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
 where
     T: CandidType,
 {

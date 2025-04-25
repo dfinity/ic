@@ -455,13 +455,16 @@ fn test_approve_from_minter() {
 }
 
 #[test]
-fn test_approval_listing() {
-    ic_ledger_suite_state_machine_tests::test_approval_listing(ledger_wasm(), encode_init_args);
+fn test_allowance_listing_sequences() {
+    ic_ledger_suite_state_machine_tests::test_allowance_listing_sequences(
+        ledger_wasm(),
+        encode_init_args,
+    );
 }
 
 #[test]
-fn test_approval_listing_values() {
-    ic_ledger_suite_state_machine_tests::test_approval_listing_values(
+fn test_allowance_listing_values() {
+    ic_ledger_suite_state_machine_tests::test_allowance_listing_values(
         ledger_wasm(),
         encode_init_args,
     );
