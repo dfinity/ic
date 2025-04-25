@@ -3,6 +3,7 @@ use crate::{
     pb::v1::{
         registry_stable_storage::Version as ReprVersion, ChangelogEntry, RegistryStableStorage,
     },
+    storage::maybe_chunkify_and_encode,
 };
 use ic_certified_map::RbTree;
 use ic_registry_canister_api::{Chunk, GetChunkRequest};
@@ -38,7 +39,7 @@ pub const MAX_REGISTRY_DELTAS_SIZE: usize =
 pub type RegistryMap = BTreeMap<Vec<u8>, VecDeque<RegistryValue>>;
 pub type Version = u64;
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Default)]
-pub struct EncodedVersion([u8; 8]);
+pub struct EncodedVersion([u8; std::mem::size_of::<Version>()]);
 
 impl EncodedVersion {
     pub const fn as_version(&self) -> Version {
@@ -92,8 +93,9 @@ pub struct Registry {
     /// representation that allows us change the index structure in future.
     ///
     /// Each entry contains a blob which is a serialized
-    /// RegistryAtomicMutateRequest.  We keep the serialized version around to
-    /// make sure that hash trees stay the same even if protobuf schema evolves.
+    /// HighCapacityRegistryAtomicMutateRequest. The serialized version is
+    /// retained to ensure that hash trees stay the same even if the protobuf
+    /// schema evolves.
     pub(crate) changelog: RbTree<EncodedVersion, Vec<u8>>,
 }
 
@@ -231,19 +233,19 @@ impl Registry {
             } as i32;
         }
 
-        let req = RegistryAtomicMutateRequest {
-            mutations,
-            preconditions: vec![],
-        };
-        self.changelog_insert(version, &req);
-
-        for mutation in req.mutations {
-            (*self.store.entry(mutation.key).or_default()).push_back(RegistryValue {
+        for mutation in &mutations {
+            (*self.store.entry(mutation.key.clone()).or_default()).push_back(RegistryValue {
                 version,
-                value: mutation.value,
+                value: mutation.value.clone(),
                 deletion_marker: mutation.mutation_type == Type::Delete as i32,
             });
         }
+
+        let request = RegistryAtomicMutateRequest {
+            mutations,
+            preconditions: vec![],
+        };
+        self.changelog_insert(version, request);
     }
 
     /// Applies the given mutations, without any check corresponding
@@ -366,10 +368,15 @@ impl Registry {
 
     /// Inserts a changelog entry at the given version, while enforcing the
     /// [`MAX_REGISTRY_DELTAS_SIZE`] limit.
-    fn changelog_insert(&mut self, version: u64, req: &RegistryAtomicMutateRequest) {
+    fn changelog_insert(&mut self, version: u64, req: RegistryAtomicMutateRequest) {
         let version = EncodedVersion::from(version);
-        let bytes = pb_encode(req);
+        let bytes = maybe_chunkify_and_encode(req);
 
+        // Once chunking is enabled, you would need a really degenerate
+        // composite/atomic mutation to reach this panic, but it is still
+        // possible (e.g. by touching a huge number of keys). Therefore, this
+        // should remain in place, even though it is not as easy to make overly
+        // large atomic/composite mutations anymore.
         let delta_size = version.as_ref().len() + bytes.len();
         if delta_size > MAX_REGISTRY_DELTAS_SIZE {
             panic!(
@@ -426,6 +433,7 @@ impl Registry {
                     }
                     // End code to fix ICSUP-2589
 
+                    // TODO(NNS1-3645): Switch to HighCapacity.
                     let req = RegistryAtomicMutateRequest::decode(&entry.encoded_mutation[..])
                         .unwrap_or_else(|err| {
                             panic!("Failed to decode mutation@{}: {}", entry.version, err)
@@ -469,7 +477,7 @@ impl Registry {
                 for (v, mutations) in mutations_by_version.into_iter() {
                     self.changelog_insert(
                         v,
-                        &RegistryAtomicMutateRequest {
+                        RegistryAtomicMutateRequest {
                             mutations,
                             preconditions: vec![],
                         },
@@ -480,15 +488,10 @@ impl Registry {
     }
 }
 
-fn pb_encode(msg: &impl prost::Message) -> Vec<u8> {
-    let mut buf = vec![];
-    msg.encode(&mut buf).unwrap();
-    buf
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::flags::temporarily_disable_chunkifying_large_values;
     use ic_registry_transport::{delete, insert, update, upsert};
     use rand::{Rng, SeedableRng};
     use rand_distr::{Alphanumeric, Distribution, Poisson, Uniform};
@@ -778,6 +781,9 @@ mod tests {
 
     #[test]
     fn test_count_fitting_deltas_max_size() {
+        // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
+        let _restore_on_drop = temporarily_disable_chunkifying_large_values();
+
         let mut registry = Registry::new();
         let version = 1;
         let key = b"key";
@@ -1024,7 +1030,7 @@ mod tests {
             mutations,
             preconditions: vec![],
         };
-        registry.changelog_insert(version, &req);
+        registry.changelog_insert(version, req);
 
         // We should have one changelog entry.
         assert_eq!(1, registry.changelog().iter().count());
@@ -1037,6 +1043,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "[Registry] Transaction rejected because delta would be too large")]
     fn test_changelog_insert_delta_too_large() {
+        // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
+        let _restore_on_drop = temporarily_disable_chunkifying_large_values();
+
         let mut registry = Registry::new();
         let version = 1;
         let key = b"key";
@@ -1048,7 +1057,7 @@ mod tests {
             preconditions: vec![],
         };
 
-        registry.changelog_insert(1, &req);
+        registry.changelog_insert(1, req);
     }
 
     #[test]
@@ -1075,6 +1084,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "[Registry] Transaction rejected because delta would be too large")]
     fn test_apply_mutations_delta_too_large() {
+        // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
+        let _restore_on_drop = temporarily_disable_chunkifying_large_values();
+
         let mut registry = Registry::new();
         let version = 1;
         let key = b"key";
@@ -1106,7 +1118,7 @@ mod tests {
         // Circumvent `changelog_insert()` to insert potentially oversized mutations.
         registry
             .changelog
-            .insert(EncodedVersion::from(version), pb_encode(&req));
+            .insert(EncodedVersion::from(version), req.encode_to_vec());
 
         (*registry.store.entry(mutation.key).or_default()).push_back(RegistryValue {
             version,
@@ -1125,25 +1137,39 @@ mod tests {
         assert_eq!(deserialized, registry);
     }
 
+    // I think we can get rid of ReprVersion::Unspecified support? It's not
+    // doing much harm now; just a bit of detritus/dead code.
     #[test]
     fn test_from_serializable_form_version_unspecified_max_size_delta() {
+        // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
+        let _restore_on_drop = temporarily_disable_chunkifying_large_values();
+
         test_from_serializable_form_impl(0, ReprVersion::Unspecified)
     }
 
     #[test]
     fn test_from_serializable_form_version1_max_size_delta() {
+        // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
+        let _restore_on_drop = temporarily_disable_chunkifying_large_values();
+
         test_from_serializable_form_impl(0, ReprVersion::Version1)
     }
 
     #[test]
     #[should_panic(expected = "[Registry] Transaction rejected because delta would be too large")]
     fn test_from_serializable_form_version_unspecified_delta_too_large() {
+        // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
+        let _restore_on_drop = temporarily_disable_chunkifying_large_values();
+
         test_from_serializable_form_impl(1, ReprVersion::Unspecified)
     }
 
     #[test]
     #[should_panic(expected = "[Registry] Transaction rejected because delta would be too large")]
     fn test_from_serializable_form_version1_delta_too_large() {
+        // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
+        let _restore_on_drop = temporarily_disable_chunkifying_large_values();
+
         test_from_serializable_form_impl(1, ReprVersion::Version1)
     }
 
@@ -1235,7 +1261,7 @@ Average length of the values: {} (desired: {})",
             };
 
             let version = EncodedVersion::from(version);
-            let bytes = pb_encode(&req);
+            let bytes = req.encode_to_vec();
 
             version.as_ref().len() + bytes.len()
         }

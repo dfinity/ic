@@ -31,10 +31,6 @@ use tokio::sync::Mutex;
 
 // Interval for syncing blocks from the ledger
 const BLOCK_SYNC_INTERVAL: Duration = Duration::from_secs(1);
-
-// Timeout for syncing blocks from the ledger. If no synchronization is attempted within this time, the sync thread will be restarted.
-const BLOCK_SYNC_TIMEOUT: Duration = Duration::from_secs(10);
-
 use tracing::{error, info};
 
 #[post("/account/balance")]
@@ -253,6 +249,7 @@ pub struct RosettaApiServer {
     ledger: Arc<dyn LedgerAccess + Send + Sync>,
     server: Mutex<ServerState>,
     server_handle: ServerHandle,
+    watchdog_timeout_seconds: u64,
 }
 
 impl RosettaApiServer {
@@ -262,6 +259,7 @@ impl RosettaApiServer {
         addr: String,
         listen_port_file: Option<PathBuf>,
         expose_metrics: bool,
+        watchdog_timeout_seconds: u64,
     ) -> io::Result<Self> {
         let stopped = Arc::new(AtomicBool::new(false));
         let http_metrics_wrapper = RosettaMetrics::http_metrics_wrapper(expose_metrics);
@@ -313,9 +311,9 @@ impl RosettaApiServer {
                     e
                 )
             });
-            std::fs::write(
-                listen_port_file,
-                server.addrs().first().unwrap().port().to_string(),
+            ic_sys::fs::write_string_using_tmp_file(
+                &listen_port_file,
+                &server.addrs().first().unwrap().port().to_string(),
             )
             .unwrap_or_else(|e| panic!("Unable to write to listen_port_file! Error: {}", e));
         }
@@ -327,6 +325,7 @@ impl RosettaApiServer {
             ledger,
             server_handle: server.handle(),
             server: Mutex::new(ServerState::Unstarted(server)),
+            watchdog_timeout_seconds,
         })
     }
 
@@ -362,7 +361,7 @@ impl RosettaApiServer {
                         RosettaMetrics::inc_sync_thread_restarts();
                     }));
                 let mut watchdog_thread = WatchdogThread::new(
-                    BLOCK_SYNC_TIMEOUT,
+                    Duration::from_secs(self.watchdog_timeout_seconds),
                     on_restart_callback,
                     skip_first_heartbeat_check,
                     None,

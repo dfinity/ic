@@ -42,6 +42,7 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-tracing = { path = "../../monitoring/tracing" }
 ic-types = { path = "../../types/types" }
+ic-utils = { path = "../../utils" }
 ic-validator = { path = "../../validator" }
 inferno = { workspace = true }
 prometheus = { workspace = true }

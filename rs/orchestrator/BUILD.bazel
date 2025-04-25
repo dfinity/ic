@@ -76,12 +76,13 @@ rust_library(
 rust_binary(
     name = "orchestrator",
     srcs = ["src/main.rs"],
-    crate_name = "ic_state_tool",
     deps = [
         # Keep sorted.
         ":lib",
         "//rs/http_endpoints/async_utils",
+        "//rs/monitoring/logger",
         "@crate_index//:clap",
+        "@crate_index//:slog",
         "@crate_index//:tokio",
     ],
 )

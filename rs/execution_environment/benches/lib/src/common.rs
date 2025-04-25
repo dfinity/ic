@@ -225,7 +225,6 @@ fn run_benchmark<G, I, W, R>(
                             expected_ops,
                             expected_ops / 1_000_000
                         );
-                        println!("    WAT: {}", wat.as_ref());
                         bench_args = Some(get_execution_args(exec_env, wat.as_ref()));
                     }
                     bench_args.as_ref().unwrap().clone()
@@ -315,6 +314,9 @@ where
         subnet_configs
             .scheduler_config
             .canister_snapshot_baseline_instructions,
+        subnet_configs
+            .scheduler_config
+            .canister_snapshot_data_baseline_instructions,
     );
     for Benchmark(id, wat, expected_ops) in benchmarks {
         run_benchmark(

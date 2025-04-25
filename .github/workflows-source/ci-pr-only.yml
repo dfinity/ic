@@ -17,7 +17,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:45535cf9304320f8b3b995fd8eec6eeac77ec314deb6d560cfa7d34e2d755683
+    image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
   dind-small-setup: &dind-small-setup
     timeout-minutes: 30
     runs-on:
@@ -54,7 +54,7 @@ jobs:
           filters: |
             fuzzers:
               - '.github/workflows/ci-pr-only.yml'
-              - 'bin/build-all-fuzzers.sh'
+              - 'bin/fuzzing/build-all-fuzzers.sh'
               - 'bazel/fuzz_testing.bzl'
       - name: Run Bazel Build Fuzzers Archives
         id: bazel-build-fuzzers-archives
@@ -62,7 +62,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cd "${GITHUB_WORKSPACE}"/bin
+          cd "${GITHUB_WORKSPACE}"/bin/fuzzing/
           ./build-all-fuzzers.sh --zip
 
   lock-generate:
@@ -95,7 +95,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
           token: ${{ steps.app-token.outputs.token }}
       - name: Run Lock Generate
         id: lock-generate

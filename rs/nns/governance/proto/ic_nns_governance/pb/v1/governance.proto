@@ -2729,3 +2729,21 @@ message MaturityDisbursement {
   // The timestamp at which the maturity disbursement should be finalized.
   uint64 finalize_disbursement_timestamp_seconds = 4;
 }
+
+// A map of neuron voting powers at a certain point in time. It can be used to initialize ballots of
+// a proposal.
+message NeuronIdToVotingPowerMap {
+  // Map from neuron id to the voting power of the neuron.
+  map<fixed64, uint64> voting_power_map = 1;
+}
+
+// Total voting power (deciding and potential) at a certain point in time. A history of the totals
+// can be used to detect voting power spikes. See `Neuron::deciding_voting_power` and
+// `Neuron::potential_voting_power` for more information.
+message VotingPowerTotal {
+  // The total deciding voting power.
+  uint64 total_deciding_voting_power = 1;
+
+  // The total potential voting power.
+  uint64 total_potential_voting_power = 2;
+}
