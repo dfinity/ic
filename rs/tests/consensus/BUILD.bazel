@@ -127,7 +127,7 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "max_ingress_payload_size_test",
     env = UNIVERSAL_CANISTER_ENV,
     tags = [
@@ -142,6 +142,7 @@ system_test(
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/base_types",
+        "//rs/types/types",
         "//rs/universal_canister/lib",
         "@crate_index//:anyhow",
         "@crate_index//:assert_matches",

@@ -50,7 +50,6 @@ const CONTENT_TOO_LARGE_STATUS: u16 = 413;
 fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
-        .add_fast_single_node_subnet(SubnetType::System)
         .add_fast_single_node_subnet(SubnetType::Application)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
@@ -65,51 +64,22 @@ fn setup(env: TestEnv) {
         .start(&env)
         .expect("failed to setup BoundaryNode VM");
 
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-
-    for subnet in env.topology_snapshot().subnets() {
-        for node in subnet.nodes() {
-            node.await_status_is_healthy().unwrap();
-            let logger = env.logger();
-            rt.block_on(async move {
-                let agent = node.build_default_agent_async().await;
-                let canister = UniversalCanister::new_with_retries(
-                    &agent,
-                    node.effective_canister_id(),
-                    &logger,
-                )
-                .await;
-
-                canister
-                    .update(wasm().stable_grow(100).reply())
-                    .await
-                    .unwrap();
-            });
-        }
-    }
-
-    let boundary_node_vm = env
-        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+    env.get_deployed_boundary_node(BOUNDARY_NODE_NAME)
         .unwrap()
         .get_snapshot()
-        .unwrap();
-
-    boundary_node_vm
+        .unwrap()
         .await_status_is_healthy()
         .expect("Boundary node did not come up healthy.");
 }
 
 fn get_first_node(env: &TestEnv, subnet_type: SubnetType) -> IcNodeSnapshot {
-    let root_subnet_id = env.topology_snapshot().root_subnet_id();
-
     env.topology_snapshot()
         .subnets()
-        .filter(|subnet| subnet.subnet_id != root_subnet_id)
         .find(|subnet| subnet.subnet_type() == subnet_type)
-        .expect("There is a subnet for each subnet type")
+        .expect("There should be at least one subnet for every subnet type")
         .nodes()
         .next()
-        .expect("Each subnet has at least one node")
+        .expect("Every subnet should have at least one node")
 }
 
 enum RequestType {
@@ -148,15 +118,25 @@ fn send_request(
     let deployed_boundary_node = env.get_deployed_boundary_node(BOUNDARY_NODE_NAME).unwrap();
     let boundary_node_vm = deployed_boundary_node.get_snapshot().unwrap();
     let agent = boundary_node_vm.build_default_agent();
-    let universal_canister =
-        UniversalCanister::from_canister_id(&agent, node.effective_canister_id().into());
+    let logger = env.logger();
 
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on(async move {
-        make_ingress_call(&universal_canister, message_size as usize, call)
-            .await
-            .map(|_| ())
-    })
+    tokio::runtime::Runtime::new()
+        .unwrap()
+        .block_on(async move {
+            let canister = UniversalCanister::new_with_params_with_retries(
+                &agent,
+                node.effective_canister_id(),
+                /*compute_allocation= */ None,
+                /*cycles= */ None,
+                /*pages= */ Some(100),
+                &logger,
+            )
+            .await;
+
+            make_ingress_call(&canister, message_size as usize, call)
+                .await
+                .map(|_| ())
+        })
 }
 
 fn test_app_subnet_update_within_limits(env: TestEnv) {
