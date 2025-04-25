@@ -137,7 +137,7 @@ use std::{
     string::ToString,
 };
 
-mod disburse_maturity;
+pub mod disburse_maturity;
 mod ledger_helper;
 mod merge_neurons;
 mod split_neuron;
@@ -6899,13 +6899,6 @@ impl Governance {
                 latest_round_available_e8s_equivalent_float as u64,
             ),
         })
-    }
-
-    pub fn batch_adjust_neurons_storage(
-        &mut self,
-        next: std::ops::Bound<NeuronId>,
-    ) -> std::ops::Bound<NeuronId> {
-        self.neuron_store.batch_adjust_neurons_storage(next)
     }
 
     /// Recompute cached metrics once per day
