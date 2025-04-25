@@ -120,10 +120,6 @@ fn test(env: TestEnv) {
         curve: VetKdCurve::Bls12_381_G2,
         name: String::from("key_1"),
     };
-    let key_id_2 = VetKdKeyId {
-        curve: VetKdCurve::Bls12_381_G2,
-        name: String::from("key_2"),
-    };
 
     block_on(async {
         // Create and enable vetKD chain key on Application subnet
@@ -220,11 +216,16 @@ fn test(env: TestEnv) {
         );
 
         // Create and enable vetKD chain key for a different key ID on Application subnet
+        let key_id_2 = VetKdKeyId {
+            curve: VetKdCurve::Bls12_381_G2,
+            name: String::from("key_2"),
+        };
         assert_ne!(key_id, key_id_2);
         enable_chain_key_signing(
             &governance,
             app_subnet.subnet_id,
             vec![
+                // Specify both key IDs, so that the existing one keeps working
                 MasterPublicKeyId::VetKd(key_id.clone()),
                 MasterPublicKeyId::VetKd(key_id_2.clone()),
             ],
