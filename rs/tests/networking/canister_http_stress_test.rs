@@ -62,7 +62,7 @@ fn main() -> Result<()> {
         .with_setup(stress_setup)
         .add_test(systest!(test))
         // This test takes consistently around 20 mintues, so setting 30 minutes to be safe.
-        .with_timeout_per_test(Duration::from_secs(30 * 60)) 
+        .with_timeout_per_test(Duration::from_secs(30 * 60))
         .execute_from_args()?;
 
     Ok(())
@@ -105,9 +105,17 @@ pub fn test(env: TestEnv) {
                 // This is necessary in order to avoid the server potentially being overloaded by 40 * 500 TCP/TLS handshake requests.
                 test_proxy_canister(&proxy_canister, url.clone(), logger.clone(), 1).await;
             }
-            
+
             for concurrent_requests in CONCURRENCY_LEVELS {
-                println!("debuggg testing {} nodes, with concurrency {} at time {}", subnet_size, concurrent_requests, std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
+                println!(
+                    "debuggg testing {} nodes, with concurrency {} at time {}",
+                    subnet_size,
+                    concurrent_requests,
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs()
+                );
                 // For each concurrency level in this subnet, we run the stress test.
                 let (qps, duration) = test_proxy_canister(
                     &proxy_canister,
