@@ -12,8 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Fixed
-- The environment variable `RUST_LOG` has no influence on log verbosity:
-  either explicit log levels (if provided) or PocketIC defaults are used.
+- The environment variables `LOG_TO_STDERR` and `RUST_LOG` have no influence on log output and verbosity:
+  logs are always printed to standard output and either explicit log levels (if provided) or PocketIC defaults are used.
 
 
 
