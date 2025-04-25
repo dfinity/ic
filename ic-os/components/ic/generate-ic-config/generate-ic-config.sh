@@ -115,13 +115,14 @@ function read_config_variables() {
 }
 
 function set_default_config_values() {
-    [ "${NNS_URLS}" = "null" ] && NNS_URLS="http://[::1]:8080"
-    [ "${BACKUP_RETENTION_TIME_SECS}" = "null" ] && BACKUP_RETENTION_TIME_SECS="86400"    # Default is 24h
-    [ "${BACKUP_PURGING_INTERVAL_SECS}" = "null" ] && BACKUP_PURGING_INTERVAL_SECS="3600" # Default is 1h
-    [ "${QUERY_STATS_EPOCH_LENGTH}" = "null" ] && QUERY_STATS_EPOCH_LENGTH="600"          # Default is 600 blocks (around 10min)
-    [ "${JAEGER_ADDR}" = "null" ] && JAEGER_ADDR=""
-    [ "${DOMAIN_NAME}" = "null" ] && DOMAIN_NAME=""
-    [ "${NODE_REWARD_TYPE}" = "null" ] && NODE_REWARD_TYPE=""
+    [ "${NNS_URLS}" = "null" -o -z "${NNS_URLS}" ] && NNS_URLS="http://[::1]:8080"
+    [ "${BACKUP_RETENTION_TIME_SECS}" = "null" -o -z "${BACKUP_RETENTION_TIME_SECS}" ] && BACKUP_RETENTION_TIME_SECS="86400"    # Default is 24h
+    [ "${BACKUP_PURGING_INTERVAL_SECS}" = "null" -o -z "${BACKUP_PURGING_INTERVAL_SECS}" ] && BACKUP_PURGING_INTERVAL_SECS="3600" # Default is 1h
+    [ "${QUERY_STATS_EPOCH_LENGTH}" = "null" -o -z "${QUERY_STATS_EPOCH_LENGTH}" ] && QUERY_STATS_EPOCH_LENGTH="600"          # Default is 600 blocks (around 10min)
+    [ "${JAEGER_ADDR}" = "null" -o -z "${JAEGER_ADDR}" ] && JAEGER_ADDR=""
+    [ "${DOMAIN_NAME}" = "null" -o -z "${DOMAIN_NAME}" ] && DOMAIN_NAME=""
+    [ "${NODE_REWARD_TYPE}" = "null" -o -z "${NODE_REWARD_TYPE}" ] && NODE_REWARD_TYPE=""
+    [ "${MALICIOUS_BEHAVIOR}" = "null" -o -z "${MALICIOUS_BEHAVIOR}" ] && MALICIOUS_BEHAVIOR="null" # Default is null
 }
 
 while getopts "i:o:" OPT; do
