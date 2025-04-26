@@ -65,7 +65,6 @@ use icrc_ledger_types::icrc1::{
 use itertools::{EitherOrBoth, Itertools};
 use maplit::btreemap;
 use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder, RejectResponse};
-use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
 use std::{collections::BTreeMap, fmt::Write, path::Path, time::Duration};
 
@@ -577,7 +576,7 @@ impl NnsInstaller {
             pocket_ic,
             "NNS Governance",
             GOVERNANCE_CANISTER_ID,
-            nns_init_payload.governance.encode_to_vec(),
+            Encode!(&nns_init_payload.governance).unwrap(),
             governance_wasm,
             Some(ROOT_CANISTER_ID.get()),
         )
