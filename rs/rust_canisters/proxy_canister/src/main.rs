@@ -7,12 +7,12 @@
 //!
 use candid::Principal;
 use futures::future::join_all;
-use ic_cdk::api::{msg_caller, time};
-use ic_cdk::call::{Call, CallFailed, RejectCode};
-use ic_cdk::futures::spawn;
+use ic_cdk::api::call::RejectionCode;
+use ic_cdk::api::time;
+use ic_cdk::{caller, spawn};
 use ic_cdk_macros::{query, update};
 use ic_management_canister_types_private::{
-    CanisterHttpResponsePayload, HttpHeader, TransformArgs,
+    CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs,
 };
 use proxy_canister::{
     RemoteHttpRequest, RemoteHttpResponse, RemoteHttpStressRequest, RemoteHttpStressResponse,
@@ -23,7 +23,7 @@ use std::time::Duration;
 
 thread_local! {
     #[allow(clippy::type_complexity)]
-    pub static REMOTE_CALLS: RefCell<HashMap<String, Result<RemoteHttpResponse, (i32, String)>>>  = RefCell::new(HashMap::new());
+    pub static REMOTE_CALLS: RefCell<HashMap<String, Result<RemoteHttpResponse, (RejectionCode, String)>>>  = RefCell::new(HashMap::new());
 }
 
 const MAX_TRANSFORM_SIZE: usize = 2_000_000;
@@ -31,11 +31,11 @@ const MAX_TRANSFORM_SIZE: usize = 2_000_000;
 #[update]
 async fn send_requests_in_parallel(
     request: RemoteHttpStressRequest,
-) -> Result<RemoteHttpStressResponse, (i32, String)> {
+) -> Result<RemoteHttpStressResponse, (RejectionCode, String)> {
     let start = time();
     if request.count == 0 {
         return Err((
-            RejectCode::CanisterError as i32,
+            RejectionCode::CanisterError,
             "Count cannot be 0".to_string(),
         ));
     }
@@ -43,7 +43,7 @@ async fn send_requests_in_parallel(
     // This is the maximum size of the queue of canister messages. In our case, it's the highest number of requests we can send in parallel.
     const MAX_CONCURRENCY: usize = 500;
 
-    let mut all_results: Vec<Result<RemoteHttpResponse, (i32, String)>> = Vec::new();
+    let mut all_results: Vec<Result<RemoteHttpResponse, (RejectionCode, String)>> = Vec::new();
 
     let indices: Vec<u64> = (0..request.count).collect();
     for chunk in indices.chunks(MAX_CONCURRENCY) {
@@ -72,7 +72,7 @@ async fn send_requests_in_parallel(
 #[update]
 pub async fn start_continuous_requests(
     request: RemoteHttpRequest,
-) -> Result<RemoteHttpResponse, (i32, String)> {
+) -> Result<RemoteHttpResponse, (RejectionCode, String)> {
     // This request establishes the session to the target server.
     let _ = send_request(request.clone()).await;
 
@@ -101,9 +101,9 @@ async fn run_continuous_request_loop(request: RemoteHttpRequest) {
             Ok(_resp) => {
                 successes += 1;
             }
-            Err((reject_code, msg)) => {
+            Err((rejection_code, msg)) => {
                 errors += 1;
-                println!("Request failed: {:?} - {}", reject_code, msg);
+                println!("Request failed: {:?} - {}", rejection_code, msg);
             }
         }
     }
@@ -118,19 +118,23 @@ async fn run_continuous_request_loop(request: RemoteHttpRequest) {
 }
 
 #[update]
-async fn send_request(request: RemoteHttpRequest) -> Result<RemoteHttpResponse, (i32, String)> {
+async fn send_request(
+    request: RemoteHttpRequest,
+) -> Result<RemoteHttpResponse, (RejectionCode, String)> {
     let RemoteHttpRequest { request, cycles } = request;
     let request_url = request.url.clone();
     println!("send_request making IC call.");
-    match Call::unbounded_wait(Principal::management_canister(), "http_request")
-        .with_arg(request.clone())
-        .with_cycles(cycles as u128)
-        .await
+    match ic_cdk::api::call::call_raw(
+        Principal::management_canister(),
+        "http_request",
+        &request.encode(),
+        cycles,
+    )
+    .await
     {
         Ok(raw_response) => {
             println!("send_request returning with success case.");
-            let decoded: CanisterHttpResponsePayload = raw_response
-                .candid()
+            let decoded: CanisterHttpResponsePayload = candid::utils::decode_one(&raw_response)
                 .expect("Failed to decode CanisterHttpResponsePayload");
             let mut response_headers = vec![];
             for header in decoded.headers {
@@ -150,9 +154,7 @@ async fn send_request(request: RemoteHttpRequest) -> Result<RemoteHttpResponse, 
             });
             Result::Ok(response)
         }
-        Err(CallFailed::CallRejected(rejection)) => {
-            let r = rejection.raw_reject_code() as i32;
-            let m = rejection.reject_message().to_string();
+        Err((r, m)) => {
             REMOTE_CALLS.with(|results| {
                 let mut writer = results.borrow_mut();
                 writer
@@ -161,12 +163,13 @@ async fn send_request(request: RemoteHttpRequest) -> Result<RemoteHttpResponse, 
             });
             Err((r, m))
         }
-        Err(err) => Err((RejectCode::CanisterError as i32, format!("{:?}", err))),
     }
 }
 
 #[query]
-async fn check_response(url: String) -> Option<Result<RemoteHttpResponse, (i32, String)>> {
+async fn check_response(
+    url: String,
+) -> Option<Result<RemoteHttpResponse, (RejectionCode, String)>> {
     println!("check_response being called");
     REMOTE_CALLS.with(|results| {
         let reader = results.borrow();
@@ -216,7 +219,7 @@ fn test_transform_(raw: TransformArgs) -> CanisterHttpResponsePayload {
         },
         HttpHeader {
             name: "caller".to_string(),
-            value: msg_caller().to_string(),
+            value: caller().to_string(),
         },
     ];
     transformed.body = context;
