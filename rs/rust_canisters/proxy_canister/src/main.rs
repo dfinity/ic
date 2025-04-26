@@ -23,7 +23,7 @@ use std::time::Duration;
 
 thread_local! {
     #[allow(clippy::type_complexity)]
-    pub static REMOTE_CALLS: RefCell<HashMap<String, Result<RemoteHttpResponse, (u32, String)>>>  = RefCell::new(HashMap::new());
+    pub static REMOTE_CALLS: RefCell<HashMap<String, Result<RemoteHttpResponse, (i32, String)>>>  = RefCell::new(HashMap::new());
 }
 
 const MAX_TRANSFORM_SIZE: usize = 2_000_000;
@@ -31,11 +31,11 @@ const MAX_TRANSFORM_SIZE: usize = 2_000_000;
 #[update]
 async fn send_requests_in_parallel(
     request: RemoteHttpStressRequest,
-) -> Result<RemoteHttpStressResponse, (u32, String)> {
+) -> Result<RemoteHttpStressResponse, (i32, String)> {
     let start = time();
     if request.count == 0 {
         return Err((
-            RejectCode::CanisterError as u32,
+            RejectCode::CanisterError as i32,
             "Count cannot be 0".to_string(),
         ));
     }
@@ -43,7 +43,7 @@ async fn send_requests_in_parallel(
     // This is the maximum size of the queue of canister messages. In our case, it's the highest number of requests we can send in parallel.
     const MAX_CONCURRENCY: usize = 500;
 
-    let mut all_results: Vec<Result<RemoteHttpResponse, (u32, String)>> = Vec::new();
+    let mut all_results: Vec<Result<RemoteHttpResponse, (i32, String)>> = Vec::new();
 
     let indices: Vec<u64> = (0..request.count).collect();
     for chunk in indices.chunks(MAX_CONCURRENCY) {
@@ -72,7 +72,7 @@ async fn send_requests_in_parallel(
 #[update]
 pub async fn start_continuous_requests(
     request: RemoteHttpRequest,
-) -> Result<RemoteHttpResponse, (u32, String)> {
+) -> Result<RemoteHttpResponse, (i32, String)> {
     // This request establishes the session to the target server.
     let _ = send_request(request.clone()).await;
 
@@ -118,7 +118,7 @@ async fn run_continuous_request_loop(request: RemoteHttpRequest) {
 }
 
 #[update]
-async fn send_request(request: RemoteHttpRequest) -> Result<RemoteHttpResponse, (u32, String)> {
+async fn send_request(request: RemoteHttpRequest) -> Result<RemoteHttpResponse, (i32, String)> {
     let RemoteHttpRequest { request, cycles } = request;
     let request_url = request.url.clone();
     println!("send_request making IC call.");
@@ -151,7 +151,7 @@ async fn send_request(request: RemoteHttpRequest) -> Result<RemoteHttpResponse, 
             Result::Ok(response)
         }
         Err(CallFailed::CallRejected(rejection)) => {
-            let r = rejection.raw_reject_code();
+            let r = rejection.raw_reject_code() as i32;
             let m = rejection.reject_message().to_string();
             REMOTE_CALLS.with(|results| {
                 let mut writer = results.borrow_mut();
@@ -161,12 +161,12 @@ async fn send_request(request: RemoteHttpRequest) -> Result<RemoteHttpResponse, 
             });
             Err((r, m))
         }
-        Err(err) => Err((RejectCode::CanisterError as u32, format!("{:?}", err))),
+        Err(err) => Err((RejectCode::CanisterError as i32, format!("{:?}", err))),
     }
 }
 
 #[query]
-async fn check_response(url: String) -> Option<Result<RemoteHttpResponse, (u32, String)>> {
+async fn check_response(url: String) -> Option<Result<RemoteHttpResponse, (i32, String)>> {
     println!("check_response being called");
     REMOTE_CALLS.with(|results| {
         let reader = results.borrow();
