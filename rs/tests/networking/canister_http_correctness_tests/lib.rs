@@ -1,20 +1,3 @@
-/* tag::catalog[]
-Title:: Test correctness of feature according to spec.
-
-Goal:: Ensure simple HTTP requests can be made from canisters.
-
-Runbook::
-0. Instantiate a universal VM with a webserver
-1. Instantiate an IC with one application subnet with the HTTP feature enabled.
-2. Install NNS canisters
-3. Install the proxy canister
-4. Make an update call to the proxy canister.
-
-Success::
-1. Received http response with status 200.
-
-end::catalog[] */
-
 use anyhow::Result;
 use assert_matches::assert_matches;
 use candid::{decode_one, CandidType, Deserialize, Encode, Principal};
@@ -32,11 +15,9 @@ use ic_management_canister_types_private::{
 use ic_system_test_driver::{
     canister_agent::HasCanisterAgentCapability,
     driver::{
-        group::{SystemTestGroup, SystemTestSubGroup},
         test_env::TestEnv,
         test_env_api::HasTopologySnapshot,
     },
-    systest,
     util::{block_on, get_app_subnet_and_node},
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
@@ -63,14 +44,14 @@ const RESPONSE_OVERHEAD: u64 = 256;
 // content-type, access-control-allow-origin, access-control-allow-credentials, date, content-length.
 const HTTPBIN_OVERHEAD_RESPONSE_HEADERS: usize = 5;
 
-struct Handlers<'a> {
+pub struct Handlers<'a> {
     subnet_size: usize,
     runtime: Runtime,
     env: &'a TestEnv,
 }
 
 impl<'a> Handlers<'a> {
-    fn new(env: &'a TestEnv) -> Handlers<'a> {
+    pub fn new(env: &'a TestEnv) -> Handlers<'a> {
         let subnet_size = get_node_snapshots(env).count();
 
         let runtime = {
@@ -86,13 +67,13 @@ impl<'a> Handlers<'a> {
         }
     }
 
-    fn proxy_canister(&self) -> Canister<'_> {
+    pub fn proxy_canister(&self) -> Canister<'_> {
         let principal_id = get_proxy_canister_id(self.env);
         let canister_id = CanisterId::unchecked_from_principal(principal_id);
         Canister::new(&self.runtime, canister_id)
     }
 
-    async fn agent(&self) -> Agent {
+    pub async fn agent(&self) -> Agent {
         let topology_snapshot = self.env.topology_snapshot();
         let (_, app_node) = get_app_subnet_and_node(&topology_snapshot);
 
@@ -100,97 +81,7 @@ impl<'a> Handlers<'a> {
     }
 }
 
-fn main() -> Result<()> {
-    SystemTestGroup::new()
-        .with_setup(canister_http::setup)
-        .add_parallel(
-            SystemTestSubGroup::new()
-                .add_test(systest!(test_enforce_https))
-                .add_test(systest!(test_transform_function_is_executed))
-                .add_test(systest!(test_composite_transform_function_is_executed))
-                .add_test(systest!(test_no_cycles_attached))
-                .add_test(systest!(test_2mb_response_cycle_for_rejection_path))
-                .add_test(systest!(test_4096_max_response_cycle_case_1))
-                .add_test(systest!(test_4096_max_response_cycle_case_2))
-                .add_test(systest!(test_max_response_bytes_too_large))
-                .add_test(systest!(test_max_response_bytes_2_mb_returns_ok))
-                .add_test(systest!(
-                    test_transform_that_bloats_response_above_2mb_limit
-                ))
-                .add_test(systest!(test_transform_that_bloats_on_the_2mb_limit))
-                .add_test(systest!(test_request_header_name_and_value_within_limits))
-                .add_test(systest!(test_request_header_name_too_long))
-                .add_test(systest!(test_request_header_value_too_long))
-                .add_test(systest!(test_response_header_name_within_limit))
-                .add_test(systest!(test_response_header_name_over_limit))
-                .add_test(systest!(test_response_header_value_within_limit))
-                .add_test(systest!(test_response_header_value_over_limit))
-                .add_test(systest!(
-                    test_request_header_total_size_within_the_48_kib_limit
-                ))
-                .add_test(systest!(
-                    test_request_header_total_size_over_the_48_kib_limit
-                ))
-                .add_test(systest!(
-                    test_response_header_total_size_within_the_48_kib_limit
-                ))
-                .add_test(systest!(
-                    test_response_header_total_size_over_the_48_kib_limit
-                ))
-                .add_test(systest!(test_post_request))
-                .add_test(systest!(
-                    test_http_endpoint_response_is_too_large_with_custom_max_response_bytes
-                ))
-                .add_test(systest!(
-                    test_http_endpoint_response_is_within_limits_with_custom_max_response_bytes
-                ))
-                .add_test(systest!(
-                    test_http_endpoint_response_is_too_large_with_default_max_response_bytes
-                ))
-                .add_test(systest!(
-                    test_http_endpoint_response_is_within_limits_with_default_max_response_bytes
-                ))
-                .add_test(systest!(
-                    test_http_endpoint_with_delayed_response_is_rejected
-                ))
-                .add_test(systest!(test_that_redirects_are_not_followed))
-                .add_test(systest!(test_http_calls_to_ic_fails))
-                .add_test(systest!(test_invalid_domain_name))
-                .add_test(systest!(test_invalid_ip))
-                .add_test(systest!(test_get_hello_world_call))
-                .add_test(systest!(test_post_call))
-                .add_test(systest!(test_head_call))
-                .add_test(systest!(test_max_possible_request_size))
-                .add_test(systest!(test_max_possible_request_size_exceeded))
-                .add_test(systest!(test_non_ascii_url_is_rejected))
-                .add_test(systest!(test_max_url_length))
-                .add_test(systest!(test_max_url_length_exceeded))
-                .add_test(systest!(
-                    test_small_maximum_possible_response_size_only_headers
-                ))
-                .add_test(systest!(
-                    test_small_maximum_possible_response_size_exceeded_only_headers
-                ))
-                .add_test(systest!(test_maximum_possible_value_of_max_response_bytes))
-                .add_test(systest!(
-                    test_maximum_possible_value_of_max_response_bytes_exceeded
-                ))
-                .add_test(systest!(check_caller_id_on_transform_function))
-                .add_test(systest!(
-                    reference_transform_function_exposed_by_different_canister
-                ))
-                .add_test(systest!(test_max_number_of_request_headers))
-                .add_test(systest!(test_max_number_of_request_headers_exceeded))
-                .add_test(systest!(test_max_number_of_response_headers))
-                .add_test(systest!(test_non_existent_transform_function))
-                .add_test(systest!(test_max_number_of_response_headers_exceeded)),
-        )
-        .execute_from_args()?;
-
-    Ok(())
-}
-
-fn test_enforce_https(env: TestEnv) {
+pub fn test_enforce_https(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -224,7 +115,7 @@ fn test_enforce_https(env: TestEnv) {
     );
 }
 
-fn test_transform_function_is_executed(env: TestEnv) {
+pub fn test_transform_function_is_executed(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -266,7 +157,7 @@ fn test_transform_function_is_executed(env: TestEnv) {
     assert_eq!(response.status, 202);
 }
 
-fn test_non_existent_transform_function(env: TestEnv) {
+pub fn test_non_existent_transform_function(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -302,7 +193,7 @@ fn test_non_existent_transform_function(env: TestEnv) {
     );
 }
 
-fn test_composite_transform_function_is_executed(env: TestEnv) {
+pub fn test_composite_transform_function_is_executed(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -336,7 +227,7 @@ fn test_composite_transform_function_is_executed(env: TestEnv) {
     assert_eq!(response.headers[1].1, "aaaaa-aa");
 }
 
-fn test_no_cycles_attached(env: TestEnv) {
+pub fn test_no_cycles_attached(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -370,7 +261,7 @@ fn test_no_cycles_attached(env: TestEnv) {
     );
 }
 
-fn test_max_possible_request_size(env: TestEnv) {
+pub fn test_max_possible_request_size(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
     let headers_list = vec![
@@ -414,7 +305,7 @@ fn test_max_possible_request_size(env: TestEnv) {
     assert_matches!(response, Ok(r) if r.status==200);
 }
 
-fn test_max_possible_request_size_exceeded(env: TestEnv) {
+pub fn test_max_possible_request_size_exceeded(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
     let headers_list = vec![
@@ -464,7 +355,7 @@ fn test_max_possible_request_size_exceeded(env: TestEnv) {
     );
 }
 
-fn test_2mb_response_cycle_for_rejection_path(env: TestEnv) {
+pub fn test_2mb_response_cycle_for_rejection_path(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -507,7 +398,7 @@ fn test_2mb_response_cycle_for_rejection_path(env: TestEnv) {
     );
 }
 
-fn test_4096_max_response_cycle_case_1(env: TestEnv) {
+pub fn test_4096_max_response_cycle_case_1(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -544,7 +435,7 @@ fn test_4096_max_response_cycle_case_1(env: TestEnv) {
     assert_matches!(response, Ok(r) if r.status==200);
 }
 
-fn test_4096_max_response_cycle_case_2(env: TestEnv) {
+pub fn test_4096_max_response_cycle_case_2(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -586,7 +477,7 @@ fn test_4096_max_response_cycle_case_2(env: TestEnv) {
     );
 }
 
-fn test_max_response_bytes_2_mb_returns_ok(env: TestEnv) {
+pub fn test_max_response_bytes_2_mb_returns_ok(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -614,7 +505,7 @@ fn test_max_response_bytes_2_mb_returns_ok(env: TestEnv) {
     assert_matches!(response, Ok(r) if r.status==200);
 }
 
-fn test_max_response_bytes_too_large(env: TestEnv) {
+pub fn test_max_response_bytes_too_large(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -648,7 +539,7 @@ fn test_max_response_bytes_too_large(env: TestEnv) {
     );
 }
 
-fn test_transform_that_bloats_on_the_2mb_limit(env: TestEnv) {
+pub fn test_transform_that_bloats_on_the_2mb_limit(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -676,7 +567,7 @@ fn test_transform_that_bloats_on_the_2mb_limit(env: TestEnv) {
     assert_matches!(response, Ok(r) if r.status==200);
 }
 
-fn test_transform_that_bloats_response_above_2mb_limit(env: TestEnv) {
+pub fn test_transform_that_bloats_response_above_2mb_limit(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -710,7 +601,7 @@ fn test_transform_that_bloats_response_above_2mb_limit(env: TestEnv) {
     );
 }
 
-fn test_post_request(env: TestEnv) {
+pub fn test_post_request(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -741,7 +632,7 @@ fn test_post_request(env: TestEnv) {
     assert_matches!(response, Ok(r) if r.body.contains("satoshi"));
 }
 
-fn test_http_endpoint_response_is_within_limits_with_custom_max_response_bytes(env: TestEnv) {
+pub fn test_http_endpoint_response_is_within_limits_with_custom_max_response_bytes(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
     let max_response_bytes: u64 = 1_000_000;
@@ -776,7 +667,7 @@ fn test_http_endpoint_response_is_within_limits_with_custom_max_response_bytes(e
     assert_matches!(&response, RemoteHttpResponse { status: 200, .. });
 }
 
-fn test_http_endpoint_response_is_too_large_with_custom_max_response_bytes(env: TestEnv) {
+pub fn test_http_endpoint_response_is_too_large_with_custom_max_response_bytes(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
     let max_response_bytes = 1_000_000;
@@ -814,7 +705,7 @@ fn test_http_endpoint_response_is_too_large_with_custom_max_response_bytes(env: 
     );
 }
 
-fn test_http_endpoint_response_is_within_limits_with_default_max_response_bytes(env: TestEnv) {
+pub fn test_http_endpoint_response_is_within_limits_with_default_max_response_bytes(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -848,7 +739,7 @@ fn test_http_endpoint_response_is_within_limits_with_default_max_response_bytes(
     assert_matches!(&response, RemoteHttpResponse { status: 200, .. });
 }
 
-fn test_http_endpoint_response_is_too_large_with_default_max_response_bytes(env: TestEnv) {
+pub fn test_http_endpoint_response_is_too_large_with_default_max_response_bytes(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -885,7 +776,7 @@ fn test_http_endpoint_response_is_too_large_with_default_max_response_bytes(env:
     );
 }
 
-fn test_http_endpoint_with_delayed_response_is_rejected(env: TestEnv) {
+pub fn test_http_endpoint_with_delayed_response_is_rejected(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -920,7 +811,7 @@ fn test_http_endpoint_with_delayed_response_is_rejected(env: TestEnv) {
 }
 
 /// The adapter should not follow HTTP redirects.
-fn test_that_redirects_are_not_followed(env: TestEnv) {
+pub fn test_that_redirects_are_not_followed(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -949,7 +840,7 @@ fn test_that_redirects_are_not_followed(env: TestEnv) {
 }
 
 /// The adapter should reject HTTP calls that are made to other IC replicas' HTTPS endpoints.
-fn test_http_calls_to_ic_fails(env: TestEnv) {
+pub fn test_http_calls_to_ic_fails(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -988,7 +879,7 @@ fn test_http_calls_to_ic_fails(env: TestEnv) {
 }
 
 // ---- BEGIN SPEC COMPLIANCE TESTS ----
-fn test_invalid_domain_name(env: TestEnv) {
+pub fn test_invalid_domain_name(env: TestEnv) {
     let handlers = Handlers::new(&env);
 
     let response = block_on(submit_outcall(
@@ -1021,7 +912,7 @@ fn test_invalid_domain_name(env: TestEnv) {
     );
 }
 
-fn test_invalid_ip(env: TestEnv) {
+pub fn test_invalid_ip(env: TestEnv) {
     let handlers = Handlers::new(&env);
 
     let response = block_on(submit_outcall(
@@ -1055,7 +946,7 @@ fn test_invalid_ip(env: TestEnv) {
 }
 
 /// Test that the response body returned is the same as the requested path.
-fn test_get_hello_world_call(env: TestEnv) {
+pub fn test_get_hello_world_call(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
     let expected_body = "hello_world";
@@ -1089,7 +980,7 @@ fn test_get_hello_world_call(env: TestEnv) {
     assert_http_response(&response);
 }
 
-fn test_request_header_total_size_within_the_48_kib_limit(env: TestEnv) {
+pub fn test_request_header_total_size_within_the_48_kib_limit(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -1126,7 +1017,7 @@ fn test_request_header_total_size_within_the_48_kib_limit(env: TestEnv) {
     assert_matches!(&response, RemoteHttpResponse { status: 200, .. });
 }
 
-fn test_request_header_total_size_over_the_48_kib_limit(env: TestEnv) {
+pub fn test_request_header_total_size_over_the_48_kib_limit(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -1173,7 +1064,7 @@ fn test_request_header_total_size_over_the_48_kib_limit(env: TestEnv) {
     );
 }
 
-fn test_response_header_total_size_within_the_48_kib_limit(env: TestEnv) {
+pub fn test_response_header_total_size_within_the_48_kib_limit(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -1218,7 +1109,7 @@ fn test_response_header_total_size_within_the_48_kib_limit(env: TestEnv) {
     );
 }
 
-fn test_response_header_total_size_over_the_48_kib_limit(env: TestEnv) {
+pub fn test_response_header_total_size_over_the_48_kib_limit(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -1256,7 +1147,7 @@ fn test_response_header_total_size_over_the_48_kib_limit(env: TestEnv) {
     );
 }
 
-fn test_request_header_name_and_value_within_limits(env: TestEnv) {
+pub fn test_request_header_name_and_value_within_limits(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -1286,7 +1177,7 @@ fn test_request_header_name_and_value_within_limits(env: TestEnv) {
     assert_matches!(&response, RemoteHttpResponse { status: 200, .. });
 }
 
-fn test_request_header_name_too_long(env: TestEnv) {
+pub fn test_request_header_name_too_long(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -1321,7 +1212,7 @@ fn test_request_header_name_too_long(env: TestEnv) {
     );
 }
 
-fn test_request_header_value_too_long(env: TestEnv) {
+pub fn test_request_header_value_too_long(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -1356,7 +1247,7 @@ fn test_request_header_value_too_long(env: TestEnv) {
     );
 }
 
-fn test_response_header_name_within_limit(env: TestEnv) {
+pub fn test_response_header_name_within_limit(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -1383,7 +1274,7 @@ fn test_response_header_name_within_limit(env: TestEnv) {
     assert_matches!(&response, Ok(RemoteHttpResponse { status: 200, .. }));
 }
 
-fn test_response_header_name_over_limit(env: TestEnv) {
+pub fn test_response_header_name_over_limit(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -1417,7 +1308,7 @@ fn test_response_header_name_over_limit(env: TestEnv) {
     );
 }
 
-fn test_response_header_value_within_limit(env: TestEnv) {
+pub fn test_response_header_value_within_limit(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -1446,7 +1337,7 @@ fn test_response_header_value_within_limit(env: TestEnv) {
     assert_matches!(&response, Ok(RemoteHttpResponse { status: 200, .. }));
 }
 
-fn test_response_header_value_over_limit(env: TestEnv) {
+pub fn test_response_header_value_over_limit(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -1482,7 +1373,7 @@ fn test_response_header_value_over_limit(env: TestEnv) {
     );
 }
 
-fn test_post_call(env: TestEnv) {
+pub fn test_post_call(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
     let expected_body = "POST";
@@ -1527,7 +1418,7 @@ fn test_post_call(env: TestEnv) {
 /// Send 6666 repeating `x` to /anything endpoint.
 /// Use HEAD http method. It only asks for the head, not the body.
 /// Set max response size to 666 (order of magnitude smaller)
-fn test_head_call(env: TestEnv) {
+pub fn test_head_call(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -1581,20 +1472,12 @@ fn test_head_call(env: TestEnv) {
     );
 }
 
-fn test_small_maximum_possible_response_size_only_headers(env: TestEnv) {
+pub fn test_small_maximum_possible_response_size_only_headers(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     let n = 0;
     let url = format!("https://[{}]:20443/{}/{}", webserver_ipv6, "equal_bytes", n);
-
-    //   { Response headers
-    //       date: Jan 1 1970 00:00:00 GMT
-    //       content-type: application/octet-stream
-    //       content-length: 11
-    //       access-control-allow-origin: *
-    //       access-control-allow-credentials: true
-    //   }
 
     let header_size = 142;
     let max_response_bytes = Some(header_size + n);
@@ -1619,20 +1502,12 @@ fn test_small_maximum_possible_response_size_only_headers(env: TestEnv) {
     assert_http_response(&response);
 }
 
-fn test_small_maximum_possible_response_size_exceeded_only_headers(env: TestEnv) {
+pub fn test_small_maximum_possible_response_size_exceeded_only_headers(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     let n = 0;
     let url = format!("https://[{}]:20443/{}/{}", webserver_ipv6, "equal_bytes", n);
-
-    //   { Response headers
-    //       date: Jan 1 1970 00:00:00 GMT
-    //       content-type: application/octet-stream
-    //       content-length: 0
-    //       access-control-allow-origin: *
-    //       access-control-allow-credentials: true
-    //   }
 
     let header_size = 142;
     let max_response_bytes = Some(header_size + n - 1);
@@ -1661,7 +1536,7 @@ fn test_small_maximum_possible_response_size_exceeded_only_headers(env: TestEnv)
     );
 }
 
-fn test_non_ascii_url_is_rejected(env: TestEnv) {
+pub fn test_non_ascii_url_is_rejected(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
     let expected_body = "안녕하세요";
@@ -1699,7 +1574,7 @@ fn test_non_ascii_url_is_rejected(env: TestEnv) {
     );
 }
 
-fn test_max_url_length(env: TestEnv) {
+pub fn test_max_url_length(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -1732,7 +1607,7 @@ fn test_max_url_length(env: TestEnv) {
     assert_http_response(&response);
 }
 
-fn test_max_url_length_exceeded(env: TestEnv) {
+pub fn test_max_url_length_exceeded(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -1769,7 +1644,7 @@ fn test_max_url_length_exceeded(env: TestEnv) {
     );
 }
 
-fn test_maximum_possible_value_of_max_response_bytes(env: TestEnv) {
+pub fn test_maximum_possible_value_of_max_response_bytes(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -1778,13 +1653,6 @@ fn test_maximum_possible_value_of_max_response_bytes(env: TestEnv) {
         webserver_ipv6, "ascii", "hello_world"
     );
 
-    //   { Response headers
-    //       date: Jan 1 1970 00:00:00 GMT
-    //       content-type: application/octet-stream
-    //       content-length: 11
-    //       access-control-allow-origin: *
-    //       access-control-allow-credentials: true
-    //   }
     let header_size = 143;
     let max_response_bytes = Some(header_size + "hello_world".len() as u64);
 
@@ -1808,7 +1676,7 @@ fn test_maximum_possible_value_of_max_response_bytes(env: TestEnv) {
     assert_http_response(&response);
 }
 
-fn test_maximum_possible_value_of_max_response_bytes_exceeded(env: TestEnv) {
+pub fn test_maximum_possible_value_of_max_response_bytes_exceeded(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -1816,14 +1684,6 @@ fn test_maximum_possible_value_of_max_response_bytes_exceeded(env: TestEnv) {
         "https://[{}]:20443/{}/{}",
         webserver_ipv6, "ascii", "hello_world"
     );
-
-    //   { Response headers
-    //       date: Jan 1 1970 00:00:00 GMT
-    //       content-type: application/octet-stream
-    //       content-length: 11
-    //       access-control-allow-origin: *
-    //       access-control-allow-credentials: true
-    //   }
 
     let header_size = 143;
     let max_response_bytes = Some(header_size + "hello_world".len() as u64 - 1);
@@ -1852,7 +1712,7 @@ fn test_maximum_possible_value_of_max_response_bytes_exceeded(env: TestEnv) {
     );
 }
 
-fn reference_transform_function_exposed_by_different_canister(env: TestEnv) {
+pub fn reference_transform_function_exposed_by_different_canister(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
     let url = format!(
@@ -1906,7 +1766,7 @@ fn reference_transform_function_exposed_by_different_canister(env: TestEnv) {
     );
 }
 
-fn test_max_number_of_response_headers(env: TestEnv) {
+pub fn test_max_number_of_response_headers(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -1943,7 +1803,7 @@ fn test_max_number_of_response_headers(env: TestEnv) {
     );
 }
 
-fn test_max_number_of_response_headers_exceeded(env: TestEnv) {
+pub fn test_max_number_of_response_headers_exceeded(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -1976,7 +1836,7 @@ fn test_max_number_of_response_headers_exceeded(env: TestEnv) {
     );
 }
 
-fn test_max_number_of_request_headers(env: TestEnv) {
+pub fn test_max_number_of_request_headers(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -2006,7 +1866,7 @@ fn test_max_number_of_request_headers(env: TestEnv) {
     assert_http_json_response(&request.request, &response);
 }
 
-fn test_max_number_of_request_headers_exceeded(env: TestEnv) {
+pub fn test_max_number_of_request_headers_exceeded(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
     let url = format!("https://[{webserver_ipv6}]:20443/anything");
@@ -2052,7 +1912,7 @@ fn test_max_number_of_request_headers_exceeded(env: TestEnv) {
     );
 }
 
-fn check_caller_id_on_transform_function(env: TestEnv) {
+pub fn check_caller_id_on_transform_function(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
     let url = format!(
