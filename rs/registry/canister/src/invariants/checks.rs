@@ -158,8 +158,7 @@ impl Registry {
                     if deletion_marker {
                         continue;
                     }
-
-                    // DO NOT MEGE - Log.
+                    // Treat deletion_marker = false the same as Value(vec![]).
                     vec![]
                 }
 
