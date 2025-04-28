@@ -56,7 +56,8 @@ def main():
     with open(args.input_execlog, "rb") as execlog_file, sys.stdout as csv_file:
         writer = csv.writer(csv_file)
         while True:
-            # The execution log is a stream of protobuf messages, each preceded by a varint32 denoting its length.
+            # The execution log is a stream of protobuf messages,
+            # each preceded by a varint32 denoting its length.
             msg_len = google.protobuf.internal.decoder._DecodeVarint32(execlog_file)
             if msg_len is None:
                 break
