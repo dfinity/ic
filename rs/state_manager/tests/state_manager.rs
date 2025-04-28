@@ -5930,8 +5930,9 @@ fn restore_snapshot(snapshot_id: SnapshotId, canister_id: CanisterId, state: &mu
     ));
 
     state
-        .canister_snapshots
-        .add_restore_operation(canister_id, snapshot_id);
+        .metadata
+        .unflushed_checkpoint_ops
+        .load_snapshot(canister_id, snapshot_id);
     state.put_canister_state(canister);
 }
 
@@ -5950,9 +5951,7 @@ fn can_create_and_delete_canister_snapshot() {
         .unwrap();
         let snapshot_id = SnapshotId::from((canister_test_id(100), 0));
 
-        state
-            .canister_snapshots
-            .push(snapshot_id, Arc::new(new_snapshot));
+        state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
 
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         state_manager.flush_tip_channel();
@@ -5994,7 +5993,7 @@ fn can_create_and_delete_canister_snapshot() {
 
         let (_height, mut state) = state_manager.take_tip();
 
-        state.canister_snapshots.remove(snapshot_id);
+        state.delete_snapshot(snapshot_id);
 
         state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
         state_manager.flush_tip_channel();
@@ -6029,9 +6028,7 @@ fn wasm_binaries_can_be_correctly_switched_from_memory_to_checkpoint() {
         )
         .unwrap();
         let snapshot_id = SnapshotId::from((canister_id, 0));
-        state
-            .canister_snapshots
-            .push(snapshot_id, Arc::new(new_snapshot));
+        state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
 
         let canister_wasm_binary = &state
             .canister_state(&canister_id)
@@ -6139,9 +6136,7 @@ fn wasm_binaries_can_be_correctly_switched_from_checkpoint_to_checkpoint() {
         )
         .unwrap();
         let snapshot_id = SnapshotId::from((canister_id, 0));
-        state
-            .canister_snapshots
-            .push(snapshot_id, Arc::new(new_snapshot));
+        state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
 
         state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
         state_manager.flush_tip_channel();
@@ -6227,9 +6222,7 @@ fn can_create_and_restore_snapshot() {
             )
             .unwrap();
             let snapshot_id = SnapshotId::from((canister_id, 0));
-            state
-                .canister_snapshots
-                .push(snapshot_id, Arc::new(new_snapshot));
+            state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
             state_manager.commit_and_certify(state, height(2), certification_scope.clone(), None);
 
             // Modify the canister.

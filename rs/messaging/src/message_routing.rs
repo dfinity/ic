@@ -1051,7 +1051,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
 
         let chain_key_enabled_subnets = self
             .registry
-            .get_chain_key_signing_subnets(registry_version)
+            .get_chain_key_enabled_subnets(registry_version)
             .map_err(|err| registry_error("chain key signing subnets", None, err))?
             .unwrap_or_default();
 

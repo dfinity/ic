@@ -67,8 +67,8 @@ fn insert_and_truncate<Value: Storable>(
 impl VotingPowerSnapshots {
     pub fn new(maps_memory: DefaultMemory, totals_memory: DefaultMemory) -> Self {
         Self {
-            neuron_id_to_voting_power_maps: StableBTreeMap::new(maps_memory),
-            voting_power_totals: StableBTreeMap::new(totals_memory),
+            neuron_id_to_voting_power_maps: StableBTreeMap::init(maps_memory),
+            voting_power_totals: StableBTreeMap::init(totals_memory),
         }
     }
 
