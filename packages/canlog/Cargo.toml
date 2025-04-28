@@ -12,7 +12,7 @@ documentation = "https://docs.rs/canlog"
 
 [dependencies]
 candid = { workspace = true }
-canlog_derive = { path = "../canlog_derive", optional = true }
+canlog_derive = { version = "=0.1.0", path = "../canlog_derive", optional = true }
 ic-canister-log = "0.2.0"
 ic-cdk = { workspace = true }
 regex = { workspace = true }
