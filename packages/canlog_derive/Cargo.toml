@@ -16,10 +16,6 @@ quote = "1.0.40"
 proc-macro2 = "1.0.94"
 darling = "0.20.11"
 
-[dev-dependencies]
-canlog = { path = "../canlog" }
-serde = { workspace = true, features = ["derive"] }
-
 [lib]
 proc-macro = true
 

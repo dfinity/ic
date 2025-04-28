@@ -2011,11 +2011,9 @@ dependencies = [
 name = "canlog_derive"
 version = "0.1.0"
 dependencies = [
- "canlog",
  "darling 0.20.11",
  "proc-macro2",
  "quote",
- "serde",
  "syn 2.0.101",
 ]
 
