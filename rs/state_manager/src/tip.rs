@@ -4,7 +4,7 @@ use crate::{
     state_sync::types::{
         FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, MAX_SUPPORTED_STATE_SYNC_VERSION,
     },
-    CheckpointError, PageMapType, SharedState, StateManagerMetrics,
+    CheckpointError, PageMapType, SharedState, StateManagerMetrics, StorageMetrics,
     CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use crossbeam_channel::{unbounded, Sender};
@@ -201,6 +201,8 @@ pub(crate) fn spawn_tip_thread(
                                     &state,
                                     &tip_handler.tip(height).unwrap(),
                                     &mut thread_pool,
+                                    &lsmt_config,
+                                    &metrics.storage_metrics,
                                 )
                                 .unwrap_or_else(|err| {
                                     fatal!(log, "Failed to serialize to tip @{}: {}", height, err);
@@ -1021,16 +1023,20 @@ fn serialize_wasm_binaries(
     state: &ReplicatedState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     thread_pool: &mut scoped_threadpool::Pool,
+    lsmt_config: &LsmtConfig,
+    metrics: &StorageMetrics,
 ) -> Result<(), CheckpointError> {
     parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
-        serialize_canister_wasm_binary(log, canister_state, tip)
+        serialize_canister_wasm_binary(log, canister_state, tip, metrics, lsmt_config)
     })
     .into_iter()
     .try_for_each(identity)?;
     parallel_map(
         thread_pool,
         state.canister_snapshots.iter(),
-        |(snapshot_id, snapshot)| serialize_snapshot_wasm_binary(log, snapshot_id, &snapshot, tip),
+        |(snapshot_id, snapshot)| {
+            serialize_snapshot_wasm_binary(log, snapshot_id, &snapshot, tip, metrics, lsmt_config)
+        },
     )
     .into_iter()
     .try_for_each(identity)
@@ -1068,6 +1074,8 @@ fn serialize_canister_wasm_binary(
     log: &ReplicaLogger,
     canister_state: &CanisterState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
+    metrics: &StorageMetrics,
+    lsmt_config: &LsmtConfig,
 ) -> Result<(), CheckpointError> {
     let canister_id = canister_state.canister_id();
     let canister_layout = tip.canister(&canister_id)?;
@@ -1079,8 +1087,18 @@ fn serialize_canister_wasm_binary(
                 &canister_layout.wasm(),
                 &execution_state.wasm_binary.binary,
             )?;
-            assert!(execution_state.wasm_memory.page_map.page_delta_is_empty());
-            assert!(execution_state.stable_memory.page_map.page_delta_is_empty());
+            execution_state.wasm_memory.page_map.persist_delta(
+                &canister_layout.vmemory_0(),
+                tip.height(),
+                lsmt_config,
+                metrics,
+            )?;
+            execution_state.stable_memory.page_map.persist_delta(
+                &canister_layout.stable_memory(),
+                tip.height(),
+                lsmt_config,
+                metrics,
+            )?;
         }
         None => {
             // The canister is uninstalled
@@ -1090,11 +1108,16 @@ fn serialize_canister_wasm_binary(
         }
     }
 
-    assert!(canister_state
+    canister_state
         .system_state
         .wasm_chunk_store
         .page_map()
-        .page_delta_is_empty());
+        .persist_delta(
+            &canister_layout.wasm_chunk_store(),
+            tip.height(),
+            lsmt_config,
+            metrics,
+        )?;
     Ok(())
 }
 
@@ -1103,6 +1126,8 @@ fn serialize_snapshot_wasm_binary(
     snapshot_id: &SnapshotId,
     snapshot: &CanisterSnapshot,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
+    metrics: &StorageMetrics,
+    lsmt_config: &LsmtConfig,
 ) -> Result<(), CheckpointError> {
     let snapshot_layout = tip.snapshot(&snapshot_id)?;
 
@@ -1112,16 +1137,24 @@ fn serialize_snapshot_wasm_binary(
         &snapshot_layout.wasm(),
         &execution_snapshot.wasm_binary,
     )?;
-    assert!(execution_snapshot
-        .wasm_memory
-        .page_map
-        .page_delta_is_empty());
-    assert!(execution_snapshot
-        .stable_memory
-        .page_map
-        .page_delta_is_empty());
-
-    assert!(snapshot.chunk_store().page_map().page_delta_is_empty());
+    execution_snapshot.wasm_memory.page_map.persist_delta(
+        &snapshot_layout.vmemory_0(),
+        tip.height(),
+        lsmt_config,
+        metrics,
+    )?;
+    execution_snapshot.stable_memory.page_map.persist_delta(
+        &snapshot_layout.stable_memory(),
+        tip.height(),
+        lsmt_config,
+        metrics,
+    )?;
+    snapshot.chunk_store().page_map().persist_delta(
+        &snapshot_layout.wasm_chunk_store(),
+        tip.height(),
+        lsmt_config,
+        metrics,
+    )?;
     Ok(())
 }
 
