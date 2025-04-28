@@ -149,6 +149,8 @@ EOF
         echo "LOG_VECTOR_URL=\"${LOGGING_URL}\"" >>"${ENV_FILE}"
         echo "LOG_VECTOR_USER=\"${LOGGING_USER}\"" >>"${ENV_FILE}"
         echo "LOG_VECTOR_PASS=\"${LOGGING_PASSWORD}\"" >>"${ENV_FILE}"
+        echo "LOG_VECTOR_INTERVAL=\"2s\"" >>"${ENV_FILE}"
+        echo "LOG_VECTOR_FLUSHERS=\"32\"" >>"${ENV_FILE}"
     fi
 }
 
