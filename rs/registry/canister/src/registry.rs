@@ -140,11 +140,26 @@ impl Registry {
         key: &[u8],
         version: Version,
     ) -> Option<&HighCapacityRegistryValue> {
-        self.store
+        let result = self.store
             .get(key)?
             .iter()
             .rev()
-            .find(|value| value.version <= version)
+            .find(|value| value.version <= version)?;
+
+        let is_delete = match &result.content {
+            Some(high_capacity_registry_value::Content::DeletionMarker(_)) => true,
+
+            None
+            | Some(high_capacity_registry_value::Content::Value(_))
+            | Some(high_capacity_registry_value::Content::LargeValueChunkKeys(_))
+                => false,
+        };
+
+        if is_delete {
+            return None;
+        }
+
+        Some(result)
     }
 
     pub fn get_chunk(&self, request: GetChunkRequest) -> Result<Chunk, String> {
