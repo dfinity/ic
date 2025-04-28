@@ -101,8 +101,14 @@ def main():
     for context_file in args.context_files:
         shutil.copy(context_file, context_dir)
 
-    root = tempfile.mkdtemp()
-    run_root = tempfile.mkdtemp()
+    # Temporary shim to create tmpfs on demand, until we have userspace
+    # overlayfs, or tmpfs natively available on CI.
+    tmpfs_shim_dir = tempfile.mkdtemp()
+    invoke.run(f"sudo mount -t tmpfs none {tmpfs_shim_dir}")
+    atexit.register(lambda: invoke.run(f"sudo umount {tmpfs_shim_dir}"))
+
+    root = tempfile.mkdtemp(dir=tmpfs_shim_dir)
+    run_root = tempfile.mkdtemp(dir=tmpfs_shim_dir)
     container_cmd = f"sudo podman --root {root} --runroot {run_root}"
 
     atexit.register(lambda: purge_podman(container_cmd))
