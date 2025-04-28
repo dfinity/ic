@@ -2,9 +2,6 @@
 Description=IC Bitcoin Testnet Adapter Service Provider
 After=bootstrap-ic-node.service
 Wants=bootstrap-ic-node.service
-# TODO: Remove update-config references in NODE-1518
-After=update-config.service
-Wants=update-config.service
 After=network-online.target
 Wants=network-online.target
 Requires=ic-btc-testnet-adapter.socket
