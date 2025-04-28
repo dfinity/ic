@@ -118,6 +118,7 @@ PODMAN_RUN_ARGS+=(
     --mount type=bind,source="/tmp",target="/tmp"
     --mount type=volume,chown=true,destination=/tmp/zig-cache
     --mount type=tmpfs,destination=/var/sysimage
+    --mount type=tmpfs,target="/tmp/tmpfs"
 )
 
 if [ "$(id -u)" = "1000" ]; then
