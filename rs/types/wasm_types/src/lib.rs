@@ -351,7 +351,7 @@ impl ModuleStorage {
         }
         let mut arc = match self {
             ModuleStorage::Memory(bytes) => Arc::clone(bytes),
-            ModuleStorage::File(_path, mmap) => Arc::new(mmap.as_slice().to_vec()),
+            ModuleStorage::File(file) => Arc::new(file.as_slice().to_vec()),
         };
         let inner = Arc::make_mut(&mut arc);
         inner[offset..end].copy_from_slice(buf);
