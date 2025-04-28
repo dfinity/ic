@@ -81,8 +81,7 @@ def main():
                     for output in exec_log_entry.spawn.outputs:
                         output_type = output.WhichOneof("type")
                         if output_type == "output_id":
-                            output_id = output.output_id
-                            output_entry = id_to_entry[output_id]
+                            output_entry = id_to_entry[output.output_id]
                             output_entry_type = output_entry.WhichOneof("type")
                             if output_entry_type == "file":
                                 path = output_entry.file.path
