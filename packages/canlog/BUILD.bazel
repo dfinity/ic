@@ -3,8 +3,6 @@ load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_doc_test", "rust_library", 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/canlog_derive",
     "@crate_index//:candid",
     "@crate_index//:ic-canister-log",
     "@crate_index//:ic-cdk",
@@ -13,15 +11,20 @@ DEPENDENCIES = [
     "@crate_index//:serde_json",
 ]
 
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/canlog_derive",
+]
+
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:proptest",
-    "//packages/canlog_derive",
 ]
 
 rust_library(
     name = "canlog",
     srcs = glob(["src/**/*.rs"]),
+    proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
 
