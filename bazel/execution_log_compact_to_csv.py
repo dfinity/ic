@@ -83,18 +83,19 @@ def main():
                         if output_type == "output_id":
                             output_entry = id_to_entry[output.output_id]
                             output_entry_type = output_entry.WhichOneof("type")
-                            if output_entry_type == "file":
-                                path = output_entry.file.path
-                                hash = output_entry.file.digest.hash
-                                writer.writerow([label, path, hash])
-                            elif output_entry_type == "directory":
-                                dir_path = output_entry.directory.path
-                                for dir_file in output_entry.directory.files:
-                                    path = dir_path + "/" + dir_file.path
-                                    hash = dir_file.digest.hash
+                            match output_entry_type:
+                                case "file":
+                                    path = output_entry.file.path
+                                    hash = output_entry.file.digest.hash
                                     writer.writerow([label, path, hash])
-                            else:
-                                raise ValueError(f"Unknown output entry type: {output_entry_type}")
+                                case "directory":
+                                    dir_path = output_entry.directory.path
+                                    for dir_file in output_entry.directory.files:
+                                        path = dir_path + "/" + dir_file.path
+                                        hash = dir_file.digest.hash
+                                        writer.writerow([label, path, hash])
+                                case _:
+                                    raise ValueError(f"Unknown output entry type: {output_entry_type}")
 
 
 if __name__ == "__main__":
