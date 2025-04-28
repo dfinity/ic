@@ -6,8 +6,8 @@ mod high_capacity;
 use std::{fmt, str};
 
 use crate::pb::v1::{
-    registry_error::Code, registry_mutation::Type, Precondition, RegistryDelta, RegistryError,
-    RegistryGetChangesSinceResponse, RegistryMutation,
+    registry_error::Code, registry_mutation, registry_mutation::Type, Precondition, RegistryDelta,
+    RegistryError, RegistryGetChangesSinceResponse, RegistryMutation,
 };
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -110,6 +110,38 @@ impl From<Error> for RegistryError {
             }
         }
         error_pb
+    }
+}
+
+impl registry_mutation::Type {
+    pub fn is_delete(self) -> bool {
+        // Do not simply replace this with self == Delete, because that assumes
+        // the reader knows that all other mutation types are not some other
+        // flavor of deletion. Whereas, this match proves (in writing) that we
+        // really individually considered every single mutation types.
+        match self {
+            registry_mutation::Type::Delete => true,
+
+            registry_mutation::Type::Insert
+            | registry_mutation::Type::Update
+            | registry_mutation::Type::Upsert => false,
+        }
+    }
+
+    /// Returns whether key being touched
+    ///
+    ///   * must be present. In this case, Some(true) is returned.
+    ///   * must be absence. In this case, Some(false) is returned.
+    ///   * can be present or absent: In this case None is returned.
+    pub fn requires_already_present(self) -> Option<bool> {
+        match self {
+            registry_mutation::Type::Upsert => None, // Anything goes!
+
+            // Destructive operations must have SOME value to destroy.
+            registry_mutation::Type::Delete | registry_mutation::Type::Update => Some(true),
+
+            registry_mutation::Type::Insert => Some(false), // Do NOT clobber!
+        }
     }
 }
 

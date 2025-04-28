@@ -21,8 +21,9 @@
 //! want is not already there, feel free to add it).
 
 use crate::pb::v1::{
-    high_capacity_registry_mutation, HighCapacityRegistryAtomicMutateRequest,
-    HighCapacityRegistryMutation, RegistryAtomicMutateRequest, RegistryMutation,
+    high_capacity_registry_mutation, high_capacity_registry_value,
+    HighCapacityRegistryAtomicMutateRequest, HighCapacityRegistryMutation,
+    RegistryAtomicMutateRequest, RegistryMutation,
 };
 
 impl From<RegistryAtomicMutateRequest> for HighCapacityRegistryAtomicMutateRequest {
@@ -61,6 +62,26 @@ impl From<RegistryMutation> for HighCapacityRegistryMutation {
             mutation_type,
             key,
             content,
+        }
+    }
+}
+
+impl From<Option<high_capacity_registry_mutation::Content>>
+    for high_capacity_registry_value::Content
+{
+    fn from(original: Option<high_capacity_registry_mutation::Content>) -> Self {
+        // Treat None the same as Value(vec![]).
+        let Some(original) = original else {
+            return high_capacity_registry_value::Content::Value(vec![]);
+        };
+
+        match original {
+            high_capacity_registry_mutation::Content::Value(value) => {
+                high_capacity_registry_value::Content::Value(value)
+            }
+            high_capacity_registry_mutation::Content::LargeValueChunkKeys(
+                large_value_chunk_keys,
+            ) => high_capacity_registry_value::Content::LargeValueChunkKeys(large_value_chunk_keys),
         }
     }
 }

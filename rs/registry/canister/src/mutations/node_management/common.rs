@@ -1,11 +1,12 @@
 use std::{default::Default, str::FromStr};
 
-use crate::{common::LOG_PREFIX, registry::Registry};
+use crate::{common::LOG_PREFIX, registry::Registry, storage::with_chunks};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_protobuf::registry::{
     node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord, subnet::v1::SubnetListRecord,
 };
+use ic_registry_canister_chunkify::decode_high_capacity_registry_value;
 use ic_registry_keys::{
     make_crypto_node_key, make_crypto_tls_cert_key, make_firewall_rules_record_key,
     make_node_operator_record_key, make_node_record_key, make_subnet_list_record_key,
@@ -13,7 +14,7 @@ use ic_registry_keys::{
 };
 use ic_registry_transport::{
     delete, insert,
-    pb::v1::{RegistryMutation, RegistryValue},
+    pb::v1::{HighCapacityRegistryValue, RegistryMutation, RegistryValue},
     update,
 };
 use ic_types::crypto::KeyPurpose;
@@ -281,23 +282,22 @@ pub fn get_key_family_iter_at_version<'a, T: prost::Message + Default>(
         .store
         .range(start..)
         .take_while(|(k, _)| k.starts_with(prefix_bytes))
-        .filter_map(move |(k, v)| {
-            v.iter()
-                .rev()
-                .find(|v| v.version <= version)
-                .map(|v| (k, v))
-        })
-        // ...skipping any that have been deleted...
-        .filter(|(_, v)| !v.deletion_marker)
-        // ...and repack them into a tuple of (ID, value).
-        .map(|(k, v)| {
-            let id = k
+        .filter_map(move |(key, values)| {
+            let value: &HighCapacityRegistryValue =
+                values.iter().rev().find(|value| value.version <= version)?;
+
+            let latest_value: Option<T> =
+                with_chunks(|chunks| decode_high_capacity_registry_value::<T, _>(value, chunks));
+
+            // Skip deleted values.
+            let latest_value = latest_value?;
+
+            let id = key
                 .strip_prefix(prefix_bytes)
                 .and_then(|v| std::str::from_utf8(v).ok())
                 .unwrap()
                 .to_string();
-            let value = T::decode(v.value.as_slice()).unwrap();
 
-            (id, value)
+            Some((id, latest_value))
         })
 }

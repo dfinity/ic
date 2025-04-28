@@ -7,12 +7,13 @@ use crate::{
 };
 use ic_certified_map::RbTree;
 use ic_registry_canister_api::{Chunk, GetChunkRequest};
-use ic_registry_canister_chunkify::dechunkify_prime_mutation_value;
+use ic_registry_canister_chunkify::dechunkify_registry_value;
 use ic_registry_transport::{
     pb::v1::{
-        high_capacity_registry_mutation, registry_mutation::Type,
-        HighCapacityRegistryAtomicMutateRequest, HighCapacityRegistryMutation,
-        RegistryAtomicMutateRequest, RegistryDelta, RegistryMutation, RegistryValue,
+        high_capacity_registry_mutation, high_capacity_registry_value, registry_mutation::Type,
+        HighCapacityRegistryAtomicMutateRequest, HighCapacityRegistryDelta,
+        HighCapacityRegistryMutation, HighCapacityRegistryValue, RegistryAtomicMutateRequest,
+        RegistryMutation, RegistryValue,
     },
     Error,
 };
@@ -33,11 +34,6 @@ use dfn_core::println;
 pub const MAX_REGISTRY_DELTAS_SIZE: usize =
     2 * MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize / 3;
 
-/// The type for the registry map.
-///
-/// The Deque part is mostly future proofing for when we have garbage collection
-/// so that we're able to call pop_front().
-pub type RegistryMap = BTreeMap<Vec<u8>, VecDeque<RegistryValue>>;
 pub type Version = u64;
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Default)]
 pub struct EncodedVersion([u8; std::mem::size_of::<Version>()]);
@@ -86,7 +82,7 @@ pub struct Registry {
     /// Registry contents represented as a versioned key/value store, where
     /// value versions are stored in a deque in ascending order (latest version
     /// is stored at the back of the deque).
-    pub(crate) store: RegistryMap,
+    pub(crate) store: BTreeMap<Vec<u8>, VecDeque<HighCapacityRegistryValue>>,
 
     /// All the mutations applied to the registry.
     ///
@@ -112,7 +108,7 @@ impl Registry {
         &self,
         version: u64,
         max_versions: Option<usize>,
-    ) -> Vec<RegistryDelta> {
+    ) -> Vec<HighCapacityRegistryDelta> {
         let max_version = match max_versions {
             Some(max_versions) => version.saturating_add(max_versions as u64),
             None => u64::MAX,
@@ -121,7 +117,7 @@ impl Registry {
         self.store
             .iter()
             // For every key create a delta with values versioned `(version, max_version]`.
-            .map(|(key, values)| RegistryDelta {
+            .map(|(key, values)| HighCapacityRegistryDelta {
                 key: key.clone(),
                 values: values
                     .iter()
@@ -136,21 +132,19 @@ impl Registry {
             .collect()
     }
 
-    /// Returns the highest version of value such that it is lower than or equal
-    /// to 'version', or None if it does not exist or if the most recent update
-    /// whose version is less than or equal to 'version' is a deletion marker.
-    pub fn get(&self, key: &[u8], version: Version) -> Option<&RegistryValue> {
-        let value = self
-            .store
+    /// Returns the most recent value associated with key that is not newer than
+    /// version. (If the key was never set, or absent due to deletion, None is
+    /// returned).
+    pub fn get_high_capacity(
+        &self,
+        key: &[u8],
+        version: Version,
+    ) -> Option<&HighCapacityRegistryValue> {
+        self.store
             .get(key)?
             .iter()
             .rev()
-            // Get the first one versioned at or below `version`.
-            .find(|value| value.version <= version)?;
-        if value.deletion_marker {
-            return None;
-        }
-        Some(value)
+            .find(|value| value.version <= version)
     }
 
     pub fn get_chunk(&self, request: GetChunkRequest) -> Result<Chunk, String> {
@@ -185,6 +179,28 @@ impl Registry {
             .count()
     }
 
+    pub(crate) fn get(&self, key: &[u8], version: Version) -> Option<RegistryValue> {
+        let HighCapacityRegistryValue {
+            version,
+            content,
+            timestamp_seconds: _,
+        } = self.get_high_capacity(key, version)?;
+
+        let value = content
+            .clone()
+            .map(|content| with_chunks(|chunks| dechunkify_registry_value(content, chunks)))
+            .unwrap_or_else(|| Some(vec![]));
+
+        let value = value?;
+
+        let version = *version;
+        Some(RegistryValue {
+            version,
+            value,
+            deletion_marker: false,
+        })
+    }
+
     /// Returns the last RegistryValue, if any, for the given key.
     ///
     /// As we keep track of deletions in the registry, this value
@@ -192,7 +208,7 @@ impl Registry {
     /// field equal true, and value being completely bogus. Thus,
     /// when calling 'get_last' you must check the 'deleted' marker,
     /// otherwise you might deal with garbage.
-    fn get_last(&self, key: &[u8]) -> Option<&RegistryValue> {
+    fn get_last(&self, key: &[u8]) -> Option<&HighCapacityRegistryValue> {
         self.store.get(key).and_then(VecDeque::back)
     }
 
@@ -237,24 +253,37 @@ impl Registry {
             } as i32;
         }
 
-        // Populate self.store (this is secondary to self.changelog).
-        with_chunks(|chunks| {
-            for mutation in &composite_mutation.mutations {
-                // TODO(NNS1-3683): Switch to high capacity.
-                let value = dechunkify_prime_mutation_value(mutation.clone(), chunks);
+        // Populate self.store (which is secondary to self.changelog).
+        let timestamp_seconds = composite_mutation.timestamp_seconds;
+        for prime_mutation in composite_mutation.mutations.clone() {
+            let HighCapacityRegistryMutation {
+                mutation_type,
+                content,
+                key,
+            } = prime_mutation;
 
-                let (value, deletion_marker) = match value {
-                    None => (vec![], true),
-                    Some(value) => (value, false),
-                };
+            // Convert to high_capacity_registry_value::Content.
+            let mutation_type = Type::try_from(mutation_type).unwrap_or_else(|err| {
+                panic!(
+                    "Unable to convert mutation_type ({}): {}",
+                    mutation_type, err
+                );
+            });
+            let content = if mutation_type.is_delete() {
+                high_capacity_registry_value::Content::DeletionMarker(true)
+            } else {
+                high_capacity_registry_value::Content::from(content)
+            };
+            let content = Some(content);
 
-                (*self.store.entry(mutation.key.clone()).or_default()).push_back(RegistryValue {
-                    version,
-                    value,
-                    deletion_marker,
-                });
-            }
-        });
+            let registry_value = HighCapacityRegistryValue {
+                version,
+                content,
+                timestamp_seconds,
+            };
+
+            self.store.entry(key).or_default().push_back(registry_value);
+        }
 
         // Populate self.changelog (this is our primary data).
         self.changelog_insert(version, composite_mutation);
@@ -284,30 +313,57 @@ impl Registry {
         self.apply_mutations_as_version(mutations, self.version);
     }
 
-    /// Verifies the implicit precondition corresponding to the mutation_type
-    /// field.
+    /// Some mutation_type(s) require that the key/value is currently (i.e.
+    /// right before the mutation is performed) present, while other(s) require
+    /// that the key/value is currently absent. This enforces those requirements.
     fn verify_mutation_type(&self, mutations: &[RegistryMutation]) -> Vec<Error> {
         mutations
             .iter()
-            .map(|m| {
-                let key = &m.key;
-                let latest = self
+            .map(|new_mutation| {
+                let RegistryMutation {
+                    key,
+                    mutation_type,
+                    value: _,
+                } = new_mutation;
+
+                let mutation_type = Type::try_from(*mutation_type).map_err(|err| {
+                    Error::MalformedMessage(format!("Unable to convert mutation_type: {}", err,))
+                })?;
+                let Some(requires_already_present) = mutation_type.requires_already_present()
+                else {
+                    return Ok(());
+                };
+
+                let already_present = self
                     .get_last(key)
-                    .filter(|registry_value| !registry_value.deletion_marker);
-                match (Type::try_from(m.mutation_type).ok(), latest) {
-                    (None, _) => Err(Error::MalformedMessage(format!(
-                        "Unknown mutation type {} for key {:?}.",
-                        m.mutation_type, m.key
-                    ))),
-                    (Some(Type::Insert), None) => Ok(()),
-                    (Some(Type::Insert), Some(_)) => Err(Error::KeyAlreadyPresent(key.to_vec())),
-                    (Some(Type::Update), None) => Err(Error::KeyNotPresent(key.to_vec())),
-                    (Some(Type::Update), Some(_)) => Ok(()),
-                    (Some(Type::Delete), None) => Err(Error::KeyNotPresent(key.to_vec())),
-                    (Some(Type::Delete), Some(_)) => Ok(()),
-                    (Some(Type::Upsert), None) => Ok(()),
-                    (Some(Type::Upsert), Some(_)) => Ok(()),
+                    .map(|registry_value| match registry_value.content {
+                        Some(high_capacity_registry_value::Content::DeletionMarker(
+                            deletion_marker,
+                        )) => !deletion_marker,
+
+                        None
+                        | Some(high_capacity_registry_value::Content::Value(_))
+                        | Some(high_capacity_registry_value::Content::LargeValueChunkKeys(_)) => {
+                            true
+                        }
+                    })
+                    .unwrap_or(false);
+                if requires_already_present == already_present {
+                    return Ok(());
                 }
+
+                // Something is wrong, so Err will be returned, but a more
+                // precise description of the problem still needs to be
+                // decided...
+
+                let key = key.to_vec();
+                let err = if already_present {
+                    Error::KeyAlreadyPresent(key)
+                } else {
+                    Error::KeyNotPresent(key)
+                };
+
+                Err(err)
             })
             .flat_map(Result::err)
             .collect()
