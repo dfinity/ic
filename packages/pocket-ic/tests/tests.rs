@@ -2763,11 +2763,12 @@ fn test_stop_canister_with_deleted_call_contexts() {
             Principal::anonymous(),
             "update",
             wasm()
-                .call_simple(
+                .call_with_cycles(
                     callee,
                     "update",
                     call_args()
-                        .other_side(wasm().instruction_counter_is_at_least(29_000_000_000).build()),
+                        .other_side(wasm().accept_cycles(5_000_000_000_000_u128).instruction_counter_is_at_least(29_000_000_000).build()),
+                    10_000_000_000_000_u128,
                 )
                 .build(),
         ).unwrap();
@@ -2789,8 +2790,9 @@ fn test_stop_canister_with_deleted_call_contexts() {
     env.start_canister(canister_id, None).unwrap();
     env.stop_canister(canister_id, None).unwrap();
 
-    for _ in 0..100 {
-      //println!("cycles: {:?}", env.cycle_balance(callee));
+    for _ in 0..20 {
+      //println!("cycles: {:?}", env.cycle_balance(canister_id));
+      //println!("cycles (callee): {:?}", env.cycle_balance(callee));
       env.tick();
     }
 }
