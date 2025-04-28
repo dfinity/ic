@@ -270,7 +270,7 @@ pub(crate) fn get_key_family_iter<'a, T: prost::Message + Default>(
     get_key_family_iter_at_version(registry, prefix, registry.latest_version())
 }
 
-pub fn get_key_family_iter_at_version<'a, T: prost::Message + Default>(
+pub(crate) fn get_key_family_iter_at_version<'a, T: prost::Message + Default>(
     registry: &'a Registry,
     prefix: &'a str,
     version: u64,
@@ -301,3 +301,7 @@ pub fn get_key_family_iter_at_version<'a, T: prost::Message + Default>(
             Some((id, latest_value))
         })
 }
+
+#[path = "common_tests.rs"]
+#[cfg(test)]
+mod tests;

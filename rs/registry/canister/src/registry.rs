@@ -789,6 +789,46 @@ mod tests {
     }
 
     #[test]
+    fn test_verify_mutation_type_delete() {
+        let key = vec![1, 2, 3, 4];
+        let value = vec![5, 6, 7, 8];
+
+        let mut registry = Registry::new();
+
+        assert_eq!(
+            registry.verify_mutation_type(&[delete(&key)]),
+            vec![Error::KeyNotPresent(key.clone())]
+        );
+
+        apply_mutations_skip_invariant_checks(&mut registry, vec![insert(&key, &value)]);
+
+        assert_eq!(
+            registry.verify_mutation_type(&[delete(&key)]),
+            vec![],
+        );
+    }
+
+    #[test]
+    fn test_verify_mutation_type_upsert() {
+        let key = vec![1, 2, 3, 4];
+        let value = vec![5, 6, 7, 8];
+
+        let mut registry = Registry::new();
+
+        assert_eq!(
+            registry.verify_mutation_type(&[upsert(&key, &value)]),
+            vec![],
+        );
+
+        apply_mutations_skip_invariant_checks(&mut registry, vec![insert(&key, &value)]);
+
+        assert_eq!(
+            registry.verify_mutation_type(&[upsert(&key, &value)]),
+            vec![],
+        );
+    }
+
+    #[test]
     fn test_count_fitting_deltas() {
         let mut registry = Registry::new();
 
