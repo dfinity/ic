@@ -70,7 +70,7 @@ def main():
             # We intend to log the outputs of Spawns. Spawns refer to their output by ID
             # so we need to keep track of the ID to entry mapping. Important note:
             # if an entry (like a Spawn) refers to another entry (like a File or Direcory)
-            # the latter must precede the former.
+            # it's guaranteed the latter will precede the former.
             entry_type = exec_log_entry.WhichOneof("type")
             if entry_type in ["file", "directory"]:
                 id_to_entry[exec_log_entry.id] = exec_log_entry
