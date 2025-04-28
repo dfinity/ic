@@ -19,5 +19,6 @@ rust_library(
         "//rs/utils",
         "//rs/utils/validate_eq",
         "@crate_index//:serde",
+        "@crate_index//:tempfile",
     ],
 )

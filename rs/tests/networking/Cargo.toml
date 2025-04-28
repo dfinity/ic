@@ -59,6 +59,14 @@ name = "ic-systest-canister-http-socks"
 path = "canister_http_socks_test.rs"
 
 [[bin]]
+name = "ic-systest-canister-http-stress"
+path = "canister_http_stress_test.rs"
+
+[[bin]]
+name = "ic-systest-canister-http-soak"
+path = "canister_http_soak_test.rs"
+
+[[bin]]
 name = "ic-systest-canister-http"
 path = "canister_http_test.rs"
 
