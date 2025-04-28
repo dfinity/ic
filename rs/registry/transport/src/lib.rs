@@ -181,7 +181,7 @@ pub fn deserialize_get_value_request(request: Vec<u8>) -> Result<(Vec<u8>, Optio
 // be used in the registry canister only and thus there is no problem with
 // leaking the PB structs to the rest of the code base.
 pub fn serialize_get_value_response(
-    response: pb::v1::RegistryGetValueResponse,
+    response: pb::v1::HighCapacityRegistryGetValueResponse,
 ) -> Result<Vec<u8>, Error> {
     let mut buf = Vec::new();
     match response.encode(&mut buf) {
@@ -244,7 +244,7 @@ pub fn deserialize_get_changes_since_request(request: Vec<u8>) -> Result<u64, Er
 // be used in the registry canister only and thus there is no problem with
 // leaking the PB structs to the rest of the code base.
 pub fn serialize_get_changes_since_response(
-    response: pb::v1::RegistryGetChangesSinceResponse,
+    response: pb::v1::HighCapacityRegistryGetChangesSinceResponse,
 ) -> Result<Vec<u8>, Error> {
     let mut buf = Vec::new();
     match response.encode(&mut buf) {

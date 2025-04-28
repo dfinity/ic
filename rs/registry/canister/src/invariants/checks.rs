@@ -148,14 +148,14 @@ impl Registry {
         for (key, values) in self.store.iter() {
             let registry_value = values.back().unwrap();
 
-            let content = match &registry_value.content {
+            let content = match registry_value.content.clone() {
                 Some(ok) => ok,
                 None => high_capacity_registry_value::Content::Value(vec![]),
             };
 
-            let value = match content {
+            let value: Vec<u8> = match content {
                 high_capacity_registry_value::Content::DeletionMarker(deletion_marker) => {
-                    if *deletion_marker {
+                    if deletion_marker {
                         continue;
                     }
 
@@ -163,11 +163,11 @@ impl Registry {
                     vec![]
                 }
 
-                high_capacity_registry_value::Content::Value(value) => value.clone(),
+                high_capacity_registry_value::Content::Value(value) => value,
 
                 high_capacity_registry_value::Content::LargeValueChunkKeys(
                     large_value_chunk_keys,
-                ) => with_chunks(|chunks| dechunkify(large_value_chunk_keys, chunks)),
+                ) => with_chunks(|chunks| dechunkify(&large_value_chunk_keys, chunks)),
             };
 
             snapshot.insert(key.to_vec(), value);

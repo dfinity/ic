@@ -21,9 +21,9 @@
 //! want is not already there, feel free to add it).
 
 use crate::pb::v1::{
-    high_capacity_registry_mutation, high_capacity_registry_value,
-    HighCapacityRegistryAtomicMutateRequest, HighCapacityRegistryMutation,
-    RegistryAtomicMutateRequest, RegistryMutation,
+    high_capacity_registry_get_value_response, high_capacity_registry_mutation,
+    high_capacity_registry_value, HighCapacityRegistryAtomicMutateRequest,
+    HighCapacityRegistryMutation, RegistryAtomicMutateRequest, RegistryMutation,
 };
 
 impl From<RegistryAtomicMutateRequest> for HighCapacityRegistryAtomicMutateRequest {
@@ -82,6 +82,26 @@ impl From<Option<high_capacity_registry_mutation::Content>>
             high_capacity_registry_mutation::Content::LargeValueChunkKeys(
                 large_value_chunk_keys,
             ) => high_capacity_registry_value::Content::LargeValueChunkKeys(large_value_chunk_keys),
+        }
+    }
+}
+
+impl TryFrom<high_capacity_registry_value::Content>
+    for high_capacity_registry_get_value_response::Content
+{
+    type Error = String;
+
+    fn try_from(original: high_capacity_registry_value::Content) -> Result<Self, String> {
+        match original {
+            high_capacity_registry_value::Content::Value(ok) => Ok(Self::Value(ok)),
+
+            high_capacity_registry_value::Content::DeletionMarker(_) => {
+                Err("get_value responses cannot represent deletion_marker.".to_string())
+            }
+
+            high_capacity_registry_value::Content::LargeValueChunkKeys(ok) => {
+                Ok(Self::LargeValueChunkKeys(ok))
+            }
         }
     }
 }

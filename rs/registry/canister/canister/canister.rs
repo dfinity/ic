@@ -21,9 +21,10 @@ use ic_registry_transport::{
     deserialize_atomic_mutate_request, deserialize_get_changes_since_request,
     deserialize_get_value_request,
     pb::v1::{
-        registry_error::Code, CertifiedResponse, RegistryAtomicMutateResponse, RegistryError,
-        RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
-        RegistryGetLatestVersionResponse, RegistryGetValueResponse,
+        high_capacity_registry_get_value_response, registry_error::Code, CertifiedResponse,
+        HighCapacityRegistryGetChangesSinceResponse, HighCapacityRegistryGetValueResponse,
+        HighCapacityRegistryValue, RegistryAtomicMutateResponse, RegistryError,
+        RegistryGetChangesSinceRequest, RegistryGetLatestVersionResponse,
     },
     serialize_atomic_mutate_response, serialize_get_changes_since_response,
     serialize_get_value_response,
@@ -221,7 +222,7 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 
 #[export_name = "canister_query get_changes_since"]
 fn get_changes_since() {
-    fn main() -> Result<RegistryGetChangesSinceResponse, (Code, String)> {
+    fn main() -> Result<HighCapacityRegistryGetChangesSinceResponse, (Code, String)> {
         // Parse request.
         let request = deserialize_get_changes_since_request(arg_data())
             .map_err(|err| (Code::MalformedMessage, err.to_string()))?;
@@ -235,7 +236,7 @@ fn get_changes_since() {
             .count_fitting_deltas(version, MAX_REGISTRY_DELTAS_SIZE)
             .min(MAX_VERSIONS_PER_QUERY);
 
-        Ok(RegistryGetChangesSinceResponse {
+        Ok(HighCapacityRegistryGetChangesSinceResponse {
             error: None,
             version: registry.latest_version(),
             deltas: registry.get_changes_since(version, Some(max_versions)),
@@ -243,11 +244,11 @@ fn get_changes_since() {
     }
 
     let response = main().unwrap_or_else(
-        // Convert Err to RegistryGetChangesSinceResponse
+        // Convert Err to HighCapacityRegistryGetChangesSinceResponse
         |(code, reason)| {
             let code = code as i32;
 
-            RegistryGetChangesSinceResponse {
+            HighCapacityRegistryGetChangesSinceResponse {
                 error: Some(RegistryError {
                     code,
                     reason,
@@ -302,14 +303,38 @@ fn get_value() {
         Ok((key, version_opt)) => {
             let registry = registry();
             let version = version_opt.unwrap_or_else(|| registry.latest_version());
-            let result = registry.get(&key, version);
+            let result: Option<HighCapacityRegistryValue> =
+                registry.get_high_capacity(&key, version).cloned();
+
             match result {
-                Some(value) => RegistryGetValueResponse {
-                    error: None,
-                    version: value.version,
-                    value: value.value.clone(),
-                },
-                None => RegistryGetValueResponse {
+                Some(result) => {
+                    let HighCapacityRegistryValue {
+                        version,
+                        content,
+                        timestamp_seconds,
+                    } = result;
+
+                    let content = content.map(|content| {
+                        high_capacity_registry_get_value_response::Content::try_from(content)
+                            // Since get_high_capacity is supposed to NOT return a
+                            // value whose content is deletion_marker, and since
+                            // that is the only case where try_from fails, we deduce
+                            // that this panic cannot occur.
+                            .unwrap_or_else(|err| {
+                                panic!("Unable to convert value to response type, because {}", err,)
+                            })
+                    });
+
+                    HighCapacityRegistryGetValueResponse {
+                        version,
+                        content,
+                        timestamp_seconds,
+
+                        error: None,
+                    }
+                }
+
+                None => HighCapacityRegistryGetValueResponse {
                     error: Some(RegistryError {
                         code: Code::KeyNotPresent as i32,
                         key: key.clone(),
@@ -322,18 +347,20 @@ fn get_value() {
                     // or use it as a precondition, we can only ask that nothing has changed
                     // since the moment we did this read.
                     version,
-                    value: Vec::<u8>::default(),
+                    content: None,
+                    timestamp_seconds: 0,
                 },
             }
         }
-        Err(error) => RegistryGetValueResponse {
+        Err(error) => HighCapacityRegistryGetValueResponse {
             error: Some(RegistryError {
                 code: Code::MalformedMessage as i32,
                 key: Vec::<u8>::default(),
                 reason: error.to_string(),
             }),
             version: 0,
-            value: Vec::<u8>::default(),
+            content: None,
+            timestamp_seconds: 0,
         },
     };
     let bytes = serialize_get_value_response(response_pb).expect("Error serializing response");
