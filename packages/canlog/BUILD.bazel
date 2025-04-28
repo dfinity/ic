@@ -31,6 +31,7 @@ rust_library(
 rust_test(
     name = "unit_tests",
     crate = ":canlog",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_doc(
