@@ -1135,6 +1135,7 @@ impl Neuron {
         self.known_neuron_data = None;
     }
 
+    /// Adds a maturity disbursement in progress at the end.
     pub fn add_maturity_disbursement_in_progress(
         &mut self,
         maturity_disbursement: MaturityDisbursement,
@@ -1144,7 +1145,6 @@ impl Neuron {
     }
 
     /// Pops the first maturity disbursement in progress.
-    #[cfg(test)]
     pub fn pop_maturity_disbursement_in_progress(&mut self) -> Option<MaturityDisbursement> {
         if self.maturity_disbursements_in_progress.is_empty() {
             None
@@ -1152,6 +1152,16 @@ impl Neuron {
             // This is safe because we know that the vector is not empty.
             Some(self.maturity_disbursements_in_progress.remove(0))
         }
+    }
+
+    /// Pushes a maturity disbursement in progress at the front. This should only be used if the
+    /// ledger operation fails and the disbursement needs to be put back in the queue.
+    pub fn push_front_maturity_disbursement_in_progress(
+        &mut self,
+        maturity_disbursement: MaturityDisbursement,
+    ) {
+        self.maturity_disbursements_in_progress
+            .insert(0, maturity_disbursement);
     }
 }
 
