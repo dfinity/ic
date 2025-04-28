@@ -1,15 +1,14 @@
 use crate::eth_rpc::{
-    self, Block, BlockSpec, BlockTag, Data, FeeHistory, FeeHistoryParams, FixedSizeData,
-    GetLogsParam, Hash, HttpOutcallError, HttpResponsePayload, LogEntry, Quantity,
-    ResponseSizeEstimate, SendRawTransactionResult, Topic, HEADER_SIZE_LIMIT,
+    Block, BlockSpec, BlockTag, Data, FeeHistory, FeeHistoryParams, FixedSizeData, GetLogsParam,
+    Hash, HttpOutcallError, LogEntry, Quantity, SendRawTransactionResult, Topic, HEADER_SIZE_LIMIT,
 };
-use crate::eth_rpc_client::providers::{RpcNodeProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS};
-use crate::eth_rpc_client::requests::GetTransactionCountParams;
+use crate::eth_rpc_client::providers::RpcNodeProvider;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;
-use crate::logs::{PrintProxySink, DEBUG, INFO, TRACE_HTTP};
+use crate::logs::{PrintProxySink, INFO, TRACE_HTTP};
 use crate::numeric::{BlockNumber, GasAmount, LogIndex, TransactionCount, Wei, WeiPerGas};
 use crate::state::State;
+use evm_rpc_client::RpcService as EvmRpcService;
 use evm_rpc_client::{
     Block as EvmBlock, BlockTag as EvmBlockTag, ConsensusStrategy, EvmRpcClient,
     FeeHistory as EvmFeeHistory, FeeHistoryArgs as EvmFeeHistoryArgs,
@@ -22,7 +21,6 @@ use evm_rpc_client::{
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use num_traits::ToPrimitive;
-use serde::{de::DeserializeOwned, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::Infallible;
 use std::fmt::{Debug, Display};
@@ -107,228 +105,95 @@ impl EthRpcClient {
         client
     }
 
-    fn providers(&self) -> &[RpcNodeProvider] {
-        match self.chain {
-            EthereumNetwork::Mainnet => &MAINNET_PROVIDERS,
-            EthereumNetwork::Sepolia => &SEPOLIA_PROVIDERS,
-        }
-    }
-
-    /// Query all providers in sequence until one returns an ok result
-    /// (which could still be a JsonRpcResult::Error).
-    /// If none of the providers return an ok result, return the last error.
-    /// This method is useful in case a provider is temporarily down but should only be for
-    /// querying data that is **not** critical since the returned value comes from a single provider.
-    async fn sequential_call_until_ok<I, O>(
-        &self,
-        method: impl Into<String> + Clone,
-        params: I,
-        response_size_estimate: ResponseSizeEstimate,
-    ) -> MultiCallResults<O>
-    where
-        I: Serialize + Clone,
-        O: DeserializeOwned + HttpResponsePayload + Debug,
-    {
-        let mut results: MultiCallResults<O> = MultiCallResults::new();
-        for provider in self.providers() {
-            log!(
-                DEBUG,
-                "[sequential_call_until_ok]: calling provider: {:?}",
-                provider
-            );
-            let result: Result<O, SingleCallError> = eth_rpc::call(
-                provider.url().to_string(),
-                method.clone(),
-                params.clone(),
-                response_size_estimate,
-            )
-            .await;
-            results.insert_once(provider.clone(), result);
-            if results.has_ok_results() {
-                return results;
-            }
-        }
-        results
-    }
-
-    /// Query all providers in parallel and return all results.
-    /// It's up to the caller to decide how to handle the results, which could be inconsistent among one another,
-    /// (e.g., if different providers gave different responses).
-    /// This method is useful for querying data that is critical for the system to ensure that there is no single point of failure,
-    /// e.g., ethereum logs upon which ckETH will be minted.
-    async fn parallel_call<I, O>(
-        &self,
-        method: impl Into<String> + Clone,
-        params: I,
-        response_size_estimate: ResponseSizeEstimate,
-    ) -> MultiCallResults<O>
-    where
-        I: Serialize + Clone,
-        O: DeserializeOwned + HttpResponsePayload,
-    {
-        let providers = self.providers();
-        let results = {
-            let mut fut = Vec::with_capacity(providers.len());
-            for provider in providers {
-                log!(DEBUG, "[parallel_call]: will call provider: {:?}", provider);
-                fut.push(eth_rpc::call(
-                    provider.url().to_string(),
-                    method.clone(),
-                    params.clone(),
-                    response_size_estimate,
-                ));
-            }
-            futures::future::join_all(fut).await
-        };
-        MultiCallResults::from_non_empty_iter(providers.iter().cloned().zip(results.into_iter()))
-    }
-
     pub async fn eth_get_logs(
         &self,
         params: GetLogsParam,
     ) -> Result<Vec<LogEntry>, MultiCallError<Vec<LogEntry>>> {
-        if let Some(evm_rpc_client) = &self.evm_rpc_client {
-            return evm_rpc_client
-                .eth_get_logs(EvmGetLogsArgs {
-                    from_block: Some(into_evm_block_tag(params.from_block)),
-                    to_block: Some(into_evm_block_tag(params.to_block)),
-                    addresses: params
-                        .address
-                        .into_iter()
-                        .map(|a| Hex20::from(a.into_bytes()))
-                        .collect(),
-                    topics: Some(into_evm_topic(params.topics)),
-                })
-                .await
-                .reduce()
-                .into();
-        }
-
-        let results: MultiCallResults<Vec<LogEntry>> = self
-            .parallel_call(
-                "eth_getLogs",
-                vec![params],
-                ResponseSizeEstimate::new(ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE),
-            )
-            .await;
-        results.reduce().into()
+        self.evm_rpc_client
+            .as_ref()
+            .unwrap()
+            .eth_get_logs(EvmGetLogsArgs {
+                from_block: Some(into_evm_block_tag(params.from_block)),
+                to_block: Some(into_evm_block_tag(params.to_block)),
+                addresses: params
+                    .address
+                    .into_iter()
+                    .map(|a| Hex20::from(a.into_bytes()))
+                    .collect(),
+                topics: Some(into_evm_topic(params.topics)),
+            })
+            .await
+            .reduce()
+            .into()
     }
 
     pub async fn eth_get_block_by_number(
         &self,
         block: BlockSpec,
     ) -> Result<Block, MultiCallError<Block>> {
-        use crate::eth_rpc::GetBlockByNumberParams;
-
-        if let Some(evm_rpc_client) = &self.evm_rpc_client {
-            return evm_rpc_client
-                .eth_get_block_by_number(into_evm_block_tag(block))
-                .await
-                .reduce()
-                .into();
-        }
-
-        let expected_block_size = match self.chain {
-            EthereumNetwork::Sepolia => 12 * 1024,
-            EthereumNetwork::Mainnet => 24 * 1024,
-        };
-
-        let results: MultiCallResults<Block> = self
-            .parallel_call(
-                "eth_getBlockByNumber",
-                GetBlockByNumberParams {
-                    block,
-                    include_full_transactions: false,
-                },
-                ResponseSizeEstimate::new(expected_block_size),
-            )
-            .await;
-        results.reduce().into()
+        self.evm_rpc_client
+            .as_ref()
+            .unwrap()
+            .eth_get_block_by_number(into_evm_block_tag(block))
+            .await
+            .reduce()
+            .into()
     }
 
     pub async fn eth_get_transaction_receipt(
         &self,
         tx_hash: Hash,
     ) -> Result<Option<TransactionReceipt>, MultiCallError<Option<TransactionReceipt>>> {
-        if let Some(evm_rpc_client) = &self.evm_rpc_client {
-            return evm_rpc_client
-                .eth_get_transaction_receipt(tx_hash.to_string())
-                .await
-                .reduce()
-                .into();
-        }
-        let results: MultiCallResults<Option<TransactionReceipt>> = self
-            .parallel_call(
-                "eth_getTransactionReceipt",
-                vec![tx_hash],
-                ResponseSizeEstimate::new(700),
-            )
-            .await;
-        results.reduce().into()
+        self.evm_rpc_client
+            .as_ref()
+            .unwrap()
+            .eth_get_transaction_receipt(tx_hash.to_string())
+            .await
+            .reduce()
+            .into()
     }
 
     pub async fn eth_fee_history(
         &self,
         params: FeeHistoryParams,
     ) -> Result<FeeHistory, MultiCallError<FeeHistory>> {
-        if let Some(evm_rpc_client) = &self.evm_rpc_client {
-            return evm_rpc_client
-                .eth_fee_history(EvmFeeHistoryArgs {
-                    block_count: Nat256::from_be_bytes(params.block_count.to_be_bytes()),
-                    newest_block: into_evm_block_tag(params.highest_block),
-                    reward_percentiles: Some(params.reward_percentiles),
-                })
-                .await
-                .reduce()
-                .into();
-        }
-        // A typical response is slightly above 300 bytes.
-        let results: MultiCallResults<FeeHistory> = self
-            .parallel_call("eth_feeHistory", params, ResponseSizeEstimate::new(512))
-            .await;
-        results.reduce().into()
+        self.evm_rpc_client
+            .as_ref()
+            .unwrap()
+            .eth_fee_history(EvmFeeHistoryArgs {
+                block_count: Nat256::from_be_bytes(params.block_count.to_be_bytes()),
+                newest_block: into_evm_block_tag(params.highest_block),
+                reward_percentiles: Some(params.reward_percentiles),
+            })
+            .await
+            .reduce()
+            .into()
     }
 
     pub async fn eth_send_raw_transaction(
         &self,
         raw_signed_transaction_hex: String,
     ) -> Result<SendRawTransactionResult, MultiCallError<SendRawTransactionResult>> {
-        if let Some(evm_rpc_client) = &self.evm_rpc_client {
-            return evm_rpc_client
-                .eth_send_raw_transaction(raw_signed_transaction_hex)
-                .await
-                .reduce()
-                .into();
-        }
-        // A successful reply is under 256 bytes, but we expect most calls to end with an error
-        // since we submit the same transaction from multiple nodes.
-        let results: MultiCallResults<SendRawTransactionResult> = self
-            .sequential_call_until_ok(
-                "eth_sendRawTransaction",
-                vec![raw_signed_transaction_hex],
-                ResponseSizeEstimate::new(256),
-            )
-            .await;
-        results.reduce().into()
+        self.evm_rpc_client
+            .as_ref()
+            .unwrap()
+            .eth_send_raw_transaction(raw_signed_transaction_hex)
+            .await
+            .reduce()
+            .into()
     }
 
     pub async fn eth_get_finalized_transaction_count(
         &self,
         address: Address,
     ) -> Result<TransactionCount, MultiCallError<TransactionCount>> {
-        if let Some(evm_rpc_client) = &self.evm_rpc_client {
-            let results = evm_rpc_client
-                .eth_get_transaction_count(EvmGetTransactionCountArgs {
-                    address: Hex20::from(address.into_bytes()),
-                    block: EvmBlockTag::Finalized,
-                })
-                .await;
-            return ReduceWithStrategy::<Equality>::reduce(results).into();
-        }
-        let results: MultiCallResults<TransactionCount> = self
-            .eth_get_transaction_count(GetTransactionCountParams {
-                address,
-                block: BlockSpec::Tag(BlockTag::Finalized),
+        let results = self
+            .evm_rpc_client
+            .as_ref()
+            .unwrap()
+            .eth_get_transaction_count(EvmGetTransactionCountArgs {
+                address: Hex20::from(address.into_bytes()),
+                block: EvmBlockTag::Finalized,
             })
             .await;
         ReduceWithStrategy::<Equality>::reduce(results).into()
@@ -338,34 +203,16 @@ impl EthRpcClient {
         &self,
         address: Address,
     ) -> Result<TransactionCount, MultiCallError<TransactionCount>> {
-        if let Some(evm_rpc_client) = &self.evm_rpc_client {
-            let results = evm_rpc_client
-                .eth_get_transaction_count(EvmGetTransactionCountArgs {
-                    address: Hex20::from(address.into_bytes()),
-                    block: EvmBlockTag::Latest,
-                })
-                .await;
-            return ReduceWithStrategy::<MinByKey>::reduce(results).into();
-        }
-        let results: MultiCallResults<TransactionCount> = self
-            .eth_get_transaction_count(GetTransactionCountParams {
-                address,
-                block: BlockSpec::Tag(BlockTag::Latest),
+        let results = self
+            .evm_rpc_client
+            .as_ref()
+            .unwrap()
+            .eth_get_transaction_count(EvmGetTransactionCountArgs {
+                address: Hex20::from(address.into_bytes()),
+                block: EvmBlockTag::Latest,
             })
             .await;
         ReduceWithStrategy::<MinByKey>::reduce(results).into()
-    }
-
-    async fn eth_get_transaction_count(
-        &self,
-        params: GetTransactionCountParams,
-    ) -> MultiCallResults<TransactionCount> {
-        self.parallel_call(
-            "eth_getTransactionCount",
-            params,
-            ResponseSizeEstimate::new(50),
-        )
-        .await
     }
 }
 
@@ -422,10 +269,6 @@ impl<T> MultiCallResults<T> {
                 assert!(self.errors.insert(provider, error).is_none());
             }
         }
-    }
-
-    fn has_ok_results(&self) -> bool {
-        !self.ok_results.is_empty()
     }
 
     fn from_non_empty_iter<
