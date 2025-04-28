@@ -15,7 +15,7 @@ DEV_DEPENDENCIES = [
 ]
 
 rust_library(
-    name = "canlog",
+    name = "canlog_derive",
     srcs = glob(["src/**/*.rs"]),
     deps = DEPENDENCIES,
 )
