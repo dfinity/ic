@@ -31,8 +31,7 @@ import re
 import sys
 
 import google.protobuf.internal
-
-import bazel.spawn_pb2
+import spawn_pb2
 
 
 def main():
@@ -62,9 +61,9 @@ def main():
             if msg_len is None:
                 break
 
-            # Parse the ExecLogEntry message. See ./spawn.proto for the message definition.
+            # Parse the ExecLogEntry message. See spawn.proto for the message definition.
             msg_buf = execlog_file.read(msg_len)
-            exec_log_entry = bazel.spawn_pb2.ExecLogEntry()
+            exec_log_entry = spawn_pb2.ExecLogEntry()
             exec_log_entry.ParseFromString(msg_buf)
 
             # We intend to log the outputs of Spawns. Spawns refer to their output by ID

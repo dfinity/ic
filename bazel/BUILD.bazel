@@ -1,22 +1,12 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag", "string_flag")
 load("@buildifier_prebuilt//:rules.bzl", "buildifier")
-load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
 load("@com_google_protobuf//bazel:py_proto_library.bzl", "py_proto_library")
 load("@rules_python//python:py_binary.bzl", "py_binary")
 load("//bazel:defs.bzl", "write_info_file_var")
 
-proto_library(
-    name = "spawn_pb2",
-    srcs = ["spawn.proto"],
-    deps = [
-        "@com_google_protobuf//:duration_proto",
-        "@com_google_protobuf//:timestamp_proto",
-    ],
-)
-
 py_proto_library(
     name = "spawn_py_pb2",
-    deps = [":spawn_pb2"],
+    deps = ["@spawn_proto_library//:spawn_pb2"],
 )
 
 py_binary(
