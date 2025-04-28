@@ -1962,7 +1962,9 @@ fn check_stream_handler_generated_reject_signal_canister_stopped() {
                 .canister_state_mut(&LOCAL_CANISTER)
                 .unwrap()
                 .system_state
-                .set_status(CanisterStatus::Stopped);
+                .set_status(CanisterStatus::Stopped {
+                  call_context_manager: Default::default(),
+                });
         },
         RejectReason::CanisterStopped,
     );
@@ -2138,7 +2140,9 @@ fn inducting_best_effort_response_into_stopped_canister_does_not_raise_a_critica
             .canister_state_mut(&LOCAL_CANISTER)
             .unwrap()
             .system_state
-            .set_status(CanisterStatus::Stopped);
+            .set_status(CanisterStatus::Stopped {
+                  call_context_manager: Default::default(),
+            });
     });
 }
 
@@ -2212,7 +2216,9 @@ fn legacy_check_stream_handler_generated_reject_response_canister_stopped() {
                 .canister_state_mut(&LOCAL_CANISTER)
                 .unwrap()
                 .system_state
-                .set_status(CanisterStatus::Stopped);
+                .set_status(CanisterStatus::Stopped {
+                  call_context_manager: Default::default(),
+                });
         },
         RejectReason::CanisterStopped,
     );

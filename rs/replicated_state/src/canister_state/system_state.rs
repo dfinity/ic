@@ -413,7 +413,9 @@ pub enum CanisterStatus {
         /// of them would be tracked here so that they can all get a response.
         stop_contexts: Vec<StopCanisterContext>,
     },
-    Stopped,
+    Stopped {
+        call_context_manager: CallContextManager,
+    }
 }
 
 impl CanisterStatus {
@@ -432,7 +434,9 @@ impl From<&CanisterStatus> for pb::canister_state_bits::CanisterStatus {
             } => Self::Running(pb::CanisterStatusRunning {
                 call_context_manager: Some(call_context_manager.into()),
             }),
-            CanisterStatus::Stopped => Self::Stopped(pb::CanisterStatusStopped {}),
+            CanisterStatus::Stopped { call_context_manager } => Self::Stopped(pb::CanisterStatusStopped {
+                call_context_manager: Some(call_context_manager.into()),
+            }),
             CanisterStatus::Stopping {
                 call_context_manager,
                 stop_contexts,
@@ -456,8 +460,15 @@ impl TryFrom<pb::canister_state_bits::CanisterStatus> for CanisterStatus {
                     "CanisterStatus::Running::call_context_manager",
                 )?,
             },
-            pb::canister_state_bits::CanisterStatus::Stopped(pb::CanisterStatusStopped {}) => {
-                Self::Stopped
+            pb::canister_state_bits::CanisterStatus::Stopped(pb::CanisterStatusStopped {
+                call_context_manager,
+            }) => {
+                Self::Stopped {
+                    call_context_manager: try_from_option_field(
+                        call_context_manager,
+                        "CanisterStatus::Stopped::call_context_manager",
+                    )?,
+                }
             }
             pb::canister_state_bits::CanisterStatus::Stopping(pb::CanisterStatusStopping {
                 call_context_manager,
@@ -889,7 +900,9 @@ impl SystemState {
             controller,
             initial_cycles,
             freeze_threshold,
-            CanisterStatus::Stopped,
+            CanisterStatus::Stopped {
+                call_context_manager: CallContextManager::default(),
+            },
         )
     }
 
@@ -1038,7 +1051,7 @@ impl SystemState {
                 call_context_manager,
                 ..
             } => Some(call_context_manager),
-            CanisterStatus::Stopped => None,
+            CanisterStatus::Stopped { call_context_manager } => Some(call_context_manager),
         }
     }
 
@@ -1303,8 +1316,8 @@ impl SystemState {
                 Ok(false)
             }
 
-            // Requests and guaranteed responses are both rejected when stopped.
-            (_, CanisterStatus::Stopped { .. }) => {
+            // Requests are rejected when stopped.
+            (RequestOrResponse::Request(_), CanisterStatus::Stopped { .. }) => {
                 Err((StateError::CanisterStopped(self.canister_id()), msg))
             }
 
@@ -1323,6 +1336,13 @@ impl SystemState {
             | (
                 RequestOrResponse::Response(_),
                 CanisterStatus::Stopping {
+                    call_context_manager,
+                    ..
+                },
+            )
+            | (
+                RequestOrResponse::Response(_),
+                CanisterStatus::Stopped {
                     call_context_manager,
                     ..
                 },
@@ -1397,8 +1417,10 @@ impl SystemState {
                 stop_contexts
             }
 
-            CanisterStatus::Stopped => {
-                self.status = CanisterStatus::new_running();
+            CanisterStatus::Stopped { call_context_manager } => {
+                self.status = CanisterStatus::Running {
+                  call_context_manager: std::mem::take(call_context_manager),
+                };
                 Vec::new()
             }
         }
@@ -1415,7 +1437,7 @@ impl SystemState {
     ) -> Option<StopCanisterContext> {
         match &mut self.status {
             // Return the stop context, nothing to do here.
-            CanisterStatus::Stopped => Some(stop_context),
+            CanisterStatus::Stopped { .. } => Some(stop_context),
 
             CanisterStatus::Stopping {
                 ref mut stop_contexts,
@@ -1454,19 +1476,20 @@ impl SystemState {
     ) -> (bool, Vec<StopCanisterContext>) {
         match self.status {
             // Canister is not stopping so we can skip it.
-            CanisterStatus::Running { .. } | CanisterStatus::Stopped => (false, Vec::new()),
+            CanisterStatus::Running { .. } | CanisterStatus::Stopped { .. } => (false, Vec::new()),
 
             // Canister is ready to stop.
             CanisterStatus::Stopping {
-                ref call_context_manager,
+                ref mut call_context_manager,
                 ref mut stop_contexts,
-            } if call_context_manager.callbacks().is_empty()
-                && call_context_manager.call_contexts().is_empty() =>
+            } if call_context_manager.canister_ready_to_stop() =>
             {
                 let stop_contexts = std::mem::take(stop_contexts);
 
                 // Transition the canister to "stopped".
-                self.status = CanisterStatus::Stopped;
+                self.status = CanisterStatus::Stopped {
+                  call_context_manager: std::mem::take(call_context_manager),
+                };
 
                 // Reply to all pending stop_canister requests.
                 (true, stop_contexts)
@@ -1500,11 +1523,8 @@ impl SystemState {
             CanisterStatus::Stopping {
                 call_context_manager,
                 ..
-            } => {
-                call_context_manager.callbacks().is_empty()
-                    && call_context_manager.call_contexts().is_empty()
-            }
-            CanisterStatus::Stopped => true,
+            } => call_context_manager.canister_ready_to_stop(),
+            CanisterStatus::Stopped { .. } => true,
         }
     }
 
@@ -1527,7 +1547,7 @@ impl SystemState {
         match self.status {
             CanisterStatus::Running { .. } => "Running",
             CanisterStatus::Stopping { .. } => "Stopping",
-            CanisterStatus::Stopped => "Stopped",
+            CanisterStatus::Stopped { .. } => "Stopped",
         }
     }
 
@@ -1550,7 +1570,7 @@ impl SystemState {
         // contexts (the calls corresponding to the dropped stop contexts will be
         // rejected by subnet A').
         match self.status {
-            CanisterStatus::Running { .. } | CanisterStatus::Stopped => {}
+            CanisterStatus::Running { .. } | CanisterStatus::Stopped { .. } => {}
             CanisterStatus::Stopping {
                 ref mut call_context_manager,
                 ..
@@ -1617,7 +1637,7 @@ impl SystemState {
             CanisterStatus::Running {
                 call_context_manager,
             } => call_context_manager,
-            CanisterStatus::Stopped | CanisterStatus::Stopping { .. } => return,
+            CanisterStatus::Stopped { .. } | CanisterStatus::Stopping { .. } => return,
         };
 
         let mut guaranteed_response_memory_usage =
@@ -1723,11 +1743,6 @@ impl SystemState {
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
     ) -> (usize, Vec<StateError>) {
-        if self.status == CanisterStatus::Stopped {
-            // Stopped canisters have no call context manager, so no callbacks.
-            return (0, Vec::new());
-        }
-
         let aborted_or_paused_callback_id = self
             .aborted_or_paused_response()
             .map(|response| response.originator_reply_callback);
@@ -2166,7 +2181,9 @@ fn call_context_manager_mut(status: &mut CanisterStatus) -> Option<&mut CallCont
             ..
         } => Some(call_context_manager),
 
-        CanisterStatus::Stopped => None,
+        CanisterStatus::Stopped {
+          call_context_manager,
+        } => Some(call_context_manager),
     }
 }
 
@@ -2266,7 +2283,7 @@ pub mod testing {
 
         fn add_stop_context(&mut self, stop_context: StopCanisterContext) {
             match &mut self.status {
-                CanisterStatus::Running { .. } | CanisterStatus::Stopped => {
+                CanisterStatus::Running { .. } | CanisterStatus::Stopped { .. } => {
                     panic!("Should never add_stop_context to a non-stopping canister.")
                 }
                 CanisterStatus::Stopping { stop_contexts, .. } => stop_contexts.push(stop_context),
@@ -2309,7 +2326,7 @@ pub mod testing {
             memory_allocation: Default::default(),
             wasm_memory_threshold: Default::default(),
             freeze_threshold: Default::default(),
-            status: CanisterStatus::Stopped,
+            status: CanisterStatus::Stopped { call_context_manager: CallContextManager::default() },
             certified_data: Default::default(),
             canister_metrics: Default::default(),
             cycles_balance: Default::default(),

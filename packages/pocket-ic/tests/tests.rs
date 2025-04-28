@@ -2741,3 +2741,56 @@ fn stack_overflow() {
         .reject_message
         .contains("Canister trapped: stack overflow"));
 }
+
+#[test]
+fn test_stop_canister_with_deleted_call_contexts() {
+    use ic_universal_canister::{call_args, wasm, get_universal_canister_wasm};
+
+    let env = PocketIcBuilder::new().with_application_subnet().with_application_subnet().build();
+
+    let canister_id = env.create_canister_on_subnet(None, None, env.topology().get_app_subnets()[0]);
+    env.add_cycles(canister_id, 100_000_000_000_000);
+    env.install_canister(canister_id, get_universal_canister_wasm(), vec![], None);
+    let callee = env.create_canister_on_subnet(None, None, env.topology().get_app_subnets()[1]);
+    env.add_cycles(callee, 100_000_000_000_000);
+    env.install_canister(callee, get_universal_canister_wasm(), vec![], None);
+
+    // Make an inter-canister call to the other universal canister that keeps the call open
+    // by looping until a high number of instructions is executed.
+    let hold_msg_id = env
+        .submit_call(
+            canister_id,
+            Principal::anonymous(),
+            "update",
+            wasm()
+                .call_simple(
+                    callee,
+                    "update",
+                    call_args()
+                        .other_side(wasm().instruction_counter_is_at_least(29_000_000_000).build()),
+                )
+                .build(),
+        ).unwrap();
+    env.tick();
+    let hold_msg_status = env.ingress_status(hold_msg_id);
+    assert!(hold_msg_status.is_none());
+
+    let stop_msg_id = env.submit_call_with_effective_principal(Principal::management_canister(),
+      RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+      Principal::anonymous(), "stop_canister", Encode!(&CanisterIdRecord {canister_id}).unwrap()).unwrap();
+    env.tick();
+    let stop_msg_status = env.ingress_status(stop_msg_id.clone());
+    assert!(stop_msg_status.is_none());
+
+    env.uninstall_canister(canister_id, None).unwrap();
+
+    env.await_call(stop_msg_id).unwrap();
+
+    env.start_canister(canister_id, None).unwrap();
+    env.stop_canister(canister_id, None).unwrap();
+
+    for _ in 0..100 {
+      //println!("cycles: {:?}", env.cycle_balance(callee));
+      env.tick();
+    }
+}

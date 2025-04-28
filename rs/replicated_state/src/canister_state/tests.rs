@@ -279,7 +279,7 @@ fn canister_state_push_input_best_effort_response_canister_stopped() {
     fixture
         .canister_state
         .system_state
-        .set_status(CanisterStatus::Stopped);
+        .set_status(CanisterStatus::Stopped { call_context_manager: CallContextManager::default() });
 
     // The best-effort response should be dropped silently.
     assert_eq!(

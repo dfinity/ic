@@ -3156,7 +3156,7 @@ fn can_timeout_stop_canister_requests() {
             // was sent above.
             assert_eq!(stop_contexts.len(), 3);
         }
-        CanisterStatus::Running { .. } | CanisterStatus::Stopped => {
+        CanisterStatus::Running { .. } | CanisterStatus::Stopped { .. } => {
             unreachable!("Expected the canister to be in stopping mode");
         }
     }
@@ -3175,7 +3175,7 @@ fn can_timeout_stop_canister_requests() {
             // The first two stop_contexts should have expired, 1 is still active.
             assert_eq!(stop_contexts.len(), 1);
         }
-        CanisterStatus::Running { .. } | CanisterStatus::Stopped => {
+        CanisterStatus::Running { .. } | CanisterStatus::Stopped { .. } => {
             unreachable!("Expected the canister to be in stopping mode");
         }
     }

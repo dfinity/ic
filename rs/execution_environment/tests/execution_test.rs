@@ -3121,3 +3121,55 @@ fn test_canister_liquid_cycle_balance() {
     let receiver_balance = env.cycle_balance(callee);
     assert!(receiver_balance > 2 * INITIAL_CYCLES_BALANCE.get() - 100 * B);
 }
+
+/// Verifies that a canister with deleted call contexts can be stopped.
+#[test]
+fn test_stop_canister_with_deleted_call_contexts() {
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        SubnetConfig::new(SubnetType::Application),
+        HypervisorConfig::default(),
+    ));
+
+    // Install the universal canister to be stopped.
+    let canister_id = create_universal_canister_with_cycles(&env, None, INITIAL_CYCLES_BALANCE);
+    // Install another universal canister to keep a call from the first universal canister open
+    // while that first universal canister is stopped.
+    let callee = create_universal_canister_with_cycles(&env, None, INITIAL_CYCLES_BALANCE);
+
+    // Make an inter-canister call to the other universal canister that keeps the call open
+    // by looping until a high number of instructions is executed.
+    let hold_msg_id = env
+        .send_ingress(
+            PrincipalId::new_anonymous(),
+            canister_id,
+            "update",
+            wasm()
+                .call_simple(
+                    callee,
+                    "update",
+                    call_args()
+                        .other_side(wasm().instruction_counter_is_at_least(29_000_000_000).build()),
+                )
+                .build(),
+        );
+    let hold_msg_status = env.ingress_status(&hold_msg_id);
+    assert!(matches!(hold_msg_status, IngressStatus::Known { state: IngressState::Processing, .. }));
+
+    let stop_msg_id = env.
+        send_ingress(PrincipalId::new_anonymous(), IC_00, Method::StopCanister, Encode!(&CanisterIdRecord::from(canister_id)).unwrap());
+    let stop_msg_status = env.ingress_status(&stop_msg_id);
+    assert!(matches!(stop_msg_status, IngressStatus::Known { state: IngressState::Processing, .. }));
+
+    env.uninstall_code(canister_id).unwrap();
+
+    let stop_msg_res = env.await_ingress(stop_msg_id, 10).unwrap();
+    assert!(matches!(stop_msg_res, WasmResult::Reply(_)));
+
+    env.start_canister(canister_id).unwrap();
+    env.stop_canister(canister_id).unwrap();
+
+    for _ in 0..100 {
+      //println!("cycles: {:?}", env.cycle_balance(callee));
+      env.tick();
+    }
+}
