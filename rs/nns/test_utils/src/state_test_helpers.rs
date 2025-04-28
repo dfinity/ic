@@ -87,7 +87,7 @@ use num_traits::ToPrimitive;
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayload;
 use serde::Serialize;
-use std::{convert::TryInto, env, time::Duration};
+use std::{convert::TryInto, time::Duration};
 
 /// A `StateMachine` builder setting the IC time to the current time
 /// and using the canister ranges of both the NNS and II subnets.
@@ -101,14 +101,6 @@ pub fn state_machine_builder_for_nns_tests() -> StateMachineBuilder {
             CanisterId::from_u64(0x2100000),
             CanisterId::from_u64(0x21FFFFE),
         ))
-}
-
-/// Turn down state machine logging to just errors to reduce noise in tests where this is not relevant
-pub fn reduce_state_machine_logging_unless_env_set() {
-    match env::var("RUST_LOG") {
-        Ok(_) => {}
-        Err(_) => env::set_var("RUST_LOG", "ERROR"),
-    }
 }
 
 pub fn registry_latest_version(state_machine: &StateMachine) -> Result<u64, String> {
