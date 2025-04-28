@@ -435,9 +435,11 @@ mod tests {
     fn test_serde_get_value_response() {
         let value = vec![1, 2, 3, 4];
         let version = 10;
-        let response = pb::v1::RegistryGetValueResponse {
+        let response = pb::v1::HighCapacityRegistryGetValueResponse {
             version,
-            value: value.clone(),
+            content: Some(high_capacity_registry_get_value_response::Content::Value(
+                value.clone(),
+            )),
             ..Default::default()
         };
 
@@ -450,7 +452,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_serde_get_value_response_with_error() {
-        let mut response = pb::v1::RegistryGetValueResponse::default();
+        let mut response = pb::v1::HighCapacityRegistryGetValueResponse::default();
         let error = RegistryError {
             code: 1,
             ..Default::default()

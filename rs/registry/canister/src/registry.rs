@@ -535,6 +535,9 @@ mod tests {
     use rand::{Rng, SeedableRng};
     use rand_distr::{Alphanumeric, Distribution, Poisson, Uniform};
 
+    const DELETION_MARKER: Option<high_capacity_registry_value::Content> =
+        Some(high_capacity_registry_value::Content::DeletionMarker(true));
+
     /// Simulate a round-trip through stable memory, which is an essential part
     /// of the upgrade process.
     ///
@@ -583,12 +586,12 @@ mod tests {
             &mut registry,
             vec![update(&key, &value2)]
         ));
-        let result2 = registry.get(&key, registry.latest_version());
-        assert_eq!(value2, result2.unwrap().value);
-        assert_eq!(registry.latest_version(), result2.unwrap().version);
-        let result = registry.get(&key, registry.latest_version() - 1);
-        assert_eq!(value, result.unwrap().value);
-        assert_eq!(registry.latest_version() - 1, result.unwrap().version);
+        let result2 = registry.get(&key, registry.latest_version()).unwrap();
+        assert_eq!(value2, result2.value);
+        assert_eq!(registry.latest_version(), result2.version);
+        let result = registry.get(&key, registry.latest_version() - 1).unwrap();
+        assert_eq!(value, result.value);
+        assert_eq!(registry.latest_version() - 1, result.version);
 
         serialize_then_deserialize(registry);
     }
@@ -607,9 +610,9 @@ mod tests {
             &mut registry,
             vec![update(&key, &value2)]
         ));
-        let result2 = registry.get(&key, registry.latest_version());
-        assert_eq!(value2, result2.unwrap().value);
-        assert_eq!(registry.latest_version(), result2.unwrap().version);
+        let result2 = registry.get(&key, registry.latest_version()).unwrap();
+        assert_eq!(value2, result2.value);
+        assert_eq!(registry.latest_version(), result2.version);
         assert_empty!(apply_mutations_skip_invariant_checks(
             &mut registry,
             vec![delete(&key)]
@@ -622,9 +625,9 @@ mod tests {
             &mut registry,
             vec![insert(&key, &value)]
         ));
-        let result = registry.get(&key, registry.latest_version());
-        assert_eq!(value, result.unwrap().value);
-        assert_eq!(registry.latest_version(), result.unwrap().version);
+        let result = registry.get(&key, registry.latest_version()).unwrap();
+        assert_eq!(value, result.value);
+        assert_eq!(registry.latest_version(), result.version);
 
         serialize_then_deserialize(registry);
     }
@@ -668,9 +671,12 @@ mod tests {
         let key2_values = &deltas.get(1).unwrap().values;
         assert_eq!(key1_values.len(), 4);
         assert_eq!(key2_values.len(), 2);
-        assert_eq!(key1_values[0].value, value1);
+        assert_eq!(
+            key1_values[0].content,
+            Some(high_capacity_registry_value::Content::Value(value1.clone()))
+        );
         assert_eq!(key1_values[0].version, 4);
-        assert!(key1_values[1].deletion_marker);
+        assert_eq!(key1_values[1].content, DELETION_MARKER);
         assert_eq!(key1_values[1].version, 3);
 
         assert_eq!(deltas, registry.get_changes_since(0, Some(4)));
@@ -684,13 +690,22 @@ mod tests {
         let key2_values = &deltas.get(1).unwrap().values;
         assert_eq!(key1_values.len(), 2);
         assert_eq!(key2_values.len(), 2);
-        assert!(key1_values[0].deletion_marker);
+        assert_eq!(key1_values[0].content, DELETION_MARKER);
         assert_eq!(key1_values[0].version, 3);
-        assert_eq!(key1_values[1].value, value2);
+        assert_eq!(
+            key1_values[1].content,
+            Some(high_capacity_registry_value::Content::Value(value2.clone()))
+        );
         assert_eq!(key1_values[1].version, 2);
-        assert_eq!(key2_values[0].value, value2);
+        assert_eq!(
+            key2_values[0].content,
+            Some(high_capacity_registry_value::Content::Value(value2.clone()))
+        );
         assert_eq!(key2_values[0].version, 3);
-        assert_eq!(key2_values[1].value, value1);
+        assert_eq!(
+            key2_values[1].content,
+            Some(high_capacity_registry_value::Content::Value(value1.clone()))
+        );
         assert_eq!(key2_values[1].version, 2);
 
         // Now try getting a couple of other versions
@@ -1098,7 +1113,7 @@ mod tests {
         assert_eq!(registry.latest_version(), version);
         assert_eq!(
             registry.get(key, version),
-            Some(&RegistryValue {
+            Some(RegistryValue {
                 value: max_value,
                 version,
                 deletion_marker: false
@@ -1145,10 +1160,14 @@ mod tests {
             .changelog
             .insert(EncodedVersion::from(version), req.encode_to_vec());
 
-        (*registry.store.entry(mutation.key).or_default()).push_back(RegistryValue {
+        (*registry.store.entry(mutation.key).or_default()).push_back(HighCapacityRegistryValue {
             version,
-            value: mutation.value,
-            deletion_marker: mutation.mutation_type == Type::Delete as i32,
+            content: Some(if mutation.mutation_type != Type::Delete as i32 {
+                high_capacity_registry_value::Content::Value(mutation.value)
+            } else {
+                DELETION_MARKER.unwrap()
+            }),
+            timestamp_seconds: 0,
         });
         registry.version = version;
 
@@ -1250,7 +1269,13 @@ Average length of the values: {} (desired: {})",
                 changes
                     .iter()
                     .flat_map(|delta| delta.values.iter())
-                    .map(|registry_value| registry_value.value.len())
+                    .map(|registry_value| {
+                        let content = registry_value.content.as_ref().unwrap();
+                        match content {
+                            high_capacity_registry_value::Content::Value(value) => value.len(),
+                            _ => 0,
+                        }
+                    })
             ),
             mean_value_length
         );
@@ -1315,14 +1340,36 @@ Average length of the values: {} (desired: {})",
         // Step 1.2.1: Verify original_registry.store.
         let store = &original_registry.store;
         assert_eq!(store.len(), 1, "{:#?}", store);
-        let history: &VecDeque<RegistryValue> = store.get(&b"this is key".to_vec()).unwrap();
+        let history: &VecDeque<HighCapacityRegistryValue> =
+            store.get(&b"this is key".to_vec()).unwrap();
         assert_eq!(history.len(), 1, "{:#?}", history);
+        let registry_value = history.front().unwrap();
+        let large_value_chunk_keys = match registry_value.content.as_ref().unwrap() {
+            high_capacity_registry_value::Content::LargeValueChunkKeys(ok) => ok.clone(),
+            _ => panic!("{:#?}", registry_value),
+        };
         assert_eq!(
-            history.front().unwrap(),
-            &RegistryValue {
-                value: original_value.clone(),
+            large_value_chunk_keys.chunk_content_sha256s.len(),
+            3,
+            "{:#?}",
+            large_value_chunk_keys
+        );
+        let reconstituted_monolithic_blob_from_store =
+            with_chunks(|chunks| dechunkify(&large_value_chunk_keys, chunks));
+        assert_eq!(
+            reconstituted_monolithic_blob_from_store.len(),
+            original_value.len()
+        );
+        // assert_eq is intentionally NOT used here, because it would generate lots of spam.
+        assert!(reconstituted_monolithic_blob_from_store == original_value);
+        assert_eq!(
+            registry_value,
+            &HighCapacityRegistryValue {
+                content: Some(high_capacity_registry_value::Content::LargeValueChunkKeys(
+                    large_value_chunk_keys,
+                )),
                 version: 1,
-                deletion_marker: false,
+                timestamp_seconds: 0,
             },
         );
 
