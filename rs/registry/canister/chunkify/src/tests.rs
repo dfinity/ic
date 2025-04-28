@@ -1,9 +1,89 @@
 use super::*;
 use ic_registry_transport::pb::v1::{
-    high_capacity_registry_value, registry_mutation, HighCapacityRegistryValue, Precondition,
+    high_capacity_registry_mutation, high_capacity_registry_value,
+    registry_mutation::{self, Type as MutationType},
+    HighCapacityRegistryValue, Precondition,
 };
 use prost::Message;
 use std::{cell::RefCell, iter::repeat, rc::Rc};
+
+#[test]
+fn test_dechunkify_mutation_delete() {
+    let memory = Rc::new(RefCell::new(Vec::<u8>::new()));
+    let chunks = Chunks::init(memory);
+
+    let mutation = HighCapacityRegistryMutation {
+        mutation_type: MutationType::Delete as i32,
+        key: b"this is key".to_vec(),
+        content: None,
+    };
+
+    let result = dechunkify_prime_mutation_value(mutation, &chunks);
+
+    assert_eq!(result, None);
+}
+
+#[test]
+fn test_dechunkify_mutation_inline() {
+    let memory = Rc::new(RefCell::new(Vec::<u8>::new()));
+    let chunks = Chunks::init(memory);
+
+    let mutation = HighCapacityRegistryMutation {
+        mutation_type: MutationType::Insert as i32,
+        key: b"this is key".to_vec(),
+        content: Some(high_capacity_registry_mutation::Content::Value(
+            b"Hello, world!".to_vec(),
+        )),
+    };
+
+    let result = dechunkify_prime_mutation_value(mutation, &chunks);
+
+    assert_eq!(result, Some(b"Hello, world!".to_vec()));
+}
+
+#[test]
+fn test_dechunkify_mutation_chunked() {
+    let memory = Rc::new(RefCell::new(Vec::<u8>::new()));
+    let mut chunks = Chunks::init(memory);
+
+    let chunk_content_sha256s = chunks.upsert_monolithic_blob(b"blobity blob".to_vec());
+    assert_eq!(
+        chunk_content_sha256s.len(),
+        1,
+        "{:?}",
+        chunk_content_sha256s
+    );
+
+    let mutation = HighCapacityRegistryMutation {
+        mutation_type: MutationType::Update as i32,
+        key: b"this is key".to_vec(),
+        content: Some(
+            high_capacity_registry_mutation::Content::LargeValueChunkKeys(LargeValueChunkKeys {
+                chunk_content_sha256s,
+            }),
+        ),
+    };
+
+    let result = dechunkify_prime_mutation_value(mutation, &chunks);
+
+    assert_eq!(result, Some(b"blobity blob".to_vec()));
+}
+
+#[test]
+fn test_dechunkify_mutation_no_content() {
+    let memory = Rc::new(RefCell::new(Vec::<u8>::new()));
+    let chunks = Chunks::init(memory);
+
+    let mutation = HighCapacityRegistryMutation {
+        mutation_type: MutationType::Upsert as i32,
+        key: b"this is key".to_vec(),
+        content: None,
+    };
+
+    let result = dechunkify_prime_mutation_value(mutation, &chunks);
+
+    assert_eq!(result, Some(vec![]));
+}
 
 // This also indirectly tests dechunkify, because decode_high_capacity_registry_value calls that.
 #[test]

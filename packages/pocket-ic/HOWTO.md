@@ -673,7 +673,7 @@ without interference between the individual tests.
 An example of a such setup:
 
 ```rust
-use std::sync::OnceCell;
+use std::sync::OnceLock;
 
 const MAINNET_CANISTER_ID: Principal =
     Principal::from_slice(&[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01]);
