@@ -1284,6 +1284,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "syn2": crate.spec(
+                package = "syn",
                 version = "^2.0.101",
             ),
             "syscalls": crate.spec(
