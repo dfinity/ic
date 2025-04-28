@@ -1,5 +1,5 @@
 {
-  "checksum": "6aaf133eeef4e7520c37ef799dde01e822140153763391d583eca58129563a75",
+  "checksum": "cfd57dd2deeb7d2e38a58449f0c024519789240e33244e6cb8a98736b61ebe1a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1072,7 +1072,7 @@
               "target": "actix_router"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -1080,7 +1080,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -3130,7 +3130,7 @@
               "target": "mime_guess"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -3142,7 +3142,7 @@
               "target": "serde"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -3373,7 +3373,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -3381,7 +3381,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             },
             {
@@ -3433,7 +3433,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -3441,7 +3441,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -4169,7 +4169,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -4177,7 +4177,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -4400,7 +4400,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -4408,7 +4408,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -4501,7 +4501,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -4509,7 +4509,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -4800,7 +4800,7 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -5608,7 +5608,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -5616,7 +5616,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -5669,7 +5669,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -5677,7 +5677,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -6975,7 +6975,7 @@
               "target": "prettyplease"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -6995,7 +6995,7 @@
               "target": "shlex"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -7109,7 +7109,7 @@
               "target": "lazycell"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -7129,7 +7129,7 @@
               "target": "shlex"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -7272,7 +7272,7 @@
               "target": "either"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -9099,7 +9099,7 @@
               "target": "proc_macro_crate"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -9107,7 +9107,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -9915,7 +9915,7 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -10267,7 +10267,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -10899,7 +10899,7 @@
               "target": "darling"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -10907,7 +10907,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -11246,7 +11246,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -11427,7 +11427,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -11435,7 +11435,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -13623,7 +13623,7 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -13689,7 +13689,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -13697,7 +13697,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -13981,7 +13981,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -13993,7 +13993,7 @@
               "target": "serde_derive_internals"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -14557,7 +14557,7 @@
               "target": "convert_case"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -14617,7 +14617,7 @@
               "target": "convert_case"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -17936,7 +17936,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -18350,7 +18350,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -18358,7 +18358,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -18665,7 +18665,7 @@
               "target": "ident_case"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -18739,7 +18739,7 @@
               "target": "ident_case"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -18751,7 +18751,7 @@
               "target": "strsim"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -18861,7 +18861,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -19536,7 +19536,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -19544,7 +19544,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -19660,7 +19660,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -19668,7 +19668,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -19715,7 +19715,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -19723,7 +19723,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -19806,7 +19806,7 @@
               "target": "convert_case"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -21120,7 +21120,7 @@
               "target": "priority_queue"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -21415,6 +21415,11 @@
             {
               "id": "syn 1.0.109",
               "target": "syn"
+            },
+            {
+              "id": "syn 2.0.101",
+              "target": "syn",
+              "alias": "syn2"
             },
             {
               "id": "syscalls 0.6.18",
@@ -22047,7 +22052,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -22055,7 +22060,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -22898,7 +22903,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -23470,7 +23475,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -23530,7 +23535,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -23538,7 +23543,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -23594,7 +23599,7 @@
               "target": "num_traits"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -23602,7 +23607,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -23938,7 +23943,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -23946,7 +23951,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -27560,7 +27565,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -27568,7 +27573,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -31061,7 +31066,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -33536,7 +33541,7 @@
               "target": "candid"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -33603,7 +33608,7 @@
               "target": "candid"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -33619,7 +33624,7 @@
               "target": "serde_tokenstream"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -33673,7 +33678,7 @@
               "target": "candid"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -33689,7 +33694,7 @@
               "target": "serde_tokenstream"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -36672,7 +36677,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -36680,7 +36685,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -37292,7 +37297,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -40455,7 +40460,7 @@
               "target": "darling"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -40467,7 +40472,7 @@
               "target": "serde_json"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -43777,7 +43782,7 @@
               "target": "fnv"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -43789,7 +43794,7 @@
               "target": "regex_syntax"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -43845,7 +43850,7 @@
               "target": "fnv"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -45664,7 +45669,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -46276,7 +46281,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -46284,7 +46289,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -46886,7 +46891,7 @@
               "target": "either"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -48689,7 +48694,7 @@
               "target": "proc_macro_crate"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -48697,7 +48702,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -49448,7 +49453,7 @@
               "target": "bytes"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -49678,7 +49683,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -49686,7 +49691,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -51616,7 +51621,7 @@
               "target": "proc_macro_crate"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -52873,7 +52878,7 @@
               "target": "pest_meta"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -52881,7 +52886,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -53371,7 +53376,7 @@
               "target": "phf_shared"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -53379,7 +53384,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -53619,7 +53624,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -53627,7 +53632,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -55495,11 +55500,11 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -55904,7 +55909,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -56002,7 +56007,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -56107,14 +56112,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "proc-macro2 1.0.89": {
+    "proc-macro2 1.0.95": {
       "name": "proc-macro2",
-      "version": "1.0.89",
+      "version": "1.0.95",
       "package_url": "https://github.com/dtolnay/proc-macro2",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/proc-macro2/1.0.89/download",
-          "sha256": "f139b0662de085916d1fb67d2b4169d1addddda1919e696f3252b740b629986e"
+          "url": "https://static.crates.io/crates/proc-macro2/1.0.95/download",
+          "sha256": "02b3e5e68a3a1a02aad3ec490a98007cbc13c37cbe84a3cd7b8e406d76e7f778"
         }
       },
       "targets": [
@@ -56158,7 +56163,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "build_script_build"
             },
             {
@@ -56169,7 +56174,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.0.89"
+        "version": "1.0.95"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -56755,7 +56760,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -56763,7 +56768,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -56993,7 +56998,7 @@
               "target": "regex"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             },
             {
@@ -57099,7 +57104,7 @@
               "target": "regex"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             },
             {
@@ -57158,7 +57163,7 @@
               "target": "itertools"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -57166,7 +57171,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -57221,7 +57226,7 @@
               "target": "itertools"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -57229,7 +57234,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -57607,7 +57612,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -58370,7 +58375,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             }
           ],
@@ -59988,7 +59993,7 @@
               "target": "itertools"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -65215,7 +65220,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -65379,7 +65384,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -65735,7 +65740,7 @@
               "target": "glob"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -65755,7 +65760,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             },
             {
@@ -68609,7 +68614,7 @@
               "target": "proc_macro_crate"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -68814,7 +68819,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -68826,7 +68831,7 @@
               "target": "serde_derive_internals"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -69175,7 +69180,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -69183,7 +69188,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -70715,7 +70720,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -70723,7 +70728,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -70771,7 +70776,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -70779,7 +70784,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -71026,7 +71031,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -71034,7 +71039,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -71082,7 +71087,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -71137,7 +71142,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -71149,7 +71154,7 @@
               "target": "serde"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -71396,7 +71401,7 @@
               "target": "darling"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -71456,7 +71461,7 @@
               "target": "darling"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -71464,7 +71469,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -73740,7 +73745,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -73806,7 +73811,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -73814,7 +73819,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -74824,7 +74829,7 @@
               "target": "phf_shared"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -74952,7 +74957,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -74960,7 +74965,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -75017,7 +75022,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -75025,7 +75030,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -75189,7 +75194,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -75197,7 +75202,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -75257,7 +75262,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -75265,7 +75270,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -75698,7 +75703,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -75734,14 +75739,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "syn 2.0.87": {
+    "syn 2.0.101": {
       "name": "syn",
-      "version": "2.0.87",
+      "version": "2.0.101",
       "package_url": "https://github.com/dtolnay/syn",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/syn/2.0.87/download",
-          "sha256": "25aa4ce346d03a6dcd68dd8b4010bcb74e54e62c90c573f394c46eae99aba32d"
+          "url": "https://static.crates.io/crates/syn/2.0.101/download",
+          "sha256": "8ce2b7fc941b3a24138a0a7cf8e858bfc6a992e7978a068a5c760deb0ed43caf"
         }
       },
       "targets": [
@@ -75837,7 +75842,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -75852,7 +75857,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.0.87"
+        "version": "2.0.101"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -75992,7 +75997,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -76000,7 +76005,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -77000,7 +77005,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -77504,7 +77509,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -77516,7 +77521,7 @@
               "target": "structmeta"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -77870,7 +77875,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -77878,7 +77883,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -77926,7 +77931,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -77934,7 +77939,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -79270,7 +79275,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -79278,7 +79283,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -79886,7 +79891,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -79894,7 +79899,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -81026,7 +81031,7 @@
               "target": "prettyplease"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -81042,7 +81047,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -81985,7 +81990,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -81993,7 +81998,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -85182,7 +85187,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -85633,7 +85638,7 @@
               "target": "log"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -85641,7 +85646,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             },
             {
@@ -85808,7 +85813,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -85816,7 +85821,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             },
             {
@@ -87894,7 +87899,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -87902,7 +87907,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -92509,7 +92514,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -92517,7 +92522,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             },
             {
@@ -92711,7 +92716,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -92719,7 +92724,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -92768,7 +92773,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -92776,7 +92781,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -92879,7 +92884,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -92887,7 +92892,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             },
             {
@@ -92995,7 +93000,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -93003,7 +93008,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -93118,7 +93123,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -93126,7 +93131,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -94726,7 +94731,7 @@
     "pretty-bytes 0.2.2",
     "pretty_assertions 1.4.0",
     "priority-queue 1.3.2",
-    "proc-macro2 1.0.89",
+    "proc-macro2 1.0.95",
     "procfs 0.9.1",
     "prometheus 0.13.4",
     "prometheus-parse 0.2.4",
@@ -94804,6 +94809,7 @@
     "stubborn-io 0.3.2",
     "subtle 2.6.1",
     "syn 1.0.109",
+    "syn 2.0.101",
     "syscalls 0.6.18",
     "tar 0.4.39",
     "tarpc 0.34.0",
