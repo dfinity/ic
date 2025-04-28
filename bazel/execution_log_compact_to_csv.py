@@ -56,19 +56,28 @@ def main():
     with open(args.input_execlog, "rb") as execlog_file, sys.stdout as csv_file:
         writer = csv.writer(csv_file)
         while True:
+            # The execution log is a stream of protobuf messages, each preceded by a varint32 denoting its length.
             msg_len = google.protobuf.internal.decoder._DecodeVarint32(execlog_file)
             if msg_len is None:
                 break
+
+            # Parse the ExecLogEntry message. See spawn.proto for the message definition.
             msg_buf = execlog_file.read(msg_len)
-            execLogEntry = bazel.spawn_pb2.ExecLogEntry()
-            execLogEntry.ParseFromString(msg_buf)
-            entry_type = execLogEntry.WhichOneof("type")
+            exec_log_entry = bazel.spawn_pb2.ExecLogEntry()
+            exec_log_entry.ParseFromString(msg_buf)
+
+            # We intend to log the outputs of Spawns. Spawns refer to their output by ID
+            # so we need to keep track of the ID to entry mapping. Important note:
+            # if an entry (like a Spawn) refers to another entry (like a File or Direcory)
+            # the latter must precede the former.
+            entry_type = exec_log_entry.WhichOneof("type")
             if entry_type in ["file", "directory"]:
-                id_to_entry[execLogEntry.id] = execLogEntry
+                id_to_entry[exec_log_entry.id] = exec_log_entry
+
             if entry_type == "spawn":
-                label = execLogEntry.spawn.target_label
+                label = exec_log_entry.spawn.target_label
                 if args.whitelist_pat is None or re.match(args.whitelist_pat, label):
-                    for output in execLogEntry.spawn.outputs:
+                    for output in exec_log_entry.spawn.outputs:
                         output_type = output.WhichOneof("type")
                         if output_type == "output_id":
                             output_id = output.output_id
