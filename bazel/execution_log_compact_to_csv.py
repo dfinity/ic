@@ -95,7 +95,7 @@ def main():
                                         hash = dir_file.digest.hash
                                         writer.writerow([label, path, hash])
                                 case _:
-                                    raise ValueError(f"Unknown output entry type: {output_entry_type}")
+                                    raise ValueError(f"Unexpected output entry type: {output_entry_type}")
 
 
 if __name__ == "__main__":
