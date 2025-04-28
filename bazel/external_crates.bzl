@@ -439,6 +439,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "cvt": crate.spec(
                 version = "^0.1.1",
             ),
+            "darling": crate.spec(
+                version = "^0.20.11",
+            ),
             "dashmap": crate.spec(
                 version = "^5.3.4",
             ),

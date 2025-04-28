@@ -1,0 +1,32 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:syn",
+    "@crate_index//:quote",
+    "@crate_index//:proc-macro2",
+    "@crate_index//:darling",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+]
+
+rust_library(
+    name = "canlog",
+    srcs = glob(["src/**/*.rs"]),
+    deps = DEPENDENCIES,
+)
+
+rust_doc(
+    name = "doc",
+    crate = ":canlog_derive",
+)
+
+rust_doc_test(
+    name = "doc_test",
+    crate = ":canlog_derive",
+    deps = [":canlog_derive"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
