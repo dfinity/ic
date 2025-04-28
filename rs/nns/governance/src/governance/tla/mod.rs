@@ -16,7 +16,9 @@ pub use tla_instrumentation::checker::{check_tla_code_link, PredicateDescription
 
 use std::path::PathBuf;
 
-use icp_ledger::Subaccount;
+use icp_ledger::{AccountIdentifier, Subaccount};
+use icrc_ledger_types::icrc1::account::Account as Icrc1Account;
+
 mod common;
 mod store;
 
@@ -75,11 +77,33 @@ fn neuron_global() -> TlaValue {
                                 value: Box::new(TlaValue::Constant("UNIT".to_string())),
                             },
                         ),
+                        (
+                            ("maturity_disbursements_in_progress".to_string()),
+                            neuron
+                                .maturity_disbursements_in_progress
+                                .iter()
+                                .map(|d| {
+                                    TlaValue::Record(BTreeMap::from([
+                                        (
+                                            "account_id".to_string(),
+                                            match &d.account_to_disburse_to {
+                                                Some(account) => {
+                                                    account_to_tla(AccountIdentifier::from(
+                                                        Icrc1Account::try_from(account.clone()).expect("An invalid Icrc1 account found in maturity_disbursements_in_progress: {account:?}"),
+                                                    ))
+                                                }
+                                                None => subaccount_to_tla(&neuron.subaccount()),
+                                            },
+                                        ),
+                                        ("amount".to_string(), d.amount_e8s.to_tla_value()),
+                                    ]))
+                                }).collect::<Vec<_>>().to_tla_value(),
+                        ),
                     ])),
                 )
             })
             .collect()
-    });
+   });
     neuron_map.to_tla_value()
 }
 
