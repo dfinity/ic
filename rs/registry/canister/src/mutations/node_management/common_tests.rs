@@ -1,8 +1,5 @@
 use super::*;
-use ic_registry_transport::{
-    upsert,
-    pb::v1::LargeValueChunkKeys,
-};
+use ic_registry_transport::{pb::v1::LargeValueChunkKeys, upsert};
 
 fn new_upsert(key: &str, value: &str) -> RegistryMutation {
     let value = LargeValueChunkKeys {
@@ -18,13 +15,14 @@ fn test_get_key_family_iter_at_version() {
     let mut registry = Registry::new();
 
     registry.apply_mutations_for_test(vec![
-        new_upsert("red_herring_1",           "boeoeg"),
-        new_upsert("name_1",                  "Daniel"),
-        new_upsert("name_2",                  "Wong"),
+        new_upsert("red_herring_1", "boeoeg"),
+        new_upsert("name_1", "Daniel"),
+        new_upsert("name_2", "Wong"),
         new_upsert("delicious_red_herring_1", "fish"),
     ]);
 
-    let result = get_key_family_iter(&registry, "name_").collect::<Vec<(String, LargeValueChunkKeys)>>();
+    let result =
+        get_key_family_iter(&registry, "name_").collect::<Vec<(String, LargeValueChunkKeys)>>();
 
     assert_eq!(
         result,

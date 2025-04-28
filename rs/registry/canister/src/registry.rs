@@ -140,7 +140,8 @@ impl Registry {
         key: &[u8],
         version: Version,
     ) -> Option<&HighCapacityRegistryValue> {
-        let result = self.store
+        let result = self
+            .store
             .get(key)?
             .iter()
             .rev()
@@ -151,8 +152,7 @@ impl Registry {
 
             None
             | Some(high_capacity_registry_value::Content::Value(_))
-            | Some(high_capacity_registry_value::Content::LargeValueChunkKeys(_))
-                => false,
+            | Some(high_capacity_registry_value::Content::LargeValueChunkKeys(_)) => false,
         };
 
         if is_delete {
@@ -817,10 +817,7 @@ mod tests {
 
         apply_mutations_skip_invariant_checks(&mut registry, vec![insert(&key, &value)]);
 
-        assert_eq!(
-            registry.verify_mutation_type(&[delete(&key)]),
-            vec![],
-        );
+        assert_eq!(registry.verify_mutation_type(&[delete(&key)]), vec![],);
     }
 
     #[test]
