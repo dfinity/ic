@@ -233,7 +233,7 @@ pub(crate) fn spawn_tip_thread(
                                     if let Some(checkpoint_readwrite) = result.checkpoint_readwrite
                                     {
                                         let _timer = request_timer(&metrics, "serialize_to_tip");
-                                        serialize_to_tip(
+                                        serialize_protos_to_tip(
                                             &result.state,
                                             &checkpoint_readwrite,
                                             &mut thread_pool,
@@ -968,7 +968,7 @@ fn merge(
     });
 }
 
-fn serialize_to_tip(
+fn serialize_protos_to_tip(
     state: &ReplicatedState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     thread_pool: &mut scoped_threadpool::Pool,
@@ -1010,7 +1010,7 @@ fn serialize_to_tip(
     })?;
 
     let results = parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
-        serialize_canister_to_tip(canister_state, tip)
+        serialize_canister_protos_to_tip(canister_state, tip)
     });
 
     for result in results.into_iter() {
@@ -1021,7 +1021,7 @@ fn serialize_to_tip(
         thread_pool,
         state.canister_snapshots.iter(),
         |canister_snapshot| {
-            serialize_snapshot_to_tip(canister_snapshot.0, canister_snapshot.1, tip)
+            serialize_snapshot_protos_to_tip(canister_snapshot.0, canister_snapshot.1, tip)
         },
     );
 
@@ -1172,7 +1172,7 @@ fn serialize_snapshot_wasm_binary(
     Ok(())
 }
 
-fn serialize_canister_to_tip(
+fn serialize_canister_protos_to_tip(
     canister_state: &CanisterState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
 ) -> Result<(), CheckpointError> {
@@ -1270,7 +1270,7 @@ fn serialize_canister_to_tip(
 }
 
 /// Serialize a single snapshot to disk at checkpoint time.
-fn serialize_snapshot_to_tip(
+fn serialize_snapshot_protos_to_tip(
     snapshot_id: &SnapshotId,
     canister_snapshot: &CanisterSnapshot,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
