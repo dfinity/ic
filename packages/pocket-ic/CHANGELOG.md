@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 8.0.0 - 2025-04-23
+
 ### Added
 - The function `PocketIc::auto_progress_enabled` to determine whether the automatic progress was enabled for the PocketIC instance.
 - The struct `PocketIcState` encapsulating the state of a PocketIC instance persisted in a temporary directory (`PocketIcState::new`)
@@ -21,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   This state must be empty if `PocketIcBuilder::with_read_only_state` is used.
 - The function `PocketIc::drop_and_take_state` to drop a PocketIC instance and get its final state if the instance was created
   using `PocketIcBuilder::with_state` or `PocketIcBuilder::with_state_dir`.
+- The type `Time` used by the functions `PocketIc::get_time`, `PocketIc::set_time`, and `PocketIc::set_certified_time`.
 
 ### Removed
 - The module `management_canister` used to contain interface types of the IC management canister. Those types have since been published on crates.io as `ic-management-canister-types`, so PocketIC can depend on that and remove the redundant types.

@@ -612,7 +612,8 @@ fn test_disburse_neuron() {
         .value.parse::<u64>().unwrap();
 
         // We now update the neuron so it is in state DISSOLVED
-        let now = env.pocket_ic.get_time().await.duration_since(UNIX_EPOCH).unwrap().as_secs();
+        let now_system_time: SystemTime = env.pocket_ic.get_time().await.try_into().unwrap();
+        let now = now_system_time.duration_since(UNIX_EPOCH).unwrap().as_secs();
         neuron.dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(now - 1));
         update_neuron(&agent, neuron).await;
 

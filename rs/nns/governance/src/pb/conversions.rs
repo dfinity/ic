@@ -2683,14 +2683,6 @@ impl From<pb_api::Governance> for pb::Governance {
     }
 }
 
-impl From<pb::governance::NeuronInFlightCommand> for pb_api::governance::NeuronInFlightCommand {
-    fn from(item: pb::governance::NeuronInFlightCommand) -> Self {
-        Self {
-            timestamp: item.timestamp,
-            command: item.command.map(|x| x.into()),
-        }
-    }
-}
 impl From<pb_api::governance::NeuronInFlightCommand> for pb::governance::NeuronInFlightCommand {
     fn from(item: pb_api::governance::NeuronInFlightCommand) -> Self {
         Self {
@@ -2715,43 +2707,6 @@ impl From<pb_api::governance::neuron_in_flight_command::SyncCommand>
     }
 }
 
-impl From<pb::governance::neuron_in_flight_command::Command>
-    for pb_api::governance::neuron_in_flight_command::Command
-{
-    fn from(item: pb::governance::neuron_in_flight_command::Command) -> Self {
-        match item {
-            pb::governance::neuron_in_flight_command::Command::Disburse(v) => {
-                pb_api::governance::neuron_in_flight_command::Command::Disburse(v.into())
-            }
-            pb::governance::neuron_in_flight_command::Command::Split(v) => {
-                pb_api::governance::neuron_in_flight_command::Command::Split(v.into())
-            }
-            pb::governance::neuron_in_flight_command::Command::DisburseToNeuron(v) => {
-                pb_api::governance::neuron_in_flight_command::Command::DisburseToNeuron(v.into())
-            }
-            pb::governance::neuron_in_flight_command::Command::MergeMaturity(v) => {
-                pb_api::governance::neuron_in_flight_command::Command::MergeMaturity(v.into())
-            }
-            pb::governance::neuron_in_flight_command::Command::ClaimOrRefreshNeuron(v) => {
-                pb_api::governance::neuron_in_flight_command::Command::ClaimOrRefreshNeuron(
-                    v.into(),
-                )
-            }
-            pb::governance::neuron_in_flight_command::Command::Configure(v) => {
-                pb_api::governance::neuron_in_flight_command::Command::Configure(v.into())
-            }
-            pb::governance::neuron_in_flight_command::Command::Merge(v) => {
-                pb_api::governance::neuron_in_flight_command::Command::Merge(v.into())
-            }
-            pb::governance::neuron_in_flight_command::Command::Spawn(v) => {
-                pb_api::governance::neuron_in_flight_command::Command::Spawn(v)
-            }
-            pb::governance::neuron_in_flight_command::Command::SyncCommand(v) => {
-                pb_api::governance::neuron_in_flight_command::Command::SyncCommand(v.into())
-            }
-        }
-    }
-}
 impl From<pb_api::governance::neuron_in_flight_command::Command>
     for pb::governance::neuron_in_flight_command::Command
 {

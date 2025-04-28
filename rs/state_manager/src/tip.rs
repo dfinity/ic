@@ -4,7 +4,7 @@ use crate::{
     state_sync::types::{
         FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, MAX_SUPPORTED_STATE_SYNC_VERSION,
     },
-    CheckpointError, PageMapType, SharedState, StateManagerMetrics, StorageMetrics,
+    CheckpointError, PageMapType, SharedState, StateManagerMetrics,
     CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use crossbeam_channel::{unbounded, Sender};
@@ -17,10 +17,12 @@ use ic_protobuf::state::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::SandboxMemory;
-use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
-    canister_snapshots::{CanisterSnapshot, SnapshotOperation},
-    page_map::{MergeCandidate, StorageResult, MAX_NUMBER_OF_FILES},
+    canister_snapshots::CanisterSnapshot,
+    page_map::{MergeCandidate, StorageMetrics, StorageResult, MAX_NUMBER_OF_FILES},
+};
+use ic_replicated_state::{
+    metadata_state::UnflushedCheckpointOp, page_map::PageAllocatorFileDescriptor,
 };
 use ic_replicated_state::{
     page_map::{StorageLayout, PAGE_SIZE},
@@ -99,7 +101,7 @@ pub(crate) enum TipRequest {
     FlushPageMapDelta {
         height: Height,
         pagemaps: Vec<PageMapToFlush>,
-        snapshot_operations: Vec<SnapshotOperation>,
+        unflushed_checkpoint_ops: Vec<UnflushedCheckpointOp>,
     },
     /// Reset tip folder to the checkpoint with given height.
     /// Merge overlays in tip folder if necessary.
@@ -255,7 +257,7 @@ pub(crate) fn spawn_tip_thread(
                         TipRequest::FlushPageMapDelta {
                             height,
                             pagemaps,
-                            snapshot_operations,
+                            unflushed_checkpoint_ops,
                         } => {
                             let _timer = request_timer(&metrics, "flush_unflushed_delta");
                             debug_assert!(tip_state.tip_folder_state.page_maps_height <= height);
@@ -269,8 +271,8 @@ pub(crate) fn spawn_tip_thread(
                                 );
                             });
 
-                            // We flush snapshots to disk first.
-                            flush_snapshot_changes(&log, layout, snapshot_operations)
+                            // We flush snapshots and canister renamings to disk first.
+                            flush_unflushed_checkpoint_ops(&log, layout, unflushed_checkpoint_ops)
                                 .unwrap_or_else(|err| {
                                     fatal!(log, "Failed to flush snapshot changes: {}", err);
                                 });
@@ -581,6 +583,18 @@ fn switch_to_checkpoint(
                 )
                 .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?,
             );
+
+        let wasm_binary = snapshot_layout
+            .wasm()
+            .deserialize(
+                new_snapshot
+                    .execution_snapshot()
+                    .wasm_binary
+                    .module_hash()
+                    .into(),
+            )
+            .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
+        new_snapshot.execution_snapshot_mut().wasm_binary = wasm_binary;
     }
 
     for (tip_id, tip_canister) in tip.canister_states.iter_mut() {
@@ -592,7 +606,7 @@ fn switch_to_checkpoint(
             let embedder_cache = Arc::clone(&tip_state.wasm_binary.embedder_cache);
             let wasm_binary = canister_layout
                 .wasm()
-                .deserialize(Some(tip_state.wasm_binary.binary.module_hash().into()))
+                .deserialize(tip_state.wasm_binary.binary.module_hash().into())
                 .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
             debug_assert_eq!(
                 tip_state.wasm_binary.binary.as_slice(),
@@ -614,23 +628,23 @@ fn switch_to_checkpoint(
     Ok(())
 }
 
-/// Update the tip directory files with the most recent snapshot operations.
-/// `snapshot_operations` is an ordered list of all created/restores/deleted snapshots since the last flush.
-fn flush_snapshot_changes<T>(
+/// Update the tip directory files with the most recent checkpoint operations.
+/// `operations` is an ordered list of all created/restores/deleted snapshots and renamed canisters since the last flush.
+fn flush_unflushed_checkpoint_ops<T>(
     log: &ReplicaLogger,
     layout: &CheckpointLayout<RwPolicy<T>>,
-    snapshot_operations: Vec<SnapshotOperation>,
+    operations: Vec<UnflushedCheckpointOp>,
 ) -> Result<(), LayoutError> {
     // This loop is not parallelized as there are combinations such as creating then restoring from a snapshot within the same flush.
-    for op in snapshot_operations {
+    for op in operations {
         match op {
-            SnapshotOperation::Delete(snapshot_id) => {
+            UnflushedCheckpointOp::DeleteSnapshot(snapshot_id) => {
                 layout.snapshot(&snapshot_id)?.delete_dir()?;
             }
-            SnapshotOperation::Backup(canister_id, snapshot_id) => {
+            UnflushedCheckpointOp::TakeSnapshot(canister_id, snapshot_id) => {
                 backup(log, layout, canister_id, snapshot_id)?;
             }
-            SnapshotOperation::Restore(canister_id, snapshot_id) => {
+            UnflushedCheckpointOp::LoadSnapshot(canister_id, snapshot_id) => {
                 restore(log, layout, canister_id, snapshot_id)?;
             }
         }
@@ -959,8 +973,8 @@ fn serialize_to_tip(
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     thread_pool: &mut scoped_threadpool::Pool,
 ) -> Result<(), CheckpointError> {
-    // Snapshots should have been handled earlier in `flush_page_delta`.
-    debug_assert!(state.canister_snapshots.is_unflushed_changes_empty());
+    // Snapshots and other unflushed changed should have been handled earlier in `flush_page_delta`.
+    debug_assert!(state.metadata.unflushed_checkpoint_ops.is_empty());
 
     // Serialize ingress history separately. The `SystemMetadata` proto does not
     // encode it.
@@ -1177,7 +1191,7 @@ fn serialize_canister_to_tip(
             exports: execution_state.exports.clone(),
             last_executed_round: execution_state.last_executed_round,
             metadata: execution_state.metadata.clone(),
-            binary_hash: Some(execution_state.wasm_binary.binary.module_hash().into()),
+            binary_hash: execution_state.wasm_binary.binary.module_hash().into(),
             next_scheduled_method: execution_state.next_scheduled_method,
             is_wasm64: execution_state.wasm_execution_mode.is_wasm64(),
         });
@@ -1270,7 +1284,7 @@ fn serialize_snapshot_to_tip(
             canister_id: canister_snapshot.canister_id(),
             taken_at_timestamp: *canister_snapshot.taken_at_timestamp(),
             canister_version: canister_snapshot.canister_version(),
-            binary_hash: Some(canister_snapshot.canister_module().module_hash().into()),
+            binary_hash: canister_snapshot.canister_module().module_hash().into(),
             certified_data: canister_snapshot.certified_data().clone(),
             wasm_chunk_store_metadata: canister_snapshot.chunk_store().metadata().clone(),
             stable_memory_size: canister_snapshot.stable_memory().size,

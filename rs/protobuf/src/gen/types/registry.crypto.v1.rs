@@ -6,10 +6,10 @@ pub struct EcdsaSigningSubnetList {
     #[prost(message, repeated, tag = "2")]
     pub subnets: ::prost::alloc::vec::Vec<super::super::super::types::v1::SubnetId>,
 }
-/// A list of subnets that can sign with a given chain key.
+/// A list of subnets on which a given chain-key is enabled.
 /// This allows replicas to route their signing requests to the right subnets.
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ChainKeySigningSubnetList {
+pub struct ChainKeyEnabledSubnetList {
     #[prost(message, repeated, tag = "1")]
     pub subnets: ::prost::alloc::vec::Vec<super::super::super::types::v1::SubnetId>,
 }

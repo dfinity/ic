@@ -51,6 +51,64 @@ system_test_nns(
 )
 
 system_test_nns(
+    name = "canister_http_stress_test",
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
+    tags = [
+        "long_testasdfasdf",
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "eternal",
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
+        CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
+    deps = CANISTER_HTTP_BASE_DEPS + [
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/types/types",
+        "@crate_index//:futures",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test_nns(
+    name = "canister_http_soak_test",
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "eternal",
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
+        CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
+    deps = CANISTER_HTTP_BASE_DEPS + [
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/types/types",
+        "@crate_index//:futures",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test_nns(
     name = "canister_http_socks_test",
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
@@ -137,6 +195,29 @@ system_test_nns(
         UNIVERSAL_VM_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS,
+)
+
+system_test_nns(
+    name = "nns_delegation_test",
+    tags = [
+        "long_test",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/tree_hash",
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:ic-agent",
+        "@crate_index//:leb128",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
 )
 
 system_test_nns(
