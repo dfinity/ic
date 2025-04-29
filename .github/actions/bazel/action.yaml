@@ -86,6 +86,7 @@ runs:
         execlogs_csv_out='${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv'
         if ! [ -s "$execlogs_json_in" ]; then
           echo "no execlogs found"
+          touch "$execlogs_csv_out" # create empty CSV
           exit 0
         fi
 
@@ -118,7 +119,6 @@ runs:
       uses: actions/upload-artifact@v4
       with:
         name: ${{ inputs.execlogs-artifact-name }}
-        if-no-files-found: ignore
         path: |
           ${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv
 
