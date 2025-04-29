@@ -119,7 +119,7 @@ def export_container_filesystem(container_cmd: str, image_tag: str, destination_
 
 
 def purge_podman(container_cmd: str):
-    cmd = f"{container_cmd} system prune --all --build --volumes --force"
+    cmd = f"{container_cmd} system prune --all --volumes --force"
     invoke.run(cmd)
 
 

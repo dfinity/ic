@@ -59,8 +59,7 @@ def build_image(container_cmd: str, image_tag: str, dockerfile: str, context_dir
 
 
 def purge_podman(container_cmd: str):
-    log.info("Cleaning up...")
-    cmd = f"{container_cmd} system prune --all --build --volumes --force"
+    cmd = f"{container_cmd} system prune --all --volumes --force"
     invoke.run(cmd)
 
 
