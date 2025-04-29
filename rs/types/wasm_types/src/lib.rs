@@ -73,8 +73,9 @@ impl CanisterModule {
     pub fn new_from_file(
         wasm_file_layout: Box<dyn MemoryMappableWasmFile + Send + Sync>,
         module_hash: WasmHash,
+        len: Option<usize>,
     ) -> std::io::Result<Self> {
-        let module = ModuleStorage::from_file(wasm_file_layout)?;
+        let module = ModuleStorage::from_file(wasm_file_layout, len)?;
         Ok(Self {
             module,
             module_hash: module_hash.0,
@@ -291,8 +292,13 @@ impl WasmFileStorage {
     /// that will lazily load the provided wasm file.
     pub fn lazy_load(
         wasm_file: Box<dyn MemoryMappableWasmFile + Send + Sync>,
+        len: Option<usize>,
     ) -> std::io::Result<Self> {
-        let len = std::fs::metadata(wasm_file.path())?.len() as usize;
+        let len = if let Some(len) = len {
+            len
+        } else {
+            std::fs::metadata(wasm_file.path())?.len() as usize
+        };
         Ok(Self {
             path: wasm_file.path().to_path_buf(),
             len,
@@ -335,8 +341,11 @@ impl WasmFileStorage {
 }
 
 impl ModuleStorage {
-    fn from_file(file: Box<dyn MemoryMappableWasmFile + Send + Sync>) -> std::io::Result<Self> {
-        Ok(Self::File(WasmFileStorage::lazy_load(file)?))
+    fn from_file(
+        file: Box<dyn MemoryMappableWasmFile + Send + Sync>,
+        len: Option<usize>,
+    ) -> std::io::Result<Self> {
+        Ok(Self::File(WasmFileStorage::lazy_load(file, len)?))
     }
 
     fn as_slice(&self) -> &[u8] {
@@ -424,7 +433,7 @@ mod tests {
             .unwrap();
         let test_wasm_file = TestWasmFile(tmp.path().to_path_buf());
         let mut module =
-            CanisterModule::new_from_file(Box::new(test_wasm_file), WasmHash([0; 32])).unwrap();
+            CanisterModule::new_from_file(Box::new(test_wasm_file), WasmHash([0; 32]), None).unwrap();
         module.write(&[9], 5).unwrap();
         assert_eq!(
             &[0x00, 0x61, 0x73, 0x6d, 0x00, 0x09, 0x00, 0x00],

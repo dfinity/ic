@@ -2510,12 +2510,13 @@ where
     pub fn lazy_load_with_module_hash(
         self,
         module_hash: WasmHash,
+        len: Option<usize>,
     ) -> Result<CanisterModule, LayoutError>
     where
         T: Send + Sync + 'static,
     {
         let path = self.path.clone();
-        CanisterModule::new_from_file(Box::new(self), module_hash).map_err(|err| {
+        CanisterModule::new_from_file(Box::new(self), module_hash, len).map_err(|err| {
             LayoutError::IoError {
                 path,
                 message: "Failed to load wasm file lazily".to_string(),

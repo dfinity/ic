@@ -1132,12 +1132,10 @@ fn switch_to_checkpoint(
                 Arc::clone(fd_factory),
             )?);
 
+        let new_snapshot_wasm_binary = &new_snapshot.execution_snapshot().wasm_binary;
         let wasm_binary = snapshot_layout.wasm().lazy_load_with_module_hash(
-            new_snapshot
-                .execution_snapshot()
-                .wasm_binary
-                .module_hash()
-                .into(),
+            new_snapshot_wasm_binary.module_hash().into(),
+            Some(new_snapshot_wasm_binary.len()),
         )?;
         debug_assert_eq!(wasm_binary.file_loading_status(), Some(false));
         new_snapshot.execution_snapshot_mut().wasm_binary = wasm_binary;
@@ -1150,15 +1148,20 @@ fn switch_to_checkpoint(
             // We can reuse the cache because the Wasm binary has the same
             // contents, only the storage of that binary changed.
             let embedder_cache = Arc::clone(&tip_state.wasm_binary.embedder_cache);
-            let wasm_binary = canister_layout
-                .wasm()
-                .lazy_load_with_module_hash(tip_state.wasm_binary.binary.module_hash().into())?;
+            let tip_state_wasm_binary = &tip_state.wasm_binary.binary;
+            let wasm_binary = canister_layout.wasm().lazy_load_with_module_hash(
+                tip_state_wasm_binary.module_hash().into(),
+                Some(tip_state_wasm_binary.len()),
+            )?;
 
             debug_assert_eq!(
                 tip_state.wasm_binary.binary.as_slice(),
                 canister_layout
                     .wasm()
-                    .lazy_load_with_module_hash(tip_state.wasm_binary.binary.module_hash().into())
+                    .lazy_load_with_module_hash(
+                        tip_state.wasm_binary.binary.module_hash().into(),
+                        Some(tip_state_wasm_binary.len())
+                    )
                     .unwrap()
                     .as_slice()
             );
