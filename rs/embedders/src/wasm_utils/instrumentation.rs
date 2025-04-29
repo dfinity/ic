@@ -121,12 +121,15 @@ use ic_types::methods::WasmMethod;
 use ic_types::NumBytes;
 use ic_types::NumInstructions;
 use ic_wasm_types::{BinaryEncodedWasm, WasmError, WasmInstrumentationError};
+use orca_wasm::ir::module::module_functions::{FuncKind, LocalFunction};
+use orca_wasm::ir::{id::ImportsID, module::module_imports::ModuleImports};
 
 use crate::wasmtime_embedder::{
     STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_BYTEMAP_MEMORY_NAME,
     WASM_HEAP_MEMORY_NAME,
 };
 use ic_wasm_transform::{self, Global, Module};
+use orca_wasm::DataType;
 use wasmparser::{
     BlockType, CompositeInnerType, CompositeType, Export, ExternalKind, FuncType, GlobalType,
     Import, MemoryType, Operator, SubType, TypeRef, ValType,
@@ -727,40 +730,24 @@ fn max_memory_size_in_wasm_pages(memory_size: NumBytes) -> u64 {
     memory_size.get() / (WASM_PAGE_SIZE as u64)
 }
 
-fn add_func_type(module: &mut Module, ty: FuncType) -> u32 {
-    for (idx, existing_subtype) in module.types.iter().enumerate() {
-        if let CompositeInnerType::Func(existing_ty) = &existing_subtype.composite_type.inner {
-            if *existing_ty == ty {
-                return idx as u32;
-            }
-        }
-    }
-    module.types.push(SubType {
-        is_final: true,
-        supertype_idx: None,
-        composite_type: CompositeType {
-            inner: CompositeInnerType::Func(ty),
-            shared: false,
-        },
-    });
-    (module.types.len() - 1) as u32
-}
-
-fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
-    fn mutate_instruction(f: &impl Fn(u32) -> u32, op: &mut Operator) {
+fn mutate_function_indices(module: &mut orca_wasm::Module, f: impl Fn(u32) -> u32) {
+    fn mutate_instruction(f: &impl Fn(u32) -> u32, op: &mut orca_wasm::wasmparser::Operator) {
         match op {
-            Operator::Call { function_index }
-            | Operator::ReturnCall { function_index }
-            | Operator::RefFunc { function_index } => {
+            orca_wasm::wasmparser::Operator::Call { function_index }
+            | orca_wasm::wasmparser::Operator::ReturnCall { function_index }
+            | orca_wasm::wasmparser::Operator::RefFunc { function_index } => {
                 *function_index = f(*function_index);
             }
             _ => {}
         }
     }
 
-    for func_body in &mut module.code_sections {
-        for op in &mut func_body.instructions {
-            mutate_instruction(&f, op);
+    for func in module.functions.iter_mut() {
+        let FuncKind::Local(local_func) = func else {
+            continue;
+        };
+        for op in &mut local_func.body.instructions {
+            mutate_instruction(&f, &mut op.op);
         }
     }
 
@@ -825,82 +812,97 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
 /// added as the last imports, we'd need to increment only non imported
 /// functions, since imported functions precede all others in the function index
 /// space, but this would be error-prone).
-fn inject_helper_functions(mut module: Module, mem_type: WasmMemoryType) -> Module {
-    // insert types
-    let ooi_type = FuncType::new([], []);
-    let tgwm_type = match mem_type {
-        WasmMemoryType::Wasm32 => FuncType::new([ValType::I32, ValType::I32], [ValType::I32]),
-        WasmMemoryType::Wasm64 => FuncType::new([ValType::I64, ValType::I64], [ValType::I64]),
+fn inject_helper_functions(
+    mut module: orca_wasm::Module,
+    mem_type: WasmMemoryType,
+) -> orca_wasm::Module {
+    // Temporarily clear the import section so that the injected imports come first.
+    let mut old_imports = ModuleImports::new(vec![]);
+    let mut imports = std::mem::swap(&mut module.imports, &mut old_imports);
+
+    let ooi_type_idx = module.types.add_func_type(&[], &[]);
+    module.add_import_func(
+        INSTRUMENTED_FUN_MODULE.to_string(),
+        OUT_OF_INSTRUCTIONS_FUN_NAME.to_string(),
+        ooi_type_idx,
+    );
+
+    let (params, res) = match mem_type {
+        WasmMemoryType::Wasm32 => ([DataType::I32, DataType::I32], [DataType::I32]),
+        WasmMemoryType::Wasm64 => ([DataType::I64, DataType::I64], [DataType::I64]),
     };
+    let tgwm_type_idx = module.types.add_func_type(&params, &res);
+    module.add_import_func(
+        INSTRUMENTED_FUN_MODULE.to_string(),
+        TRY_GROW_WASM_MEMORY_FUN_NAME.to_string(),
+        tgwm_type_idx,
+    );
 
-    let ooi_type_idx = add_func_type(&mut module, ooi_type);
-    let tgwm_type_idx = add_func_type(&mut module, tgwm_type);
+    let tgsm_type_idx = module.types.add_func_type(
+        &[DataType::I64, DataType::I64, DataType::I32],
+        &[DataType::I64],
+    );
+    module.add_import_func(
+        INSTRUMENTED_FUN_MODULE.to_string(),
+        TRY_GROW_STABLE_MEMORY_FUN_NAME.to_string(),
+        tgsm_type_idx,
+    );
 
-    // push_front imports
-    let ooi_imp = Import {
-        module: INSTRUMENTED_FUN_MODULE,
-        name: OUT_OF_INSTRUCTIONS_FUN_NAME,
-        ty: TypeRef::Func(ooi_type_idx),
-    };
+    let it_type_idx = module.types.add_func_type(&[DataType::I32], &[]);
+    module.add_import_func(
+        INSTRUMENTED_FUN_MODULE.to_string(),
+        INTERNAL_TRAP_FUN_NAME.to_string(),
+        it_type_idx,
+    );
 
-    let tgwm_imp = Import {
-        module: INSTRUMENTED_FUN_MODULE,
-        name: TRY_GROW_WASM_MEMORY_FUN_NAME,
-        ty: TypeRef::Func(tgwm_type_idx),
-    };
+    let fr_type_idx = module
+        .types
+        .add_func_type(&[DataType::I64, DataType::I64, DataType::I64], &[]);
+    module.add_import_func(
+        INSTRUMENTED_FUN_MODULE.to_string(),
+        STABLE_READ_FIRST_ACCESS_NAME.to_string(),
+        fr_type_idx,
+    );
 
-    let mut old_imports = module.imports;
-    module.imports = Vec::with_capacity(old_imports.len() + InjectedImports::count());
-    module.imports.push(ooi_imp);
-    module.imports.push(tgwm_imp);
-
-    let tgsm_type = FuncType::new([ValType::I64, ValType::I64, ValType::I32], [ValType::I64]);
-    let tgsm_type_idx = add_func_type(&mut module, tgsm_type);
-    let tgsm_imp = Import {
-        module: INSTRUMENTED_FUN_MODULE,
-        name: TRY_GROW_STABLE_MEMORY_FUN_NAME,
-        ty: TypeRef::Func(tgsm_type_idx),
-    };
-    module.imports.push(tgsm_imp);
-
-    let it_type = FuncType::new([ValType::I32], []);
-    let it_type_idx = add_func_type(&mut module, it_type);
-    let it_imp = Import {
-        module: INSTRUMENTED_FUN_MODULE,
-        name: INTERNAL_TRAP_FUN_NAME,
-        ty: TypeRef::Func(it_type_idx),
-    };
-    module.imports.push(it_imp);
-
-    let fr_type = FuncType::new([ValType::I64, ValType::I64, ValType::I64], []);
-    let fr_type_idx = add_func_type(&mut module, fr_type);
-    let fr_imp = Import {
-        module: INSTRUMENTED_FUN_MODULE,
-        name: STABLE_READ_FIRST_ACCESS_NAME,
-        ty: TypeRef::Func(fr_type_idx),
-    };
-    module.imports.push(fr_imp);
-
-    module.imports.append(&mut old_imports);
+    module.imports.extend(old_imports);
 
     // now increment all function references by InjectedImports::Count
     let cnt = InjectedImports::count() as u32;
     mutate_function_indices(&mut module, |i| i + cnt);
 
     debug_assert!(
-        module.imports[InjectedImports::OutOfInstructions as usize].name == "out_of_instructions"
+        module
+            .imports
+            .get(ImportsID(InjectedImports::OutOfInstructions as u32))
+            .name
+            == "out_of_instructions"
     );
     debug_assert!(
-        module.imports[InjectedImports::TryGrowWasmMemory as usize].name == "try_grow_wasm_memory"
+        module
+            .imports
+            .get(ImportsID(InjectedImports::TryGrowWasmMemory as u32))
+            .name
+            == "try_grow_wasm_memory"
     );
-
     debug_assert!(
-        module.imports[InjectedImports::TryGrowStableMemory as usize].name
+        module
+            .imports
+            .get(ImportsID(InjectedImports::TryGrowStableMemory as u32))
+            .name
             == "try_grow_stable_memory"
     );
-    debug_assert!(module.imports[InjectedImports::InternalTrap as usize].name == "internal_trap");
     debug_assert!(
-        module.imports[InjectedImports::StableReadFirstAccess as usize].name
+        module
+            .imports
+            .get(ImportsID(InjectedImports::InternalTrap as u32))
+            .name
+            == "internal_trap"
+    );
+    debug_assert!(
+        module
+            .imports
+            .get(ImportsID(InjectedImports::StableReadFirstAccess as u32))
+            .name
             == "stable_read_first_access"
     );
 
