@@ -577,24 +577,7 @@ mod eth_get_transaction_receipt {
 }
 
 mod eth_get_transaction_count {
-    use crate::eth_rpc::{BlockSpec, BlockTag};
-    use crate::eth_rpc_client::requests::GetTransactionCountParams;
     use crate::numeric::TransactionCount;
-    use ic_ethereum_types::Address;
-    use std::str::FromStr;
-
-    #[test]
-    fn should_serialize_get_transaction_count_params_as_tuple() {
-        let params = GetTransactionCountParams {
-            address: Address::from_str("0x407d73d8a49eeb85d32cf465507dd71d507100c1").unwrap(),
-            block: BlockSpec::Tag(BlockTag::Finalized),
-        };
-        let serialized_params = serde_json::to_string(&params).unwrap();
-        assert_eq!(
-            serialized_params,
-            r#"["0x407d73d8a49eeb85d32cf465507dd71d507100c1","finalized"]"#
-        );
-    }
 
     #[test]
     fn should_deserialize_transaction_count() {

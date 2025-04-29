@@ -24,7 +24,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::convert::Infallible;
 use std::fmt::{Debug, Display};
 
-pub mod requests;
 pub mod responses;
 
 #[cfg(test)]
