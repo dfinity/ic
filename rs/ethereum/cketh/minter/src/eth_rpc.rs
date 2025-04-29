@@ -820,11 +820,6 @@ pub(super) mod metrics {
     }
 
     impl RetryHistogram {
-        fn observe_retry_count(&mut self, count: usize) {
-            self.retry_buckets[count.min(MAX_EXPECTED_RETRIES)] += 1;
-            self.retry_count += count as u64;
-        }
-
         /// Returns a iterator over the histrogram buckets in the format that ic-metrics-encoder
         /// expects.
         fn iter(&self) -> impl Iterator<Item = (f64, f64)> + '_ {
@@ -845,21 +840,6 @@ pub(super) mod metrics {
     }
 
     impl HttpMetrics {
-        pub fn observe_retry_count(&mut self, method: String, count: usize) {
-            self.retry_histogram_per_method
-                .entry(method)
-                .or_default()
-                .observe_retry_count(count);
-        }
-
-        #[cfg(test)]
-        pub fn count_retries_in_bucket(&self, method: &str, count: usize) -> u64 {
-            match self.retry_histogram_per_method.get(method) {
-                Some(histogram) => histogram.retry_buckets[count.min(MAX_EXPECTED_RETRIES)],
-                None => 0,
-            }
-        }
-
         pub fn encode<W: std::io::Write>(
             &self,
             encoder: &mut MetricsEncoder<W>,
@@ -887,11 +867,6 @@ pub(super) mod metrics {
 
     thread_local! {
         static METRICS: RefCell<HttpMetrics> = RefCell::default();
-    }
-
-    /// Record the retry count for the specified ETH RPC method.
-    pub fn observe_retry_count(method: String, count: usize) {
-        METRICS.with(|metrics| metrics.borrow_mut().observe_retry_count(method, count));
     }
 
     /// Encodes the metrics related to ETH RPC method calls.
