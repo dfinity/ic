@@ -79,8 +79,8 @@ runs:
       run: |
         execlog="$(mktemp)"
         trap "rm -f $execlog" INT TERM EXIT
-        for execlog in $(find '${{ steps.metrics-tmpdir.outputs.dir }}' -name 'execlog-*.zst'); do
-          zstd -f -d "$execlog" -o "$execlog"
+        for execlog_zst in $(find '${{ steps.metrics-tmpdir.outputs.dir }}' -name 'execlog-*.zst'); do
+          zstd -f -d "$execlog_zst" -o "$execlog"
           bazel run //bazel:execution_log_compact_to_csv \
             $([[ "$(uname)" == "Linux" ]] && echo '--repository_cache=/cache/bazel') -- \
             --input_execlog="$execlog" \
