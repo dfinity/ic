@@ -73,39 +73,15 @@ runs:
           ${{ steps.metrics-tmpdir.outputs.dir }}/bazel-bep-*.pb.gpg
           ${{ steps.metrics-tmpdir.outputs.dir }}/profile-*.json
 
-    - name: Build execution_log_compact_to_csv
-      shell: bash
-      if: (success() || failure()) && inputs.execlogs-artifact-name != ''
-      env:
-        # Used by the bazel wrapper
-        BUILDBUDDY_LINKS: '[CI Job](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})'
-      run: |
-        set -euo pipefail
-        if [ -x bazel-bin/bazel/execution_log_compact_to_csv ]; then
-          echo "bazel-bin/bazel/execution_log_compact_to_csv already exists, skipping build"
-        else
-          # Here we overwrite the PATH with our custom bazel wrapper to ensure
-          # the specified commands are run with the CI-specific options included
-          # in the wrapper.
-          export BAZEL_ACTION_OLDPATH="$PATH"
-          # github.action_path doesn't seem to work
-          PATH="$PWD/.github/actions/bazel/bin:$BAZEL_ACTION_OLDPATH"
-          hash -r
-
-          # Used by the bazel wrapper
-          export BAZEL_ACTION_METRICS_OUT='${{ steps.metrics-tmpdir.outputs.dir }}'
-
-          bazel build --config=ci //bazel:execution_log_compact_to_csv
-        fi
-
     - name: Convert execlogs to CSV
       shell: bash
       if: (success() || failure()) && inputs.execlogs-artifact-name != ''
       run: |
         for execlog in $(find '${{ steps.metrics-tmpdir.outputs.dir }}' -name 'execlog-*.zst'); do
           zstd -f -d "$execlog" -o execlog
-          bazel-bin/bazel/execution_log_compact_to_csv \
-            --input_execlog=execlog \
+          bazel run //bazel:execution_log_compact_to_csv \
+            $([[ "$(uname)" == "Linux" ]] && echo '--repository_cache=/cache/bazel') -- \
+            --input_execlog="$PWD/execlog" \
             --whitelist_pat='^//'
         done > '${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv'
         rm -f execlog
