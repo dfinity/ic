@@ -11,12 +11,8 @@ py_proto_library(
 
 py_binary(
     name = "execution_log_compact_to_csv",
-    srcs = [
-        "execution_log_compact_to_csv.py",
-    ],
-    deps = [
-        ":spawn_py_pb2",
-    ],
+    srcs = ["execution_log_compact_to_csv.py"],
+    deps = [":spawn_py_pb2"],
 )
 
 bool_flag(
