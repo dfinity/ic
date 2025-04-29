@@ -503,7 +503,7 @@ impl RoundSchedule {
             number_of_long_executions == 0 || long_execution_cores > 0,
             metrics.scheduler_cores_invariant_broken,
             logger,
-            "{}: Number of long execution cores {} must be more than 0",
+            "{}: Number of long execution cores {} must be more than 0!",
             SCHEDULER_CORES_INVARIANT_BROKEN,
             long_execution_cores,
         );

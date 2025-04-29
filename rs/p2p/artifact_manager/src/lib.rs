@@ -403,7 +403,7 @@ impl<P: MutablePool<SignedIngress>> IngressProcessor<P> {
 impl<P: MutablePool<SignedIngress> + Send + Sync + 'static> ArtifactProcessor<SignedIngress>
     for IngressProcessor<P>
 {
-    /// The method processes changes in the ingress pool.
+    /// The method processes changes in the ingress pool!
     #[instrument(skip_all)]
     fn process_changes(
         &self,
