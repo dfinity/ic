@@ -16,7 +16,7 @@ use ic_nns_test_utils::{
         get_unauthorized_neuron, submit_proposal,
     },
     state_test_helpers::{
-        get_pending_proposals, list_all_neurons_and_combine_responses, nns_cast_vote,
+        get_pending_proposals, list_all_neurons_and_combine_responses, nns_cast_vote_or_panic,
         nns_governance_get_full_neuron, nns_governance_make_proposal, setup_nns_canisters,
         state_machine_builder_for_nns_tests,
     },
@@ -59,7 +59,7 @@ fn unauthorized_neuron_cannot_vote_on_nonexistent_proposal() {
     let state_machine = setup_state_machine_with_nns_canisters();
     let unauthorized_neuron = get_unauthorized_neuron();
 
-    let response = nns_cast_vote(
+    let response = nns_cast_vote_or_panic(
         &state_machine,
         unauthorized_neuron.principal_id,
         unauthorized_neuron.neuron_id,
@@ -78,7 +78,7 @@ fn anonymous_principal_cannot_vote_on_nonexistent_proposal() {
     let state_machine = setup_state_machine_with_nns_canisters();
     let n1 = get_neuron_1();
 
-    let response = nns_cast_vote(
+    let response = nns_cast_vote_or_panic(
         &state_machine,
         PrincipalId::new_anonymous(),
         n1.neuron_id,
@@ -98,7 +98,7 @@ fn anonymous_principal_cannot_vote_on_existent_proposal() {
     let n1 = get_neuron_1();
     let proposal_id = submit_proposal(&state_machine, &n1);
 
-    let response = nns_cast_vote(
+    let response = nns_cast_vote_or_panic(
         &state_machine,
         PrincipalId::new_anonymous(),
         n1.neuron_id,
@@ -117,7 +117,7 @@ fn neuron_cannot_vote_on_nonexistent_proposal() {
     let state_machine = setup_state_machine_with_nns_canisters();
     let n1 = get_neuron_1();
 
-    let response = nns_cast_vote(
+    let response = nns_cast_vote_or_panic(
         &state_machine,
         n1.principal_id,
         n1.neuron_id,
@@ -138,7 +138,7 @@ fn propose_and_vote_with_other_neuron() {
     let n2 = get_neuron_2();
     let proposal_id = submit_proposal(&state_machine, &n1);
 
-    let response = nns_cast_vote(
+    let response = nns_cast_vote_or_panic(
         &state_machine,
         n2.principal_id,
         n2.neuron_id,
@@ -159,7 +159,7 @@ fn proposer_neuron_cannot_vote_explicitly() {
     let proposal_id = submit_proposal(&state_machine, &n1);
 
     // neuron 1 already implicitly voted when submitting the proposal
-    let response = nns_cast_vote(
+    let response = nns_cast_vote_or_panic(
         &state_machine,
         n1.principal_id,
         n1.neuron_id,
@@ -181,7 +181,7 @@ fn neuron_cannot_vote_twice() {
     let proposal_id = submit_proposal(&state_machine, &n1);
 
     // vote once with neuron 2
-    let response_1 = nns_cast_vote(
+    let response_1 = nns_cast_vote_or_panic(
         &state_machine,
         n2.principal_id,
         n2.neuron_id,
@@ -194,7 +194,7 @@ fn neuron_cannot_vote_twice() {
     assert_eq!(response_1, Command::RegisterVote(RegisterVoteResponse {}));
 
     // vote again with neuron 2
-    let response_2 = nns_cast_vote(
+    let response_2 = nns_cast_vote_or_panic(
         &state_machine,
         n2.principal_id,
         n2.neuron_id,
@@ -215,7 +215,7 @@ fn nonexistent_neuron_cannot_vote() {
     let nonexistent_neuron = get_nonexistent_neuron();
     let proposal_id = submit_proposal(&state_machine, &n1);
 
-    let response = nns_cast_vote(
+    let response = nns_cast_vote_or_panic(
         &state_machine,
         nonexistent_neuron.principal_id,
         nonexistent_neuron.neuron_id,
@@ -253,7 +253,7 @@ fn can_vote_on_proposal_with_insufficient_funds() {
 
     // however, proposal can be voted on even when the voting neuron has insufficient funds for submitting proposals
     let proposal_id = submit_proposal(&state_machine, &n2);
-    let response = nns_cast_vote(
+    let response = nns_cast_vote_or_panic(
         &state_machine,
         n3.principal_id,
         n3.neuron_id,
@@ -280,7 +280,7 @@ fn failed_proposal_causes_reject_cost_deduction_for_proposer() {
     let proposal_id = submit_proposal(&state_machine, &n2);
 
     // vote "no" with heavy neuron 1 to cause the proposal to fail
-    let response = nns_cast_vote(
+    let response = nns_cast_vote_or_panic(
         &state_machine,
         n1.principal_id,
         n1.neuron_id,
@@ -307,7 +307,7 @@ fn cannot_vote_on_future_proposal() {
     let n2 = get_neuron_2();
     let future_proposal_id = ProposalId(1);
 
-    let response = nns_cast_vote(
+    let response = nns_cast_vote_or_panic(
         &state_machine,
         n1.principal_id,
         n1.neuron_id,

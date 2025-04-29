@@ -3,23 +3,27 @@ use cycles_minting_canister::CyclesCanisterInitPayload;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
+use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NODE_REWARDS_CANISTER_ID,
     REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
+use ic_nns_governance_api::pb::v1::Vote;
 use ic_nns_test_utils::{
     common::modify_wasm_bytes,
     state_test_helpers::{
-        get_canister_status, nns_create_super_powerful_neuron, nns_propose_upgrade_nns_canister,
-        wait_for_canister_upgrade_to_succeed,
+        get_canister_status, nns_cast_vote, nns_create_super_powerful_neuron,
+        nns_propose_upgrade_nns_canister, wait_for_canister_upgrade_to_succeed,
     },
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
+use icp_ledger::Tokens;
 use std::{
     env,
     fmt::{Debug, Formatter},
     fs,
+    str::FromStr,
 };
 
 struct NnsCanisterUpgrade {
@@ -139,6 +143,26 @@ impl Debug for NnsCanisterUpgrade {
     }
 }
 
+fn get_well_known_public_neurons() -> Vec<(NeuronId, PrincipalId)> {
+    [
+        (
+            27,
+            "4vnki-cqaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aae",
+        ),
+        (
+            28,
+            "4vnki-cqaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aae",
+        ),
+    ]
+    .into_iter()
+    .map(|(id, principal_str)| {
+        let id = NeuronId { id };
+        let principal = PrincipalId::from_str(principal_str).unwrap();
+        (id, principal)
+    })
+    .collect()
+}
+
 #[test]
 fn test_upgrade_canisters_with_golden_nns_state() {
     // Step 0: Read configuration. To wit, what canisters does the user want to upgrade in this
@@ -183,7 +207,11 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     // Step 1.2: Create a super powerful Neuron.
     println!("Creating super powerful Neuron.");
     let neuron_controller = PrincipalId::new_self_authenticating(&[1, 2, 3, 4]);
-    let neuron_id = nns_create_super_powerful_neuron(&state_machine, neuron_controller);
+    let neuron_id = nns_create_super_powerful_neuron(
+        &state_machine,
+        neuron_controller,
+        Tokens::from_tokens(100_000_000).unwrap(),
+    );
     println!("Done creating super powerful Neuron.");
 
     let mut repetition_number = 1;
@@ -233,7 +261,8 @@ fn test_upgrade_canisters_with_golden_nns_state() {
                     "Proposing to upgrade NNS {} (attempt {})...",
                     nns_canister_name, repetition_number,
                 );
-                let _proposal_id = nns_propose_upgrade_nns_canister(
+
+                let proposal_id = nns_propose_upgrade_nns_canister(
                     &state_machine,
                     neuron_controller,
                     neuron_id,
@@ -241,6 +270,19 @@ fn test_upgrade_canisters_with_golden_nns_state() {
                     wasm_content.clone(),
                     module_arg.clone(),
                 );
+
+                // Impersonate some public neurons to vote on the proposal.
+                for (voter_neuron_id, voter_controller) in get_well_known_public_neurons() {
+                    // Note that the voting can fail if the proposal already reaches absolute
+                    // majority and the NNS Governance starts to upgrade.
+                    let _result = nns_cast_vote(
+                        &state_machine,
+                        voter_controller,
+                        voter_neuron_id,
+                        proposal_id.id,
+                        Vote::Yes,
+                    );
+                }
 
                 // Step 3: Verify result(s): In a short while, the canister should
                 // be running the new code.
