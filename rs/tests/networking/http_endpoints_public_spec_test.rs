@@ -52,7 +52,7 @@ const CALL_VERSIONS: [Call; 2] = [Call::V2, Call::V3];
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(test))
+        .add_test(systest!(effective_canister_http_spec_test))
         .execute_from_args()?;
 
     Ok(())
@@ -73,8 +73,7 @@ fn setup(env: TestEnv) {
     });
 }
 
-// TODO: Name this test correctly
-fn test(env: TestEnv) {
+fn effective_canister_http_spec_test(env: TestEnv) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
 
@@ -95,7 +94,7 @@ fn test(env: TestEnv) {
     let sys_agent = sys_node.build_default_agent();
     let sys_socket_addr = std::net::SocketAddr::new(sys_node.get_ip_addr(), 8080);
 
-    // Get the app subnet, setup an agent and get a cansiter id from the range
+    // Get the app subnet, setup an agent and get a canister id from the range
     let app_subnet = snapshot
         .subnets()
         .find(|subnet| subnet.subnet_type() == SubnetType::Application)
@@ -108,7 +107,7 @@ fn test(env: TestEnv) {
     let app_agent = app_subnet.nodes().next().unwrap().build_default_agent();
 
     block_on(async {
-        // Create three universal canister, two on the system sybnet, one on the app subnet
+        // Create three universal canister, two on the system subnet, one on the app subnet
         UniversalCanister::new_with_retries(&sys_agent, sys_uc1_id.into(), &logger).await;
         UniversalCanister::new_with_retries(&sys_agent, sys_uc2_id.into(), &logger).await;
         UniversalCanister::new_with_retries(&app_agent, app_uc_id, &logger).await;
@@ -136,7 +135,7 @@ fn test(env: TestEnv) {
                 )
                 .await;
             let status = inspect_response(response, "Call", &logger).await;
-            assert!((200..300).contains(&status));
+            assert_2xx(&status);
         }
 
         // Test that malformed calls get rejects
@@ -152,7 +151,7 @@ fn test(env: TestEnv) {
                 )
                 .await;
             let status = inspect_response(response, "Call", &logger).await;
-            assert!((400..500).contains(&status));
+            assert_4xx(&status);
         }
 
         // Test query calls
@@ -162,7 +161,7 @@ fn test(env: TestEnv) {
             .query(sys_socket_addr)
             .await;
         let status = inspect_response(response, "Query", &logger).await;
-        assert!((200..300).contains(&status));
+        assert_2xx(&status);
 
         // Test that malformed calls get rejeceted
         for effective_canister_id in test_canister_ids {
@@ -170,7 +169,7 @@ fn test(env: TestEnv) {
                 .query(sys_socket_addr)
                 .await;
             let status = inspect_response(response, "Query", &logger).await;
-            assert!((400..500).contains(&status));
+            assert_4xx(&status);
         }
 
         // Test read state requests
@@ -187,7 +186,7 @@ fn test(env: TestEnv) {
         .read_state(sys_socket_addr)
         .await;
         let status = inspect_response(response, "ReadState", &logger).await;
-        assert!((200..300).contains(&status));
+        assert_2xx(&status);
 
         // Test that malformed read_state requests are rejected
         for effective_canister_id in test_canister_ids {
@@ -202,7 +201,7 @@ fn test(env: TestEnv) {
             .read_state(sys_socket_addr)
             .await;
             let status = inspect_response(response, "ReadState", &logger).await;
-            assert!((400..500).contains(&status));
+            assert_4xx(&status);
         }
 
         // Test that calling "time" path on the existing canister id works
@@ -211,9 +210,12 @@ fn test(env: TestEnv) {
                 .read_state(sys_socket_addr)
                 .await;
         let status = inspect_response(response, "ReadState", &logger).await;
-        assert!((200..300).contains(&status));
+        assert_2xx(&status);
 
-        // Test that calling "time" on the management canister gets rejected
+        // Test that calling "time" on the management canister
+        // NOTE: On a boundary node this would get rejected, since the boundary node is not able to route
+        // the call, since it's not clear which subnet it should route to.
+        // Without a boundary node, this call is just fine
         let response = CanisterReadState::new(
             vec![Path::from(Label::from("time"))],
             CanisterId::ic_00().into(),
@@ -221,7 +223,7 @@ fn test(env: TestEnv) {
         .read_state(sys_socket_addr)
         .await;
         let status = inspect_response(response, "ReadState", &logger).await;
-        assert!((400..500).contains(&status));
+        assert_2xx(&status);
     });
 }
 
@@ -236,4 +238,12 @@ async fn inspect_response(response: Response, typ: &str, logger: &Logger) -> u16
     info!(logger, "{}: Got response status: {} {}", typ, status, text);
 
     status
+}
+
+fn assert_2xx(status: &u16) {
+    assert!((200..300).contains(status));
+}
+
+fn assert_4xx(status: &u16) {
+    assert!((400..500).contains(status))
 }
