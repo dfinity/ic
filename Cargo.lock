@@ -18314,6 +18314,7 @@ dependencies = [
  "ic-utils-thread",
  "ic-validator-ingress-message",
  "itertools 0.12.1",
+ "libc",
  "nix 0.29.0",
  "pocket-ic",
  "prometheus",
