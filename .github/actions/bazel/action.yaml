@@ -77,14 +77,15 @@ runs:
       shell: bash
       if: (success() || failure()) && inputs.execlogs-artifact-name != ''
       run: |
+        execlog="$(mktemp)"
+        trap "rm -f $execlog" INT TERM EXIT
         for execlog in $(find '${{ steps.metrics-tmpdir.outputs.dir }}' -name 'execlog-*.zst'); do
-          zstd -f -d "$execlog" -o execlog
+          zstd -f -d "$execlog" -o "$execlog"
           bazel run //bazel:execution_log_compact_to_csv \
             $([[ "$(uname)" == "Linux" ]] && echo '--repository_cache=/cache/bazel') -- \
-            --input_execlog="$PWD/execlog" \
+            --input_execlog="$execlog" \
             --whitelist_pat='^//'
         done > '${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv'
-        rm -f execlog
 
     - name: Upload execution log
       if: (success() || failure()) && inputs.execlogs-artifact-name != ''
