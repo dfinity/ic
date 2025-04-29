@@ -10,22 +10,31 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 
 INSERT NEW RELEASES HERE
 
-## Changed
+# 2025-03-28: Proposal 136007
 
-## Deprecated
+https://dashboard.internetcomputer.org/proposal/136007
+
+This is a maintenance upgrade.
+
+# 2025-03-21: Proposal 135934
+
+https://dashboard.internetcomputer.org/proposal/135934
+
+No "real" behavior changes. This is just a maintenance upgrade.
+
+Technically, there is a new get_chunk method, but it does not actually do anything useful yet. Watch this space.
+
+
+# 2025-02-13: Proposal 135300
+
+https://dashboard.internetcomputer.org/proposal/135300
 
 ## Fixed
 
-### Update the correct node operator ID in do_remove_node_directly
+### Disable replacement of nodes that are active in subnets
 
-Fix for the do_remove_node_directly function to update the correct node operator ID record.
-In the past the caller_id and the node_operator_id for the node were always the same.
-However, since #3285 the caller_id and the node_operator_id for the removed node may differ,
-and this introduces a bug in this edge case.
-
-The bug resulted in a node reward discrepancy for a few operator records, identified in the
-regular administrative checks before the reward distribution and [described in the forum](https://forum.dfinity.org/t/issue-with-node-provider-rewards/41109/2) and
-mitigated with a few NNS proposals referenced in the forum thread.
+Direct node replacements of nodes that are active in a subnet may result in unexpected behavior and potential problems in the current Consensus code.
+So to be on the safe side we need to disable the functionality on the Registry side until the rest of the core protocol can handle it safely.
 
 
 # 2025-02-07: Proposal 135207

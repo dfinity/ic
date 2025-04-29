@@ -156,7 +156,7 @@ impl SetupBuilder {
             .unwrap_or(local_replica::icrc_ledger_default_args_builder())
             .with_minting_account(minting_account)
             .build();
-        let canister_id = create_and_install_icrc_ledger(&pocket_ic, init_args.clone());
+        let canister_id = create_and_install_icrc_ledger(&pocket_ic, init_args.clone(), None);
 
         let subnet_id = pocket_ic.get_subnet(canister_id).unwrap();
         println!(

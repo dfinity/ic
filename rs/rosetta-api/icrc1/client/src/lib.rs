@@ -23,6 +23,7 @@ use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 use url::ParseError;
 
+#[derive(Clone)]
 pub struct RosettaClient {
     pub url: Url,
     pub http_client: Client,

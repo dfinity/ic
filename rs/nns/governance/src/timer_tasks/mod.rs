@@ -1,14 +1,24 @@
+use calculate_distributable_rewards::CalculateDistributableRewardsTask;
+use finalize_maturity_disbursements::FinalizeMaturityDisbursementsTask;
 use ic_metrics_encoder::MetricsEncoder;
-use ic_nervous_system_timer_task::{RecurringAsyncTask, TimerTaskMetricsRegistry};
+use ic_nervous_system_timer_task::{
+    RecurringAsyncTask, RecurringSyncTask, TimerTaskMetricsRegistry,
+};
+use prune_following::PruneFollowingTask;
 use seeding::SeedingTask;
+use snapshot_voting_power::SnapshotVotingPowerTask;
 use std::cell::RefCell;
 
-use crate::canister_state::GOVERNANCE;
-use crate::timer_tasks::calculate_distributable_rewards::CalculateDistributableRewardsTask;
+use crate::{
+    canister_state::GOVERNANCE, is_disburse_maturity_enabled, storage::VOTING_POWER_SNAPSHOTS,
+};
 
 mod calculate_distributable_rewards;
 mod distribute_rewards;
+mod finalize_maturity_disbursements;
+mod prune_following;
 mod seeding;
+mod snapshot_voting_power;
 
 thread_local! {
     static METRICS_REGISTRY: RefCell<TimerTaskMetricsRegistry> = RefCell::new(TimerTaskMetricsRegistry::default());
@@ -17,6 +27,12 @@ thread_local! {
 pub fn schedule_tasks() {
     SeedingTask::new(&GOVERNANCE).schedule(&METRICS_REGISTRY);
     CalculateDistributableRewardsTask::new(&GOVERNANCE).schedule(&METRICS_REGISTRY);
+    PruneFollowingTask::new(&GOVERNANCE).schedule(&METRICS_REGISTRY);
+    SnapshotVotingPowerTask::new(&GOVERNANCE, &VOTING_POWER_SNAPSHOTS).schedule(&METRICS_REGISTRY);
+    if is_disburse_maturity_enabled() {
+        FinalizeMaturityDisbursementsTask::new(&GOVERNANCE).schedule(&METRICS_REGISTRY);
+    }
+
     run_distribute_rewards_periodic_task();
 }
 

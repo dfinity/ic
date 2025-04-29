@@ -1,6 +1,8 @@
 // Include the prost-build generated registry protos.
 pub mod pb;
 
+mod high_capacity;
+
 use std::{fmt, str};
 
 use crate::pb::v1::{
@@ -507,9 +509,13 @@ mod tests {
             }
         };
 
+        // If (or when) we decide to backport `timestamp` field to
+        // the legacy types, we should add "real" timestamp data
+        // to the tests
         let high_capacity_registry_value = HighCapacityRegistryValue {
             content: Some(high_capacity_registry_value::Content::Value(value)),
             version,
+            timestamp_seconds: 0,
         };
 
         let version = 43;
@@ -526,6 +532,7 @@ mod tests {
                 deletion_marker,
             )),
             version,
+            timestamp_seconds: 0,
         };
 
         let key = b"name".to_vec();
@@ -625,12 +632,16 @@ mod tests {
             }
         };
 
+        // If (or when) we decide to backport `timestamp` field to
+        // the legacy types, we should add "real" timestamp data
+        // to the tests
         let high_capacity_response = HighCapacityRegistryGetValueResponse {
             error,
             version,
             content: Some(high_capacity_registry_get_value_response::Content::Value(
                 value,
             )),
+            timestamp_seconds: 0,
         };
 
         // Ok if client starts using HighCapacity before server.
@@ -744,6 +755,7 @@ mod tests {
                     }
                 })
                 .collect(),
+            timestamp_seconds: 0,
         };
 
         // Ok if client starts using HighCapacity before server.

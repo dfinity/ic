@@ -9,16 +9,7 @@ Apalache requires us to do this in a separate module.
 
 ---- MODULE Split_Neuron_Apalache ----
 
-EXTENDS TLC, Variants
-
-(*
-@typeAlias: proc = Str;
-@typeAlias: account = Str;
-@typeAlias: neuronId = Int;
-@typeAlias: methodCall = Transfer({ from: $account, to: $account, amount: Int, fee: Int}) | AccountBalance({ account_id: $account });
-@typeAlias: methodResponse = Fail(UNIT) | TransferOk(UNIT) | BalanceQueryOk(Int);
-*)
-_type_alias_dummy == TRUE
+EXTENDS TLC, Variants, Common_Apalache
 
 \* This marker is necessary for the code link tooling to insert the constants
 \* CODE_LINK_INSERT_CONSTANTS

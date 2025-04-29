@@ -103,7 +103,7 @@ fn main() {
                 url: empty_disk_img_url,
                 sha256: empty_disk_img_sha256,
             },
-            VmType::Nested,
+            VmType::Production,
             Some(101.into()), // 101 GibiByte image
         )
     } else {

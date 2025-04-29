@@ -23,8 +23,7 @@ use ic_management_canister_types_private::{
 };
 use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, InitialNiDkgTranscriptRecord};
 use ic_registry_client_fake::FakeRegistryClient;
-use ic_registry_client_helpers::crypto::CryptoRegistry;
-use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_registry_client_helpers::{crypto::CryptoRegistry, subnet::SubnetRegistry};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_test_utilities_consensus::make_genesis;
@@ -39,8 +38,10 @@ use ic_types::{
 };
 use rand::{CryptoRng, Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 /// Setup a subnet of the given subnet_id and node_ids by creating an initial registry
 /// with required records, including subnet record, node record, node public keys,
@@ -181,19 +182,19 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
         )
         .expect("Could not add node record.");
 
-    // Add threshold signing subnet to registry
+    // Add chain-key enabled subnet to registry
     for key_id in test_master_public_key_ids() {
         data_provider
             .add(
-                &ic_registry_keys::make_chain_key_signing_subnet_list_key(&key_id),
+                &ic_registry_keys::make_chain_key_enabled_subnet_list_key(&key_id),
                 registry_version,
                 Some(
-                    ic_protobuf::registry::crypto::v1::ChainKeySigningSubnetList {
+                    ic_protobuf::registry::crypto::v1::ChainKeyEnabledSubnetList {
                         subnets: vec![subnet_id_into_protobuf(subnet_id)],
                     },
                 ),
             )
-            .expect("Could not add chain key signing subnet list");
+            .expect("Could not add chain-key enabled subnet list");
     }
     registry_client.reload();
     registry_client.update_to_latest_version();

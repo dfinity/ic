@@ -33,6 +33,7 @@ LIB_DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/starter:ic-starter-lib",
     "//rs/state_machine_tests",
+    "//rs/state_manager",
     "//rs/test_utilities",
     "//rs/test_utilities/registry",
     "//rs/types/management_canister_types",
@@ -162,7 +163,7 @@ rust_library(
     ]),
     crate_name = "pocket_ic_server",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "8.0.0",
+    version = "9.0.0",
     deps = LIB_DEPENDENCIES + [":build_script"],
 )
 
@@ -221,6 +222,7 @@ rust_test(
     ],
     data = [
         ":pocket-ic-server",
+        "//hs/spec_compliance:ic-ref-test",
         "//rs/tests/httpbin-rs:httpbin",
         "//rs/tests/research:ic-hs",
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
@@ -229,6 +231,7 @@ rust_test(
         "HTTPBIN_BIN": "$(rootpath //rs/tests/httpbin-rs:httpbin)",
         "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
         "IC_REF_TEST_ROOT": "rs/tests/research/ic-hs",
+        "IC_REF_TEST_BIN": "$(rootpath //hs/spec_compliance:ic-ref-test)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
     tags = [

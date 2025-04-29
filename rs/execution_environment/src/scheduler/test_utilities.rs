@@ -16,6 +16,10 @@ use ic_embedders::{
         CanisterStateChanges, ExecutionStateChanges, PausedWasmExecution, SliceExecutionOutput,
         WasmExecutionResult, WasmExecutor,
     },
+    wasmtime_embedder::system_api::{
+        sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
+        ApiType, ExecutionParameters,
+    },
     CompilationCache, CompilationResult, WasmExecutionInput,
 };
 use ic_error_types::UserError;
@@ -38,10 +42,6 @@ use ic_replicated_state::{
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
     CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory, MessageMemoryUsage,
     ReplicatedState,
-};
-use ic_system_api::{
-    sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
-    ApiType, ExecutionParameters,
 };
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_execution_environment::{generate_subnets, test_registry_settings};
@@ -944,6 +944,8 @@ impl SchedulerTestBuilder {
             self.scheduler_config.upload_wasm_chunk_instructions,
             self.scheduler_config
                 .canister_snapshot_baseline_instructions,
+            self.scheduler_config
+                .canister_snapshot_data_baseline_instructions,
         );
         let scheduler = SchedulerImpl::new(
             self.scheduler_config,

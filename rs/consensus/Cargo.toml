@@ -8,6 +8,8 @@ documentation.workspace = true
 
 [dependencies]
 ic-config = { path = "../config" }
+ic-consensus-certification = { path = "./certification" }
+ic-consensus-idkg = { path = "./idkg" }
 ic-consensus-dkg = { path = "./dkg" }
 ic-consensus-utils = { path = "./utils" }
 ic-consensus-vetkd = { path = "./vetkd" }
@@ -37,7 +39,6 @@ rand = { workspace = true }
 rand_chacha = { workspace = true }
 slog = { workspace = true }
 strum_macros = { workspace = true }
-tokio = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
@@ -81,6 +82,7 @@ slog-envlogger = "2.2.0"
 slog-term = { workspace = true }
 strum = { workspace = true }
 tempfile = { workspace = true }
+tokio = { workspace = true }
 
 [[bench]]
 name = "validate_payload"
@@ -88,5 +90,5 @@ harness = false
 
 [features]
 default = []
-malicious_code = []
+malicious_code = ["ic-consensus-idkg/malicious_code"]
 proptest = []

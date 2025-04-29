@@ -24,7 +24,7 @@ use crate::{
                 self, DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
             },
             nervous_system_function::FunctionType,
-            neuron::Followees,
+            neuron::{Followees, TopicFollowees},
             proposal::Action,
             ChunkedCanisterWasm, ClaimSwapNeuronsError, ClaimSwapNeuronsResponse,
             ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters, Empty,
@@ -134,7 +134,7 @@ pub mod native_action_ids {
     pub const ADVANCE_SNS_TARGET_VERSION: u64 = 15;
 
     /// SetTopicsForCustomProposals Action.
-    pub const SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION: u64 = 16;
+    pub const SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION: u64 = 16;
 
     // When adding something to this list, make sure to update the below function.
     pub fn nervous_system_functions() -> Vec<NervousSystemFunction> {
@@ -347,6 +347,7 @@ impl From<&manage_neuron::Command> for neuron_in_flight_command::Command {
             S::Configure              (x) => D::Configure              (x),
             S::Disburse               (x) => D::Disburse               (x),
             S::Follow                 (x) => D::Follow                 (x),
+            S::SetFollowing           (x) => D::SetFollowing           (x),
             S::MakeProposal           (x) => D::MakeProposal           (x),
             S::RegisterVote           (x) => D::RegisterVote           (x),
             S::Split                  (x) => D::Split                  (x),
@@ -1244,7 +1245,7 @@ impl NervousSystemFunction {
 
     fn set_topics_for_custom_proposals() -> NervousSystemFunction {
         NervousSystemFunction {
-            id: native_action_ids::SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION,
+            id: native_action_ids::SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION,
             name: "Set topics for custom proposals".to_string(),
             description: Some("Proposal to set the topics for custom SNS proposals.".to_string()),
             function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
@@ -1355,6 +1356,7 @@ impl manage_neuron::Command {
             manage_neuron::Command::Configure(_) => "Configure",
             manage_neuron::Command::Disburse(_) => "Disburse",
             manage_neuron::Command::Follow(_) => "Follow",
+            manage_neuron::Command::SetFollowing(_) => "SetFollowing",
             manage_neuron::Command::MakeProposal(_) => "MakeProposal",
             manage_neuron::Command::RegisterVote(_) => "RegisterVote",
             manage_neuron::Command::Split(_) => "Split",
@@ -1448,6 +1450,14 @@ impl ManageNeuronResponse {
         ManageNeuronResponse {
             command: Some(manage_neuron_response::Command::Follow(
                 manage_neuron_response::FollowResponse {},
+            )),
+        }
+    }
+
+    pub fn set_following_response() -> Self {
+        ManageNeuronResponse {
+            command: Some(manage_neuron_response::Command::SetFollowing(
+                manage_neuron_response::SetFollowingResponse {},
             )),
         }
     }
@@ -1868,7 +1878,7 @@ impl From<&Action> for u64 {
             }
             Action::AdvanceSnsTargetVersion(_) => native_action_ids::ADVANCE_SNS_TARGET_VERSION,
             Action::SetTopicsForCustomProposals(_) => {
-                native_action_ids::SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION
+                native_action_ids::SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION
             }
         }
     }
@@ -2299,6 +2309,14 @@ impl NeuronRecipe {
                 followees: followees.clone(),
             };
             btreemap! { catch_all => followees }
+        }
+    }
+
+    // TODO[NNS1-3676]: Provide a proper implementation for this function once new SNSs are
+    // TODO[NNS1-3676]: to begin using topics-based following.
+    pub(crate) fn construct_topic_followees(&self) -> TopicFollowees {
+        TopicFollowees {
+            topic_id_to_followees: btreemap! {},
         }
     }
 

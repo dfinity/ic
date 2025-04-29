@@ -5,8 +5,8 @@ use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
-    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
-    ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NODE_REWARDS_CANISTER_ID,
+    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_test_utils::{
     common::modify_wasm_bytes,
@@ -45,7 +45,7 @@ impl NnsCanisterUpgrade {
             "registry"       => (REGISTRY_CANISTER_ID, "REGISTRY_CANISTER_WASM_PATH"),
             "root"           => (ROOT_CANISTER_ID, "ROOT_CANISTER_WASM_PATH"),
             "sns-wasm"       => (SNS_WASM_CANISTER_ID, "SNS_WASM_CANISTER_WASM_PATH"),
-
+            "node-rewards"   => (NODE_REWARDS_CANISTER_ID, "NODE_REWARDS_CANISTER_WASM_PATH"),
             _ => panic!("Not a known NNS canister type: {}", nns_canister_name,),
         };
 
@@ -61,8 +61,10 @@ impl NnsCanisterUpgrade {
                 }))
             )
             .unwrap()
-        } else {
+        } else if nns_canister_name == "ledger" {
             Encode!(&()).unwrap()
+        } else {
+            vec![]
         };
 
         let nns_canister_name = nns_canister_name.to_string();
@@ -162,6 +164,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
             "registry",
             "root",
             "sns-wasm",
+            "node-rewards",
         ]
         .join(",");
     }

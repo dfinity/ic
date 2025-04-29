@@ -356,7 +356,9 @@ fn test_start_and_stop_neuron_dissolve() {
         // The neuron should now be in DISSOLVING state
         assert_eq!(
             start_dissolving_response.operations.first().unwrap().status,
-            Some("COMPLETED".to_owned())
+            Some("COMPLETED".to_owned()),
+            "Expected the operation to be completed but got: {:?}",
+            start_dissolving_response
         );
         let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
         match neuron.dissolve_state.unwrap() {
@@ -610,7 +612,8 @@ fn test_disburse_neuron() {
         .value.parse::<u64>().unwrap();
 
         // We now update the neuron so it is in state DISSOLVED
-        let now = env.pocket_ic.get_time().await.duration_since(UNIX_EPOCH).unwrap().as_secs();
+        let now_system_time: SystemTime = env.pocket_ic.get_time().await.try_into().unwrap();
+        let now = now_system_time.duration_since(UNIX_EPOCH).unwrap().as_secs();
         neuron.dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(now - 1));
         update_neuron(&agent, neuron).await;
 

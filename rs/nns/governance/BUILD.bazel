@@ -42,6 +42,7 @@ filegroup(
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-dummy-getrandom-for-wasm",
+    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
@@ -67,6 +68,7 @@ DEPENDENCIES = [
     "//rs/nns/gtc_accounts",
     "//rs/nns/handlers/root/interface",
     "//rs/nns/sns-wasm",
+    "//rs/node_rewards/canister/api",
     "//rs/protobuf",
     "//rs/registry/canister",
     "//rs/rust_canisters/http_types",
@@ -231,6 +233,21 @@ rust_canbench(
     results_file = "canbench/canbench_results.yml",
     deps = [
         # Keep sorted.
+        ":governance--canbench_feature",
+    ],
+)
+
+# Used for benchmarking compilation/instrumentation/execution changes in the
+# embedders crate.
+rust_canister(
+    name = "governance-bench-canister",
+    srcs = ["canbench/main.rs"],
+    aliases = ALIASES,
+    compile_data = ["canbench/bench.did"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":canbench/bench.did",
+    visibility = ["//visibility:public"],
+    deps = [
         ":governance--canbench_feature",
     ],
 )

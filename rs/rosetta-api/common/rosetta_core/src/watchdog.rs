@@ -5,7 +5,7 @@ use std::sync::{
     Arc,
 };
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tracing::{error, info};
+use tracing::{error, info, info_span, Instrument};
 
 /// A watchdog thread that monitors a monitored task by checking periodic heartbeats.
 /// If the heartbeat is not updated within a specified timeout, the watchdog will trigger
@@ -26,8 +26,11 @@ pub struct WatchdogThread {
     last_heartbeat_ms: Arc<AtomicU64>,
     /// If true, missing the first heartbeat is tolerated and does not trigger a restart.
     skip_first_heartbeat_check: bool,
+    /// Tracing span for the watchdog thread.
+    tracing_span: Option<tracing::Span>,
 }
 
+/// A thread watchdog implementation that monitors a task and restarts it if it becomes unresponsive.
 impl WatchdogThread {
     /// Creates a new `WatchdogThread` with the specified `heartbeat_timeout` and `skip_first_heartbeat` mode.
     ///
@@ -35,11 +38,13 @@ impl WatchdogThread {
     ///
     /// * `heartbeat_timeout` - Duration that the watchdog will wait before considering the monitored task stalled.
     /// * `on_restart` - Optional callback function that is called when the watchdog restarts the task.
-    /// * `skip_first_heartbeat` - If true, the watchdog will not trigger a restart if no heartbeat is received before the first heartbeat.
+    /// * `skip_first_heartbeat_check` - If true, the watchdog will not trigger a restart if no heartbeat is received before the first heartbeat.
+    /// * `tracing_span` - Optional tracing span to associate with the watchdog thread for logging purposes.
     pub fn new(
         heartbeat_timeout: Duration,
         on_restart: Option<Arc<dyn Fn() + Send + Sync>>,
         skip_first_heartbeat_check: bool,
+        tracing_span: Option<tracing::Span>,
     ) -> Self {
         Self {
             stopped: Arc::new(AtomicBool::new(false)),
@@ -48,6 +53,7 @@ impl WatchdogThread {
             on_restart,
             last_heartbeat_ms: Arc::new(AtomicU64::new(0)),
             skip_first_heartbeat_check,
+            tracing_span,
         }
     }
 
@@ -78,6 +84,11 @@ impl WatchdogThread {
         let last_heartbeat_ms = Arc::clone(&self.last_heartbeat_ms);
         let skip_first = self.skip_first_heartbeat_check;
 
+        let span = self
+            .tracing_span
+            .clone()
+            .unwrap_or_else(|| info_span!("watchdog_thread"));
+
         let handle = tokio::spawn(async move {
             loop {
                 if stopped.load(Ordering::SeqCst) {
@@ -92,38 +103,44 @@ impl WatchdogThread {
                     last_heartbeat_clone.store(Self::current_timestamp(), Ordering::SeqCst);
                 }));
 
+                let mut thread_handle = thread_handle; // make mutable for select!
                 loop {
-                    tokio::time::sleep(heartbeat_timeout).await;
-                    let last = last_heartbeat_ms.load(Ordering::SeqCst);
-                    if last == 0 {
-                        if skip_first {
-                            continue;
-                        } else {
-                            error!("No heartbeat received and skip_first_heartbeat disabled, restarting");
-                        }
-                    }
-                    let now = Self::current_timestamp();
-                    if now - last > heartbeat_timeout.as_millis() as u64 {
-                        if stopped.load(Ordering::SeqCst) {
+                    tokio::select! {
+                        _ = tokio::time::sleep(heartbeat_timeout) => {
+                            let last = last_heartbeat_ms.load(Ordering::SeqCst);
+                            if last == 0 {
+                                if skip_first {
+                                    continue;
+                                } else {
+                                    error!("No heartbeat received and skip_first_heartbeat disabled, restarting");
+                                }
+                            }
+                            let now = Self::current_timestamp();
+                            if now - last > heartbeat_timeout.as_millis() as u64 {
+                                if stopped.load(Ordering::SeqCst) {
+                                    break;
+                                }
+                                error!("Thread is not responding, restarting");
+                                if let Some(ref on_restart_fn) = on_restart {
+                                    on_restart_fn();
+                                }
+                                thread_handle.abort();
+                                break;
+                            }
+                        },
+                        res = &mut thread_handle => {
+                            if res.is_err() {
+                                error!("Monitored task panicked, restarting");
+                                if let Some(ref on_restart_fn) = on_restart {
+                                    on_restart_fn();
+                                }
+                            }
                             break;
                         }
-                        error!("Thread is not responding, restarting");
-                        if let Some(ref on_restart_fn) = on_restart {
-                            on_restart_fn();
-                        }
-                        thread_handle.abort();
-                        if let Err(e) = thread_handle.await {
-                            if e.is_cancelled() {
-                                info!("Monitored task stopped");
-                            } else {
-                                error!("Monitored task aborted: {:?}", e);
-                            }
-                        }
-                        break;
                     }
                 }
             }
-        });
+        }.instrument(span));
 
         self.handle = Some(handle);
     }
@@ -154,7 +171,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_watchdog_thread_starts_and_stops() {
-        let mut watchdog = WatchdogThread::new(Duration::from_secs(1), None, false);
+        let mut watchdog = WatchdogThread::new(Duration::from_secs(1), None, false, None);
 
         watchdog.start(|heartbeat| {
             tokio::spawn(async move {
@@ -179,6 +196,7 @@ mod tests {
                 restart_count_clone.fetch_add(1, Ordering::SeqCst);
             })),
             false,
+            None,
         );
 
         watchdog.start(|heartbeat| {
@@ -202,7 +220,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_watchdog_thread_receives_heartbeat() {
-        let mut watchdog = WatchdogThread::new(Duration::from_secs(1), None, false);
+        let mut watchdog = WatchdogThread::new(Duration::from_secs(1), None, false, None);
 
         watchdog.start(|heartbeat| {
             tokio::spawn(async move {
@@ -219,7 +237,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_watchdog_thread_stops_properly() {
-        let mut watchdog = WatchdogThread::new(Duration::from_secs(1), None, false);
+        let mut watchdog = WatchdogThread::new(Duration::from_secs(1), None, false, None);
 
         watchdog.start(|heartbeat| {
             tokio::spawn(async move {
@@ -250,6 +268,7 @@ mod tests {
                 restart_count_clone.fetch_add(1, Ordering::SeqCst);
             })),
             false,
+            None,
         );
 
         watchdog.start(|heartbeat| {
@@ -274,7 +293,7 @@ mod tests {
     #[tokio::test]
     async fn test_skip_first_heartbeat_enabled() {
         // When skip_first_heartbeat is enabled, lack of initial heartbeat should be tolerated.
-        let mut watchdog = WatchdogThread::new(Duration::from_secs(1), None, true);
+        let mut watchdog = WatchdogThread::new(Duration::from_secs(1), None, true, None);
         // Spawn a task which delays the first call to heartbeat.
         let start = std::time::Instant::now();
         watchdog.start(|heartbeat| {
@@ -307,6 +326,7 @@ mod tests {
                 restart_clone.fetch_add(1, Ordering::SeqCst);
             })),
             false,
+            None,
         );
         // Spawn a task that deliberately delays the heartbeat beyond the timeout.
         watchdog.start(|heartbeat| {
@@ -325,6 +345,36 @@ mod tests {
         assert!(
             restart_count.load(Ordering::SeqCst) > 0,
             "Expected at least one restart when skip_first_heartbeat is disabled"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_watchdog_thread_restarts_on_panic() {
+        let restart_count = Arc::new(AtomicUsize::new(0));
+        let restart_clone = restart_count.clone();
+        let mut watchdog = WatchdogThread::new(
+            Duration::from_secs(1),
+            Some(Arc::new(move || {
+                restart_clone.fetch_add(1, Ordering::SeqCst);
+            })),
+            false,
+            None,
+        );
+
+        watchdog.start(|heartbeat| {
+            tokio::spawn(async move {
+                heartbeat();
+                panic!("Simulated panic to trigger restart");
+            })
+        });
+
+        // Allow time for the panic to be detected and a restart to be triggered.
+        sleep(Duration::from_secs(2)).await;
+        watchdog.stop().await;
+
+        assert!(
+            restart_count.load(Ordering::SeqCst) > 0,
+            "Expected at least one restart when the monitored task panics"
         );
     }
 }

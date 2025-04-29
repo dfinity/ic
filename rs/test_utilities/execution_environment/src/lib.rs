@@ -11,6 +11,7 @@ use ic_config::{
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
     wasm_utils::{compile, decoding::decode_wasm},
+    wasmtime_embedder::system_api::InstructionLimits,
     WasmtimeEmbedder,
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
@@ -52,7 +53,6 @@ use ic_replicated_state::{
     CallContext, CanisterState, ExecutionState, ExecutionTask, InputQueueType, NetworkTopology,
     PageIndex, ReplicatedState, SubnetTopology,
 };
-use ic_system_api::InstructionLimits;
 use ic_test_utilities::{crypto::mock_random_number_generator, state_manager::FakeStateManager};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
 use ic_types::crypto::threshold_sig::ni_dkg::{
@@ -1124,8 +1124,8 @@ impl ExecutionTest {
         );
     }
 
-    /// Executes an anonymous query in the given canister.
-    pub fn anonymous_query<S: ToString>(
+    /// Executes a query sent by the system in the given canister.
+    pub fn system_query<S: ToString>(
         &mut self,
         canister_id: CanisterId,
         method_name: S,
@@ -1135,7 +1135,7 @@ impl ExecutionTest {
         let state = Arc::new(self.state.take().unwrap());
 
         let query = Query {
-            source: QuerySource::Anonymous,
+            source: QuerySource::System,
             receiver: canister_id,
             method_name: method_name.to_string(),
             method_payload,
@@ -1754,6 +1754,7 @@ pub struct ExecutionTestBuilder {
     heap_delta_rate_limit: NumBytes,
     upload_wasm_chunk_instructions: NumInstructions,
     canister_snapshot_baseline_instructions: NumInstructions,
+    canister_snapshot_data_baseline_instructions: NumInstructions,
     replica_version: ReplicaVersion,
     precompiled_universal_canister: bool,
     cycles_account_manager_config: Option<CyclesAccountManagerConfig>,
@@ -1767,7 +1768,7 @@ impl Default for ExecutionTestBuilder {
             execution_config: Config {
                 rate_limiting_of_instructions: FlagStatus::Disabled,
                 canister_sandboxing_flag: FlagStatus::Enabled,
-                composite_queries: FlagStatus::Disabled,
+                composite_queries: FlagStatus::Enabled,
                 allocatable_compute_capacity_in_percent: 100,
                 ..Config::default()
             },
@@ -1799,6 +1800,8 @@ impl Default for ExecutionTestBuilder {
             upload_wasm_chunk_instructions: scheduler_config.upload_wasm_chunk_instructions,
             canister_snapshot_baseline_instructions: scheduler_config
                 .canister_snapshot_baseline_instructions,
+            canister_snapshot_data_baseline_instructions: scheduler_config
+                .canister_snapshot_data_baseline_instructions,
             replica_version: ReplicaVersion::default(),
             precompiled_universal_canister: true,
             cycles_account_manager_config: None,
@@ -1809,6 +1812,13 @@ impl Default for ExecutionTestBuilder {
 impl ExecutionTestBuilder {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn with_execution_config(self, execution_config: Config) -> Self {
+        Self {
+            execution_config,
+            ..self
+        }
     }
 
     pub fn with_nns_subnet_id(self, nns_subnet_id: SubnetId) -> Self {
@@ -2009,8 +2019,8 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_composite_queries(mut self) -> Self {
-        self.execution_config.composite_queries = FlagStatus::Enabled;
+    pub fn without_composite_queries(mut self) -> Self {
+        self.execution_config.composite_queries = FlagStatus::Disabled;
         self
     }
 
@@ -2148,14 +2158,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_non_native_stable(mut self) -> Self {
-        self.execution_config
-            .embedders_config
-            .feature_flags
-            .wasm_native_stable_memory = FlagStatus::Disabled;
-        self
-    }
-
     pub fn with_best_effort_responses(mut self, stage: BestEffortResponsesFeature) -> Self {
         self.execution_config
             .embedders_config
@@ -2201,6 +2203,16 @@ impl ExecutionTestBuilder {
 
     pub fn with_max_snapshots_per_canister(mut self, max_snapshots_per_canister: usize) -> Self {
         self.execution_config.max_number_of_snapshots_per_canister = max_snapshots_per_canister;
+        self
+    }
+
+    pub fn with_snapshot_metadata_download(mut self) -> Self {
+        self.execution_config.canister_snapshot_download = FlagStatus::Enabled;
+        self
+    }
+
+    pub fn with_snapshot_metadata_upload(mut self) -> Self {
+        self.execution_config.canister_snapshot_upload = FlagStatus::Enabled;
         self
     }
 
@@ -2406,6 +2418,7 @@ impl ExecutionTestBuilder {
             self.heap_delta_rate_limit,
             self.upload_wasm_chunk_instructions,
             self.canister_snapshot_baseline_instructions,
+            self.canister_snapshot_data_baseline_instructions,
         );
         let (query_stats_collector, _) =
             ic_query_stats::init_query_stats(self.log.clone(), &config, &metrics_registry);
@@ -2413,7 +2426,6 @@ impl ExecutionTestBuilder {
         let query_handler = InternalHttpQueryHandler::new(
             self.log.clone(),
             hypervisor,
-            self.own_subnet_id,
             self.subnet_type,
             config.clone(),
             &metrics_registry,

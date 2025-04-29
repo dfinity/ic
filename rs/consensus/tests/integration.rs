@@ -7,18 +7,16 @@ use crate::framework::{
 };
 use framework::test_master_public_key_ids;
 use ic_consensus_utils::pool_reader::PoolReader;
-use ic_interfaces::consensus_pool::ConsensusPool;
-use ic_interfaces::messaging::MessageRouting;
+use ic_interfaces::{consensus_pool::ConsensusPool, messaging::MessageRouting};
 use ic_interfaces_registry::RegistryClient;
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-use ic_types::malicious_flags::MaliciousFlags;
-use ic_types::{crypto::CryptoHash, replica_config::ReplicaConfig, Height};
+use ic_types::{
+    crypto::CryptoHash, malicious_flags::MaliciousFlags, replica_config::ReplicaConfig, Height,
+};
 use rand::Rng;
 use rand_chacha::{rand_core::SeedableRng, ChaChaRng};
-use std::cell::RefCell;
-use std::rc::Rc;
-use std::sync::Arc;
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 #[test]
 fn multiple_nodes_are_live() -> Result<(), String> {

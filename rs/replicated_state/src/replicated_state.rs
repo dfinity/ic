@@ -6,20 +6,21 @@ use super::{
     },
 };
 use crate::{
-    canister_snapshots::CanisterSnapshots,
+    canister_snapshots::{CanisterSnapshot, CanisterSnapshots},
     canister_state::{
         queues::{CanisterInput, CanisterQueuesLoopDetector},
         system_state::{push_input, CanisterOutputQueuesIterator},
     },
     CanisterQueues,
 };
-use ic_base_types::PrincipalId;
+use ic_base_types::{PrincipalId, SnapshotId};
 use ic_btc_replica_types::BitcoinAdapterResponse;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::messaging::{
     IngressInductionError, LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_CANISTER_STOPPED,
     LABEL_VALUE_CANISTER_STOPPING,
 };
+use ic_management_canister_types_private::CanisterStatusType;
 use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
@@ -731,6 +732,26 @@ impl ReplicatedState {
             .sum()
     }
 
+    /// Canister migrations require that a canister is stopped, has no guaranteed responses
+    /// in any outgoing stream, and nothing in the output queue (guaranteed or otherwise).
+    pub fn ready_for_migration(&self, canister: &CanisterId) -> bool {
+        let streams_flushed = || {
+            self.metadata
+                .streams
+                .iter()
+                .all(|(_, stream)| stream.guaranteed_response_counts().get(canister).is_none())
+        };
+
+        let canister_state = match self.canister_state(canister) {
+            Some(canister_state) => canister_state,
+            None => return false,
+        };
+
+        let stopped = canister_state.system_state.status() == CanisterStatusType::Stopped;
+
+        stopped && !canister_state.has_output() && streams_flushed()
+    }
+
     /// Computes the memory taken by different types of memory resources.
     pub fn memory_taken(&self) -> MemoryTaken {
         let (
@@ -1231,6 +1252,42 @@ impl ReplicatedState {
         (shed_messages, shed_message_bytes, cycles_lost)
     }
 
+    /// Adds a new snapshot to the list of snapshots.
+    ///
+    /// This function is used by the management canister's TakeSnapshot function to change the state.
+    /// Note that the rest of the logic, e.g. constructing the `snapshot` is done in the calling code.
+    pub fn take_snapshot(
+        &mut self,
+        snapshot_id: SnapshotId,
+        snapshot: Arc<CanisterSnapshot>,
+    ) -> SnapshotId {
+        self.metadata
+            .unflushed_checkpoint_ops
+            .take_snapshot(snapshot.canister_id(), snapshot_id);
+        self.canister_snapshots.push(snapshot_id, snapshot)
+    }
+
+    /// Delete a snapshot from the list of snapshots.
+    pub fn delete_snapshot(&mut self, snapshot_id: SnapshotId) -> Option<Arc<CanisterSnapshot>> {
+        let result = self.canister_snapshots.remove(snapshot_id);
+        if result.is_some() {
+            self.metadata
+                .unflushed_checkpoint_ops
+                .delete_snapshot(snapshot_id)
+        }
+        result
+    }
+
+    /// Delete all snapshots belonging to the given canister id.
+    pub fn delete_snapshots(&mut self, canister_id: CanisterId) {
+        let deleted = self.canister_snapshots.delete_snapshots(canister_id);
+        for snapshot_id in deleted {
+            self.metadata
+                .unflushed_checkpoint_ops
+                .delete_snapshot(snapshot_id);
+        }
+    }
+
     /// Splits the replicated state as part of subnet splitting phase 1, retaining
     /// only the canisters of `subnet_id` (as determined by the provided routing
     /// table).
@@ -1283,9 +1340,6 @@ impl ReplicatedState {
         canister_states
             .retain(|canister_id, _| routing_table.route(canister_id.get()) == Some(subnet_id));
 
-        // Retain only the canister snapshots belonging to the local canisters.
-        canister_snapshots.split(|canister_id| canister_states.contains_key(&canister_id));
-
         // All subnet messages (ingress and canister) only remain on subnet A' because:
         //
         //  * Message Routing would drop a response from subnet B to a request it had
@@ -1302,7 +1356,16 @@ impl ReplicatedState {
 
         // Obtain a new metadata state for subnet B. No-op for subnet A' (apart from
         // setting the split marker).
-        let metadata = metadata.split(subnet_id, new_subnet_batch_time)?;
+        let mut metadata = metadata.split(subnet_id, new_subnet_batch_time)?;
+
+        // Retain only the canister snapshots belonging to the local canisters.
+        let deleted =
+            canister_snapshots.split(|canister_id| canister_states.contains_key(&canister_id));
+        for snapshot_id in deleted {
+            metadata
+                .unflushed_checkpoint_ops
+                .delete_snapshot(snapshot_id);
+        }
 
         Ok(Self {
             canister_states,

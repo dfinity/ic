@@ -2,14 +2,15 @@
 //! selections of ingress and xnet messages, and DKGs computed for other
 //! subnets.
 
-use crate::{
-    consensus::{
-        metrics::{BatchStats, BlockStats},
-        status::{self, Status},
-    },
-    idkg::utils::{get_idkg_subnet_public_keys, get_pre_signature_ids_to_deliver},
+use crate::consensus::{
+    metrics::{BatchStats, BlockStats},
+    status::{self, Status},
 };
 use ic_consensus_dkg::get_vetkey_public_keys;
+use ic_consensus_idkg::utils::{
+    generate_responses_to_signature_request_contexts, get_idkg_subnet_public_keys,
+    get_pre_signature_ids_to_deliver,
+};
 use ic_consensus_utils::{
     crypto_hashable_to_seed, membership::Membership, pool_reader::PoolReader,
 };
@@ -22,7 +23,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{debug, error, info, warn, ReplicaLogger};
-use ic_management_canister_types_private::SetupInitialDKGResponse;
+use ic_management_canister_types_private::{ReshareChainKeyResponse, SetupInitialDKGResponse};
 use ic_protobuf::{
     log::consensus_log_entry::v1::ConsensusLogEntry,
     registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
@@ -30,7 +31,7 @@ use ic_protobuf::{
 use ic_types::{
     batch::{Batch, BatchMessages, BatchSummary, BlockmakerMetrics, ConsensusResponse},
     consensus::{
-        idkg::{self, CompletedSignature},
+        idkg::{self},
         Block, HasVersion,
     },
     crypto::threshold_sig::{
@@ -358,8 +359,14 @@ impl RemoteDkgResults {
     }
 }
 
-/// This function creates responses to the SetupInitialDKG system calls with the
-/// computed DKG key material for remote subnets, without needing values from the state.
+/// This function creates responses to finished remote DKGs
+///
+/// Responses can either be information about a failed DKG or contain the DKG transcript(s)
+/// necessary to complete the request.
+///
+/// The responses generate by this function are:
+/// - Responses to `setup_initial_dkg` system calls
+/// - Responses to `reshare_chain_key`, if the requested key is a NiDkg key
 pub fn generate_responses_to_remote_dkgs(
     transcripts_for_remote_subnets: &[(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)],
     log: &ReplicaLogger,
@@ -376,24 +383,30 @@ pub fn generate_responses_to_remote_dkgs(
 
     dkg_results
         .into_iter()
-        .filter_map(|(callback_id, transcript_result)| match transcript_result {
-            RemoteDkgResults::ReshareChainKey(_ni_dkg_transcript) => {
-                // TODO(CON-1416): Implement this case
-                error!(
+        .filter_map(|(callback_id, transcript_result)| {
+            match transcript_result {
+                RemoteDkgResults::ReshareChainKey(key_transcript) => {
+                    Some(generate_reshare_chain_key_response(key_transcript))
+                }
+                RemoteDkgResults::SetupInitialDKG {
+                    low_threshold,
+                    high_threshold,
+                } => generate_dkg_response_payload(
+                    low_threshold.as_ref(),
+                    high_threshold.as_ref(),
                     log,
-                    "ReshareChainKey for callback ID {callback_id} is unimplemented",
-                );
-                None
+                ),
             }
-            RemoteDkgResults::SetupInitialDKG {
-                low_threshold,
-                high_threshold,
-            } => {
-                generate_dkg_response_payload(low_threshold.as_ref(), high_threshold.as_ref(), log)
-                    .map(|payload| ConsensusResponse::new(callback_id, payload))
-            }
+            .map(|payload| ConsensusResponse::new(callback_id, payload))
         })
         .collect()
+}
+
+fn generate_reshare_chain_key_response(key_transcript: Result<NiDkgTranscript, String>) -> Payload {
+    match key_transcript {
+        Ok(transcript) => Payload::Data(ReshareChainKeyResponse::NiDkg(transcript.into()).encode()),
+        Err(err) => Payload::Reject(RejectContext::new(RejectCode::CanisterReject, err)),
+    }
 }
 
 /// Generate a response payload given the low and high threshold transcripts
@@ -466,20 +479,6 @@ fn generate_dkg_response_payload(
         )),
         _ => None,
     }
-}
-
-/// Creates responses to `SignWithECDSA` and `SignWithSchnorr` system calls with the computed
-/// signature.
-pub fn generate_responses_to_signature_request_contexts(
-    idkg_payload: &idkg::IDkgPayload,
-) -> Vec<ConsensusResponse> {
-    let mut consensus_responses = Vec::new();
-    for completed in idkg_payload.signature_agreements.values() {
-        if let CompletedSignature::Unreported(response) = completed {
-            consensus_responses.push(response.clone());
-        }
-    }
-    consensus_responses
 }
 
 /// Creates responses to `ComputeInitialIDkgDealingsArgs` system calls with the initial
@@ -577,7 +576,7 @@ mod tests {
             NiDkgId {
                 start_block_height: Height::from(0),
                 dealer_subnet: subnet_test_id(0),
-                dkg_tag: NiDkgTag::HighThresholdForKey(key_id),
+                dkg_tag: NiDkgTag::HighThresholdForKey(key_id.clone()),
                 target_subnet: NiDkgTargetSubnet::Remote(TARGET_ID),
             },
             CallbackId::from(2),
@@ -586,8 +585,16 @@ mod tests {
 
         let result =
             generate_responses_to_remote_dkgs(&transcripts_for_remote_subnets[..], &no_op_logger());
-        assert_eq!(result.len(), 0);
+        assert_eq!(result.len(), 1);
 
-        // TODO(CON-1416: Extend this test)
+        // Deserialize the `ReshareChainKeyResponse`
+        let payload = match &result[0].payload {
+            Payload::Data(data) => data,
+            Payload::Reject(_) => panic!("Payload was rejected unexpectedly"),
+        };
+        let response = ReshareChainKeyResponse::decode(payload).unwrap();
+        let ReshareChainKeyResponse::NiDkg(_response) = response else {
+            panic!("Expected a NiDkg response");
+        };
     }
 }

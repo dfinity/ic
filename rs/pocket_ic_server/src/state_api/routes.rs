@@ -200,6 +200,8 @@ where
         // i.e., periodically update the time of the IC instance
         // to the real time and execute rounds on the subnets.
         .api_route("/{id}/auto_progress", post(auto_progress))
+        // Returns whether automatic progress is enabled for an IC instance.
+        .api_route("/{id}/auto_progress", get(get_auto_progress))
         //
         // Stop automatic progress (see endpoint `auto_progress`)
         // on an IC instance.
@@ -1187,9 +1189,9 @@ pub async fn create_instance(
         None
     };
 
-    let (instance_id, topology) = api_state
+    match api_state
         .add_instance(move |seed| {
-            PocketIc::new(
+            PocketIc::try_new(
                 runtime,
                 seed,
                 subnet_configs,
@@ -1199,14 +1201,20 @@ pub async fn create_instance(
                 instance_config.bitcoind_addr,
             )
         })
-        .await;
-    (
-        StatusCode::CREATED,
-        Json(rest::CreateInstanceResponse::Created {
-            instance_id,
-            topology,
-        }),
-    )
+        .await
+    {
+        Ok((instance_id, topology)) => (
+            StatusCode::CREATED,
+            Json(rest::CreateInstanceResponse::Created {
+                instance_id,
+                topology,
+            }),
+        ),
+        Err(err) => (
+            StatusCode::BAD_REQUEST,
+            Json(rest::CreateInstanceResponse::Error { message: err }),
+        ),
+    }
 }
 
 pub async fn list_instances(
@@ -1274,6 +1282,14 @@ pub async fn auto_progress(
     } else {
         (StatusCode::OK, Json(ApiResponse::Success(())))
     }
+}
+
+pub async fn get_auto_progress(
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(id): Path<InstanceId>,
+) -> (StatusCode, Json<ApiResponse<bool>>) {
+    let auto_progress = api_state.get_auto_progress(id).await;
+    (StatusCode::OK, Json(ApiResponse::Success(auto_progress)))
 }
 
 pub async fn stop_progress(

@@ -1,12 +1,13 @@
 use crate::common::{
     build_cmc_wasm, build_genesis_token_wasm, build_governance_wasm_with_features,
-    build_ledger_wasm, build_lifeline_wasm, build_registry_wasm, build_root_wasm,
-    build_sns_wasms_wasm, NnsInitPayloads,
+    build_ledger_wasm, build_lifeline_wasm, build_node_rewards_wasm, build_registry_wasm,
+    build_root_wasm, build_sns_wasms_wasm, NnsInitPayloads,
 };
 use candid::{CandidType, Decode, Encode, Nat};
 use canister_test::Wasm;
 use cycles_minting_canister::{
-    IcpXdrConversionRateCertifiedResponse, SetAuthorizedSubnetworkListArgs,
+    CyclesCanisterInitPayload, IcpXdrConversionRateCertifiedResponse,
+    SetAuthorizedSubnetworkListArgs,
 };
 use dfn_http::types::{HttpRequest, HttpResponse};
 use dfn_protobuf::ToProto;
@@ -23,12 +24,16 @@ use ic_nervous_system_common::{
     ledger::{compute_neuron_staking_subaccount, compute_neuron_staking_subaccount_bytes},
     DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS,
 };
+use ic_nns_common::init::LifelineCanisterInitPayload;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
     canister_id_to_nns_canister_name, memory_allocation_of, CYCLES_LEDGER_CANISTER_ID,
-    CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID,
-    LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID, CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET,
+    GENESIS_TOKEN_CANISTER_INDEX_IN_NNS_SUBNET, GOVERNANCE_CANISTER_ID,
+    GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, LEDGER_CANISTER_ID,
+    LEDGER_CANISTER_INDEX_IN_NNS_SUBNET, LIFELINE_CANISTER_ID,
+    LIFELINE_CANISTER_INDEX_IN_NNS_SUBNET, NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET,
+    REGISTRY_CANISTER_ID, REGISTRY_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
     ROOT_CANISTER_INDEX_IN_NNS_SUBNET, SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
     SUBNET_RENTAL_CANISTER_ID, SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
 };
@@ -38,18 +43,22 @@ use ic_nns_governance_api::pb::v1::{
         self,
         claim_or_refresh::{self, MemoAndController},
         configure::Operation,
-        AddHotKey, ClaimOrRefresh, Configure, Disburse, Follow, IncreaseDissolveDelay,
-        JoinCommunityFund, LeaveCommunityFund, RegisterVote, RemoveHotKey, Split, StakeMaturity,
+        AddHotKey, ClaimOrRefresh, Configure, Disburse, DisburseMaturity, Follow,
+        IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund, RegisterVote, RemoveHotKey,
+        Split, StakeMaturity,
     },
     manage_neuron_response::{self, ClaimOrRefreshResponse},
-    Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
-    Governance, GovernanceError, InstallCodeRequest, ListNeurons, ListNeuronsResponse,
-    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfo,
-    ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
-    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction,
-    ProposalActionRequest, ProposalInfo, RewardNodeProviders, Topic, Vote,
+    Account as GovernanceAccount, Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
+    GetNeuronsFundAuditInfoResponse, Governance, GovernanceError, InstallCodeRequest, ListNeurons,
+    ListNeuronsResponse, ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse,
+    ListProposalInfo, ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest,
+    ManageNeuronRequest, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics,
+    NnsFunction, ProposalActionRequest, ProposalInfo, RewardNodeProviders, Topic, Vote,
 };
+use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
+use ic_registry_canister_api::GetChunkRequest;
+use ic_registry_transport::deserialize_get_latest_version_response;
 use ic_registry_transport::pb::v1::{
     RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
 };
@@ -66,15 +75,19 @@ use ic_test_utilities::universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
 };
 use ic_types::{ingress::WasmResult, Cycles};
-use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, BlockIndex, Memo, SendArgs, Tokens};
+use icp_ledger::{
+    AccountIdentifier, BinaryAccountBalanceArgs, BlockIndex, LedgerCanisterInitPayload, Memo,
+    SendArgs, Tokens,
+};
 use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{TransferArg, TransferError},
 };
 use num_traits::ToPrimitive;
 use prost::Message;
+use registry_canister::init::RegistryCanisterInitPayload;
 use serde::Serialize;
-use std::{convert::TryInto, env, time::Duration};
+use std::{convert::TryInto, time::Duration};
 
 /// A `StateMachine` builder setting the IC time to the current time
 /// and using the canister ranges of both the NNS and II subnets.
@@ -90,12 +103,15 @@ pub fn state_machine_builder_for_nns_tests() -> StateMachineBuilder {
         ))
 }
 
-/// Turn down state machine logging to just errors to reduce noise in tests where this is not relevant
-pub fn reduce_state_machine_logging_unless_env_set() {
-    match env::var("RUST_LOG") {
-        Ok(_) => {}
-        Err(_) => env::set_var("RUST_LOG", "ERROR"),
-    }
+pub fn registry_latest_version(state_machine: &StateMachine) -> Result<u64, String> {
+    let response = update(
+        state_machine,
+        REGISTRY_CANISTER_ID,
+        "get_latest_version",
+        vec![],
+    )?;
+    deserialize_get_latest_version_response(response)
+        .map_err(|e| format!("Could not decode response {e:?}"))
 }
 
 pub fn registry_get_changes_since(
@@ -123,6 +139,34 @@ pub fn registry_get_changes_since(
     };
 
     RegistryGetChangesSinceResponse::decode(&result[..]).unwrap()
+}
+
+pub fn registry_get_chunk(
+    state_machine: &StateMachine,
+    chunk_content_sha256: &[u8],
+) -> Result<ic_registry_canister_api::Chunk, String> {
+    let content_sha256 = Some(chunk_content_sha256.to_vec());
+    let request = GetChunkRequest { content_sha256 };
+
+    let result = state_machine
+        .execute_ingress(
+            REGISTRY_CANISTER_ID,
+            "get_chunk",
+            Encode!(&request).unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(reject) => {
+            panic!(
+                "get chunk was rejected by the NNS registry canister: {:#?}",
+                reject
+            )
+        }
+    };
+
+    Decode!(&result, Result<ic_registry_canister_api::Chunk, String>).unwrap()
 }
 
 /// Creates a canister with a wasm, payload, and optionally settings on a StateMachine
@@ -197,8 +241,24 @@ pub fn update(
 ) -> Result<Vec<u8>, String> {
     // move time forward
     machine.advance_time(Duration::from_secs(2));
+    update_with_sender_bytes(
+        machine,
+        canister_target,
+        method_name,
+        payload,
+        PrincipalId::new_anonymous(),
+    )
+}
+
+pub fn update_with_sender_bytes(
+    machine: &StateMachine,
+    canister_target: CanisterId,
+    method_name: &str,
+    payload: Vec<u8>,
+    sender: PrincipalId,
+) -> Result<Vec<u8>, String> {
     let result = machine
-        .execute_ingress(canister_target, method_name, payload)
+        .execute_ingress_as(sender, canister_target, method_name, payload)
         .map_err(|e| e.to_string())?;
     match result {
         WasmResult::Reply(v) => Ok(v),
@@ -219,19 +279,16 @@ where
 {
     // move time forward
     machine.advance_time(Duration::from_secs(2));
-    let result = machine
-        .execute_ingress_as(
-            sender,
-            canister_target,
-            method_name,
-            Encode!(&payload).unwrap(),
-        )
-        .map_err(|e| e.to_string())?;
 
-    match result {
-        WasmResult::Reply(v) => Decode!(&v, ReturnType).map_err(|e| e.to_string()),
-        WasmResult::Reject(s) => Err(format!("Canister rejected with message: {}", s)),
-    }
+    let response = update_with_sender_bytes(
+        machine,
+        canister_target,
+        method_name,
+        Encode!(&payload).unwrap(),
+        sender,
+    )?;
+
+    Decode!(&response, ReturnType).map_err(|e| e.to_string())
 }
 
 /// Internal impl of querying canister
@@ -477,6 +534,7 @@ pub fn try_call_with_cycles_via_universal_canister(
 
     update(machine, sender, "update", universal_canister_payload)
 }
+
 /// Converts a canisterID to a u64 by relying on an implementation detail.
 fn canister_id_to_u64(canister_id: CanisterId) -> u64 {
     let bytes: [u8; 8] = canister_id.get().to_vec()[0..8]
@@ -486,22 +544,75 @@ fn canister_id_to_u64(canister_id: CanisterId) -> u64 {
     u64::from_be_bytes(bytes)
 }
 
-/// Create a canister at 0-indexed position (assuming canisters are created sequentially)
-/// This also creates all intermediate canisters
-pub fn create_canister_id_at_position(
+/// Check that a canister exists  at 0-indexed position (assuming canisters are created sequentially).
+/// If it does not, then create it (and all canisters in between).
+/// This approach is used because create_canister advances the canister ID counter in the underlying
+/// execution environment, which otherwise creates problems with creating other canisters
+/// with non-specified IDs.  If that bug is fixed, the behavior in this test helper can be changed.
+pub fn ensure_canister_id_exists_at_position_with_settings(
     machine: &StateMachine,
     position: u64,
     canister_settings: Option<CanisterSettingsArgs>,
 ) -> CanisterId {
-    let mut canister_id = machine.create_canister(canister_settings.clone());
-    while canister_id_to_u64(canister_id) < position {
-        canister_id = machine.create_canister(canister_settings.clone());
+    let mut canister_id = CanisterId::from_u64(position);
+    if !machine.canister_exists(canister_id) {
+        canister_id = machine.create_canister(None);
+        while canister_id_to_u64(canister_id) < position {
+            canister_id = machine.create_canister(canister_settings.clone());
+        }
+
+        // In case we tried using this when we are already past the sequence
+        assert_eq!(canister_id_to_u64(canister_id), position);
     }
 
-    // In case we tried using this when we are already past the sequence
-    assert_eq!(canister_id_to_u64(canister_id), position);
+    if let Some(settings) = canister_settings {
+        machine
+            .update_settings(&canister_id, settings)
+            .expect("Canister settings could not be updated.");
+    };
 
     canister_id
+}
+
+fn setup_nns_canister_at_position(
+    machine: &StateMachine,
+    index: u64,
+    wasm: Wasm,
+    payload: Vec<u8>,
+) {
+    let controllers = if index == ROOT_CANISTER_INDEX_IN_NNS_SUBNET {
+        vec![LIFELINE_CANISTER_ID.get()]
+    } else {
+        vec![ROOT_CANISTER_ID.get()]
+    };
+    let args = CanisterSettingsArgsBuilder::new()
+        .with_memory_allocation(memory_allocation_of(CanisterId::from_u64(index)))
+        .with_controllers(controllers)
+        .build();
+
+    let canister_id =
+        ensure_canister_id_exists_at_position_with_settings(machine, index, Some(args));
+
+    machine
+        .install_wasm_in_mode(
+            canister_id,
+            CanisterInstallMode::Install,
+            wasm.bytes(),
+            payload,
+        )
+        .unwrap();
+}
+
+pub fn setup_registry_with_correct_canister_id(
+    machine: &StateMachine,
+    init_payload: RegistryCanisterInitPayload,
+) {
+    setup_nns_canister_at_position(
+        machine,
+        REGISTRY_CANISTER_INDEX_IN_NNS_SUBNET,
+        build_registry_wasm(),
+        Encode!(&init_payload).unwrap(),
+    );
 }
 
 pub fn setup_nns_governance_with_correct_canister_id(
@@ -509,53 +620,69 @@ pub fn setup_nns_governance_with_correct_canister_id(
     init_payload: Governance,
     features: &[&str],
 ) {
-    let canister_id = create_canister_id_at_position(
+    setup_nns_canister_at_position(
         machine,
         GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET,
-        Some(
-            CanisterSettingsArgsBuilder::new()
-                .with_controllers(vec![ROOT_CANISTER_ID.get()])
-                .build(),
-        ),
+        build_governance_wasm_with_features(features),
+        Encode!(&init_payload).unwrap(),
     );
+}
 
-    assert_eq!(canister_id, GOVERNANCE_CANISTER_ID);
-    let governance_wasm = build_governance_wasm_with_features(features);
-    machine
-        .install_wasm_in_mode(
-            canister_id,
-            CanisterInstallMode::Install,
-            governance_wasm.bytes(),
-            init_payload.encode_to_vec(),
-        )
-        .unwrap();
+pub fn setup_nns_ledger_canister_with_correct_canister_id(
+    machine: &StateMachine,
+    init_payload: LedgerCanisterInitPayload,
+) {
+    setup_nns_canister_at_position(
+        machine,
+        LEDGER_CANISTER_INDEX_IN_NNS_SUBNET,
+        build_ledger_wasm(),
+        Encode!(&init_payload).unwrap(),
+    );
 }
 
 pub fn setup_nns_root_with_correct_canister_id(
     machine: &StateMachine,
     init_payload: RootCanisterInitPayload,
 ) {
-    let root_canister_id = create_canister_id_at_position(
+    setup_nns_canister_at_position(
         machine,
         ROOT_CANISTER_INDEX_IN_NNS_SUBNET,
-        Some(
-            CanisterSettingsArgsBuilder::new()
-                .with_memory_allocation(memory_allocation_of(ROOT_CANISTER_ID))
-                .with_controllers(vec![LIFELINE_CANISTER_ID.get()])
-                .build(),
-        ),
+        build_root_wasm(),
+        Encode!(&init_payload).unwrap(),
     );
+}
 
-    assert_eq!(root_canister_id, ROOT_CANISTER_ID);
+pub fn setup_cmc_with_correct_canister_id(
+    machine: &StateMachine,
+    init_payload: Option<CyclesCanisterInitPayload>,
+) {
+    setup_nns_canister_at_position(
+        machine,
+        CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET,
+        build_cmc_wasm(),
+        Encode!(&init_payload).unwrap(),
+    );
+}
 
-    machine
-        .install_wasm_in_mode(
-            root_canister_id,
-            CanisterInstallMode::Install,
-            build_root_wasm().bytes(),
-            Encode!(&init_payload).unwrap(),
-        )
-        .unwrap();
+pub fn setup_lifeline_with_correct_canister_id(
+    machine: &StateMachine,
+    init_payload: LifelineCanisterInitPayload,
+) {
+    setup_nns_canister_at_position(
+        machine,
+        LIFELINE_CANISTER_INDEX_IN_NNS_SUBNET,
+        build_lifeline_wasm(),
+        Encode!(&init_payload).unwrap(),
+    );
+}
+
+pub fn setup_gtc_with_correct_canister_id(machine: &StateMachine, init_payload: Gtc) {
+    setup_nns_canister_at_position(
+        machine,
+        GENESIS_TOKEN_CANISTER_INDEX_IN_NNS_SUBNET,
+        build_genesis_token_wasm(),
+        init_payload.encode_to_vec(),
+    );
 }
 
 /// Creates empty canisters up until the correct SNS-WASM id, then installs SNS-WASMs with payload
@@ -564,26 +691,21 @@ pub fn setup_nns_sns_wasms_with_correct_canister_id(
     machine: &StateMachine,
     init_payload: SnsWasmCanisterInitPayload,
 ) {
-    let canister_id = create_canister_id_at_position(
+    setup_nns_canister_at_position(
         machine,
         SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
-        Some(
-            CanisterSettingsArgsBuilder::new()
-                .with_controllers(vec![ROOT_CANISTER_ID.get()])
-                .build(),
-        ),
+        build_sns_wasms_wasm(),
+        Encode!(&init_payload).unwrap(),
     );
+}
 
-    assert_eq!(canister_id, SNS_WASM_CANISTER_ID);
-
-    machine
-        .install_wasm_in_mode(
-            canister_id,
-            CanisterInstallMode::Install,
-            build_sns_wasms_wasm().bytes(),
-            Encode!(&init_payload).unwrap(),
-        )
-        .unwrap();
+pub fn setup_nns_node_rewards_with_correct_canister_id(machine: &StateMachine) {
+    setup_nns_canister_at_position(
+        machine,
+        NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET,
+        build_node_rewards_wasm(),
+        Encode!().unwrap(),
+    );
 }
 
 /// Sets up the NNS for StateMachine tests.
@@ -596,83 +718,26 @@ pub fn setup_nns_canisters_with_features(
     init_payloads: NnsInitPayloads,
     features: &[&str],
 ) {
-    let registry_canister_id = create_canister(
-        machine,
-        build_registry_wasm(),
-        Some(Encode!(&init_payloads.registry).unwrap()),
-        Some(
-            CanisterSettingsArgsBuilder::new()
-                .with_memory_allocation(memory_allocation_of(REGISTRY_CANISTER_ID))
-                .with_controllers(vec![ROOT_CANISTER_ID.get()])
-                .build(),
-        ),
-    );
-    assert_eq!(registry_canister_id, REGISTRY_CANISTER_ID);
+    setup_registry_with_correct_canister_id(machine, init_payloads.registry);
 
     setup_nns_governance_with_correct_canister_id(machine, init_payloads.governance, features);
 
-    let ledger_canister_id = create_canister(
-        machine,
-        build_ledger_wasm(),
-        Some(Encode!(&init_payloads.ledger).unwrap()),
-        Some(
-            CanisterSettingsArgsBuilder::new()
-                .with_memory_allocation(memory_allocation_of(LEDGER_CANISTER_ID))
-                .with_controllers(vec![ROOT_CANISTER_ID.get()])
-                .build(),
-        ),
-    );
-    assert_eq!(ledger_canister_id, LEDGER_CANISTER_ID);
+    setup_nns_ledger_canister_with_correct_canister_id(machine, init_payloads.ledger);
 
     setup_nns_root_with_correct_canister_id(machine, init_payloads.root);
 
-    let cmc_canister_id = create_canister(
-        machine,
-        build_cmc_wasm(),
-        Some(Encode!(&init_payloads.cycles_minting).unwrap()),
-        Some(
-            CanisterSettingsArgsBuilder::new()
-                .with_memory_allocation(memory_allocation_of(CYCLES_MINTING_CANISTER_ID))
-                .with_controllers(vec![ROOT_CANISTER_ID.get()])
-                .build(),
-        ),
-    );
-    assert_eq!(cmc_canister_id, CYCLES_MINTING_CANISTER_ID);
+    setup_cmc_with_correct_canister_id(machine, init_payloads.cycles_minting);
 
-    let lifeline_canister_id = create_canister(
-        machine,
-        build_lifeline_wasm(),
-        Some(Encode!(&init_payloads.lifeline).unwrap()),
-        Some(
-            CanisterSettingsArgsBuilder::new()
-                .with_memory_allocation(memory_allocation_of(LIFELINE_CANISTER_ID))
-                .with_controllers(vec![ROOT_CANISTER_ID.get()])
-                .build(),
-        ),
-    );
-    assert_eq!(lifeline_canister_id, LIFELINE_CANISTER_ID);
+    setup_lifeline_with_correct_canister_id(machine, init_payloads.lifeline);
 
-    let genesis_token_canister_id = create_canister(
-        machine,
-        build_genesis_token_wasm(),
-        Some(init_payloads.genesis_token.encode_to_vec()),
-        Some(
-            CanisterSettingsArgsBuilder::new()
-                .with_memory_allocation(memory_allocation_of(GENESIS_TOKEN_CANISTER_ID))
-                .with_controllers(vec![ROOT_CANISTER_ID.get()])
-                .build(),
-        ),
-    );
-    assert_eq!(genesis_token_canister_id, GENESIS_TOKEN_CANISTER_ID);
+    setup_gtc_with_correct_canister_id(machine, init_payloads.genesis_token);
 
-    // We need to fill in 2 CanisterIds, but don't use Identity or NNS-UI canisters in our tests
-    let identity_canister_id = machine.create_canister(None);
-    assert_eq!(identity_canister_id, IDENTITY_CANISTER_ID);
-
-    let nns_ui_canister_id = machine.create_canister(None);
-    assert_eq!(nns_ui_canister_id, NNS_UI_CANISTER_ID);
+    // Canister IDs are automatically filled in by subsequent creation scripts (so they exist, but
+    // nothing is installed).
 
     setup_nns_sns_wasms_with_correct_canister_id(machine, init_payloads.sns_wasms);
+
+    setup_nns_node_rewards_with_correct_canister_id(machine);
 }
 
 pub fn mint_icp(state_machine: &StateMachine, destination: AccountIdentifier, amount: Tokens) {
@@ -1037,6 +1102,24 @@ pub fn nns_start_dissolving(
         sender,
         neuron_id,
         Operation::StartDissolving(nns_governance_pb::manage_neuron::StartDissolving {}),
+    )
+}
+
+pub fn nns_disburse_maturity(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+    percentage_to_disburse: u32,
+    to_account: Option<GovernanceAccount>,
+) -> ManageNeuronResponse {
+    manage_neuron(
+        state_machine,
+        sender,
+        neuron_id,
+        ManageNeuronCommandRequest::DisburseMaturity(DisburseMaturity {
+            percentage_to_disburse,
+            to_account,
+        }),
     )
 }
 
@@ -2116,7 +2199,7 @@ pub fn setup_cycles_ledger(state_machine: &StateMachine) {
 }
 
 pub fn setup_subnet_rental_canister_with_correct_canister_id(state_machine: &StateMachine) {
-    let canister_id = create_canister_id_at_position(
+    let canister_id = ensure_canister_id_exists_at_position_with_settings(
         state_machine,
         SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
         Some(

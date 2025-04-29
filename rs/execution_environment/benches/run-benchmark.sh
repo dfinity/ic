@@ -21,7 +21,7 @@ TMP_FILE="${TMP_FILE:-${MIN_FILE%.*}.tmp}"
 bash -c "set -o pipefail; \
     bazel run '${BENCH}' -- ${FILTER} ${BENCH_ARGS} \
         2>&1 | tee '${LOG_FILE}' | rg '^(test .* )?bench:' --line-buffered \
-        | sed -uEe 's/^test (.+) ... bench: +/> bench: \1 /'" \
+        | sed -uEe 's/^test (.+) ... bench: (.+)...... ns\/iter [(].*/> bench: \1 \2 ms\/iter/'" \
     || (
         echo "Error running the benchmark:"
         tail -10 "${LOG_FILE}" | sed 's/^/! /'
@@ -47,7 +47,8 @@ else
         min_result_ns="${min_result_ns% ns/iter*}"
 
         if [ -z "${min_result_ns}" ] || [ "${new_result_ns}" -lt "${min_result_ns}" ]; then
-            echo "^ improved: ${name} time: $((new_result_ns / 1000)) µs"
+            printf "^ improved: ${name} time: %s -> %s ms\n" \
+                "$((min_result_ns / 1000 / 1000))" "$((new_result_ns / 1000 / 1000))"
             min_bench="${new_bench}"
         fi
         echo "${min_bench}" >>"${TMP_FILE}"

@@ -1,7 +1,6 @@
 #![allow(clippy::disallowed_types)]
 
 use std::{
-    hash::{DefaultHasher, Hash, Hasher},
     sync::{Arc, RwLock},
     time::Instant,
 };
@@ -24,6 +23,7 @@ use prometheus::{
     register_int_gauge_with_registry, Encoder, HistogramOpts, HistogramVec, IntCounterVec,
     IntGauge, IntGaugeVec, Registry, TextEncoder,
 };
+use sha3::{Digest, Sha3_256};
 use tikv_jemalloc_ctl::{epoch, stats};
 use tower_http::request_id::RequestId;
 use tracing::info;
@@ -651,18 +651,22 @@ pub async fn metrics_middleware(
             .observe(response_size as f64);
 
         // Anonymization
-        let s = anonymization_salt.load();
+        let salt = anonymization_salt.load();
 
-        let hash_fn = |v: &str| -> String {
-            if s.is_none() {
+        let hash_fn = |input: &str| -> String {
+            let mut hasher = Sha3_256::new();
+
+            if let Some(v) = salt.as_ref() {
+                hasher.update(v.as_slice());
+            } else {
                 return "N/A".to_string();
             }
 
-            let mut h = DefaultHasher::new();
-            v.hash(&mut h);
-            s.hash(&mut h);
+            hasher.update(input);
+            let result = hasher.finalize();
 
-            format!("{:x}", h.finish())
+            // SHA3-256 is guaranteed to be 32 bytes, so this is safe
+            hex::encode(&result[..16])
         };
 
         let remote_addr = hash_fn(&remote_addr);

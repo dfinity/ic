@@ -10,7 +10,6 @@ rust_binary(
         "//rs/config",
         "//rs/embedders",
         "//rs/replicated_state",
-        "//rs/system_api",
         "//rs/types/types",
         "@crate_index//:clap",
         "@crate_index//:eyre",

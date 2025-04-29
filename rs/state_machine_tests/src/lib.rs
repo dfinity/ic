@@ -7,6 +7,7 @@ use ic_config::{
     adapters::AdaptersConfig,
     bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig,
     execution_environment::Config as HypervisorConfig,
+    flag_status::FlagStatus,
     message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES},
     state_manager::LsmtConfig,
     subnet_config::SubnetConfig,
@@ -49,19 +50,20 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types_private::{
     self as ic00, CanisterIdRecord, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
 };
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
     CanisterSnapshotResponse, CanisterStatusResultV2, ClearChunkStoreArgs, EcdsaCurve, EcdsaKeyId,
     InstallChunkedCodeArgs, LoadCanisterSnapshotArgs, SchnorrAlgorithm, SignWithECDSAReply,
     SignWithSchnorrReply, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
-    UploadChunkReply,
+    UploadChunkReply, VetKdDeriveKeyResult,
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{
     registry::{
-        crypto::v1::{ChainKeySigningSubnetList, PublicKey as PublicKeyProto, X509PublicKeyCert},
+        crypto::v1::{ChainKeyEnabledSubnetList, PublicKey as PublicKeyProto, X509PublicKeyCert},
         node::v1::{ConnectionEndpoint, NodeRecord},
         provisional_whitelist::v1::ProvisionalWhitelist as PbProvisionalWhitelist,
         replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
@@ -82,7 +84,7 @@ use ic_registry_client_helpers::{
 };
 use ic_registry_keys::{
     make_blessed_replica_versions_key, make_canister_migrations_record_key,
-    make_catch_up_package_contents_key, make_chain_key_signing_subnet_list_key,
+    make_catch_up_package_contents_key, make_chain_key_enabled_subnet_list_key,
     make_crypto_node_key, make_crypto_tls_cert_key, make_node_record_key,
     make_provisional_whitelist_record_key, make_replica_version_key, make_routing_table_record_key,
     ROOT_SUBNET_ID_KEY,
@@ -129,7 +131,9 @@ use ic_types::{
     },
     crypto::{
         canister_threshold_sig::MasterPublicKey,
-        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet, NiDkgTranscript},
+        threshold_sig::ni_dkg::{
+            NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet, NiDkgTranscript,
+        },
         AlgorithmId, CombinedThresholdSig, CombinedThresholdSigOf, KeyPurpose, Signable, Signed,
     },
     malicious_flags::MaliciousFlags,
@@ -198,7 +202,7 @@ pub enum SubmitIngressError {
     UserError(UserError),
 }
 
-struct FakeVerifier;
+pub struct FakeVerifier;
 
 impl Verifier for FakeVerifier {
     fn validate(
@@ -211,15 +215,26 @@ impl Verifier for FakeVerifier {
     }
 }
 
-/// Adds root subnet ID, routing table, subnet list,
-/// and provisional whitelist to the registry.
-pub fn finalize_registry(
+/// Adds global registry records to the registry managed by the registry data provider:
+/// - root subnet record;
+/// - routing table record;
+/// - subnet list record;
+/// - chain key records;
+pub fn add_global_registry_records(
     nns_subnet_id: SubnetId,
     routing_table: RoutingTable,
     subnet_list: Vec<SubnetId>,
+    chain_keys: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
 ) {
-    let registry_version = INITIAL_REGISTRY_VERSION;
+    let registry_version = if registry_data_provider.is_empty() {
+        INITIAL_REGISTRY_VERSION
+    } else {
+        let latest_registry_version = registry_data_provider.latest_version();
+        RegistryVersion::from(latest_registry_version.get() + 1)
+    };
+
+    // root subnet record
     let root_subnet_id_proto = SubnetIdProto {
         principal_id: Some(PrincipalIdIdProto {
             raw: nns_subnet_id.get_ref().to_vec(),
@@ -232,6 +247,8 @@ pub fn finalize_registry(
             Some(root_subnet_id_proto),
         )
         .unwrap();
+
+    // routing table record
     let pb_routing_table = PbRoutingTable::from(routing_table.clone());
     registry_data_provider
         .add(
@@ -240,7 +257,38 @@ pub fn finalize_registry(
             Some(pb_routing_table),
         )
         .unwrap();
+
+    // subnet list record
     add_subnet_list_record(&registry_data_provider, registry_version.get(), subnet_list);
+
+    // chain key records
+    for (key_id, subnets) in chain_keys {
+        let subnets = subnets
+            .into_iter()
+            .map(|subnet_id| SubnetIdProto {
+                principal_id: Some(PrincipalIdIdProto {
+                    raw: subnet_id.get_ref().to_vec(),
+                }),
+            })
+            .collect();
+        registry_data_provider
+            .add(
+                &make_chain_key_enabled_subnet_list_key(&key_id),
+                registry_version,
+                Some(ChainKeyEnabledSubnetList { subnets }),
+            )
+            .unwrap();
+    }
+}
+
+/// Adds initial registry records to the registry managed by the registry data provider:
+/// - provisional whitelist record;
+/// - blessed replica versions record;
+/// - replica version record.
+pub fn add_initial_registry_records(registry_data_provider: Arc<ProtoRegistryDataProvider>) {
+    let registry_version = INITIAL_REGISTRY_VERSION;
+
+    // provisional whitelist record
     let pb_whitelist = PbProvisionalWhitelist::from(ProvisionalWhitelist::All);
     registry_data_provider
         .add(
@@ -249,6 +297,8 @@ pub fn finalize_registry(
             Some(pb_whitelist),
         )
         .unwrap();
+
+    // blessed replica versions record
     let replica_version = ReplicaVersion::default();
     let blessed_replica_version = BlessedReplicaVersions {
         blessed_version_ids: vec![replica_version.clone().into()],
@@ -260,6 +310,8 @@ pub fn finalize_registry(
             Some(blessed_replica_version),
         )
         .unwrap();
+
+    // replica version record
     let replica_version_record = ReplicaVersionRecord {
         release_package_sha256_hex: "".to_string(),
         release_package_urls: vec![],
@@ -274,19 +326,26 @@ pub fn finalize_registry(
         .unwrap();
 }
 
-/// Adds subnet-related records to registry.
-/// Note: `finalize_registry` must be called with `routing_table` containing `subnet_id`
-/// before any other public method of the `StateMachine` (except for `get_subnet_id`) is invoked.
-fn make_nodes_registry(
+/// Adds subnet local registry records to the registry managed by the registry data provider:
+/// - node records;
+/// - node signing key records;
+/// - node TLS key records;
+/// - subnet CUP record;
+/// - subnet record;
+/// - subnet threshold key record.
+///
+/// Note: initial and global registry records must be added to the registry
+/// (using the fuctions `add_initial_registry_records` and `add_global_registry_records`)
+/// before any messages are executed on the `StateMachine`.
+fn add_subnet_local_registry_records(
     subnet_id: SubnetId,
     subnet_type: SubnetType,
-    chain_keys_enabled_status: &BTreeMap<MasterPublicKeyId, bool>,
     features: SubnetFeatures,
-    registry_data_provider: Arc<ProtoRegistryDataProvider>,
     nodes: &Vec<StateMachineNode>,
-    is_root_subnet: bool,
     public_key: ThresholdSigPublicKey,
+    chain_keys_enabled_status: &BTreeMap<MasterPublicKeyId, bool>,
     ni_dkg_transcript: NiDkgTranscript,
+    registry_data_provider: Arc<ProtoRegistryDataProvider>,
 ) -> FakeRegistryClient {
     let registry_version = if registry_data_provider.is_empty() {
         INITIAL_REGISTRY_VERSION
@@ -294,27 +353,6 @@ fn make_nodes_registry(
         let latest_registry_version = registry_data_provider.latest_version();
         RegistryVersion::from(latest_registry_version.get() + 1)
     };
-    // subnet_id must be different from nns_subnet_id, otherwise
-    // the IC00 call won't be charged.
-    let subnet_id_proto = SubnetIdProto {
-        principal_id: Some(PrincipalIdIdProto {
-            raw: subnet_id.get_ref().to_vec(),
-        }),
-    };
-    for (key_id, is_enabled) in chain_keys_enabled_status {
-        if !*is_enabled {
-            continue;
-        }
-        registry_data_provider
-            .add(
-                &make_chain_key_signing_subnet_list_key(key_id),
-                registry_version,
-                Some(ChainKeySigningSubnetList {
-                    subnets: vec![subnet_id_proto.clone()],
-                }),
-            )
-            .unwrap();
-    }
 
     for node in nodes {
         let node_record = NodeRecord {
@@ -398,7 +436,7 @@ fn make_nodes_registry(
         SubnetType::VerifiedApplication => 2 * 1024 * 1024,
         SubnetType::System => 3 * 1024 * 1024 + 512 * 1024,
     };
-    let max_ingress_messages_per_block = if is_root_subnet { 400 } else { 1000 };
+    let max_ingress_messages_per_block = 1000;
     let max_block_payload_size = 4 * 1024 * 1024;
 
     let node_ids: Vec<_> = nodes.iter().map(|n| n.node_id).collect();
@@ -801,6 +839,7 @@ enum SignatureSecretKey {
     EcdsaSecp256k1(ic_secp256k1::PrivateKey),
     SchnorrBip340(ic_secp256k1::PrivateKey),
     Ed25519(ic_ed25519::DerivedPrivateKey),
+    VetKD(ic_crypto_test_utils_vetkd::PrivateKey),
 }
 
 /// Represents a replicated state machine detached from the network layer that
@@ -813,6 +852,7 @@ pub struct StateMachine {
     secret_key: SecretKeyBytes,
     is_ecdsa_signing_enabled: bool,
     is_schnorr_signing_enabled: bool,
+    is_vetkd_enabled: bool,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     pub registry_client: Arc<FakeRegistryClient>,
     pub state_manager: Arc<StateManagerImpl>,
@@ -839,6 +879,7 @@ pub struct StateMachine {
     time_of_last_round: RwLock<Time>,
     chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     chain_key_subnet_secret_keys: BTreeMap<MasterPublicKeyId, SignatureSecretKey>,
+    ni_dkg_ids: BTreeMap<MasterPublicKeyId, NiDkgId>,
     pub replica_logger: ReplicaLogger,
     pub log_level: Option<Level>,
     pub nodes: Vec<StateMachineNode>,
@@ -917,13 +958,16 @@ pub struct StateMachineBuilder {
     chain_keys_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
     ecdsa_signature_fee: Option<Cycles>,
     schnorr_signature_fee: Option<Cycles>,
+    vetkd_derive_key_fee: Option<Cycles>,
     is_ecdsa_signing_enabled: bool,
     is_schnorr_signing_enabled: bool,
+    is_vetkd_enabled: bool,
+    is_snapshot_download_enabled: bool,
+    is_snapshot_upload_enabled: bool,
     features: SubnetFeatures,
     runtime: Option<Arc<Runtime>>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     lsmt_override: Option<LsmtConfig>,
-    is_root_subnet: bool,
     seed: [u8; 32],
     with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
     log_level: Option<Level>,
@@ -949,8 +993,12 @@ impl StateMachineBuilder {
             chain_keys_enabled_status: Default::default(),
             ecdsa_signature_fee: None,
             schnorr_signature_fee: None,
+            vetkd_derive_key_fee: None,
             is_ecdsa_signing_enabled: true,
             is_schnorr_signing_enabled: true,
+            is_vetkd_enabled: true,
+            is_snapshot_download_enabled: false,
+            is_snapshot_upload_enabled: false,
             features: SubnetFeatures {
                 http_requests: true,
                 ..SubnetFeatures::default()
@@ -958,7 +1006,6 @@ impl StateMachineBuilder {
             runtime: None,
             registry_data_provider: Arc::new(ProtoRegistryDataProvider::new()),
             lsmt_override: None,
-            is_root_subnet: false,
             seed: [42; 32],
             with_extra_canister_range: None,
             log_level: Some(Level::Warning),
@@ -1101,6 +1148,13 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_vetkd_derive_key_fee(self, fee: u128) -> Self {
+        Self {
+            vetkd_derive_key_fee: Some(Cycles::new(fee)),
+            ..self
+        }
+    }
+
     pub fn with_features(self, features: SubnetFeatures) -> Self {
         Self { features, ..self }
     }
@@ -1126,13 +1180,6 @@ impl StateMachineBuilder {
         Self { seed, ..self }
     }
 
-    pub fn with_root_subnet_config(self) -> Self {
-        Self {
-            is_root_subnet: true,
-            ..self
-        }
-    }
-
     pub fn with_ecdsa_signing_enabled(self, is_ecdsa_signing_enabled: bool) -> Self {
         Self {
             is_ecdsa_signing_enabled,
@@ -1143,6 +1190,27 @@ impl StateMachineBuilder {
     pub fn with_schnorr_signing_enabled(self, is_schnorr_signing_enabled: bool) -> Self {
         Self {
             is_schnorr_signing_enabled,
+            ..self
+        }
+    }
+
+    pub fn with_vetkd_enabled(self, is_vetkd_enabled: bool) -> Self {
+        Self {
+            is_vetkd_enabled,
+            ..self
+        }
+    }
+
+    pub fn with_snapshot_download_enabled(self, is_snapshot_download_enabled: bool) -> Self {
+        Self {
+            is_snapshot_download_enabled,
+            ..self
+        }
+    }
+
+    pub fn with_snapshot_upload_enabled(self, is_snapshot_upload_enabled: bool) -> Self {
+        Self {
+            is_snapshot_upload_enabled,
             ..self
         }
     }
@@ -1180,8 +1248,12 @@ impl StateMachineBuilder {
             self.chain_keys_enabled_status,
             self.ecdsa_signature_fee,
             self.schnorr_signature_fee,
+            self.vetkd_derive_key_fee,
             self.is_ecdsa_signing_enabled,
             self.is_schnorr_signing_enabled,
+            self.is_vetkd_enabled,
+            self.is_snapshot_download_enabled,
+            self.is_snapshot_upload_enabled,
             self.features,
             self.runtime.unwrap_or_else(|| {
                 tokio::runtime::Builder::new_current_thread()
@@ -1191,7 +1263,6 @@ impl StateMachineBuilder {
             }),
             self.registry_data_provider,
             self.lsmt_override,
-            self.is_root_subnet,
             self.seed,
             self.log_level,
             self.remove_old_states,
@@ -1203,6 +1274,7 @@ impl StateMachineBuilder {
         let mut routing_table = self.routing_table.clone();
         let registry_data_provider = self.registry_data_provider.clone();
         let extra_canister_range = self.with_extra_canister_range.clone();
+        let chain_keys_enabled_status = self.chain_keys_enabled_status.clone();
         let sm = self.build_internal();
         let subnet_id = sm.get_subnet_id();
         if routing_table.is_empty() {
@@ -1221,10 +1293,22 @@ impl StateMachineBuilder {
                 .expect("failed to assign a canister range");
         }
         let subnet_list = vec![sm.get_subnet_id()];
-        finalize_registry(
+        let chain_keys = chain_keys_enabled_status
+            .into_iter()
+            .filter_map(|(key_id, is_enabled)| {
+                if is_enabled {
+                    Some((key_id, vec![subnet_id]))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        add_initial_registry_records(registry_data_provider.clone());
+        add_global_registry_records(
             nns_subnet_id.unwrap_or(subnet_id),
             routing_table,
             subnet_list,
+            chain_keys,
             registry_data_provider,
         );
         sm.reload_registry();
@@ -1509,13 +1593,16 @@ impl StateMachine {
         chain_keys_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
         ecdsa_signature_fee: Option<Cycles>,
         schnorr_signature_fee: Option<Cycles>,
+        vetkd_derive_key_fee: Option<Cycles>,
         is_ecdsa_signing_enabled: bool,
         is_schnorr_signing_enabled: bool,
+        is_vetkd_enabled: bool,
+        is_snapshot_download_enabled: bool,
+        is_snapshot_upload_enabled: bool,
         features: SubnetFeatures,
         runtime: Arc<Runtime>,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
         lsmt_override: Option<LsmtConfig>,
-        is_root_subnet: bool,
         seed: [u8; 32],
         log_level: Option<Level>,
         remove_old_states: bool,
@@ -1528,10 +1615,16 @@ impl StateMachine {
 
         let metrics_registry = MetricsRegistry::new();
 
-        let (mut subnet_config, hypervisor_config) = match config {
+        let (mut subnet_config, mut hypervisor_config) = match config {
             Some(config) => (config.subnet_config, config.hypervisor_config),
             None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
         };
+        if is_snapshot_download_enabled {
+            hypervisor_config.canister_snapshot_download = FlagStatus::Enabled;
+        }
+        if is_snapshot_upload_enabled {
+            hypervisor_config.canister_snapshot_upload = FlagStatus::Enabled;
+        }
         if let Some(ecdsa_signature_fee) = ecdsa_signature_fee {
             subnet_config
                 .cycles_account_manager_config
@@ -1542,6 +1635,9 @@ impl StateMachine {
                 .cycles_account_manager_config
                 .schnorr_signature_fee = schnorr_signature_fee;
         }
+        if let Some(vetkd_derive_key_fee) = vetkd_derive_key_fee {
+            subnet_config.cycles_account_manager_config.vetkd_fee = vetkd_derive_key_fee;
+        }
 
         let mut node_rng = StdRng::from_seed(seed);
         let nodes: Vec<StateMachineNode> = (0..subnet_size)
@@ -1551,6 +1647,8 @@ impl StateMachine {
             dummy_initial_dkg_transcript_with_master_key(&mut StdRng::from_seed(seed));
         let public_key = (&ni_dkg_transcript).try_into().unwrap();
         let public_key_der = threshold_sig_public_key_to_der(public_key).unwrap();
+        let subnet_id =
+            subnet_id.unwrap_or(PrincipalId::new_self_authenticating(&public_key_der).into());
 
         let mut sm_config = ic_config::state_manager::Config::new(state_dir.path().to_path_buf());
         if let Some(lsmt_override) = lsmt_override {
@@ -1563,9 +1661,6 @@ impl StateMachine {
             ..Default::default()
         };
 
-        // subnet ID used to bootstrap the initial state
-        let subnet_id =
-            subnet_id.unwrap_or(PrincipalId::new_self_authenticating(&public_key_der).into());
         let state_manager = Arc::new(StateManagerImpl::new(
             Arc::new(FakeVerifier),
             subnet_id,
@@ -1576,23 +1671,16 @@ impl StateMachine {
             None,
             malicious_flags.clone(),
         ));
-        // override with the subnet ID stored in the state
-        let subnet_id = state_manager
-            .get_latest_state()
-            .take()
-            .metadata
-            .own_subnet_id;
 
-        let registry_client = make_nodes_registry(
+        let registry_client = add_subnet_local_registry_records(
             subnet_id,
             subnet_type,
-            &chain_keys_enabled_status,
             features,
-            registry_data_provider.clone(),
             &nodes,
-            is_root_subnet,
             public_key,
+            &chain_keys_enabled_status,
             ni_dkg_transcript,
+            registry_data_provider.clone(),
         );
 
         let cycles_account_manager = Arc::new(CyclesAccountManager::new(
@@ -1691,6 +1779,7 @@ impl StateMachine {
 
         let mut chain_key_subnet_public_keys = BTreeMap::new();
         let mut chain_key_subnet_secret_keys = BTreeMap::new();
+        let mut ni_dkg_ids = BTreeMap::new();
 
         for key_id in chain_keys_enabled_status.keys() {
             let (public_key, private_key) = match key_id {
@@ -1784,13 +1873,34 @@ impl StateMachine {
                         (public_key, private_key)
                     }
                 },
-                MasterPublicKeyId::VetKd(_vetkd_key_id) => {
-                    todo!("CRP-2629: Support vetKD in state machine tests")
+                MasterPublicKeyId::VetKd(id) => {
+                    use ic_crypto_test_utils_vetkd::PrivateKey;
+
+                    let private_key = PrivateKey::generate(id.name.as_bytes());
+
+                    let public_key = MasterPublicKey {
+                        algorithm_id: AlgorithmId::VetKD,
+                        public_key: private_key.public_key_bytes(),
+                    };
+
+                    let private_key = SignatureSecretKey::VetKD(private_key);
+
+                    let nidkg_id = NiDkgId {
+                        start_block_height: Height::new(0),
+                        dealer_subnet: subnet_id,
+                        dkg_tag: NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(
+                            id.clone(),
+                        )),
+                        target_subnet: NiDkgTargetSubnet::Local,
+                    };
+
+                    ni_dkg_ids.insert(key_id.clone(), nidkg_id);
+
+                    (public_key, private_key)
                 }
             };
 
             chain_key_subnet_secret_keys.insert(key_id.clone(), private_key);
-
             chain_key_subnet_public_keys.insert(key_id.clone(), public_key);
         }
 
@@ -1837,6 +1947,7 @@ impl StateMachine {
             public_key_der,
             is_ecdsa_signing_enabled,
             is_schnorr_signing_enabled,
+            is_vetkd_enabled,
             registry_data_provider,
             registry_client: registry_client.clone(),
             state_manager,
@@ -1863,6 +1974,7 @@ impl StateMachine {
             time_of_last_round: RwLock::new(time),
             chain_key_subnet_public_keys,
             chain_key_subnet_secret_keys,
+            ni_dkg_ids,
             replica_logger: replica_logger.clone(),
             log_level,
             nodes,
@@ -2295,6 +2407,38 @@ impl StateMachine {
         Ok(SignWithSchnorrReply { signature })
     }
 
+    fn build_vetkd_derive_key_reply(
+        &self,
+        context: &SignWithThresholdContext,
+    ) -> Result<VetKdDeriveKeyResult, UserError> {
+        assert!(context.is_vetkd());
+
+        if let Some(SignatureSecretKey::VetKD(k)) =
+            self.chain_key_subnet_secret_keys.get(&context.key_id())
+        {
+            let vetkd_context: Vec<u8> =
+                context.derivation_path.iter().flatten().cloned().collect();
+            let encrypted_key = k.vetkd_protocol(
+                context.request.sender.get().as_slice(),
+                &vetkd_context,
+                context.vetkd_args().input.as_ref(),
+                &context.vetkd_args().transport_public_key,
+                &[42; 32],
+            );
+
+            Ok(VetKdDeriveKeyResult { encrypted_key })
+        } else {
+            Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "Subnet {} does not hold threshold key {}.",
+                    self.subnet_id,
+                    context.key_id()
+                ),
+            ))
+        }
+    }
+
     fn process_threshold_signing_request(
         &self,
         id: &CallbackId,
@@ -2334,6 +2478,22 @@ impl StateMachine {
                     }
                 }
             }
+            ThresholdArguments::VetKd(_) if self.is_vetkd_enabled => {
+                match self.build_vetkd_derive_key_reply(context) {
+                    Ok(response) => {
+                        payload.consensus_responses.push(ConsensusResponse::new(
+                            *id,
+                            MsgPayload::Data(response.encode()),
+                        ));
+                    }
+                    Err(user_error) => {
+                        payload.consensus_responses.push(ConsensusResponse::new(
+                            *id,
+                            MsgPayload::Reject(RejectContext::from(user_error)),
+                        ));
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -2346,6 +2506,11 @@ impl StateMachine {
     /// If set to true, the state machine will handle sign_with_schnorr calls during `tick()`.
     pub fn set_schnorr_signing_enabled(&mut self, value: bool) {
         self.is_schnorr_signing_enabled = value;
+    }
+
+    /// If set to true, the state machine will handle vetkd_derive_key calls during `tick()`.
+    pub fn set_vetkd_enabled(&mut self, value: bool) {
+        self.is_vetkd_enabled = value;
     }
 
     /// Triggers a single round of execution without any new inputs.  The state
@@ -2455,7 +2620,7 @@ impl StateMachine {
             randomness: Randomness::from(seed),
             chain_key_subnet_public_keys: self.chain_key_subnet_public_keys.clone(),
             idkg_pre_signature_ids: BTreeMap::new(),
-            ni_dkg_ids: BTreeMap::new(),
+            ni_dkg_ids: self.ni_dkg_ids.clone(),
             registry_version: self.registry_client.get_latest_version(),
             time: time_of_next_round,
             consensus_responses: payload.consensus_responses,
@@ -3111,6 +3276,52 @@ impl StateMachine {
             WasmResult::Reply(data) => Ok(data),
             WasmResult::Reject(reason) => {
                 panic!("load_canister_snapshot call rejected: {}", reason)
+            }
+        })?
+    }
+
+    pub fn read_canister_snapshot_metadata(
+        &self,
+        args: &ReadCanisterSnapshotMetadataArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        let state = self.state_manager.get_latest_state().take();
+        let sender = state
+            .canister_state(&args.get_canister_id())
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap();
+        self.execute_ingress_as(
+            sender,
+            ic00::IC_00,
+            Method::ReadCanisterSnapshotMetadata,
+            args.encode(),
+        )
+        .map(|res| match res {
+            WasmResult::Reply(data) => Ok(data),
+            WasmResult::Reject(reason) => {
+                panic!("read_canister_snapshot_metadata call rejected: {}", reason)
+            }
+        })?
+    }
+
+    pub fn read_canister_snapshot_data(
+        &self,
+        args: &ReadCanisterSnapshotDataArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        let state = self.state_manager.get_latest_state().take();
+        let sender = state
+            .canister_state(&args.get_canister_id())
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap();
+        self.execute_ingress_as(
+            sender,
+            ic00::IC_00,
+            Method::ReadCanisterSnapshotData,
+            args.encode(),
+        )
+        .map(|res| match res {
+            WasmResult::Reply(data) => Ok(data),
+            WasmResult::Reject(reason) => {
+                panic!("read_canister_snapshot_data call rejected: {}", reason)
             }
         })?
     }
@@ -3771,6 +3982,15 @@ impl StateMachine {
             .metadata
             .subnet_call_context_manager
             .sign_with_schnorr_contexts()
+    }
+
+    /// Returns `vetkd_derive_key` contexts from internal subnet call context manager.
+    pub fn vetkd_derive_key_contexts(&self) -> BTreeMap<CallbackId, SignWithThresholdContext> {
+        let state = self.state_manager.get_latest_state().take();
+        state
+            .metadata
+            .subnet_call_context_manager
+            .vetkd_derive_key_contexts()
     }
 
     /// Returns canister HTTP request contexts from internal subnet call context manager.

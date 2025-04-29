@@ -21,6 +21,7 @@ DEPENDENCIES = [
     "@crate_index//:sha2",
     "@crate_index//:slog",
     "@crate_index//:strum",
+    "@crate_index//:tempfile",
     "@crate_index//:thiserror",
     "@crate_index//:tokio",
     "@crate_index//:tracing",
@@ -35,6 +36,7 @@ MACRO_DEPENDENCIES = [
 TEST_DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-error-types",
+    "//packages/ic-vetkd-utils",
     #TODO: try upgrading this to the latest bitcion crate
     "@crate_index//:bitcoin_0_28",
     "@crate_index//:candid_parser",
@@ -49,7 +51,7 @@ rust_library(
     name = "pocket-ic",
     srcs = glob(["src/**/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "7.0.0",
+    version = "8.0.0",
     deps = DEPENDENCIES,
 )
 

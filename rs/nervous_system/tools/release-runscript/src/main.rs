@@ -183,6 +183,7 @@ fn run_determine_targets(cmd: DetermineTargets) -> Result<()> {
         "Registry",
         "Cycles-Minting",
         "Genesis-Token",
+        "Node-Rewards",
     ];
     let sns_candidates = ["Root", "Governance", "Swap", "Ledger", "Archive", "Index"];
 
@@ -278,9 +279,6 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
     let mut sns_proposal_text_paths = Vec::new();
 
     {
-        // Switch to the commit being released while we generate the proposal texts
-        let _commit_switcher = CommitSwitcher::switch(commit.clone())?;
-
         println!(
             "Creating proposal texts for {} NNS canisters and {} SNS canisters at commit {}",
             nns_canisters.len(),

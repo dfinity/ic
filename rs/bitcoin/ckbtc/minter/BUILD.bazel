@@ -125,6 +125,7 @@ rust_test(
     crate = ":ckbtc_minter_lib",
     deps = [
         # Keep sorted.
+        "@crate_index//:assert_matches",
         "@crate_index//:bitcoin_0_28",
         "@crate_index//:maplit",
         "@crate_index//:mockall",
@@ -222,6 +223,7 @@ rust_ic_test(
         "@crate_index//:bitcoin_0_28",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
+        "@crate_index//:ic-cdk",
         "@crate_index//:minicbor",
         "@crate_index//:regex",
         "@crate_index//:serde_bytes",
