@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 #
-# Utilities common to container functionality
+# Common utilities
 #
-
 import os
 from pathlib import Path
 
 import invoke
+from loguru import logger as log
 
 
 def path_owned_by_root(p: Path) -> bool:
@@ -24,3 +24,20 @@ def take_ownership_of_file(file: Path):
 
 def remove_image(container_cmd: str, image_tag: str):
     invoke.run(f"{container_cmd} image rm -f {image_tag}")
+
+
+def purge_podman(container_cmd: str):
+    log.info("Cleaning up...")
+    cmd = f"{container_cmd} system prune --all --volumes --force"
+    invoke.run(cmd)
+
+
+def parse_size(s):
+    if s[-1] == "k" or s[-1] == "K":
+        return 1024 * int(s[:-1])
+    elif s[-1] == "m" or s[-1] == "M":
+        return 1024 * 1024 * int(s[:-1])
+    elif s[-1] == "g" or s[-1] == "G":
+        return 1024 * 1024 * 1024 * int(s[:-1])
+    else:
+        return int(s)
