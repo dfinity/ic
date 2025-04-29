@@ -225,23 +225,10 @@ impl MemoryDiskBytes for WasmHash {
 impl std::fmt::Display for WasmHash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         for byte in self.0 {
-            write!(f, "{:2x}", byte)?;
+            write!(f, "{:02x}", byte)?;
         }
         Ok(())
     }
-}
-
-#[test]
-fn wasmhash_display() {
-    let hash = WasmHash([0; WASM_HASH_LENGTH]);
-    let expected: String = "00".repeat(WASM_HASH_LENGTH);
-    assert_eq!(expected, format!("{}", hash));
-    let hash = WasmHash([11; WASM_HASH_LENGTH]);
-    let expected: String = "0b".repeat(WASM_HASH_LENGTH);
-    assert_eq!(expected, format!("{}", hash));
-    let hash = WasmHash([255; WASM_HASH_LENGTH]);
-    let expected: String = "ff".repeat(WASM_HASH_LENGTH);
-    assert_eq!(expected, format!("{}", hash));
 }
 
 /// Trait representing a Wasm file that can be memory-mapped.
@@ -406,7 +393,7 @@ impl ModuleStorage {
 
 #[cfg(test)]
 mod tests {
-    use crate::{CanisterModule, MemoryMappableWasmFile, WasmHash};
+    use crate::{CanisterModule, MemoryMappableWasmFile, WasmHash, WASM_HASH_LENGTH};
     use std::path::{Path, PathBuf};
     struct TestWasmFile(PathBuf);
     impl MemoryMappableWasmFile for TestWasmFile {
@@ -414,6 +401,20 @@ mod tests {
             &self.0
         }
     }
+
+    #[test]
+    fn wasmhash_display() {
+        let hash = WasmHash([0; WASM_HASH_LENGTH]);
+        let expected: String = "00".repeat(WASM_HASH_LENGTH);
+        assert_eq!(expected, format!("{}", hash));
+        let hash = WasmHash([11; WASM_HASH_LENGTH]);
+        let expected: String = "0b".repeat(WASM_HASH_LENGTH);
+        assert_eq!(expected, format!("{}", hash));
+        let hash = WasmHash([255; WASM_HASH_LENGTH]);
+        let expected: String = "ff".repeat(WASM_HASH_LENGTH);
+        assert_eq!(expected, format!("{}", hash));
+    }
+
     #[test]
     fn test_chunk_write_to_module() {
         let original_module = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
