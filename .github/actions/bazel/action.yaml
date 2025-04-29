@@ -102,9 +102,10 @@ runs:
       shell: bash
       if: (success() || failure()) && inputs.execlogs-artifact-name != ''
       run: |
-        for execlog in "$(find '${{ steps.metrics-tmpdir.outputs.dir }}' -name 'execlog-*.zst')"; do
+        for execlog in $(find '${{ steps.metrics-tmpdir.outputs.dir }}' -name 'execlog-*.zst'); do
           zstd -f -d "$execlog" -o execlog
           bazel-bin/bazel/execution_log_compact_to_csv \
+            --verbose \
             --input_execlog=execlog \
             --whitelist_pat='^//'
         done > '${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv'

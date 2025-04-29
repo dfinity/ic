@@ -48,6 +48,11 @@ def main():
         default=None,
         help="Regex to match target labels to include in the CSV. If omitted, all targets are included.",
     )
+    parser.add_argument(
+        "--verbose",
+        default=None,
+        help="Log every ExecLogEntry to stderr. This is useful for debugging.",
+    )
     args = parser.parse_args()
 
     id_to_entry = {}
@@ -65,6 +70,9 @@ def main():
             msg_buf = execlog_file.read(msg_len)
             exec_log_entry = spawn_pb2.ExecLogEntry()
             exec_log_entry.ParseFromString(msg_buf)
+
+            if args.verbose:
+                print(exec_log_entry, file=sys.stderr)
 
             # We intend to log the outputs of Spawns. Spawns refer to their output by ID
             # so we need to keep track of the ID to entry mapping. Important note:
