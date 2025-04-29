@@ -85,7 +85,7 @@ fn make_checkpoint_and_get_state_impl(
         )
     });
     *state = (*switched_state).clone();
-    flush_tip_channel(&tip_channel);
+    flush_tip_channel(tip_channel);
     load_checkpoint_and_validate_parallel(
         &cp_layout,
         state.metadata.own_subnet_type,
