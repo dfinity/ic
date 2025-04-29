@@ -43,16 +43,17 @@ use ic_nns_governance_api::pb::v1::{
         self,
         claim_or_refresh::{self, MemoAndController},
         configure::Operation,
-        AddHotKey, ClaimOrRefresh, Configure, Disburse, Follow, IncreaseDissolveDelay,
-        JoinCommunityFund, LeaveCommunityFund, RegisterVote, RemoveHotKey, Split, StakeMaturity,
+        AddHotKey, ClaimOrRefresh, Configure, Disburse, DisburseMaturity, Follow,
+        IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund, RegisterVote, RemoveHotKey,
+        Split, StakeMaturity,
     },
     manage_neuron_response::{self, ClaimOrRefreshResponse},
-    Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
-    Governance, GovernanceError, InstallCodeRequest, ListNeurons, ListNeuronsResponse,
-    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfo,
-    ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
-    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction,
-    ProposalActionRequest, ProposalInfo, RewardNodeProviders, Topic, Vote,
+    Account as GovernanceAccount, Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
+    GetNeuronsFundAuditInfoResponse, Governance, GovernanceError, InstallCodeRequest, ListNeurons,
+    ListNeuronsResponse, ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse,
+    ListProposalInfo, ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest,
+    ManageNeuronRequest, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics,
+    NnsFunction, ProposalActionRequest, ProposalInfo, RewardNodeProviders, Topic, Vote,
 };
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
@@ -86,7 +87,7 @@ use num_traits::ToPrimitive;
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayload;
 use serde::Serialize;
-use std::{convert::TryInto, env, time::Duration};
+use std::{convert::TryInto, time::Duration};
 
 /// A `StateMachine` builder setting the IC time to the current time
 /// and using the canister ranges of both the NNS and II subnets.
@@ -100,14 +101,6 @@ pub fn state_machine_builder_for_nns_tests() -> StateMachineBuilder {
             CanisterId::from_u64(0x2100000),
             CanisterId::from_u64(0x21FFFFE),
         ))
-}
-
-/// Turn down state machine logging to just errors to reduce noise in tests where this is not relevant
-pub fn reduce_state_machine_logging_unless_env_set() {
-    match env::var("RUST_LOG") {
-        Ok(_) => {}
-        Err(_) => env::set_var("RUST_LOG", "ERROR"),
-    }
 }
 
 pub fn registry_latest_version(state_machine: &StateMachine) -> Result<u64, String> {
@@ -1109,6 +1102,24 @@ pub fn nns_start_dissolving(
         sender,
         neuron_id,
         Operation::StartDissolving(nns_governance_pb::manage_neuron::StartDissolving {}),
+    )
+}
+
+pub fn nns_disburse_maturity(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+    percentage_to_disburse: u32,
+    to_account: Option<GovernanceAccount>,
+) -> ManageNeuronResponse {
+    manage_neuron(
+        state_machine,
+        sender,
+        neuron_id,
+        ManageNeuronCommandRequest::DisburseMaturity(DisburseMaturity {
+            percentage_to_disburse,
+            to_account,
+        }),
     )
 }
 
