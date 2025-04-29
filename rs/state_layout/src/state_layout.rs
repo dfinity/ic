@@ -2484,22 +2484,6 @@ impl<T> MemoryMappableWasmFile for WasmFile<T>
 where
     T: ReadPolicy,
 {
-    fn mmap_file(&self) -> std::io::Result<ic_sys::mmap::ScopedMmap> {
-        use std::io;
-        let f = std::fs::File::open(&self.path)?;
-        let len = f.metadata()?.len();
-        if len == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("{}: Wasm file must not be empty", self.path.display()),
-            ));
-        }
-        match ic_sys::mmap::ScopedMmap::from_readonly_file(&f, len as usize) {
-            Ok(mmap) => Ok(mmap),
-            Err(_) => Err(io::Error::last_os_error()),
-        }
-    }
-
     fn path(&self) -> &Path {
         &self.path
     }

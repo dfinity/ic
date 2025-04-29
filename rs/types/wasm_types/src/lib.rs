@@ -241,9 +241,23 @@ fn wasmhash_display() {
 /// Implementors **must guarantee** that the path returned by `path()`
 /// always points to a valid and accessible file whenever `mmap_file()` is called.
 pub trait MemoryMappableWasmFile {
-    fn mmap_file(&self) -> std::io::Result<ic_sys::mmap::ScopedMmap>;
-
     fn path(&self) -> &Path;
+
+    fn mmap_file(&self) -> std::io::Result<ic_sys::mmap::ScopedMmap> {
+        use std::io;
+        let f = std::fs::File::open(&self.path())?;
+        let len = f.metadata()?.len();
+        if len == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("{}: Wasm file must not be empty", self.path().display()),
+            ));
+        }
+        match ic_sys::mmap::ScopedMmap::from_readonly_file(&f, len as usize) {
+            Ok(mmap) => Ok(mmap),
+            Err(_) => Err(io::Error::last_os_error()),
+        }
+    }
 }
 
 // We introduce another enum instead of making `BinaryEncodedWasm` an enum to
@@ -367,41 +381,54 @@ impl ModuleStorage {
     }
 }
 
-#[test]
-fn test_chunk_write_to_module() {
-    let original_module = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-    let original_hash = ic_crypto_sha2::Sha256::hash(original_module.as_slice());
-    let chunk_size = 4;
-    let mut module = CanisterModule::new(original_module.clone());
-    assert_eq!(original_hash, module.module_hash());
-
-    let mut offset = 0;
-    for chunk in original_module.chunks(chunk_size) {
-        module.write(chunk, offset).unwrap();
-        offset += chunk.len();
+#[cfg(test)]
+mod tests {
+    use crate::{CanisterModule, MemoryMappableWasmFile, WasmHash};
+    use std::path::{Path, PathBuf};
+    struct TestWasmFile(PathBuf);
+    impl MemoryMappableWasmFile for TestWasmFile {
+        fn path(&self) -> &Path {
+            &self.0
+        }
     }
-    assert_eq!(&original_module, module.as_slice());
-    assert_eq!(original_hash, module.module_hash());
+    #[test]
+    fn test_chunk_write_to_module() {
+        let original_module = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let original_hash = ic_crypto_sha2::Sha256::hash(original_module.as_slice());
+        let chunk_size = 4;
+        let mut module = CanisterModule::new(original_module.clone());
+        assert_eq!(original_hash, module.module_hash());
 
-    module.write(&[1, 2, 3], 999).unwrap_err();
-    module
-        .write(&[1, 2, 3], original_module.len() - 1)
-        .unwrap_err();
-    module
-        .write(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 0)
-        .unwrap_err();
-}
+        let mut offset = 0;
+        for chunk in original_module.chunks(chunk_size) {
+            module.write(chunk, offset).unwrap();
+            offset += chunk.len();
+        }
+        assert_eq!(&original_module, module.as_slice());
+        assert_eq!(original_hash, module.module_hash());
 
-#[test]
-fn test_write_module_file() {
-    use std::io::Write;
-    let mut tmp = tempfile::NamedTempFile::new().unwrap();
-    tmp.write_all(&[0x00, 0x61, 0x73, 0x6d, 0x00, 0x00, 0x00, 0x00])
-        .unwrap();
-    let mut module = CanisterModule::new_from_file(tmp.path().into(), WasmHash([0; 32])).unwrap();
-    module.write(&[9], 5).unwrap();
-    assert_eq!(
-        &[0x00, 0x61, 0x73, 0x6d, 0x00, 0x09, 0x00, 0x00],
-        module.as_slice()
-    );
+        module.write(&[1, 2, 3], 999).unwrap_err();
+        module
+            .write(&[1, 2, 3], original_module.len() - 1)
+            .unwrap_err();
+        module
+            .write(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 0)
+            .unwrap_err();
+    }
+
+    #[test]
+    fn test_write_module_file() {
+        use std::io::Write;
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        tmp.write_all(&[0x00, 0x61, 0x73, 0x6d, 0x00, 0x00, 0x00, 0x00])
+            .unwrap();
+        let test_wasm_file = TestWasmFile(tmp.path().to_path_buf());
+        let mut module =
+            CanisterModule::new_from_file(Box::new(test_wasm_file), WasmHash([0; 32])).unwrap();
+        module.write(&[9], 5).unwrap();
+        assert_eq!(
+            &[0x00, 0x61, 0x73, 0x6d, 0x00, 0x09, 0x00, 0x00],
+            module.as_slice()
+        );
+    }
 }
