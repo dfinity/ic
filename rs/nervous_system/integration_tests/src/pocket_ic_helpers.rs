@@ -464,9 +464,7 @@ impl NnsInstaller {
         self
     }
 
-    pub fn with_test_node_rewards_canister(&mut self) -> &mut Self {
-
-    }
+    pub fn with_test_node_rewards_canister(&mut self) -> &mut Self {}
 
     /// Requests the NNS Governance to be initialized with the following neurons.
     /// Mutually exclusive with `with_neurons_fund_hotkeys`.
