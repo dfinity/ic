@@ -55,6 +55,10 @@ def main():
     )
     args = parser.parse_args()
 
+    # We intend to log the outputs of Spawns. Spawns refer to their output by ID
+    # so we need to keep track of the ID to entry mapping. Important note:
+    # if an entry (like a Spawn) refers to another entry (like a File or Directory)
+    # it's guaranteed the latter will precede the former.
     id_to_entry = {}
 
     with open(args.input_execlog, "rb") as execlog_file, sys.stdout as csv_file:
@@ -74,34 +78,31 @@ def main():
             if args.verbose:
                 print(exec_log_entry, file=sys.stderr)
 
-            # We intend to log the outputs of Spawns. Spawns refer to their output by ID
-            # so we need to keep track of the ID to entry mapping. Important note:
-            # if an entry (like a Spawn) refers to another entry (like a File or Direcory)
-            # it's guaranteed the latter will precede the former.
             entry_type = exec_log_entry.WhichOneof("type")
             if entry_type in ["file", "directory"]:
                 id_to_entry[exec_log_entry.id] = exec_log_entry
-
-            if entry_type == "spawn":
+            elif entry_type == "spawn":
                 label = exec_log_entry.spawn.target_label
-                if args.whitelist_pat is None or re.match(args.whitelist_pat, label):
-                    for output in exec_log_entry.spawn.outputs:
-                        output_type = output.WhichOneof("type")
-                        if output_type == "output_id":
-                            output_entry = id_to_entry[output.output_id]
-                            output_entry_type = output_entry.WhichOneof("type")
-                            if output_entry_type == "file":
-                                path = output_entry.file.path
-                                hash = output_entry.file.digest.hash
-                                writer.writerow([label, path, hash])
-                            elif output_entry_type == "directory":
-                                dir_path = output_entry.directory.path
-                                for dir_file in output_entry.directory.files:
-                                    path = dir_path + "/" + dir_file.path
-                                    hash = dir_file.digest.hash
-                                    writer.writerow([label, path, hash])
-                            else:
-                                raise ValueError(f"Unexpected output entry type: {output_entry_type}")
+                if args.whitelist_pat is not None and not re.match(args.whitelist_pat, label):
+                    continue
+                for output in exec_log_entry.spawn.outputs:
+                    output_type = output.WhichOneof("type")
+                    if output_type != "output_id":
+                        continue
+                    output_entry = id_to_entry[output.output_id]
+                    output_entry_type = output_entry.WhichOneof("type")
+                    if output_entry_type == "file":
+                        path = output_entry.file.path
+                        hash = output_entry.file.digest.hash
+                        writer.writerow([label, path, hash])
+                    elif output_entry_type == "directory":
+                        dir_path = output_entry.directory.path
+                        for dir_file in output_entry.directory.files:
+                            path = dir_path + "/" + dir_file.path
+                            hash = dir_file.digest.hash
+                            writer.writerow([label, path, hash])
+                    else:
+                        raise ValueError(f"Unexpected output entry type: {output_entry_type}")
 
 
 if __name__ == "__main__":

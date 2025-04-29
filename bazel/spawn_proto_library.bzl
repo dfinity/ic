@@ -4,7 +4,8 @@ This module fetches the spawn.proto file from the bazel source code and turns it
 
 def _spawn_proto_library_impl(ctx):
     ctx.download(
-        url = "https://raw.githubusercontent.com/bazelbuild/bazel/refs/tags/{bazel_version}/src/main/protobuf/spawn.proto".format(bazel_version = native.bazel_version),
+        # We assume the ExecLogEntry proto message is forward compatible such that we can use the spawn.proto from bazel-7.6.0 even after upgrading bazel.
+        url = "https://raw.githubusercontent.com/bazelbuild/bazel/refs/tags/7.6.0/src/main/protobuf/spawn.proto",
         output = "spawn.proto",
         sha256 = "381bcb109e2855d4055fdc75988cc2144e0a92aa8586298123bb662cdefa6afe",
     )
