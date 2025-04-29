@@ -579,6 +579,7 @@ where
             hot_keys: self.hot_keys_map.len(),
             followees: self.followees_map.len(),
             known_neuron_data: self.known_neuron_data_map.len(),
+            maturity_disbursements: self.maturity_disbursements_map.len(),
         }
     }
 
@@ -751,6 +752,7 @@ pub struct NeuronStorageLens {
     pub hot_keys: u64,
     pub followees: u64,
     pub known_neuron_data: u64,
+    pub maturity_disbursements: u64,
 }
 
 use crate::{governance::MAX_NEURON_RECENT_BALLOTS, pb::v1::Vote};
