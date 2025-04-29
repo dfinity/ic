@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -57,4 +57,4 @@ rust_test(
     deps = [
         ":config_types_compatibility_lib",
     ],
-) 
+)
