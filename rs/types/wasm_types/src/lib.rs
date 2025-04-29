@@ -245,7 +245,7 @@ pub trait MemoryMappableWasmFile {
 
     fn mmap_file(&self) -> std::io::Result<ic_sys::mmap::ScopedMmap> {
         use std::io;
-        let f = std::fs::File::open(&self.path())?;
+        let f = std::fs::File::open(self.path())?;
         let len = f.metadata()?.len();
         if len == 0 {
             return Err(io::Error::new(
