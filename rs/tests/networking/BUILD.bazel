@@ -202,14 +202,13 @@ system_test_nns(
     ],
 )
 
-system_test_nns(
+system_test(
     name = "http_endpoints_public_spec_test",
     env = UNIVERSAL_CANISTER_ENV,
     flaky = False,
     target_compatible_with = ["@platforms//os:linux"],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + HTTP_ENDPOINTS_DEPS + [
-        "@crate_index//:futures",
         "@crate_index//:tokio",
         "@crate_index//:tokio-util",
     ],

@@ -14,7 +14,6 @@ canister-test = { path = "../../rust_canisters/canister_test" }
 canister_http = { path = "./canister_http" }
 cloner-canister-types = { path = "./canisters" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
-futures = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
