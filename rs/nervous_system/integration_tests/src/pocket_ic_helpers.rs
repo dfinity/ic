@@ -474,6 +474,11 @@ impl NnsInstaller {
         self
     }
 
+    pub fn with_node_rewards_canister(&mut self) -> &mut Self {
+        self.with_node_rewards_canister = Some("".to_string());
+        self
+    }
+
     /// Requests the NNS Governance to be initialized with the following neurons.
     /// Mutually exclusive with `with_neurons_fund_hotkeys`.
     pub fn with_neurons(&mut self, neurons: Vec<Neuron>) -> &mut Self {

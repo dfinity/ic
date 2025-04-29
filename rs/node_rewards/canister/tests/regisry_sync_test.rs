@@ -23,12 +23,15 @@ async fn test_registry_value_syncing() {
     let wasm = build_node_rewards_test_wasm();
 
     let canister_id = pocket_ic.create_canister().await;
+    pocket_ic.add_cycles(canister_id, 100_000_000_000_000).await;
     pocket_ic
         .install_canister(canister_id, wasm.bytes(), Encode!().unwrap(), None)
         .await;
 
     // This is the value from invariant_compliant_mutation
     let test_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(999));
+    // We don't use agents here because this method is test-only, so we won't
+    // support it beyond this one test.
     let response = pocket_ic
         .query_call(
             canister_id,
