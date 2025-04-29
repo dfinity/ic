@@ -89,7 +89,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             patch_args = ["-p4"],
             patches = ["@@//bazel:cranelift-isle.patch"],
         )],
-        "cranelift-srcgen-lib": [crate.annotation(
+        "cranelift-srcgen": [crate.annotation(
             # Patch for issue https://github.com/bytecodealliance/wasmtime/issues/9553
             patch_args = ["-p4"],
             patches = ["@@//bazel:cranelift-srcgen-lib.patch"],
