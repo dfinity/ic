@@ -16,17 +16,14 @@ use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_P
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
     self, ALL_NNS_CANISTER_IDS, CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID, NODE_REWARDS_CANISTER_ID,
-    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance_api::pb::v1::{
     install_code::CanisterInstallMode, CreateServiceNervousSystem, GetNeuronsFundAuditInfoResponse,
     InstallCodeRequest, ListNeurons, ListNeuronsResponse, MakeProposalRequest,
     ManageNeuronCommandRequest, ManageNeuronResponse, NetworkEconomics, Neuron,
     ProposalActionRequest, ProposalInfo,
-};
-use ic_nns_test_utils::common::{
-    build_mainnet_node_rewards_wasm, build_node_rewards_test_wasm, build_node_rewards_wasm,
 };
 use ic_nns_test_utils::{
     common::{
@@ -272,8 +269,7 @@ impl SnsWasmCanistersInstaller {
         pocket_ic: &PocketIc,
     ) -> Result<DeployedSnsStartingInfo, String> {
         let with_mainnet_sns_canisters = self.mainnet_sns_canister_versions.expect(
-            "Please explicitly request either mainnet or \
-                tip-of-the-branch SNS canisters version.",
+            "Please explicitly request either mainnet or tip-of-the-branch SNS canisters version.",
         );
         let (root_wasm, governance_wasm, swap_wasm, index_wasm, ledger_wasm, archive_wasm) =
             if with_mainnet_sns_canisters {
@@ -396,7 +392,6 @@ pub struct NnsInstaller {
     with_cycles_ledger: bool,
     with_index_canister: bool,
     with_test_governance_canister: bool,
-    with_node_rewards_canister: Option<String>,
     neurons: Option<Vec<Neuron>>,
 }
 
@@ -469,16 +464,6 @@ impl NnsInstaller {
         self
     }
 
-    pub fn with_test_node_rewards_canister(&mut self) -> &mut Self {
-        self.with_node_rewards_canister = Some("test".to_string());
-        self
-    }
-
-    pub fn with_node_rewards_canister(&mut self) -> &mut Self {
-        self.with_node_rewards_canister = Some("".to_string());
-        self
-    }
-
     /// Requests the NNS Governance to be initialized with the following neurons.
     /// Mutually exclusive with `with_neurons_fund_hotkeys`.
     pub fn with_neurons(&mut self, neurons: Vec<Neuron>) -> &mut Self {
@@ -498,8 +483,7 @@ impl NnsInstaller {
             .mainnet_nns_canister_versions
             .expect("Please explicitly request either mainnet or tip-of-the-branch NNS version.");
 
-        assert!(
-            !(with_mainnet_canister_versions && self.with_test_governance_canister),
+        assert!(!(with_mainnet_canister_versions && self.with_test_governance_canister),
             "The test version of the governance canister cannot be used with mainnet versions of the NNS canisters"
         );
 
@@ -674,31 +658,6 @@ impl NnsInstaller {
                 LEDGER_INDEX_CANISTER_ID,
                 Encode!(&nns_init_payload.index).unwrap(),
                 ledger_index_wasm,
-                Some(ROOT_CANISTER_ID.get()),
-            )
-            .await;
-        }
-
-        if let Some(variety) = self.with_node_rewards_canister {
-            if with_mainnet_canister_versions && variety != "".to_string() {
-                panic!("Test version is not available for mainnet canisters");
-            }
-            let node_rewards_wasm = if with_mainnet_canister_versions {
-                build_mainnet_node_rewards_wasm()
-            } else {
-                if variety == "test" {
-                    build_node_rewards_test_wasm()
-                } else {
-                    build_node_rewards_wasm()
-                }
-            };
-
-            install_canister(
-                pocket_ic,
-                "Node Rewards",
-                NODE_REWARDS_CANISTER_ID,
-                Encode!().unwrap(),
-                node_rewards_wasm,
                 Some(ROOT_CANISTER_ID.get()),
             )
             .await;
@@ -2869,8 +2828,7 @@ pub mod sns {
                 last_auto_finalization_status = Some(auto_finalization_status);
             }
             Err(format!(
-                "Looks like the expected SNS auto-finalization status of {status:?} \
-                    is never going to be reached: {last_auto_finalization_status:#?}",
+                "Looks like the expected SNS auto-finalization status of {status:?} is never going to be reached: {last_auto_finalization_status:#?}",
             ))
         }
 
