@@ -9,7 +9,7 @@ lazy_static! {
     //
     // Only useful for tests (but not harmful if used elsewhere).
     pub static ref MEGA_BLOB: Vec<u8> = {
-        const MOD: u64 = (u8::MAX as u64 + 1) as u64;
+        const MOD: u64 = u8::MAX as u64 + 1;
 
         (0..5_000_000)
             .map(|i| {

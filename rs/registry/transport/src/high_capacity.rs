@@ -23,8 +23,89 @@
 use crate::pb::v1::{
     high_capacity_registry_get_value_response, high_capacity_registry_mutation,
     high_capacity_registry_value, HighCapacityRegistryAtomicMutateRequest,
-    HighCapacityRegistryMutation, RegistryAtomicMutateRequest, RegistryMutation,
+    HighCapacityRegistryDelta, HighCapacityRegistryGetChangesSinceResponse,
+    HighCapacityRegistryMutation, HighCapacityRegistryValue, RegistryAtomicMutateRequest,
+    RegistryDelta, RegistryGetChangesSinceResponse, RegistryMutation, RegistryValue,
 };
+
+mod down_grade_get_changes_since_response {
+    use super::*;
+
+    impl TryFrom<HighCapacityRegistryGetChangesSinceResponse> for RegistryGetChangesSinceResponse {
+        type Error = String;
+
+        fn try_from(
+            original: HighCapacityRegistryGetChangesSinceResponse,
+        ) -> Result<RegistryGetChangesSinceResponse, String> {
+            let HighCapacityRegistryGetChangesSinceResponse {
+                error,
+                version,
+                deltas,
+            } = original;
+
+            let deltas = deltas
+                .into_iter()
+                .map(RegistryDelta::try_from)
+                .collect::<Result<Vec<RegistryDelta>, String>>()?;
+
+            Ok(RegistryGetChangesSinceResponse {
+                error,
+                version,
+                deltas,
+            })
+        }
+    }
+
+    impl TryFrom<HighCapacityRegistryDelta> for RegistryDelta {
+        type Error = String;
+
+        fn try_from(original: HighCapacityRegistryDelta) -> Result<RegistryDelta, String> {
+            let HighCapacityRegistryDelta { key, values } = original;
+
+            let values = values
+                .into_iter()
+                .map(RegistryValue::try_from)
+                .collect::<Result<Vec<RegistryValue>, String>>()?;
+
+            Ok(RegistryDelta { key, values })
+        }
+    }
+
+    impl TryFrom<HighCapacityRegistryValue> for RegistryValue {
+        type Error = String;
+
+        fn try_from(original: HighCapacityRegistryValue) -> Result<RegistryValue, String> {
+            let HighCapacityRegistryValue {
+                version,
+                content,
+
+                // This gets dropped.
+                timestamp_seconds: _,
+            } = original;
+
+            let (value, deletion_marker) = match content {
+                None => (vec![], false),
+                Some(high_capacity_registry_value::Content::Value(value)) => (value, false),
+
+                Some(high_capacity_registry_value::Content::DeletionMarker(deletion_marker)) => {
+                    (vec![], deletion_marker)
+                }
+
+                Some(high_capacity_registry_value::Content::LargeValueChunkKeys(_)) => {
+                    return Err("Unable to convert to legacy type, \
+                                because of large chunked value."
+                        .to_string());
+                }
+            };
+
+            Ok(RegistryValue {
+                version,
+                value,
+                deletion_marker,
+            })
+        }
+    }
+} // mod down_grade_get_changes_since_response
 
 impl From<RegistryAtomicMutateRequest> for HighCapacityRegistryAtomicMutateRequest {
     fn from(original: RegistryAtomicMutateRequest) -> HighCapacityRegistryAtomicMutateRequest {

@@ -1,17 +1,21 @@
 use canister_test::CanisterInstallMode;
+use ic_base_types::PrincipalId;
 use ic_nervous_system_chunks::{Chunks, MEGA_BLOB, MEGA_BLOB_CHUNK_KEYS};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_test_utils::{
     common::{build_registry_wasm, NnsInitPayloadsBuilder},
     state_test_helpers::{
-        registry_get_chunk, registry_get_value, registry_latest_version,
-        registry_mutate_daniel_wong, setup_nns_canisters, state_machine_builder_for_nns_tests,
+        registry_get_chunk, registry_get_value, registry_high_capacity_get_changes_since,
+        registry_latest_version, registry_mutate_daniel_wong, setup_nns_canisters,
+        state_machine_builder_for_nns_tests,
     },
 };
 use ic_registry_canister_api::{mutate_daniel_wong, Chunk};
 use ic_registry_transport::pb::v1::{
-    high_capacity_registry_get_value_response, registry_error,
-    HighCapacityRegistryGetValueResponse, LargeValueChunkKeys, RegistryError,
+    high_capacity_registry_get_value_response, high_capacity_registry_value, registry_error,
+    HighCapacityRegistryDelta, HighCapacityRegistryGetChangesSinceResponse,
+    HighCapacityRegistryGetValueResponse, HighCapacityRegistryValue, LargeValueChunkKeys,
+    RegistryError,
 };
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager};
 use pretty_assertions::assert_eq;
@@ -108,7 +112,7 @@ fn test_mutate_daniel_wong() {
 
     const RED_HERRING_ID: u64 = 999;
 
-    let _version = registry_mutate_daniel_wong(
+    let prior_small_version = registry_mutate_daniel_wong(
         &state_machine,
         mutate_daniel_wong::Request {
             id: 42,
@@ -123,7 +127,7 @@ fn test_mutate_daniel_wong() {
             operation: mutate_daniel_wong::Operation::UpsertSmall,
         },
     );
-    let _version = registry_mutate_daniel_wong(
+    let prior_red_herring_version = registry_mutate_daniel_wong(
         &state_machine,
         mutate_daniel_wong::Request {
             id: RED_HERRING_ID,
@@ -147,6 +151,7 @@ fn test_mutate_daniel_wong() {
             operation: mutate_daniel_wong::Operation::Delete,
         },
     );
+    let last_version = delete_version;
 
     let delete_get_value_response = registry_get_value(&state_machine, b"daniel_wong_42");
 
@@ -190,6 +195,76 @@ fn test_mutate_daniel_wong() {
             )),
             version: final_red_herring_version,
             timestamp_seconds: 0,
+            error: None,
+        },
+    );
+
+    // Step 3.2: Verify get_change_since.
+
+    let changes = registry_high_capacity_get_changes_since(
+        &state_machine,
+        PrincipalId::new_user_test_id(42),
+        original_version, // version
+    );
+    assert_eq!(
+        changes,
+        HighCapacityRegistryGetChangesSinceResponse {
+            deltas: vec![
+                HighCapacityRegistryDelta {
+                    key: b"daniel_wong_42".to_vec(),
+                    values: vec![
+                        HighCapacityRegistryValue {
+                            version: delete_version,
+                            content: Some(high_capacity_registry_value::Content::DeletionMarker(
+                                true
+                            )),
+                            timestamp_seconds: 0,
+                        },
+                        HighCapacityRegistryValue {
+                            version: small_version,
+                            content: Some(high_capacity_registry_value::Content::Value(
+                                b"small value".to_vec(),
+                            )),
+                            timestamp_seconds: 0,
+                        },
+                        HighCapacityRegistryValue {
+                            version: prior_small_version,
+                            content: Some(
+                                high_capacity_registry_value::Content::LargeValueChunkKeys(
+                                    LargeValueChunkKeys {
+                                        chunk_content_sha256s: MEGA_BLOB_CHUNK_KEYS.clone(),
+                                    }
+                                )
+                            ),
+                            timestamp_seconds: 0,
+                        },
+                    ],
+                },
+                HighCapacityRegistryDelta {
+                    key: b"daniel_wong_999".to_vec(),
+                    values: vec![
+                        HighCapacityRegistryValue {
+                            version: final_red_herring_version,
+                            content: Some(high_capacity_registry_value::Content::Value(
+                                b"small value".to_vec(),
+                            )),
+                            timestamp_seconds: 0,
+                        },
+                        HighCapacityRegistryValue {
+                            version: prior_red_herring_version,
+                            content: Some(
+                                high_capacity_registry_value::Content::LargeValueChunkKeys(
+                                    LargeValueChunkKeys {
+                                        chunk_content_sha256s: MEGA_BLOB_CHUNK_KEYS.clone(),
+                                    }
+                                )
+                            ),
+                            timestamp_seconds: 0,
+                        },
+                    ],
+                },
+            ],
+            version: last_version,
             error: None,
         },
     );
