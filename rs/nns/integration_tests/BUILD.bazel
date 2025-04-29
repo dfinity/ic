@@ -44,6 +44,7 @@ BASE_DEPENDENCIES = [
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
         "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/ic-http-types",
         "//rs/canister_client/sender",
         "//rs/config",
         "//rs/crypto",
@@ -59,7 +60,6 @@ BASE_DEPENDENCIES = [
         "//rs/registry/transport",
         "//rs/rosetta-api/tvl/xrc_mock",
         "//rs/rust_canisters/canister_test",
-        "//rs/rust_canisters/http_types",
         "//rs/rust_canisters/on_wire",
         "//rs/state_machine_tests",
         "//rs/test_utilities",
