@@ -11855,6 +11855,7 @@ dependencies = [
  "ic-nervous-system-chunks",
  "ic-registry-transport",
  "ic-stable-structures",
+ "lazy_static",
  "prost 0.13.4",
 ]
 
