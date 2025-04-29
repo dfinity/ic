@@ -1049,7 +1049,7 @@ fn serialize_wasm_binaries(
         thread_pool,
         state.canister_snapshots.iter(),
         |(snapshot_id, snapshot)| {
-            serialize_snapshot_wasm_binary(log, snapshot_id, &snapshot, tip, metrics, lsmt_config)
+            serialize_snapshot_wasm_binary(log, snapshot_id, snapshot, tip, metrics, lsmt_config)
         },
     )
     .into_iter()
@@ -1143,7 +1143,7 @@ fn serialize_snapshot_wasm_binary(
     metrics: &StorageMetrics,
     lsmt_config: &LsmtConfig,
 ) -> Result<(), CheckpointError> {
-    let snapshot_layout = tip.snapshot(&snapshot_id)?;
+    let snapshot_layout = tip.snapshot(snapshot_id)?;
 
     let execution_snapshot = snapshot.execution_snapshot();
     serialize_wasm_binary(

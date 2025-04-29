@@ -96,7 +96,7 @@ pub(crate) fn make_unvalidated_checkpoint(
                 sender: send,
             })
             .unwrap();
-        Ok(recv.recv().unwrap()?)
+        recv.recv().unwrap()
     }
 }
 
