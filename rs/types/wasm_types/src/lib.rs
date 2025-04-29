@@ -284,7 +284,7 @@ struct WasmFileStorage {
 impl WasmFileStorage {
     /// The only constructor to creates a new `WasmFileStorage`
     /// that will lazily load the provided wasm file.
-    pub fn lazy_load(
+    fn lazy_load(
         wasm_file: Box<dyn MemoryMappableWasmFile + Send + Sync>,
         len: Option<usize>,
     ) -> std::io::Result<Self> {
@@ -328,7 +328,7 @@ impl WasmFileStorage {
         })
     }
 
-    pub fn is_loaded(&self) -> bool {
+    fn is_loaded(&self) -> bool {
         self.mmap.get().is_some()
     }
 
