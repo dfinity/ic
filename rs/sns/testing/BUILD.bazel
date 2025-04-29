@@ -187,6 +187,7 @@ pkg_tar(
     srcs = [
         ":sns-testing",
         ":sns-testing-init",
+        "dfx.json",
     ],
     extension = "tar",
 )
