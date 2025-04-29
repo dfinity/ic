@@ -85,12 +85,12 @@ runs:
             --whitelist_pat='^//'
         done > '${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv'
         rm -f execlog
+
     - name: Upload execution log
       if: (success() || failure()) && inputs.execlogs-artifact-name != ''
       uses: actions/upload-artifact@v4
       with:
         name: ${{ inputs.execlogs-artifact-name }}
-        if-no-files-found: ignore
         path: |
           ${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv
 
