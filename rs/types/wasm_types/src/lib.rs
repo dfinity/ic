@@ -274,7 +274,7 @@ enum ModuleStorage {
 /// The only constructor, `lazy_load`, guarantees that the `file` field is
 /// populated when the first access occurs.
 #[derive(Clone)]
-pub struct WasmFileStorage {
+struct WasmFileStorage {
     path: PathBuf,
     len: usize,
     file: Arc<Mutex<Option<Box<dyn MemoryMappableWasmFile + Send + Sync>>>>,
@@ -335,10 +335,6 @@ impl WasmFileStorage {
     fn as_slice(&self) -> &[u8] {
         self.init_or_die().as_slice()
     }
-
-    fn len(&self) -> usize {
-        self.len
-    }
 }
 
 impl ModuleStorage {
@@ -386,7 +382,7 @@ impl ModuleStorage {
     fn len(&self) -> usize {
         match &self {
             ModuleStorage::Memory(arc) => arc.len(),
-            ModuleStorage::File(file) => file.len(),
+            ModuleStorage::File(file) => file.len,
         }
     }
 }
