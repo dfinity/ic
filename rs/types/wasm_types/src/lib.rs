@@ -302,6 +302,13 @@ impl WasmFileStorage {
         len: Option<usize>,
     ) -> std::io::Result<Self> {
         let len = if let Some(len) = len {
+            debug_assert_eq!(
+                len,
+                std::fs::metadata(wasm_file.path())
+                    .expect("Failed to read metadata")
+                    .len() as usize,
+                "Wasm file length mismatch"
+            );
             len
         } else {
             std::fs::metadata(wasm_file.path())?.len() as usize
