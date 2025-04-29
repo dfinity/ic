@@ -202,7 +202,7 @@ struct RosettaTestingEnvironmentBuilder {
 }
 
 /// Timeout for the Rosetta client to wait for transactions to be added to the blockchain.
-const ROSETTA_CLIENT_TIMEOUT_SECONDS: u64 = 30;
+const ROSETTA_CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
 
 impl RosettaTestingEnvironmentBuilder {
     pub fn new(setup: &Setup) -> Self {
@@ -289,7 +289,7 @@ impl RosettaTestingEnvironmentBuilder {
         .await;
         let rosetta_client = RosettaClient::from_str_url_and_timeout(
             &format!("http://0.0.0.0:{}", rosetta_context.port),
-            ROSETTA_CLIENT_TIMEOUT_SECONDS,
+            ROSETTA_CLIENT_TIMEOUT,
         )
         .expect("Unable to parse url");
 
