@@ -45,6 +45,17 @@ impl BinaryEncodedWasm {
     }
 }
 
+/// Represents the current loading state of the canister module storage.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ModuleLoadingStatus {
+    /// The module is stored in memory.
+    InMemory,
+    /// The module is backed by a file but has been loaded.
+    FileLoaded,
+    /// The module is backed by a file but has not been loaded yet.
+    FileNotLoaded,
+}
+
 /// Canister module stored by the replica.
 /// Currently, we support two kinds of modules:
 ///   * Raw Wasm modules (magic number \0asm)
@@ -90,11 +101,6 @@ impl CanisterModule {
         }
     }
 
-    /// If this module is backed by a file, return the path to that file.
-    pub fn is_file(&self) -> bool {
-        matches!(self.module, ModuleStorage::File(_))
-    }
-
     /// Overwrite the module at `offset` with `buf`. This may invalidate the
     /// module, and will change its hash. It's useful for uploading a module
     /// chunk by chunk.
@@ -133,16 +139,17 @@ impl CanisterModule {
         self.module_hash
     }
 
-    /// Returns the loading status of the module if it is backed by a file.
-    ///
-    /// # Returns
-    /// - `None` if the module is stored in memory.
-    /// - `Some(true)` if the module is backed by a file and has been loaded.
-    /// - `Some(false)` if the module is backed by a file but has not been loaded yet.
-    pub fn file_loading_status(&self) -> Option<bool> {
+    /// Returns the loading status of the module storage.
+    pub fn module_loading_status(&self) -> ModuleLoadingStatus {
         match &self.module {
-            ModuleStorage::Memory(_) => None,
-            ModuleStorage::File(storage) => Some(storage.is_loaded()),
+            ModuleStorage::Memory(_) => ModuleLoadingStatus::InMemory,
+            ModuleStorage::File(storage) => {
+                if storage.is_loaded() {
+                    ModuleLoadingStatus::FileLoaded
+                } else {
+                    ModuleLoadingStatus::FileNotLoaded
+                }
+            }
         }
     }
 }

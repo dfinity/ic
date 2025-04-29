@@ -59,6 +59,7 @@ use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
 };
 use ic_utils_thread::{deallocator_thread::DeallocatorThread, JoinOnDrop};
+use ic_wasm_types::ModuleLoadingStatus;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use prost::Message;
 use std::convert::{identity, From, TryFrom};
@@ -1137,7 +1138,10 @@ fn switch_to_checkpoint(
             new_snapshot_wasm_binary.module_hash().into(),
             Some(new_snapshot_wasm_binary.len()),
         )?;
-        debug_assert_eq!(wasm_binary.file_loading_status(), Some(false));
+        debug_assert_eq!(
+            wasm_binary.module_loading_status(),
+            ModuleLoadingStatus::FileNotLoaded
+        );
         new_snapshot.execution_snapshot_mut().wasm_binary = wasm_binary;
     }
 
@@ -1617,11 +1621,8 @@ impl StateManagerImpl {
             .iter()
             .filter_map(|(_, canister)| canister.execution_state.as_ref())
             .filter(|execution_state| {
-                execution_state
-                    .wasm_binary
-                    .binary
-                    .file_loading_status()
-                    .is_some_and(identity)
+                execution_state.wasm_binary.binary.module_loading_status()
+                    == ModuleLoadingStatus::FileLoaded
             })
             .count();
 
@@ -1632,8 +1633,8 @@ impl StateManagerImpl {
                 snapshot
                     .execution_snapshot()
                     .wasm_binary
-                    .file_loading_status()
-                    .is_some_and(identity)
+                    .module_loading_status()
+                    == ModuleLoadingStatus::FileLoaded
             })
             .count();
 
