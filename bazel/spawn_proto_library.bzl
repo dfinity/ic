@@ -24,6 +24,4 @@ proto_library(
 )
     """)
 
-spawn_proto_library = repository_rule(
-    implementation = _spawn_proto_library_impl,
-)
+spawn_proto_library = repository_rule(implementation = _spawn_proto_library_impl)
