@@ -44,16 +44,16 @@ pub struct Orchestrator {
     pub logger: ReplicaLogger,
     _async_log_guard: AsyncGuard,
     _metrics_runtime: MetricsHttpEndpoint,
-    upgrade: Option<Upgrade>,
+    upgrade: Upgrade,
     hostos_upgrade: Option<HostosUpgrader>,
-    boundary_node_manager: Option<BoundaryNodeManager>,
-    firewall: Option<Firewall>,
-    ssh_access_manager: Option<SshAccessManager>,
-    orchestrator_dashboard: Option<OrchestratorDashboard>,
-    registration: Option<NodeRegistration>,
+    boundary_node_manager: BoundaryNodeManager,
+    firewall: Firewall,
+    ssh_access_manager: SshAccessManager,
+    orchestrator_dashboard: OrchestratorDashboard,
+    registration: NodeRegistration,
     // The subnet id of the node.
     subnet_id: Arc<RwLock<Option<SubnetId>>>,
-    ipv4_configurator: Option<Ipv4Configurator>,
+    ipv4_configurator: Ipv4Configurator,
     task_tracker: TaskTracker,
 }
 
@@ -234,23 +234,21 @@ impl Orchestrator {
             registration.register_node().await;
         }
 
-        let upgrade = Some(
-            Upgrade::new(
-                Arc::clone(&registry),
-                Arc::clone(&metrics),
-                Arc::clone(&replica_process),
-                Arc::clone(&cup_provider),
-                replica_version.clone(),
-                args.replica_config_file.clone(),
-                node_id,
-                ic_binary_directory.clone(),
-                registry_replicator,
-                args.replica_binary_dir.clone(),
-                logger.clone(),
-                args.orchestrator_data_directory.clone(),
-            )
-            .await,
-        );
+        let upgrade = Upgrade::new(
+            Arc::clone(&registry),
+            Arc::clone(&metrics),
+            Arc::clone(&replica_process),
+            Arc::clone(&cup_provider),
+            replica_version.clone(),
+            args.replica_config_file.clone(),
+            node_id,
+            ic_binary_directory.clone(),
+            registry_replicator,
+            args.replica_binary_dir.clone(),
+            logger.clone(),
+            args.orchestrator_data_directory.clone(),
+        )
+        .await;
 
         let hostos_version = UtilityCommand::request_hostos_version()
             .await
@@ -314,7 +312,7 @@ impl Orchestrator {
 
         let subnet_id: Arc<RwLock<Option<SubnetId>>> = Default::default();
 
-        let orchestrator_dashboard = Some(OrchestratorDashboard::new(
+        let orchestrator_dashboard = OrchestratorDashboard::new(
             Arc::clone(&registry),
             node_id,
             ssh_access_manager.get_last_applied_parameters(),
@@ -326,7 +324,7 @@ impl Orchestrator {
             hostos_version.ok(),
             cup_provider,
             logger.clone(),
-        ));
+        );
 
         Ok(Self {
             logger,
@@ -334,13 +332,13 @@ impl Orchestrator {
             _metrics_runtime,
             upgrade,
             hostos_upgrade,
-            boundary_node_manager: Some(boundary_node),
-            firewall: Some(firewall),
-            ssh_access_manager: Some(ssh_access_manager),
+            boundary_node_manager: boundary_node,
+            firewall,
+            ssh_access_manager,
             orchestrator_dashboard,
-            registration: Some(registration),
+            registration,
             subnet_id,
-            ipv4_configurator: Some(ipv4_configurator),
+            ipv4_configurator,
             task_tracker,
         })
     }
@@ -366,7 +364,7 @@ impl Orchestrator {
     /// 4. Fourth task checks if this node is part of a threshold signing subnet. If so,
     ///    and it is also time to rotate the iDKG encryption key, instruct crypto
     ///    to do the rotation and attempt to register the rotated key.
-    pub async fn start_tasks(&mut self, exit_signal: Receiver<bool>) {
+    pub async fn start_tasks(mut self, exit_signal: Receiver<bool>) {
         async fn upgrade_checks(
             maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
             mut upgrade: Upgrade,
@@ -485,17 +483,15 @@ impl Orchestrator {
             dashboard.run(exit_signal).await;
         }
 
-        if let Some(upgrade) = self.upgrade.take() {
-            self.task_tracker.spawn(
-                "upgrade",
-                upgrade_checks(
-                    Arc::clone(&self.subnet_id),
-                    upgrade,
-                    exit_signal.clone(),
-                    self.logger.clone(),
-                ),
-            );
-        }
+        self.task_tracker.spawn(
+            "upgrade",
+            upgrade_checks(
+                Arc::clone(&self.subnet_id),
+                self.upgrade,
+                exit_signal.clone(),
+                self.logger.clone(),
+            ),
+        );
 
         if let Some(hostos_upgrade) = self.hostos_upgrade.take() {
             self.task_tracker.spawn(
@@ -504,45 +500,35 @@ impl Orchestrator {
             );
         }
 
-        if let Some(boundary_node) = self.boundary_node_manager.take() {
-            self.task_tracker.spawn(
-                "boundary_node_management",
-                boundary_node_check(boundary_node, exit_signal.clone()),
-            );
-        }
+        self.task_tracker.spawn(
+            "boundary_node_management",
+            boundary_node_check(self.boundary_node_manager, exit_signal.clone()),
+        );
 
-        if let (Some(ssh), Some(firewall), Some(ipv4_configurator)) = (
-            self.ssh_access_manager.take(),
-            self.firewall.take(),
-            self.ipv4_configurator.take(),
-        ) {
-            self.task_tracker.spawn(
-                "ssh_key_firewall_rules_ipv4_config",
-                ssh_key_and_firewall_rules_and_ipv4_config_checks(
-                    Arc::clone(&self.subnet_id),
-                    ssh,
-                    firewall,
-                    ipv4_configurator,
-                    exit_signal.clone(),
-                ),
-            );
-        }
+        self.task_tracker.spawn(
+            "ssh_key_firewall_rules_ipv4_config",
+            ssh_key_and_firewall_rules_and_ipv4_config_checks(
+                Arc::clone(&self.subnet_id),
+                self.ssh_access_manager,
+                self.firewall,
+                self.ipv4_configurator,
+                exit_signal.clone(),
+            ),
+        );
 
-        if let Some(dashboard) = self.orchestrator_dashboard.take() {
-            self.task_tracker
-                .spawn("dashboard", serve_dashboard(dashboard, exit_signal.clone()));
-        }
+        self.task_tracker.spawn(
+            "dashboard",
+            serve_dashboard(self.orchestrator_dashboard, exit_signal.clone()),
+        );
 
-        if let Some(registration) = self.registration.take() {
-            self.task_tracker.spawn(
-                "key_rotation",
-                key_rotation_check(
-                    Arc::clone(&self.subnet_id),
-                    registration,
-                    exit_signal.clone(),
-                ),
-            );
-        }
+        self.task_tracker.spawn(
+            "key_rotation",
+            key_rotation_check(
+                Arc::clone(&self.subnet_id),
+                self.registration,
+                exit_signal.clone(),
+            ),
+        );
 
         self.task_tracker.join_all().await
     }
