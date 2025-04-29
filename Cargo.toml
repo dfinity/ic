@@ -1,6 +1,8 @@
 [workspace]
 
 members = [
+    "packages/canlog",
+    "packages/canlog_derive",
     "packages/icrc-cbor",
     "packages/icrc-ledger-agent",
     "packages/icrc-ledger-client",
