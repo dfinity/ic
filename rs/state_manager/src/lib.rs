@@ -62,7 +62,7 @@ use ic_utils_thread::{deallocator_thread::DeallocatorThread, JoinOnDrop};
 use ic_wasm_types::ModuleLoadingStatus;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use prost::Message;
-use std::convert::{identity, From, TryFrom};
+use std::convert::{From, TryFrom};
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::ops::Deref;
