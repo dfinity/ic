@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
@@ -152,4 +153,52 @@ rust_canister(
         "@crate_index//:ic-cdk",
         "@crate_index//:serde",
     ],
+)
+
+genrule(
+    name = "_sns_testing_env",
+    testonly = True,
+    srcs = DEV_DATA,  # Include the dependencies to be resolved by rootpath in DEV_ENV.
+    outs = ["sns_testing_env.sh"],
+    cmd = "\n".join([
+    'echo \'%s="%s"\' >> $@' % (key, value)
+    for key, value in DEV_ENV.items()
+]),
+)
+
+pkg_tar(
+    name = "sns_testing_env",
+    testonly = True,
+    srcs = ["_sns_testing_env"],
+    extension = "tar",
+)
+
+pkg_tar(
+    name = "sns_testing_dependencies",
+    testonly = True,
+    srcs = DEV_DATA,
+    extension = "tar",
+    strip_prefix = "/",
+)
+
+pkg_tar(
+    name = "sns_testing_bin",
+    testonly = True,
+    srcs = [
+        ":sns-testing",
+        ":sns-testing-init",
+    ],
+    extension = "tar",
+)
+
+pkg_tar(
+    name = "sns_testing_bundle",
+    testonly = True,
+    deps = [
+        ":sns_testing_bin",
+        ":sns_testing_dependencies",
+        ":sns_testing_env",
+    ],
+    extension = "tar.gz",
+    strip_prefix = "/",
 )
