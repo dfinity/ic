@@ -28,7 +28,7 @@ impl Request {
         let key = format!("daniel_wong_{}", id).bytes().collect::<Vec<u8>>();
 
         match operation {
-            UpsertSmall => upsert(key, b"small value".to_vec()),
+            UpsertSmall => upsert(key, b"small value"),
             UpsertLarge => upsert(key, MEGA_BLOB.clone()),
             Delete => delete(key),
         }
