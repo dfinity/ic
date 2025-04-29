@@ -1,3 +1,7 @@
+"""
+This module fetches the spawn.proto file from the bazel source code and turns it into a proto_library target.
+"""
+
 def _spawn_proto_library_impl(ctx):
     dest = ctx.path("spawn.proto")
 
