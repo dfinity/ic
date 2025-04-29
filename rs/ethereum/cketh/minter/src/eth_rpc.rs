@@ -3,23 +3,16 @@
 
 use crate::endpoints::CandidBlockTag;
 use crate::eth_rpc_client::responses::TransactionReceipt;
-use crate::eth_rpc_client::SingleCallError;
 use crate::eth_rpc_error::{sanitize_send_raw_transaction_result, Parser};
-use crate::logs::{DEBUG, TRACE_HTTP};
 use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei, WeiPerGas};
-use crate::state::{mutate_state, State};
-use candid::{candid_method, CandidType, Principal};
+use candid::{candid_method, CandidType};
 use ethnum;
 use evm_rpc_client::{
     HttpOutcallError as EvmHttpOutcallError,
     SendRawTransactionStatus as EvmSendRawTransactionStatus,
 };
-use ic_canister_log::log;
-use ic_cdk::api::call::{call_with_payment128, RejectionCode};
-use ic_cdk::api::management_canister::http_request::{
-    CanisterHttpRequestArgument, HttpHeader, HttpMethod, HttpResponse, TransformArgs,
-    TransformContext,
-};
+use ic_cdk::api::call::RejectionCode;
+use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
 use ic_cdk_macros::query;
 use ic_ethereum_types::Address;
 pub use metrics::encode as encode_metrics;
@@ -607,34 +600,6 @@ pub fn is_response_too_large(code: &RejectionCode, message: &str) -> bool {
 
 pub type HttpOutcallResult<T> = Result<T, HttpOutcallError>;
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
-pub struct ResponseSizeEstimate(u64);
-
-impl ResponseSizeEstimate {
-    pub fn new(num_bytes: u64) -> Self {
-        assert!(num_bytes > 0);
-        assert!(num_bytes <= MAX_PAYLOAD_SIZE);
-        Self(num_bytes)
-    }
-
-    /// Describes the expected (90th percentile) number of bytes in the HTTP response body.
-    /// This number should be less than `MAX_PAYLOAD_SIZE`.
-    pub fn get(self) -> u64 {
-        self.0
-    }
-
-    /// Returns a higher estimate for the payload size.
-    pub fn adjust(self) -> Self {
-        Self(self.0.max(1024).saturating_mul(2).min(MAX_PAYLOAD_SIZE))
-    }
-}
-
-impl fmt::Display for ResponseSizeEstimate {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
 pub trait HttpResponsePayload {
     fn response_transform() -> Option<ResponseTransform> {
         None
@@ -644,154 +609,6 @@ pub trait HttpResponsePayload {
 impl<T: HttpResponsePayload> HttpResponsePayload for Option<T> {}
 
 impl HttpResponsePayload for TransactionCount {}
-
-/// Calls a JSON-RPC method on an Ethereum node at the specified URL.
-pub async fn call<I, O>(
-    url: impl Into<String>,
-    method: impl Into<String>,
-    params: I,
-    mut response_size_estimate: ResponseSizeEstimate,
-) -> Result<O, SingleCallError>
-where
-    I: Serialize,
-    O: DeserializeOwned + HttpResponsePayload,
-{
-    let eth_method = method.into();
-    let mut rpc_request = JsonRpcRequest {
-        jsonrpc: "2.0".to_string(),
-        params,
-        method: eth_method.clone(),
-        id: 1,
-    };
-    let url = url.into();
-    let mut retries = 0;
-
-    loop {
-        rpc_request.id = mutate_state(State::next_request_id);
-        let payload = serde_json::to_string(&rpc_request).unwrap();
-        log!(
-            TRACE_HTTP,
-            "Calling url: {}, with payload: {payload}",
-            url.clone()
-        );
-
-        let effective_size_estimate = response_size_estimate.get() + HEADER_SIZE_LIMIT;
-        let transform_op = O::response_transform()
-            .as_ref()
-            .map(|t| {
-                let mut buf = vec![];
-                minicbor::encode(t, &mut buf).unwrap();
-                buf
-            })
-            .unwrap_or_default();
-
-        let request = CanisterHttpRequestArgument {
-            url: url.clone(),
-            max_response_bytes: Some(effective_size_estimate),
-            method: HttpMethod::POST,
-            headers: vec![HttpHeader {
-                name: "Content-Type".to_string(),
-                value: "application/json".to_string(),
-            }],
-            body: Some(payload.as_bytes().to_vec()),
-            transform: Some(TransformContext::from_name(
-                "cleanup_response".to_owned(),
-                transform_op,
-            )),
-        };
-
-        // Details of the values used in the following lines can be found here:
-        // https://internetcomputer.org/docs/current/developer-docs/production/computation-and-storage-costs
-        let base_cycles = 400_000_000u128 + 100_000u128 * (2 * effective_size_estimate as u128);
-
-        const BASE_SUBNET_SIZE: u128 = 13;
-        const SUBNET_SIZE: u128 = 34;
-        let cycles = base_cycles * SUBNET_SIZE / BASE_SUBNET_SIZE;
-
-        let response: HttpResponse = match call_with_payment128(
-            Principal::management_canister(),
-            "http_request",
-            (request,),
-            cycles,
-        )
-        .await
-        {
-            Ok((response,)) => response,
-            Err((code, message)) if is_response_too_large(&code, &message) => {
-                let new_estimate = response_size_estimate.adjust();
-                if response_size_estimate == new_estimate {
-                    return Err(SingleCallError::from(HttpOutcallError::IcError {
-                        code,
-                        message,
-                    }));
-                }
-                log!(DEBUG, "The {eth_method} response didn't fit into {response_size_estimate} bytes, retrying with {new_estimate}");
-                response_size_estimate = new_estimate;
-                retries += 1;
-                continue;
-            }
-            Err((code, message)) => {
-                return Err(SingleCallError::from(HttpOutcallError::IcError {
-                    code,
-                    message,
-                }))
-            }
-        };
-
-        log!(
-            TRACE_HTTP,
-            "Got response (with {} bytes): {} from url: {} with status: {}",
-            response.body.len(),
-            String::from_utf8_lossy(&response.body),
-            url,
-            response.status
-        );
-
-        metrics::observe_retry_count(eth_method.clone(), retries);
-
-        // JSON-RPC responses over HTTP should have a 2xx status code,
-        // even if the contained JsonRpcResult is an error.
-        // If the server is not available, it will sometimes (wrongly) return HTML that will fail parsing as JSON.
-        let http_status_code = http_status_code(&response);
-        if !is_successful_http_code(&http_status_code) {
-            return Err(SingleCallError::from(
-                HttpOutcallError::InvalidHttpJsonRpcResponse {
-                    status: http_status_code,
-                    body: String::from_utf8_lossy(&response.body).to_string(),
-                    parsing_error: None,
-                },
-            ));
-        }
-
-        let reply: JsonRpcReply<O> = serde_json::from_slice(&response.body).map_err(|e| {
-            SingleCallError::from(HttpOutcallError::InvalidHttpJsonRpcResponse {
-                status: http_status_code,
-                body: String::from_utf8_lossy(&response.body).to_string(),
-                parsing_error: Some(e.to_string()),
-            })
-        })?;
-
-        return match reply.result {
-            JsonRpcResult::Result(result) => Ok(result),
-            JsonRpcResult::Error { code, message } => {
-                Err(SingleCallError::JsonRpcError { code, message })
-            }
-        };
-    }
-}
-
-fn http_status_code(response: &HttpResponse) -> u16 {
-    use num_traits::cast::ToPrimitive;
-    // HTTP status code are always 3 decimal digits, hence at most 999.
-    // See https://httpwg.org/specs/rfc9110.html#status.code.extensibility
-    response.status.0.to_u16().expect("valid HTTP status code")
-}
-
-fn is_successful_http_code(status: &u16) -> bool {
-    const OK: u16 = 200;
-    const REDIRECTION: u16 = 300;
-    (OK..REDIRECTION).contains(status)
-}
 
 fn sort_by_hash<T: Serialize + DeserializeOwned>(to_sort: &mut [T]) {
     use ic_sha3::Keccak256;
