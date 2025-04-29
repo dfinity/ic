@@ -344,6 +344,7 @@ def _ext4_image_impl(ctx):
         arguments = args,
         inputs = inputs,
         outputs = outputs,
+        env = {"USE_TMPFS": "true"},
         tools = [ctx.attr._tool.files_to_run, ctx.attr._diroid.files_to_run, ctx.attr._dflate.files_to_run],
     )
 
