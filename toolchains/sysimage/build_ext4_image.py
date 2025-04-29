@@ -13,6 +13,8 @@ import subprocess
 import sys
 import tempfile
 
+from loguru import logger as log
+
 
 def limit_file_contexts(file_contexts, base_path):
     r"""
@@ -180,7 +182,13 @@ def main():
     if limit_prefix and limit_prefix[0] == "/":
         limit_prefix = limit_prefix[1:]
 
-    tmpdir = tempfile.mkdtemp()
+    if "TMPFS_TMPDIR" in os.environ:
+        tmpdir = os.environ.get("TMPFS_TMPDIR")
+    else:
+        log.info("TMPFS_TMPDIR env variable not available, this may be slower than expected")
+        tmpdir = os.environ.get("TMPDIR")
+
+    tmpdir = tempfile.mkdtemp(dir=tmpdir)
 
     if file_contexts_file:
         original_file_contexts = open(file_contexts_file, "r").read()
