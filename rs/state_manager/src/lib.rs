@@ -1148,12 +1148,11 @@ fn switch_to_checkpoint(
                 tip_state.wasm_binary.binary.as_slice(),
                 wasm_binary.as_slice()
             );
-            tip_state.wasm_binary = Arc::new(
+            tip_state.wasm_binary = 
                 ic_replicated_state::canister_state::execution_state::WasmBinary {
                     binary: wasm_binary,
                     embedder_cache,
-                },
-            );
+                };
 
             // Reset the sandbox state to force full synchronization on the next message
             // execution because the checkpoint file of `tip` has changed.

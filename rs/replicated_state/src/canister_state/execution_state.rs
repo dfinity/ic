@@ -139,7 +139,10 @@ impl TryFrom<Vec<pb::WasmMethod>> for ExportedFunctions {
 }
 
 /// Represent a wasm binary.
-#[derive(Debug, ValidateEq)]
+///
+/// Cloning this type should be cheap (most data is behind an Arc) and result in
+/// sharing the underlying embedder cache.
+#[derive(Debug, Clone, ValidateEq)]
 pub struct WasmBinary {
     /// The raw canister module provided by the user. Remains immutable after
     /// creating a WasmBinary object.
@@ -154,11 +157,11 @@ pub struct WasmBinary {
 }
 
 impl WasmBinary {
-    pub fn new(binary: CanisterModule) -> Arc<Self> {
-        Arc::new(WasmBinary {
+    pub fn new(binary: CanisterModule) -> Self {
+        WasmBinary {
             binary,
             embedder_cache: Arc::new(std::sync::Mutex::new(None)),
-        })
+        }
     }
 
     pub fn clear_compilation_cache(&self) {
@@ -349,16 +352,9 @@ pub struct ExecutionState {
     #[validate_eq(Ignore)]
     pub canister_root: std::path::PathBuf,
 
-    /// The wasm executable associated with this state. It represented here as
-    /// a reference-counted object such that:
-    /// - it is "shallow-copied" when cloning the execution state
-    /// - all execution states cloned from each other (and also having the same
-    ///   wasm_binary) share the same compilation cache object
-    ///
-    /// The latter property ensures that compilation for queries is cached
-    /// properly when loading a state from checkpoint.
+    /// The wasm executable associated with this state.
     #[validate_eq(CompareWithValidateEq)]
-    pub wasm_binary: Arc<WasmBinary>,
+    pub wasm_binary: WasmBinary,
 
     /// The persistent heap of the module. The size of this memory is expected
     /// to fit in a `u32`.
@@ -445,7 +441,7 @@ impl ExecutionState {
     /// Be sure to change these if needed.
     pub fn new(
         canister_root: PathBuf,
-        wasm_binary: Arc<WasmBinary>,
+        wasm_binary: WasmBinary,
         exports: ExportedFunctions,
         wasm_memory: Memory,
         stable_memory: Memory,

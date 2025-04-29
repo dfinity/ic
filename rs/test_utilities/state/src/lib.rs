@@ -64,7 +64,7 @@ const EMPTY_WASM: &[u8] = &[
     0x01, 0x00,
 ];
 
-pub fn empty_wasm() -> Arc<WasmBinary> {
+pub fn empty_wasm() -> WasmBinary {
     WasmBinary::new(CanisterModule::new(EMPTY_WASM.to_vec()))
 }
 
@@ -597,7 +597,7 @@ impl ExecutionStateBuilder {
         self
     }
 
-    pub fn with_wasm_binary(mut self, wasm_binary: Arc<WasmBinary>) -> Self {
+    pub fn with_wasm_binary(mut self, wasm_binary: WasmBinary) -> Self {
         self.execution_state.wasm_binary = wasm_binary;
         self
     }
