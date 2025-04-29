@@ -2,20 +2,19 @@ use crate::eth_rpc::{
     Block, BlockSpec, BlockTag, Data, FeeHistory, FeeHistoryParams, FixedSizeData, GetLogsParam,
     Hash, HttpOutcallError, LogEntry, Quantity, SendRawTransactionResult, Topic, HEADER_SIZE_LIMIT,
 };
-use crate::eth_rpc_client::providers::RpcNodeProvider;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;
 use crate::logs::{PrintProxySink, INFO, TRACE_HTTP};
 use crate::numeric::{BlockNumber, GasAmount, LogIndex, TransactionCount, Wei, WeiPerGas};
 use crate::state::State;
-use evm_rpc_client::RpcService as EvmRpcService;
 use evm_rpc_client::{
-    Block as EvmBlock, BlockTag as EvmBlockTag, ConsensusStrategy, EvmRpcClient,
+    Block as EvmBlock, BlockTag as EvmBlockTag, ConsensusStrategy, EthSepoliaService, EvmRpcClient,
     FeeHistory as EvmFeeHistory, FeeHistoryArgs as EvmFeeHistoryArgs,
     GetLogsArgs as EvmGetLogsArgs, GetTransactionCountArgs as EvmGetTransactionCountArgs, Hex20,
     Hex32, IcRuntime, LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256,
     OverrideRpcConfig, RpcConfig as EvmRpcConfig, RpcError as EvmRpcError,
-    RpcResult as EvmRpcResult, SendRawTransactionStatus as EvmSendRawTransactionStatus,
+    RpcResult as EvmRpcResult, RpcService as EvmRpcService, RpcServices as EvmRpcServices,
+    SendRawTransactionStatus as EvmSendRawTransactionStatus,
     TransactionReceipt as EvmTransactionReceipt,
 };
 use ic_canister_log::log;
@@ -25,7 +24,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::convert::Infallible;
 use std::fmt::{Debug, Display};
 
-mod providers;
 pub mod requests;
 pub mod responses;
 
@@ -51,8 +49,6 @@ impl EthRpcClient {
     }
 
     pub fn from_state(state: &State) -> Self {
-        use evm_rpc_client::{EthSepoliaService, RpcServices as EvmRpcServices};
-
         let mut client = Self::new(state.ethereum_network());
         if let Some(evm_rpc_id) = state.evm_rpc_id {
             const MIN_ATTACHED_CYCLES: u128 = 500_000_000_000;
@@ -220,8 +216,8 @@ impl EthRpcClient {
 /// Guaranteed to be non-empty.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct MultiCallResults<T> {
-    ok_results: BTreeMap<RpcNodeProvider, T>,
-    errors: BTreeMap<RpcNodeProvider, SingleCallError>,
+    ok_results: BTreeMap<EvmRpcService, T>,
+    errors: BTreeMap<EvmRpcService, SingleCallError>,
 }
 
 impl<T> Default for MultiCallResults<T> {
@@ -258,7 +254,7 @@ impl<T> MultiCallResults<T> {
         MultiCallResults { ok_results, errors }
     }
 
-    fn insert_once(&mut self, provider: RpcNodeProvider, result: Result<T, SingleCallError>) {
+    fn insert_once(&mut self, provider: EvmRpcService, result: Result<T, SingleCallError>) {
         match result {
             Ok(value) => {
                 assert!(!self.errors.contains_key(&provider));
@@ -271,9 +267,7 @@ impl<T> MultiCallResults<T> {
         }
     }
 
-    fn from_non_empty_iter<
-        I: IntoIterator<Item = (RpcNodeProvider, Result<T, SingleCallError>)>,
-    >(
+    fn from_non_empty_iter<I: IntoIterator<Item = (EvmRpcService, Result<T, SingleCallError>)>>(
         iter: I,
     ) -> Self {
         let mut results = MultiCallResults::new();
@@ -296,7 +290,7 @@ impl<T: PartialEq> MultiCallResults<T> {
     /// * MultiCallError::ConsistentJsonRpcError: all errors are the same JSON-RPC error.
     /// * MultiCallError::ConsistentHttpOutcallError: all errors are the same HTTP outcall error.
     /// * MultiCallError::InconsistentResults if there are different errors.
-    fn all_ok(self) -> Result<BTreeMap<RpcNodeProvider, T>, MultiCallError<T>> {
+    fn all_ok(self) -> Result<BTreeMap<EvmRpcService, T>, MultiCallError<T>> {
         if self.errors.is_empty() {
             return Ok(self.ok_results);
         }
@@ -307,7 +301,7 @@ impl<T: PartialEq> MultiCallResults<T> {
     /// * MultiCallError::ConsistentJsonRpcError: all errors are the same JSON-RPC error.
     /// * MultiCallError::ConsistentHttpOutcallError: all errors are the same HTTP outcall error.
     /// * MultiCallError::InconsistentResults if there are different errors or an ok result with some errors.
-    fn at_least_two_ok(self) -> Result<BTreeMap<RpcNodeProvider, T>, MultiCallError<T>> {
+    fn at_least_two_ok(self) -> Result<BTreeMap<EvmRpcService, T>, MultiCallError<T>> {
         match self.ok_results.len() {
             0 => Err(self.expect_error()),
             1 => Err(MultiCallError::InconsistentResults(self)),
@@ -315,7 +309,7 @@ impl<T: PartialEq> MultiCallResults<T> {
         }
     }
 
-    fn at_least_one_ok(self) -> Result<(RpcNodeProvider, T), MultiCallError<T>> {
+    fn at_least_one_ok(self) -> Result<(EvmRpcService, T), MultiCallError<T>> {
         match self.ok_results.len() {
             0 => Err(self.expect_error()),
             _ => Ok(self.ok_results.into_iter().next().unwrap()),
@@ -448,10 +442,7 @@ impl<T> ReducedResult<T> {
             EvmMultiRpcResult::Inconsistent(results) => {
                 let mut multi_results = MultiCallResults::new();
                 results.into_iter().for_each(|(provider, result)| {
-                    multi_results.insert_once(
-                        RpcNodeProvider::EvmRpc(provider),
-                        into_single_call_result(result),
-                    );
+                    multi_results.insert_once(provider, into_single_call_result(result));
                 });
                 Err(MultiCallError::InconsistentResults(multi_results))
             }
@@ -766,7 +757,7 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
         self,
         extractor: F,
     ) -> Result<T, MultiCallError<T>> {
-        let mut votes_by_key: BTreeMap<K, BTreeMap<RpcNodeProvider, T>> = BTreeMap::new();
+        let mut votes_by_key: BTreeMap<K, BTreeMap<EvmRpcService, T>> = BTreeMap::new();
         for (provider, result) in self.at_least_two_ok()?.into_iter() {
             let key = extractor(&result);
             match votes_by_key.remove(&key) {
@@ -798,7 +789,7 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
             }
         }
 
-        let mut tally: Vec<(K, BTreeMap<RpcNodeProvider, T>)> = Vec::from_iter(votes_by_key);
+        let mut tally: Vec<(K, BTreeMap<EvmRpcService, T>)> = Vec::from_iter(votes_by_key);
         tally.sort_unstable_by(|(_left_key, left_ballot), (_right_key, right_ballot)| {
             left_ballot.len().cmp(&right_ballot.len())
         });
