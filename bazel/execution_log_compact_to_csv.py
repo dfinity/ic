@@ -50,7 +50,7 @@ def main():
     )
     parser.add_argument(
         "--verbose",
-        default=None,
+        action='store_true',
         help="Log every ExecLogEntry to stderr. This is useful for debugging.",
     )
     args = parser.parse_args()
