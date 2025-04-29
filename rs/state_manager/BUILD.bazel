@@ -59,7 +59,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/tmpdir",
     "//rs/test_utilities/types",
     "//rs/types/management_canister_types",
-    "//rs/types/wasm_types",
     "@crate_index//:assert_matches",
     "@crate_index//:maplit",
     "@crate_index//:proptest",
