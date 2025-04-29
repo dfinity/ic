@@ -9,16 +9,17 @@ on the process that this file is part of, see
 
 ## Added
 
-* A timer task is added to take daily snapshots of voting power for standard proposals.
-
 ## Changed
 
 ## Deprecated
 
 ## Removed
 
+* All the `_pb` methods are removed as they already always panic, as well as decoding the init arg
+  as protobuf.
+
 ## Fixed
 
-* Turned off `DisburseMaturity` that was incorrectly turned on before.
+* Use `StableBTreeMap::init` instead of `::new` for voting power snapshots.
 
 ## Security

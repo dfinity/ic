@@ -1994,6 +1994,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "canlog"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "canlog_derive",
+ "ic-canister-log 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ic-cdk 0.17.1",
+ "proptest 1.6.0",
+ "regex",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "canlog_derive"
+version = "0.1.0"
+dependencies = [
+ "darling 0.20.11",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.101",
+]
+
+[[package]]
 name = "cargo-platform"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10510,7 +10534,7 @@ dependencies = [
  "ic-metrics-encoder",
  "ic-nervous-system-runtime",
  "ic-nns-constants",
- "ic-nns-governance-api",
+ "ic-nns-gtc",
  "ic-stable-structures",
  "icp-ledger",
  "icrc-ledger-types",
@@ -11818,9 +11842,11 @@ dependencies = [
 name = "ic-registry-canister-chunkify"
 version = "0.9.0"
 dependencies = [
+ "ic-cdk 0.17.1",
  "ic-nervous-system-chunks",
  "ic-registry-transport",
  "ic-stable-structures",
+ "prost 0.13.4",
 ]
 
 [[package]]
@@ -14447,6 +14473,7 @@ dependencies = [
  "ic-validate-eq",
  "ic-validate-eq-derive",
  "serde",
+ "tempfile",
 ]
 
 [[package]]
@@ -14688,12 +14715,14 @@ name = "ic_consensus_system_tests"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "assert_matches",
  "candid",
  "canister-test",
  "futures",
  "ic-agent",
  "ic-base-types",
  "ic-crypto-test-utils-reproducible-rng",
+ "ic-limits",
  "ic-management-canister-types-private",
  "ic-nns-constants",
  "ic-nns-governance-api",
@@ -18185,7 +18214,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "backoff",
  "base64 0.13.1",
@@ -18225,7 +18254,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic-server"
-version = "8.0.0"
+version = "9.0.0"
 dependencies = [
  "aide",
  "askama",
@@ -18833,6 +18862,7 @@ name = "proxy_canister"
 version = "0.1.0"
 dependencies = [
  "candid",
+ "futures",
  "ic-cdk 0.17.1",
  "ic-cdk-macros 0.17.1",
  "ic-management-canister-types-private",
