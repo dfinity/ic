@@ -876,7 +876,7 @@ fn serialize_canister_to_tip(
                 // It is left in mainly as defensive programming
                 if !wasm.raw_path().exists() {
                     debug_assert!(false);
-                    wasm.serialize(&wasm_binary)?;
+                    wasm.serialize(wasm_binary)?;
                 }
             }
             execution_state.wasm_memory.page_map.persist_delta(
