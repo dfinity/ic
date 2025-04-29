@@ -1,7 +1,6 @@
 use config_types::*;
-use config_types_compatibility_tests::{get_previous_version, version_greater_than, ConfigFixture};
+use config_types_compatibility_lib::{get_previous_version, version_greater_than, ConfigFixture};
 use serde_json;
-use std::fs;
 use std::path::PathBuf;
 
 #[test]

@@ -46,6 +46,8 @@ rust_test(
     crate_name = "compatibility_tests",
     deps = [
         ":config_types_compatibility_lib",
+        "//rs/ic_os/config_types",
+        "@crate_index//:serde_json",
     ],
 )
 
@@ -56,5 +58,7 @@ rust_test(
     crate_name = "config_types_compatibility_test",
     deps = [
         ":config_types_compatibility_lib",
+        "//rs/ic_os/config_types",
+        "@crate_index//:serde_json",
     ],
 )
