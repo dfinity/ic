@@ -18,11 +18,27 @@ fn test_backwards_compatibility() {
 
                 // Try to deserialize into each config type
                 if filename.starts_with("hostos") {
-                    let _: HostOSConfig = serde_json::from_str(&config_json)
-                        .expect("Failed to deserialize historical HostOSConfig");
+                    match serde_json::from_str::<HostOSConfig>(&config_json) {
+                        Ok(_) => println!("Successfully deserialized {}", filename),
+                        Err(e) => {
+                            println!("Failed to deserialize {}: {}", filename, e);
+                            panic!(
+                                "Failed to deserialize historical HostOSConfig from {}",
+                                filename
+                            );
+                        }
+                    }
                 } else if filename.starts_with("guestos") {
-                    let _: GuestOSConfig = serde_json::from_str(&config_json)
-                        .expect("Failed to deserialize historical GuestOSConfig");
+                    match serde_json::from_str::<GuestOSConfig>(&config_json) {
+                        Ok(_) => println!("Successfully deserialized {}", filename),
+                        Err(e) => {
+                            println!("Failed to deserialize {}: {}", filename, e);
+                            panic!(
+                                "Failed to deserialize historical GuestOSConfig from {}",
+                                filename
+                            );
+                        }
+                    }
                 }
             }
         }
