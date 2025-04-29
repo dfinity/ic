@@ -26,7 +26,7 @@ use url::ParseError;
 pub struct RosettaClient {
     pub url: Url,
     pub http_client: Client,
-    pub timeout: Option<u64>,
+    pub timeout: Option<Duration>,
 }
 
 impl RosettaClient {
@@ -43,7 +43,7 @@ impl RosettaClient {
         Ok(Self::from_url(url))
     }
 
-    pub fn from_str_url_and_timeout(url: &str, timeout: u64) -> Result<Self, ParseError> {
+    pub fn from_str_url_and_timeout(url: &str, timeout: Duration) -> Result<Self, ParseError> {
         let url = Url::parse(url)?;
         let mut client = Self::from_url(url);
         client.timeout = Some(timeout);
@@ -189,8 +189,8 @@ impl RosettaClient {
             .with_transaction_identifier(submit_response.transaction_identifier.clone())
             .build();
         let start = Instant::now();
-        const DEFAULT_TIMEOUT_SECONDS: u64 = 10;
-        let timeout = Duration::from_secs(self.timeout.unwrap_or(DEFAULT_TIMEOUT_SECONDS));
+        const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
+        let timeout = self.timeout.unwrap_or(DEFAULT_TIMEOUT);
         while start.elapsed() < timeout {
             let transaction = self.search_transactions(&request).await?;
             if !transaction.transactions.is_empty() {
