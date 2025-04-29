@@ -233,7 +233,7 @@ rust_binary(
             "@crate_index//:serde_bytes",
             "@crate_index//:serde_json",
         ],
-    )
+    ),
 ]
 
 closure_js_library(
