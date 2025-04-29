@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import atexit
+import os
 import shutil
 import signal
 import tempfile
@@ -100,14 +101,14 @@ def main():
     for context_file in args.context_files:
         shutil.copy(context_file, context_dir)
 
-    # Temporary shim to create tmpfs on demand, until we have userspace
-    # overlayfs, or tmpfs natively available on CI.
-    tmpfs_shim_dir = tempfile.mkdtemp()
-    invoke.run(f"sudo mount -t tmpfs none {tmpfs_shim_dir}")
-    atexit.register(lambda: invoke.run(f"sudo umount {tmpfs_shim_dir}"))
+    if "TMPFS_TMPDIR" in os.environ:
+        tmpdir = os.environ.get("TMPFS_TMPDIR")
+    else:
+        log.info("TMPFS_TMPDIR env variable not available, this may be slower than expected")
+        tmpdir = os.environ.get("TMPDIR")
 
-    root = tempfile.mkdtemp(dir=tmpfs_shim_dir)
-    run_root = tempfile.mkdtemp(dir=tmpfs_shim_dir)
+    root = tempfile.mkdtemp(dir=tmpdir)
+    run_root = tempfile.mkdtemp(dir=tmpdir)
     container_cmd = f"sudo podman --root {root} --runroot {run_root}"
 
     atexit.register(lambda: purge_podman(container_cmd))

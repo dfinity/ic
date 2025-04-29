@@ -281,14 +281,13 @@ def main():
     if args.base_image_tar_file:
         base_image_override = BaseImageOverride(Path(args.base_image_tar_file), args.base_image_tar_file_tag)
 
-    # Temporary shim to create tmpfs on demand, until we have userspace
-    # overlayfs, or tmpfs natively available on CI.
-    tmpfs_shim_dir = tempfile.mkdtemp()
-    invoke.run(f"sudo mount -t tmpfs none {tmpfs_shim_dir}")
-    atexit.register(lambda: invoke.run(f"sudo umount {tmpfs_shim_dir}"))
+    if "TMPFS_TMPDIR" in os.environ:
+        tmpdir = os.environ.get("TMPFS_TMPDIR")
+    else:
+        tmpdir = os.environ.get("TMPDIR")
 
-    root = tempfile.mkdtemp(dir=tmpfs_shim_dir)
-    run_root = tempfile.mkdtemp(dir=tmpfs_shim_dir)
+    root = tempfile.mkdtemp(dir=tmpdir)
+    run_root = tempfile.mkdtemp(dir=tmpdir)
     container_cmd = f"sudo podman --root {root} --runroot {run_root}"
 
     atexit.register(lambda: purge_podman(container_cmd))
