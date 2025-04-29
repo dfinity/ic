@@ -20,11 +20,13 @@ use rosetta_core::objects::Signature;
 use rosetta_core::request_types::*;
 use rosetta_core::response_types::*;
 use serde::{Deserialize, Serialize};
+use std::time::{Duration, Instant};
 use url::ParseError;
 
 pub struct RosettaClient {
     pub url: Url,
     pub http_client: Client,
+    pub timeout: Option<u64>,
 }
 
 impl RosettaClient {
@@ -32,12 +34,20 @@ impl RosettaClient {
         Self {
             url,
             http_client: Client::new(),
+            timeout: None,
         }
     }
 
     pub fn from_str_url(url: &str) -> Result<Self, ParseError> {
         let url = Url::parse(url)?;
         Ok(Self::from_url(url))
+    }
+
+    pub fn from_str_url_and_timeout(url: &str, timeout: u64) -> Result<Self, ParseError> {
+        let url = Url::parse(url)?;
+        let mut client = Self::from_url(url);
+        client.timeout = Some(timeout);
+        Ok(client)
     }
 
     pub fn url(&self, path: &str) -> Url {
@@ -175,25 +185,25 @@ impl RosettaClient {
             .await?;
 
         // We need to wait for the transaction to be added to the blockchain
-        let mut tries = 0;
         let request = SearchTransactionsRequest::builder(network_identifier.clone())
             .with_transaction_identifier(submit_response.transaction_identifier.clone())
             .build();
-        const MAX_RETRIES: u64 = 30;
-        while tries < MAX_RETRIES {
+        let start = Instant::now();
+        const DEFAULT_TIMEOUT_SECONDS: u64 = 10;
+        let timeout = Duration::from_secs(self.timeout.unwrap_or(DEFAULT_TIMEOUT_SECONDS));
+        while start.elapsed() < timeout {
             let transaction = self.search_transactions(&request).await?;
             if !transaction.transactions.is_empty() {
                 return Ok(submit_response);
             }
 
-            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-            tries += 1;
+            tokio::time::sleep(Duration::from_secs(1)).await;
         }
 
         Err(Error::unable_to_find_block(
             &format!(
                 "Transaction was not added to the blockchain after {} seconds",
-                MAX_RETRIES
+                timeout.as_secs()
             )
             .to_owned(),
         ))
