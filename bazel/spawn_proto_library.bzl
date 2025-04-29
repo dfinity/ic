@@ -3,12 +3,9 @@ This module fetches the spawn.proto file from the bazel source code and turns it
 """
 
 def _spawn_proto_library_impl(ctx):
-    dest = ctx.path("spawn.proto")
-
-    # Download the file
     ctx.download(
         url = "https://raw.githubusercontent.com/bazelbuild/bazel/refs/tags/{bazel_version}/src/main/protobuf/spawn.proto".format(bazel_version = native.bazel_version),
-        output = dest.basename,
+        output = "spawn.proto",
         sha256 = "381bcb109e2855d4055fdc75988cc2144e0a92aa8586298123bb662cdefa6afe",
     )
 
