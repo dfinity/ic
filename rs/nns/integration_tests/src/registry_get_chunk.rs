@@ -1,16 +1,199 @@
 use canister_test::CanisterInstallMode;
-use ic_nervous_system_chunks::Chunks;
+use ic_nervous_system_chunks::{Chunks, MEGA_BLOB, MEGA_BLOB_CHUNK_KEYS};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_test_utils::{
     common::{build_registry_wasm, NnsInitPayloadsBuilder},
     state_test_helpers::{
-        registry_get_chunk, setup_nns_canisters, state_machine_builder_for_nns_tests,
+        registry_get_chunk, registry_get_value, registry_latest_version,
+        registry_mutate_daniel_wong, setup_nns_canisters, state_machine_builder_for_nns_tests,
     },
 };
-use ic_registry_canister_api::Chunk;
+use ic_registry_canister_api::{mutate_daniel_wong, Chunk};
+use ic_registry_transport::pb::v1::{
+    high_capacity_registry_get_value_response, registry_error,
+    HighCapacityRegistryGetValueResponse, LargeValueChunkKeys, RegistryError,
+};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager};
+use pretty_assertions::assert_eq;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use std::{cell::RefCell, rc::Rc};
+
+#[test]
+fn test_large_records() {
+    // Step 1: Prepare the world.
+    let state_machine = state_machine_builder_for_nns_tests().build();
+
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_initial_invariant_compliant_mutations()
+        .build();
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+
+    let original_version = registry_latest_version(&state_machine).unwrap();
+
+    // Step 2: Run the code that is under test.
+
+    let new_version = registry_mutate_daniel_wong(
+        &state_machine,
+        mutate_daniel_wong::Request {
+            id: 42,
+            operation: mutate_daniel_wong::Operation::UpsertLarge,
+        },
+    );
+
+    // Step 3: Verify result(s).
+
+    // Step 3.1: Version has advanced by 1. (This is not as interesting as the next thing(s).)
+    assert_eq!(new_version, original_version + 1);
+
+    // Step 3.2: Inspect value associated with "daniel_wong_42".
+    let get_value_response = registry_get_value(&state_machine, b"daniel_wong_42");
+    assert_eq!(
+        get_value_response,
+        HighCapacityRegistryGetValueResponse {
+            content: Some(
+                high_capacity_registry_get_value_response::Content::LargeValueChunkKeys(
+                    LargeValueChunkKeys {
+                        chunk_content_sha256s: MEGA_BLOB_CHUNK_KEYS.clone(),
+                    }
+                )
+            ),
+            version: new_version,
+            timestamp_seconds: 0,
+            error: None,
+        },
+    );
+
+    // Step 3.3: Reconstituted blob, and inspect it.
+    let chunk_content_sha256s = match &get_value_response.content {
+        Some(high_capacity_registry_get_value_response::Content::LargeValueChunkKeys(
+            LargeValueChunkKeys {
+                chunk_content_sha256s,
+            },
+        )) => chunk_content_sha256s,
+        // Because of the assert_eq directly before, this is unreachable (but
+        // rustc doesn't know that).
+        _ => panic!("{:#?}", get_value_response),
+    };
+    let reconstructed_big_monolithic_blob = chunk_content_sha256s
+        .into_iter()
+        .map(|chunk_key| -> Vec<u8> {
+            let Chunk { content } = registry_get_chunk(&state_machine, chunk_key).unwrap();
+            content.unwrap()
+        })
+        .flatten()
+        .collect::<Vec<u8>>();
+    // assert_eq is not used here, because it would be very spammy.
+    assert!(
+        reconstructed_big_monolithic_blob == *MEGA_BLOB,
+        "len = {} vs. {}",
+        reconstructed_big_monolithic_blob.len(),
+        MEGA_BLOB.len(),
+    );
+}
+
+#[test]
+fn test_mutate_daniel_wong() {
+    // Step 1: Prepare the world.
+    let state_machine = state_machine_builder_for_nns_tests().build();
+
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_initial_invariant_compliant_mutations()
+        .build();
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+
+    let original_version = registry_latest_version(&state_machine).unwrap();
+
+    // Step 2: Run the code that is under test. Similar to previous test, but we
+    // do two more mutations: UpsertSmall, and Delete.
+
+    const RED_HERRING_ID: u64 = 999;
+
+    let _version = registry_mutate_daniel_wong(
+        &state_machine,
+        mutate_daniel_wong::Request {
+            id: 42,
+            operation: mutate_daniel_wong::Operation::UpsertLarge,
+        },
+    );
+
+    let small_version = registry_mutate_daniel_wong(
+        &state_machine,
+        mutate_daniel_wong::Request {
+            id: 42,
+            operation: mutate_daniel_wong::Operation::UpsertSmall,
+        },
+    );
+    let _version = registry_mutate_daniel_wong(
+        &state_machine,
+        mutate_daniel_wong::Request {
+            id: RED_HERRING_ID,
+            operation: mutate_daniel_wong::Operation::UpsertLarge,
+        },
+    );
+
+    let small_get_value_response = registry_get_value(&state_machine, b"daniel_wong_42");
+
+    let final_red_herring_version = registry_mutate_daniel_wong(
+        &state_machine,
+        mutate_daniel_wong::Request {
+            id: RED_HERRING_ID,
+            operation: mutate_daniel_wong::Operation::UpsertSmall,
+        },
+    );
+    let delete_version = registry_mutate_daniel_wong(
+        &state_machine,
+        mutate_daniel_wong::Request {
+            id: 42,
+            operation: mutate_daniel_wong::Operation::Delete,
+        },
+    );
+
+    let delete_get_value_response = registry_get_value(&state_machine, b"daniel_wong_42");
+
+    // Step 3: Inspect result(s).
+
+    assert_eq!(small_version, original_version + 2);
+    assert_eq!(delete_version, original_version + 5);
+
+    assert_eq!(
+        small_get_value_response,
+        HighCapacityRegistryGetValueResponse {
+            content: Some(high_capacity_registry_get_value_response::Content::Value(
+                b"small value".to_vec()
+            )),
+            version: small_version,
+            timestamp_seconds: 0,
+            error: None,
+        },
+    );
+
+    assert_eq!(
+        delete_get_value_response,
+        HighCapacityRegistryGetValueResponse {
+            error: Some(RegistryError {
+                code: registry_error::Code::KeyNotPresent as i32,
+                reason: "".to_string(),
+                key: b"daniel_wong_42".to_vec(),
+            }),
+            content: None,
+            version: delete_version,
+            timestamp_seconds: 0,
+        },
+    );
+
+    let red_herring_get_value_response = registry_get_value(&state_machine, b"daniel_wong_999");
+    assert_eq!(
+        red_herring_get_value_response,
+        HighCapacityRegistryGetValueResponse {
+            content: Some(high_capacity_registry_get_value_response::Content::Value(
+                b"small value".to_vec()
+            )),
+            version: final_red_herring_version,
+            timestamp_seconds: 0,
+            error: None,
+        },
+    );
+}
 
 #[test]
 fn test_get_chunk() {
@@ -22,8 +205,6 @@ fn test_get_chunk() {
         .build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
 
-    // TODO(NNS1-3682): Populate chunks via mutation, not by directly
-    // manipulating stable memory.
     let stable_memory = Rc::new(RefCell::new(vec![]));
     let memory_manager = MemoryManager::init(Rc::clone(&stable_memory));
     let chunks_memory = memory_manager.get(MemoryId::new(1));

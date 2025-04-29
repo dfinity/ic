@@ -4,6 +4,8 @@ use serde::Serialize;
 use std::{collections::HashSet, fmt, net::Ipv4Addr, str::FromStr};
 use thiserror::Error;
 
+pub mod mutate_daniel_wong;
+
 #[derive(Debug, Error)]
 pub enum IPv4ConfigError {
     #[error("Invalid IPv4 address")]

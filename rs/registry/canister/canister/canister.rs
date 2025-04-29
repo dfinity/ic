@@ -442,6 +442,48 @@ fn get_chunk_(request: GetChunkRequest) -> Result<Chunk, String> {
     registry().get_chunk(request)
 }
 
+/// Modifies records with keys of the form "daniel_wong_{}".
+///
+/// Returns new version number.
+///
+/// Caller must be GOVERNANCE_CANISTER_ID.
+///
+/// Used in integration test(s) for large records.
+///
+/// At the same time, it is not harmful for this to be in release builds,
+/// because
+///
+///     1. Only Governance canister is allowed to call this.
+///     2. This does not appear in registry.did.
+///
+/// There are a couple of pieces of functionality here that cannot otherwise
+/// easily be accomplished:
+///
+///     1. Produce large record(s).
+///     2. Chunking is ALWAYS enabled.
+///
+/// Again, since this can only be called by the Governance canister, production
+/// is protected from prematurely (i.e. before clients are ready) doing those
+/// things.
+#[export_name = "canister_update mutate_daniel_wong"]
+fn mutate_daniel_wong() {
+    // Since these should only be used in tests, we do not put these at the top of the file.
+    use ic_registry_canister_api::mutate_daniel_wong::Request;
+    use registry_canister::flags::temporarily_enable_chunkifying_large_values;
+
+    over(candid_one, |request: Request| -> /* version */ u64 {
+        if dfn_core::api::caller() != PrincipalId::from(GOVERNANCE_CANISTER_ID) {
+            panic!("Only the Governance canister is allowed to call mutate_daniel_wong.")
+        };
+
+        let _restore_on_drop = temporarily_enable_chunkifying_large_values();
+
+        let registry = registry_mut();
+        registry.maybe_apply_mutation_internal(vec![request.into_mutation()]);
+        registry.latest_version()
+    });
+}
+
 #[export_name = "canister_update revise_elected_guestos_versions"]
 fn revise_elected_guestos_versions() {
     check_caller_is_governance_and_log("revise_elected_guestos_versions");

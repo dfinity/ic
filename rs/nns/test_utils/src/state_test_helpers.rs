@@ -57,10 +57,11 @@ use ic_nns_governance_api::pb::v1::{
 };
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
-use ic_registry_canister_api::GetChunkRequest;
+use ic_registry_canister_api::{mutate_daniel_wong, GetChunkRequest};
 use ic_registry_transport::deserialize_get_latest_version_response;
 use ic_registry_transport::pb::v1::{
-    RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
+    HighCapacityRegistryGetValueResponse, RegistryGetChangesSinceRequest,
+    RegistryGetChangesSinceResponse, RegistryGetValueRequest,
 };
 use ic_sns_governance::pb::v1::{
     self as sns_pb, manage_neuron_response::Command as SnsCommandResponse, GetModeResponse,
@@ -103,6 +104,33 @@ pub fn state_machine_builder_for_nns_tests() -> StateMachineBuilder {
         ))
 }
 
+pub fn registry_mutate_daniel_wong(
+    state_machine: &StateMachine,
+    request: mutate_daniel_wong::Request,
+) -> u64 {
+    let sender = PrincipalId::from(GOVERNANCE_CANISTER_ID);
+    let result = state_machine
+        .execute_ingress_as(
+            sender,
+            REGISTRY_CANISTER_ID,
+            "mutate_daniel_wong",
+            Encode!(&request).unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(reject) => {
+            panic!(
+                "get_changes_since was rejected by the NNS registry canister: {:#?}",
+                reject
+            )
+        }
+    };
+
+    Decode!(&result, u64).unwrap()
+}
+
 pub fn registry_latest_version(state_machine: &StateMachine) -> Result<u64, String> {
     let response = update(
         state_machine,
@@ -139,6 +167,33 @@ pub fn registry_get_changes_since(
     };
 
     RegistryGetChangesSinceResponse::decode(&result[..]).unwrap()
+}
+
+pub fn registry_get_value(
+    state_machine: &StateMachine,
+    key: &[u8],
+) -> HighCapacityRegistryGetValueResponse {
+    let request = RegistryGetValueRequest {
+        key: key.to_vec(),
+        version: None,
+    }
+    .encode_to_vec();
+
+    let result = state_machine
+        .execute_ingress(REGISTRY_CANISTER_ID, "get_value", request)
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(reject) => {
+            panic!(
+                "get_changes_since was rejected by the NNS registry canister: {:#?}",
+                reject
+            )
+        }
+    };
+
+    HighCapacityRegistryGetValueResponse::decode(&result[..]).unwrap()
 }
 
 pub fn registry_get_chunk(
