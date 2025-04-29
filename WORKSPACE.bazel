@@ -270,7 +270,4 @@ load("//bazel:spawn_proto_library.bzl", "spawn_proto_library")
 
 spawn_proto_library(
     name = "spawn_proto_library",
-    sha256 = "381bcb109e2855d4055fdc75988cc2144e0a92aa8586298123bb662cdefa6afe",
-    # Make sure the version matches the version of Bazel.
-    url = "https://raw.githubusercontent.com/bazelbuild/bazel/refs/tags/7.6.0/src/main/protobuf/spawn.proto",
 )

@@ -7,9 +7,9 @@ def _spawn_proto_library_impl(ctx):
 
     # Download the file
     ctx.download(
-        url = ctx.attr.url,
+        url = "https://raw.githubusercontent.com/bazelbuild/bazel/refs/tags/{bazel_version}/src/main/protobuf/spawn.proto".format(bazel_version = native.bazel_version),
         output = dest.basename,
-        sha256 = ctx.attr.sha256,
+        sha256 = "381bcb109e2855d4055fdc75988cc2144e0a92aa8586298123bb662cdefa6afe",
     )
 
     ctx.file("BUILD.bazel", """
@@ -29,8 +29,4 @@ proto_library(
 
 spawn_proto_library = repository_rule(
     implementation = _spawn_proto_library_impl,
-    attrs = {
-        "url": attr.string(mandatory = True),
-        "sha256": attr.string(mandatory = True),
-    },
 )
