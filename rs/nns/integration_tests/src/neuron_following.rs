@@ -88,7 +88,7 @@ fn follow_on_invalid_topic() {
 
     assert_matches!(result,
         Command::Error(err)
-        if err.error_type() == ErrorType::InvalidCommand
+        if err.error_type == ErrorType::InvalidCommand as i32
         && err.error_message.contains("Not a known topic number."));
 }
 
@@ -112,7 +112,7 @@ fn unauthorized_neuron_cannot_follow_neuron() {
 
     assert_matches!(result,
         Command::Error(err)
-        if err.error_type() == ErrorType::NotAuthorized);
+        if err.error_type == ErrorType::NotAuthorized as i32);
 }
 
 #[test]
@@ -135,7 +135,7 @@ fn nonexistent_neuron_cannot_follow_neuron() {
 
     assert_matches!(result,
         Command::Error(err)
-        if err.error_type() == ErrorType::NotFound);
+        if err.error_type == ErrorType::NotFound as i32);
 }
 
 #[test]
@@ -552,7 +552,7 @@ fn check_ballots(
     let ballots = info.ballots;
     assert!(!ballots.is_empty());
     let ballot = &ballots[&(neuron.neuron_id).id];
-    (ballot.voting_power, Vote::try_from(ballot.vote).unwrap())
+    (ballot.voting_power, Vote::from_repr(ballot.vote).unwrap())
 }
 
 fn get_yes_votes(state_machine: &StateMachine, proposal_id: &ProposalId) -> u64 {

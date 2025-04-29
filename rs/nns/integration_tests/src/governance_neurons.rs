@@ -359,7 +359,7 @@ fn test_neuron_disburse_maturity() {
     else {
         panic!("Failed to disburse maturity: {:#?}", disburse_response)
     };
-    assert!(disburse_maturity_response.amount_disbursed_e8s() > 0);
+    assert!(disburse_maturity_response.amount_disbursed_e8s.unwrap() > 0);
 
     let get_balance_e8s_of_disburse_destination = || {
         icrc1_balance(
@@ -497,8 +497,8 @@ fn test_hotkey_can_join_and_leave_community_fund() {
             command: Some(manage_neuron_response::Command::Error(error)),
         } => {
             assert_eq!(
-                ErrorType::try_from(error.error_type),
-                Ok(ErrorType::NotAuthorized),
+                error.error_type,
+                ErrorType::NotAuthorized as i32,
                 "{:?}",
                 error
             );

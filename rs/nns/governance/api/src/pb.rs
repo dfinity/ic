@@ -33,7 +33,12 @@ impl GovernanceError {
 
 impl fmt::Display for GovernanceError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}: {}", self.error_type(), self.error_message)
+        write!(
+            f,
+            "{:?}: {}",
+            ErrorType::from_repr(self.error_type).unwrap_or(ErrorType::Unspecified),
+            self.error_message
+        )
     }
 }
 
