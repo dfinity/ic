@@ -375,22 +375,6 @@ impl HttpResponsePayload for Vec<LogEntry> {
     }
 }
 
-/// Parameters of the [`eth_getBlockByNumber`](https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_getblockbynumber) call.
-#[derive(Clone, Debug, Serialize)]
-#[serde(into = "(BlockSpec, bool)")]
-pub struct GetBlockByNumberParams {
-    /// Integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
-    pub block: BlockSpec,
-    /// If true, returns the full transaction objects. If false, returns only the hashes of the transactions.
-    pub include_full_transactions: bool,
-}
-
-impl From<GetBlockByNumberParams> for (BlockSpec, bool) {
-    fn from(value: GetBlockByNumberParams) -> Self {
-        (value.block, value.include_full_transactions)
-    }
-}
-
 /// Parameters of the [`eth_feeHistory`](https://ethereum.github.io/execution-apis/api-documentation/) call.
 #[derive(Clone, Debug, Serialize)]
 #[serde(into = "(Quantity, BlockSpec, Vec<u8>)")]

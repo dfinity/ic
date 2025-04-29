@@ -252,18 +252,8 @@ mod rlp_encoding {
 }
 
 mod eth_get_block_by_number {
-    use crate::eth_rpc::{into_nat, Block, BlockSpec, BlockTag, GetBlockByNumberParams, Quantity};
+    use crate::eth_rpc::{into_nat, Block, Quantity};
     use crate::numeric::{BlockNumber, Wei};
-
-    #[test]
-    fn should_serialize_get_block_by_number_params_as_tuple() {
-        let params = GetBlockByNumberParams {
-            block: BlockSpec::Tag(BlockTag::Finalized),
-            include_full_transactions: false,
-        };
-        let serialized_params = serde_json::to_string(&params).unwrap();
-        assert_eq!(serialized_params, r#"["finalized",false]"#);
-    }
 
     #[test]
     fn should_deserialize_block() {
