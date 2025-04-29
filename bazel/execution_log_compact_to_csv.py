@@ -70,7 +70,8 @@ def main():
             if msg_len is None:
                 break
 
-            # Parse the ExecLogEntry message. See spawn.proto for the message definition.
+            # Parse the ExecLogEntry message. For the message definition see:
+            # https://github.com/bazelbuild/bazel/blob/master/src/main/protobuf/spawn.proto.
             msg_buf = execlog_file.read(msg_len)
             exec_log_entry = spawn_pb2.ExecLogEntry()
             exec_log_entry.ParseFromString(msg_buf)
