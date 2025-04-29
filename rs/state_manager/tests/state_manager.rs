@@ -412,6 +412,7 @@ fn lazy_wasms() {
     // Restarting the node clears the in-memory compilation cache.
     // The next execution requires loading the wasm binary from disk.
     let env = env.restart_node_with_snapshot_download_enabled();
+    env.tick();
     assert_eq!(wasm_files_by_source("canister", &env), 0);
     assert_eq!(wasm_files_by_source("snapshot", &env), 0);
 
