@@ -89,11 +89,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             patch_args = ["-p4"],
             patches = ["@@//bazel:cranelift-isle.patch"],
         )],
-        "cranelift-codegen-meta": [crate.annotation(
+        "cranelift-srcgen-lib": [crate.annotation(
+            # Patch for issue https://github.com/bytecodealliance/wasmtime/issues/9553
             patch_args = ["-p4"],
-            patches = [
-                "@@//bazel:cranelift-codegen-meta.patch",  # Patch for determinism issues
-            ],
+            patches = ["@@//bazel:cranelift-srcgen-lib.patch"],
         )],
         "secp256k1-sys": [crate.annotation(
             # This specific version is used by ic-btc-kyt canister, which
