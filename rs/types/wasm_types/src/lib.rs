@@ -433,7 +433,8 @@ mod tests {
             .unwrap();
         let test_wasm_file = TestWasmFile(tmp.path().to_path_buf());
         let mut module =
-            CanisterModule::new_from_file(Box::new(test_wasm_file), WasmHash([0; 32]), None).unwrap();
+            CanisterModule::new_from_file(Box::new(test_wasm_file), WasmHash([0; 32]), None)
+                .unwrap();
         module.write(&[9], 5).unwrap();
         assert_eq!(
             &[0x00, 0x61, 0x73, 0x6d, 0x00, 0x09, 0x00, 0x00],
