@@ -2507,6 +2507,12 @@ impl<T> WasmFile<T>
 where
     T: ReadPolicy,
 {
+    /// Lazily loads a Wasm file with a known `module_hash` and optionally a known file `len`.
+    ///
+    /// If the file length is already known before calling this function,
+    /// passing it into the function avoids fetching the file's metadata, which can
+    /// be a relatively expensive operation when dealing with a large number of files.
+    /// This is similar to providing the `module_hash` upfront to avoid recomputing it.
     pub fn lazy_load_with_module_hash(
         self,
         module_hash: WasmHash,
