@@ -1169,6 +1169,12 @@ fn switch_to_checkpoint(
                     .unwrap()
                     .as_slice()
             );
+
+            debug_assert_eq!(
+                wasm_binary.module_loading_status(),
+                ModuleLoadingStatus::FileNotLoaded
+            );
+
             tip_state.wasm_binary = Arc::new(
                 ic_replicated_state::canister_state::execution_state::WasmBinary {
                     binary: wasm_binary,

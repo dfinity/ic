@@ -11,7 +11,6 @@ use ic_utils::byte_slice_fmt::truncate_and_format;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::ops::DerefMut;
-use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 use std::{fmt, path::Path, sync::Arc};
 
@@ -93,12 +92,9 @@ impl CanisterModule {
         })
     }
 
-    /// If this module is backed by a file, return the path to that file.
-    pub fn file(&self) -> Option<&Path> {
-        match &self.module {
-            ModuleStorage::Memory(_) => None,
-            ModuleStorage::File(storage) => Some(&storage.path),
-        }
+    /// Returns if this module is backed by a file
+    pub fn is_file(&self) -> bool {
+        matches!(self.module, ModuleStorage::File(_))
     }
 
     /// Overwrite the module at `offset` with `buf`. This may invalidate the
@@ -143,13 +139,24 @@ impl CanisterModule {
     pub fn module_loading_status(&self) -> ModuleLoadingStatus {
         match &self.module {
             ModuleStorage::Memory(_) => ModuleLoadingStatus::InMemory,
-            ModuleStorage::File(storage) => {
-                if storage.is_loaded() {
+            ModuleStorage::File(file) => {
+                if file.is_loaded() {
                     ModuleLoadingStatus::FileLoaded
                 } else {
                     ModuleLoadingStatus::FileNotLoaded
                 }
             }
+        }
+    }
+
+    /// Returns `false` if the module is stored in memory, if the file's path does not match,
+    /// or if the backing file has already been loaded.
+    ///
+    /// Note that this method is intended for testing purposes only.
+    pub fn wasm_file_not_loaded_and_path_matches(&self, expected_path: &Path) -> bool {
+        match &self.module {
+            ModuleStorage::Memory(_) => false,
+            ModuleStorage::File(file) => file.wasm_file_not_loaded_and_path_matches(expected_path),
         }
     }
 }
@@ -275,7 +282,6 @@ enum ModuleStorage {
 /// populated when the first access occurs.
 #[derive(Clone)]
 struct WasmFileStorage {
-    path: PathBuf,
     len: usize,
     file: Arc<Mutex<Option<Box<dyn MemoryMappableWasmFile + Send + Sync>>>>,
     mmap: Arc<OnceLock<ic_sys::mmap::ScopedMmap>>,
@@ -301,7 +307,6 @@ impl WasmFileStorage {
             std::fs::metadata(wasm_file.path())?.len() as usize
         };
         Ok(Self {
-            path: wasm_file.path().to_path_buf(),
             len,
             file: Arc::new(Mutex::new(Some(wasm_file))),
             mmap: Arc::new(OnceLock::new()),
@@ -334,6 +339,19 @@ impl WasmFileStorage {
 
     fn as_slice(&self) -> &[u8] {
         self.init_or_die().as_slice()
+    }
+
+    /// Returns whether the file path backing this storage matches the expected path.
+    /// This method avoids exposing the internal path directly and is intended for testing purposes only.
+    ///
+    /// Returns `false` if the path does not match or if the `file` has been taken out of the mutex,
+    /// (i.e., the file has been loaded, and its path is no longer visible).
+    fn wasm_file_not_loaded_and_path_matches(&self, expected_path: &Path) -> bool {
+        let guard = self.file.lock().unwrap();
+        match &*guard {
+            Some(file) => file.path() == expected_path,
+            None => false,
+        }
     }
 }
 

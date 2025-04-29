@@ -6127,8 +6127,8 @@ fn wasm_binaries_can_be_correctly_switched_from_memory_to_checkpoint() {
             .wasm_binary;
 
         // Before checkpointing, wasm binaries of both the canister and the snapshot are in memory.
-        assert!(canister_wasm_binary.file().is_none());
-        assert!(snapshot_wasm_binary.file().is_none());
+        assert!(!canister_wasm_binary.is_file());
+        assert!(!snapshot_wasm_binary.is_file());
 
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         state_manager.flush_tip_channel();
@@ -6160,15 +6160,15 @@ fn wasm_binaries_can_be_correctly_switched_from_memory_to_checkpoint() {
 
         // After checkpointing, wasm binaries of both the canister and the snapshot are backed by files in checkpoint@1
         // and file contents can be correctly read.
-        assert_eq!(canister_wasm_binary.as_slice(), EMPTY_WASM);
+        // Note that `wasm_file_not_loaded_and_path_matches()` needs to be called before `as_slice()`
+        // because the path is no longer visible after we load the wasm file and thus cannot be checked.
         assert!(canister_wasm_binary
-            .file()
-            .is_some_and(|path| path == canister_layout.wasm().raw_path()));
+            .wasm_file_not_loaded_and_path_matches(canister_layout.wasm().raw_path()));
+        assert_eq!(canister_wasm_binary.as_slice(), EMPTY_WASM);
 
-        assert_eq!(snapshot_wasm_binary.as_slice(), EMPTY_WASM);
         assert!(snapshot_wasm_binary
-            .file()
-            .is_some_and(|path| path == snapshot_layout.wasm().raw_path()));
+            .wasm_file_not_loaded_and_path_matches(snapshot_layout.wasm().raw_path()));
+        assert_eq!(snapshot_wasm_binary.as_slice(), EMPTY_WASM);
 
         assert_error_counters(metrics);
     });
@@ -6204,10 +6204,9 @@ fn wasm_binaries_can_be_correctly_switched_from_checkpoint_to_checkpoint() {
             .binary;
 
         // After checkpointing at height 1, wasm binary the canister is backed by file in checkpoint@1.
-        assert_eq!(canister_wasm_binary.as_slice(), EMPTY_WASM);
         assert!(canister_wasm_binary
-            .file()
-            .is_some_and(|path| path == canister_layout.wasm().raw_path()));
+            .wasm_file_not_loaded_and_path_matches(canister_layout.wasm().raw_path()));
+        assert_eq!(canister_wasm_binary.as_slice(), EMPTY_WASM);
 
         // We create a snapshot from the canister, which already has wasm binary backed by file on disk.
         let new_snapshot = CanisterSnapshot::from_canister(
@@ -6254,15 +6253,13 @@ fn wasm_binaries_can_be_correctly_switched_from_checkpoint_to_checkpoint() {
 
         // After checkpointing at height 2, wasm binaries of both the canister and the snapshot are backed by files in checkpoint@2
         // and file contents can be correctly read.
-        assert_eq!(canister_wasm_binary.as_slice(), EMPTY_WASM);
         assert!(canister_wasm_binary
-            .file()
-            .is_some_and(|path| path == canister_layout.wasm().raw_path()));
+            .wasm_file_not_loaded_and_path_matches(canister_layout.wasm().raw_path()));
+        assert_eq!(canister_wasm_binary.as_slice(), EMPTY_WASM);
 
-        assert_eq!(snapshot_wasm_binary.as_slice(), EMPTY_WASM);
         assert!(snapshot_wasm_binary
-            .file()
-            .is_some_and(|path| path == snapshot_layout.wasm().raw_path()));
+            .wasm_file_not_loaded_and_path_matches(snapshot_layout.wasm().raw_path()));
+        assert_eq!(snapshot_wasm_binary.as_slice(), EMPTY_WASM);
 
         assert_error_counters(metrics);
     });

@@ -722,14 +722,14 @@ fn wasm_can_be_serialized_to_and_loaded_from_a_file() {
     )
     .expect("failed to read Wasm from disk");
 
-    assert_eq!(wasm_in_memory.file(), None);
-    assert_eq!(wasm_on_disk.file(), Some(wasm_file.path.as_path()));
+    assert!(!wasm_in_memory.is_file());
+    assert!(wasm_on_disk.wasm_file_not_loaded_and_path_matches(wasm_file.path.as_path()));
     assert_eq!(wasm_in_memory.as_slice(), wasm_on_disk.as_slice());
     assert_eq!(wasm_in_memory, wasm_on_disk);
 
+    assert!(wasm_on_disk_with_len.wasm_file_not_loaded_and_path_matches(wasm_file.path.as_path()));
     assert_eq!(wasm_on_disk, wasm_on_disk_with_len);
     assert_eq!(wasm_on_disk.len(), wasm_on_disk_with_len.len());
-    assert_eq!(wasm_on_disk.file(), wasm_on_disk_with_len.file());
     assert_eq!(wasm_on_disk.as_slice(), wasm_on_disk_with_len.as_slice());
 }
 
