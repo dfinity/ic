@@ -25,6 +25,7 @@ DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//packages/pocket-ic",
+    "//rs/nervous_system/agent:test_agent",
     "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
     "//rs/nns/test_utils",
     "//rs/registry/transport",

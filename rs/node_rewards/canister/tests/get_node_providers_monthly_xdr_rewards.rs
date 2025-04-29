@@ -1,3 +1,6 @@
+use futures_util::FutureExt;
+use ic_nervous_system_agent::nns::node_rewards::get_node_providers_monthly_xdr_rewards;
+use ic_nervous_system_agent::state_machine_impl::StateMachineAgent;
 use ic_nns_constants::NODE_REWARDS_CANISTER_ID;
 use ic_nns_test_utils::state_test_helpers::{
     setup_nns_node_rewards_with_correct_canister_id, state_machine_builder_for_nns_tests,
@@ -17,31 +20,28 @@ fn get_node_providers_monthly_xdr_rewards_is_only_callable_by_governance() {
         registry_version: None,
     };
 
-    let attempt_with_bad_caller: Result<GetNodeProvidersMonthlyXdrRewardsResponse, String> =
-        update_with_sender(
-            &state_machine,
-            NODE_REWARDS_CANISTER_ID,
-            "get_node_providers_monthly_xdr_rewards",
-            request.clone(),
-            PrincipalId::new_user_test_id(1),
-        );
-    let actual_error = attempt_with_bad_caller.unwrap_err();
+    let bad_agent = StateMachineAgent::new(&state_machine, PrincipalId::new_anonymous());
+
+    let attempt_with_bad_caller =
+        get_node_providers_monthly_xdr_rewards(&bad_agent, request.clone())
+            .now_or_never()
+            .unwrap();
+    let error = attempt_with_bad_caller.unwrap_err();
 
     assert!(
-        actual_error.contains("Only the governance canister can call this method"),
+        error.contains("Only the governance canister can call this method"),
         "Expected error message not found, was {}",
-        actual_error
+        error
+    );
+    let governance_agent = StateMachineAgent::new(
+        &state_machine,
+        ic_nns_constants::GOVERNANCE_CANISTER_ID.get(),
     );
 
-    let attempt_with_governance: Result<GetNodeProvidersMonthlyXdrRewardsResponse, String> =
-        update_with_sender(
-            &state_machine,
-            NODE_REWARDS_CANISTER_ID,
-            "get_node_providers_monthly_xdr_rewards",
-            request,
-            ic_nns_constants::GOVERNANCE_CANISTER_ID.get(),
-        );
-
+    let attempt_with_governance =
+        get_node_providers_monthly_xdr_rewards(&governance_agent, request)
+            .now_or_never()
+            .unwrap();
     let error = attempt_with_governance.unwrap().error.unwrap();
 
     // Registry canister isn't installed, so this is the expected error when you use the right caller.

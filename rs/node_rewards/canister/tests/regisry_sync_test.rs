@@ -10,17 +10,22 @@ use std::time::Duration;
 
 #[tokio::test]
 async fn test_registry_value_syncing() {
-    let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
+    let pocket_ic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_sns_subnet()
+        .build_async()
+        .await;
 
-    NnsInstaller::default().install(&pocket_ic).await;
+    let mut installer = NnsInstaller::default();
+    installer.with_current_nns_canister_versions();
+    installer.install(&pocket_ic).await;
 
     let wasm = build_node_rewards_test_wasm();
 
     let canister_id = pocket_ic.create_canister().await;
     pocket_ic
         .install_canister(canister_id, wasm.bytes(), Encode!().unwrap(), None)
-        .await
-        .unwrap();
+        .await;
 
     // This is the value from invariant_compliant_mutation
     let test_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(999));
@@ -31,6 +36,7 @@ async fn test_registry_value_syncing() {
             "get_registry_value",
             Encode!(&make_subnet_record_key(test_subnet_id)).unwrap(),
         )
+        .await
         .unwrap();
 
     let decoded = Decode!(&response, Result<Option<Vec<u8>>, String>).unwrap();
@@ -50,6 +56,7 @@ async fn test_registry_value_syncing() {
             "get_registry_value",
             Encode!(&make_subnet_record_key(test_subnet_id)).unwrap(),
         )
+        .await
         .unwrap();
 
     // Now we are asserting that there is something in this recod
