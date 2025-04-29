@@ -91,7 +91,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
         )],
         "cranelift-srcgen": [crate.annotation(
             # Patch for issue https://github.com/bytecodealliance/wasmtime/issues/9553
-            patch_args = ["-p4"],
+            patch_args = ["-p3"],
             patches = ["@@//bazel:cranelift-srcgen-lib.patch"],
         )],
         "secp256k1-sys": [crate.annotation(

@@ -1,5 +1,5 @@
 {
-  "checksum": "506fc59ff430694d62a254ae0c828c537b351ba95bc7646898a414a194456261",
+  "checksum": "4083c76dd8efd7350412131e5474a40783d18f46794c9a421e8af2d5b4b7f979",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -16432,7 +16432,7 @@
           "url": "https://static.crates.io/crates/cranelift-srcgen/0.119.0/download",
           "sha256": "47e1a86340a16e74b4285cc86ac69458fa1c8e7aaff313da4a89d10efd3535ee",
           "patch_args": [
-            "-p4"
+            "-p3"
           ],
           "patches": [
             "@@//bazel:cranelift-srcgen-lib.patch"
