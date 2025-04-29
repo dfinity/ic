@@ -79,12 +79,11 @@ fn test_large_records() {
         _ => panic!("{:#?}", get_value_response),
     };
     let reconstructed_big_monolithic_blob = chunk_content_sha256s
-        .into_iter()
-        .map(|chunk_key| -> Vec<u8> {
+        .iter()
+        .flat_map(|chunk_key| -> Vec<u8> {
             let Chunk { content } = registry_get_chunk(&state_machine, chunk_key).unwrap();
             content.unwrap()
         })
-        .flatten()
         .collect::<Vec<u8>>();
     // assert_eq is not used here, because it would be very spammy.
     assert!(
