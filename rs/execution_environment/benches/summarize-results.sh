@@ -80,4 +80,5 @@ fi
 rm -f "${TMP_FILE}"
 
 # Return an error if there are changes, so the calling script might retry or report an error.
+
 [ "${total_diff}" == "0" ]
