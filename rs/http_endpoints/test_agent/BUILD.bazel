@@ -20,10 +20,10 @@ ALIASES = {}
 
 rust_library(
     name = "test_agent",
+    testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_http_endpoints_test_agent",
-    testonly = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES,
