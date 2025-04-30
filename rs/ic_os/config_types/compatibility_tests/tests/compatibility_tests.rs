@@ -5,7 +5,9 @@ use std::path::PathBuf;
 
 #[test]
 fn test_backwards_compatibility() {
-    let test_data_dir = PathBuf::from("fixtures");
+    // Get the path to the fixtures directory using Bazel runfiles
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let test_data_dir = PathBuf::from(manifest_dir).join("fixtures");
 
     // Test each historical version
     for entry in std::fs::read_dir(&test_data_dir).unwrap() {
