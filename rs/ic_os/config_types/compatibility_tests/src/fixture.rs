@@ -12,7 +12,7 @@ pub struct ConfigFixture {
 
 impl ConfigFixture {
     pub fn generate_for_version(version: &str) -> Self {
-        let base_config = generate_test_base_config(version);
+        let base_config = generate_test_base_config();
 
         let hostos_config = HostOSConfig {
             config_version: base_config.0.clone(),
@@ -105,9 +105,7 @@ pub fn generate_fixtures(fixtures_dir: &Path) -> std::io::Result<()> {
     fixture.save_to_directory(fixtures_dir)
 }
 
-fn generate_test_base_config(
-    version: &str,
-) -> (
+fn generate_test_base_config() -> (
     String,
     NetworkSettings,
     ICOSSettings,
@@ -153,7 +151,7 @@ fn generate_test_base_config(
     let guestos_settings = GuestOSSettings::default();
 
     (
-        version.to_string(),
+        CONFIG_VERSION.to_string(),
         network_settings,
         icos_settings,
         hostos_settings,
