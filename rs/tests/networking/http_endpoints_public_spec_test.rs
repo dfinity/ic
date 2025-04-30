@@ -49,6 +49,7 @@ use ic_types::CanisterId;
 use itertools::Itertools;
 use reqwest::Response;
 use slog::{info, Logger};
+use std::net::SocketAddr;
 
 const CALL_VERSIONS: [Call; 2] = [Call::V2, Call::V3];
 
@@ -59,73 +60,40 @@ fn setup(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    info!(&env.logger(), "Checking readiness of all nodes...");
-    env.topology_snapshot().subnets().for_each(|subnet| {
+    let logger = env.logger();
+    let snapshot = env.topology_snapshot();
+
+    info!(&logger, "Checking readiness of all nodes...");
+
+    snapshot.subnets().for_each(|subnet| {
         subnet
             .nodes()
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
-}
 
-fn effective_canister_http_spec_test(env: TestEnv) {
-    let logger = env.logger();
-    let snapshot = env.topology_snapshot();
-
-    // Get the system subnet, setup an agent and get two canister ids from the range
-    let sys_subnet = snapshot
-        .subnets()
-        .find(|subnet| subnet.subnet_type() == SubnetType::System)
-        .expect("Failed to find system subnet");
-    let sys_subnet_canister_id_range = sys_subnet.subnet_canister_ranges()[0];
-    let sys_uc1_id = sys_subnet_canister_id_range
-        .generate_canister_id(None)
-        .unwrap();
-    let sys_uc2_id = sys_subnet_canister_id_range
-        .generate_canister_id(Some(sys_uc1_id))
-        .unwrap();
-
-    let sys_node = sys_subnet.nodes().next().unwrap();
-    let sys_agent = sys_node.build_default_agent();
-    let sys_socket_addr = std::net::SocketAddr::new(sys_node.get_ip_addr(), 8080);
-
-    // Get the app subnet, setup an agent and get a canister id from the range
-    let app_subnet = snapshot
-        .subnets()
-        .find(|subnet| subnet.subnet_type() == SubnetType::Application)
-        .expect("Failed to find app subnet");
-    let app_node = app_subnet
-        .nodes()
-        .next()
-        .expect("Failed to find node in system subnet");
-    let app_uc_id = app_node.effective_canister_id();
-    let app_agent = app_subnet.nodes().next().unwrap().build_default_agent();
-
+    let (sys_uc1_id, sys_uc2_id, app_uc_id) = get_canister_ids(&snapshot);
+    let (sys_agent, app_agent) = get_agents(&snapshot);
     block_on(async {
         // Create three universal canister, two on the system subnet, one on the app subnet
         UniversalCanister::new_with_retries(&sys_agent, sys_uc1_id.into(), &logger).await;
         UniversalCanister::new_with_retries(&sys_agent, sys_uc2_id.into(), &logger).await;
-        UniversalCanister::new_with_retries(&app_agent, app_uc_id, &logger).await;
+        UniversalCanister::new_with_retries(&app_agent, app_uc_id.into(), &logger).await;
+    });
+}
 
-        let test_canister_ids: [CanisterId; 4] = [
-            // Valid destination on same subnet
-            sys_uc2_id,
-            // Valid destination on other subnet
-            CanisterId::try_from_principal_id(app_uc_id).unwrap(),
-            // Invalid canister id
-            CanisterId::from(1337),
-            // Management canister
-            CanisterId::ic_00(),
-        ];
+fn update_calls(env: TestEnv) {
+    let logger = env.logger();
+    let snapshot = env.topology_snapshot();
+    let (primary, test_ids) = get_canister_test_ids(&snapshot);
+    let socket = get_socket_addr(&snapshot);
 
-        // Test update calls
-
+    block_on(async {
         // Test that well formed calls get accepted
         for version in CALL_VERSIONS.iter() {
             let response = version
                 .call(
-                    sys_socket_addr,
-                    IngressMessage::default()
-                        .with_canister_id(sys_uc1_id.into(), sys_uc1_id.into()),
+                    socket,
+                    IngressMessage::default().with_canister_id(primary.into(), primary.into()),
                 )
                 .await;
             let status = inspect_response(response, "Call", &logger).await;
@@ -133,75 +101,97 @@ fn effective_canister_http_spec_test(env: TestEnv) {
         }
 
         // Test that malformed calls get rejects
-        for (version, effective_canister_id) in CALL_VERSIONS
-            .iter()
-            .cartesian_product(test_canister_ids.iter())
+        for (version, effective_canister_id) in
+            CALL_VERSIONS.iter().cartesian_product(test_ids.iter())
         {
             let response = version
                 .call(
-                    sys_socket_addr,
+                    socket,
                     IngressMessage::default()
-                        .with_canister_id(sys_uc1_id.into(), (*effective_canister_id).into()),
+                        .with_canister_id(primary.into(), (*effective_canister_id).into()),
                 )
                 .await;
             let status = inspect_response(response, "Call", &logger).await;
             assert_4xx(&status);
         }
+    });
+}
 
-        // Test query calls
+fn query_calls(env: TestEnv) {
+    let logger = env.logger();
+    let snapshot = env.topology_snapshot();
+    let (primary, test_ids) = get_canister_test_ids(&snapshot);
+    let socket = get_socket_addr(&snapshot);
 
+    block_on(async {
         // Test that well formed calls get accepted
-        let response = Query::new(sys_uc1_id.into(), sys_uc1_id.into())
-            .query(sys_socket_addr)
+        let response = Query::new(primary.into(), primary.into())
+            .query(socket)
             .await;
         let status = inspect_response(response, "Query", &logger).await;
         assert_2xx(&status);
 
         // Test that malformed calls get rejeceted
-        for effective_canister_id in test_canister_ids {
-            let response = Query::new(sys_uc1_id.into(), effective_canister_id.into())
-                .query(sys_socket_addr)
+        for effective_canister_id in test_ids {
+            let response = Query::new(primary.into(), effective_canister_id.into())
+                .query(socket)
                 .await;
             let status = inspect_response(response, "Query", &logger).await;
             assert_4xx(&status);
         }
+    });
+}
 
-        // Test read state requests
+fn read_state(env: TestEnv) {
+    let logger = env.logger();
+    let snapshot = env.topology_snapshot();
+    let (primary, test_ids) = get_canister_test_ids(&snapshot);
+    let socket = get_socket_addr(&snapshot);
 
+    block_on(async {
         // Test that well formed read state requests work
         let response = CanisterReadState::new(
             vec![Path::from(vec![
                 Label::from("canister"),
-                Label::from(sys_uc1_id),
+                Label::from(primary),
                 Label::from("controllers"),
             ])],
-            sys_uc1_id.into(),
+            primary.into(),
         )
-        .read_state(sys_socket_addr)
+        .read_state(socket)
         .await;
         let status = inspect_response(response, "ReadState", &logger).await;
         assert_2xx(&status);
 
         // Test that malformed read_state requests are rejected
-        for effective_canister_id in test_canister_ids {
+        for effective_canister_id in test_ids {
             let response = CanisterReadState::new(
                 vec![Path::from(vec![
                     Label::from("canister"),
                     Label::from(effective_canister_id),
                     Label::from("controllers"),
                 ])],
-                sys_uc1_id.into(),
+                primary.into(),
             )
-            .read_state(sys_socket_addr)
+            .read_state(socket)
             .await;
             let status = inspect_response(response, "ReadState", &logger).await;
             assert_4xx(&status);
         }
+    });
+}
 
+fn read_time(env: TestEnv) {
+    let logger = env.logger();
+    let snapshot = env.topology_snapshot();
+    let (primary, _) = get_canister_test_ids(&snapshot);
+    let socket = get_socket_addr(&snapshot);
+
+    block_on(async {
         // Test that calling "time" path on the existing canister id works
         let response =
-            CanisterReadState::new(vec![Path::from(Label::from("time"))], sys_uc1_id.into())
-                .read_state(sys_socket_addr)
+            CanisterReadState::new(vec![Path::from(Label::from("time"))], primary.into())
+                .read_state(socket)
                 .await;
         let status = inspect_response(response, "ReadState", &logger).await;
         assert_2xx(&status);
@@ -214,7 +204,7 @@ fn effective_canister_http_spec_test(env: TestEnv) {
             vec![Path::from(Label::from("time"))],
             CanisterId::ic_00().into(),
         )
-        .read_state(sys_socket_addr)
+        .read_state(socket)
         .await;
         let status = inspect_response(response, "ReadState", &logger).await;
         assert_2xx(&status);
@@ -252,11 +242,6 @@ fn get_agents(snapshot: &TopologySnapshot) -> (Agent, Agent) {
 
     let sys_node = sys_subnet.nodes().next().unwrap();
     let sys_agent = sys_node.build_default_agent();
-
-    let app_node = app_subnet
-        .nodes()
-        .next()
-        .expect("Failed to find node in system subnet");
     let app_agent = app_subnet.nodes().next().unwrap().build_default_agent();
 
     (sys_agent, app_agent)
@@ -281,19 +266,27 @@ fn get_canister_ids(snapshot: &TopologySnapshot) -> (CanisterId, CanisterId, Can
     (sys_uc1_id, sys_uc2_id, app_uc_id)
 }
 
-fn get_canister_test_ids(snapshot: &TopologySnapshot) -> [CanisterId; 4] {
-    let (_, sys_uc, app_uc) = get_canister_ids(snapshot);
+fn get_socket_addr(snapshot: &TopologySnapshot) -> SocketAddr {
+    let (sys_subnet, _) = get_subnets(snapshot);
+    let sys_node = sys_subnet.nodes().next().unwrap();
+    SocketAddr::new(sys_node.get_ip_addr(), 8080)
+}
 
-    [
-        // Valid destination on same subnet
-        sys_uc,
-        // Valid destination on other subnet
-        app_uc,
-        // Invalid canister id
-        CanisterId::from(1337),
-        // Management canister
-        CanisterId::ic_00(),
-    ]
+fn get_canister_test_ids(snapshot: &TopologySnapshot) -> (CanisterId, [CanisterId; 4]) {
+    let (primary, sys_uc, app_uc) = get_canister_ids(snapshot);
+    (
+        primary,
+        [
+            // Valid destination on same subnet
+            sys_uc,
+            // Valid destination on other subnet
+            app_uc,
+            // Invalid canister id
+            CanisterId::from(1337),
+            // Management canister
+            CanisterId::ic_00(),
+        ],
+    )
 }
 
 fn assert_2xx(status: &u16) {
@@ -307,7 +300,10 @@ fn assert_4xx(status: &u16) {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(effective_canister_http_spec_test))
+        .add_test(systest!(update_calls))
+        .add_test(systest!(query_calls))
+        .add_test(systest!(read_state))
+        .add_test(systest!(read_time))
         .execute_from_args()?;
 
     Ok(())
