@@ -21,10 +21,11 @@ version [ledger-suite-icrc-2025-04-14](https://github.com/dfinity/ic/releases/ta
 
 ## Release Notes
 
+No changes since last version (0d96610b842ca721e50169c65bdfbc5d6d3d8b67).
+
 ```
 git log --format='%C(auto) %h %s' 0d96610b842ca721e50169c65bdfbc5d6d3d8b67..512cf412f33d430b79f42330518166d14fc6884e -- rs/ledger_suite/icrc1/archive
-
- ```
+```
 
 ## Upgrade args
 
