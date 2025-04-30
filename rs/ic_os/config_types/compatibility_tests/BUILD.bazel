@@ -52,16 +52,3 @@ rust_test(
         "@crate_index//:serde_json",
     ],
 )
-
-# Alias target for running from the config_types package
-rust_test(
-    name = "config_types_compatibility_test",
-    srcs = ["tests/compatibility_tests.rs"],
-    crate_name = "config_types_compatibility_test",
-    data = [":config_types_fixtures"],
-    deps = [
-        ":config_types_compatibility_lib",
-        "//rs/ic_os/config_types",
-        "@crate_index//:serde_json",
-    ],
-)
