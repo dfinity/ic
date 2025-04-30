@@ -11,8 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-## 9.0.1 - 2025-04-29
-
 ### Fixed
 - Crash when creating multiple instances with the same subnet state directory simultaneously.
 
