@@ -11,8 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed
+- Crash when creating multiple instances with the same subnet state directory simultaneously.
+
+
+
+## 9.0.0 - 2025-04-23
+
 ### Added
-- The `GET` endpoint `/instances/<instance_id>/auto_progress` that returns whether the automatic progress was enable for the PocketIC instance.
+- The `GET` endpoint `/instances/<instance_id>/auto_progress` that returns whether the automatic progress was enabled for the PocketIC instance.
 - Support for VetKd if nonmainnet features are enabled on a PocketIC instance.
 
 ### Changed

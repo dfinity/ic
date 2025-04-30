@@ -13,9 +13,9 @@ use ic_nns_test_utils::{
     },
     registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
-use ic_protobuf::registry::crypto::v1::ChainKeySigningSubnetList;
+use ic_protobuf::registry::crypto::v1::ChainKeyEnabledSubnetList;
 use ic_protobuf::registry::subnet::v1::{ChainKeyConfig as ChainKeyConfigPb, SubnetRecord};
-use ic_registry_keys::{make_chain_key_signing_subnet_list_key, make_subnet_record_key};
+use ic_registry_keys::{make_chain_key_enabled_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::{
     ChainKeyConfig as ChainKeyConfigInternal, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
 };
@@ -609,9 +609,9 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
             // Inspect the signing subnet list
             {
                 let new_signing_subnet_list: Vec<_> =
-                    get_value_or_panic::<ChainKeySigningSubnetList>(
+                    get_value_or_panic::<ChainKeyEnabledSubnetList>(
                         &registry,
-                        make_chain_key_signing_subnet_list_key(&key_id).as_bytes(),
+                        make_chain_key_enabled_subnet_list_key(&key_id).as_bytes(),
                     )
                     .await
                     .subnets

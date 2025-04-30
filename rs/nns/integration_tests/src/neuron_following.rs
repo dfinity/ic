@@ -406,9 +406,8 @@ async fn test_prune_some_following() {
 
     let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
 
-    let now_seconds = pocket_ic
-        .get_time()
-        .await
+    let system_time: SystemTime = pocket_ic.get_time().await.try_into().unwrap();
+    let now_seconds = system_time
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_secs();

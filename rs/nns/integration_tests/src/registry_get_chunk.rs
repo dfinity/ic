@@ -1,7 +1,8 @@
+use canister_test::CanisterInstallMode;
 use ic_nervous_system_chunks::Chunks;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_test_utils::{
-    common::NnsInitPayloadsBuilder,
+    common::{build_registry_wasm, NnsInitPayloadsBuilder},
     state_test_helpers::{
         registry_get_chunk, setup_nns_canisters, state_machine_builder_for_nns_tests,
     },
@@ -46,6 +47,14 @@ fn test_get_chunk() {
     // convert stable_memory to its inner Vec.
     let stable_memory = <RefCell<std::vec::Vec<u8>> as Clone>::clone(&stable_memory).into_inner();
     state_machine.set_stable_memory(REGISTRY_CANISTER_ID, &stable_memory);
+    state_machine
+        .install_wasm_in_mode(
+            REGISTRY_CANISTER_ID,
+            CanisterInstallMode::Upgrade,
+            build_registry_wasm().bytes(),
+            vec![],
+        )
+        .unwrap();
 
     // Step 2: Call code under test (i.e. get_chunk).
     let small_response = registry_get_chunk(&state_machine, &small_chunk_key);
