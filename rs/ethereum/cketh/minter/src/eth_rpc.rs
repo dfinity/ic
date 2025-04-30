@@ -2,22 +2,18 @@
 //! interface.
 
 use crate::endpoints::CandidBlockTag;
-use crate::eth_rpc_client::responses::TransactionReceipt;
-use crate::eth_rpc_error::{sanitize_send_raw_transaction_result, Parser};
-use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei, WeiPerGas};
-use candid::{candid_method, CandidType};
+use crate::numeric::{BlockNumber, LogIndex, Wei, WeiPerGas};
+use candid::CandidType;
 use ethnum;
 use evm_rpc_client::{
     HttpOutcallError as EvmHttpOutcallError,
     SendRawTransactionStatus as EvmSendRawTransactionStatus,
 };
 use ic_cdk::api::call::RejectionCode;
-use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
-use ic_cdk_macros::query;
 use ic_ethereum_types::Address;
 pub use metrics::encode as encode_metrics;
 use minicbor::{Decode, Encode};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
@@ -137,12 +133,6 @@ impl From<EvmSendRawTransactionStatus> for SendRawTransactionResult {
     }
 }
 
-impl HttpResponsePayload for SendRawTransactionResult {
-    fn response_transform() -> Option<ResponseTransform> {
-        Some(ResponseTransform::SendRawTransaction)
-    }
-}
-
 #[derive(
     Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Decode, Deserialize, Encode, Serialize,
 )]
@@ -191,8 +181,6 @@ impl std::str::FromStr for Hash {
         Ok(Self(bytes))
     }
 }
-
-impl HttpResponsePayload for Hash {}
 
 /// Block tags.
 /// See <https://ethereum.org/en/developers/docs/apis/json-rpc/#default-block>
@@ -362,12 +350,6 @@ pub struct LogEntry {
     pub removed: bool,
 }
 
-impl HttpResponsePayload for Vec<LogEntry> {
-    fn response_transform() -> Option<ResponseTransform> {
-        Some(ResponseTransform::LogEntries)
-    }
-}
-
 /// Parameters of the [`eth_feeHistory`](https://ethereum.github.io/execution-apis/api-documentation/) call.
 #[derive(Clone, Debug, Serialize)]
 #[serde(into = "(Quantity, BlockSpec, Vec<u8>)")]
@@ -409,14 +391,6 @@ pub struct FeeHistory {
     pub reward: Vec<Vec<WeiPerGas>>,
 }
 
-impl HttpResponsePayload for FeeHistory {
-    fn response_transform() -> Option<ResponseTransform> {
-        Some(ResponseTransform::FeeHistory)
-    }
-}
-
-impl HttpResponsePayload for Wei {}
-
 impl From<BlockNumber> for BlockSpec {
     fn from(value: BlockNumber) -> Self {
         BlockSpec::Number(value)
@@ -430,12 +404,6 @@ pub struct Block {
     pub number: BlockNumber,
     /// Base fee value of this block
     pub base_fee_per_gas: Wei,
-}
-
-impl HttpResponsePayload for Block {
-    fn response_transform() -> Option<ResponseTransform> {
-        Some(ResponseTransform::Block)
-    }
 }
 
 /// An envelope for all JSON-RPC requests.
@@ -462,92 +430,6 @@ pub struct JsonRpcReply<T> {
 pub enum JsonRpcResult<T> {
     Result(T),
     Error { code: i64, message: String },
-}
-
-/// Describes a payload transformation to execute before passing the HTTP response to consensus.
-/// The purpose of these transformations is to ensure that the response encoding is deterministic
-/// (the field order is the same).
-#[derive(Debug, Decode, Encode)]
-pub enum ResponseTransform {
-    #[n(0)]
-    Block,
-    #[n(1)]
-    LogEntries,
-    #[n(2)]
-    TransactionReceipt,
-    #[n(3)]
-    FeeHistory,
-    #[n(4)]
-    SendRawTransaction,
-}
-
-impl ResponseTransform {
-    fn apply(&self, body_bytes: &mut Vec<u8>) {
-        fn redact_response<T>(body: &mut Vec<u8>)
-        where
-            T: Serialize + DeserializeOwned,
-        {
-            let response: JsonRpcReply<T> = match serde_json::from_slice(body) {
-                Ok(response) => response,
-                Err(_) => return,
-            };
-            *body = serde_json::to_string(&response)
-                .expect("BUG: failed to serialize response")
-                .into_bytes();
-        }
-
-        fn redact_collection_response<T>(body: &mut Vec<u8>)
-        where
-            T: Serialize + DeserializeOwned,
-        {
-            let mut response: JsonRpcReply<Vec<T>> = match serde_json::from_slice(body) {
-                Ok(response) => response,
-                Err(_) => return,
-            };
-
-            if let JsonRpcResult::Result(ref mut result) = response.result {
-                sort_by_hash(result);
-            }
-
-            *body = serde_json::to_string(&response)
-                .expect("BUG: failed to serialize response")
-                .into_bytes();
-        }
-
-        match self {
-            Self::Block => redact_response::<Block>(body_bytes),
-            Self::LogEntries => redact_collection_response::<LogEntry>(body_bytes),
-            Self::TransactionReceipt => redact_response::<TransactionReceipt>(body_bytes),
-            Self::FeeHistory => redact_response::<FeeHistory>(body_bytes),
-            Self::SendRawTransaction => {
-                sanitize_send_raw_transaction_result(body_bytes, Parser::new())
-            }
-        }
-    }
-}
-
-#[query]
-#[candid_method(query)]
-fn cleanup_response(mut args: TransformArgs) -> HttpResponse {
-    args.response.headers.clear();
-    ic_cdk::println!(
-        "RAW RESPONSE BEFORE TRANSFORM:\nstatus: {:?}\nbody:{:?}",
-        args.response.status,
-        String::from_utf8_lossy(&args.response.body).to_string()
-    );
-    let status_ok = args.response.status >= 200u16 && args.response.status < 300u16;
-    if status_ok && !args.context.is_empty() {
-        let maybe_transform: Result<ResponseTransform, _> = minicbor::decode(&args.context[..]);
-        if let Ok(transform) = maybe_transform {
-            transform.apply(&mut args.response.body);
-        }
-    }
-    ic_cdk::println!(
-        "RAW RESPONSE AFTER TRANSFORM:\nstatus: {:?}\nbody:{:?}",
-        args.response.status,
-        String::from_utf8_lossy(&args.response.body).to_string()
-    );
-    args.response
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
@@ -599,25 +481,6 @@ pub fn is_response_too_large(code: &RejectionCode, message: &str) -> bool {
 }
 
 pub type HttpOutcallResult<T> = Result<T, HttpOutcallError>;
-
-pub trait HttpResponsePayload {
-    fn response_transform() -> Option<ResponseTransform> {
-        None
-    }
-}
-
-impl<T: HttpResponsePayload> HttpResponsePayload for Option<T> {}
-
-impl HttpResponsePayload for TransactionCount {}
-
-fn sort_by_hash<T: Serialize + DeserializeOwned>(to_sort: &mut [T]) {
-    use ic_sha3::Keccak256;
-    to_sort.sort_by(|a, b| {
-        let a_hash = Keccak256::hash(serde_json::to_vec(a).expect("BUG: failed to serialize"));
-        let b_hash = Keccak256::hash(serde_json::to_vec(b).expect("BUG: failed to serialize"));
-        a_hash.cmp(&b_hash)
-    });
-}
 
 pub(super) mod metrics {
     use ic_metrics_encoder::MetricsEncoder;
