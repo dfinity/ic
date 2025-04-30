@@ -1,5 +1,4 @@
 use config_types::*;
-use serde_json;
 use std::fs;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::Path;
