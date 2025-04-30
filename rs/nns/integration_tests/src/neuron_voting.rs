@@ -50,7 +50,7 @@ fn unauthorized_neuron_cannot_create_proposal() {
     .command
     .expect("Making NNS proposal failed");
 
-    assert_matches!(response, Command::Error(ref err) if err.error_type() == ErrorType::NotAuthorized);
+    assert_matches!(response, Command::Error(ref err) if err.error_type == ErrorType::NotAuthorized as i32);
     assert_matches!(response, Command::Error(ref err) if err.error_message.contains("Caller not authorized to propose"));
 }
 
@@ -69,7 +69,7 @@ fn unauthorized_neuron_cannot_vote_on_nonexistent_proposal() {
     .command
     .expect("Casting vote failed");
 
-    assert_matches!(response, Command::Error(ref err) if err.error_type() == ErrorType::NotAuthorized);
+    assert_matches!(response, Command::Error(ref err) if err.error_type == ErrorType::NotAuthorized as i32);
     assert_matches!(response, Command::Error(ref err) if err.error_message.contains("Caller is not authorized to vote for neuron"));
 }
 
@@ -88,7 +88,7 @@ fn anonymous_principal_cannot_vote_on_nonexistent_proposal() {
     .command
     .expect("Casting vote failed");
 
-    assert_matches!(response, Command::Error(ref err) if err.error_type() == ErrorType::NotAuthorized);
+    assert_matches!(response, Command::Error(ref err) if err.error_type == ErrorType::NotAuthorized as i32);
     assert_matches!(response, Command::Error(ref err) if err.error_message.contains("Caller is not authorized to vote for neuron"));
 }
 
@@ -108,7 +108,7 @@ fn anonymous_principal_cannot_vote_on_existent_proposal() {
     .command
     .expect("Casting vote failed");
 
-    assert_matches!(response, Command::Error(ref err) if err.error_type() == ErrorType::NotAuthorized);
+    assert_matches!(response, Command::Error(ref err) if err.error_type == ErrorType::NotAuthorized as i32);
     assert_matches!(response, Command::Error(ref err) if err.error_message.contains("Caller is not authorized to vote for neuron"));
 }
 
@@ -127,7 +127,7 @@ fn neuron_cannot_vote_on_nonexistent_proposal() {
     .command
     .expect("Casting vote failed");
 
-    assert_matches!(response, Command::Error(ref err) if err.error_type() == ErrorType::NotFound);
+    assert_matches!(response, Command::Error(ref err) if err.error_type == ErrorType::NotFound as i32);
     assert_matches!(response, Command::Error(ref err) if err.error_message.contains("Can't find proposal"));
 }
 
@@ -169,7 +169,7 @@ fn proposer_neuron_cannot_vote_explicitly() {
     .command
     .expect("Casting vote failed");
 
-    assert_matches!(response, Command::Error(ref err) if err.error_type() == ErrorType::NeuronAlreadyVoted);
+    assert_matches!(response, Command::Error(ref err) if err.error_type == ErrorType::NeuronAlreadyVoted as i32);
     assert_matches!(response, Command::Error(ref err) if err.error_message.contains("Neuron already voted"));
 }
 
@@ -204,7 +204,7 @@ fn neuron_cannot_vote_twice() {
     .command
     .expect("Casting vote failed");
 
-    assert_matches!(response_2, Command::Error(ref err) if err.error_type() == ErrorType::NeuronAlreadyVoted);
+    assert_matches!(response_2, Command::Error(ref err) if err.error_type == ErrorType::NeuronAlreadyVoted as i32);
     assert_matches!(response_2, Command::Error(ref err) if err.error_message.contains("Neuron already voted"));
 }
 
@@ -225,7 +225,7 @@ fn nonexistent_neuron_cannot_vote() {
     .command
     .expect("Casting vote failed");
 
-    assert_matches!(response, Command::Error(ref err) if err.error_type() == ErrorType::NotFound);
+    assert_matches!(response, Command::Error(ref err) if err.error_type == ErrorType::NotFound as i32);
     assert_matches!(response, Command::Error(ref err) if err.error_message.contains("Neuron not found"));
 }
 
@@ -241,7 +241,7 @@ fn cannot_submit_proposals_with_insufficient_funds() {
             .command
             .expect("Making NNS proposal failed");
 
-    assert_matches!(response, Command::Error(ref err) if err.error_type() == ErrorType::InsufficientFunds);
+    assert_matches!(response, Command::Error(ref err) if err.error_type == ErrorType::InsufficientFunds as i32);
     assert_matches!(response, Command::Error(ref err) if err.error_message.contains("Neuron doesn't have enough minted stake to submit proposal"));
 }
 
@@ -317,7 +317,7 @@ fn cannot_vote_on_future_proposal() {
     .command
     .expect("Casting vote failed");
 
-    assert_matches!(response, Command::Error(ref err) if err.error_type() == ErrorType::NotFound);
+    assert_matches!(response, Command::Error(ref err) if err.error_type == ErrorType::NotFound as i32);
     assert_matches!(response, Command::Error(ref err) if err.error_message.contains("Can't find proposal"));
 
     let proposal_id = submit_proposal(&state_machine, &n2);
@@ -331,7 +331,10 @@ fn cannot_vote_on_future_proposal() {
 
     // either there is no ballot registered for neuron 1 or it is unspecified
     if proposal.ballots.contains_key(&n1.neuron_id.id) {
-        assert_eq!(proposal.ballots[&n1.neuron_id.id].vote(), Vote::Unspecified);
+        assert_eq!(
+            proposal.ballots[&n1.neuron_id.id].vote,
+            Vote::Unspecified as i32
+        );
     }
 }
 
