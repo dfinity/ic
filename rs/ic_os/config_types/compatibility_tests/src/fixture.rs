@@ -7,7 +7,6 @@ use std::path::Path;
 pub struct ConfigFixture {
     version: String,
     hostos_config: HostOSConfig,
-    guestos_config: GuestOSConfig,
 }
 
 impl ConfigFixture {
@@ -22,17 +21,9 @@ impl ConfigFixture {
             guestos_settings: base_config.4.clone(),
         };
 
-        let guestos_config = GuestOSConfig {
-            config_version: base_config.0.clone(),
-            network_settings: base_config.1.clone(),
-            icos_settings: base_config.2.clone(),
-            guestos_settings: base_config.4.clone(),
-        };
-
         Self {
             version: version.to_string(),
             hostos_config,
-            guestos_config,
         }
     }
 
@@ -44,11 +35,6 @@ impl ConfigFixture {
             &self.hostos_config,
         )?;
 
-        serde_json::to_writer_pretty(
-            fs::File::create(dir.join(format!("guestos_v{}.json", self.version)))?,
-            &self.guestos_config,
-        )?;
-
         Ok(())
     }
 }
@@ -56,9 +42,7 @@ impl ConfigFixture {
 /// Checks if fixtures for the current version already exist
 fn current_fixture_versions_exist(fixtures_dir: &Path) -> bool {
     let hostos_path = fixtures_dir.join(format!("hostos_v{}.json", CONFIG_VERSION));
-    let guestos_path = fixtures_dir.join(format!("guestos_v{}.json", CONFIG_VERSION));
-
-    hostos_path.exists() && guestos_path.exists()
+    hostos_path.exists()
 }
 
 /// Checks if the current config_types structure has changed compared to the existing fixture version
@@ -66,7 +50,6 @@ fn config_structure_changed(fixtures_dir: &Path) -> bool {
     let new_fixture = ConfigFixture::generate_for_version(CONFIG_VERSION);
 
     let existing_hostos_fixture = fixtures_dir.join(format!("hostos_v{}.json", CONFIG_VERSION));
-    let existing_guestos_fixture = fixtures_dir.join(format!("guestos_v{}.json", CONFIG_VERSION));
 
     fn check_config_changed<T: serde::de::DeserializeOwned + PartialEq>(
         existing_fixture_path: &Path,
@@ -85,12 +68,7 @@ fn config_structure_changed(fixtures_dir: &Path) -> bool {
         }
     }
 
-    let hostos_config_changed =
-        check_config_changed(&existing_hostos_fixture, &new_fixture.hostos_config);
-    let guestos_config_changed =
-        check_config_changed(&existing_guestos_fixture, &new_fixture.guestos_config);
-
-    hostos_config_changed || guestos_config_changed
+    check_config_changed(&existing_hostos_fixture, &new_fixture.hostos_config)
 }
 
 /// Generates fixtures for the current version, enforcing version increment if config_types has been modified

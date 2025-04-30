@@ -28,17 +28,6 @@ fn test_backwards_compatibility() {
                             );
                         }
                     }
-                } else if filename.starts_with("guestos") {
-                    match serde_json::from_str::<GuestOSConfig>(&config_json) {
-                        Ok(_) => println!("Successfully deserialized {}", filename),
-                        Err(e) => {
-                            println!("Failed to deserialize {}: {}", filename, e);
-                            panic!(
-                                "Failed to deserialize historical GuestOSConfig from {}",
-                                filename
-                            );
-                        }
-                    }
                 }
             }
         }

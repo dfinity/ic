@@ -2,6 +2,8 @@
 
 This module contains tests to ensure backwards compatibility of the config_types library. This is critical because we need to ensure that after updates, newer versions can always deserialize configurations written by older versions.
 
+Currently, only HostOS config objects are checked for backwards compatibility, as GuestOS config objects are a subset of HostOS config and are fully contained within the HostOS config structure.
+
 ## Components
 
 ### 1. Fixture Generation System (`fixture.rs`)
