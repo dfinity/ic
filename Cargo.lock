@@ -10438,6 +10438,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
+ "ic-node-rewards-canister-api",
  "ic-registry-canister-api",
  "ic-sns-governance-api",
  "ic-sns-root",
@@ -11495,7 +11496,9 @@ dependencies = [
  "ic-cdk 0.17.1",
  "ic-cdk-timers",
  "ic-interfaces-registry",
+ "ic-nervous-system-agent",
  "ic-nervous-system-canisters",
+ "ic-nervous-system-integration-tests",
  "ic-nns-constants",
  "ic-nns-test-utils",
  "ic-node-rewards-canister-api",
@@ -11508,8 +11511,10 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-types",
  "maplit",
+ "pocket-ic",
  "prost 0.13.4",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
