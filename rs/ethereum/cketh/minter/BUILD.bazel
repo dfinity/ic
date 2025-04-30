@@ -191,50 +191,48 @@ rust_binary(
     ],
 )
 
-[
-    rust_ic_test_suite(
-        name = "integration_tests",
-        srcs = glob(["tests/**/*.rs"]),
-        data = [
-            ":cketh_minter_debug.wasm.gz",
-            "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz",
-            "//rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz",
-            "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
-            "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
-            "@evm_rpc.wasm.gz//file",
-        ],
-        env = {
-            "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
-            "CKETH_MINTER_WASM_PATH": "$(rootpath :cketh_minter_debug.wasm.gz)",
-            "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz)",
-            "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz)",
-            "INDEX_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz)",
-            "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz)",
-            "EVM_RPC_CANISTER_WASM_PATH": "$(rootpath @evm_rpc.wasm.gz//file)",
-        },
-        proc_macro_deps = [],
-        deps = [
-            # Keep sorted.
-            ":minter",
-            "//packages/ic-ethereum-types",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
-            "//rs/ethereum/cketh/test_utils:test_utils_evm_rpc",
-            "//rs/ethereum/ledger-suite-orchestrator/test_utils",
-            "//rs/state_machine_tests",
-            "//rs/types/base_types",
-            "//rs/types/management_canister_types",
-            "@crate_index//:assert_matches",
-            "@crate_index//:candid",
-            "@crate_index//:ethers-core",
-            "@crate_index//:hex",
-            "@crate_index//:num-bigint",
-            "@crate_index//:num-traits",
-            "@crate_index//:serde",
-            "@crate_index//:serde_bytes",
-            "@crate_index//:serde_json",
-        ],
-    ),
-]
+rust_ic_test_suite(
+    name = "integration_tests",
+    srcs = glob(["tests/**/*.rs"]),
+    data = [
+        ":cketh_minter_debug.wasm.gz",
+        "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz",
+        "//rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz",
+        "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
+        "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
+        "@evm_rpc.wasm.gz//file",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
+        "CKETH_MINTER_WASM_PATH": "$(rootpath :cketh_minter_debug.wasm.gz)",
+        "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz)",
+        "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz)",
+        "INDEX_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz)",
+        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz)",
+        "EVM_RPC_CANISTER_WASM_PATH": "$(rootpath @evm_rpc.wasm.gz//file)",
+    },
+    proc_macro_deps = [],
+    deps = [
+        # Keep sorted.
+        ":minter",
+        "//packages/ic-ethereum-types",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/ethereum/cketh/test_utils:test_utils_evm_rpc",
+        "//rs/ethereum/ledger-suite-orchestrator/test_utils",
+        "//rs/state_machine_tests",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "@crate_index//:assert_matches",
+        "@crate_index//:candid",
+        "@crate_index//:ethers-core",
+        "@crate_index//:hex",
+        "@crate_index//:num-bigint",
+        "@crate_index//:num-traits",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_json",
+    ],
+)
 
 closure_js_library(
     name = "principal_to_bytes",
