@@ -13,12 +13,11 @@ pub fn generate_fixtures(fixtures_dir: &Path) -> std::io::Result<()> {
         ));
     }
 
-    let config = generate_default_hostos_config();
-    fs::create_dir_all(fixtures_dir)?;
+    let hostos_config = generate_default_hostos_config();
 
     serde_json::to_writer_pretty(
         fs::File::create(fixtures_dir.join(format!("hostos_v{}.json", CONFIG_VERSION)))?,
-        &config,
+        &hostos_config,
     )?;
 
     Ok(())
@@ -26,28 +25,20 @@ pub fn generate_fixtures(fixtures_dir: &Path) -> std::io::Result<()> {
 
 /// Checks if the current config_types structure has changed compared to the existing fixture version
 fn config_structure_changed(fixtures_dir: &Path) -> bool {
-    let new_config = generate_default_hostos_config();
-
+    let new_hostos_fixture = generate_default_hostos_config();
     let existing_hostos_fixture = fixtures_dir.join(format!("hostos_v{}.json", CONFIG_VERSION));
 
-    fn check_config_changed<T: serde::de::DeserializeOwned + PartialEq>(
-        existing_fixture_path: &Path,
-        new_config: &T,
-    ) -> bool {
-        let file = fs::File::open(existing_fixture_path).unwrap_or_else(|_| {
-            panic!(
-                "Failed to open existing fixture: {}",
-                existing_fixture_path.display()
-            )
-        });
+    let file = fs::File::open(&existing_hostos_fixture).unwrap_or_else(|_| {
+        panic!(
+            "Failed to open existing fixture: {}",
+            existing_hostos_fixture.display()
+        )
+    });
 
-        match serde_json::from_reader::<_, T>(file) {
-            Ok(existing_config) => existing_config != *new_config,
-            Err(_) => true, // If we can't parse the existing fixture, assume structure changed
-        }
+    match serde_json::from_reader::<_, HostOSConfig>(file) {
+        Ok(existing_config) => existing_config != new_hostos_fixture,
+        Err(_) => true, // If we can't parse the existing fixture, assume structure changed
     }
-
-    check_config_changed(&existing_hostos_fixture, &new_config)
 }
 
 fn current_fixture_version_exists(fixtures_dir: &Path) -> bool {
