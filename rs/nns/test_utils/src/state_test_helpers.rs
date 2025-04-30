@@ -2138,7 +2138,20 @@ pub fn cmc_set_default_authorized_subnetworks(
     sender: PrincipalId,
     neuron_id: NeuronId,
 ) {
-    let args = SetAuthorizedSubnetworkListArgs { who: None, subnets };
+    cmc_set_authorized_subnetworks_for_principal(machine, None, subnets, sender, neuron_id);
+}
+
+pub fn cmc_set_authorized_subnetworks_for_principal(
+    machine: &StateMachine,
+    principal: Option<PrincipalId>,
+    subnets: Vec<SubnetId>,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+) {
+    let args = SetAuthorizedSubnetworkListArgs {
+        who: principal,
+        subnets,
+    };
     let proposal = MakeProposalRequest {
         title: Some("set subnetworks".to_string()),
         summary: "setting subnetworks".to_string(),
