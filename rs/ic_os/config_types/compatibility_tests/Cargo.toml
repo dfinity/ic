@@ -9,6 +9,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 url = { workspace = true }
 macaddr = { workspace = true }
+anyhow = { workspace = true }
 
 [[bin]]
 name = "generate_config_types_fixture"
