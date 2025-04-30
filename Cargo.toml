@@ -588,7 +588,7 @@ ic-certification = "3"
 ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "469d2daee8b44aadb46400bcb2832d560baf7272" }
 ic-http-certification = "3.0.3"
 ic-http-gateway = "0.2.0"
-ic-management-canister-types = "0.2.1"
+ic-management-canister-types = "0.3.0"
 ic-response-verification = "3"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"

@@ -1,5 +1,5 @@
 {
-  "checksum": "0bede03bd2e78ac766d09254da2b1544d49f47999cc189f2423217cfccc0a91f",
+  "checksum": "3d83dc631e7792eea7c984230db7389dbdf77b0feffad4fd5fdc1f76ce60b4cc",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -20804,7 +20804,7 @@
               "target": "ic_http_gateway"
             },
             {
-              "id": "ic-management-canister-types 0.2.1",
+              "id": "ic-management-canister-types 0.3.0",
               "target": "ic_management_canister_types"
             },
             {
@@ -34666,14 +34666,14 @@
       ],
       "license_file": null
     },
-    "ic-management-canister-types 0.2.1": {
+    "ic-management-canister-types 0.3.0": {
       "name": "ic-management-canister-types",
-      "version": "0.2.1",
+      "version": "0.3.0",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-management-canister-types/0.2.1/download",
-          "sha256": "1a23527ab5e2ede1aae270cdb79ef0491479c8b5c2de9fd393048ca907cac5e1"
+          "url": "https://static.crates.io/crates/ic-management-canister-types/0.3.0/download",
+          "sha256": "90253c6ac92f9a0b548a53a02c2d29dfa0f04a6c1ae919b86a6f54d4767d78b9"
         }
       },
       "targets": [
@@ -34702,10 +34702,6 @@
               "target": "candid"
             },
             {
-              "id": "candid_parser 0.1.4",
-              "target": "candid_parser"
-            },
-            {
               "id": "serde 1.0.217",
               "target": "serde"
             },
@@ -34717,7 +34713,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.2.1"
+        "version": "0.3.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -94767,7 +94763,7 @@
     "ic-gateway 0.1.0",
     "ic-http-certification 3.0.3",
     "ic-http-gateway 0.2.0",
-    "ic-management-canister-types 0.2.1",
+    "ic-management-canister-types 0.3.0",
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 3.0.3",
     "ic-sha3 1.0.0",
