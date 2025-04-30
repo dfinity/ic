@@ -4,10 +4,24 @@ use std::fs;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::Path;
 
-/// Checks if fixtures for the current version already exist
-fn current_fixture_versions_exist(fixtures_dir: &Path) -> bool {
-    let hostos_path = fixtures_dir.join(format!("hostos_v{}.json", CONFIG_VERSION));
-    hostos_path.exists()
+/// Generates fixtures for the current version, enforcing version increment if config_types has been modified
+pub fn generate_fixtures(fixtures_dir: &Path) -> std::io::Result<()> {
+    if current_fixture_version_exists(fixtures_dir) && config_structure_changed(fixtures_dir) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("CONFIG_VERSION in lib.rs ({}) already has a fixture, but the config structure has changed. Please increment config_types CONFIG_VERSION before generating a new fixture.", CONFIG_VERSION)
+        ));
+    }
+
+    let config = generate_default_hostos_config();
+    fs::create_dir_all(fixtures_dir)?;
+
+    serde_json::to_writer_pretty(
+        fs::File::create(fixtures_dir.join(format!("hostos_v{}.json", CONFIG_VERSION)))?,
+        &config,
+    )?;
+
+    Ok(())
 }
 
 /// Checks if the current config_types structure has changed compared to the existing fixture version
@@ -36,23 +50,9 @@ fn config_structure_changed(fixtures_dir: &Path) -> bool {
     check_config_changed(&existing_hostos_fixture, &new_config)
 }
 
-/// Generates fixtures for the current version, enforcing version increment if config_types has been modified
-pub fn generate_fixtures(fixtures_dir: &Path) -> std::io::Result<()> {
-    if current_fixture_versions_exist(fixtures_dir) && config_structure_changed(fixtures_dir) {
-        eprintln!("Error: CONFIG_VERSION in lib.rs ({}) already has fixtures, but the config structure has changed.", CONFIG_VERSION);
-        eprintln!("Please increment config_types CONFIG_VERSION before generating new fixtures.");
-        std::process::exit(1);
-    }
-
-    let config = generate_default_hostos_config();
-    fs::create_dir_all(fixtures_dir)?;
-
-    serde_json::to_writer_pretty(
-        fs::File::create(fixtures_dir.join(format!("hostos_v{}.json", CONFIG_VERSION)))?,
-        &config,
-    )?;
-
-    Ok(())
+fn current_fixture_version_exists(fixtures_dir: &Path) -> bool {
+    let hostos_config_path = fixtures_dir.join(format!("hostos_v{}.json", CONFIG_VERSION));
+    hostos_config_path.exists()
 }
 
 fn generate_default_hostos_config() -> HostOSConfig {
