@@ -4,34 +4,6 @@ use std::fs;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::Path;
 
-pub struct ConfigFixture {
-    version: String,
-    hostos_config: HostOSConfig,
-}
-
-impl ConfigFixture {
-    pub fn generate_for_version(version: &str) -> Self {
-        let mut hostos_config = generate_test_base_config();
-        hostos_config.config_version = version.to_string();
-
-        Self {
-            version: version.to_string(),
-            hostos_config,
-        }
-    }
-
-    pub fn save_to_directory(&self, dir: &Path) -> std::io::Result<()> {
-        fs::create_dir_all(dir)?;
-
-        serde_json::to_writer_pretty(
-            fs::File::create(dir.join(format!("hostos_v{}.json", self.version)))?,
-            &self.hostos_config,
-        )?;
-
-        Ok(())
-    }
-}
-
 /// Checks if fixtures for the current version already exist
 fn current_fixture_versions_exist(fixtures_dir: &Path) -> bool {
     let hostos_path = fixtures_dir.join(format!("hostos_v{}.json", CONFIG_VERSION));
@@ -40,7 +12,7 @@ fn current_fixture_versions_exist(fixtures_dir: &Path) -> bool {
 
 /// Checks if the current config_types structure has changed compared to the existing fixture version
 fn config_structure_changed(fixtures_dir: &Path) -> bool {
-    let new_fixture = ConfigFixture::generate_for_version(CONFIG_VERSION);
+    let new_config = generate_test_base_config();
 
     let existing_hostos_fixture = fixtures_dir.join(format!("hostos_v{}.json", CONFIG_VERSION));
 
@@ -61,7 +33,7 @@ fn config_structure_changed(fixtures_dir: &Path) -> bool {
         }
     }
 
-    check_config_changed(&existing_hostos_fixture, &new_fixture.hostos_config)
+    check_config_changed(&existing_hostos_fixture, &new_config)
 }
 
 /// Generates fixtures for the current version, enforcing version increment if config_types has been modified
@@ -72,8 +44,15 @@ pub fn generate_fixtures(fixtures_dir: &Path) -> std::io::Result<()> {
         std::process::exit(1);
     }
 
-    let fixture = ConfigFixture::generate_for_version(CONFIG_VERSION);
-    fixture.save_to_directory(fixtures_dir)
+    let config = generate_test_base_config();
+    fs::create_dir_all(fixtures_dir)?;
+
+    serde_json::to_writer_pretty(
+        fs::File::create(fixtures_dir.join(format!("hostos_v{}.json", CONFIG_VERSION)))?,
+        &config,
+    )?;
+
+    Ok(())
 }
 
 fn generate_test_base_config() -> HostOSConfig {
