@@ -115,7 +115,7 @@ class RosettaClient:
             },
             "public_key": public_key
         }
-        if neuron_index:
+        if neuron_index is not None:
             payload["metadata"] = {
                 "account_type": "neuron",
                 "neuron_index": neuron_index
@@ -334,20 +334,22 @@ class RosettaClient:
         Args:
             address (str): The neuron's account identifier.
             neuron_index (int, optional): The neuron index. Defaults to 0.
-            public_key (dict, optional): The public key information. Defaults to None.
+            public_key (dict): The public key information containing hex_bytes and curve_type.
+                Example: {"hex_bytes": "ba5242d02642aede88a5f9fe82482a9fd0b6dc25f38c729253116c6865384a9d", 
+                          "curve_type": "edwards25519"}
             verbose (bool, optional): Whether to print verbose output. Defaults to False.
             
         Returns:
             dict: The neuron balance information.
         """
+        if public_key is None:
+            raise ValueError("public_key is required for neuron balance queries")
+            
         metadata = {
             "account_type": "neuron",
-            "neuron_index": neuron_index
+            "neuron_index": neuron_index,
+            "public_key": public_key
         }
-        
-        # Add public key if provided
-        if public_key:
-            metadata["public_key"] = public_key
             
         payload = {
             "network_identifier": {
@@ -428,7 +430,6 @@ class RosettaClient:
                 "blockchain": "Internet Computer",
                 "network": self.network
             },
-            "operator": "or",
             "limit": limit
         }
         

@@ -48,6 +48,7 @@ def main():
     parser.add_argument("--recipient-account-id", type=str)
     parser.add_argument("--amount-e8s", type=int)
     parser.add_argument("--fee-e8s", type=int)
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
     args = parser.parse_args()
     
     client1 = RosettaClient(
@@ -66,7 +67,7 @@ def main():
         args.recipient_account_id,
         args.amount_e8s,
         args.fee_e8s,
-        verbose=False
+        verbose=args.verbose
     )
 
     time.sleep(3)

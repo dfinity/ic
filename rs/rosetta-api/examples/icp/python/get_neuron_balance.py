@@ -1,0 +1,78 @@
+#!/usr/bin/env python3
+"""
+Fetch Neuron Balance Example
+
+This script demonstrates how to fetch neuron balances using the Internet Computer Rosetta API.
+The script requires only the public key and neuron index, and automatically derives the neuron account ID.
+
+Examples:
+    # Get balance for a neuron (requires only public key and neuron index)
+    python3 get_neuron_balance.py --node-address http://localhost:8081 --neuron-index 0 --public-key ba5242d02642aede88a5f9fe82482a9fd0b6dc25f38c729253116c6865384a9d --curve-type edwards25519
+
+    # With verbose output
+    python3 get_neuron_balance.py --node-address http://localhost:8081 --public-key ba5242d02642aede88a5f9fe82482a9fd0b6dc25f38c729253116c6865384a9d --verbose
+"""
+
+from rosetta_client import RosettaClient
+import argparse
+import json
+
+def format_balance(balance):
+    """Format balance for display"""
+    value = int(balance["balances"][0]["value"])
+    decimals = balance["balances"][0]["currency"]["decimals"]
+    symbol = balance["balances"][0]["currency"]["symbol"]
+    return f"{value / 10**decimals} {symbol} ({value} e8s)"
+
+def main():
+    parser = argparse.ArgumentParser(description='Fetch neuron balances using Rosetta API')
+    parser.add_argument("--node-address", type=str, required=True, help="Rosetta node address")
+    parser.add_argument("--neuron-index", type=int, default=0, help="Neuron index")
+    parser.add_argument("--public-key", type=str, required=True, help="Public key for neuron account (hex)")
+    parser.add_argument("--curve-type", type=str, default="edwards25519", help="Curve type for neuron public key")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
+    
+    args = parser.parse_args()
+    
+    client = RosettaClient(args.node_address)
+    
+    # Prepare public key
+    public_key = {
+        "hex_bytes": args.public_key,
+        "curve_type": args.curve_type
+    }
+    
+    # Derive neuron account ID from public key
+    neuron_account_id = client.get_account_identifier(
+        public_key=public_key,
+        neuron_index=args.neuron_index,
+        verbose=args.verbose
+    )
+    
+    print(f"\nDerived neuron account ID: {neuron_account_id}")
+    print(f"Using neuron index: {args.neuron_index}")
+    print(f"Using public key: {args.public_key}")
+    
+    # Fetch neuron balance
+    print(f"\nFetching neuron balance...")
+    
+    try:
+        neuron_balance = client.get_neuron_balance(
+            neuron_account_id,
+            neuron_index=args.neuron_index,
+            public_key=public_key,
+            verbose=args.verbose
+        )
+        
+        print(f"Neuron Balance: {format_balance(neuron_balance)}")
+        print(f"Block Height: {neuron_balance['block_identifier']['index']}")
+        
+        # If there's metadata in the response, display it
+        if 'metadata' in neuron_balance:
+            print("\nNeuron Metadata:")
+            print(json.dumps(neuron_balance['metadata'], indent=2))
+    except ValueError as e:
+        print(f"Error: {e}")
+
+if __name__ == "__main__":
+    main() 
