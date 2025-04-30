@@ -1,5 +1,4 @@
 use config_types::*;
-use serde_json;
 use std::path::PathBuf;
 
 #[test]
