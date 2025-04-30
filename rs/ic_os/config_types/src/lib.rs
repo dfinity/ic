@@ -28,7 +28,7 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.2.0";
+pub const CONFIG_VERSION: &str = "1.1.0";
 
 /// List of field names that have been removed and should not be reused.
 pub static RESERVED_FIELD_NAMES: &[&str] = &[];
