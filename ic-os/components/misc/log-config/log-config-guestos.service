@@ -2,8 +2,6 @@
 Description=Log config partition
 After=bootstrap-ic-node.service
 Wants=bootstrap-ic-node.service
-After=update-config.service
-Wants=update-config.service
 
 [Service]
 Type=oneshot
