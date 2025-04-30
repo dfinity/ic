@@ -217,7 +217,7 @@ rust_ic_test_suite(
         ":minter",
         "//packages/ic-ethereum-types",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/ethereum/cketh/test_utils:test_utils",
+        "//rs/ethereum/cketh/test_utils",
         "//rs/ethereum/ledger-suite-orchestrator/test_utils",
         "//rs/state_machine_tests",
         "//rs/types/base_types",
