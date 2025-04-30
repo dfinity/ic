@@ -406,15 +406,6 @@ pub struct Block {
     pub base_fee_per_gas: Wei,
 }
 
-/// An envelope for all JSON-RPC requests.
-#[derive(Clone, Deserialize, Serialize)]
-pub struct JsonRpcRequest<T> {
-    jsonrpc: String,
-    method: String,
-    id: u64,
-    pub params: T,
-}
-
 #[derive(Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JsonRpcReply<T> {
