@@ -9,7 +9,6 @@ use ic_btc_checker::{
     UpgradeArg as CheckerUpgradeArg,
 };
 use ic_btc_interface::Txid;
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
@@ -26,6 +25,7 @@ use ic_ckbtc_minter::{
     Log, MinterInfo, Network, CKBTC_LEDGER_MEMO_SIZE, MIN_RELAY_FEE_PER_VBYTE,
     MIN_RESUBMISSION_DELAY,
 };
+use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_metrics_assert::{CanisterHttpQuery, MetricsAssert};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
