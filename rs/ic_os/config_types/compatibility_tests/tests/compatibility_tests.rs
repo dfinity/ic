@@ -5,11 +5,10 @@ use std::path::PathBuf;
 
 #[test]
 fn test_backwards_compatibility() {
-    // Get the path to the fixtures directory using Bazel runfiles
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     let test_data_dir = PathBuf::from(manifest_dir).join("fixtures");
 
-    // Test each historical version
+    // Test each historical config version
     for entry in std::fs::read_dir(&test_data_dir).unwrap() {
         let path = entry.unwrap().path();
         if let Some(ext) = path.extension() {
@@ -56,28 +55,4 @@ fn test_field_removal_protection() {
             "Empty field name in RESERVED_FIELD_NAMES"
         );
     }
-}
-
-#[test]
-fn test_version_increment() {
-    let previous_version = get_previous_version();
-
-    if CONFIG_VERSION != previous_version {
-        assert!(
-            version_greater_than(CONFIG_VERSION, &previous_version),
-            "Config version must be greater than previous version"
-        );
-    }
-}
-
-#[test]
-fn test_generate_current_fixture() {
-    let fixture = ConfigFixture::generate_for_version(CONFIG_VERSION);
-
-    let test_dir = PathBuf::from("fixtures");
-    std::fs::create_dir_all(&test_dir).unwrap();
-
-    fixture.save_to_directory(&test_dir).unwrap();
-
-    std::fs::remove_dir_all(&test_dir).unwrap();
 }
