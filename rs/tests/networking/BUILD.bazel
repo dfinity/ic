@@ -184,6 +184,7 @@ system_test_nns(
         "//rs/rust_canisters/canister_test",
         "//rs/types/types",
         "@crate_index//:ic-utils",
+        "@crate_index//:reqwest",
         "@crate_index//:tokio",
     ],
 )
