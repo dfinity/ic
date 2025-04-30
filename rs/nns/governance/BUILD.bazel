@@ -42,6 +42,7 @@ filegroup(
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-dummy-getrandom-for-wasm",
+    "//packages/ic-http-types",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
     "//rs/ledger_suite/common/ledger_core",
@@ -71,7 +72,6 @@ DEPENDENCIES = [
     "//rs/node_rewards/canister/api",
     "//rs/protobuf",
     "//rs/registry/canister",
-    "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/on_wire",
     "//rs/sns/init",
     "//rs/sns/root",
