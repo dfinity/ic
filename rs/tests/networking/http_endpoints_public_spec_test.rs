@@ -29,6 +29,7 @@ The different canister ID B is
 end::catalog[] */
 
 use anyhow::Result;
+use ic_agent::Agent;
 use ic_crypto_tree_hash::{Label, Path};
 use ic_http_endpoints_test_agent::*;
 use ic_registry_subnet_type::SubnetType;
@@ -37,7 +38,9 @@ use ic_system_test_driver::{
         group::SystemTestGroup,
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
-        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
+        test_env_api::{
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SubnetSnapshot, TopologySnapshot,
+        },
     },
     systest,
     util::{block_on, UniversalCanister},
@@ -48,15 +51,6 @@ use reqwest::Response;
 use slog::{info, Logger};
 
 const CALL_VERSIONS: [Call; 2] = [Call::V2, Call::V3];
-
-fn main() -> Result<()> {
-    SystemTestGroup::new()
-        .with_setup(setup)
-        .add_test(systest!(effective_canister_http_spec_test))
-        .execute_from_args()?;
-
-    Ok(())
-}
 
 fn setup(env: TestEnv) {
     InternetComputer::new()
@@ -240,10 +234,81 @@ async fn inspect_response(response: Response, typ: &str, logger: &Logger) -> u16
     status
 }
 
+fn get_subnets(snapshot: &TopologySnapshot) -> (SubnetSnapshot, SubnetSnapshot) {
+    let sys_subnet = snapshot
+        .subnets()
+        .find(|subnet| subnet.subnet_type() == SubnetType::System)
+        .expect("Failed to find system subnet");
+    let app_subnet = snapshot
+        .subnets()
+        .find(|subnet| subnet.subnet_type() == SubnetType::Application)
+        .expect("Failed to find app subnet");
+
+    (sys_subnet, app_subnet)
+}
+
+fn get_agents(snapshot: &TopologySnapshot) -> (Agent, Agent) {
+    let (sys_subnet, app_subnet) = get_subnets(snapshot);
+
+    let sys_node = sys_subnet.nodes().next().unwrap();
+    let sys_agent = sys_node.build_default_agent();
+
+    let app_node = app_subnet
+        .nodes()
+        .next()
+        .expect("Failed to find node in system subnet");
+    let app_agent = app_subnet.nodes().next().unwrap().build_default_agent();
+
+    (sys_agent, app_agent)
+}
+
+fn get_canister_ids(snapshot: &TopologySnapshot) -> (CanisterId, CanisterId, CanisterId) {
+    let (sys_subnet, app_subnet) = get_subnets(snapshot);
+
+    let sys_subnet_canister_id_range = sys_subnet.subnet_canister_ranges()[0];
+    let sys_uc1_id = sys_subnet_canister_id_range
+        .generate_canister_id(None)
+        .unwrap();
+    let sys_uc2_id = sys_subnet_canister_id_range
+        .generate_canister_id(Some(sys_uc1_id))
+        .unwrap();
+
+    let app_subnet_canister_id_range = app_subnet.subnet_canister_ranges()[0];
+    let app_uc_id = app_subnet_canister_id_range
+        .generate_canister_id(None)
+        .unwrap();
+
+    (sys_uc1_id, sys_uc2_id, app_uc_id)
+}
+
+fn get_canister_test_ids(snapshot: &TopologySnapshot) -> [CanisterId; 4] {
+    let (_, sys_uc, app_uc) = get_canister_ids(snapshot);
+
+    [
+        // Valid destination on same subnet
+        sys_uc,
+        // Valid destination on other subnet
+        app_uc,
+        // Invalid canister id
+        CanisterId::from(1337),
+        // Management canister
+        CanisterId::ic_00(),
+    ]
+}
+
 fn assert_2xx(status: &u16) {
     assert!((200..300).contains(status));
 }
 
 fn assert_4xx(status: &u16) {
     assert!((400..500).contains(status))
+}
+
+fn main() -> Result<()> {
+    SystemTestGroup::new()
+        .with_setup(setup)
+        .add_test(systest!(effective_canister_http_spec_test))
+        .execute_from_args()?;
+
+    Ok(())
 }
