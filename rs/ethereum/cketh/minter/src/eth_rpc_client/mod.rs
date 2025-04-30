@@ -35,69 +35,61 @@ const TOTAL_NUMBER_OF_PROVIDERS: u8 = 4;
 
 #[derive(Debug)]
 pub struct EthRpcClient {
-    evm_rpc_client: Option<EvmRpcClient<IcRuntime, PrintProxySink>>,
-    chain: EthereumNetwork,
+    evm_rpc_client: EvmRpcClient<IcRuntime, PrintProxySink>,
 }
 
 impl EthRpcClient {
-    const fn new(chain: EthereumNetwork) -> Self {
-        Self {
-            evm_rpc_client: None,
-            chain,
-        }
-    }
-
     pub fn from_state(state: &State) -> Self {
-        let mut client = Self::new(state.ethereum_network());
-        if let Some(evm_rpc_id) = state.evm_rpc_id {
-            const MIN_ATTACHED_CYCLES: u128 = 500_000_000_000;
+        let chain = state.ethereum_network;
+        let evm_rpc_id = state
+            .evm_rpc_id
+            .expect("BUG: Missing evm_rpc_id. Should be validated in post_upgrade");
+        const MIN_ATTACHED_CYCLES: u128 = 500_000_000_000;
 
-            let providers = match client.chain {
-                EthereumNetwork::Mainnet => EvmRpcServices::EthMainnet(None),
-                EthereumNetwork::Sepolia => EvmRpcServices::EthSepolia(Some(vec![
-                    EthSepoliaService::BlockPi,
-                    EthSepoliaService::PublicNode,
-                    EthSepoliaService::Alchemy,
-                    EthSepoliaService::Ankr,
-                ])),
-            };
-            let min_threshold = match client.chain {
-                EthereumNetwork::Mainnet => 3_u8,
-                EthereumNetwork::Sepolia => 2_u8,
-            };
-            assert!(
-                min_threshold <= TOTAL_NUMBER_OF_PROVIDERS,
-                "BUG: min_threshold too high"
-            );
-            let threshold_strategy = EvmRpcConfig {
-                response_consensus: Some(ConsensusStrategy::Threshold {
-                    total: Some(TOTAL_NUMBER_OF_PROVIDERS),
-                    min: min_threshold,
+        let providers = match chain {
+            EthereumNetwork::Mainnet => EvmRpcServices::EthMainnet(None),
+            EthereumNetwork::Sepolia => EvmRpcServices::EthSepolia(Some(vec![
+                EthSepoliaService::BlockPi,
+                EthSepoliaService::PublicNode,
+                EthSepoliaService::Alchemy,
+                EthSepoliaService::Ankr,
+            ])),
+        };
+        let min_threshold = match chain {
+            EthereumNetwork::Mainnet => 3_u8,
+            EthereumNetwork::Sepolia => 2_u8,
+        };
+        assert!(
+            min_threshold <= TOTAL_NUMBER_OF_PROVIDERS,
+            "BUG: min_threshold too high"
+        );
+        let threshold_strategy = EvmRpcConfig {
+            response_consensus: Some(ConsensusStrategy::Threshold {
+                total: Some(TOTAL_NUMBER_OF_PROVIDERS),
+                min: min_threshold,
+            }),
+            ..EvmRpcConfig::default()
+        };
+        let evm_rpc_client = EvmRpcClient::builder_for_ic(TRACE_HTTP)
+            .with_providers(providers)
+            .with_evm_canister_id(evm_rpc_id)
+            .with_min_attached_cycles(MIN_ATTACHED_CYCLES)
+            .with_override_rpc_config(OverrideRpcConfig {
+                eth_get_block_by_number: Some(threshold_strategy.clone()),
+                eth_get_logs: Some(EvmRpcConfig {
+                    response_size_estimate: Some(
+                        ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE + HEADER_SIZE_LIMIT,
+                    ),
+                    ..threshold_strategy.clone()
                 }),
-                ..EvmRpcConfig::default()
-            };
-            client.evm_rpc_client = Some(
-                EvmRpcClient::builder_for_ic(TRACE_HTTP)
-                    .with_providers(providers)
-                    .with_evm_canister_id(evm_rpc_id)
-                    .with_min_attached_cycles(MIN_ATTACHED_CYCLES)
-                    .with_override_rpc_config(OverrideRpcConfig {
-                        eth_get_block_by_number: Some(threshold_strategy.clone()),
-                        eth_get_logs: Some(EvmRpcConfig {
-                            response_size_estimate: Some(
-                                ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE + HEADER_SIZE_LIMIT,
-                            ),
-                            ..threshold_strategy.clone()
-                        }),
-                        eth_fee_history: Some(threshold_strategy.clone()),
-                        eth_get_transaction_receipt: Some(threshold_strategy.clone()),
-                        eth_get_transaction_count: Some(threshold_strategy.clone()),
-                        eth_send_raw_transaction: Some(threshold_strategy),
-                    })
-                    .build(),
-            );
-        }
-        client
+                eth_fee_history: Some(threshold_strategy.clone()),
+                eth_get_transaction_receipt: Some(threshold_strategy.clone()),
+                eth_get_transaction_count: Some(threshold_strategy.clone()),
+                eth_send_raw_transaction: Some(threshold_strategy),
+            })
+            .build();
+
+        Self { evm_rpc_client }
     }
 
     pub async fn eth_get_logs(
@@ -105,8 +97,6 @@ impl EthRpcClient {
         params: GetLogsParam,
     ) -> Result<Vec<LogEntry>, MultiCallError<Vec<LogEntry>>> {
         self.evm_rpc_client
-            .as_ref()
-            .unwrap()
             .eth_get_logs(EvmGetLogsArgs {
                 from_block: Some(into_evm_block_tag(params.from_block)),
                 to_block: Some(into_evm_block_tag(params.to_block)),
@@ -127,8 +117,6 @@ impl EthRpcClient {
         block: BlockSpec,
     ) -> Result<Block, MultiCallError<Block>> {
         self.evm_rpc_client
-            .as_ref()
-            .unwrap()
             .eth_get_block_by_number(into_evm_block_tag(block))
             .await
             .reduce()
@@ -140,8 +128,6 @@ impl EthRpcClient {
         tx_hash: Hash,
     ) -> Result<Option<TransactionReceipt>, MultiCallError<Option<TransactionReceipt>>> {
         self.evm_rpc_client
-            .as_ref()
-            .unwrap()
             .eth_get_transaction_receipt(tx_hash.to_string())
             .await
             .reduce()
@@ -153,8 +139,6 @@ impl EthRpcClient {
         params: FeeHistoryParams,
     ) -> Result<FeeHistory, MultiCallError<FeeHistory>> {
         self.evm_rpc_client
-            .as_ref()
-            .unwrap()
             .eth_fee_history(EvmFeeHistoryArgs {
                 block_count: Nat256::from_be_bytes(params.block_count.to_be_bytes()),
                 newest_block: into_evm_block_tag(params.highest_block),
@@ -170,8 +154,6 @@ impl EthRpcClient {
         raw_signed_transaction_hex: String,
     ) -> Result<SendRawTransactionResult, MultiCallError<SendRawTransactionResult>> {
         self.evm_rpc_client
-            .as_ref()
-            .unwrap()
             .eth_send_raw_transaction(raw_signed_transaction_hex)
             .await
             .reduce()
@@ -184,8 +166,6 @@ impl EthRpcClient {
     ) -> Result<TransactionCount, MultiCallError<TransactionCount>> {
         let results = self
             .evm_rpc_client
-            .as_ref()
-            .unwrap()
             .eth_get_transaction_count(EvmGetTransactionCountArgs {
                 address: Hex20::from(address.into_bytes()),
                 block: EvmBlockTag::Finalized,
@@ -200,8 +180,6 @@ impl EthRpcClient {
     ) -> Result<TransactionCount, MultiCallError<TransactionCount>> {
         let results = self
             .evm_rpc_client
-            .as_ref()
-            .unwrap()
             .eth_get_transaction_count(EvmGetTransactionCountArgs {
                 address: Hex20::from(address.into_bytes()),
                 block: EvmBlockTag::Latest,

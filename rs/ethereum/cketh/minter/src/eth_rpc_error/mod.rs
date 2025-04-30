@@ -1,6 +1,4 @@
-use crate::eth_rpc::{Hash, JsonRpcResult, SendRawTransactionResult};
-use crate::logs::DEBUG;
-use ic_canister_log::log;
+use crate::eth_rpc::JsonRpcResult;
 
 /// Possible errors returned by calling `eth_sendRawTransaction` endpoint.
 /// Unfortunately, error codes and error messages are not standardized in
