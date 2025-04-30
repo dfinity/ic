@@ -323,6 +323,9 @@ pub struct Neuron {
     ///
     /// Per NNS policy, this is opt. Nevertheless, it will never be null.
     pub potential_voting_power: Option<u64>,
+
+    /// The maturity disbursements in progress for this neuron.
+    pub maturity_disbursements_in_progress: Option<Vec<MaturityDisbursement>>,
 }
 /// Nested message and enum types in `Neuron`.
 pub mod neuron {
@@ -4364,4 +4367,18 @@ pub struct ListNodeProviderRewardsRequest {
 pub struct ListNodeProviderRewardsResponse {
     /// The list of minted node provider rewards
     pub rewards: Vec<MonthlyNodeProviderRewards>,
+}
+
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Default, Clone, PartialEq,
+)]
+pub struct MaturityDisbursement {
+    /// The amount of maturity being disbursed in e8s.
+    pub amount_e8s: Option<u64>,
+    /// The timestamp at which the maturity was disbursed.
+    pub timestamp_of_disbursement_seconds: Option<u64>,
+    /// The timestamp at which the maturity disbursement should be finalized.
+    pub finalize_disbursement_timestamp_seconds: Option<u64>,
+    /// The account to disburse the maturity to.
+    pub account_to_disburse_to: Option<Account>,
 }

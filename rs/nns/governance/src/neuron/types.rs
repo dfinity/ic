@@ -3,6 +3,7 @@ use crate::{
         LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
         MAX_NEURON_RECENT_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON,
     },
+    is_disburse_maturity_enabled,
     neuron::{combine_aged_stakes, dissolve_state_and_age::DissolveStateAndAge, neuron_stake_e8s},
     neuron_store::NeuronStoreError,
     pb::v1::{
@@ -1394,7 +1395,7 @@ impl Neuron {
             known_neuron_data,
             neuron_type,
             voting_power_refreshed_timestamp_seconds,
-            maturity_disbursements_in_progress: _,
+            maturity_disbursements_in_progress,
 
             // Not used.
             visibility: _,
@@ -1427,6 +1428,17 @@ impl Neuron {
             .into_iter()
             .map(|(topic_id, followees)| (topic_id, api::neuron::Followees::from(followees)))
             .collect();
+
+        let maturity_disbursements_in_progress = if is_disburse_maturity_enabled() {
+            Some(
+                maturity_disbursements_in_progress
+                    .into_iter()
+                    .map(api::MaturityDisbursement::from)
+                    .collect(),
+            )
+        } else {
+            None
+        };
         api::Neuron {
             id,
             account,
@@ -1451,6 +1463,7 @@ impl Neuron {
             neuron_type,
             visibility,
             voting_power_refreshed_timestamp_seconds,
+            maturity_disbursements_in_progress,
 
             potential_voting_power,
             deciding_voting_power,
