@@ -9150,6 +9150,7 @@ dependencies = [
  "ic-crypto-utils-threshold-sig-der",
  "ic-error-types",
  "ic-http-endpoints-async-utils",
+ "ic-http-endpoints-test-agent",
  "ic-interfaces",
  "ic-interfaces-mocks",
  "ic-interfaces-registry",
@@ -9204,6 +9205,18 @@ dependencies = [
  "tower-test",
  "tracing-flame",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "ic-http-endpoints-test-agent"
+version = "0.9.0"
+dependencies = [
+ "ic-crypto-tree-hash",
+ "ic-types",
+ "ic-validator",
+ "reqwest 0.12.12",
+ "serde_cbor",
+ "tokio",
 ]
 
 [[package]]
@@ -16860,6 +16873,7 @@ dependencies = [
  "ic-base-types",
  "ic-cdk 0.17.1",
  "ic-crypto-tree-hash",
+ "ic-http-endpoints-test-agent",
  "ic-limits",
  "ic-management-canister-types-private",
  "ic-networking-subnet-update-workload",
@@ -16875,6 +16889,7 @@ dependencies = [
  "ic-types",
  "ic-utils 0.39.3",
  "ic_consensus_system_test_utils",
+ "itertools 0.12.1",
  "leb128",
  "proxy_canister",
  "rand 0.8.5",
