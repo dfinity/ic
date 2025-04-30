@@ -111,7 +111,6 @@ pub struct HostOSSettings {
     #[serde(default = "default_vm_nr_of_vcpus")]
     pub vm_nr_of_vcpus: u32,
     pub verbose: bool,
-    pub dummy_field: u32,
 }
 
 const fn default_vm_nr_of_vcpus() -> u32 {
@@ -249,8 +248,7 @@ mod tests {
             "vm_memory": 4096,
             "vm_cpu": "host",
             "vm_nr_of_vcpus": 4,
-            "verbose": true,
-            "dummy_field": 0
+            "verbose": true
         }"#;
         let settings: HostOSSettings = serde_json::from_str(json)?;
         assert_eq!(settings.vm_nr_of_vcpus, 4);
@@ -259,8 +257,7 @@ mod tests {
         let json = r#"{
             "vm_memory": 4096,
             "vm_cpu": "host",
-            "verbose": true,
-            "dummy_field": 0
+            "verbose": true
         }"#;
         let settings: HostOSSettings = serde_json::from_str(json)?;
         assert_eq!(settings.vm_nr_of_vcpus, 64);
@@ -296,7 +293,6 @@ mod tests {
                 vm_cpu: String::new(),
                 vm_nr_of_vcpus: 0,
                 verbose: false,
-                dummy_field: 0,
             },
             guestos_settings: GuestOSSettings::default(),
         };

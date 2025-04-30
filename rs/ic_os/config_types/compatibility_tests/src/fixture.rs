@@ -78,7 +78,6 @@ fn generate_default_hostos_config() -> HostOSConfig {
         vm_cpu: "kvm".to_string(),
         vm_nr_of_vcpus: 64,
         verbose: false,
-        dummy_field: 0,
     };
 
     HostOSConfig {

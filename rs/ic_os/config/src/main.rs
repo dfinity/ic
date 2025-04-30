@@ -232,8 +232,7 @@ pub fn main() -> Result<()> {
                     .clone()
                     .unwrap_or("kvm".to_string()),
                 vm_nr_of_vcpus: deployment_json_settings.resources.nr_of_vcpus.unwrap_or(64),
-                verbose: false,
-                dummy_field: 0,
+                verbose,
             };
 
             let guestos_settings = GuestOSSettings::default();
