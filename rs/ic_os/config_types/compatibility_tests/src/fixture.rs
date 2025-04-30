@@ -12,7 +12,7 @@ fn current_fixture_versions_exist(fixtures_dir: &Path) -> bool {
 
 /// Checks if the current config_types structure has changed compared to the existing fixture version
 fn config_structure_changed(fixtures_dir: &Path) -> bool {
-    let new_config = generate_test_base_config();
+    let new_config = generate_default_hostos_config();
 
     let existing_hostos_fixture = fixtures_dir.join(format!("hostos_v{}.json", CONFIG_VERSION));
 
@@ -44,7 +44,7 @@ pub fn generate_fixtures(fixtures_dir: &Path) -> std::io::Result<()> {
         std::process::exit(1);
     }
 
-    let config = generate_test_base_config();
+    let config = generate_default_hostos_config();
     fs::create_dir_all(fixtures_dir)?;
 
     serde_json::to_writer_pretty(
@@ -55,16 +55,12 @@ pub fn generate_fixtures(fixtures_dir: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-fn generate_test_base_config() -> HostOSConfig {
-    use url::Url;
-
-    let ipv6_config = Ipv6Config::Fixed(FixedIpv6Config {
-        address: "2a00:fb01:400:200::1/64".to_string(),
-        gateway: "2a00:fb01:400:200::1".parse::<Ipv6Addr>().unwrap(),
-    });
-
+fn generate_default_hostos_config() -> HostOSConfig {
     let network_settings = NetworkSettings {
-        ipv6_config,
+        ipv6_config: Ipv6Config::Fixed(FixedIpv6Config {
+            address: "2a00:fb01:400:200::1/64".to_string(),
+            gateway: "2a00:fb01:400:200::1".parse::<Ipv6Addr>().unwrap(),
+        }),
         ipv4_config: Some(Ipv4Config {
             address: Ipv4Addr::new(192, 168, 1, 1),
             gateway: Ipv4Addr::new(192, 168, 1, 254),
@@ -74,21 +70,23 @@ fn generate_test_base_config() -> HostOSConfig {
     };
 
     let icos_settings = ICOSSettings {
-        node_reward_type: Some("default".to_string()),
+        node_reward_type: Some("type3.1".to_string()),
         mgmt_mac: "00:00:00:00:00:01".parse().unwrap(),
-        deployment_environment: DeploymentEnvironment::Testnet,
+        deployment_environment: DeploymentEnvironment::Mainnet,
         logging: Logging::default(),
         use_nns_public_key: false,
-        nns_urls: vec![Url::parse("http://localhost:8080").unwrap()],
-        use_node_operator_private_key: false,
+        nns_urls: vec![
+            url::Url::parse("https://icp-api.io,https://icp0.io,https://ic0.app").unwrap(),
+        ],
+        use_node_operator_private_key: true,
         use_ssh_authorized_keys: false,
         icos_dev_settings: ICOSDevSettings::default(),
     };
 
     let hostos_settings = HostOSSettings {
         vm_memory: 4096,
-        vm_cpu: "host".to_string(),
-        vm_nr_of_vcpus: 4,
+        vm_cpu: "kvm".to_string(),
+        vm_nr_of_vcpus: 64,
         verbose: false,
     };
 

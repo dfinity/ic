@@ -15,24 +15,24 @@
     "domain_name": "ic.test"
   },
   "icos_settings": {
-    "node_reward_type": "default",
+    "node_reward_type": "type3.1",
     "mgmt_mac": "00:00:00:00:00:01",
-    "deployment_environment": "testnet",
+    "deployment_environment": "mainnet",
     "logging": {
       "elasticsearch_hosts": null,
       "elasticsearch_tags": null
     },
     "use_nns_public_key": false,
     "nns_urls": [
-      "http://localhost:8080/"
+      "https://icp-api.io,https//icp0.io,https://ic0.app"
     ],
-    "use_node_operator_private_key": false,
+    "use_node_operator_private_key": true,
     "use_ssh_authorized_keys": false,
     "icos_dev_settings": {}
   },
   "hostos_settings": {
     "vm_memory": 4096,
-    "vm_cpu": "host",
+    "vm_cpu": "kvm",
     "verbose": false
   },
   "guestos_settings": {
