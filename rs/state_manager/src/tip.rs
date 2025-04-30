@@ -872,7 +872,7 @@ fn serialize_canister_to_tip(
                     .serialize(&execution_state.wasm_binary.binary)?;
             } else {
                 let wasm = canister_layout.wasm();
-                // This if should always be false, as we reflink copy the entire checkpoint to the tip
+                // This if should always be false, as we hardlink the entire checkpoint to the tip
                 // It is left in mainly as defensive programming
                 if !wasm.raw_path().exists() {
                     debug_assert!(false);
