@@ -9,7 +9,6 @@ use ic_btc_checker::{
     UpgradeArg as CheckerUpgradeArg,
 };
 use ic_btc_interface::Txid;
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
@@ -26,6 +25,7 @@ use ic_ckbtc_minter::{
     Log, MinterInfo, Network, CKBTC_LEDGER_MEMO_SIZE, MIN_RELAY_FEE_PER_VBYTE,
     MIN_RESUBMISSION_DELAY,
 };
+use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_metrics_assert::{CanisterHttpQuery, MetricsAssert};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
@@ -61,6 +61,7 @@ fn default_init_args() -> CkbtcMinterInitArgs {
         btc_checker_principal: Some(CanisterId::from(0)),
         kyt_principal: None,
         kyt_fee: None,
+        get_utxos_cache_expiration_seconds: None,
     }
 }
 
@@ -1969,6 +1970,15 @@ fn test_retrieve_btc_with_approval() {
 
     ckbtc.finalize_transaction(tx);
     assert_eq!(ckbtc.await_finalization(block_index, 10), txid);
+
+    ckbtc
+        .check_minter_metrics()
+        .assert_contains_metric_matching(
+            r#"ckbtc_minter_sign_with_ecdsa_latency_bucket\{result="success",le="(\d+|\+Inf)"\} 1 \d+"#,
+        )
+        .assert_does_not_contain_metric_matching(
+            r#"ckbtc_minter_sign_with_ecdsa_latency_bucket\{result="failure",le="(\d+|\+Inf)"\} 1 \d+"#
+        );
 }
 
 #[test]
@@ -2074,6 +2084,15 @@ fn test_retrieve_btc_with_approval_from_subaccount() {
             status_v2: Some(ckbtc.retrieve_btc_status_v2(block_index))
         }]
     );
+
+    ckbtc
+        .check_minter_metrics()
+        .assert_contains_metric_matching(
+            r#"ckbtc_minter_sign_with_ecdsa_latency_bucket\{result="success",le="(\d+|\+Inf)"\} 1 \d+"#,
+        )
+        .assert_does_not_contain_metric_matching(
+            r#"ckbtc_minter_sign_with_ecdsa_latency_bucket\{result="failure",le="(\d+|\+Inf)"\} 1 \d+"#
+        );
 }
 
 #[test]

@@ -1,5 +1,5 @@
 use candid::{Encode, Principal};
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use ic_http_types::{HttpRequest, HttpResponse};
 use pocket_ic::nonblocking::PocketIc;
 use salt_sharing_api::{GetSaltError, GetSaltResponse, InitArg, SaltGenerationStrategy};
 use salt_sharing_canister_integration_tests::pocket_ic_helpers::{
@@ -21,7 +21,7 @@ async fn main() {
     let pocket_ic = setup_subnets_and_registry_canister().await;
     // Set system time on the IC.
     let time = SystemTime::from(Utc.with_ymd_and_hms(2024, 2, 25, 0, 0, 0).unwrap());
-    pocket_ic.set_time(time).await;
+    pocket_ic.set_time(time.into()).await;
     // Install salt canister
     let init_payload = InitArg {
         regenerate_now: true,
@@ -75,7 +75,7 @@ async fn main() {
     assert!(salt_id > 0);
     // Till the very last day of the month salt should not be regenerated (note leap year)
     let time = SystemTime::from(Utc.with_ymd_and_hms(2024, 2, 29, 0, 0, 0).unwrap());
-    pocket_ic.set_time(time).await;
+    pocket_ic.set_time(time.into()).await;
     tick_n_times(&pocket_ic, TICKS).await;
     let salt_id_0 = metrics_extractor
         .try_get_metric::<u64>(SALT_METRIC)
@@ -84,7 +84,7 @@ async fn main() {
     assert_eq!(salt_id_0, salt_id);
     // But on the first calendar day of next month salt should be regenerated
     let time = SystemTime::from(Utc.with_ymd_and_hms(2024, 3, 1, 0, 0, 0).unwrap());
-    pocket_ic.set_time(time).await;
+    pocket_ic.set_time(time.into()).await;
     tick_n_times(&pocket_ic, TICKS).await;
     let salt_id_1 = metrics_extractor
         .try_get_metric::<u64>(SALT_METRIC)

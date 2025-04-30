@@ -873,9 +873,7 @@ impl CanisterManager {
 
         // Take out the canister from `ReplicatedState`.
         let canister_to_delete = state.take_canister_state(&canister_id_to_delete).unwrap();
-        state
-            .canister_snapshots
-            .delete_snapshots(canister_to_delete.canister_id());
+        state.delete_snapshots(canister_to_delete.canister_id());
 
         // Leftover cycles in the balance are considered `consumed`.
         let leftover_cycles = NominalCycles::from(canister_to_delete.system_state.balance());
@@ -1586,7 +1584,7 @@ impl CanisterManager {
 
         // Delete old snapshot identified by `replace_snapshot` ID.
         if let Some(replace_snapshot) = replace_snapshot {
-            state.canister_snapshots.remove(replace_snapshot);
+            state.delete_snapshot(replace_snapshot);
             canister.system_state.snapshots_memory_usage = canister
                 .system_state
                 .snapshots_memory_usage
@@ -1617,9 +1615,7 @@ impl CanisterManager {
 
         let snapshot_id =
             SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
-        state
-            .canister_snapshots
-            .push(snapshot_id, Arc::new(new_snapshot));
+        state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
         canister.system_state.snapshots_memory_usage = canister
             .system_state
             .snapshots_memory_usage
@@ -1826,8 +1822,9 @@ impl CanisterManager {
             ),
         );
         state
-            .canister_snapshots
-            .add_restore_operation(canister_id, snapshot_id);
+            .metadata
+            .unflushed_checkpoint_ops
+            .load_snapshot(canister_id, snapshot_id);
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
             new_canister.scheduler_state.heap_delta_debit = new_canister
@@ -1905,7 +1902,7 @@ impl CanisterManager {
                 }
             }
         }
-        let old_snapshot = state.canister_snapshots.remove(delete_snapshot_id);
+        let old_snapshot = state.delete_snapshot(delete_snapshot_id);
         // Already confirmed that `old_snapshot` exists.
         let old_snapshot_size = old_snapshot.unwrap().size();
         canister.system_state.snapshots_memory_usage = canister
