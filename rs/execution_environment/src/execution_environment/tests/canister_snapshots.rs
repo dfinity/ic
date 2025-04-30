@@ -6,7 +6,7 @@ use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterSettingsArgsBuilder,
-    CanisterSnapshotDataKind, CanisterSnapshotResponse, ClearChunkStoreArgs,
+    CanisterSnapshotDataKind, CanisterSnapshotResponse, ChunkHash, ClearChunkStoreArgs,
     DeleteCanisterSnapshotArgs, GlobalTimer, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
     Method, OnLowWasmMemoryHookStatus, Payload as Ic00Payload, ReadCanisterSnapshotDataArgs,
     ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataArgs,
@@ -15,12 +15,12 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_snapshots::SnapshotOperation,
     canister_state::{
         execution_state::{WasmBinary, WasmExecutionMode},
-        system_state::CyclesUseCase,
+        system_state::{wasm_chunk_store::CHUNK_SIZE, CyclesUseCase},
         WASM_PAGE_SIZE_IN_BYTES,
     },
+    metadata_state::UnflushedCheckpointOp,
     CanisterState, ExecutionState, SchedulerState,
 };
 use ic_sys::PAGE_SIZE;
@@ -973,8 +973,14 @@ fn take_canister_snapshot_fails_when_canister_would_be_frozen() {
 }
 
 #[test]
+fn chunk_size_multiple_of_os_page_size() {
+    assert!(CHUNK_SIZE % PAGE_SIZE as u64 == 0);
+}
+
+#[test]
 fn take_snapshot_with_maximal_chunk_store() {
     let mut test = ExecutionTestBuilder::new()
+        .with_snapshot_metadata_download()
         .with_heap_delta_rate_limit(u64::MAX.into())
         .build();
 
@@ -986,26 +992,24 @@ fn take_snapshot_with_maximal_chunk_store() {
         )
         .unwrap();
 
+    let mut chunk_hashes = vec![];
     // The chunk store may have no more than 100 entries.
     // If this test fails, the wasm chunk store size or the
     // max number of stored chunks may have changed.
-    // On macos, the OS pages are bigger, so there are
-    // fewer entries possible. FIXME in a nicer way.
-    let max = {
-        #[cfg(target_os = "macos")]
-        let m = 25u32;
-        #[cfg(not(target_os = "macos"))]
-        let m = 100u32;
-        m
-    };
-    for i in 0..max {
+    for i in 0..100u32 {
         let chunk = i.to_be_bytes().to_vec();
         let upload_args = UploadChunkArgs {
             canister_id: canister_id.into(),
             chunk,
         };
-        test.subnet_message("upload_chunk", upload_args.encode())
-            .unwrap();
+        let WasmResult::Reply(bytes) = test
+            .subnet_message("upload_chunk", upload_args.encode())
+            .unwrap()
+        else {
+            panic!("Expected Reply")
+        };
+        let hash = Decode!(&bytes, ChunkHash).unwrap();
+        chunk_hashes.push(hash.hash);
     }
     // this one should fail
     let chunk = vec![42; 42];
@@ -1019,11 +1023,26 @@ fn take_snapshot_with_maximal_chunk_store() {
     // Take a snapshot of the canister.
     let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
     let result = test.subnet_message("take_canister_snapshot", args.encode());
-    let _snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
+    let snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
         .unwrap()
         .snapshot_id();
 
-    // TODO: get metadata once pull/4514 is merged.
+    let args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id);
+    let WasmResult::Reply(bytes) = test
+        .subnet_message("read_canister_snapshot_metadata", args.encode())
+        .unwrap()
+    else {
+        panic!("expected WasmResult::Reply")
+    };
+    let metadata = Decode!(&bytes, ReadCanisterSnapshotMetadataResponse).unwrap();
+    let mut returned_chunk_hashes = metadata.wasm_chunk_store;
+    returned_chunk_hashes.sort();
+    let returned_chunk_hashes = returned_chunk_hashes
+        .iter()
+        .map(|x| x.hash.clone())
+        .collect::<Vec<Vec<u8>>>();
+    chunk_hashes.sort();
+    assert_eq!(returned_chunk_hashes, chunk_hashes);
 }
 
 #[test]
@@ -1666,11 +1685,11 @@ fn load_canister_snapshot_succeeds() {
             snapshot_taken_at_timestamp
         )
     );
-    let unflushed_changes = test.state_mut().canister_snapshots.take_unflushed_changes();
+    let unflushed_changes = test.state_mut().metadata.unflushed_checkpoint_ops.take();
     assert_eq!(unflushed_changes.len(), 2);
     let expected_unflushed_changes = vec![
-        SnapshotOperation::Backup(canister_id, snapshot_id),
-        SnapshotOperation::Restore(canister_id, snapshot_id),
+        UnflushedCheckpointOp::TakeSnapshot(canister_id, snapshot_id),
+        UnflushedCheckpointOp::LoadSnapshot(canister_id, snapshot_id),
     ];
     assert_eq!(expected_unflushed_changes, unflushed_changes);
 }

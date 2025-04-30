@@ -68,8 +68,8 @@
     "sha256": "fd25a4e2e283b498c3be1aaf63cc9b2726264d78a12b12f43ad453ceeb575e7c"
   },
   "governance": {
-    "rev": "910ed6f13390e590b6b9f45ab21ea25182b76553",
-    "sha256": "733adbcbfc5c6218ad30b646dd0ac0075780b1cc0a933249326b8362d749974c"
+    "rev": "0084cbd1bdfa69146fef27d9e6a58e4992e85ae1",
+    "sha256": "bfe1e31655c8cf9abacddd27b62e8873b594a3b9a39401ae5fd8b2a92d2d9adf"
   },
   "index": {
     "rev": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
@@ -84,12 +84,12 @@
     "sha256": "8c8eb285de53ca5609abd7dc41ba3ec8eeb67708b81469311fd670e6738d7d0a"
   },
   "node-rewards": {
-    "rev": "3a3cf55373bfe5843fac9fff6657127ae11b5dd8",
-    "sha256": "8637e0182ffc1255563e295efee28f2163f9be21bbd27f3e65bfc3c1f470d3ca"
+    "rev": "0084cbd1bdfa69146fef27d9e6a58e4992e85ae1",
+    "sha256": "f249444b64a3ddb59b2a1a93d778488ea2bfaca9bc029901a2c906d5f18449b8"
   },
   "registry": {
-    "rev": "3afec59ddf883e80a4987fa9129d62ad156548a2",
-    "sha256": "3d44ad8ac30be5861f8b650300383836051a50980e3475dff7fc0953bc9e192c"
+    "rev": "0084cbd1bdfa69146fef27d9e6a58e4992e85ae1",
+    "sha256": "5556c5b3b8d65cac18ecbc913e3d5b001ced8c67fa7e9d83b27c7065faf9468d"
   },
   "root": {
     "rev": "34a638d9f593542f3da89494966c3759667aaf88",
@@ -104,8 +104,8 @@
     "sha256": "9bb1d4c4012eb6009a901f6d18eb015ca41fbcaadf8cf0ffe7c774a0d7d59d4a"
   },
   "sns_governance": {
-    "rev": "c5dee3a11b79da7b5c433574f38605d75c9feaf5",
-    "sha256": "a30843be2b9247a75fad1b8301152cb4ca06e6198699e12e488f271fc0a8ad9d"
+    "rev": "0084cbd1bdfa69146fef27d9e6a58e4992e85ae1",
+    "sha256": "7b7025e5c801f82b4c9d538a4aafc0a36619ecb2c3213e0b0ef1ff5be58a26f8"
   },
   "sns_index": {
     "rev": "0d96610b842ca721e50169c65bdfbc5d6d3d8b67",

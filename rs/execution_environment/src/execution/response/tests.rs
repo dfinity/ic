@@ -1,17 +1,12 @@
 use assert_matches::assert_matches;
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_config::execution_environment::MINIMUM_FREEZING_THRESHOLD;
 use ic_error_types::ErrorCode;
 use ic_management_canister_types_private::CanisterStatusType;
-use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{MessageMemoryUsage, NumWasmPages};
 use ic_test_utilities_execution_environment::{
     check_ingress_status, ExecutionResponse, ExecutionTest, ExecutionTestBuilder,
-};
-use ic_test_utilities_execution_environment::{
-    filtered_subnet_config, DropFeesFilter, ExecutionFeesFilter,
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_types::messages::ResponseBuilder;
@@ -1246,9 +1241,7 @@ fn dts_response_concurrent_cycles_change_succeeds() {
         .with_manual_execution()
         .build();
 
-    let a_id = test
-        .universal_canister_with_cycles(Cycles::new(10_000_000_000_000))
-        .unwrap();
+    let a_id = test.universal_canister().unwrap();
     let b_id = test.universal_canister().unwrap();
 
     let transferred_cycles = Cycles::new(1000);
@@ -1281,7 +1274,7 @@ fn dts_response_concurrent_cycles_change_succeeds() {
     test.execute_message(b_id);
     test.induct_messages();
 
-    test.update_freezing_threshold(a_id, NumSeconds::from(MINIMUM_FREEZING_THRESHOLD))
+    test.update_freezing_threshold(a_id, NumSeconds::from(1))
         .unwrap();
     test.canister_update_allocations_settings(a_id, Some(1), None)
         .unwrap();
@@ -1293,7 +1286,7 @@ fn dts_response_concurrent_cycles_change_succeeds() {
     // The memory usage of the canister increases during the message execution.
     // `ic0.call_perform()` used the current freezing threshold. This value is
     // an upper bound on the additional freezing threshold.
-    let additional_freezing_threshold = Cycles::new(500 * MINIMUM_FREEZING_THRESHOLD as u128);
+    let additional_freezing_threshold = Cycles::new(500);
 
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
@@ -1361,14 +1354,9 @@ fn dts_response_concurrent_cycles_change_fails() {
     // 6. The response callback fails because there are not enough cycles
     //    in the canister balance to cover both the call and cycles debit.
     let instruction_limit = 100_000_000;
-    let subnet_config = filtered_subnet_config(
-        SubnetType::Application,
-        ExecutionFeesFilter::Drop(DropFeesFilter::IdleResources),
-    );
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(1_000_000)
-        .with_cycles_account_manager_config(subnet_config.cycles_account_manager_config)
         .with_manual_execution()
         .build();
 
@@ -1405,7 +1393,7 @@ fn dts_response_concurrent_cycles_change_fails() {
     test.execute_message(b_id);
     test.induct_messages();
 
-    test.update_freezing_threshold(a_id, NumSeconds::from(MINIMUM_FREEZING_THRESHOLD))
+    test.update_freezing_threshold(a_id, NumSeconds::from(1))
         .unwrap();
     test.canister_update_allocations_settings(a_id, Some(1), None)
         .unwrap();
@@ -1500,14 +1488,9 @@ fn dts_response_with_cleanup_concurrent_cycles_change_succeeds() {
     // 9. The cleanup callback resumes and succeeds because it cannot change the
     //    cycles balance of the canister.
     let instruction_limit = 100_000_000;
-    let subnet_config = filtered_subnet_config(
-        SubnetType::Application,
-        ExecutionFeesFilter::Drop(DropFeesFilter::IdleResources),
-    );
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(1_000_000)
-        .with_cycles_account_manager_config(subnet_config.cycles_account_manager_config)
         .with_manual_execution()
         .build();
 
@@ -1552,7 +1535,7 @@ fn dts_response_with_cleanup_concurrent_cycles_change_succeeds() {
     test.execute_message(b_id);
     test.induct_messages();
 
-    test.update_freezing_threshold(a_id, NumSeconds::from(MINIMUM_FREEZING_THRESHOLD))
+    test.update_freezing_threshold(a_id, NumSeconds::from(1))
         .unwrap();
     test.canister_update_allocations_settings(a_id, Some(1), None)
         .unwrap();
@@ -1651,9 +1634,7 @@ fn dts_response_with_cleanup_concurrent_cycles_change_is_capped() {
         .with_manual_execution()
         .build();
 
-    let a_id = test
-        .universal_canister_with_cycles(Cycles::new(10_000_000_000_000))
-        .unwrap();
+    let a_id = test.universal_canister().unwrap();
     let b_id = test.universal_canister().unwrap();
 
     let transferred_cycles = Cycles::new(1_000);
@@ -1689,7 +1670,7 @@ fn dts_response_with_cleanup_concurrent_cycles_change_is_capped() {
     test.execute_message(b_id);
     test.induct_messages();
 
-    test.update_freezing_threshold(a_id, NumSeconds::from(MINIMUM_FREEZING_THRESHOLD))
+    test.update_freezing_threshold(a_id, NumSeconds::from(1))
         .unwrap();
     test.canister_update_allocations_settings(a_id, Some(1), None)
         .unwrap();

@@ -11,6 +11,32 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-04-15: Proposal 136285
+
+http://dashboard.internetcomputer.org/proposal/136285
+
+## Added
+
+* A timer task is added to take daily snapshots of voting power for standard proposals.
+
+## Fixed
+
+* Turned off `DisburseMaturity` that was incorrectly turned on before.
+
+
+# 2025-04-11: Proposal 136224
+
+http://dashboard.internetcomputer.org/proposal/136224
+
+## Added
+
+* Governance now gets node provider rewards from the Node Reward Canister in test builds.
+
+## Changed
+
+* The `_pb` methods now always panic.
+
+
 # 2025-04-05: Proposal 136071
 
 http://dashboard.internetcomputer.org/proposal/136071

@@ -3,7 +3,6 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use assert_matches::assert_matches;
 use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_config::execution_environment::MINIMUM_FREEZING_THRESHOLD;
 use ic_config::{
     embedders::{Config as EmbeddersConfig, MeteringType},
     execution_environment::Config as HypervisorConfig,
@@ -23,9 +22,6 @@ use ic_management_canister_types_private::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::{execution_state::NextScheduledMethod, NextExecution};
 use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineConfig};
-use ic_test_utilities_execution_environment::{
-    filtered_subnet_config, DropFeesFilter, ExecutionFeesFilter,
-};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::MessageId;
 use ic_types::{ingress::WasmResult, CryptoHashOfState, Cycles, NumInstructions};
@@ -181,33 +177,22 @@ fn dts_install_code_env(
     message_instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
 ) -> (StateMachine, DtsEnvConfig) {
-    let mut subnet_config = filtered_subnet_config(
-        SubnetType::Application,
-        ExecutionFeesFilter::Drop(DropFeesFilter::IdleResources),
-    );
-
-    subnet_config
-        .scheduler_config
-        .max_instructions_per_install_code = message_instruction_limit;
-    subnet_config
-        .scheduler_config
-        .max_instructions_per_install_code_slice = slice_instruction_limit;
-    subnet_config.scheduler_config.max_instructions_per_round =
-        message_instruction_limit + message_instruction_limit;
-    subnet_config.scheduler_config.max_instructions_per_message = message_instruction_limit;
-    subnet_config
-        .scheduler_config
-        .max_instructions_per_message_without_dts = slice_instruction_limit;
-    subnet_config.scheduler_config.max_instructions_per_slice = message_instruction_limit;
-    subnet_config
-        .scheduler_config
-        .instruction_overhead_per_execution = NumInstructions::from(0);
-    subnet_config
-        .scheduler_config
-        .instruction_overhead_per_canister = NumInstructions::from(0);
-
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     let config = DtsEnvConfig::new(
-        subnet_config,
+        SubnetConfig {
+            scheduler_config: SchedulerConfig {
+                max_instructions_per_install_code: message_instruction_limit,
+                max_instructions_per_install_code_slice: slice_instruction_limit,
+                max_instructions_per_round: message_instruction_limit + message_instruction_limit,
+                max_instructions_per_message: message_instruction_limit,
+                max_instructions_per_message_without_dts: slice_instruction_limit,
+                max_instructions_per_slice: message_instruction_limit,
+                instruction_overhead_per_execution: NumInstructions::from(0),
+                instruction_overhead_per_canister: NumInstructions::from(0),
+                ..subnet_config.scheduler_config
+            },
+            ..subnet_config
+        },
         HypervisorConfig {
             deterministic_time_slicing: FlagStatus::Enabled,
             ..Default::default()
@@ -291,7 +276,7 @@ struct DtsInstallCode {
 ///    complete.
 fn setup_dts_install_code(
     initial_balance: Cycles,
-    freezing_threshold_in_seconds: u64,
+    freezing_threshold_in_seconds: usize,
 ) -> DtsInstallCode {
     let (env, config) = dts_install_code_env(
         NumInstructions::from(1_000_000),
@@ -304,7 +289,7 @@ fn setup_dts_install_code(
         Some(
             CanisterSettingsArgsBuilder::new()
                 .with_compute_allocation(1)
-                .with_freezing_threshold(freezing_threshold_in_seconds)
+                .with_freezing_threshold(freezing_threshold_in_seconds as u64)
                 .build(),
         ),
     );
@@ -367,7 +352,7 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
         Some(
             CanisterSettingsArgsBuilder::new()
                 .with_compute_allocation(1)
-                .with_freezing_threshold(MINIMUM_FREEZING_THRESHOLD)
+                .with_freezing_threshold(0)
                 .build(),
         ),
     );
@@ -444,7 +429,7 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles() {
         canister_id,
         install_code_ingress_id,
         config,
-    } = setup_dts_install_code(initial_balance, MINIMUM_FREEZING_THRESHOLD);
+    } = setup_dts_install_code(initial_balance, 0);
 
     // Start execution of `install_code`.
     env.tick();
@@ -484,16 +469,19 @@ fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_
     let normal_ingress_cost = Cycles::new(NORMAL_INGRESS_COST);
     let max_execution_cost = Cycles::new(MAX_EXECUTION_COST);
     let actual_execution_cost = Cycles::new(ACTUAL_EXECUTION_COST);
+    let freezing_threshold = Cycles::new(10000000);
 
     // The initial balance is not sufficient for both execution and concurrent ingress message.
-    let initial_balance = install_code_ingress_cost + normal_ingress_cost.max(max_execution_cost);
+    let initial_balance = freezing_threshold
+        + install_code_ingress_cost
+        + normal_ingress_cost.max(max_execution_cost);
 
     let DtsInstallCode {
         env,
         canister_id,
         install_code_ingress_id,
         config,
-    } = setup_dts_install_code(initial_balance, MINIMUM_FREEZING_THRESHOLD);
+    } = setup_dts_install_code(initial_balance, 1);
 
     // Start execution of `install_code`.
     env.tick();
@@ -509,7 +497,7 @@ fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_
             "Canister {} is out of cycles: \
              please top up the canister with at least {} additional cycles",
             canister_id,
-            normal_ingress_cost
+            (freezing_threshold + normal_ingress_cost)
                 - (initial_balance - install_code_ingress_cost - max_execution_cost),
         )
     );
