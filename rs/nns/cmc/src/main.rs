@@ -6,13 +6,13 @@ use environment::Environment;
 use exchange_rate_canister::{
     RealExchangeRateCanisterClient, UpdateExchangeRateError, UpdateExchangeRateState,
 };
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::call::{arg_data_raw, reply_raw, CallResult, ManualReply};
 use ic_cdk::{heartbeat, init, post_upgrade, pre_upgrade, query, spawn, update};
 use ic_crypto_tree_hash::{
     flatmap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
     WitnessGeneratorImpl,
 };
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_ledger_core::{block::BlockType, tokens::CheckedSub};
 // TODO(EXC-1687): remove temporary aliases `Ic00CanisterSettingsArgs` and `Ic00CanisterSettingsArgsBuilder`.
 use ic_management_canister_types_private::{
@@ -724,7 +724,6 @@ fn get_subnet_types_to_subnets() -> SubnetTypesToSubnetsResponse {
 /// Returns the current mapping of authorized principals to subnets.
 #[query]
 fn get_principals_authorized_to_create_canisters_to_subnets() -> AuthorizedSubnetsResponse {
-    panic!("get_principals_authorized_to_create_canisters_to_subnets is temporarily disabled. DO NOT MERGE");
     with_state(|state| {
         let data = state
             .authorized_subnets
@@ -992,7 +991,6 @@ fn do_set_icp_xdr_conversion_rate(
 /// The function returns the current maturity modulation in basis points.
 #[query(hidden = true)]
 fn neuron_maturity_modulation() -> Result<i32, String> {
-    panic!("neuron_maturity_modulation is temporarily disabled. DO NOT MERGE");
     Ok(with_state(|state| {
         state.maturity_modulation_permyriad.unwrap_or(0)
     }))
@@ -1053,7 +1051,6 @@ fn compute_capped_maturity_modulation(
 
 #[update(hidden = true)]
 fn remove_subnet_from_authorized_subnet_list(arg: RemoveSubnetFromAuthorizedSubnetListArgs) {
-    panic!("remove_subnet_from_authorized_subnet_list is temporarily disabled. DO NOT MERGE");
     let RemoveSubnetFromAuthorizedSubnetListArgs {
         subnet: subnet_to_remove,
     } = arg;
@@ -2578,7 +2575,6 @@ async fn update_exchange_rate() {
 
 #[query(hidden = true, decoding_quota = 10000)]
 fn http_request(request: HttpRequest) -> HttpResponse {
-    panic!("http_request is temporarily disabled. DO NOT MERGE");
     match request.path() {
         "/metrics" => serve_metrics(encode_metrics),
         _ => HttpResponseBuilder::not_found().build(),
