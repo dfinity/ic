@@ -11,15 +11,8 @@ pub struct ConfigFixture {
 
 impl ConfigFixture {
     pub fn generate_for_version(version: &str) -> Self {
-        let base_config = generate_test_base_config();
-
-        let hostos_config = HostOSConfig {
-            config_version: base_config.0.clone(),
-            network_settings: base_config.1.clone(),
-            icos_settings: base_config.2.clone(),
-            hostos_settings: base_config.3.clone(),
-            guestos_settings: base_config.4.clone(),
-        };
+        let mut hostos_config = generate_test_base_config();
+        hostos_config.config_version = version.to_string();
 
         Self {
             version: version.to_string(),
@@ -83,13 +76,7 @@ pub fn generate_fixtures(fixtures_dir: &Path) -> std::io::Result<()> {
     fixture.save_to_directory(fixtures_dir)
 }
 
-fn generate_test_base_config() -> (
-    String,
-    NetworkSettings,
-    ICOSSettings,
-    HostOSSettings,
-    GuestOSSettings,
-) {
+fn generate_test_base_config() -> HostOSConfig {
     use url::Url;
 
     let ipv6_config = Ipv6Config::Fixed(FixedIpv6Config {
@@ -126,13 +113,11 @@ fn generate_test_base_config() -> (
         verbose: false,
     };
 
-    let guestos_settings = GuestOSSettings::default();
-
-    (
-        CONFIG_VERSION.to_string(),
+    HostOSConfig {
+        config_version: CONFIG_VERSION.to_string(),
         network_settings,
         icos_settings,
         hostos_settings,
-        guestos_settings,
-    )
+        guestos_settings: GuestOSSettings::default(),
+    }
 }

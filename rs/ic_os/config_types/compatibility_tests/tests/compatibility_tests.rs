@@ -1,7 +1,6 @@
 use config_types::*;
 use config_types_compatibility_lib::ConfigFixture;
 use serde_json;
-use std::path::PathBuf;
 
 #[test]
 fn test_backwards_compatibility() {
