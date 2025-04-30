@@ -1,25 +1,22 @@
 use assert_matches::assert_matches;
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_config::flag_status::FlagStatus;
-use ic_error_types::ErrorCode;
-use ic_error_types::UserError;
-use ic_management_canister_types::CanisterStatusType;
+use ic_config::embedders::BestEffortResponsesFeature;
+use ic_error_types::{ErrorCode, UserError};
+use ic_management_canister_types_private::CanisterStatusType;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::testing::SystemStateTesting;
-use ic_replicated_state::NumWasmPages;
+use ic_replicated_state::{MessageMemoryUsage, NumWasmPages};
 use ic_test_utilities_execution_environment::{
     check_ingress_status, ExecutionResponse, ExecutionTest, ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_types::messages::ResponseBuilder;
-use ic_types::messages::NO_DEADLINE;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{CallbackId, MessageId},
-    CanisterId, Cycles, Time,
+    messages::{CallbackId, MessageId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE},
+    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, SubnetId, Time,
 };
-use ic_types::{messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NumInstructions};
-use ic_types::{ComputeAllocation, MemoryAllocation};
+use ic_types_test_utils::ids::{SUBNET_1, SUBNET_42};
 use ic_universal_canister::{call_args, wasm};
 
 #[test]
@@ -2636,7 +2633,7 @@ fn test_cycles_burn() {
     let test = ExecutionTestBuilder::new().build();
 
     let canister_memory_usage = NumBytes::from(1_000_000);
-    let canister_message_memory_usage = NumBytes::from(0);
+    let canister_message_memory_usage = MessageMemoryUsage::ZERO;
 
     let amount = 1_000_000_000;
     let mut balance = Cycles::new(amount);
@@ -2663,7 +2660,7 @@ fn cycles_burn_up_to_the_threshold_on_not_enough_cycles() {
     let test = ExecutionTestBuilder::new().build();
 
     let canister_memory_usage = NumBytes::from(1_000_000);
-    let canister_message_memory_usage = NumBytes::from(0);
+    let canister_message_memory_usage = MessageMemoryUsage::ZERO;
 
     let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
         ic_config::execution_environment::Config::default().default_freeze_threshold,
@@ -3044,8 +3041,14 @@ fn test_call_context_performance_counter_correctly_reported_on_cleanup() {
     assert!(counters[1] < counters[2]);
 }
 
-fn test_best_effort_responses_feature_flag(flag: FlagStatus) -> Result<WasmResult, UserError> {
+const OWN_SUBNET_ID: SubnetId = SUBNET_1;
+const OTHER_SUBNET_ID: SubnetId = SUBNET_42;
+
+fn test_call_with_best_effort_response_feature_flag_impl(
+    flag: BestEffortResponsesFeature,
+) -> Result<WasmResult, UserError> {
     let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(OWN_SUBNET_ID)
         .with_best_effort_responses(flag)
         .build();
 
@@ -3073,28 +3076,23 @@ fn test_best_effort_responses_feature_flag(flag: FlagStatus) -> Result<WasmResul
 }
 
 #[test]
-fn test_best_effort_responses_feature_flag_enabled() {
-    match test_best_effort_responses_feature_flag(FlagStatus::Enabled) {
-        Ok(result) => assert_eq!(result, WasmResult::Reply(vec![])),
-        _ => panic!("Unexpected result"),
-    };
+fn test_call_with_best_effort_response_feature_flag() {
+    for flag in &[
+        BestEffortResponsesFeature::SpecificSubnets(vec![]),
+        BestEffortResponsesFeature::SpecificSubnets(vec![OTHER_SUBNET_ID]),
+        BestEffortResponsesFeature::SpecificSubnets(vec![OWN_SUBNET_ID, OTHER_SUBNET_ID]),
+        BestEffortResponsesFeature::ApplicationSubnetsOnly,
+        BestEffortResponsesFeature::Enabled,
+    ] {
+        match test_call_with_best_effort_response_feature_flag_impl(flag.clone()) {
+            Ok(result) => assert_eq!(result, WasmResult::Reply(vec![])),
+            _ => panic!("Unexpected result"),
+        };
+    }
 }
 
-#[test]
-fn test_best_effort_responses_feature_flag_disabled() {
-    match test_best_effort_responses_feature_flag(FlagStatus::Disabled) {
-        Err(e) => {
-            e.assert_contains(
-                ErrorCode::CanisterContractViolation,
-                "ic0::call_with_best_effort_response is not enabled.",
-            );
-        }
-        _ => panic!("Unexpected result"),
-    };
-}
-
-fn helper_ic0_msg_deadline_best_effort_responses_feature_flag(
-    flag: FlagStatus,
+fn ic0_msg_deadline_best_effort_responses_feature_flag_impl(
+    flag: BestEffortResponsesFeature,
 ) -> Result<WasmResult, UserError> {
     let mut test = ExecutionTestBuilder::new()
         .with_best_effort_responses(flag)
@@ -3112,21 +3110,18 @@ fn helper_ic0_msg_deadline_best_effort_responses_feature_flag(
 }
 
 #[test]
-fn test_ic0_msg_deadline_best_effort_responses_feature_flag_enabled() {
+fn test_ic0_msg_deadline_best_effort_responses_feature_flag() {
     let no_deadline = Time::from(NO_DEADLINE).as_nanos_since_unix_epoch();
-    assert_eq!(
-        helper_ic0_msg_deadline_best_effort_responses_feature_flag(FlagStatus::Enabled).unwrap(),
-        WasmResult::Reply(no_deadline.to_le_bytes().into())
-    );
-}
-
-#[test]
-fn test_ic0_msg_deadline_best_effort_responses_feature_flag_disabled() {
-    let err = helper_ic0_msg_deadline_best_effort_responses_feature_flag(FlagStatus::Disabled)
-        .unwrap_err();
-
-    err.assert_contains(
-        ErrorCode::CanisterContractViolation,
-        "ic0::msg_deadline is not enabled.",
-    );
+    for flag in &[
+        BestEffortResponsesFeature::SpecificSubnets(vec![]),
+        BestEffortResponsesFeature::SpecificSubnets(vec![OTHER_SUBNET_ID]),
+        BestEffortResponsesFeature::SpecificSubnets(vec![OWN_SUBNET_ID, OTHER_SUBNET_ID]),
+        BestEffortResponsesFeature::ApplicationSubnetsOnly,
+        BestEffortResponsesFeature::Enabled,
+    ] {
+        assert_eq!(
+            ic0_msg_deadline_best_effort_responses_feature_flag_impl(flag.clone()).unwrap(),
+            WasmResult::Reply(no_deadline.to_le_bytes().into())
+        );
+    }
 }

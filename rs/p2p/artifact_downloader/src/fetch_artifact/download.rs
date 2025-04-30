@@ -13,7 +13,8 @@ use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
 use bytes::Bytes;
 use ic_base_types::NodeId;
 use ic_interfaces::p2p::consensus::{
-    Aborted, ArtifactAssembler, Bouncer, BouncerFactory, BouncerValue, Peers, ValidatedPoolReader,
+    ArtifactAssembler, AssembleResult, Bouncer, BouncerFactory, BouncerValue, Peers,
+    ValidatedPoolReader,
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -99,7 +100,7 @@ impl<Artifact: PbArtifact> ArtifactAssembler<Artifact, Artifact> for FetchArtifa
         id: <Artifact as IdentifiableArtifact>::Id,
         artifact: Option<(Artifact, NodeId)>,
         peers: P,
-    ) -> Result<(Artifact, NodeId), Aborted> {
+    ) -> AssembleResult<Artifact> {
         Self::download_artifact(
             self.log.clone(),
             id,
@@ -159,14 +160,14 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
             build_axum_router(pool_clone),
         )
     }
-    /// Waits until advert resolves to fetch. If all peers are removed or bouncer value becomes Unwanted `Aborted` is returned.
+    /// Waits until advert resolves to wanted. If the bouncer value becomes Unwanted, false is returned.
     #[instrument(skip_all)]
-    async fn wait_fetch(
+    async fn should_download(
         id: &Artifact::Id,
         artifact: &mut Option<(Artifact, NodeId)>,
         metrics: &FetchArtifactMetrics,
         bouncer_watcher: &mut watch::Receiver<Bouncer<Artifact::Id>>,
-    ) -> Result<(), Aborted> {
+    ) -> bool {
         let mut bouncer_value = bouncer_watcher.borrow_and_update()(id);
 
         // Clear the artifact from memory if it was pushed.
@@ -180,10 +181,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
             bouncer_value = bouncer_watcher.borrow_and_update()(id);
         }
 
-        if let BouncerValue::Unwanted = bouncer_value {
-            return Err(Aborted);
-        }
-        Ok(())
+        BouncerValue::Unwanted != bouncer_value
     }
 
     /// Downloads a given artifact.
@@ -191,9 +189,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
     /// The download will be scheduled based on the given bouncer function, `bouncer_watcher`.
     ///
     /// The download fails iff:
-    /// - The bouncer function evaluates the advert to [`BouncerValue::Unwanted`] -> [`DownloadStopped::PriorityIsDrop`]
-    /// - The set of peers advertising the artifact, `peer_rx`, becomes empty -> [`DownloadStopped::AllPeersDeletedTheArtifact`]
-    /// and the failure condition is reported in the error variant of the returned result.
+    /// - The bouncer function evaluates the advert to [`BouncerValue::Unwanted`] -> [`AssembleResult::Unwanted`]
     #[instrument(skip_all)]
     async fn download_artifact(
         log: ReplicaLogger,
@@ -204,9 +200,11 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         mut bouncer_watcher: watch::Receiver<Bouncer<Artifact::Id>>,
         transport: Arc<dyn Transport>,
         metrics: FetchArtifactMetrics,
-    ) -> Result<(Artifact, NodeId), Aborted> {
+    ) -> AssembleResult<Artifact> {
         // Evaluate bouncer and wait until we should fetch.
-        Self::wait_fetch(&id, &mut artifact, &metrics, &mut bouncer_watcher).await?;
+        if !Self::should_download(&id, &mut artifact, &metrics, &mut bouncer_watcher).await {
+            return AssembleResult::Unwanted;
+        }
 
         let mut artifact_download_backoff = ExponentialBackoffBuilder::new()
             .with_initial_interval(MIN_ARTIFACT_RPC_TIMEOUT)
@@ -217,7 +215,10 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         match artifact {
             // Artifact was pushed by peer. In this case we don't need check that the artifact ID corresponds
             // to the artifact because we earlier derived the ID from the artifact.
-            Some((artifact, peer_id)) => Ok((artifact, peer_id)),
+            Some((artifact, peer_id)) => AssembleResult::Done {
+                message: artifact,
+                peer_id,
+            },
 
             // Fetch artifact
             None => {
@@ -243,7 +244,10 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
                                 let body = response.into_body();
                                 if let Ok(message) = Artifact::PbMessage::proxy_decode(&body) {
                                     if message.id() == id {
-                                        break Ok((message, peer));
+                                        break AssembleResult::Done {
+                                            message,
+                                            peer_id: peer,
+                                        };
                                     } else {
                                         warn!(
                                             log,
@@ -261,7 +265,11 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
 
                     // Wait before checking the bouncer so we might be able to avoid an unnecessary download.
                     sleep_until(next_request_at).await;
-                    Self::wait_fetch(&id, &mut artifact, &metrics, &mut bouncer_watcher).await?;
+                    if !Self::should_download(&id, &mut artifact, &metrics, &mut bouncer_watcher)
+                        .await
+                    {
+                        return AssembleResult::Unwanted;
+                    }
                 };
 
                 timer.stop_and_record();

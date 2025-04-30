@@ -10,7 +10,7 @@ use crate::vault::api::{
     PublicAndSecretKeyStoreCspVault, PublicKeyStoreCspVault, PublicRandomSeedGenerator,
     PublicRandomSeedGeneratorError, SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault,
     ThresholdSchnorrSigShareBytes, ThresholdSchnorrSignerCspVault, ThresholdSignatureCspVault,
-    ValidatePksAndSksError,
+    ValidatePksAndSksError, VetKdCspVault, VetKdEncryptedKeyShareCreationVaultError,
 };
 use crate::vault::remote_csp_vault::codec::{Bincode, CspVaultObserver, ObservableCodec};
 use crate::vault::remote_csp_vault::ThresholdSchnorrCreateSigShareVaultError;
@@ -45,6 +45,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgTranscriptOperation,
 };
+use ic_types::crypto::vetkd::{VetKdDerivationContext, VetKdEncryptedKeyShareContent};
 use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NumberOfNodes, Randomness};
@@ -807,6 +808,35 @@ impl ThresholdSchnorrSignerCspVault for RemoteCspVault {
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
             Err(
                 ThresholdSchnorrCreateSigShareVaultError::TransientInternalError(
+                    rpc_error.to_string(),
+                ),
+            )
+        })
+    }
+}
+
+impl VetKdCspVault for RemoteCspVault {
+    #[instrument(skip_all)]
+    #[inline]
+    fn create_encrypted_vetkd_key_share(
+        &self,
+        key_id: KeyId,
+        master_public_key: Vec<u8>,
+        transport_public_key: Vec<u8>,
+        context: VetKdDerivationContext,
+        input: Vec<u8>,
+    ) -> Result<VetKdEncryptedKeyShareContent, VetKdEncryptedKeyShareCreationVaultError> {
+        self.tokio_block_on(self.tarpc_csp_client.create_encrypted_vetkd_key_share(
+            context_with_timeout(self.rpc_timeout),
+            key_id,
+            ByteBuf::from(master_public_key),
+            ByteBuf::from(transport_public_key),
+            context,
+            ByteBuf::from(input),
+        ))
+        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
+            Err(
+                VetKdEncryptedKeyShareCreationVaultError::TransientInternalError(
                     rpc_error.to_string(),
                 ),
             )

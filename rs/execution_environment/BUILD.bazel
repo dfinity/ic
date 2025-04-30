@@ -5,6 +5,8 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-error-types",
+    "//packages/ic-vetkd-utils",
     "//rs/canister_sandbox:backend_lib",
     "//rs/config",
     "//rs/crypto/prng",
@@ -28,15 +30,13 @@ DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/state_layout",
     "//rs/sys",
-    "//rs/system_api",
     "//rs/types/base_types",
-    "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/types/wasm_types",
     "//rs/utils",
     "//rs/utils/lru_cache",
-    "//rs/wasm_transform",
+    "//rs/utils/thread",
     "@crate_index//:candid",
     "@crate_index//:hex",
     "@crate_index//:ic-btc-interface",
@@ -52,16 +52,19 @@ DEPENDENCIES = [
     "@crate_index//:serde_cbor",
     "@crate_index//:slog",
     "@crate_index//:strum",
+    "@crate_index//:tempfile",
     "@crate_index//:threadpool",
     "@crate_index//:tokio",
     "@crate_index//:tower",
     "@crate_index//:tracing",
+    "@crate_index//:wasmparser",
 ]
 
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/crypto/test_utils/vetkd",
     "//rs/interfaces/state_manager/mocks",
     "//rs/rust_canisters/canister_test",
     "//rs/state_machine_tests",
@@ -75,14 +78,13 @@ DEV_DEPENDENCIES = [
     "//rs/universal_canister/lib",
     "@crate_index//:assert_matches",
     "@crate_index//:criterion",
-    "@crate_index//:ic-btc-test-utils",
     "@crate_index//:insta",
     "@crate_index//:itertools",
     "@crate_index//:libflate",
     "@crate_index//:maplit",
     "@crate_index//:proptest",
-    "@crate_index//:tempfile",
-    "@crate_index//:wasmparser",
+    "@crate_index//:regex",
+    "@crate_index//:rstest",
     "@crate_index//:wat",
 ]
 
@@ -133,22 +135,50 @@ rust_ic_test(
 rust_ic_test_suite(
     name = "execution_environment_misc_integration",
     size = "large",
-    srcs = glob(["tests/*.rs"]),
+    srcs = glob(
+        ["tests/*.rs"],
+        # Exclude the dts test, which has a separate dts_test target below
+        # because it suffered from long running times on CI
+        # so we want to experiment with different configuration options.
+        exclude = ["tests/dts.rs"],
+    ),
     aliases = ALIASES,
     compile_data = glob(["tests/test-data/**"]),
     data = DATA + [
         "//rs/rust_canisters/backtrace_canister:backtrace-canister",
+        "//rs/rust_canisters/backtrace_canister:backtrace-canister-without-names",
         "//rs/universal_canister/impl:universal_canister.module",
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
+        "//testnet/prebuilt-canisters:image-classification",
     ],
     env = dict(ENV.items() + [
         ("BACKTRACE_CANISTER_WASM_PATH", "$(rootpath //rs/rust_canisters/backtrace_canister:backtrace-canister)"),
+        ("BACKTRACE_CANISTER_WITHOUT_NAMES_WASM_PATH", "$(rootpath //rs/rust_canisters/backtrace_canister:backtrace-canister-without-names)"),
         ("UNIVERSAL_CANISTER_WASM_PATH", "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)"),
         ("UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH", "$(rootpath //rs/universal_canister/impl:universal_canister.module)"),
+        ("IMAGE_CLASSIFICATION_CANISTER_WASM_PATH", "$(rootpath //testnet/prebuilt-canisters:image-classification)"),
     ]),
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
-        "test_macos",
+        "test_macos_slow",
+    ],
+    deps = [":execution_environment"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+# TODO: move this dts test back into the :execution_environment_misc_integration target above
+# when we get its P90 running time back under 5 minutes.
+rust_ic_test(
+    name = "dts_test",
+    size = "large",
+    srcs = ["tests/dts.rs"],
+    data = DATA + [
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
+    ],
+    env = dict(ENV.items() + [
+        ("UNIVERSAL_CANISTER_WASM_PATH", "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)"),
+    ]),
+    tags = [
+        "test_macos_slow",
     ],
     deps = [":execution_environment"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -164,8 +194,10 @@ rust_doc_test(
 BENCH_DEPENDENCIES = [
     # Keep sorted.
     ":execution_environment",
+    "//packages/ic-error-types",
     "//rs/config",
     "//rs/cycles_account_manager",
+    "//rs/embedders",
     "//rs/interfaces",
     "//rs/limits",
     "//rs/monitoring/logger",
@@ -174,21 +206,18 @@ BENCH_DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
     "//rs/rust_canisters/canister_test",
-    "//rs/system_api",
     "//rs/test_utilities",
     "//rs/test_utilities/execution_environment",
     "//rs/test_utilities/state",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
     "//rs/types/base_types",
-    "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/types/wasm_types",
     "//rs/universal_canister/lib",
     "@crate_index//:criterion",
     "@crate_index//:lazy_static",
-    "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:wat",
 ]
@@ -198,6 +227,7 @@ rust_ic_bench(
     srcs = ["benches/system_api/execute_inspect_message.rs"],
     data = DATA,
     env = ENV,
+    with_test = True,
     deps = ["//rs/execution_environment/benches/lib:execution_environment_bench"] + BENCH_DEPENDENCIES,
 )
 
@@ -206,6 +236,7 @@ rust_ic_bench(
     srcs = ["benches/system_api/execute_query.rs"],
     data = DATA,
     env = ENV,
+    with_test = True,
     deps = ["//rs/execution_environment/benches/lib:execution_environment_bench"] + BENCH_DEPENDENCIES,
 )
 
@@ -214,6 +245,7 @@ rust_ic_bench(
     srcs = ["benches/system_api/execute_update.rs"],
     data = DATA,
     env = ENV,
+    with_test = True,
     deps = ["//rs/execution_environment/benches/lib:execution_environment_bench"] + BENCH_DEPENDENCIES,
 )
 
@@ -303,6 +335,7 @@ rust_ic_bench(
         "//rs/execution_environment/benches/lib:execution_environment_bench",
         "//rs/state_machine_tests",
         "@crate_index//:candid",
+        "@crate_index//:rand",
         "@crate_index//:serde",
     ] + BENCH_DEPENDENCIES,
 )

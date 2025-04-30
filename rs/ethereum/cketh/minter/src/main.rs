@@ -1,4 +1,6 @@
+use crate::dashboard::DashboardPaginationParameters;
 use candid::Nat;
+use dashboard::DashboardTemplate;
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
@@ -888,7 +890,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
 fn http_request(req: HttpRequest) -> HttpResponse {
     use ic_metrics_encoder::MetricsEncoder;
 
-    if ic_cdk::api::data_certificate().is_none() {
+    if ic_cdk::api::in_replicated_execution() {
         ic_cdk::trap("update call rejected");
     }
 
@@ -1032,7 +1034,16 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         }
     } else if req.path() == "/dashboard" {
         use askama::Template;
-        let dashboard = read_state(dashboard::DashboardTemplate::from_state);
+
+        let paging_parameters = match DashboardPaginationParameters::from_query_params(&req) {
+            Ok(args) => args,
+            Err(error) => {
+                return HttpResponseBuilder::bad_request()
+                    .with_body_and_content_length(error)
+                    .build()
+            }
+        };
+        let dashboard = read_state(|state| DashboardTemplate::from_state(state, paging_parameters));
         HttpResponseBuilder::ok()
             .header("Content-Type", "text/html; charset=utf-8")
             .with_body_and_content_length(dashboard.render().unwrap())

@@ -13,10 +13,11 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-ed25519",
     "//rs/config",
-    "//rs/crypto/ed25519",
     "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
+    "//rs/crypto/internal/crypto_lib/bls12_381/vetkd",
     "//rs/crypto/internal/crypto_lib/seed",
     "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
     "//rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig",
@@ -58,6 +59,8 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-secp256k1",
+    "//packages/ic-vetkd-utils",
     "//rs/certification/test-utils",
     "//rs/crypto/ecdsa_secp256r1",
     "//rs/crypto/for_verification_only",
@@ -72,7 +75,6 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/internal/test_vectors",
     "//rs/crypto/node_key_generation",
     "//rs/crypto/node_key_validation",
-    "//rs/crypto/secp256k1",
     "//rs/crypto/sha2",
     "//rs/crypto/temp_crypto",
     "//rs/crypto/test_utils",
@@ -138,10 +140,10 @@ rust_binary(
     crate_name = "ic_crypto_csp",
     deps = [
         # Keep sorted.
-        "//rs/async_utils",
         "//rs/config",
         "//rs/crypto/internal/crypto_service_provider",
         "//rs/crypto/internal/logmon",
+        "//rs/http_endpoints/async_utils",
         "//rs/monitoring/adapter_metrics/server",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
@@ -259,6 +261,16 @@ rust_bench(
     name = "canister_sig_bench",
     testonly = True,
     srcs = ["benches/canister_sig.rs"],
+    aliases = ALIASES,
+    pin_cpu = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_bench(
+    name = "vetkd_bench",
+    testonly = True,
+    srcs = ["benches/vetkd.rs"],
     aliases = ALIASES,
     pin_cpu = True,
     proc_macro_deps = MACRO_DEPENDENCIES,

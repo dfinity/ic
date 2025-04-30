@@ -87,29 +87,7 @@ pub async fn rejoin_test(
     let message = b"This beautiful prose should be persisted for future generations";
     store_and_read_stable(&logger, message, &universal_canister).await;
 
-    info!(
-        logger,
-        "Checking for the state sync count metrics indicating that a successful state sync has happened"
-    );
-    let res = fetch_metrics::<u64>(
-        &logger,
-        rejoin_node.clone(),
-        vec![SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT],
-    )
-    .await;
-    assert!(res[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT][0] > base_count);
-
-    let res = fetch_metrics::<f64>(
-        &logger,
-        rejoin_node.clone(),
-        vec![SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM],
-    )
-    .await;
-    info!(
-        logger,
-        "State sync finishes successfully in {} seconds",
-        res[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM][0],
-    );
+    assert_state_sync_has_happened(&logger, rejoin_node, base_count).await;
 }
 
 pub async fn rejoin_test_large_state(
@@ -223,29 +201,53 @@ pub async fn rejoin_test_large_state(
     let message = b"This beautiful prose should be persisted for future generations";
     store_and_read_stable(&logger, message, &universal_canister).await;
 
+    assert_state_sync_has_happened(&logger, rejoin_node, base_count).await;
+}
+
+async fn assert_state_sync_has_happened(
+    logger: &slog::Logger,
+    rejoin_node: IcNodeSnapshot,
+    base_count: u64,
+) {
+    const NUM_RETRIES: u32 = 200;
+    const BACKOFF_TIME_MILLIS: u64 = 500;
+
     info!(
         logger,
         "Checking for the state sync count metrics indicating that a successful state sync has happened"
     );
-    let res = fetch_metrics::<u64>(
-        &logger,
-        rejoin_node.clone(),
-        vec![SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT],
-    )
-    .await;
-    assert!(res[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT][0] > base_count);
 
-    let res = fetch_metrics::<f64>(
-        &logger,
-        rejoin_node.clone(),
-        vec![SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM],
-    )
-    .await;
-    info!(
-        logger,
-        "State sync finishes successfully in {} seconds",
-        res[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM][0],
-    );
+    // We retry a few times as we observed a pontential race condition where it
+    // still reads a slightly older value from the metrics, even though the
+    // state sync has already happened. This is a workaround to make the test
+    // more robust.
+    for i in 0..NUM_RETRIES {
+        let res = fetch_metrics::<u64>(
+            logger,
+            rejoin_node.clone(),
+            vec![SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT],
+        )
+        .await;
+        if res[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT][0] > base_count {
+            let res = fetch_metrics::<f64>(
+                logger,
+                rejoin_node.clone(),
+                vec![SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM],
+            )
+            .await;
+            info!(
+                logger,
+                "State sync finishes successfully in {} seconds",
+                res[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM][0],
+            );
+
+            return;
+        }
+
+        info!(logger, "No state sync detected yet, attempt {i}.");
+        tokio::time::sleep(Duration::from_millis(BACKOFF_TIME_MILLIS)).await;
+    }
+    panic!("Couldn't verify that a state sync has happened after {NUM_RETRIES} attempts.");
 }
 
 pub async fn fetch_metrics<T>(
@@ -364,14 +366,11 @@ async fn modify_canister_heap(
                 continue;
             }
             let seed_for_canister = i + (x - 1) * num_canisters + seed;
+            let payload = (x as u32, seed_for_canister as u32);
             // Each call will expand the memory by writing a chunk of 128 MiB.
             // There are 8 chunks in the canister, so the memory will grow by 1 GiB after 8 calls.
-            let _res: Result<u8, String> = canister
-                .update_(
-                    "expand_state",
-                    dfn_json::json,
-                    (x as u32, seed_for_canister as u32),
-                )
+            let _res: Result<u64, String> = canister
+                .update_("expand_state", dfn_candid::candid, payload)
                 .await
                 .unwrap_or_else(|e| {
                     panic!(

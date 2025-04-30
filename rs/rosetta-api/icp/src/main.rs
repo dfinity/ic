@@ -6,6 +6,7 @@ use ic_rosetta_api::request_handler::RosettaRequestHandler;
 use ic_rosetta_api::rosetta_server::{RosettaApiServer, RosettaApiServerOpt};
 use ic_rosetta_api::{ledger_client, DEFAULT_BLOCKCHAIN, DEFAULT_TOKEN_SYMBOL};
 use ic_types::{CanisterId, PrincipalId};
+use rosetta_core::metrics::RosettaMetrics;
 use std::{path::Path, path::PathBuf, str::FromStr, sync::Arc};
 use tracing::level_filters::LevelFilter;
 use tracing::{error, info, warn, Level};
@@ -66,6 +67,12 @@ struct Opt {
     not_whitelisted: bool,
     #[clap(long = "expose-metrics")]
     expose_metrics: bool,
+    #[clap(
+        long = "watchdog-timeout-seconds",
+        default_value = "60",
+        help = "Timeout in seconds for sync watchdog"
+    )]
+    watchdog_timeout_seconds: u64,
 
     #[cfg(feature = "rosetta-blocks")]
     #[clap(long = "enable-rosetta-blocks")]
@@ -97,6 +104,7 @@ fn init_logging(level: Level) -> std::io::Result<WorkerGuard> {
     fn rosetta_filter(module: &str) -> bool {
         module.starts_with("ic_rosetta_api")
             || module.starts_with("ic_ledger_canister_blocks_synchronizer")
+            || module.starts_with("rosetta_core")
     }
     let rosetta_filter =
         FilterFn::new(|metadata| metadata.module_path().map_or(true, rosetta_filter));
@@ -230,6 +238,7 @@ async fn main() -> std::io::Result<()> {
         not_whitelisted,
         expose_metrics,
         blockchain,
+        watchdog_timeout_seconds,
         ..
     } = opt;
 
@@ -263,15 +272,22 @@ async fn main() -> std::io::Result<()> {
     .unwrap_or_else(|(e, is_403)| panic!("Failed to initialize ledger client{}: {:?}", is_403, e));
 
     let ledger = Arc::new(client);
-    let req_handler = RosettaRequestHandler::new(blockchain, ledger.clone());
+    let canister_id_str = canister_id.to_string();
+    let rosetta_metrics = RosettaMetrics::new("ICP".to_string(), canister_id_str);
+    let req_handler = RosettaRequestHandler::new(blockchain, ledger.clone(), rosetta_metrics);
 
     info!("Network id: {:?}", req_handler.network_id());
+    info!(
+        "Configuring watchdog with timeout of {} seconds",
+        watchdog_timeout_seconds
+    );
     let serv = RosettaApiServer::new(
         ledger,
         req_handler,
         addr,
         opt.listen_port_file,
         expose_metrics,
+        watchdog_timeout_seconds,
     )
     .expect("Error creating RosettaApiServer");
 

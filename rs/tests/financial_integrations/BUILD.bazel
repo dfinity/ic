@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -13,7 +13,6 @@ system_test(
     env = {
         "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
     },
-    flaky = True,
     tags = [
         "k8s",
     ],
@@ -35,18 +34,45 @@ system_test(
         "@crate_index//:anyhow",
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
+        "@crate_index//:leb128",
         "@crate_index//:serde_cbor",
     ],
 )
 
 system_test_nns(
     name = "transaction_ledger_correctness_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    compile_data = [
+        "transaction_ledger_correctness.wasm",
+    ],
+    proc_macro_deps = [
+        "@crate_index//:async-recursion",
+    ],
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/canister_client/sender",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/ledger_suite/icrc1/ledger",
+        "//rs/nns/constants",
+        "//rs/nns/test_utils",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/rust_canisters/dfn_protobuf",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:ic-agent",
+        "@crate_index//:ic-utils",
+        "@crate_index//:quickcheck",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
 )

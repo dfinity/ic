@@ -1,0 +1,64 @@
+// Represents timestamp in milliseconds since the epoch (1970-01-01)
+type Timestamp = nat64;
+// Structured HTTP header representation
+type HeaderField = record { text; text; };
+
+// Detailed salt retrieval response
+type GetSaltResponse = variant {
+  Ok: SaltResponse;
+  Err: GetSaltError;
+};
+
+// Comprehensive error for salt retrieval
+type GetSaltError = variant {
+    // Salt generation is still pending. Retry later
+    SaltNotInitialized;
+    // Indicates an unauthorized attempt to get the salt
+    Unauthorized;
+    // Captures all unexpected internal errors during process
+    Internal: text;
+};
+
+// Salt response containing salt itself and additional metadata
+type SaltResponse = record {
+    salt: blob;
+    salt_id: Timestamp;
+};
+
+type HttpRequest = record {
+  method: text;
+  url: text;
+  headers: vec HeaderField;
+  body: blob;
+};
+
+type HttpResponse = record {
+  status_code: nat16;
+  headers: vec HeaderField;
+  body: blob;
+};
+
+// Salt generation strategies
+type SaltGenerationStrategy = variant {
+  // Generates a new salt at 00:00:00 UTC on the first day of the next calendar month
+  // Handles calendar edge cases including: transitions between months (December-January), leap years
+  StartOfMonth;
+};
+
+// Initialization arguments used when installing/upgrading/reinstalling the canister
+type InitArg = record {
+    // If true salt is regenerated immediately and subsequently based on the chosen strategy
+    regenerate_now: bool;
+    // Strategy defining salt generation
+    salt_generation_strategy: SaltGenerationStrategy;
+    // Interval (in seconds) for polling API boundary node IDs from the registry
+    // The first polling operation occurs immediately
+    registry_polling_interval_secs: nat64;
+};
+
+service : (InitArg) -> {
+  // Fetches the current salt (randomly generated value to be added to data before hashing)
+  get_salt: () -> (GetSaltResponse) query;
+  // Canister metrics (Http Interface)
+  http_request: (HttpRequest) -> (HttpResponse) query;
+}

@@ -24,7 +24,7 @@ use ic_consensus_threshold_sig_system_test_utils::{
     get_public_key_with_logger, get_signature_with_logger, make_bip340_key_id, make_eddsa_key_id,
     verify_signature, DKG_INTERVAL, NUMBER_OF_NODES,
 };
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;

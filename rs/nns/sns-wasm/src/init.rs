@@ -28,11 +28,6 @@ impl SnsWasmCanisterInitPayloadBuilder {
         self
     }
 
-    pub fn with_allowed_principals(&mut self, allowed_principals: Vec<PrincipalId>) -> &mut Self {
-        self.payload.allowed_principals = allowed_principals;
-        self
-    }
-
     pub fn with_access_controls_enabled(&mut self, access_controls_enabled: bool) -> &mut Self {
         self.payload.access_controls_enabled = access_controls_enabled;
         self

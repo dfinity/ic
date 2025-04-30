@@ -1,37 +1,46 @@
 use std::path::Path;
 use std::process::Command;
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use regex::Regex;
 
 use crate::systemd::generate_systemd_config_files;
-use deterministic_ips::HwAddr;
-use info::NetworkInfo;
+use config_types::{Ipv6Config, NetworkSettings};
+use deterministic_ips::MacAddr6Ext;
+use macaddr::MacAddr6;
 
-pub mod info;
 pub mod interfaces;
 pub mod systemd;
 
 /// Write SetupOS or HostOS systemd network configuration.
 /// Requires superuser permissions to run `ipmitool` and write to the systemd directory
 pub fn generate_network_config(
-    network_info: &NetworkInfo,
-    generated_mac: &HwAddr,
+    network_settings: &NetworkSettings,
+    generated_mac: &MacAddr6,
     output_directory: &Path,
 ) -> Result<()> {
-    eprintln!("Generating ipv6 address");
-    let ipv6_address = generated_mac.calculate_slaac(&network_info.ipv6_prefix)?;
-    eprintln!("Using ipv6 address: {ipv6_address}");
+    eprintln!("Generating IPv6 address");
 
-    generate_systemd_config_files(
-        output_directory,
-        network_info,
-        Some(generated_mac),
-        &ipv6_address,
-    )
+    match &network_settings.ipv6_config {
+        Ipv6Config::RouterAdvertisement => {
+            Err(anyhow!("IC-OS router advertisement is not yet supported"))
+        }
+        Ipv6Config::Fixed(_) => Err(anyhow!("Fixed IP configuration is not yet supported")),
+        Ipv6Config::Deterministic(ipv6_config) => {
+            let ipv6_address = generated_mac.calculate_slaac(&ipv6_config.prefix)?;
+            eprintln!("Using IPv6 address: {ipv6_address}");
+
+            generate_systemd_config_files(
+                output_directory,
+                ipv6_config,
+                Some(generated_mac),
+                &ipv6_address,
+            )
+        }
+    }
 }
 
-pub fn resolve_mgmt_mac(config_mac: Option<String>) -> Result<HwAddr> {
+pub fn resolve_mgmt_mac(config_mac: Option<String>) -> Result<MacAddr6> {
     if let Some(config_mac) = config_mac {
         // Take MAC address override from config
         let mgmt_mac = config_mac.parse()?;
@@ -57,17 +66,17 @@ pub fn resolve_mgmt_mac(config_mac: Option<String>) -> Result<HwAddr> {
     }
 }
 
-fn parse_mac_address_from_ipmitool_output(output: &str) -> Result<HwAddr> {
+fn parse_mac_address_from_ipmitool_output(output: &str) -> Result<MacAddr6> {
     let mac_line = output
         .lines()
         .find(|line| line.trim().starts_with("MAC Address"))
         .context(format!(
-            "Could not find mac address line in ipmitool output: {}",
+            "Could not find MAC address line in ipmitool output: {}",
             output
         ))?;
 
     // Parse MAC line
-    let error_msg = format!("Could not parse mac address line: {}", mac_line);
+    let error_msg = format!("Could not parse MAC address line: {}", mac_line);
     let re = Regex::new(r"MAC Address\s+:\s+(([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2}))")?;
     let captures = re.captures(mac_line).context(error_msg.clone())?;
     let mac = captures.get(1).context(error_msg.clone())?;

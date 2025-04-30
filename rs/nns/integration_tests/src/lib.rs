@@ -22,9 +22,6 @@ mod bad_input;
 mod canister_playground;
 
 #[cfg(test)]
-mod copy_inactive_neurons_to_stable_memory;
-
-#[cfg(test)]
 mod cycles_minting_canister;
 
 #[cfg(test)]
@@ -32,9 +29,6 @@ mod cycles_minting_canister_with_exchange_rate_canister;
 
 #[cfg(test)]
 mod node_provider_remuneration;
-
-#[cfg(test)]
-mod governance_mem_test;
 
 #[cfg(test)]
 mod governance_get_build_metadata_test;
@@ -143,3 +137,12 @@ mod stop_or_start_canister;
 
 #[cfg(test)]
 mod api_boundary_node_queries;
+
+#[cfg(test)]
+mod upgrade_canisters_with_golden_nns_state;
+
+#[cfg(test)]
+mod create_service_nervous_system;
+
+#[cfg(test)]
+mod node_provider_remuneration_migration;

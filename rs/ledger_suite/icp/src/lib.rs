@@ -1,5 +1,6 @@
 use candid::CandidType;
 use dfn_protobuf::ProtoBuf;
+use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
@@ -14,6 +15,7 @@ use ic_ledger_hash_of::HashOf;
 use ic_ledger_hash_of::HASH_LENGTH;
 use icrc_ledger_types::icrc1::account::Account;
 use on_wire::{FromWire, IntoWire};
+use prost::Message;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::collections::{HashMap, HashSet};
@@ -474,8 +476,6 @@ pub struct InitArgs {
     pub token_symbol: Option<String>,
     pub token_name: Option<String>,
     pub feature_flags: Option<FeatureFlags>,
-    pub maximum_number_of_accounts: Option<usize>,
-    pub accounts_overflow_trim_quantity: Option<usize>,
 }
 
 impl LedgerCanisterInitPayload {
@@ -508,8 +508,6 @@ pub struct LedgerCanisterInitPayloadBuilder {
     token_symbol: Option<String>,
     token_name: Option<String>,
     feature_flags: Option<FeatureFlags>,
-    maximum_number_of_accounts: Option<usize>,
-    accounts_overflow_trim_quantity: Option<usize>,
 }
 
 impl LedgerCanisterInitPayloadBuilder {
@@ -526,8 +524,6 @@ impl LedgerCanisterInitPayloadBuilder {
             token_symbol: None,
             token_name: None,
             feature_flags: None,
-            maximum_number_of_accounts: None,
-            accounts_overflow_trim_quantity: None,
         }
     }
 
@@ -582,23 +578,6 @@ impl LedgerCanisterInitPayloadBuilder {
         self
     }
 
-    pub fn maximum_number_of_accounts(mut self, maximum_number_of_accounts: Option<u64>) -> Self {
-        if let Some(maximum_number_of_accounts) = maximum_number_of_accounts {
-            self.maximum_number_of_accounts = Some(maximum_number_of_accounts as usize);
-        }
-        self
-    }
-
-    pub fn accounts_overflow_trim_quantity(
-        mut self,
-        accounts_overflow_trim_quantity: Option<u64>,
-    ) -> Self {
-        if let Some(accounts_overflow_trim_quantity) = accounts_overflow_trim_quantity {
-            self.accounts_overflow_trim_quantity = Some(accounts_overflow_trim_quantity as usize);
-        }
-        self
-    }
-
     pub fn build(self) -> Result<LedgerCanisterInitPayload, String> {
         let minting_account = self
             .minting_account
@@ -632,8 +611,6 @@ impl LedgerCanisterInitPayloadBuilder {
                 token_symbol: self.token_symbol,
                 token_name: self.token_name,
                 feature_flags: self.feature_flags,
-                maximum_number_of_accounts: self.maximum_number_of_accounts,
-                accounts_overflow_trim_quantity: self.accounts_overflow_trim_quantity,
             },
         )))
     }
@@ -806,6 +783,26 @@ impl NotifyCanisterArgs {
 }
 
 /// Arguments taken by the account_balance candid endpoint.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+pub struct AccountIdentifierByteBuf {
+    pub account: ByteBuf,
+}
+
+impl TryFrom<AccountIdentifierByteBuf> for BinaryAccountBalanceArgs {
+    type Error = String;
+
+    fn try_from(value: AccountIdentifierByteBuf) -> Result<Self, Self::Error> {
+        Ok(BinaryAccountBalanceArgs {
+            account: AccountIdBlob::try_from(value.account.as_slice()).map_err(|_| {
+                format!(
+                    "Invalid account identifier length (expected 32, got {})",
+                    value.account.len()
+                )
+            })?,
+        })
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct BinaryAccountBalanceArgs {
     pub account: AccountIdBlob,
@@ -1096,7 +1093,7 @@ pub struct TipOfChainRes {
 #[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct GetBlocksArgs {
     pub start: BlockIndex,
-    pub length: usize,
+    pub length: u64,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
@@ -1137,7 +1134,7 @@ pub struct IterBlocksRes(pub Vec<EncodedBlock>);
 pub struct BlockArg(pub BlockIndex);
 pub struct BlockRes(pub Option<Result<EncodedBlock, CanisterId>>);
 
-// A helper function for ledger/get_blocks and archive_node/get_blocks endpoints
+// A helper function for archive_node/get_blocks endpoints
 pub fn get_blocks(
     blocks: &[EncodedBlock],
     range_from_offset: BlockIndex,
@@ -1161,8 +1158,7 @@ pub fn get_blocks(
     GetBlocksRes(Ok(blocks[offset..offset + length].to_vec()))
 }
 
-// A helper function for ledger/iter_blocks and archive_node/iter_blocks
-// endpoints
+// A helper function for archive_node/iter_blocks endpoint
 pub fn iter_blocks(blocks: &[EncodedBlock], offset: usize, length: usize) -> IterBlocksRes {
     let start = std::cmp::min(offset, blocks.len());
     let end = std::cmp::min(start + length, blocks.len());
@@ -1235,14 +1231,26 @@ impl Default for FeatureFlags {
 }
 
 pub fn max_blocks_per_request(principal_id: &PrincipalId) -> usize {
-    if ic_cdk::api::data_certificate().is_none() && principal_id.is_self_authenticating() {
+    if ic_cdk::api::in_replicated_execution() && principal_id.is_self_authenticating() {
         return MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST;
     }
     MAX_BLOCKS_PER_REQUEST
 }
 
+pub fn to_proto_bytes<T: ToProto>(msg: T) -> Result<Vec<u8>, String> {
+    let proto = msg.into_proto();
+    let mut proto_bytes = Vec::with_capacity(proto.encoded_len());
+    proto.encode(&mut proto_bytes).map_err(|e| e.to_string())?;
+    Ok(proto_bytes)
+}
+
+pub fn from_proto_bytes<T: ToProto>(msg: Vec<u8>) -> Result<T, String> {
+    T::from_proto(prost::Message::decode(&msg[..]).map_err(|e| e.to_string())?)
+}
+
 #[cfg(test)]
 mod test {
+    use ic_stable_structures::storable::Storable;
     use std::str::FromStr;
 
     use proptest::{arbitrary::any, prop_assert_eq, prop_oneof, proptest, strategy::Strategy};
@@ -1404,6 +1412,13 @@ mod test {
             let encoded = block.clone().encode();
             let decoded = Block::decode(encoded).expect("Unable to decode block!");
             prop_assert_eq!(block, decoded)
+        })
+    }
+
+    #[test]
+    fn test_storable_serialization() {
+        proptest!(|(a in arb_account())| {
+            prop_assert_eq!(AccountIdentifier::from_bytes(a.to_bytes()), a)
         })
     }
 }

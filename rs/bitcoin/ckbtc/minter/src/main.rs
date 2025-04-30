@@ -8,6 +8,7 @@ use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::lifecycle::{self, init::MinterArg};
 use ic_ckbtc_minter::metrics::encode_metrics;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
+use ic_ckbtc_minter::state::eventlog::Event;
 use ic_ckbtc_minter::state::{
     read_state, BtcRetrievalStatusV2, RetrieveBtcStatus, RetrieveBtcStatusV2,
 };
@@ -22,7 +23,7 @@ use ic_ckbtc_minter::updates::{
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
 use ic_ckbtc_minter::{
-    state::eventlog::{Event, GetEventsArg},
+    state::eventlog::{EventType, GetEventsArg},
     storage, {Log, LogEntry, Priority},
 };
 use ic_ckbtc_minter::{MinterInfo, IC_CANISTER_RUNTIME};
@@ -33,7 +34,7 @@ use std::str::FromStr;
 fn init(args: MinterArg) {
     match args {
         MinterArg::Init(args) => {
-            storage::record_event(&Event::Init(args.clone()));
+            storage::record_event(EventType::Init(args.clone()), &IC_CANISTER_RUNTIME);
             lifecycle::init::init(args);
             setup_tasks();
 
@@ -49,7 +50,6 @@ fn init(args: MinterArg) {
 fn setup_tasks() {
     schedule_now(TaskType::ProcessLogic, &IC_CANISTER_RUNTIME);
     schedule_now(TaskType::RefreshFeePercentiles, &IC_CANISTER_RUNTIME);
-    schedule_now(TaskType::DistributeKytFee, &IC_CANISTER_RUNTIME);
 }
 
 #[cfg(feature = "self_check")]
@@ -81,16 +81,6 @@ fn check_invariants() -> Result<(), String> {
 
         Ok(())
     })
-}
-
-#[cfg(feature = "self_check")]
-#[update]
-async fn distribute_kyt_fee() {
-    let _guard = match ic_ckbtc_minter::guard::DistributeKytFeeGuard::new() {
-        Some(guard) => guard,
-        None => return,
-    };
-    ic_ckbtc_minter::distribute_kyt_fees().await;
 }
 
 #[cfg(feature = "self_check")]
@@ -142,7 +132,6 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
 
 #[update]
 async fn get_btc_address(args: GetBtcAddressArgs) -> String {
-    check_anonymous_caller();
     updates::get_btc_address::get_btc_address(args).await
 }
 
@@ -209,6 +198,14 @@ async fn get_canister_status() -> ic_cdk::api::management_canister::main::Canist
     .0
 }
 
+#[cfg(feature = "self_check")]
+#[update]
+async fn upload_events(events: Vec<Event>) {
+    for event in events {
+        storage::record_event_v0(event.payload, &IC_CANISTER_RUNTIME);
+    }
+}
+
 #[query]
 fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
     read_state(|s| {
@@ -223,7 +220,7 @@ fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
 #[query]
 fn get_minter_info() -> MinterInfo {
     read_state(|s| MinterInfo {
-        kyt_fee: s.kyt_fee,
+        check_fee: s.check_fee,
         min_confirmations: s.min_confirmations,
         retrieve_btc_min_amount: s.fee_based_retrieve_btc_min_amount,
     })
@@ -231,12 +228,12 @@ fn get_minter_info() -> MinterInfo {
 
 #[query]
 fn get_deposit_fee() -> u64 {
-    read_state(|s| s.kyt_fee)
+    read_state(|s| s.check_fee)
 }
 
 #[query(hidden = true)]
 fn http_request(req: HttpRequest) -> HttpResponse {
-    if ic_cdk::api::data_certificate().is_none() {
+    if ic_cdk::api::in_replicated_execution() {
         ic_cdk::trap("update call rejected");
     }
 

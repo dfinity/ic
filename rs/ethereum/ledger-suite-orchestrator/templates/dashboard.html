@@ -66,6 +66,8 @@
                 <th>ID</th>
                 <th>Type</th>
                 <th>Version installed by orchestrator</th>
+                <th>Version of last upgrade</th>
+                <th>Timestamp of last upgrade</th>
             </tr>
             </thead>
             <tbody>
@@ -74,6 +76,8 @@
                 <td>{{ canister.canister_id }}</td>
                 <td>{{ canister.canister_type }}</td>
                 <td>{{ canister.installed_from }}</td>
+                <td>{{ canister.last_upgraded_to|unwrap_or_none }}</td>
+                <td>{{ canister.last_upgraded_timestamp|opt_timestamp_to_datetime }}</td>
                 </td>
             </tr>
             {% endfor %}
@@ -91,6 +95,8 @@
                 <th>ID</th>
                 <th>Type</th>
                 <th>Version installed</th>
+                <th>Version of last upgrade</th>
+                <th>Timestamp of last upgrade</th>
             </tr>
             </thead>
             <tbody>
@@ -99,6 +105,8 @@
                 <td>{{ canister.canister_id }}</td>
                 <td>{{ canister.canister_type }}</td>
                 <td>{{ canister.installed_from }}</td>
+                <td>{{ canister.last_upgraded_to|unwrap_or_none }}</td>
+                <td>{{ canister.last_upgraded_timestamp|opt_timestamp_to_datetime }}</td>
                 </td>
             </tr>
             {% endfor %}

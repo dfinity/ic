@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -48,8 +48,6 @@ rust_library(
 system_test_nns(
     name = "sr_app_same_nodes_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -68,13 +66,12 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_same_nodes_enable_tecdsa_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    flaky = True,  # flakiness rate of over 3.33% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "experimental_system_test_colocation",
         "k8s",
+        "long_test",
         "subnet_recovery",
-        "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
@@ -88,8 +85,6 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_same_nodes_with_tecdsa_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -109,8 +104,6 @@ system_test_nns(
 system_test_nns(
     name = "sr_app_failover_nodes_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -129,13 +122,12 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_failover_nodes_enable_tecdsa_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    flaky = True,  # flakiness rate of over 1.67% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "experimental_system_test_colocation",
         "k8s",
+        "long_test",
         "subnet_recovery",
-        "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
@@ -150,13 +142,12 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_failover_nodes_with_tecdsa_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    flaky = True,  # flakiness rate of 3.33% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "experimental_system_test_colocation",
         "k8s",
+        "long_test",
         "subnet_recovery",
-        "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
@@ -172,8 +163,25 @@ system_test_nns(
 system_test_nns(
     name = "sr_app_no_upgrade_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "experimental_system_test_colocation",
+        "k8s",
+        "long_test",  # since it takes longer than 5 minutes.
+        "subnet_recovery",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    uses_guestos_dev_test = True,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    deps = [
+        ":common",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "sr_app_no_upgrade_local_test",
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -192,13 +200,11 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_no_upgrade_enable_tecdsa_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
         "k8s",
+        "long_test",
         "subnet_recovery",
-        "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
@@ -213,13 +219,12 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_no_upgrade_with_tecdsa_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    flaky = True,  # flakiness rate of over 6% over the month from 2025-02-11 till 2025-03-11 (only for //rs/tests/consensus/subnet_recovery:sr_app_no_upgrade_with_tecdsa_test_head_nns_colocate).
     tags = [
         "experimental_system_test_colocation",
         "k8s",
+        "long_test",
         "subnet_recovery",
-        "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
@@ -235,8 +240,7 @@ system_test_nns(
 system_test_nns(
     name = "sr_app_large_with_tecdsa_test",
     extra_head_nns_tags = ["manual"],  # Let's not run this expensive test against the HEAD NNS canisters to save resources.
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    flaky = True,  # flakiness rate of over 2.21% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "experimental_system_test_colocation",
         "subnet_recovery",
@@ -257,8 +261,6 @@ system_test_nns(
 system_test_nns(
     name = "sr_nns_same_nodes_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -283,8 +285,6 @@ system_test_nns(
 system_test_nns(
     name = "sr_nns_failover_nodes_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = False,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
         "k8s",

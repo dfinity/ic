@@ -1,6 +1,6 @@
 load("//bazel:defs.bzl", "gzip_compress")
 load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
-load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary", "release_strip_binary_test")
+load("//publish:defs.bzl", "checksum_rule", "release_nostrip_binary", "release_strip_binary", "release_strip_binary_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -11,6 +11,7 @@ ALL_BINARIES = {
     "ic-btc-adapter": "//rs/bitcoin/adapter:ic-btc-adapter",
     "replica": "//rs/replica:replica",
     "certificate-issuer": "//rs/boundary_node/certificate_issuance/certificate_issuer:certificate-issuer",
+    "rate-limiting-canister-client": "//rs/boundary_node/rate_limits/canister_client:rate-limiting-canister-client",
     "ic-admin": "//rs/registry/admin:ic-admin",
     "ic-backup": "//rs/backup:ic-backup",
     "ic-boundary": "//rs/boundary_node/ic_boundary:ic-boundary",
@@ -38,8 +39,6 @@ ALL_BINARIES = {
     "pocket-ic": "//rs/pocket_ic_server:pocket-ic-server",
     "types-test": "//rs/types/types:types_test",
     "replicated-state-test": "//rs/replicated_state:replicated_state_test_binary",
-    # needed by DRE for release qualification
-    "ic-workload-generator": "//rs/workload_generator:ic-workload-generator",
 }
 
 # test binaries or binaries using test utils
@@ -116,6 +115,11 @@ TEST_BINARIES = [
 filegroup(
     name = "binaries",
     srcs = [name + ".gz" for name in ALL_BINARIES],
+)
+
+checksum_rule(
+    name = "compute_checksums",
+    inputs = [":binaries"],
 )
 
 upload_artifacts(

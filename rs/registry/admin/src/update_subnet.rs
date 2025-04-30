@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use clap::Parser;
 use ic_admin_derive::derive_common_proposal_fields;
 use ic_canister_client::{Agent, Sender};
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_common::types::NeuronId;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_features::SubnetFeatures;
@@ -323,9 +323,6 @@ impl ProposeToUpdateSubnetCmd {
             chain_key_signing_disable,
 
             // Deprecated fields
-            ecdsa_config: None,
-            ecdsa_key_signing_enable: None,
-            ecdsa_key_signing_disable: None,
             max_artifact_streams_per_peer: None,
             max_chunk_wait_ms: None,
             max_duplicity: None,
@@ -351,7 +348,9 @@ impl ProposalPayload<do_update_subnet::UpdateSubnetPayload> for ProposeToUpdateS
 
 #[cfg(test)]
 mod tests {
-    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId};
+    use ic_management_canister_types_private::{
+        EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    };
     use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
     use ic_types::PrincipalId;
 
@@ -381,9 +380,6 @@ mod tests {
             is_halted: None,
             halt_at_cup_height: None,
             features: None,
-            ecdsa_config: None,
-            ecdsa_key_signing_enable: None,
-            ecdsa_key_signing_disable: None,
             max_number_of_canisters: None,
             ssh_readonly_access: None,
             ssh_backup_access: None,

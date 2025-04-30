@@ -3,6 +3,7 @@ use std::{
     fs::{self, File},
     net::Ipv6Addr,
     path::{Path, PathBuf},
+    str::FromStr,
     time::Duration,
 };
 
@@ -11,7 +12,7 @@ use maplit::hashmap;
 use reqwest::Url;
 use serde::Serialize;
 use serde_json::json;
-use slog::{debug, info};
+use slog::{debug, info, warn, Logger};
 
 use crate::driver::{
     constants::SSH_USERNAME,
@@ -21,8 +22,8 @@ use crate::driver::{
     resource::{DiskImage, ImageType},
     test_env::TestEnv,
     test_env_api::{
-        get_dependency_path, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-        RetrieveIpv4Addr, SshSession, TopologySnapshot,
+        HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, RetrieveIpv4Addr, SshSession,
+        TopologySnapshot,
     },
     test_setup::{GroupSetup, InfraProvider},
     universal_vm::{UniversalVm, UniversalVms},
@@ -44,7 +45,7 @@ const PROMETHEUS_VM_NAME: &str = "prometheus";
 /// The latest hash can be retrieved by downloading the SHA256SUMS file from:
 /// https://hydra-int.dfinity.systems/job/dfinity-ci-build/farm/universal-vm.img-prometheus.x86_64-linux/latest
 const DEFAULT_PROMETHEUS_VM_IMG_SHA256: &str =
-    "147ad092d7310fadbde63538de6a434b8b37f2c9fce8faa2a70556c49d54349d";
+    "4c288cebafb59e6c6b1611475cef1f4963aec61b6af798dd47d8c5264af15b8f";
 
 fn get_default_prometheus_vm_img_url() -> String {
     format!("http://download.proxy-global.dfinity.network:8080/farm/prometheus-vm/{DEFAULT_PROMETHEUS_VM_IMG_SHA256}/x86_64-linux/prometheus-vm.img.zst")
@@ -84,6 +85,7 @@ const BITCOIN_WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET: &str =
 const BN_PROMETHEUS_TARGET: &str = "boundary_nodes.json";
 const BN_EXPORTER_PROMETHEUS_TARGET: &str = "boundary_nodes_exporter.json";
 const IC_BOUNDARY_PROMETHEUS_TARGET: &str = "ic_boundary.json";
+const GRAFANA_DASHBOARDS: &str = "grafana_dashboards";
 
 pub struct PrometheusVm {
     universal_vm: UniversalVm,
@@ -143,6 +145,100 @@ impl PrometheusVm {
         self
     }
 
+    /// Expects the layout of directory to be like:
+    /// ```
+    /// root
+    /// ├── folder1
+    /// │   ├── kustomization.yaml
+    /// │   ├── dashboard1.json
+    /// │   └── dashboard2.json
+    /// ├── folder2
+    /// │   ├── dashboard3.json
+    /// │   ├── dashboard4.json
+    /// │   ├── kustomization.yaml
+    /// ...
+    /// ```
+    ///
+    /// This process automatically discovers all `*.json` files, which are interpreted as Grafana dashboards. It then copies these files to a destination, where they will be sent to the Prometheus VM for use with the testnets. The expected name of the dashboards directory is determined by reading the `commonAnnotations.k8s-sidecar-target-directory` path from the `kustomize.yaml` file. This value specifies the location where the dashboards should be placed so that the links don't get broken.
+    fn transform_dashboards_root_dir(logger: Logger, destination: &Path) -> Result<()> {
+        let dashboards_root = PathBuf::from_str(&std::env::var("IC_DASHBOARDS_DIR")?)?;
+
+        for directory in dashboards_root.read_dir().map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to read contents of `{}`: {:?}",
+                dashboards_root.display(),
+                e
+            )
+        })? {
+            let entry = directory?;
+            if !entry.path().is_dir() {
+                continue;
+            }
+
+            let maybe_kustomization = entry
+                .path()
+                .read_dir()?
+                .filter_map(|f| f.ok())
+                .find(|f| f.file_name().eq("kustomization.yaml"));
+
+            let dashboard_dir = match maybe_kustomization {
+                Some(file) => {
+                    let parsed: serde_yaml::Value =
+                        serde_yaml::from_str(&std::fs::read_to_string(file.path()).unwrap())?;
+
+                    parsed
+                        .get("commonAnnotations")
+                        .ok_or(anyhow::anyhow!(
+                            "Unexpected yaml schema for kustomization.yaml"
+                        ))?
+                        .get("k8s-sidecar-target-directory")
+                        .ok_or(anyhow::anyhow!(
+                            "Unexpected yaml schema for kustomization.yaml"
+                        ))?
+                        .as_str()
+                        .ok_or(anyhow::anyhow!("Expected string for the name of directory"))?
+                        .to_string()
+                }
+                None => entry.file_name().to_string_lossy().to_string(),
+            };
+            let dashboard_dir = destination.join(dashboard_dir);
+
+            std::fs::create_dir_all(&dashboard_dir)?;
+            info!(
+                logger,
+                "Created dir for dashboards: {}",
+                dashboard_dir.display()
+            );
+
+            for maybe_file in entry.path().read_dir()? {
+                let file = maybe_file?;
+
+                if !file.path().is_file() && file.path().extension().is_none() {
+                    continue;
+                }
+
+                // Safe because of previous check
+                let path = file.path();
+                let extension = path.extension().unwrap();
+
+                // Dashboards are json files
+                if extension != "json" {
+                    continue;
+                }
+
+                let file_name = file.file_name();
+                let file_name = file_name.as_os_str().to_str().unwrap();
+
+                let destination_path = dashboard_dir.join(file_name);
+
+                std::fs::copy(file.path(), destination_path)?;
+                info!(logger, "Copying `{}` dashboard...", file_name);
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn start(&self, env: &TestEnv) -> Result<()> {
         // Create a config directory containing the prometheus.yml configuration file.
         let vm_name = &self.universal_vm.name;
@@ -157,12 +253,14 @@ for name in replica orchestrator node_exporter; do
   echo '[]' > "{PROMETHEUS_SCRAPING_TARGETS_DIR}/$name.json"
 done
 
+mkdir -p /config/grafana/dashboards
+
 if uname -a | grep -q Ubuntu; then
   # k8s
   chmod g+s /etc/prometheus
   cp -f /config/prometheus/prometheus.yml /etc/prometheus/prometheus.yml
-  cp -R /config/grafana/dashboards/IC /var/lib/grafana/dashboards/
-  chown -R grafana:grafana /var/lib/grafana/dashboards/IC/
+  cp -R /config/grafana/dashboards /var/lib/grafana/
+  chown -R grafana:grafana /var/lib/grafana/dashboards
   chown -R {SSH_USERNAME}:prometheus /etc/prometheus
   systemctl reload prometheus
 else
@@ -173,10 +271,21 @@ fi
                 ),
             )
             .unwrap();
-        let grafana_dashboards_src = get_dependency_path("rs/tests/dashboards");
+
         let grafana_dashboards_dst = config_dir.join("grafana").join("dashboards");
-        debug!(log, "Copying Grafana dashboards from {grafana_dashboards_src:?} to {grafana_dashboards_dst:?} ...");
-        TestEnv::shell_copy_with_deref(grafana_dashboards_src, grafana_dashboards_dst).unwrap();
+        std::fs::create_dir_all(&grafana_dashboards_dst).unwrap();
+        let grafana_dashboards_src = env.get_path(GRAFANA_DASHBOARDS);
+        if let Err(e) = Self::transform_dashboards_root_dir(log.clone(), &grafana_dashboards_src) {
+            warn!(
+                log,
+                "Failed to sync k8s dashboards to grafana. Error: {}",
+                e.to_string()
+            )
+        } else {
+            debug!(log, "Copying Grafana dashboards from {grafana_dashboards_src:?} to {grafana_dashboards_dst:?} ...");
+            TestEnv::shell_copy_with_deref(grafana_dashboards_src, grafana_dashboards_dst).unwrap();
+        }
+
         write_prometheus_config_dir(config_dir.clone(), self.scrape_interval).unwrap();
 
         self.universal_vm

@@ -89,9 +89,10 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
     ];
     common::run_benchmarks(
         c,
-        "inspect",
+        "execution_environment:inspect_message",
         &benchmarks,
-        |exec_env: &ExecutionEnvironment,
+        |id: &str,
+         exec_env: &ExecutionEnvironment,
          expected_instructions,
          common::BenchmarkArgs {
              canister_state,
@@ -125,7 +126,8 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
             assert_eq!(
                 expected_instructions,
                 common::MAX_NUM_INSTRUCTIONS.get() - instructions_left.get(),
-                "Error comparing number of actual and expected instructions"
+                "update the reference number of instructions for '{id}' to {}",
+                common::MAX_NUM_INSTRUCTIONS.get() - instructions_left.get()
             );
         },
     );

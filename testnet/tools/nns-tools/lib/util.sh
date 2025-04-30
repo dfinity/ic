@@ -134,3 +134,33 @@ confirm() {
         exit 1
     fi
 }
+
+#### Markdown
+
+filter_out_empty_markdown_sections() {
+    # Python is used, because I'm not sure how to do this with sed.
+    python3 -c 'import sys, re
+s = sys.stdin.read()
+print(re.sub(
+    r"^(#+) [\w ]+\n+(?=\1 |\Z)",
+    "",  # Replace with nothing.
+    s,   # Input.
+    0,   # Unlimited replacements.
+    re.MULTILINE,
+)
+.strip())'
+}
+
+increment_markdown_heading_levels() {
+    # Python is used, because I'm not sure how to do this with sed.
+    python3 -c 'import sys, re
+s = sys.stdin.read()
+print(re.sub(
+    r"^(#+)",  # Grab Markdown heading.
+    r"\1# ",    # Add another # character to increase the level.
+    s,   # Input.
+    0,   # Unlimited replacements.
+    re.MULTILINE,
+)
+.strip())'
+}

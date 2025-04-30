@@ -3,7 +3,7 @@
     {
       "image": "library/ubuntu",
       "repo": "docker.io",
-      "sha256": "77d57fd89366f7d16615794a5b53e124d742404e20f035c22032233f1826bd6a"
+      "sha256": "965fbcae990b0467ed5657caceaec165018ef44a4d2d46c7cdea80a9dff0d1ea"
     },
     {
       "image": "library/ubuntu",

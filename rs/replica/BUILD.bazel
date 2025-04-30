@@ -6,14 +6,15 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/artifact_pool",
-    "//rs/async_utils",
     "//rs/bitcoin/client",
     "//rs/bitcoin/consensus",
     "//rs/config",
+    "//rs/consensus/certification",
     "//rs/crypto",
     "//rs/crypto/sha2",
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
+    "//rs/http_endpoints/async_utils",
     "//rs/http_endpoints/metrics",
     "//rs/http_endpoints/public",
     "//rs/http_endpoints/xnet",
@@ -53,6 +54,7 @@ DEPENDENCIES = [
     "@crate_index//:tikv-jemalloc-ctl",
     "@crate_index//:tikv-jemallocator",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-util",
     "@crate_index//:tracing",
     "@crate_index//:tracing-subscriber",
 ]

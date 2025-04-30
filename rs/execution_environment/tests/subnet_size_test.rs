@@ -4,7 +4,7 @@ use ic_config::{
     execution_environment::Config as HypervisorConfig,
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     self as ic00, BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterIdRecord,
     CanisterInstallMode, CanisterSettingsArgsBuilder, DerivationPath, EcdsaCurve, EcdsaKeyId,
     HttpMethod, MasterPublicKeyId, TransformContext, TransformFunc,
@@ -454,7 +454,7 @@ fn simulate_sign_with_ecdsa_cost(
         .with_subnet_size(subnet_size)
         .with_nns_subnet_id(nns_subnet_id)
         .with_subnet_id(subnet_id)
-        .with_idkg_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
+        .with_chain_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
     // Create canister with initial cycles for some unrelated costs (eg. ingress induction, heartbeat).
     let canister_id =

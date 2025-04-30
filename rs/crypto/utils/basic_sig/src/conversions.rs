@@ -1,6 +1,6 @@
 //! Conversion of keys into various formats
 use ic_base_types::{NodeId, PrincipalId};
-use ic_crypto_ed25519::PublicKey;
+use ic_ed25519::PublicKey;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 
 #[cfg(test)]

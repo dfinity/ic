@@ -10,10 +10,9 @@ use ic_ledger_core::{
     tokens::{CheckedAdd, TOKEN_SUBDIVIDABLE_BY},
     Tokens,
 };
+use ic_nervous_system_canisters::cmc::FakeCmc;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
-use ic_nervous_system_common::{
-    cmc::FakeCmc, i2d, NervousSystemError, DEFAULT_TRANSFER_FEE, ONE_YEAR_SECONDS,
-};
+use ic_nervous_system_common::{i2d, NervousSystemError, DEFAULT_TRANSFER_FEE, ONE_YEAR_SECONDS};
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
 };
@@ -724,7 +723,10 @@ fn test_neuron_action_is_not_authorized() {
 // This is a bit hacky and fragile, as it depends on how `SnsCanisters` is setup.
 // TODO(NNS1-1892): expose SnsCanisters' current time via API.
 fn get_sns_canisters_now_seconds() -> i64 {
-    (NativeEnvironment::default().now() as i64)
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
         + (NervousSystemParameters::with_default_values()
             .initial_voting_period_seconds
             .unwrap() as i64)

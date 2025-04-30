@@ -107,7 +107,7 @@ fn default_archive_options() -> ArchiveOptions {
         max_message_size_bytes: None,
         controller_id: PrincipalId::new_user_test_id(100),
         more_controller_ids: None,
-        cycles_for_archive_creation: None,
+        cycles_for_archive_creation: Some(0),
         max_transactions_per_response: None,
     }
 }
@@ -483,7 +483,7 @@ fn assert_ledger_index_parity(
     ledger_id: CanisterId,
     index_id: CanisterId,
 ) -> usize {
-    let ledger_blocks = icp_get_blocks(env, ledger_id);
+    let ledger_blocks = icp_get_blocks(env, ledger_id, None, None);
     let index_blocks = index_get_blocks(env, index_id);
     assert_eq!(ledger_blocks, index_blocks);
     ledger_blocks.len()
@@ -496,7 +496,7 @@ fn assert_ledger_index_parity_query_blocks_and_query_encoded_blocks(
     ledger_id: CanisterId,
     index_id: CanisterId,
 ) {
-    let ledger_blocks = icp_get_blocks(env, ledger_id);
+    let ledger_blocks = icp_get_blocks(env, ledger_id, None, None);
     let index_blocks = index_get_blocks(env, index_id);
     let ledger_unencoded_blocks = icp_query_blocks(env, ledger_id);
     assert_eq!(ledger_blocks, index_blocks);
@@ -914,7 +914,7 @@ fn assert_ledger_index_block_transaction_parity(
     );
 
     // verify that the ledger block is as expected
-    let ledger_blocks = icp_get_blocks(&setup.env, setup.ledger_id);
+    let ledger_blocks = icp_get_blocks(&setup.env, setup.ledger_id, None, None);
     assert_eq!(ledger_blocks.len(), expected_ledger_block_index + 1);
     let ledger_parent_block = ledger_blocks
         .get(expected_ledger_block_index - 1)

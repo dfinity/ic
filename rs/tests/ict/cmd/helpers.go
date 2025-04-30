@@ -3,7 +3,9 @@ package cmd
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/schollz/closestmatch"
@@ -148,4 +150,73 @@ func get_closest_target_matches(all_targets []string, target string) []string {
 	return filter(closest_matches, func(s string) bool {
 		return len(s) > 0
 	})
+}
+
+func sparse_checkout(repoUrl, repoDir string, sparseCheckoutPaths []string, branch string) (string, error) {
+	startingPoint, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("Could not get current dir: %v", err)
+	}
+
+	if repoDir == "" {
+		tempDir, err := os.UserCacheDir()
+		if err != nil {
+			return "", fmt.Errorf("Could not get user cache dir: %v", err)
+		}
+		repoDir = filepath.Join(tempDir, "k8s_repo")
+	}
+
+	defer func() {
+		os.Chdir(startingPoint)
+	}()
+
+	if err := os.RemoveAll(repoDir); err != nil {
+		return "", fmt.Errorf("Failed to remove directory: %v", err)
+	}
+
+	err = os.MkdirAll(repoDir, 0775)
+	if err != nil {
+		return "", fmt.Errorf("Could not create repo directory: %v", err)
+	}
+
+	cloneCmd := exec.Command("git", "clone", "--filter=blob:none", "--no-checkout", "--branch", branch, repoUrl, repoDir)
+	stdErrBuffer := &bytes.Buffer{}
+	cloneCmd.Stderr = stdErrBuffer
+	if err := cloneCmd.Run(); err != nil {
+		return "", fmt.Errorf("Failed to clone repository: %v\nStderr: %s", err, stdErrBuffer.String())
+	}
+
+	if err := os.Chdir(repoDir); err != nil {
+		return "", fmt.Errorf("Failed to chdir to repository: %v", err)
+	}
+
+	sparseCmd := exec.Command("git", "config", "core.sparseCheckout", "true")
+	if err := sparseCmd.Run(); err != nil {
+		return "", fmt.Errorf("Could not enable sparseCheckout: %v", err)
+	}
+
+	sparseFile := ".git/info/sparse-checkout"
+	f, err := os.OpenFile(sparseFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return "", fmt.Errorf("Could not open sparse-checkout file: %v", err)
+	}
+	defer f.Close()
+
+	for _, path := range sparseCheckoutPaths {
+		_, err = f.WriteString(path + "\n")
+		if err != nil {
+			return "", fmt.Errorf("Could not write sparse checkout path: %v", err)
+		}
+	}
+
+	checkoutCmd := exec.Command("git", "checkout", "HEAD")
+	if err := checkoutCmd.Run(); err != nil {
+		return "", fmt.Errorf("Could not perform git checkout: %v", err)
+	}
+
+	if err := os.Chdir(startingPoint); err != nil {
+		return "", fmt.Errorf("Could not return to the original directory: %v", err)
+	}
+
+	return repoDir, nil
 }

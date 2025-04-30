@@ -302,8 +302,6 @@ type InitArgs = record {
     token_symbol: opt text;
     token_name: opt text;
     feature_flags : opt FeatureFlags;
-    maximum_number_of_accounts : opt nat64;
-    accounts_overflow_trim_quantity: opt nat64;
 };
 
 type Icrc1BlockIndex = nat;
@@ -535,4 +533,6 @@ service: (LedgerCanisterPayload) -> {
 
     icrc21_canister_call_consent_message: (icrc21_consent_message_request) -> (icrc21_consent_message_response);
     icrc10_supported_standards : () -> (vec record { name : text; url : text }) query;
+
+    is_ledger_ready: () -> (bool) query;
 }

@@ -597,12 +597,12 @@ fn run_test_orphaned_crypto_keys(
     );
 }
 
-mod ecdsa_signing_subnet_lists {
+mod chain_key_enabled_subnet_lists {
     use super::*;
     use crate::common::test_helpers::invariant_compliant_registry;
     use ic_base_types::{subnet_id_into_protobuf, SubnetId};
-    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
-    use ic_protobuf::registry::crypto::v1::ChainKeySigningSubnetList;
+    use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
+    use ic_protobuf::registry::crypto::v1::ChainKeyEnabledSubnetList;
     use ic_protobuf::registry::subnet::v1::{
         ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
         SubnetRecord as SubnetRecordPb,
@@ -610,7 +610,7 @@ mod ecdsa_signing_subnet_lists {
     use ic_protobuf::types::v1::{
         self as pb, master_public_key_id, MasterPublicKeyId as MasterPublicKeyIdPb,
     };
-    use ic_registry_keys::CHAIN_KEY_SIGNING_SUBNET_LIST_KEY_PREFIX;
+    use ic_registry_keys::CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX;
     use ic_registry_subnet_features::KeyConfig;
     use ic_registry_transport::pb::v1::RegistryMutation;
     use ic_registry_transport::upsert;
@@ -798,7 +798,7 @@ mod ecdsa_signing_subnet_lists {
                 Err(InvariantCheckError{msg: error_message, source: _})
                 if error_message.contains(format!(
                     "A non-existent subnet {} was set as the holder of a key_id {}{}",
-                    setup.subnet_id, CHAIN_KEY_SIGNING_SUBNET_LIST_KEY_PREFIX, ecdsa_key_id
+                    setup.subnet_id, CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX, ecdsa_key_id
                 ).as_str())
             );
         }
@@ -869,7 +869,7 @@ mod ecdsa_signing_subnet_lists {
             if error_message.contains(format!(
                 "A non-existent subnet {} was set as the holder of a key_id {}{}",
                 setup.subnet_id,
-                ic_registry_keys::CHAIN_KEY_SIGNING_SUBNET_LIST_KEY_PREFIX,
+                ic_registry_keys::CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX,
                 setup.key_id.expect("a valid MasterPublicKey should be set")
             ).as_str())
         );
@@ -908,7 +908,7 @@ mod ecdsa_signing_subnet_lists {
             if error_message.contains(format!(
                 "The subnet {} does not have the key with {}{} in its chain key configurations",
                 setup.subnet_id,
-                ic_registry_keys::CHAIN_KEY_SIGNING_SUBNET_LIST_KEY_PREFIX,
+                ic_registry_keys::CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX,
                 setup.key_id.expect("a valid MasterPublicKeyId should be set")
             ).as_str())
         );
@@ -993,8 +993,8 @@ mod ecdsa_signing_subnet_lists {
                     );
                 }
             };
-            let ecdsa_signing_subnet_list_key =
-                format!("{}{}", CHAIN_KEY_SIGNING_SUBNET_LIST_KEY_PREFIX, key_id);
+            let chain_key_enabled_subnet_list_key =
+                format!("{}{}", CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX, key_id);
 
             let subnet_id = subnet_test_id(1);
             let mut subnets = vec![subnet_id_into_protobuf(subnet_id)];
@@ -1002,9 +1002,9 @@ mod ecdsa_signing_subnet_lists {
                 subnets.push(subnet_id_into_protobuf(another_subnet_id));
             }
             let mut mutations: Vec<RegistryMutation> = vec![];
-            let subnets_value = ChainKeySigningSubnetList { subnets };
+            let subnets_value = ChainKeyEnabledSubnetList { subnets };
             mutations.push(ic_registry_transport::insert(
-                ecdsa_signing_subnet_list_key,
+                chain_key_enabled_subnet_list_key,
                 subnets_value.encode_to_vec(),
             ));
             let node_id = node_test_id(1);
@@ -1020,11 +1020,11 @@ mod ecdsa_signing_subnet_lists {
                             max_queue_size: Default::default(),
                         })
                         .collect();
-                    let ecdsa_config = ChainKeyConfig {
+                    let chain_key_config = ChainKeyConfig {
                         key_configs,
                         ..Default::default()
                     };
-                    Some(ChainKeyConfigPb::from(ecdsa_config))
+                    Some(ChainKeyConfigPb::from(chain_key_config))
                 } else {
                     None
                 };

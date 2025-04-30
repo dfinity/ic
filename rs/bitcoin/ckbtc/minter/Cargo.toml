@@ -14,23 +14,24 @@ path = "src/main.rs"
 async-trait = { workspace = true }
 bech32 = "0.9.0"
 bs58 = "0.5.0"
+canbench-rs = { version = "0.1.7", optional = true }
 candid = { workspace = true }
 ciborium = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-btc-interface = { workspace = true }
-ic-btc-kyt = { path = "../../kyt" }
+ic-btc-checker = { path = "../../checker" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
-ic-crypto-secp256k1 = { path = "../../../crypto/secp256k1" }
-ic-crypto-getrandom-for-wasm = { path = "../../../crypto/getrandom_for_wasm" }
 ic-crypto-sha2 = { path = "../../../crypto/sha2" }
+ic-dummy-getrandom-for-wasm = { path = "../../../../packages/ic-dummy-getrandom-for-wasm" }
 ic-icrc1 = { path = "../../../ledger_suite/icrc1" }
 ic-ledger-core = { path = "../../../ledger_suite/common/ledger_core" }
-ic-management-canister-types = { path = "../../../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
 ic-metrics-encoder = "1"
+ic-secp256k1 = { path = "../../../../packages/ic-secp256k1" }
 ic-stable-structures = { workspace = true }
 ic-utils-ensure = { path = "../../../utils/ensure" }
 ic0 = "0.18.9"
@@ -48,7 +49,7 @@ serde_json = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-bitcoin = { workspace = true }
+bitcoin = { version = "0.28.2" }
 candid_parser = { workspace = true }
 canister-test = { path = "../../../rust_canisters/canister_test" }
 flate2 = { workspace = true }
@@ -56,11 +57,13 @@ ic-agent = { workspace = true }
 ic-bitcoin-canister-mock = { path = "../../mock" }
 ic-config = { path = "../../../config" }
 ic-icrc1-ledger = { path = "../../../ledger_suite/icrc1/ledger" }
+ic-metrics-assert = { path = "../../../../packages/ic-metrics-assert" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 ic-types = { path = "../../../types/types" }
 maplit = "1.0.2"
 mockall = { workspace = true }
+pocket-ic = { path = "../../../../packages/pocket-ic" }
 proptest = { workspace = true }
 simple_asn1 = { workspace = true }
 tokio = { workspace = true }

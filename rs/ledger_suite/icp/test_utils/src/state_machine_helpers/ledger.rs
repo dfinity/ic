@@ -7,10 +7,15 @@ use icp_ledger::{
 };
 use on_wire::FromWire;
 
-pub fn icp_get_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger::Block> {
+pub fn icp_get_blocks(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    start_index: Option<u64>,
+    num_blocks: Option<usize>,
+) -> Vec<icp_ledger::Block> {
     let req = GetBlocksArgs {
-        start: 0u64,
-        length: u32::MAX as usize,
+        start: start_index.unwrap_or(0u64),
+        length: num_blocks.unwrap_or(u32::MAX as usize) as u64,
     };
     let req = Encode!(&req).expect("Failed to encode GetBlocksArgs");
     let res = env
@@ -34,7 +39,7 @@ pub fn icp_get_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledg
         for i in 0..=archived.length / MAX_BLOCKS_PER_REQUEST as u64 {
             let req = GetBlocksArgs {
                 start: archived.start + i * MAX_BLOCKS_PER_REQUEST as u64,
-                length: MAX_BLOCKS_PER_REQUEST,
+                length: MAX_BLOCKS_PER_REQUEST as u64,
             };
             let req = Encode!(&req).expect("Failed to encode GetBlocksArgs for archive node");
             let canister_id = archived.callback.canister_id;
@@ -63,7 +68,7 @@ pub fn icp_get_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledg
 pub fn icp_query_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger::Block> {
     let req = GetBlocksArgs {
         start: 0u64,
-        length: u32::MAX as usize,
+        length: u32::MAX as u64,
     };
     let req = Encode!(&req).expect("Failed to encode GetBlocksArgs");
     let res = env
@@ -76,7 +81,7 @@ pub fn icp_query_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_le
         for i in 0..=archived.length / MAX_BLOCKS_PER_REQUEST as u64 {
             let req = GetBlocksArgs {
                 start: archived.start + i * MAX_BLOCKS_PER_REQUEST as u64,
-                length: MAX_BLOCKS_PER_REQUEST,
+                length: MAX_BLOCKS_PER_REQUEST as u64,
             };
             let req = Encode!(&req).expect("Failed to encode GetBlocksArgs for archive node");
             let canister_id = archived.callback.canister_id;
@@ -108,7 +113,7 @@ pub fn icp_query_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_le
     blocks
 }
 
-pub(crate) fn icp_ledger_tip(env: &StateMachine, ledger_id: CanisterId) -> u64 {
+pub fn icp_ledger_tip(env: &StateMachine, ledger_id: CanisterId) -> u64 {
     let res = env
         .query(ledger_id, "tip_of_chain_pb", vec![])
         .expect("Failed to send tip_of_chain_pb request")

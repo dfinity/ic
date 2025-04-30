@@ -23,3 +23,8 @@ Our CI contains several automated steps to either generate commits or PRs, usual
 - they generate a token which is only valid while the workflow is running, enhancing security and removing the need for regular rotation
 - they can be managed via the organization and do not require a separate service account
 - they can be installed on mutliple repos, however they only have access to the repo they are installed in
+
+## Automated PRs by Bots
+To increase security and prevent a bot from accidentally changing files that it shouldn't, we are introducing a new config file stored in `.github/repo_policies/bot_approved_files.json` in all public repos where any files changed by a bot must be listed. If not, the workflow will fail and the PR can't be merged.
+
+Workflow defined in: https://github.com/dfinity/public-workflows/blob/main/.github/workflows/repo_policies.yml

@@ -46,6 +46,7 @@ candid_parser = { workspace = true }
 cddl = "0.9.4"
 ciborium = { workspace = true }
 ic-agent = { workspace = true }
+ic-cbor = { workspace = true }
 ic-certification = { workspace = true }
 ic-ledger-suite-state-machine-tests = { path = "../../tests/sm-tests" }
 ic-icrc1-test-utils = { path = "../test_utils" }
@@ -61,4 +62,3 @@ u256-tokens = ["dep:ic-icrc1-tokens-u256"]
 canbench-rs = ["dep:canbench-rs", "dep:assert_matches"]
 low-upgrade-instruction-limits = []
 next-ledger-version = []
-icrc3-compatible-data-certificate = []

@@ -1,7 +1,10 @@
 [package]
 name = "ic-crypto-internal-basic-sig-cose"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }

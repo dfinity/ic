@@ -22,13 +22,13 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:3cc80d1a2d5789b69f6a7f170280bb3763a54acce299430903f59718f904f273
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Login to Docker
-        uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
         with:
           registry: docker.io
           username: ${{ vars.DOCKER_HUB_USER}}
@@ -37,7 +37,7 @@ jobs:
       - name: Configure Git
         run: |
           git config --global user.name "IDX GitHub Automation"
-          git config --global user.email "idx@dfinity.org"
+          git config --global user.email "<>"
 
       - name: Check rosetta release version
         if: ${{ github.event.inputs.rosetta_release_version }}
@@ -89,5 +89,5 @@ jobs:
           for tag in "v${ICRC_ROSETTA_RELEASE_VERSION}" latest; do
             bazel run --stamp --embed_label="$tag" //rs/rosetta-api/icrc1:push_ic_icrc_rosetta_image
           done
-          git tag "icrc-rosetta-release-$ICRC_ROSETTA_RELEASE_VERSION" "${{ github.sha }}"
-          git push origin "icrc-rosetta-release-$ICRC_ROSETTA_RELEASE_VERSION"
+          git tag "rosetta-icrc-release-$ICRC_ROSETTA_RELEASE_VERSION" "${{ github.sha }}"
+          git push origin "rosetta-icrc-release-$ICRC_ROSETTA_RELEASE_VERSION"

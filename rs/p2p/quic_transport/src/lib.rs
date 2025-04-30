@@ -186,9 +186,12 @@ impl QuicTransport {
 /// https://datatracker.ietf.org/doc/html/draft-ietf-quic-transport-03#section-12.3.
 const QUIC_STREAM_CANCELLED: VarInt = VarInt::from_u32(0x80000006);
 
-/// Drop guard to send a [`SendStream::reset`] frame on drop. QUINN sends a [`SendStream::finish`] frame by default when dropping a [`SendStream`],
-/// which can lead to the peer receiving the stream thinking a complete message was sent. This guard is used to send a reset frame instead, to signal
-/// that the transmission of the message was cancelled.
+/// A drop guard that sends a [`SendStream::reset`] frame when dropped.
+///
+/// By default, QUINN sends a [`SendStream::finish`] frame upon dropping a [`SendStream`].
+/// This struct overrides that behavior by sending a reset frame instead, signaling
+/// that the message transmission was canceled. This approach helps optimize bandwidth
+/// usage in scenarios involving message cancellation.
 struct ResetStreamOnDrop {
     send_stream: SendStream,
 }
@@ -222,7 +225,7 @@ impl Transport for QuicTransport {
             .ok_or(anyhow!("Currently not connected to this peer"))?
             .clone();
         peer.rpc(request).await.inspect_err(|err| {
-            info!(self.log, "{:?}", err);
+            info!(every_n_seconds => 5, self.log, "Error sending rpc request to {}: {:?}", peer_id, err);
         })
     }
 

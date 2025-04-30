@@ -26,8 +26,10 @@ Success::
 end::catalog[] */
 
 use anyhow::Result;
+use candid::Principal;
 use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
+use ic_cdk::api::management_canister::provisional::CanisterId;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::InternetComputer;
@@ -46,7 +48,7 @@ use slog::{info, Logger};
 use std::env;
 use std::time::Duration;
 use tokio::time::sleep;
-use xnet_test::{CanisterId, Metrics};
+use xnet_test::{Metrics, StartArgs};
 
 const SUBNETS_COUNT: usize = 2;
 const CANISTERS_PER_SUBNET: usize = 3;
@@ -172,7 +174,11 @@ pub fn start_all_canisters(
 ) {
     let topology: Vec<Vec<CanisterId>> = canisters
         .iter()
-        .map(|x| x.iter().map(|y| y.canister_id_vec8()).collect())
+        .map(|x| {
+            x.iter()
+                .map(|y| Principal::try_from(y.canister_id_vec8()).unwrap())
+                .collect()
+        })
         .collect();
     block_on(async {
         for (subnet_idx, canister_idx, canister) in canisters
@@ -180,9 +186,16 @@ pub fn start_all_canisters(
             .enumerate()
             .flat_map(|(x, v)| v.iter().enumerate().map(move |(y, v)| (x, y, v)))
         {
-            let input = (&topology, canister_to_subnet_rate, payload_size_bytes);
+            let input = StartArgs {
+                network_topology: topology.clone(),
+                canister_to_subnet_rate,
+                request_payload_size_bytes: payload_size_bytes,
+                // A mix of guaranteed response and best-effort calls.
+                call_timeouts_seconds: vec![None, Some(u32::MAX)],
+                response_payload_size_bytes: payload_size_bytes,
+            };
             let _: String = canister
-                .update_("start", candid, input)
+                .update_("start", candid, (input,))
                 .await
                 .unwrap_or_else(|_| {
                     panic!(
@@ -209,9 +222,9 @@ pub fn assert_metrics_progress_without_errors(
 
         assert_eq!(pre_reboot.seq_errors, 0);
         assert_eq!(post_reboot.seq_errors, 0);
-        assert!(pre_reboot.requests_sent > 0);
+        assert!(pre_reboot.requests_sent() > 0);
         // Assert positive dynamics after reboot.
-        assert!(post_reboot.requests_sent > pre_reboot.requests_sent);
+        assert!(post_reboot.requests_sent() > pre_reboot.requests_sent());
 
         let responses_pre_reboot = pre_reboot.latency_distribution.buckets().last().unwrap().1
             + pre_reboot.reject_responses;

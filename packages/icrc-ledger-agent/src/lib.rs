@@ -15,7 +15,8 @@ use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
-use icrc_ledger_types::icrc3::blocks::{DataCertificate, GetBlocksRequest, GetBlocksResponse};
+use icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate;
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResponse};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value, icrc3::blocks::BlockRange,
 };
@@ -57,7 +58,7 @@ pub enum CallMode {
 /// Each query method in this agent takes in input
 /// the mode to allow to either use a query call or
 /// update calls.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Icrc1Agent {
     pub agent: Agent,
     pub ledger_canister_id: Principal,
@@ -262,11 +263,14 @@ impl Icrc1Agent {
         )?)
     }
 
-    pub async fn get_data_certificate(&self) -> Result<DataCertificate, Icrc1AgentError> {
-        Ok(Decode!(
-            &self.query("get_data_certificate", &Encode!()?).await?,
-            DataCertificate
-        )?)
+    pub async fn icrc3_get_tip_certificate(&self) -> Result<ICRC3DataCertificate, Icrc1AgentError> {
+        Decode!(
+            &self.query("icrc3_get_tip_certificate", &Encode!()?).await?,
+            Option<ICRC3DataCertificate>
+        )?
+        .ok_or(Icrc1AgentError::VerificationFailed(
+            "ICRC3DataCertificate not found".to_string(),
+        ))
     }
 
     /// The function performs the following checks:
@@ -311,24 +315,18 @@ impl Icrc1Agent {
     pub async fn get_certified_chain_tip(
         &self,
     ) -> Result<Option<(Hash, BlockIndex)>, Icrc1AgentError> {
-        let DataCertificate {
+        let ICRC3DataCertificate {
             certificate,
             hash_tree,
-        } = self.get_data_certificate().await?;
-        let certificate = if let Some(certificate) = certificate {
-            match Certificate::from_cbor(certificate.as_slice()) {
-                Ok(certificate) => certificate,
-                Err(e) => {
-                    return Err(Icrc1AgentError::VerificationFailed(format!(
-                        "Unable to deserialize CBOR encoded Certificate: {}",
-                        e
-                    )));
-                }
+        } = self.icrc3_get_tip_certificate().await?;
+        let certificate = match Certificate::from_cbor(certificate.as_slice()) {
+            Ok(certificate) => certificate,
+            Err(e) => {
+                return Err(Icrc1AgentError::VerificationFailed(format!(
+                    "Unable to deserialize CBOR encoded Certificate: {}",
+                    e
+                )));
             }
-        } else {
-            return Err(Icrc1AgentError::VerificationFailed(
-                "Certificate not found in the DataCertificate".to_string(),
-            ));
         };
         let hash_tree: HashTree = match ciborium::de::from_reader(hash_tree.as_slice()) {
             Ok(hash_tree) => hash_tree,

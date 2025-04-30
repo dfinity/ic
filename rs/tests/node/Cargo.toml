@@ -14,6 +14,7 @@ ic-base-types = { path = "../../types/base_types" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-registry-canister-api = { path = "../../registry/canister/api" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic_consensus_system_test_utils = { path = "../consensus/utils" }
 ic-system-test-driver = { path = "../driver" }
 indoc = "1.0.9"
 k256 = { workspace = true }
@@ -24,3 +25,7 @@ tokio = { workspace = true }
 [[bin]]
 name = "ic-systest-ipv4-integration"
 path = "ipv4_integration_test.rs"
+
+[[bin]]
+name = "reboot_toy"
+path = "reboot_toy.rs"

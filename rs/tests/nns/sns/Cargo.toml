@@ -14,7 +14,6 @@ ic-sns-swap = { path = "../../../sns/swap" }
 ic-system-test-driver = { path = "../../driver" }
 rust_decimal = "1.36.0"
 slog = { workspace = true }
-tests = { path = "../../" }
 sns_system_test_lib = { path = "./lib" }
 
 [[bin]]

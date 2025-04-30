@@ -9,7 +9,7 @@ use core::fmt;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{CspNiDkgDealing, CspNiDkgTranscript};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::{MasterPublicKeyId, VetKdKeyId};
+use ic_management_canister_types_private::{MasterPublicKeyId, VetKdKeyId};
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::v1 as pb;
 use ic_protobuf::types::v1::NiDkgId as NiDkgIdProto;
@@ -32,6 +32,7 @@ pub use id::NiDkgId;
 mod tests;
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, EnumCount, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum NiDkgMasterPublicKeyId {
     VetKd(VetKdKeyId),
 }
@@ -40,6 +41,21 @@ impl From<NiDkgMasterPublicKeyId> for MasterPublicKeyId {
     fn from(val: NiDkgMasterPublicKeyId) -> Self {
         match val {
             NiDkgMasterPublicKeyId::VetKd(k) => MasterPublicKeyId::VetKd(k),
+        }
+    }
+}
+
+impl TryFrom<MasterPublicKeyId> for NiDkgMasterPublicKeyId {
+    type Error = &'static str;
+
+    fn try_from(value: MasterPublicKeyId) -> Result<Self, Self::Error> {
+        match value {
+            MasterPublicKeyId::VetKd(vet_kd_key_id) => {
+                Ok(NiDkgMasterPublicKeyId::VetKd(vet_kd_key_id))
+            }
+            MasterPublicKeyId::Ecdsa(_) | MasterPublicKeyId::Schnorr(_) => {
+                Err("This is not a NiDkg key")
+            }
         }
     }
 }
@@ -93,6 +109,7 @@ impl fmt::Display for NiDkgMasterPublicKeyId {
 ///   a master public key with a particular ID
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, EnumCount, Serialize)]
 #[repr(isize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum NiDkgTag {
     LowThreshold = 1,
     HighThreshold = 2,

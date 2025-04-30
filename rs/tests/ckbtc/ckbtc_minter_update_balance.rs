@@ -4,7 +4,7 @@ use bitcoincore_rpc::RpcApi;
 use candid::Principal;
 use ic_agent::identity::Secp256k1Identity;
 use ic_base_types::PrincipalId;
-use ic_btc_kyt::KytMode as NewKytMode;
+use ic_btc_checker::CheckMode as NewCheckMode;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::{
     lifecycle::upgrade::UpgradeArgs,
@@ -24,15 +24,15 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
 };
 use ic_tests_ckbtc::{
-    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
-    install_ledger, install_minter, setup, subnet_sys, upgrade_kyt,
+    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_btc_checker,
+    install_ledger, install_minter, setup, subnet_app, subnet_sys, upgrade_btc_checker,
     utils::{
         assert_mint_transaction, assert_no_new_utxo, assert_no_transaction,
         assert_temporarily_unavailable, ensure_wallet, generate_blocks, get_btc_address,
         get_btc_client, start_canister, stop_canister, update_balance, upgrade_canister,
         upgrade_canister_with_args, wait_for_bitcoin_balance, BTC_BLOCK_REWARD,
     },
-    BTC_MIN_CONFIRMATIONS, KYT_FEE, TEST_KEY_LOCAL,
+    BTC_MIN_CONFIRMATIONS, CHECK_FEE, TEST_KEY_LOCAL,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
@@ -47,7 +47,9 @@ use slog::{debug, info};
 pub fn test_update_balance(env: TestEnv) {
     let logger = env.logger();
     let subnet_sys = subnet_sys(&env);
+    let subnet_app = subnet_app(&env);
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
+    let app_node = subnet_app.nodes().next().expect("No node in app subnet.");
 
     // Get access to btc replica.
     let btc_rpc = get_btc_client(&env);
@@ -55,7 +57,10 @@ pub fn test_update_balance(env: TestEnv) {
     // Create wallet if required.
     ensure_wallet(&btc_rpc, &logger);
 
-    let default_btc_address = btc_rpc.get_new_address(None, None).unwrap();
+    let default_btc_address = btc_rpc
+        .get_new_address(None, None)
+        .unwrap()
+        .assume_checked();
     // Creating the 10 first block to reach the min confirmations of the minter canister.
     debug!(
         &logger,
@@ -66,23 +71,26 @@ pub fn test_update_balance(env: TestEnv) {
         .unwrap();
 
     block_on(async {
-        let runtime = runtime_from_url(sys_node.get_public_url(), sys_node.effective_canister_id());
-        install_bitcoin_canister(&runtime, &logger).await;
+        let sys_runtime =
+            runtime_from_url(sys_node.get_public_url(), sys_node.effective_canister_id());
+        let runtime = runtime_from_url(app_node.get_public_url(), app_node.effective_canister_id());
+        install_bitcoin_canister(&sys_runtime, &logger).await;
 
         let mut ledger_canister = create_canister(&runtime).await;
         let mut minter_canister = create_canister(&runtime).await;
-        let mut kyt_canister = create_canister(&runtime).await;
+        let mut btc_checker_canister = create_canister(&runtime).await;
 
         let minting_user = minter_canister.canister_id().get();
-        let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
-        let kyt_id = install_kyt(&mut kyt_canister, &env).await;
+        let agent = assert_create_agent(app_node.get_public_url().as_str()).await;
+        let btc_checker_id = install_btc_checker(&mut btc_checker_canister, &env).await;
         let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
-        let minter_id = install_minter(&mut minter_canister, ledger_id, &logger, 0, kyt_id).await;
+        let minter_id =
+            install_minter(&mut minter_canister, ledger_id, &logger, 0, btc_checker_id).await;
         let minter = Principal::from(minter_id.get());
 
         let ledger = Principal::from(ledger_id.get());
         let universal_canister =
-            UniversalCanister::new_with_retries(&agent, sys_node.effective_canister_id(), &logger)
+            UniversalCanister::new_with_retries(&agent, app_node.effective_canister_id(), &logger)
                 .await;
         activate_ecdsa_signature(
             sys_node.clone(),
@@ -125,9 +133,9 @@ pub fn test_update_balance(env: TestEnv) {
         };
 
         // Because bitcoind only allows to see one's own transaction, and we
-        // are using multiple addresses in this test. We have to change KYT
+        // are using multiple addresses in this test. We have to change check
         // mode to AcceptAll, otherwise bitcoind will return 500 error.
-        upgrade_kyt(&mut kyt_canister, NewKytMode::AcceptAll).await;
+        upgrade_btc_checker(&mut btc_checker_canister, NewCheckMode::AcceptAll).await;
 
         // Get the BTC address of the caller's sub-accounts.
         let btc_address0 = get_btc_address(&minter_agent, &logger, subaccount0).await;
@@ -173,7 +181,7 @@ pub fn test_update_balance(env: TestEnv) {
                     &logger,
                     *block_index,
                     &account1,
-                    BTC_BLOCK_REWARD - KYT_FEE,
+                    BTC_BLOCK_REWARD - CHECK_FEE,
                 )
                 .await;
             } else {
@@ -229,7 +237,7 @@ pub fn test_update_balance(env: TestEnv) {
                     &logger,
                     *block_index,
                     &account2,
-                    BTC_BLOCK_REWARD - KYT_FEE,
+                    BTC_BLOCK_REWARD - CHECK_FEE,
                 )
                 .await;
             } else {
@@ -272,8 +280,7 @@ pub fn test_update_balance(env: TestEnv) {
 
         // We create a new agent with a different identity
         // to have caller != new_caller
-        let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
-        let mut mutable_agent = agent;
+        let mut mutable_agent = assert_create_agent(app_node.get_public_url().as_str()).await;
         let mut rng = ChaChaRng::from_rng(OsRng).unwrap();
         let identity = Secp256k1Identity::from_private_key(SecretKey::random(&mut rng));
         mutable_agent.set_identity(identity);
@@ -306,7 +313,7 @@ pub fn test_update_balance(env: TestEnv) {
                     &logger,
                     *block_index,
                     &account3,
-                    BTC_BLOCK_REWARD - KYT_FEE,
+                    BTC_BLOCK_REWARD - CHECK_FEE,
                 )
                 .await;
             } else {

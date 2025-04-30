@@ -263,6 +263,14 @@ impl ManagedCanisters {
     }
 }
 
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+pub struct CanisterUpgrade {
+    /// Wasm hash installed on the canister after the upgrade.
+    pub wasm_hash: WasmHash,
+    /// Timestamp (nanoseconds since the Unix Epoch) of then the upgrade was completed.
+    pub timestamp: u64,
+}
+
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct TokenSymbol(String);
 
@@ -510,6 +518,8 @@ fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> T {
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct State {
     managed_canisters: ManagedCanisters,
+    #[serde(default)]
+    completed_upgrades: BTreeMap<Principal, CanisterUpgrade>,
     cycles_management: CyclesManagement,
     more_controller_ids: Vec<Principal>,
     minter_id: Option<Principal>,
@@ -547,6 +557,10 @@ impl State {
 
     pub fn all_managed_tokens_ids_iter(&self) -> impl Iterator<Item = TokenId> + '_ {
         self.all_managed_canisters_iter().map(|(id, _)| id)
+    }
+
+    pub fn completed_upgrades(&self) -> &BTreeMap<Principal, CanisterUpgrade> {
+        &self.completed_upgrades
     }
 
     pub fn managed_canisters(&self, token_id: &TokenId) -> Option<&Canisters> {
@@ -650,6 +664,21 @@ impl State {
         };
     }
 
+    pub fn record_upgrade_completed(
+        &mut self,
+        canister_id: Principal,
+        wasm_hash: WasmHash,
+        timestamp: u64,
+    ) {
+        self.completed_upgrades.insert(
+            canister_id,
+            CanisterUpgrade {
+                wasm_hash,
+                timestamp,
+            },
+        );
+    }
+
     pub fn validate_config(&self) -> Result<(), InvalidStateError> {
         const MAX_ADDITIONAL_CONTROLLERS: usize = 9;
         if self.more_controller_ids.len() > MAX_ADDITIONAL_CONTROLLERS {
@@ -747,6 +776,7 @@ impl TryFrom<InitArg> for State {
     ) -> Result<Self, Self::Error> {
         let state = Self {
             managed_canisters: Default::default(),
+            completed_upgrades: Default::default(),
             cycles_management: cycles_management.unwrap_or_default(),
             more_controller_ids,
             minter_id,

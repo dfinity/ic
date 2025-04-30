@@ -1,5 +1,5 @@
 use ic_metrics::{buckets::decimal_buckets_with_zero, MetricsRegistry};
-use prometheus::{Histogram, HistogramVec, IntCounter, IntGauge};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 
 const SOURCE_LABEL: &str = "source";
 
@@ -10,7 +10,7 @@ pub(super) struct FetchStrippedConsensusArtifactMetrics {
     pub(super) missing_ingress_messages_bytes: Histogram,
     pub(super) total_block_assembly_duration: Histogram,
     pub(super) active_ingress_message_downloads: IntGauge,
-    pub(super) total_ingress_message_download_errors: IntCounter,
+    pub(super) total_ingress_message_download_errors: IntCounterVec,
 }
 
 #[derive(Copy, Clone)]
@@ -58,10 +58,11 @@ impl FetchStrippedConsensusArtifactMetrics {
                     "ic_stripped_consensus_artifact_active_ingress_message_downloads",
                     "The number of active missing ingress message downloads",
             ),
-            total_ingress_message_download_errors: metrics_registry.int_counter(
+            total_ingress_message_download_errors: metrics_registry.int_counter_vec(
                     "ic_stripped_consensus_artifact_total_ingress_message_download_errors",
                     "The total number of errors occurred while downloading \
                     missing ingress messages",
+                    &["error"],
             ),
         }
     }
@@ -70,6 +71,12 @@ impl FetchStrippedConsensusArtifactMetrics {
         self.ingress_messages_in_a_block_count
             .with_label_values(&[source.as_str()])
             .observe(count as f64)
+    }
+
+    pub(super) fn report_download_error(&self, label: &str) {
+        self.total_ingress_message_download_errors
+            .with_label_values(&[label])
+            .inc()
     }
 }
 

@@ -1,6 +1,7 @@
 use ic_base_types::PrincipalId;
-use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::protobuf::AccountIdentifier;
+use std::collections::BTreeMap;
 
 /// The entity that owns the nodes that run the network.
 ///
@@ -120,6 +121,17 @@ pub struct NeuronInfo {
     #[prost(uint64, optional, tag = "15")]
     pub potential_voting_power: Option<u64>,
 }
+
+impl NeuronInfo {
+    pub fn is_seed_neuron(&self) -> bool {
+        self.neuron_type == Some(NeuronType::Seed as i32)
+    }
+
+    pub fn is_ect_neuron(&self) -> bool {
+        self.neuron_type == Some(NeuronType::Ect as i32)
+    }
+}
+
 /// A transfer performed from some account to stake a new neuron.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -710,6 +722,7 @@ pub mod proposal {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Empty {}
+
 /// All operations that modify the state of an existing neuron are
 /// represented by instances of `ManageNeuron`.
 ///
@@ -1069,6 +1082,29 @@ pub mod manage_neuron {
     )]
     pub struct RefreshVotingPower {}
 
+    /// Disburse the maturity of a neuron to any ledger account. If an account
+    /// is not specified, the caller's account will be used. The caller can choose
+    /// a percentage of the current maturity to disburse to the ledger account. The
+    /// resulting amount to disburse must be greater than or equal to the
+    /// transaction fee.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct DisburseMaturity {
+        /// The percentage to disburse, from 1 to 100
+        #[prost(uint32, tag = "1")]
+        pub percentage_to_disburse: u32,
+        /// The (optional) principal to which to transfer the stake.
+        #[prost(message, optional, tag = "2")]
+        pub to_account: ::core::option::Option<super::Account>,
+    }
+
     /// The ID of the neuron to manage. This can either be a subaccount or a neuron ID.
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]
@@ -1080,6 +1116,8 @@ pub mod manage_neuron {
         #[prost(message, tag = "12")]
         NeuronId(NeuronId),
     }
+
+    // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
@@ -1110,6 +1148,9 @@ pub mod manage_neuron {
         StakeMaturity(StakeMaturity),
         #[prost(message, tag = "16")]
         RefreshVotingPower(RefreshVotingPower),
+        #[prost(message, tag = "17")]
+        DisburseMaturity(DisburseMaturity),
+        // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
     }
 }
 /// The response of the ManageNeuron command
@@ -1239,6 +1280,21 @@ pub mod manage_neuron_response {
     )]
     pub struct RefreshVotingPowerResponse {}
 
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct DisburseMaturityResponse {
+        #[prost(uint64, optional, tag = "1")]
+        amount_disbursed_e8s: Option<u64>,
+    }
+
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
@@ -1271,6 +1327,178 @@ pub mod manage_neuron_response {
         StakeMaturity(StakeMaturityResponse),
         #[prost(message, tag = "14")]
         RefreshVotingPower(RefreshVotingPowerResponse),
+        #[prost(message, tag = "15")]
+        DisburseMaturity(DisburseMaturityResponse),
+    }
+
+    // Below, we should remove `manage_neuron_response::`, but that should be
+    // done later, so that the original PR that transplanted this code does not
+    // have "extra" refactoring in it.
+    impl ManageNeuronResponse {
+        pub fn is_err(&self) -> bool {
+            matches!(
+                &self.command,
+                Some(manage_neuron_response::Command::Error(_))
+            )
+        }
+
+        pub fn err_ref(&self) -> Option<&GovernanceError> {
+            match &self.command {
+                Some(manage_neuron_response::Command::Error(err)) => Some(err),
+                _ => None,
+            }
+        }
+
+        pub fn err(self) -> Option<GovernanceError> {
+            match self.command {
+                Some(manage_neuron_response::Command::Error(err)) => Some(err),
+                _ => None,
+            }
+        }
+
+        pub fn is_ok(&self) -> bool {
+            !self.is_err()
+        }
+
+        pub fn panic_if_error(self, msg: &str) -> Self {
+            if let Some(manage_neuron_response::Command::Error(err)) = &self.command {
+                panic!("{}: {:?}", msg, err);
+            }
+            self
+        }
+
+        // This is generic so that callers can pass either GovernanceError from
+        // the ic_nns_governance crate (notice the lack of "_api" at the end of
+        // the name!), in addition to GovernanceError from this crate.
+        pub fn error<E>(err: E) -> Self
+        where
+            GovernanceError: From<E>,
+        {
+            ManageNeuronResponse {
+                command: Some(Command::Error(GovernanceError::from(err))),
+            }
+        }
+
+        pub fn configure_response() -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::Configure(
+                    manage_neuron_response::ConfigureResponse {},
+                )),
+            }
+        }
+
+        pub fn disburse_response(transfer_block_height: u64) -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::Disburse(
+                    manage_neuron_response::DisburseResponse {
+                        transfer_block_height,
+                    },
+                )),
+            }
+        }
+
+        pub fn spawn_response(created_neuron_id: NeuronId) -> Self {
+            let created_neuron_id = Some(created_neuron_id);
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::Spawn(
+                    manage_neuron_response::SpawnResponse { created_neuron_id },
+                )),
+            }
+        }
+
+        pub fn merge_maturity_response(response: MergeMaturityResponse) -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::MergeMaturity(response)),
+            }
+        }
+
+        pub fn stake_maturity_response(response: StakeMaturityResponse) -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::StakeMaturity(response)),
+            }
+        }
+
+        pub fn follow_response() -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::Follow(
+                    manage_neuron_response::FollowResponse {},
+                )),
+            }
+        }
+
+        pub fn make_proposal_response(proposal_id: ProposalId, message: String) -> Self {
+            let proposal_id = Some(proposal_id);
+            let message = Some(message);
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::MakeProposal(
+                    manage_neuron_response::MakeProposalResponse {
+                        proposal_id,
+                        message,
+                    },
+                )),
+            }
+        }
+
+        pub fn register_vote_response() -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::RegisterVote(
+                    manage_neuron_response::RegisterVoteResponse {},
+                )),
+            }
+        }
+
+        pub fn split_response(created_neuron_id: NeuronId) -> Self {
+            let created_neuron_id = Some(created_neuron_id);
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::Split(
+                    manage_neuron_response::SplitResponse { created_neuron_id },
+                )),
+            }
+        }
+
+        pub fn merge_response(merge_response: manage_neuron_response::MergeResponse) -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::Merge(merge_response)),
+            }
+        }
+
+        pub fn disburse_to_neuron_response(created_neuron_id: NeuronId) -> Self {
+            let created_neuron_id = Some(created_neuron_id);
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::DisburseToNeuron(
+                    manage_neuron_response::DisburseToNeuronResponse { created_neuron_id },
+                )),
+            }
+        }
+
+        pub fn claim_or_refresh_neuron_response(refreshed_neuron_id: NeuronId) -> Self {
+            let refreshed_neuron_id = Some(refreshed_neuron_id);
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::ClaimOrRefresh(
+                    manage_neuron_response::ClaimOrRefreshResponse {
+                        refreshed_neuron_id,
+                    },
+                )),
+            }
+        }
+
+        pub fn refresh_voting_power_response(_: ()) -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::RefreshVotingPower(
+                    manage_neuron_response::RefreshVotingPowerResponse {},
+                )),
+            }
+        }
+
+        pub fn disburse_maturity_response(amount_disbursed_e8s: u64) -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::DisburseMaturity(
+                    manage_neuron_response::DisburseMaturityResponse {
+                        amount_disbursed_e8s: Some(amount_disbursed_e8s),
+                    },
+                )),
+            }
+        }
     }
 }
 
@@ -1339,6 +1567,7 @@ pub struct ManageNeuronRequest {
     pub command: ::core::option::Option<ManageNeuronCommandRequest>,
 }
 
+// KEEP THIS IN SYNC WITH manage_neuron::Command!
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Oneof)]
@@ -1367,7 +1596,13 @@ pub enum ManageNeuronCommandRequest {
     Merge(manage_neuron::Merge),
     #[prost(message, tag = "15")]
     StakeMaturity(manage_neuron::StakeMaturity),
+    #[prost(message, tag = "16")]
+    RefreshVotingPower(manage_neuron::RefreshVotingPower),
+    #[prost(message, tag = "17")]
+    DisburseMaturity(manage_neuron::DisburseMaturity),
+    // KEEP THIS IN SYNC WITH manage_neuron::Command!
 }
+
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[compare_default]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -1978,72 +2213,50 @@ pub struct WaitForQuietState {
 /// This is a view of the ProposalData returned by API queries and is NOT used
 /// for storage. The ballots are restricted to those of the caller's neurons and
 /// additionally it has the computed fields, topic, status, and reward_status.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, Debug, PartialEq)]
 pub struct ProposalInfo {
     /// The unique id for this proposal.
-    #[prost(message, optional, tag = "1")]
     pub id: Option<::ic_nns_common::pb::v1::ProposalId>,
     /// The ID of the neuron that made this proposal.
-    #[prost(message, optional, tag = "2")]
     pub proposer: Option<NeuronId>,
     /// The amount of ICP in E8s to be charged to the proposer if the proposal is
     /// rejected.
-    #[prost(uint64, tag = "3")]
     pub reject_cost_e8s: u64,
     /// The proposal originally submitted.
-    #[prost(message, optional, tag = "4")]
     pub proposal: Option<Proposal>,
     /// The timestamp, in seconds from the Unix epoch, when this proposal was made.
-    #[prost(uint64, tag = "5")]
     pub proposal_timestamp_seconds: u64,
     /// See \[ProposalData::ballots\].
-    #[prost(map = "fixed64, message", tag = "6")]
     pub ballots: ::std::collections::HashMap<u64, Ballot>,
     /// See \[ProposalData::latest_tally\].
-    #[prost(message, optional, tag = "7")]
     pub latest_tally: Option<Tally>,
     /// See \[ProposalData::decided_timestamp_seconds\].
-    #[prost(uint64, tag = "8")]
     pub decided_timestamp_seconds: u64,
     /// See \[ProposalData::executed_timestamp_seconds\].
-    #[prost(uint64, tag = "12")]
     pub executed_timestamp_seconds: u64,
     /// See \[ProposalData::failed_timestamp_seconds\].
-    #[prost(uint64, tag = "13")]
     pub failed_timestamp_seconds: u64,
     /// See \[ProposalData::failure_reason\].
-    #[prost(message, optional, tag = "18")]
     pub failure_reason: Option<GovernanceError>,
     /// See \[ProposalData::reward_event_round\].
-    #[prost(uint64, tag = "14")]
     pub reward_event_round: u64,
     /// Derived - see \[Topic\] for more information
-    #[prost(enumeration = "Topic", tag = "15")]
     pub topic: i32,
     /// Derived - see \[ProposalStatus\] for more information
-    #[prost(enumeration = "ProposalStatus", tag = "16")]
     pub status: i32,
     /// Derived - see \[ProposalRewardStatus\] for more information
-    #[prost(enumeration = "ProposalRewardStatus", tag = "17")]
     pub reward_status: i32,
-    #[prost(uint64, optional, tag = "19")]
     pub deadline_timestamp_seconds: Option<u64>,
-    #[prost(message, optional, tag = "20")]
     pub derived_proposal_information: Option<DerivedProposalInformation>,
-    #[prost(uint64, optional, tag = "21")]
     pub total_potential_voting_power: ::core::option::Option<u64>,
 }
+
 /// Network economics contains the parameters for several operations related
 /// to the economy of the network. When submitting a NetworkEconomics proposal
 /// default values (0) are considered unchanged, so a valid proposal only needs
 /// to set the parameters that it wishes to change.
 /// In other words, it's not possible to set any of the values of
 /// NetworkEconomics to 0.
-///
-/// NOTE: If adding a value to this proto, make sure there is a corresponding
-/// `if` in Governance::perform_action().
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[self_describing]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -2097,7 +2310,58 @@ pub struct NetworkEconomics {
     /// Global Neurons' Fund participation thresholds.
     #[prost(message, optional, tag = "11")]
     pub neurons_fund_economics: Option<NeuronsFundEconomics>,
+
+    /// Parameters that affect the voting power of neurons.
+    #[prost(message, optional, tag = "12")]
+    pub voting_power_economics: ::core::option::Option<VotingPowerEconomics>,
 }
+
+/// Parameters that affect the voting power of neurons.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct VotingPowerEconomics {
+    /// If a neuron has not "refreshed" its voting power after this amount of time,
+    /// its deciding voting power starts decreasing linearly. See also
+    /// clear_following_after_seconds.
+    ///
+    /// For explanation of what "refresh" means in this context, see
+    /// <https://dashboard.internetcomputer.org/proposal/132411>
+    ///
+    /// Initially, set to 0.5 years. (The nominal length of a year is 365.25 days).
+    #[prost(uint64, optional, tag = "1")]
+    pub start_reducing_voting_power_after_seconds: ::core::option::Option<u64>,
+
+    /// After a neuron has experienced voting power reduction for this amount of
+    /// time, a couple of things happen:
+    ///
+    ///      1. Deciding voting power reaches 0.
+    ///
+    ///      2. Its following on topics other than NeuronManagement are cleared.
+    ///
+    /// Initially, set to 1/12 years.
+    #[prost(uint64, optional, tag = "2")]
+    pub clear_following_after_seconds: ::core::option::Option<u64>,
+
+    /// The minimum dissolve delay a neuron must have in order to be eligible to vote or
+    /// make proposals.
+    ///
+    /// Neurons with a dissolve delay lower than this threshold will not have
+    /// voting power, even if they are otherwise active.
+    ///
+    /// This value is an essential part of the staking mechanism, promoting
+    /// long-term alignment with the network's governance.
+    #[prost(uint64, optional, tag = "3")]
+    pub neuron_minimum_dissolve_delay_to_vote_seconds: ::core::option::Option<u64>,
+}
+
 /// The thresholds specify the shape of the ideal matching function used by the Neurons' Fund to
 /// determine how much to contribute for a given direct participation amount. Note that the actual
 /// swap participation is in ICP, whereas these thresholds are specifid in XDR; the conversion rate
@@ -2666,6 +2930,8 @@ pub mod update_canister_settings {
         pub log_visibility: Option<i32>,
         #[prost(uint64, optional, tag = "6")]
         pub wasm_memory_limit: Option<u64>,
+        #[prost(uint64, optional, tag = "7")]
+        pub wasm_memory_threshold: Option<u64>,
     }
     /// Log visibility of a canister.
     #[derive(
@@ -2717,20 +2983,17 @@ pub mod update_canister_settings {
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
 /// across upgrades of the NNS governance system.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-#[compare_default]
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Default, Debug,
+)]
 pub struct Governance {
     /// Current set of neurons.
-    #[prost(btree_map = "fixed64, message", tag = "1")]
-    pub neurons: ::prost::alloc::collections::BTreeMap<u64, Neuron>,
+    pub neurons: BTreeMap<u64, Neuron>,
     /// Proposals.
-    #[prost(btree_map = "uint64, message", tag = "2")]
-    pub proposals: ::prost::alloc::collections::BTreeMap<u64, ProposalData>,
+    pub proposals: BTreeMap<u64, ProposalData>,
     /// The transfers that have been made to stake new neurons, but
     /// haven't been claimed by the user, yet.
-    #[prost(message, repeated, tag = "3")]
     pub to_claim_transfers: Vec<NeuronStakeTransfer>,
     /// Also known as the 'normal voting period'. The maximum time a
     /// proposal (of a topic with "normal" voting period) is open for
@@ -2739,13 +3002,10 @@ pub struct Governance {
     /// rejected.
     ///
     /// See also `short_voting_period_seconds`.
-    #[prost(uint64, tag = "5")]
     pub wait_for_quiet_threshold_seconds: u64,
     /// The network economics configuration parameters.
-    #[prost(message, optional, tag = "8")]
     pub economics: Option<NetworkEconomics>,
     /// The last reward event. Should never be missing.
-    #[prost(message, optional, tag = "9")]
     pub latest_reward_event: Option<RewardEvent>,
     /// Set of in-flight neuron ledger commands.
     ///
@@ -2767,15 +3027,12 @@ pub struct Governance {
     /// Because we know exactly what was going on, we should have the
     /// information necessary to reconcile the state, using custom code
     /// added on upgrade, if necessary.
-    #[prost(map = "fixed64, message", tag = "10")]
     pub in_flight_commands: ::std::collections::HashMap<u64, governance::NeuronInFlightCommand>,
     /// The timestamp, in seconds since the unix epoch, at which `canister_init` was run for
     /// the governance canister, considered
     /// the genesis of the IC for reward purposes.
-    #[prost(uint64, tag = "11")]
     pub genesis_timestamp_seconds: u64,
     /// The entities that own the nodes running the IC.
-    #[prost(message, repeated, tag = "12")]
     pub node_providers: Vec<NodeProvider>,
     /// Default followees
     ///
@@ -2786,7 +3043,6 @@ pub struct Governance {
     /// map are present in the initial set of neurons.
     ///
     /// Default following can be changed via proposal.
-    #[prost(map = "int32, message", tag = "13")]
     pub default_followees: ::std::collections::HashMap<i32, neuron::Followees>,
     /// The maximum time a proposal of a topic with *short voting period*
     /// is open for voting. If a proposal on a topic with short voting
@@ -2797,7 +3053,6 @@ pub struct Governance {
     /// rate should not be voted on if they're days old because exchange rates
     /// fluctuate regularly. Currently, only proposals to set the exchange rate
     /// use the short voting period, and such proposals are deprecated.
-    #[prost(uint64, tag = "14")]
     pub short_voting_period_seconds: u64,
     /// The maximum time a proposal of a topic with *private voting period*
     /// is open for voting. If a proposal on a topic with short voting
@@ -2807,36 +3062,20 @@ pub struct Governance {
     /// NeuronManagement proposals. These proposals are not meant to be voted on
     /// by the general public and have limited impact, so a different voting period
     /// is appropriate.
-    #[prost(uint64, optional, tag = "25")]
     pub neuron_management_voting_period_seconds: Option<u64>,
-    #[prost(message, optional, tag = "15")]
     pub metrics: Option<governance::GovernanceCachedMetrics>,
-    #[prost(message, optional, tag = "16")]
     pub most_recent_monthly_node_provider_rewards: Option<MonthlyNodeProviderRewards>,
     /// Cached value for the maturity modulation as calculated each day.
-    #[prost(int32, optional, tag = "17")]
     pub cached_daily_maturity_modulation_basis_points: Option<i32>,
     /// The last time that the maturity modulation value was updated.
-    #[prost(uint64, optional, tag = "18")]
     pub maturity_modulation_last_updated_at_timestamp_seconds: Option<u64>,
     /// Whether the heartbeat function is currently spawning neurons, meaning
     /// that it should finish before being called again.
-    #[prost(bool, optional, tag = "19")]
     pub spawning_neurons: Option<bool>,
-    #[prost(message, optional, tag = "20")]
     pub making_sns_proposal: Option<governance::MakingSnsProposal>,
-    /// Migration related data.
-    #[prost(message, optional, tag = "21")]
-    pub migrations: Option<governance::Migrations>,
-    /// A Structure used during upgrade to store the index of topics for neurons to their followers.
-    /// This is the inverse of what is stored in a Neuron (its followees).
-    #[prost(map = "int32, message", tag = "22")]
-    pub topic_followee_index: ::std::collections::HashMap<i32, governance::FollowersMap>,
     /// Local cache for XDR-related conversion rates (the source of truth is in the CMC canister).
-    #[prost(message, optional, tag = "26")]
     pub xdr_conversion_rate: Option<XdrConversionRate>,
     /// The summary of restore aging event.
-    #[prost(message, optional, tag = "27")]
     pub restore_aging_summary: Option<RestoreAgingSummary>,
 }
 /// Nested message and enum types in `Governance`.
@@ -2991,6 +3230,12 @@ pub mod governance {
             Option<governance_cached_metrics::NeuronSubsetMetrics>,
         #[prost(message, optional, tag = "39")]
         pub public_neuron_subset_metrics: Option<governance_cached_metrics::NeuronSubsetMetrics>,
+        #[prost(message, optional, tag = "40")]
+        pub declining_voting_power_neuron_subset_metrics:
+            ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
+        #[prost(message, optional, tag = "41")]
+        pub fully_lost_voting_power_neuron_subset_metrics:
+            ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
     }
     /// Nested message and enum types in `GovernanceCachedMetrics`.
     pub mod governance_cached_metrics {
@@ -3007,27 +3252,46 @@ pub mod governance {
             /// example, count = count_buckets.values().sum().
             #[prost(uint64, optional, tag = "1")]
             pub count: Option<u64>,
+
             #[prost(uint64, optional, tag = "2")]
             pub total_staked_e8s: Option<u64>,
             #[prost(uint64, optional, tag = "3")]
             pub total_staked_maturity_e8s_equivalent: Option<u64>,
             #[prost(uint64, optional, tag = "4")]
             pub total_maturity_e8s_equivalent: Option<u64>,
+
+            /// Deprecated. Use one of the following instead.
             #[prost(uint64, optional, tag = "5")]
             pub total_voting_power: Option<u64>,
+            /// Used to decide proposals. If all neurons refresh their voting
+            /// power/following frequently enough, this will be equal to potential
+            /// voting power. If not, this will be less.
+            #[prost(uint64, optional, tag = "11")]
+            pub total_deciding_voting_power: ::core::option::Option<u64>,
+            /// Used for voting rewards.
+            #[prost(uint64, optional, tag = "12")]
+            pub total_potential_voting_power: ::core::option::Option<u64>,
+
             /// These fields are keyed by floor(dissolve delay / 0.5 years). These are
             /// analogous to the (singular) fields above. Here, the usual definition of
             /// year for the IC is used: exactly 365.25 days.
             #[prost(map = "uint64, uint64", tag = "6")]
             pub count_buckets: ::std::collections::HashMap<u64, u64>,
+
             #[prost(map = "uint64, uint64", tag = "7")]
             pub staked_e8s_buckets: ::std::collections::HashMap<u64, u64>,
             #[prost(map = "uint64, uint64", tag = "8")]
             pub staked_maturity_e8s_equivalent_buckets: ::std::collections::HashMap<u64, u64>,
             #[prost(map = "uint64, uint64", tag = "9")]
             pub maturity_e8s_equivalent_buckets: ::std::collections::HashMap<u64, u64>,
+
+            /// Deprecated. Use one of the following instead.
             #[prost(map = "uint64, uint64", tag = "10")]
             pub voting_power_buckets: ::std::collections::HashMap<u64, u64>,
+            #[prost(map = "uint64, uint64", tag = "13")]
+            pub deciding_voting_power_buckets: ::std::collections::HashMap<u64, u64>,
+            #[prost(map = "uint64, uint64", tag = "14")]
+            pub potential_voting_power_buckets: ::std::collections::HashMap<u64, u64>,
         }
     }
     /// Records that making an OpenSnsTokenSwap (OSTS) or CreateServiceNervousSystem (CSNS)
@@ -3048,129 +3312,6 @@ pub mod governance {
         pub caller: Option<PrincipalId>,
         #[prost(message, optional, tag = "3")]
         pub proposal: Option<super::Proposal>,
-    }
-    /// Progress of a migration that (potentially) is performed over the course of more than one heartbeat call.
-    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Message)]
-    pub struct Migration {
-        /// Migration status.
-        #[prost(enumeration = "migration::MigrationStatus", optional, tag = "1")]
-        pub status: Option<i32>,
-        /// The reason why it failed. Should only be present when the status is FAILED.
-        /// This is only for debugging and it should not be used programmatically (other than its presence).
-        #[prost(string, optional, tag = "2")]
-        pub failure_reason: Option<::prost::alloc::string::String>,
-        /// Migration progress (cursor).
-        #[prost(oneof = "migration::Progress", tags = "3")]
-        pub progress: Option<migration::Progress>,
-    }
-    /// Nested message and enum types in `Migration`.
-    pub mod migration {
-        use super::*;
-
-        #[derive(
-            candid::CandidType,
-            candid::Deserialize,
-            serde::Serialize,
-            comparable::Comparable,
-            Clone,
-            Copy,
-            Debug,
-            PartialEq,
-            Eq,
-            Hash,
-            PartialOrd,
-            Ord,
-            ::prost::Enumeration,
-        )]
-        #[repr(i32)]
-        pub enum MigrationStatus {
-            /// Unspecified.
-            Unspecified = 0,
-            /// Migration is in progress.
-            InProgress = 1,
-            /// Migration succeeded.
-            Succeeded = 2,
-            /// Migration failed.
-            Failed = 3,
-        }
-        impl MigrationStatus {
-            /// String value of the enum field names used in the ProtoBuf definition.
-            ///
-            /// The values are not transformed in any way and thus are considered stable
-            /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-            pub fn as_str_name(&self) -> &'static str {
-                match self {
-                    MigrationStatus::Unspecified => "MIGRATION_STATUS_UNSPECIFIED",
-                    MigrationStatus::InProgress => "MIGRATION_STATUS_IN_PROGRESS",
-                    MigrationStatus::Succeeded => "MIGRATION_STATUS_SUCCEEDED",
-                    MigrationStatus::Failed => "MIGRATION_STATUS_FAILED",
-                }
-            }
-            /// Creates an enum from field names used in the ProtoBuf definition.
-            pub fn from_str_name(value: &str) -> Option<Self> {
-                match value {
-                    "MIGRATION_STATUS_UNSPECIFIED" => Some(Self::Unspecified),
-                    "MIGRATION_STATUS_IN_PROGRESS" => Some(Self::InProgress),
-                    "MIGRATION_STATUS_SUCCEEDED" => Some(Self::Succeeded),
-                    "MIGRATION_STATUS_FAILED" => Some(Self::Failed),
-                    _ => None,
-                }
-            }
-        }
-        /// Migration progress (cursor).
-        #[derive(
-            candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable,
-        )]
-        #[allow(clippy::derive_partial_eq_without_eq)]
-        #[derive(Clone, PartialEq, ::prost::Oneof)]
-        pub enum Progress {
-            /// Last neuron id migrated.
-            #[prost(message, tag = "3")]
-            LastNeuronId(NeuronId),
-        }
-    }
-    /// The status of all on-going (and recently completed) migrations (that take
-    /// place over the course of multiple heartbeat calls).
-    ///
-    /// Each Migration field corresponds to one (ongoing or recently completed) migration.
-    ///
-    /// After a migration is finished, it should be OK to reserve the tag and lose the data.
-    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Message)]
-    pub struct Migrations {
-        /// Migrates neuron indexes to stable storage.
-        #[prost(message, optional, tag = "1")]
-        pub neuron_indexes_migration: Option<Migration>,
-        #[prost(message, optional, tag = "2")]
-        pub copy_inactive_neurons_to_stable_memory_migration: Option<Migration>,
-    }
-    /// A map of followees to their followers.
-    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Message)]
-    pub struct FollowersMap {
-        /// The key is the neuron ID of the followee.
-        #[prost(map = "fixed64, message", tag = "1")]
-        pub followers_map: ::std::collections::HashMap<u64, followers_map::Followers>,
-    }
-    /// Nested message and enum types in `FollowersMap`.
-    pub mod followers_map {
-        use super::*;
-
-        #[derive(
-            candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable,
-        )]
-        #[allow(clippy::derive_partial_eq_without_eq)]
-        #[derive(Clone, PartialEq, ::prost::Message)]
-        pub struct Followers {
-            /// The followers of the neuron with the given ID.
-            /// These values will be non-repeating, and order does not matter.
-            #[prost(message, repeated, tag = "1")]
-            pub followers: Vec<NeuronId>,
-        }
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -3234,37 +3375,45 @@ pub struct ListProposalInfo {
     #[prost(bool, optional, tag = "7")]
     pub omit_large_fields: Option<bool>,
 }
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, Debug, PartialEq)]
 pub struct ListProposalInfoResponse {
-    #[prost(message, repeated, tag = "1")]
     pub proposal_info: Vec<ProposalInfo>,
 }
+
 /// A request to list neurons. The "requested list", i.e., the list of
 /// neuron IDs to retrieve information about, is the union of the list
 /// of neurons listed in `neuron_ids` and, if `caller_neurons` is true,
 /// the list of neuron IDs of neurons for which the caller is the
 /// controller or one of the hot keys.
+///
+/// Paging is available if the result set is larger than `MAX_LIST_NEURONS_RESULTS`,
+/// which is currently 500 neurons.  If you are unsure of the number of results in a set,
+/// you can use the `total_pages_available` field in the response to determine how many
+/// additional pages need to be queried.  It will be based on your `page_size` parameter.  
+/// When paging through results, it is good to keep in mind that newly inserted neurons
+/// could be missed if they are inserted between calls to pages, and this could result in missing
+/// a neuron in the combined responses.
+///
+/// If a user provides neuron_ids that do not exist in the request, there is no guarantee that
+/// each page will contain the exactly the page size, even if it is not the final request.  This is
+/// because neurons are retrieved by their neuron_id, and no additional checks are made on the
+/// validity of the neuron_ids provided by the user before deciding which sets of neuron_ids
+/// will be returned in the current page.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ListNeurons {
     /// The neurons to get information about. The "requested list"
     /// contains all of these neuron IDs.
-    #[prost(fixed64, repeated, packed = "false", tag = "1")]
     pub neuron_ids: Vec<u64>,
     /// If true, the "requested list" also contains the neuron ID of the
     /// neurons that the calling principal is authorized to read.
-    #[prost(bool, tag = "2")]
     pub include_neurons_readable_by_caller: bool,
     /// Whether to also include empty neurons readable by the caller. This field only has an effect
     /// when `include_neurons_readable_by_caller` is true. If a neuron's id already exists in the
-    /// `neuron_ids` field, then the neuron will be included in the response regardless of the value of
-    /// this field. Since the previous behavior was to always include empty neurons readable by caller,
-    /// if this field is not provided, it defaults to true, in order to maintain backwards
-    /// compatibility. Here, being "empty" means 0 stake, 0 maturity and 0 staked maturity.
-    #[prost(bool, optional, tag = "3")]
+    /// `neuron_ids` field, then the neuron will be included in the response regardless of the value
+    /// of this field. The default value is false (i.e. `None` is treated as `Some(false)`). Here,
+    /// being "empty" means 0 stake, 0 maturity and 0 staked maturity.
     pub include_empty_neurons_readable_by_caller: Option<bool>,
     /// If this is set to true, and a neuron in the "requested list" has its
     /// visibility set to public, then, it will (also) be included in the
@@ -3274,9 +3423,30 @@ pub struct ListNeurons {
     /// requested list. In general, you probably want to set this to true, but
     /// since this feature was added later, it is opt in to avoid confusing
     /// existing (unmigrated) callers.
-    #[prost(bool, optional, tag = "4")]
     pub include_public_neurons_in_full_neurons: Option<bool>,
+    /// If this is set, we return the batch of neurons at a given page, using the `page_size` to
+    /// determine how many neurons are returned in each page.
+    pub page_number: Option<u64>,
+    /// If this is set, we use the page limit provided to determine how large pages will be.
+    /// This cannot be greater than MAX_LIST_NEURONS_RESULTS, which is set to 500.
+    /// If not set, this defaults to MAX_LIST_NEURONS_RESULTS.
+    pub page_size: Option<u64>,
+    /// A list of neurons by subaccounts to return in the response.  If the neurons are not
+    /// found by subaccount, no error is returned, but the page will still be returned.
+    pub neuron_subaccounts: Option<Vec<list_neurons::NeuronSubaccount>>,
 }
+
+pub mod list_neurons {
+    /// A type for the request to list neurons.
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, Debug, PartialEq)]
+    pub struct NeuronSubaccount {
+        #[serde(with = "serde_bytes")]
+        pub subaccount: Vec<u8>,
+    }
+}
+
 /// A response to a `ListNeurons` request.
 ///
 /// The "requested list" is described in `ListNeurons`.
@@ -3294,6 +3464,10 @@ pub struct ListNeuronsResponse {
     /// `ManageNeuron` topic).
     #[prost(message, repeated, tag = "2")]
     pub full_neurons: Vec<Neuron>,
+    /// This is returned to tell the caller how many pages of results are available to query.
+    /// If there are fewer than the page_size neurons, this will equal 1.
+    #[prost(uint64, optional, tag = "3")]
+    pub total_pages_available: Option<u64>,
 }
 /// A response to "ListKnownNeurons"
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -3878,6 +4052,30 @@ pub mod restore_aging_summary {
         }
     }
 }
+
+/// A Ledger account identified by the owner of the account `of` and
+/// the `subaccount`. If the `subaccount` is not specified then the default
+/// one is used.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Account {
+    /// The owner of the account.
+    #[prost(message, optional, tag = "1")]
+    pub owner: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// The subaccount of the account. If not set then the default
+    /// subaccount (all bytes set to 0) is used.
+    #[prost(message, optional, tag = "2")]
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub subaccount: ::core::option::Option<Vec<u8>>,
+}
+
 /// Proposal types are organized into topics. Neurons can automatically
 /// vote based on following other neurons, and these follow
 /// relationships are defined per topic.

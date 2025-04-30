@@ -98,7 +98,9 @@ pub use ic_base_types::{
     PrincipalIdParseError, RegistryVersion, SnapshotId, SubnetId,
 };
 pub use ic_crypto_internal_types::NodeIndex;
+use ic_management_canister_types_private::GlobalTimer;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::state::canister_snapshot_bits::v1 as pb_snapshot_bits;
 use ic_protobuf::state::canister_state_bits::v1 as pb_state_bits;
 use ic_protobuf::types::v1 as pb;
 use phantom_newtype::{AmountOf, DisplayerOf, Id};
@@ -326,6 +328,46 @@ pub enum CanisterTimer {
     Active(Time),
 }
 
+impl From<CanisterTimer> for pb_snapshot_bits::CanisterTimer {
+    fn from(value: CanisterTimer) -> Self {
+        match value {
+            CanisterTimer::Inactive => pb_snapshot_bits::CanisterTimer {
+                global_timer_nanos: None,
+            },
+            CanisterTimer::Active(time) => pb_snapshot_bits::CanisterTimer {
+                global_timer_nanos: Some(time.as_nanos_since_unix_epoch()),
+            },
+        }
+    }
+}
+
+impl From<pb_snapshot_bits::CanisterTimer> for CanisterTimer {
+    fn from(value: pb_snapshot_bits::CanisterTimer) -> Self {
+        match value.global_timer_nanos {
+            Some(nanos) => CanisterTimer::Active(Time::from_nanos_since_unix_epoch(nanos)),
+            None => CanisterTimer::Inactive,
+        }
+    }
+}
+
+impl From<GlobalTimer> for CanisterTimer {
+    fn from(value: GlobalTimer) -> Self {
+        match value {
+            GlobalTimer::Inactive => Self::Inactive,
+            GlobalTimer::Active(nanos) => Self::Active(Time::from_nanos_since_unix_epoch(nanos)),
+        }
+    }
+}
+
+impl From<CanisterTimer> for GlobalTimer {
+    fn from(value: CanisterTimer) -> Self {
+        match value {
+            CanisterTimer::Inactive => Self::Inactive,
+            CanisterTimer::Active(time) => Self::Active(time.as_nanos_since_unix_epoch()),
+        }
+    }
+}
+
 impl CanisterTimer {
     /// Convert this canister timer to time.
     pub fn to_time(&self) -> Time {
@@ -489,9 +531,14 @@ pub const MAX_STABLE_MEMORY_IN_BYTES: u64 = 500 * GIB;
 /// it is public and `u64` (`NumBytes` cannot be used in const expressions).
 pub const MAX_WASM_MEMORY_IN_BYTES: u64 = 4 * GIB;
 
+/// The upper limit on the Wasm64 canister memory size.
+/// This constant is used by other crates to define other constants, that's why
+/// it is public and `u64` (`NumBytes` cannot be used in const expressions).
+pub const MAX_WASM64_MEMORY_IN_BYTES: u64 = 6 * GIB;
+
 const MIN_MEMORY_ALLOCATION: NumBytes = NumBytes::new(0);
 pub const MAX_MEMORY_ALLOCATION: NumBytes =
-    NumBytes::new(MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM_MEMORY_IN_BYTES);
+    NumBytes::new(MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM64_MEMORY_IN_BYTES);
 
 impl InvalidMemoryAllocationError {
     pub fn new(given: candid::Nat) -> Self {
@@ -529,30 +576,56 @@ pub trait CountBytes {
     fn count_bytes(&self) -> usize;
 }
 
-impl CountBytes for Time {
-    fn count_bytes(&self) -> usize {
+/// Allow an object to report its own byte size on disk and in memory. Not
+/// necessarily exact.
+pub trait MemoryDiskBytes {
+    fn memory_bytes(&self) -> usize;
+    fn disk_bytes(&self) -> usize;
+}
+
+impl MemoryDiskBytes for Time {
+    fn memory_bytes(&self) -> usize {
         8
+    }
+
+    fn disk_bytes(&self) -> usize {
+        0
     }
 }
 
-impl<T: CountBytes, E: CountBytes> CountBytes for Result<T, E> {
-    fn count_bytes(&self) -> usize {
+impl<T: MemoryDiskBytes, E: MemoryDiskBytes> MemoryDiskBytes for Result<T, E> {
+    fn memory_bytes(&self) -> usize {
         match self {
-            Ok(result) => result.count_bytes(),
-            Err(err) => err.count_bytes(),
+            Ok(result) => result.memory_bytes(),
+            Err(err) => err.memory_bytes(),
+        }
+    }
+
+    fn disk_bytes(&self) -> usize {
+        match self {
+            Ok(result) => result.disk_bytes(),
+            Err(err) => err.disk_bytes(),
         }
     }
 }
 
-impl<T: CountBytes> CountBytes for Arc<T> {
-    fn count_bytes(&self) -> usize {
-        self.as_ref().count_bytes()
+impl<T: MemoryDiskBytes> MemoryDiskBytes for Arc<T> {
+    fn memory_bytes(&self) -> usize {
+        self.as_ref().memory_bytes()
+    }
+
+    fn disk_bytes(&self) -> usize {
+        self.as_ref().disk_bytes()
     }
 }
 
-// Implementing `CountBytes` in `ic_error_types` introduces a circular dependency.
-impl CountBytes for ic_error_types::UserError {
-    fn count_bytes(&self) -> usize {
+// Implementing `MemoryDiskBytes` in `ic_error_types` introduces a circular dependency.
+impl MemoryDiskBytes for ic_error_types::UserError {
+    fn memory_bytes(&self) -> usize {
         self.count_bytes()
+    }
+
+    fn disk_bytes(&self) -> usize {
+        0
     }
 }

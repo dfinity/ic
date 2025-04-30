@@ -4,7 +4,7 @@ use crate::{
 };
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_config::artifact_pool::BACKUP_GROUP_SIZE;
-use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
+use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_interfaces::{
@@ -232,6 +232,8 @@ where
 /// Deserializes consensus artifacts, reading them from the backup spool height
 /// by height and inserting them into the consensus pool. It stops at certain
 /// points which require the execution state to catch up.
+// TODO(CON-1494): change the return type of this function. Most variants of ExitPoint
+// are not result of errors.
 pub(crate) fn deserialize_consensus_artifacts(
     registry_client: Arc<dyn RegistryClient>,
     crypto: Arc<dyn CryptoComponentForVerificationOnly>,

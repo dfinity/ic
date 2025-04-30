@@ -12,12 +12,10 @@ bincode = { workspace = true }
 clap = { workspace = true }
 hex = { workspace = true }
 ic-adapter-metrics-server = { path = "../monitoring/adapter_metrics/server" }
-ic-async-utils = { path = "../async_utils" }
+ic-http-endpoints-async-utils = { path = "../http_endpoints/async_utils" }
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
-ic-crypto-secp256k1 = { path = "secp256k1" }
 ic-crypto-ecdsa-secp256r1 = { path = "ecdsa_secp256r1" }
-ic-crypto-ed25519 = { path = "ed25519" }
 ic-crypto-interfaces-sig-verification = { path = "interfaces/sig_verification" }
 ic-crypto-internal-basic-sig-ed25519 = { path = "internal/crypto_lib/basic_sig/ed25519" }
 ic-crypto-internal-csp = { path = "internal/crypto_service_provider" }
@@ -25,21 +23,25 @@ ic-crypto-internal-logmon = { path = "internal/logmon" }
 ic-crypto-internal-seed = { path = "internal/crypto_lib/seed" }
 ic-crypto-internal-threshold-sig-bls12381 = { path = "internal/crypto_lib/threshold_sig/bls12_381" }
 ic-crypto-internal-threshold-sig-canister-threshold-sig = { path = "internal/crypto_lib/threshold_sig/canister_threshold_sig" }
+ic-crypto-internal-bls12-381-vetkd = { path = "internal/crypto_lib/bls12_381/vetkd" }
 ic-crypto-internal-types = { path = "internal/crypto_lib/types" }
 ic-crypto-standalone-sig-verifier = { path = "standalone-sig-verifier" }
 ic-crypto-tls-cert-validation = { path = "node_key_validation/tls_cert_validation" }
 ic-crypto-tls-interfaces = { path = "tls_interfaces" }
 ic-crypto-utils-basic-sig = { path = "utils/basic_sig" }
 ic-crypto-utils-tls = { path = "utils/tls" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
+ic-ed25519 = { path = "../../packages/ic-ed25519" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
+ic-secp256k1 = { path = "../../packages/ic-secp256k1" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-types = { path = "../types/types" }
+ic-vetkd-utils = { path = "../../packages/ic-vetkd-utils" }
 parking_lot = { workspace = true }
 rustls = { workspace = true }
 serde = { workspace = true }
@@ -135,4 +137,8 @@ harness = false
 
 [[bench]]
 name = "tschnorr"
+harness = false
+
+[[bench]]
+name = "vetkd"
 harness = false

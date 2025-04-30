@@ -8,9 +8,9 @@
 use super::state::{ApiState, OpOut, PocketIcError, StateLabel, UpdateReply};
 use crate::pocket_ic::{
     AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, CanisterReadStateRequest,
-    DashboardRequest, ExecuteIngressMessage, GetCanisterHttp, GetControllers, GetCyclesBalance,
-    GetStableMemory, GetSubnet, GetTime, GetTopology, IngressMessageStatus, MockCanisterHttp,
-    PubKey, Query, QueryRequest, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
+    DashboardRequest, GetCanisterHttp, GetControllers, GetCyclesBalance, GetStableMemory,
+    GetSubnet, GetTime, GetTopology, IngressMessageStatus, MockCanisterHttp, PubKey, Query,
+    QueryRequest, SetCertifiedTime, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
     SubnetReadStateRequest, Tick,
 };
 use crate::{async_trait, pocket_ic::PocketIc, BlobStore, InstanceId, OpId, Operation};
@@ -38,15 +38,15 @@ use ic_types::{CanisterId, SubnetId};
 use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
     HttpGatewayDetails, InstanceConfig, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall,
-    RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles, RawMessageId,
-    RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory,
-    RawSubmitIngressResult, RawSubnetId, RawTime, RawWasmResult, Topology,
+    RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles, RawIngressStatusArgs,
+    RawMessageId, RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory,
+    RawSubnetId, RawTime, TickConfigs, Topology,
 };
-use pocket_ic::WasmResult;
+use pocket_ic::RejectResponse;
 use serde::Serialize;
 use slog::Level;
 use std::str::FromStr;
-use std::{collections::BTreeMap, fs::File, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, fs::File, sync::atomic::AtomicU64, sync::Arc, time::Duration};
 use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
 use tower_http::limit::RequestBodyLimitLayer;
 use tracing::trace;
@@ -61,6 +61,7 @@ const RETRY_TIMEOUT_S: u64 = 300;
 #[derive(Clone)]
 pub struct AppState {
     pub api_state: Arc<ApiState>,
+    pub pending_requests: Arc<AtomicU64>,
     pub min_alive_until: Arc<RwLock<Instant>>,
     pub runtime: Arc<Runtime>,
     pub blob_store: Arc<dyn BlobStore>,
@@ -98,11 +99,8 @@ where
             "/await_ingress_message",
             post(handler_await_ingress_message),
         )
-        .directory_route(
-            "/execute_ingress_message",
-            post(handler_execute_ingress_message),
-        )
         .directory_route("/set_time", post(handler_set_time))
+        .directory_route("/set_certified_time", post(handler_set_certified_time))
         .directory_route("/add_cycles", post(handler_add_cycles))
         .directory_route("/set_stable_memory", post(handler_set_stable_memory))
         .directory_route("/tick", post(handler_tick))
@@ -117,7 +115,7 @@ where
     ApiRouter::new()
         .directory_route("/status", get(handler_status))
         .directory_route(
-            "/canister/:ecid/call",
+            "/canister/{ecid}/call",
             post(handler_call_v2)
                 .layer(RequestBodyLimitLayer::new(
                     4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
@@ -125,7 +123,7 @@ where
                 .layer(axum::middleware::from_fn(verify_cbor_content_header)),
         )
         .directory_route(
-            "/canister/:ecid/query",
+            "/canister/{ecid}/query",
             post(handler_query)
                 .layer(RequestBodyLimitLayer::new(
                     4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
@@ -133,7 +131,7 @@ where
                 .layer(axum::middleware::from_fn(verify_cbor_content_header)),
         )
         .directory_route(
-            "/canister/:ecid/read_state",
+            "/canister/{ecid}/read_state",
             post(handler_canister_read_state)
                 .layer(RequestBodyLimitLayer::new(
                     4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
@@ -141,7 +139,7 @@ where
                 .layer(axum::middleware::from_fn(verify_cbor_content_header)),
         )
         .directory_route(
-            "/subnet/:sid/read_state",
+            "/subnet/{sid}/read_state",
             post(handler_subnet_read_state)
                 .layer(RequestBodyLimitLayer::new(
                     4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
@@ -156,7 +154,7 @@ where
     AppState: extract::FromRef<S>,
 {
     ApiRouter::new().directory_route(
-        "/canister/:ecid/call",
+        "/canister/{ecid}/call",
         post(handler_call_v3)
             .layer(RequestBodyLimitLayer::new(
                 4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
@@ -180,32 +178,34 @@ where
         .api_route("/", post(create_instance))
         //
         // Deletes an instance.
-        .directory_route("/:id", delete(delete_instance))
+        .directory_route("/{id}", delete(delete_instance))
         //
         // All the read-only endpoints
-        .nest("/:id/read", instance_read_routes())
+        .nest("/{id}/read", instance_read_routes())
         //
         // All the state-changing endpoints
-        .nest("/:id/update", instance_update_routes())
+        .nest("/{id}/update", instance_update_routes())
         //
         // All the api v2 endpoints
-        .nest("/:id/api/v2", instance_api_v2_routes())
+        .nest("/{id}/api/v2", instance_api_v2_routes())
         //
         // All the api v3 endpoints
-        .nest("/:id/api/v3", instance_api_v3_routes())
+        .nest("/{id}/api/v3", instance_api_v3_routes())
         //
         // The instance dashboard
-        .api_route("/:id/_/dashboard", get(handler_dashboard))
+        .api_route("/{id}/_/dashboard", get(handler_dashboard))
         // The topology to be retrieved via an HTTP gateway that cannot route `/read/topology`.
-        .api_route("/:id/_/topology", get(handler_topology))
+        .api_route("/{id}/_/topology", get(handler_topology))
         // Configures an IC instance to make progress automatically,
         // i.e., periodically update the time of the IC instance
         // to the real time and execute rounds on the subnets.
-        .api_route("/:id/auto_progress", post(auto_progress))
+        .api_route("/{id}/auto_progress", post(auto_progress))
+        // Returns whether automatic progress is enabled for an IC instance.
+        .api_route("/{id}/auto_progress", get(get_auto_progress))
         //
         // Stop automatic progress (see endpoint `auto_progress`)
         // on an IC instance.
-        .api_route("/:id/stop_progress", post(stop_progress))
+        .api_route("/{id}/stop_progress", post(stop_progress))
         .layer(cors_layer())
 }
 
@@ -221,7 +221,7 @@ where
         // Returns an InstanceId and the HTTP gateway's port.
         .api_route("/", post(create_http_gateway))
         // Stops an HTTP gateway.
-        .api_route("/:id/stop", post(stop_http_gateway))
+        .api_route("/{id}/stop", post(stop_http_gateway))
 }
 
 async fn run_operation<T: Serialize + FromOpOut>(
@@ -312,6 +312,12 @@ impl<T: TryFrom<OpOut>> FromOpOut for T {
     async fn from(value: OpOut) -> (StatusCode, ApiResponse<T>) {
         // match errors explicitly to make sure they have a 4xx status code
         match value {
+            OpOut::Error(PocketIcError::Forbidden(msg)) => (
+                StatusCode::FORBIDDEN,
+                ApiResponse::Error {
+                    message: msg.to_string(),
+                },
+            ),
             OpOut::Error(e) => (
                 StatusCode::BAD_REQUEST,
                 ApiResponse::Error {
@@ -405,18 +411,7 @@ impl TryFrom<OpOut> for RawCanisterResult {
     type Error = OpConversionError;
     fn try_from(value: OpOut) -> Result<Self, Self::Error> {
         match value {
-            OpOut::CanisterResult(wasm_result) => {
-                let inner = match wasm_result {
-                    Ok(WasmResult::Reply(wasm_result)) => {
-                        RawCanisterResult::Ok(RawWasmResult::Reply(wasm_result))
-                    }
-                    Ok(WasmResult::Reject(error_message)) => {
-                        RawCanisterResult::Ok(RawWasmResult::Reject(error_message))
-                    }
-                    Err(user_error) => RawCanisterResult::Err(user_error),
-                };
-                Ok(inner)
-            }
+            OpOut::CanisterResult(result) => Ok(result.into()),
             _ => Err(OpConversionError),
         }
     }
@@ -426,18 +421,7 @@ impl TryFrom<OpOut> for Option<RawCanisterResult> {
     type Error = OpConversionError;
     fn try_from(value: OpOut) -> Result<Self, Self::Error> {
         match value {
-            OpOut::CanisterResult(wasm_result) => {
-                let inner = match wasm_result {
-                    Ok(WasmResult::Reply(wasm_result)) => {
-                        Some(RawCanisterResult::Ok(RawWasmResult::Reply(wasm_result)))
-                    }
-                    Ok(WasmResult::Reject(error_message)) => {
-                        Some(RawCanisterResult::Ok(RawWasmResult::Reject(error_message)))
-                    }
-                    Err(user_error) => Some(RawCanisterResult::Err(user_error)),
-                };
-                Ok(inner)
-            }
+            OpOut::CanisterResult(result) => Ok(Some(result.into())),
             OpOut::NoOutput => Ok(None),
             _ => Err(OpConversionError),
         }
@@ -490,17 +474,15 @@ impl TryFrom<OpOut> for Vec<u8> {
     }
 }
 
-impl TryFrom<OpOut> for RawSubmitIngressResult {
+impl TryFrom<OpOut> for Result<RawMessageId, RejectResponse> {
     type Error = OpConversionError;
     fn try_from(value: OpOut) -> Result<Self, Self::Error> {
         match value {
-            OpOut::MessageId((effective_principal, message_id)) => {
-                Ok(RawSubmitIngressResult::Ok(RawMessageId {
-                    effective_principal: effective_principal.into(),
-                    message_id,
-                }))
-            }
-            OpOut::CanisterResult(Err(user_error)) => Ok(RawSubmitIngressResult::Err(user_error)),
+            OpOut::MessageId((effective_principal, message_id)) => Ok(Ok(RawMessageId {
+                effective_principal: effective_principal.into(),
+                message_id,
+            })),
+            OpOut::CanisterResult(Err(reject_response)) => Ok(Err(reject_response)),
             _ => Err(OpConversionError),
         }
     }
@@ -832,7 +814,7 @@ async fn op_out_to_response(op_out: OpOut) -> Response {
         opout @ OpOut::MessageId(_) => (
             StatusCode::OK,
             Json(ApiResponse::Success(
-                RawSubmitIngressResult::try_from(opout).unwrap(),
+                Result::<RawMessageId, RejectResponse>::try_from(opout).unwrap(),
             )),
         )
             .into_response(),
@@ -892,6 +874,13 @@ async fn op_out_to_response(op_out: OpOut) -> Response {
             Json(ApiResponse::Success(
                 Option::<RawSubnetId>::try_from(opout).unwrap(),
             )),
+        )
+            .into_response(),
+        OpOut::Error(PocketIcError::Forbidden(msg)) => (
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::Error {
+                message: msg.to_string(),
+            }),
         )
             .into_response(),
         opout @ OpOut::Error(_) => (
@@ -967,7 +956,10 @@ pub async fn handler_submit_ingress_message(
     Path(instance_id): Path<InstanceId>,
     headers: HeaderMap,
     extract::Json(raw_canister_call): extract::Json<RawCanisterCall>,
-) -> (StatusCode, Json<ApiResponse<RawSubmitIngressResult>>) {
+) -> (
+    StatusCode,
+    Json<ApiResponse<Result<RawMessageId, RejectResponse>>>,
+) {
     let timeout = timeout_or_default(headers);
     match crate::pocket_ic::CanisterCall::try_from(raw_canister_call) {
         Ok(canister_call) => {
@@ -1006,38 +998,21 @@ pub async fn handler_await_ingress_message(
     }
 }
 
-pub async fn handler_execute_ingress_message(
-    State(AppState { api_state, .. }): State<AppState>,
-    Path(instance_id): Path<InstanceId>,
-    headers: HeaderMap,
-    extract::Json(raw_canister_call): extract::Json<RawCanisterCall>,
-) -> (StatusCode, Json<ApiResponse<RawCanisterResult>>) {
-    let timeout = timeout_or_default(headers);
-    match crate::pocket_ic::CanisterCall::try_from(raw_canister_call) {
-        Ok(canister_call) => {
-            let ingress_op = ExecuteIngressMessage(canister_call);
-            let (code, response) = run_operation(api_state, instance_id, timeout, ingress_op).await;
-            (code, Json(response))
-        }
-        Err(e) => (
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::Error {
-                message: format!("{:?}", e),
-            }),
-        ),
-    }
-}
-
 pub async fn handler_ingress_status(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     headers: HeaderMap,
-    extract::Json(raw_message_id): extract::Json<RawMessageId>,
+    extract::Json(raw_ingress_status_args): extract::Json<RawIngressStatusArgs>,
 ) -> (StatusCode, Json<ApiResponse<Option<RawCanisterResult>>>) {
     let timeout = timeout_or_default(headers);
-    match crate::pocket_ic::MessageId::try_from(raw_message_id) {
+    match crate::pocket_ic::MessageId::try_from(raw_ingress_status_args.raw_message_id) {
         Ok(message_id) => {
-            let ingress_op = IngressMessageStatus(message_id);
+            let ingress_op = IngressMessageStatus {
+                message_id,
+                caller: raw_ingress_status_args
+                    .raw_caller
+                    .map(|caller| caller.into()),
+            };
             let (code, response) = run_operation(api_state, instance_id, timeout, ingress_op).await;
             (code, Json(response))
         }
@@ -1058,6 +1033,20 @@ pub async fn handler_set_time(
 ) -> (StatusCode, Json<ApiResponse<()>>) {
     let timeout = timeout_or_default(headers);
     let op = SetTime {
+        time: ic_types::Time::from_nanos_since_unix_epoch(time.nanos_since_epoch),
+    };
+    let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
+    (code, Json(response))
+}
+
+pub async fn handler_set_certified_time(
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(instance_id): Path<InstanceId>,
+    headers: HeaderMap,
+    axum::extract::Json(time): axum::extract::Json<rest::RawTime>,
+) -> (StatusCode, Json<ApiResponse<()>>) {
+    let timeout = timeout_or_default(headers);
+    let op = SetCertifiedTime {
         time: ic_types::Time::from_nanos_since_unix_epoch(time.nanos_since_epoch),
     };
     let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
@@ -1088,9 +1077,8 @@ pub async fn handler_add_cycles(
 pub async fn handler_set_stable_memory(
     State(AppState {
         api_state,
-        min_alive_until: _,
-        runtime: _,
         blob_store,
+        ..
     }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     headers: HeaderMap,
@@ -1115,9 +1103,12 @@ pub async fn handler_tick(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     headers: HeaderMap,
+    axum::extract::Json(ticks_configs): axum::extract::Json<TickConfigs>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
     let timeout = timeout_or_default(headers);
-    let op = Tick;
+    let op = Tick {
+        configs: ticks_configs,
+    };
     let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(res))
 }
@@ -1151,10 +1142,7 @@ fn contains_unimplemented(config: ExtendedSubnetConfigSet) -> bool {
 /// The new InstanceId will be returned.
 pub async fn create_instance(
     State(AppState {
-        api_state,
-        min_alive_until: _,
-        runtime,
-        blob_store: _,
+        api_state, runtime, ..
     }): State<AppState>,
     extract::Json(instance_config): extract::Json<InstanceConfig>,
 ) -> (StatusCode, Json<rest::CreateInstanceResponse>) {
@@ -1201,9 +1189,9 @@ pub async fn create_instance(
         None
     };
 
-    let (instance_id, topology) = api_state
+    match api_state
         .add_instance(move |seed| {
-            PocketIc::new(
+            PocketIc::try_new(
                 runtime,
                 seed,
                 subnet_configs,
@@ -1213,14 +1201,20 @@ pub async fn create_instance(
                 instance_config.bitcoind_addr,
             )
         })
-        .await;
-    (
-        StatusCode::CREATED,
-        Json(rest::CreateInstanceResponse::Created {
-            instance_id,
-            topology,
-        }),
-    )
+        .await
+    {
+        Ok((instance_id, topology)) => (
+            StatusCode::CREATED,
+            Json(rest::CreateInstanceResponse::Created {
+                instance_id,
+                topology,
+            }),
+        ),
+        Err(err) => (
+            StatusCode::BAD_REQUEST,
+            Json(rest::CreateInstanceResponse::Error { message: err }),
+        ),
+    }
 }
 
 pub async fn list_instances(
@@ -1288,6 +1282,14 @@ pub async fn auto_progress(
     } else {
         (StatusCode::OK, Json(ApiResponse::Success(())))
     }
+}
+
+pub async fn get_auto_progress(
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(id): Path<InstanceId>,
+) -> (StatusCode, Json<ApiResponse<bool>>) {
+    let auto_progress = api_state.get_auto_progress(id).await;
+    (StatusCode::OK, Json(ApiResponse::Success(auto_progress)))
 }
 
 pub async fn stop_progress(

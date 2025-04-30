@@ -1,7 +1,6 @@
 use crate::pb::v1::{
-    sns_init_payload, AirdropDistribution, DappCanisters, DeveloperDistribution,
-    FractionalDeveloperVotingPower, NeuronDistribution, SnsInitPayload, SwapDistribution,
-    TreasuryDistribution,
+    sns_init_payload, DappCanisters, DeveloperDistribution, FractionalDeveloperVotingPower,
+    NeuronDistribution, SnsInitPayload, SwapDistribution, TreasuryDistribution,
 };
 use ic_nns_governance_api::pb::v1::{create_service_nervous_system, CreateServiceNervousSystem};
 
@@ -321,8 +320,6 @@ impl TryFrom<create_service_nervous_system::InitialTokenDistribution>
                 }
             };
 
-        let airdrop_distribution = Some(AirdropDistribution::default());
-
         if !defects.is_empty() {
             return Err(format!(
                 "Failed to convert to InitialTokenDistribution for the following reasons:\n{}",
@@ -335,7 +332,6 @@ impl TryFrom<create_service_nervous_system::InitialTokenDistribution>
                 developer_distribution,
                 treasury_distribution,
                 swap_distribution,
-                airdrop_distribution,
             },
         ))
     }

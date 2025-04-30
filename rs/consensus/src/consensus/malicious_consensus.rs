@@ -87,7 +87,9 @@ fn maliciously_propose_blocks(
         .get_block_maker_rank(height, &beacon, my_node_id)
     {
         Ok(Some(rank)) => Some(rank),
-        Ok(None) => Some(Rank(0)),
+        // TODO: introduce a malicious flag which will instruct a malicious node to propose a block
+        // when it's not elected a block maker; implement a system test which uses the flag.
+        Ok(None) => None,
         Err(_) => None,
     };
 
@@ -165,8 +167,8 @@ fn maliciously_propose_empty_block(
     parent: HashedBlock,
 ) -> Option<BlockProposal> {
     let height = parent.height().increment();
-    let certified_height = block_maker.state_manager.latest_certified_height();
-    let context = parent.as_ref().context.clone();
+    let mut context = parent.as_ref().context.clone();
+    context.certified_height = block_maker.state_manager.latest_certified_height();
 
     // Note that we will skip blockmaking if registry versions or replica_versions
     // are missing or temporarily not retrievable.
@@ -185,7 +187,6 @@ fn maliciously_propose_empty_block(
         context,
         parent,
         height,
-        certified_height,
         rank,
         registry_version,
         &subnet_records,
@@ -232,7 +233,6 @@ fn maliciously_notarize_all(notary: &Notary, pool: &PoolReader<'_>) -> Vec<Notar
 
 /// Generate finalization shares for each notarized block in the validated
 /// pool.
-
 fn maliciously_finalize_all(
     finalizer: &Finalizer,
     pool: &PoolReader<'_>,

@@ -1,7 +1,14 @@
 use std::rc::Rc;
 use std::sync::Arc;
 
-use super::{system_api, StoreData, INSTRUCTIONS_COUNTER_GLOBAL_NAME};
+use super::{
+    linker,
+    system_api::{
+        sandbox_safe_system_state::SandboxSafeSystemState, ApiType,
+        DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits, SystemApiImpl,
+    },
+    StoreData, INSTRUCTIONS_COUNTER_GLOBAL_NAME,
+};
 use crate::{wasm_utils::validate_and_instrument_for_testing, WasmtimeEmbedder};
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
@@ -14,11 +21,7 @@ use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory}
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
-use ic_replicated_state::{Memory, NetworkTopology, SystemState};
-use ic_system_api::{
-    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
-    ExecutionParameters, InstructionLimits, SystemApiImpl,
-};
+use ic_replicated_state::{Memory, MessageMemoryUsage, NetworkTopology, SystemState};
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
@@ -68,7 +71,7 @@ fn test_wasmtime_system_api() {
     );
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
-    let canister_current_message_memory_usage = NumBytes::from(0);
+    let canister_current_message_memory_usage = MessageMemoryUsage::ZERO;
     let system_api = SystemApiImpl::new(
         api_type,
         sandbox_safe_system_state,
@@ -92,11 +95,7 @@ fn test_wasmtime_system_api() {
             subnet_memory_saturation: ResourceSaturation::default(),
         },
         *MAX_SUBNET_AVAILABLE_MEMORY,
-        EmbeddersConfig::default()
-            .feature_flags
-            .wasm_native_stable_memory,
-        EmbeddersConfig::default().feature_flags.canister_backtrace,
-        EmbeddersConfig::default().max_sum_exported_function_name_lengths,
+        &EmbeddersConfig::default(),
         Memory::new_for_testing(),
         NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
@@ -140,7 +139,7 @@ fn test_wasmtime_system_api() {
 
     let mut linker: wasmtime::Linker<StoreData> = wasmtime::Linker::new(&engine);
 
-    system_api::syscalls::<u32>(
+    linker::syscalls::<u32>(
         &mut linker,
         config.feature_flags,
         config.stable_memory_dirty_page_limit,

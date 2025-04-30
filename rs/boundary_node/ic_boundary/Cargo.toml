@@ -20,7 +20,7 @@ arc-swap = "1.7.1"
 async-scoped = { version = "0.9", features = ["use-tokio"] }
 async-trait = { workspace = true }
 axum = { workspace = true }
-axum-extra = "0.9.3"
+axum-extra = { workspace = true }
 bytes = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
@@ -32,14 +32,20 @@ hex = { workspace = true }
 http = { workspace = true }
 http-body = { workspace = true }
 humantime = "2.1"
+ic-agent = "0.39.1"
 ic-base-types = { path = "../../types/base_types" }
-ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "2496803db52d8182f578f098a3ffe4fcb9573fcd" }
+ic-bn-lib = { workspace = true }
+ic-canister-client = { path = "../../canister_client" }
+ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
 ic-config = { path = "../../config" }
-ic-crypto-ed25519 = { path = "../../crypto/ed25519" }
+ic-crypto = { path = "../../crypto" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
+ic-crypto-utils-basic-sig = { path = "../../crypto/utils/basic_sig" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
 ic-crypto-utils-tls = { path = "../../crypto/utils/tls" }
+ic-ed25519 = { path = "../../../packages/ic-ed25519" }
+ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-limits = { path = "../../limits" }
 ic-logger = { path = "../../monitoring/logger" }
@@ -54,6 +60,7 @@ ic-registry-replicator = { path = "../../orchestrator/registry_replicator" }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-types = { path = "../../types/types" }
+ipnet = { workspace = true }
 lazy_static = { workspace = true }
 maxminddb = "0.24"
 mockall = { workspace = true }
@@ -63,6 +70,8 @@ nix = { workspace = true }
 prometheus = { workspace = true }
 rand = { workspace = true }
 ratelimit = "0.9.1"
+rate-limits-api = { path = "../rate_limits/api" }
+salt-sharing-api = { path = "../salt_sharing/api" }
 rcgen = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
@@ -74,17 +83,19 @@ serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 serde_regex = "1.1"
 serde_yaml = { workspace = true }
+sha3 = { workspace = true }
 simple_moving_average = "1.0.2"
 slog = { workspace = true }
 strum = { workspace = true }
 thiserror = { workspace = true }
-tikv-jemalloc-ctl = "0.5"
-tikv-jemallocator = "0.5"
+tikv-jemalloc-ctl = { workspace = true }
+tikv-jemallocator = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
-tower_governor = "0.4.2"
+# axum 0.8 support not yet released, use git
+tower_governor = { git = "https://github.com/benwis/tower-governor", rev = "bc9a6eacafcaec1e732886ceae8ae324bbd327df" }
 tracing = { workspace = true }
 tracing-serde = "0.1.3"
 tracing-slog = "0.2"

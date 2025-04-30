@@ -1,7 +1,10 @@
 [package]
 name = "ic-p2p-test-utils"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
@@ -25,8 +28,6 @@ ic-quic-transport = { path = "../quic_transport" }
 ic-registry-client-fake = { path = "../../registry/fake" }
 ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-local-registry = { path = "../../registry/local_registry" }
-ic-registry-local-store = { path = "../../registry/local_store" }
-ic-registry-local-store-artifacts = { path = "../../registry/local_store/artifacts" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-state-manager = { path = "../../state_manager" }
 ic-state-sync-manager = { path = "../state_sync_manager" }
@@ -44,4 +45,5 @@ serde = { workspace = true }
 slog = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
+tokio-stream = { workspace = true }
 turmoil = { workspace = true }

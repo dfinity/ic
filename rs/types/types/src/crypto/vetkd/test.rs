@@ -1,11 +1,14 @@
 use crate::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet};
-use crate::crypto::vetkd::{VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare};
-use crate::crypto::ExtendedDerivationPath;
+use crate::crypto::vetkd::{
+    VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare, VetKdEncryptedKeyShareContent,
+};
 use crate::Height;
 use ic_base_types::PrincipalId;
 use ic_base_types::SubnetId;
 
 mod display_and_debug {
+    use crate::crypto::vetkd::VetKdDerivationContext;
+
     use super::*;
 
     #[test]
@@ -19,19 +22,18 @@ mod display_and_debug {
                     [42; NiDkgTargetId::SIZE],
                 )),
             },
-            derivation_path: ExtendedDerivationPath {
+            context: VetKdDerivationContext {
                 caller: PrincipalId::new_node_test_id(17),
-                derivation_path: vec![b"dp".to_vec()],
+                context: b"context-123".to_vec(),
             },
-            derivation_id: b"did".to_vec(),
-            encryption_public_key: b"ek".to_vec(),
+            input: b"input".to_vec(),
+            transport_public_key: b"tpk".to_vec(),
         };
         let output = "VetKdArgs { \
             ni_dkg_id: NiDkgId { start_block_height: 7, dealer_subnet: ot5wk-sbkaa-aaaaa-aaaap-yai, dkg_tag: HighThreshold, target_subnet: Remote(0x2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a) }, \
-            derivation_path: ExtendedDerivationPath { caller: 7xzs3-rqraa-aaaaa-aaaap-2ai, \
-            derivation_path: { 6470 } }, \
-            derivation_id: 0x646964, \
-            encryption_public_key: 0x656b \
+            input: 0x696e707574, \
+            context: VetKdDerivationContext { caller: 7xzs3-rqraa-aaaaa-aaaap-2ai, context: 0x636f6e746578742d313233 }, \
+            transport_public_key: 0x74706b \
         }"
         .to_string();
 
@@ -42,11 +44,11 @@ mod display_and_debug {
     #[test]
     fn should_correctly_print_vetkd_encrypted_key_share() {
         let input = VetKdEncryptedKeyShare {
-            encrypted_key_share: b"eks".to_vec(),
+            encrypted_key_share: VetKdEncryptedKeyShareContent(b"eks".to_vec()),
             node_signature: b"ns".to_vec(),
         };
         let output = "VetKdEncryptedKeyShare { \
-            encrypted_key_share: 0x656b73, \
+            encrypted_key_share: VetKdEncryptedKeyShareContent(0x656b73), \
             node_signature: 0x6e73 \
         }"
         .to_string();

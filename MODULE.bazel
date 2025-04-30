@@ -37,6 +37,10 @@ archive_override(
     urls = ["https://github.com/bazelbuild/rules_foreign_cc/archive/77d4483fadbb1b7bcace18ed8e8e87e8791050f6.tar.gz"],
 )
 
+# Misc tools
+
+bazel_dep(name = "pigz", version = "2.8")  # (parallel) gzip
+
 # Python dependencies
 
 bazel_dep(name = "rules_python", version = "0.35.0")
@@ -82,62 +86,17 @@ go_deps.module(
     version = "v1.13.0",
 )
 go_deps.module(
-    path = "github.com/golang/protobuf",
-    sum = "h1:ROPKBNFfQgOUMifHyP+KYbvpjbdoFNs+aK7DXlji0Tw=",
-    version = "v1.5.2",
-)
-go_deps.module(
-    path = "github.com/google/go-cmp",
-    sum = "h1:O2Tfq5qg4qc4AmwVlvv0oLiVAGB7enBSJ2x2DqQFi38=",
-    version = "v0.5.9",
-)
-go_deps.module(
-    path = "github.com/honeycombio/beeline-go",
-    sum = "h1:cyrfwgxM32DKzUhZFJ0KLbPkoyf5lHOyn+7GISwEVZQ=",
-    version = "v1.11.1",
-)
-go_deps.module(
-    path = "github.com/schollz/closestmatch",
-    sum = "h1:Uel2GXEpJqOWBrlyI+oY9LTiyyjYS17cCYRqP13/SHk=",
-    version = "v2.1.0+incompatible",
-)
-go_deps.module(
     path = "github.com/spf13/cobra",
     sum = "h1:o94oiPyS4KD1mPy2fmcYYHHfCxLqYjJOhGsCHFZtEzA=",
     version = "v1.6.1",
 )
-go_deps.module(
-    path = "github.com/stretchr/testify",
-    sum = "h1:w7B6lhMri9wdJUVmEZPGGhZzrYTPvgJArz7wNPgYKsk=",
-    version = "v1.8.1",
-)
-go_deps.module(
-    path = "google.golang.org/genproto",
-    sum = "h1:wtujag7C+4D6KMoulW9YauvK2lgdvCMS260jsqqBXr0=",
-    version = "v0.0.0-20210602131652-f16073e35f0c",
-)
-go_deps.module(
-    path = "google.golang.org/grpc",
-    sum = "h1:WTLtQzmQori5FUH25Pq4WT22oCsv8USpQ+F6rqtsmxw=",
-    version = "v1.49.0",
-)
-go_deps.module(
-    path = "google.golang.org/protobuf",
-    sum = "h1:d0NfwRgPtno5B1Wa6L2DAG+KivqkdutMf1UhdNx175w=",
-    version = "v1.28.1",
-)
 use_repo(
     go_deps,
     "com_github_fatih_color",
-    "com_github_golang_protobuf",
     "com_github_google_go_cmp",
-    "com_github_honeycombio_beeline_go",
     "com_github_schollz_closestmatch",
     "com_github_spf13_cobra",
     "com_github_stretchr_testify",
-    "org_golang_google_genproto",
-    "org_golang_google_grpc",
-    "org_golang_google_protobuf",
 )
 
 # Docker/OCI & archive rules with image definitions
@@ -170,6 +129,16 @@ oci.pull(
 )
 use_repo(oci, "bitcoind", "bitcoind_linux_amd64")
 
+# foundry container used in test
+oci.pull(
+    name = "foundry",
+    image = "ghcr.io/foundry-rs/foundry@sha256:8f9dd6d4c498538b3aa3999758520bca24a41273163b0c7295ed53b1a6062f30",  # v0.3.0 https://github.com/foundry-rs/foundry/pkgs/container/foundry/391862899?tag=v0.3.0
+    platforms = [
+        "linux/amd64",
+    ],
+)
+use_repo(oci, "foundry", "foundry_linux_amd64")
+
 # nginx-proxy container used in test
 oci.pull(
     name = "nginx-proxy",
@@ -201,7 +170,7 @@ use_repo(oci, "minica", "minica_linux_amd64")
 # used by rosetta image
 oci.pull(
     name = "rust_base",
-    image = "gcr.io/distroless/cc-debian12@sha256:3310655aac0d85eb9d579792387af1ff3eb7a1667823478be58020ab0e0d97a8",
+    image = "gcr.io/distroless/cc-debian11@sha256:8e94f031353596c3fc9db6a2499bcc82dacc40cb71e0703476f9fad41677efdf",
     platforms = ["linux/amd64"],
 )
 use_repo(oci, "rust_base", "rust_base_linux_amd64")
@@ -209,7 +178,7 @@ use_repo(oci, "rust_base", "rust_base_linux_amd64")
 # used in various places as base
 oci.pull(
     name = "ubuntu_base",
-    image = "ghcr.io/dfinity/ubuntu@sha256:77d57fd89366f7d16615794a5b53e124d742404e20f035c22032233f1826bd6a",
+    image = "ghcr.io/dfinity/ubuntu@sha256:965fbcae990b0467ed5657caceaec165018ef44a4d2d46c7cdea80a9dff0d1ea",
     platforms = ["linux/amd64"],
 )
 use_repo(oci, "ubuntu_base", "ubuntu_base_linux_amd64")
@@ -247,6 +216,17 @@ use_repo(oci, "alpine_openssl", "alpine_openssl_linux_amd64")
 bazel_dep(name = "rules_distroless", version = "0.3.8")
 
 apt = use_extension("@rules_distroless//apt:extensions.bzl", "apt")
+
+## Packageset based on an Ubuntu focal snapshot, see manifest file
+## for details
+## To update, comment out the `lock` field below and run:
+##   bazel run @focal//:lock
+apt.install(
+    name = "focal",
+    lock = "//bazel:focal.lock.json",
+    manifest = "//bazel:focal.yaml",
+)
+use_repo(apt, "focal")
 
 # Packageset based on an Ubuntu noble snapshot, see manifest file
 # for details
@@ -429,38 +409,6 @@ http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_
 
 http_jar = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_jar")
 
-# Gzip tool
-http_archive(
-    name = "pigz",
-    build_file_content = """
-cc_library(
-    name = "zopfli",
-    hdrs = glob(["zopfli/src/zopfli/*.h"]),
-    srcs = glob(["zopfli/src/zopfli/*.c"]),
-)
-
-cc_binary(
-    name = "pigz",
-    srcs = [
-        "pigz.c",
-        "try.c",
-        "try.h",
-        "yarn.c",
-        "yarn.h",
-    ],
-    linkopts = [
-        "-lm",
-        "-lpthread",
-        "-lz",
-    ],
-    deps = [":zopfli"],
-    visibility = ["//visibility:public"],
-)""",
-    sha256 = "688fe1d805b33a4ae8cbf86ba56aa1a5d647e959219c7d3aeb7d041c228af1ef",
-    strip_prefix = "pigz-2.8",
-    url = "https://github.com/madler/pigz/archive/refs/tags/v2.8.zip",
-)
-
 # TLA+ tools
 http_jar(
     name = "tlaplus_community_modules",
@@ -523,6 +471,15 @@ http_file(
     downloaded_file_path = "assetstorage.wasm.gz",
     sha256 = "1286960c50eb7a773cfb5fdd77cc238588f39e21f189cc3eb0f35199a99b9c7e",
     url = "https://github.com/dfinity/sdk/raw/0.14.2/src/distributed/assetstorage.wasm.gz",
+)
+
+# Asset canister that certifies long assets chunk-wise
+
+http_file(
+    name = "long_asset_canister",
+    downloaded_file_path = "http_gateway_canister_custom_assets.wasm.gz",
+    sha256 = "eedcbf986c67fd4ebe3042094604a9a5703e825e56433e2509a6a4d0384ccf95",
+    url = "https://github.com/dfinity/http-gateway/raw/refs/heads/main/examples/http-gateway/canister/http_gateway_canister_custom_assets.wasm.gz",
 )
 
 # Old version of wallet canister
@@ -620,8 +577,8 @@ http_file(
 
 http_file(
     name = "cycles-ledger.wasm.gz",
-    sha256 = "4f26aae9edef5b4e2c785c1dc6f312163af055f22954dd99d515d8a862bd59bd",
-    url = "https://github.com/dfinity/cycles-ledger/releases/download/cycles-ledger-v0.2.3/cycles-ledger.wasm.gz",
+    sha256 = "d2aacbd214f20d752fd1696c2e36d7eceaafe07b932b3ae9e7e5564d1bda0178",
+    url = "https://github.com/dfinity/cycles-ledger/releases/download/cycles-ledger-v1.0.3/cycles-ledger.wasm.gz",
 )
 
 # Subnet Rental Canister
@@ -654,8 +611,8 @@ http_file(
 
 http_file(
     name = "evm_rpc.wasm.gz",
-    sha256 = "636442e4349a007316dcc1452d9a256d22203186181d2534f33bd264162305b3",
-    url = "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/download/v2.2.0/evm_rpc.wasm.gz",
+    sha256 = "d3d5f1ba715b5d67718bff088a75a498e83dcaa5c8b7c375c772ce6391aa5d9a",
+    url = "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/download/v2.3.0/evm_rpc.wasm.gz",
 )
 
 http_archive(
@@ -785,7 +742,7 @@ cc_library(
 )
 
 http_archive(
-    name = "bitcoin_core",
+    name = "bitcoin_core_linux_x86",
     build_file_content = """
 package(default_visibility = ["//visibility:public"])
 filegroup(
@@ -801,6 +758,40 @@ filegroup(
     ],
 )
 
+http_archive(
+    name = "bitcoin_core_darwin_x86",
+    build_file_content = """
+package(default_visibility = ["//visibility:public"])
+filegroup(
+    name = "bitcoind",
+    srcs = ["bin/bitcoind"],
+)
+""",
+    sha256 = "e1efd8c4605b2aabc876da93b6eee2bedd868ce7d1f02b0220c1001f903b3e2c",
+    strip_prefix = "bitcoin-27.0",
+    urls = [
+        "https://bitcoin.org/bin/bitcoin-core-27.0/bitcoin-27.0-x86_64-apple-darwin.tar.gz",
+        "https://bitcoincore.org/bin/bitcoin-core-27.0/bitcoin-27.0-x86_64-apple-darwin.tar.gz",
+    ],
+)
+
+http_archive(
+    name = "bitcoin_core_darwin_arm64",
+    build_file_content = """
+package(default_visibility = ["//visibility:public"])
+filegroup(
+    name = "bitcoind",
+    srcs = ["bin/bitcoind"],
+)
+""",
+    sha256 = "1d9d9b837297a73fc7a3b1cfed376644e3fa25c4e1672fbc143d5946cb52431d",
+    strip_prefix = "bitcoin-27.0",
+    urls = [
+        "https://bitcoin.org/bin/bitcoin-core-27.0/bitcoin-27.0-arm64-apple-darwin.tar.gz",
+        "https://bitcoincore.org/bin/bitcoin-core-27.0/bitcoin-27.0-arm64-apple-darwin.tar.gz",
+    ],
+)
+
 http_file(
     name = "bitcoin_example_canister",
     downloaded_file_path = "basic_bitcoin.wasm.gz",
@@ -810,16 +801,13 @@ http_file(
 
 http_file(
     name = "pocket-ic-mainnet-gz",
-    sha256 = "454891cac2421f3f894759ec5e6b6e48fbb544d79197bc29b88d34b93d78a4f1",
-    url = "https://download.dfinity.systems/ic/52ebccfba8855e23dcad9657a8d6e6be01df71f9/binaries/x86_64-linux/pocket-ic.gz",
-)
-
-# Patches
-
-http_file(
-    name = "rustix-patch",
-    sha256 = "ffe807170f06b579098f948eca42ba1ea1fd2cb7b8290c9d41101efe976337f7",
-    url = "https://github.com/nmattia/rustix/commit/330bcc07796f4b8e6443987fbb1b9be79c446bd2.diff",
+    # Calculate this hash using:
+    # git checkout $revision
+    # ci/container/container-run.sh
+    # bazel build //publish/binaries:pocket-ic.gz
+    # sha256sum bazel-bin/publish/binaries/pocket-ic.gz
+    sha256 = "0935ee6ece312719aae4eabddec2dfc6af34d5edbddf4d3af53bccd1b3636044",
+    url = "https://download.dfinity.systems/ic/172f8c78653c93ad101af75b94251439b4ccf098/binaries/x86_64-linux/pocket-ic.gz",
 )
 
 # Management canister candid interface
@@ -827,6 +815,21 @@ http_file(
 http_file(
     name = "management_canister_did",
     downloaded_file_path = "ic.did",
-    sha256 = "31d4654d60b364420a2e52f546f06b2255dc78ac8c2d768271f004b8946e92cb",
-    url = "https://raw.githubusercontent.com/dfinity/portal/407ec5b92d06618c4df9f52e98514c5f4f44313e/docs/references/_attachments/ic.did",
+    sha256 = "0e92d8b9c2cf3d3fca166b76b2d3b8a2464d9b2b61117d8b2f63222b388d8dd1",
+    url = "https://raw.githubusercontent.com/dfinity/portal/78c93aa37ef17dc67484079d1a4bf58a10a63106/docs/references/_attachments/ic.did",
+)
+
+# Mozilla CA certificate store in PEM format
+http_file(
+    name = "mozilla_root_ca_store",
+    downloaded_file_path = "cacert.pem",
+    sha256 = "bb1782d281fe60d4a2dcf41bc229abe3e46c280212597d4abcc25bddf667739b",
+    url = "https://curl.se/ca/cacert-2024-11-26.pem",
+)
+
+mainnet_icos_versions = use_repo_rule("//bazel:mainnet-icos-versions.bzl", "mainnet_icos_versions")
+
+mainnet_icos_versions(
+    name = "mainnet_icos_versions",
+    path = "//:mainnet-icos-revisions.json",
 )

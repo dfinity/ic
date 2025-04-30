@@ -204,7 +204,7 @@ def rust_ic_test(env = {}, data = [], **kwargs):
         **kwargs
     )
 
-def rust_bench(name, env = {}, data = [], pin_cpu = False, **kwargs):
+def rust_bench(name, env = {}, data = [], pin_cpu = False, with_test = False, **kwargs):
     """A rule for defining a rust benchmark.
 
     Args:
@@ -212,6 +212,7 @@ def rust_bench(name, env = {}, data = [], pin_cpu = False, **kwargs):
       env: additional environment variables to pass to the benchmark binary.
       data: data dependencies required to run the benchmark.
       pin_cpu: pins the benchmark process to a single CPU if set `True`.
+      with_test: generates name + '_test' target to test that the benchmark work.
       **kwargs: see docs for `rust_binary`.
     """
 
@@ -245,6 +246,17 @@ def rust_bench(name, env = {}, data = [], pin_cpu = False, **kwargs):
         data = data + [":" + binary_name_publish],
         tags = kwargs.get("tags", []) + ["rust_bench"],
     )
+
+    # To test that the benchmarks work.
+    if with_test:
+        native.sh_test(
+            name = name + "_test",
+            testonly = True,
+            env = env,
+            srcs = [":" + binary_name_publish],
+            data = data,
+            tags = kwargs.get("tags", None),
+        )
 
 def rust_ic_bench(env = {}, data = [], **kwargs):
     """A rule for defining a rust benchmark.
@@ -368,3 +380,43 @@ symlink_dirs = rule(
         "targets": attr.label_keyed_string_dict(allow_files = True),
     },
 )
+
+def _write_info_file_var_impl(ctx):
+    """Helper rule that creates a file with the content of the provided var from the info file."""
+
+    output = ctx.actions.declare_file(ctx.label.name)
+    ctx.actions.run_shell(
+        command = """
+            grep <{info_file} -e '{varname}' \\
+                    | cut -d' ' -f2 > {out}""".format(varname = ctx.attr.varname, info_file = ctx.info_file.path, out = output.path),
+        inputs = [ctx.info_file],
+        outputs = [output],
+    )
+    return [DefaultInfo(files = depset([output]))]
+
+write_info_file_var = rule(
+    implementation = _write_info_file_var_impl,
+    attrs = {
+        "varname": attr.string(mandatory = True),
+    },
+)
+
+def file_size_check(
+        name,
+        max_file_size):
+    """
+    A check to make sure the given file is below the specified size.
+
+    Args:
+      name: Name of the file.
+      max_file_size: Max accepted size in bytes.
+    """
+    native.sh_test(
+        name = "%s_size_test" % name,
+        srcs = ["//bazel:file_size_test.sh"],
+        data = [name],
+        env = {
+            "FILE": "$(rootpath %s)" % name,
+            "MAX_SIZE": str(max_file_size),
+        },
+    )

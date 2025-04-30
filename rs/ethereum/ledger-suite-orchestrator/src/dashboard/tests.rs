@@ -129,6 +129,43 @@ fn should_display_managed_canisters() {
         .has_ledger(USDT_LEDGER_ID, LEDGER_WASM_HASH)
         .has_index(USDT_INDEX_ID, INDEX_WASM_HASH)
         .has_archive(USDT_ARCHIVE_ID);
+
+    let now: u64 = 1733145560 * 1_000_000_000;
+    let now_datetime = "2024-12-02T13:19:20+00:00";
+    state.record_upgrade_completed(
+        Principal::from_str(USDC_LEDGER_ID).unwrap(),
+        WasmHash::from([42_u8; 32]),
+        now,
+    );
+    state.record_upgrade_completed(
+        Principal::from_str(USDC_INDEX_ID).unwrap(),
+        WasmHash::from([43_u8; 32]),
+        now,
+    );
+    state.record_upgrade_completed(
+        Principal::from_str(USDC_ARCHIVE_ID).unwrap(),
+        WasmHash::from([44_u8; 32]),
+        now,
+    );
+    DashboardAssert::assert_that_dashboard_from_state(&state)
+        .has_erc20("ckUSDC", 1, USDC_ADDRESS)
+        .has_ledger_with_upgrade(
+            USDC_LEDGER_ID,
+            LEDGER_WASM_HASH,
+            "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
+            now_datetime,
+        )
+        .has_index_with_upgrade(
+            USDC_INDEX_ID,
+            INDEX_WASM_HASH,
+            "2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b",
+            now_datetime,
+        )
+        .has_archive_with_upgrade(
+            USDC_ARCHIVE_ID,
+            "2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c",
+            now_datetime,
+        );
 }
 
 #[test]
@@ -407,6 +444,8 @@ mod assertions {
     }
 
     impl DashboardTokenAssert {
+        const NONE: &str = "None";
+
         pub fn has_erc20(
             self,
             ckerc20_token_symbol: &str,
@@ -418,15 +457,80 @@ mod assertions {
         }
 
         pub fn has_ledger(self, expected_canister_id: &str, expected_version: &str) -> Self {
-            self.has_token_table_row_string_value("Ledger", expected_canister_id, expected_version)
+            self.has_token_table_row_string_value(
+                "Ledger",
+                expected_canister_id,
+                expected_version,
+                Self::NONE,
+                Self::NONE,
+            )
+        }
+
+        pub fn has_ledger_with_upgrade(
+            self,
+            expected_canister_id: &str,
+            expected_version: &str,
+            expected_upgrade_version: &str,
+            expected_upgrade_timestamp: &str,
+        ) -> Self {
+            self.has_token_table_row_string_value(
+                "Ledger",
+                expected_canister_id,
+                expected_version,
+                expected_upgrade_version,
+                expected_upgrade_timestamp,
+            )
         }
 
         pub fn has_index(self, expected_canister_id: &str, expected_version: &str) -> Self {
-            self.has_token_table_row_string_value("Index", expected_canister_id, expected_version)
+            self.has_token_table_row_string_value(
+                "Index",
+                expected_canister_id,
+                expected_version,
+                Self::NONE,
+                Self::NONE,
+            )
+        }
+
+        pub fn has_index_with_upgrade(
+            self,
+            expected_canister_id: &str,
+            expected_version: &str,
+            expected_upgrade_version: &str,
+            expected_upgrade_timestamp: &str,
+        ) -> Self {
+            self.has_token_table_row_string_value(
+                "Index",
+                expected_canister_id,
+                expected_version,
+                expected_upgrade_version,
+                expected_upgrade_timestamp,
+            )
         }
 
         pub fn has_archive(self, expected_canister_id: &str) -> Self {
-            self.has_token_table_row_string_value("Archive", expected_canister_id, "N/A")
+            self.has_token_table_row_string_value(
+                "Archive",
+                expected_canister_id,
+                "N/A",
+                Self::NONE,
+                Self::NONE,
+            )
+        }
+
+        pub fn has_archive_with_upgrade(
+            self,
+            expected_canister_id: &str,
+            expected_upgrade_version: &str,
+            expected_upgrade_timestamp: &str,
+        ) -> Self {
+            self.has_token_table_row_string_value(
+                "Archive",
+                expected_canister_id,
+                "N/A",
+                expected_upgrade_version,
+                expected_upgrade_timestamp,
+            )
         }
 
         fn has_token_table_row_string_value(
@@ -434,6 +538,8 @@ mod assertions {
             canister_type: &str,
             expected_canister_id: &str,
             expected_version: &str,
+            expected_upgrade_version: &str,
+            expected_upgrade_timestamp: &str,
         ) -> Self {
             let row_selector = match &self.token_selector {
                 TokenSelector::Erc20 {
@@ -458,8 +564,8 @@ mod assertions {
                     .collect();
                 assert_eq!(
                     cells.len(),
-                    3,
-                    "expected 3 cells in a row of an ERC-20 table, but got {:?}. Rendered html: {}",
+                    5,
+                    "expected 5 cells in a row of an ERC-20 table, but got {:?}. Rendered html: {}",
                     cells,
                     self.assert.rendered_html
                 );
@@ -472,6 +578,16 @@ mod assertions {
                     assert_eq!(
                         cells[2], expected_version,
                         "Unexpected version. Rendered html: {}",
+                        self.assert.rendered_html
+                    );
+                    assert_eq!(
+                        cells[3], expected_upgrade_version,
+                        "Unexpected last upgrade version. Rendered html: {}",
+                        self.assert.rendered_html
+                    );
+                    assert_eq!(
+                        cells[4], expected_upgrade_timestamp,
+                        "Unexpected last upgrade timestamp. Rendered html: {}",
                         self.assert.rendered_html
                     );
                     return self;

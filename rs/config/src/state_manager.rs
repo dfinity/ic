@@ -4,8 +4,6 @@ use std::path::PathBuf;
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct LsmtConfig {
-    /// Whether LSMT is enabled or not.
-    pub lsmt_status: FlagStatus,
     /// Number of pages per shard in sharded overlays; u64::MAX if unlimited.
     pub shard_num_pages: u64,
 }
@@ -47,7 +45,6 @@ fn file_backed_memory_allocator_default() -> FlagStatus {
 
 pub fn lsmt_config_default() -> LsmtConfig {
     LsmtConfig {
-        lsmt_status: FlagStatus::Enabled,
         // 40GiB
         // DO NOT CHANGE after LSMT is enabled, as it would crash the new replica trying to merge
         // old data.

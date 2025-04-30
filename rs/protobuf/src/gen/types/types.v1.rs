@@ -377,10 +377,6 @@ pub struct Summary {
     pub next_interval_length: u64,
     #[prost(uint64, tag = "4")]
     pub height: u64,
-    #[prost(message, repeated, tag = "5")]
-    pub current_transcripts_deprecated: ::prost::alloc::vec::Vec<TaggedNiDkgTranscript>,
-    #[prost(message, repeated, tag = "6")]
-    pub next_transcripts_deprecated: ::prost::alloc::vec::Vec<TaggedNiDkgTranscript>,
     #[prost(message, repeated, tag = "7")]
     pub configs: ::prost::alloc::vec::Vec<NiDkgConfig>,
     #[prost(message, repeated, tag = "9")]
@@ -388,18 +384,9 @@ pub struct Summary {
     #[prost(message, repeated, tag = "10")]
     pub transcripts_for_remote_subnets: ::prost::alloc::vec::Vec<CallbackIdedNiDkgTranscript>,
     #[prost(message, repeated, tag = "11")]
-    pub current_transcripts_new: ::prost::alloc::vec::Vec<NiDkgTranscript>,
+    pub current_transcripts: ::prost::alloc::vec::Vec<NiDkgTranscript>,
     #[prost(message, repeated, tag = "12")]
-    pub next_transcripts_new: ::prost::alloc::vec::Vec<NiDkgTranscript>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct TaggedNiDkgTranscript {
-    #[prost(message, optional, tag = "1")]
-    pub transcript: ::core::option::Option<NiDkgTranscript>,
-    #[prost(enumeration = "NiDkgTag", tag = "2")]
-    pub tag: i32,
-    #[prost(message, optional, tag = "3")]
-    pub key_id: ::core::option::Option<MasterPublicKeyId>,
+    pub next_transcripts: ::prost::alloc::vec::Vec<NiDkgTranscript>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CallbackIdedNiDkgTranscript {
@@ -926,7 +913,7 @@ pub struct KeyTranscriptCreation {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgMessage {
-    #[prost(oneof = "i_dkg_message::Msg", tags = "1, 2, 3, 4, 5, 6")]
+    #[prost(oneof = "i_dkg_message::Msg", tags = "1, 2, 3, 4, 5, 6, 7")]
     pub msg: ::core::option::Option<i_dkg_message::Msg>,
 }
 /// Nested message and enum types in `IDkgMessage`.
@@ -945,6 +932,8 @@ pub mod i_dkg_message {
         Opening(super::SignedIDkgOpening),
         #[prost(message, tag = "6")]
         SchnorrSigShare(super::SchnorrSigShare),
+        #[prost(message, tag = "7")]
+        VetkdKeyShare(super::VetKdKeyShare),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -964,6 +953,17 @@ pub struct SchnorrSigShare {
     pub request_id: ::core::option::Option<RequestId>,
     #[prost(bytes = "vec", tag = "3")]
     pub sig_share_raw: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct VetKdKeyShare {
+    #[prost(message, optional, tag = "1")]
+    pub signer_id: ::core::option::Option<NodeId>,
+    #[prost(message, optional, tag = "2")]
+    pub request_id: ::core::option::Option<RequestId>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub encrypted_key_share: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "4")]
+    pub node_signature: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignedIDkgComplaint {
@@ -1039,7 +1039,7 @@ pub struct PrefixPairSigShare {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgArtifactId {
-    #[prost(oneof = "i_dkg_artifact_id::Kind", tags = "1, 2, 3, 4, 5, 6")]
+    #[prost(oneof = "i_dkg_artifact_id::Kind", tags = "1, 2, 3, 4, 5, 6, 7")]
     pub kind: ::core::option::Option<i_dkg_artifact_id::Kind>,
 }
 /// Nested message and enum types in `IDkgArtifactId`.
@@ -1058,6 +1058,8 @@ pub mod i_dkg_artifact_id {
         Opening(super::PrefixPairIDkg),
         #[prost(message, tag = "6")]
         SchnorrSigShare(super::PrefixPairSigShare),
+        #[prost(message, tag = "7")]
+        VetkdKeyShare(super::PrefixPairSigShare),
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -1290,6 +1292,8 @@ pub struct Block {
     pub canister_http_payload_bytes: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "16")]
     pub query_stats_payload_bytes: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "17")]
+    pub vetkd_payload_bytes: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "11")]
     pub payload_hash: ::prost::alloc::vec::Vec<u8>,
 }
@@ -1504,6 +1508,23 @@ pub struct CanisterQueryStats {
     pub egress_payload_size: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct VetKdAgreement {
+    #[prost(uint64, tag = "1")]
+    pub callback_id: u64,
+    #[prost(oneof = "vet_kd_agreement::Agreement", tags = "2, 3")]
+    pub agreement: ::core::option::Option<vet_kd_agreement::Agreement>,
+}
+/// Nested message and enum types in `VetKdAgreement`.
+pub mod vet_kd_agreement {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Agreement {
+        #[prost(bytes, tag = "2")]
+        Data(::prost::alloc::vec::Vec<u8>),
+        #[prost(enumeration = "super::VetKdErrorCode", tag = "3")]
+        Reject(i32),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressIdOffset {
     #[prost(uint64, tag = "1")]
     pub expiry: u64,
@@ -1513,11 +1534,18 @@ pub struct IngressIdOffset {
     pub offset: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IngressMessage {
+    #[prost(bytes = "vec", tag = "1")]
+    pub message_id: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint64, tag = "2")]
+    pub expiry: u64,
+    #[prost(bytes = "vec", tag = "3")]
+    pub signed_request_bytes: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressPayload {
-    #[prost(message, repeated, tag = "1")]
-    pub id_and_pos: ::prost::alloc::vec::Vec<IngressIdOffset>,
-    #[prost(bytes = "vec", tag = "2")]
-    pub buffer: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, repeated, tag = "3")]
+    pub ingress_messages: ::prost::alloc::vec::Vec<IngressMessage>,
 }
 /// Stripped consensus artifacts messages below
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1526,6 +1554,8 @@ pub struct GetIngressMessageInBlockRequest {
     pub ingress_message_id: ::core::option::Option<IngressMessageId>,
     #[prost(message, optional, tag = "2")]
     pub block_proposal_id: ::core::option::Option<ConsensusMessageId>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub ingress_bytes_hash: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetIngressMessageInBlockResponse {
@@ -1545,6 +1575,8 @@ pub struct StrippedBlockProposal {
 pub struct StrippedIngressMessage {
     #[prost(message, optional, tag = "1")]
     pub stripped: ::core::option::Option<IngressMessageId>,
+    #[prost(bytes = "vec", tag = "2")]
+    pub ingress_bytes_hash: ::prost::alloc::vec::Vec<u8>,
 }
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1567,4 +1599,33 @@ pub mod stripped_consensus_message {
 pub struct StrippedConsensusMessageId {
     #[prost(message, optional, tag = "1")]
     pub unstripped_id: ::core::option::Option<ConsensusMessageId>,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum VetKdErrorCode {
+    Unspecified = 0,
+    TimedOut = 1,
+    InvalidKey = 2,
+}
+impl VetKdErrorCode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "VET_KD_ERROR_CODE_UNSPECIFIED",
+            Self::TimedOut => "VET_KD_ERROR_CODE_TIMED_OUT",
+            Self::InvalidKey => "VET_KD_ERROR_CODE_INVALID_KEY",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "VET_KD_ERROR_CODE_UNSPECIFIED" => Some(Self::Unspecified),
+            "VET_KD_ERROR_CODE_TIMED_OUT" => Some(Self::TimedOut),
+            "VET_KD_ERROR_CODE_INVALID_KEY" => Some(Self::InvalidKey),
+            _ => None,
+        }
+    }
 }

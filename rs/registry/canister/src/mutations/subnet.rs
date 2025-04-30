@@ -9,18 +9,18 @@ use dfn_core::call;
 use ic_base_types::{
     subnet_id_into_protobuf, CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId,
 };
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     ComputeInitialIDkgDealingsArgs, ComputeInitialIDkgDealingsResponse, MasterPublicKeyId,
 };
 use ic_protobuf::registry::{
-    crypto::v1::ChainKeySigningSubnetList,
+    crypto::v1::ChainKeyEnabledSubnetList,
     subnet::v1::{
         chain_key_initialization, CatchUpPackageContents, ChainKeyInitialization, SubnetListRecord,
         SubnetRecord,
     },
 };
 use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_chain_key_signing_subnet_list_key,
+    make_catch_up_package_contents_key, make_chain_key_enabled_subnet_list_key,
     make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_subnet_features::ChainKeyConfig;
@@ -262,35 +262,34 @@ impl Registry {
         }
     }
 
-    /// Get the list of subnets that can sign for a given MasterPublicKeyId.
-    pub fn get_chain_key_signing_subnet_list(
+    /// Get the list of subnets that are enabled for a given MasterPublicKeyId.
+    pub fn get_chain_key_enabled_subnet_list(
         &self,
         key_id: &MasterPublicKeyId,
-    ) -> Option<ChainKeySigningSubnetList> {
-        let chain_key_signing_subnet_list_key_id = make_chain_key_signing_subnet_list_key(key_id);
+    ) -> Option<ChainKeyEnabledSubnetList> {
+        let chain_key_enabled_subnet_list_key_id = make_chain_key_enabled_subnet_list_key(key_id);
         self.get(
-            chain_key_signing_subnet_list_key_id.as_bytes(),
+            chain_key_enabled_subnet_list_key_id.as_bytes(),
             self.latest_version(),
         )
         .map(|registry_value| {
-            ChainKeySigningSubnetList::decode(registry_value.value.as_slice()).unwrap()
+            ChainKeyEnabledSubnetList::decode(registry_value.value.as_slice()).unwrap()
         })
     }
 
-    /// Create the mutations that disable subnet signing for a single subnet
-    /// and set of MasterPublicKeyId's.
-    pub fn mutations_to_disable_subnet_signing(
+    /// Create the mutations that disable set of chain keys for a single subnet.
+    pub fn mutations_to_disable_subnet_chain_key(
         &self,
         subnet_id: SubnetId,
-        chain_key_signing_disable: &Vec<MasterPublicKeyId>,
+        chain_key_disable: &Vec<MasterPublicKeyId>,
     ) -> Vec<RegistryMutation> {
         let mut mutations = vec![];
-        for chain_key_id in chain_key_signing_disable {
+        for chain_key_id in chain_key_disable {
             let mut chain_key_signing_list_for_key = self
-                .get_chain_key_signing_subnet_list(chain_key_id)
+                .get_chain_key_enabled_subnet_list(chain_key_id)
                 .unwrap_or_default();
 
-            // If this subnet does not sign for that key, do nothing.
+            // If that key is already disabled on this subnet, do nothing.
             if !chain_key_signing_list_for_key
                 .subnets
                 .contains(&subnet_id_into_protobuf(subnet_id))
@@ -305,7 +304,7 @@ impl Registry {
                 .retain(|subnet| subnet != &protobuf_subnet_id);
 
             mutations.push(upsert(
-                make_chain_key_signing_subnet_list_key(chain_key_id),
+                make_chain_key_enabled_subnet_list_key(chain_key_id),
                 chain_key_signing_list_for_key.encode_to_vec(),
             ));
         }

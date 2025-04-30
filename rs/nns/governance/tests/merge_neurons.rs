@@ -10,12 +10,15 @@ use ic_base_types::PrincipalId;
 use ic_nervous_system_common::ONE_YEAR_SECONDS;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::{
-    governance::{Environment, MAX_DISSOLVE_DELAY_SECONDS},
+    governance::MAX_DISSOLVE_DELAY_SECONDS,
     pb::v1::{
         manage_neuron::{Command, Merge},
-        manage_neuron_response::{Command as CommandResponse, MergeResponse},
         ManageNeuron, NetworkEconomics,
     },
+};
+use ic_nns_governance_api::pb::v1::{
+    self as api,
+    manage_neuron_response::{Command as CommandResponse, MergeResponse},
 };
 use proptest::prelude::{proptest, TestCaseError};
 
@@ -133,32 +136,30 @@ fn do_test_merge_neurons(
             let source_neuron_id = source_neuron.id.unwrap();
             let target_neuron_id = target_neuron.id.unwrap();
 
-            let now_seconds = nns.now();
-
             pretty_assertions::assert_eq!(
                 source_neuron,
                 nns.governance
-                    .neuron_store
-                    .with_neuron(&source_neuron_id, |n| n.clone().into_proto(now_seconds))
+                    .get_full_neuron(&source_neuron_id, &source_neuron.controller.unwrap())
                     .unwrap()
             );
             pretty_assertions::assert_eq!(
                 target_neuron,
                 nns.governance
-                    .neuron_store
-                    .with_neuron(&target_neuron_id, |n| n.clone().into_proto(now_seconds))
+                    .get_full_neuron(&target_neuron_id, &target_neuron.controller.unwrap())
                     .unwrap()
             );
             pretty_assertions::assert_eq!(
                 source_neuron_info,
                 nns.governance
                     .get_neuron_info(&source_neuron_id, controller)
+                    .map(api::NeuronInfo::from)
                     .unwrap()
             );
             pretty_assertions::assert_eq!(
                 target_neuron_info,
                 nns.governance
                     .get_neuron_info(&target_neuron_id, controller)
+                    .map(api::NeuronInfo::from)
                     .unwrap()
             );
         }

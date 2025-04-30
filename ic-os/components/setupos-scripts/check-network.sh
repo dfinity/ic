@@ -6,24 +6,33 @@ set -o pipefail
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
+source /opt/ic/bin/config.sh
 source /opt/ic/bin/functions.sh
 
-CONFIG="${CONFIG:=/var/ic/config/config.ini}"
-DEPLOYMENT="${DEPLOYMENT:=/data/deployment.json}"
+function check_generate_network_config() {
+    if [ "$(systemctl is-failed generate-network-config.service)" = "failed" ]; then
+        local service_logs=$(systemctl status generate-network-config.service)
+        local network_settings=$(get_config_value '.network_settings')
+        local log_message="ERROR in generate-network-config.service
 
-function read_variables() {
-    # Read limited set of keys. Be extra-careful quoting values as it could
-    # otherwise lead to executing arbitrary shell code!
-    while IFS="=" read -r key value; do
-        case "$key" in
-            "ipv6_prefix") ipv6_prefix="${value}" ;;
-            "ipv6_gateway") ipv6_gateway="${value}" ;;
-            "ipv4_address") ipv4_address="${value}" ;;
-            "ipv4_prefix_length") ipv4_prefix_length="${value}" ;;
-            "ipv4_gateway") ipv4_gateway="${value}" ;;
-            "domain") domain="${value}" ;;
-        esac
-    done <"${CONFIG}"
+generate-network-config.service logs:
+${service_logs}
+
+Config network settings:
+${network_settings}
+
+For more detailed generate-network-config.service logs, run \`\$ journalctl -u generate-network-config\`"
+        log_and_halt_installation_on_error "1" "${log_message}"
+    fi
+}
+
+function read_config_variables() {
+    ipv6_prefix=$(get_config_value '.network_settings.ipv6_config.Deterministic.prefix')
+    ipv6_gateway=$(get_config_value '.network_settings.ipv6_config.Deterministic.gateway')
+    ipv4_address=$(get_config_value '.network_settings.ipv4_config.address')
+    ipv4_prefix_length=$(get_config_value '.network_settings.ipv4_config.prefix_length')
+    ipv4_gateway=$(get_config_value '.network_settings.ipv4_config.gateway')
+    domain_name=$(get_config_value '.network_settings.domain_name')
 }
 
 # WARNING: Uses 'eval' for command execution.
@@ -47,18 +56,18 @@ function eval_command_with_retries() {
 
     if [ ${exit_code} -ne 0 ]; then
         local ip6_output=$(ip -6 addr show)
-        local ip6_route_output=$(ip -6 route show)
         local dns_servers=$(grep 'nameserver' /etc/resolv.conf)
+        local network_settings=$(get_config_value '.network_settings')
 
         log_and_halt_installation_on_error "${exit_code}" "${error_message}
 Output of 'ip -6 addr show':
 ${ip6_output}
 
-Output of 'ip -6 route show':
-${ip6_route_output}
-
 Configured DNS servers:
-${dns_servers}"
+${dns_servers}
+
+Config network settings:
+${network_settings}"
     fi
 
     echo "${result}"
@@ -101,20 +110,22 @@ function get_network_settings() {
         "echo ${ipv6_address_system_full} | awk -F '/' '{ print \$1 }'" \
         "Failed to get system's IPv6 address.")
 
-    # 0 corresponds to HostOS, 1 to GuestOS
-    HOSTOS_IPV6_ADDRESS=$(/opt/ic/bin/setupos_tool generate-ipv6-address --node-type 0)
-    GUESTOS_IPV6_ADDRESS=$(/opt/ic/bin/setupos_tool generate-ipv6-address --node-type 1)
+    HOSTOS_IPV6_ADDRESS=$(/opt/ic/bin/setupos_tool generate-ipv6-address --node-type HostOS)
+    GUESTOS_IPV6_ADDRESS=$(/opt/ic/bin/setupos_tool generate-ipv6-address --node-type GuestOS)
 }
 
 function print_network_settings() {
     echo "* Printing user defined network settings..."
     echo "  IPv6 Prefix : ${ipv6_prefix}"
     echo "  IPv6 Gateway: ${ipv6_gateway}"
-    if [[ -v ipv4_address && -n ${ipv4_address} && -v ipv4_prefix_length && -n ${ipv4_prefix_length} && -v ipv4_gateway && -n ${ipv4_gateway} && -v domain && -n ${domain} ]]; then
+
+    if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} ]]; then
         echo "  IPv4 Address: ${ipv4_address}"
         echo "  IPv4 Prefix Length: ${ipv4_prefix_length}"
         echo "  IPv4 Gateway: ${ipv4_gateway}"
-        echo "  Domain name : ${domain}"
+    fi
+    if [[ -n ${domain_name} ]]; then
+        echo "  Domain name: ${domain_name}"
     fi
     echo " "
 
@@ -135,10 +146,10 @@ function validate_domain_name() {
     local domain_part
     local -a domain_parts
 
-    IFS='.' read -ra domain_parts <<<"${domain}"
+    IFS='.' read -ra domain_parts <<<"${domain_name}"
 
     if [ ${#domain_parts[@]} -lt 2 ]; then
-        log_and_halt_installation_on_error 1 "Domain validation error: less than two domain parts in domain: ${domain}"
+        log_and_halt_installation_on_error 1 "Domain validation error: less than two domain parts in domain: ${domain_name}"
     fi
 
     for domain_part in "${domain_parts[@]}"; do
@@ -185,17 +196,13 @@ function ping_ipv6_gateway() {
     echo " "
 }
 
-function assemble_nns_nodes_list() {
-    NNS_URL_STRING=$(/opt/ic/bin/fetch-property.sh --key=.nns.url --config=${DEPLOYMENT})
-    IFS=',' read -r -a NNS_URL_LIST <<<"$NNS_URL_STRING"
-}
-
 function query_nns_nodes() {
     echo "* Querying NNS nodes..."
 
+    local nns_url_list=($(get_config_value '.icos_settings.nns_urls' | jq -r '.[]'))
     local success=false
-    # At least one of the provided URLs needs to work.
-    for url in "${NNS_URL_LIST[@]}"; do
+
+    for url in "${nns_url_list[@]}"; do
         # When running against testnets, we need to ignore self signed certs
         # with `--insecure`. This check is only meant to confirm from SetupOS
         # that NNS urls are reachable, so we do not mind that it is "weak".
@@ -219,18 +226,21 @@ function query_nns_nodes() {
 main() {
     log_start "$(basename $0)"
     if kernel_cmdline_bool_default_true ic.setupos.check_network; then
-        read_variables
+        check_generate_network_config
+        read_config_variables
         get_network_settings
         print_network_settings
 
-        if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} ]]; then
+        if [[ -n ${domain_name} ]]; then
             validate_domain_name
+        fi
+
+        if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} ]]; then
             setup_ipv4_network
             ping_ipv4_gateway
         fi
 
         ping_ipv6_gateway
-        assemble_nns_nodes_list
         query_nns_nodes
     else
         echo "* Network checks skipped by request via kernel command line"

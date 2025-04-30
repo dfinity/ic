@@ -139,6 +139,7 @@ fn subnet_splitting_test(env: TestEnv) {
         ),
         test_mode: true,
         skip_prompts: true,
+        use_local_binaries: false,
     };
 
     let subnet_splitting_args = SubnetSplittingArgs {

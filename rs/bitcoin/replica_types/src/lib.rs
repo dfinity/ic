@@ -414,6 +414,7 @@ impl From<v1::SendTransactionResponse> for SendTransactionResponse {
 impl SendTransactionResponse {
     /// Returns the size of this `SendTransactionResponse` in bytes.
     pub fn count_bytes(&self) -> usize {
+        let SendTransactionResponse {} = &self;
         0
     }
 }
@@ -429,7 +430,11 @@ pub struct BitcoinReject {
 impl BitcoinReject {
     /// Returns the size of this `RejectResponse` in bytes.
     pub fn count_bytes(&self) -> usize {
-        size_of_val(&self.reject_code) + self.message.len()
+        let BitcoinReject {
+            reject_code,
+            message,
+        } = &self;
+        size_of_val(reject_code) + message.len()
     }
 }
 
@@ -598,7 +603,11 @@ impl TryFrom<v1::BitcoinAdapterResponse> for BitcoinAdapterResponse {
 impl BitcoinAdapterResponse {
     /// Returns the size of this `BitcoinAdapterResponse` in bytes.
     pub fn count_bytes(&self) -> usize {
-        self.response.count_bytes() + std::mem::size_of::<u64>()
+        let BitcoinAdapterResponse {
+            response,
+            callback_id,
+        } = &self;
+        response.count_bytes() + size_of_val(callback_id)
     }
 }
 

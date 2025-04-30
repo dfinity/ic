@@ -69,12 +69,9 @@ IMAGE="$IMAGE:$IMAGE_TAG"
 if ! sudo podman "${PODMAN_ARGS[@]}" image exists $IMAGE; then
     if ! sudo podman "${PODMAN_ARGS[@]}" pull $IMAGE; then
         # fallback to building the image
-        docker() {
-            PODMAN_ARGS=(${PODMAN_ARGS})
-            sudo podman "${PODMAN_ARGS[@]}" "$@" --network=host
-        }
+        docker() { sudo podman "${PODMAN_ARGS[@]}" "$@" --network=host; }
         export -f docker
-        PODMAN_ARGS="${PODMAN_ARGS[@]}" "$REPO_ROOT"/ci/container/build-image.sh "${BUILD_ARGS[@]}"
+        "$REPO_ROOT"/ci/container/build-image.sh "${BUILD_ARGS[@]}"
         unset -f docker
     fi
 fi
@@ -114,7 +111,6 @@ fi
 
 PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"
-    --mount type=bind,source="${HOME}",target="${HOME}"
     --mount type=bind,source="${CACHE_DIR:-${HOME}/.cache}",target="${CTR_HOME}/.cache"
     --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
     --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"

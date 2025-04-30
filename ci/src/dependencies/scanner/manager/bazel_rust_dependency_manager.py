@@ -110,11 +110,8 @@ class BazelRustDependencyManager(DependencyManager):
             # ['zstd', 'sys', '2.0.2', 'zstd.1.5.2']
             for split_string in parse_result:
                 # 2.0.2
-                try:
-                    if isinstance(version.parse(split_string), version.Version):
-                        version_str = split_string
-                except version.InvalidVersion:
-                    continue
+                if isinstance(version.parse(split_string), version.Version):
+                    version_str = split_string
             # split with -2.0.2
             # noinspection PyUnboundLocalVariable
             name = result[0].split(f"-{version_str}", 1)[0]

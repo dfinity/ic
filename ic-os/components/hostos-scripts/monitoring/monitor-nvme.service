@@ -1,11 +1,14 @@
 [Unit]
 Description=Monitor NVMe SMART log info 
-Requires=node_exporter.service
-After=node_exporter.service
+Before=node_exporter.service
 
 [Service]
 Type=oneshot
 ExecStart=/opt/ic/bin/monitor-nvme.sh
+
+# Disable systemd start and stop logs
+LogLevelMax=1
+SyslogLevel=2
 
 [Install]
 WantedBy=multi-user.target

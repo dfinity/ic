@@ -86,11 +86,9 @@ dev-root-ca.crt
 cpp/**/infogetty
 cpp/**/infogetty.o
 cpp/**/network_info.o
-cpp/**/prestorecon
-cpp/**/prestorecon.o
 
 # Various build artifacts
-artifacts
+/artifacts
 **/build
 **/build-tmp
 **/build-out
@@ -115,7 +113,6 @@ artifacts
 bazel-build-log.json
 bazel-bep.pb
 bazel-bep.txt
-bazel-timestamp.txt
 user.bazelrc
 
 # Bazel profile

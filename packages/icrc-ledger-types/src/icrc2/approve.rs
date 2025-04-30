@@ -5,6 +5,9 @@ use std::fmt;
 use super::super::icrc1::account::{Account, Subaccount};
 use super::super::icrc1::transfer::Memo;
 
+/// The arguments for the
+/// [ICRC-2 `approve`](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-2/README.md#icrc2_approve)
+/// endpoint.
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ApproveArgs {
     #[serde(default)]
@@ -23,6 +26,9 @@ pub struct ApproveArgs {
     pub created_at_time: Option<u64>,
 }
 
+/// The error return type for the
+/// [ICRC-2 `approve`](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-2/README.md#icrc2_approve)
+/// endpoint.
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub enum ApproveError {
     BadFee { expected_fee: Nat },

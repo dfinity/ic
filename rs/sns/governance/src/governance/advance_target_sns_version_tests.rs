@@ -13,15 +13,17 @@ use crate::sns_upgrade::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryRe
 use crate::{
     pb::v1::{
         governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Versions},
-        ProposalData, Tally, UpgradeSnsToNextVersion,
+        upgrade_journal_entry::Event,
+        GetUpgradeJournalRequest, ProposalData, Tally, UpgradeJournal, UpgradeJournalEntry,
+        UpgradeSnsToNextVersion,
     },
     sns_upgrade::{ListUpgradeStep, ListUpgradeStepsRequest, ListUpgradeStepsResponse, SnsVersion},
     types::test_helpers::NativeEnvironment,
 };
+use ic_nervous_system_canisters::cmc::FakeCmc;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusType,
 };
-use ic_nervous_system_common::cmc::FakeCmc;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
@@ -59,7 +61,7 @@ async fn test_initiate_upgrade_blocked_by_upgrade_proposal() {
     let proposal = ProposalData {
         action: (&action).into(),
         id: Some(proposal_id.into()),
-        decided_timestamp_seconds: 1,
+        decided_timestamp_seconds: NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS - 10,
         latest_tally: Some(Tally {
             yes: 1,
             no: 0,
@@ -924,6 +926,84 @@ fn get_or_reset_upgrade_steps_leads_to_should_refresh_cached_upgrade_steps() {
     assert!(gov.should_refresh_cached_upgrade_steps());
 }
 
+#[tokio::test]
+async fn test_refresh_cached_upgrade_steps_advances_target_version_automatically_is_required() {
+    let version_a = Version {
+        root_wasm_hash: vec![1, 2, 3],
+        governance_wasm_hash: vec![2, 3, 4],
+        ledger_wasm_hash: vec![3, 4, 5],
+        swap_wasm_hash: vec![4, 5, 6],
+        archive_wasm_hash: vec![5, 6, 7],
+        index_wasm_hash: vec![6, 7, 8],
+    };
+    let mut version_b = version_a.clone();
+    version_b.root_wasm_hash = vec![9, 9, 9];
+
+    // Smoke test.
+    assert_ne!(version_a, version_b);
+
+    let make_gov = || -> Governance {
+        let mut env = NativeEnvironment::new(Some(*TEST_GOVERNANCE_CANISTER_ID));
+        add_environment_mock_list_upgrade_steps_call(
+            &mut env,
+            vec![
+                SnsVersion::from(version_a.clone()),
+                SnsVersion::from(version_b.clone()),
+            ],
+        );
+        Governance::new(
+            GovernanceProto {
+                deployed_version: Some(version_a.clone()),
+                cached_upgrade_steps: None,
+                ..basic_governance_proto()
+            }
+            .try_into()
+            .unwrap(),
+            Box::new(env),
+            Box::new(DoNothingLedger {}),
+            Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
+        )
+    };
+
+    for (automatically_advance_target_version, expected_target_version) in [
+        (None, None),
+        (Some(false), None),
+        (Some(true), Some(version_b.clone())),
+    ] {
+        let mut gov = make_gov();
+
+        if let Some(parameters) = gov.proto.parameters.as_mut() {
+            parameters.automatically_advance_target_version = automatically_advance_target_version;
+        };
+
+        // Precondition
+        assert_eq!(gov.proto.cached_upgrade_steps, None);
+        assert_eq!(gov.proto.target_version, None);
+
+        // Run code under test and assert intermediate conditions.
+        let deployed_version = gov
+            .try_temporarily_lock_refresh_cached_upgrade_steps()
+            .unwrap();
+        gov.refresh_cached_upgrade_steps(deployed_version).await;
+
+        // Intermediate postcondition.
+        assert_eq!(
+            gov.proto
+                .cached_upgrade_steps
+                .clone()
+                .unwrap()
+                .upgrade_steps
+                .unwrap()
+                .versions,
+            vec![version_a.clone(), version_b.clone(),]
+        );
+
+        // Main postcondition.
+        assert_eq!(gov.proto.target_version, expected_target_version);
+    }
+}
+
 fn add_environment_mock_calls_for_initiate_upgrade(
     env: &mut NativeEnvironment,
     expected_wasm_hash_requested: Vec<u8>,
@@ -1018,8 +1098,8 @@ fn add_environment_mock_calls_for_initiate_upgrade(
             env.require_call_canister_invocation(
                 CanisterId::ic_00(),
                 "install_code",
-                Encode!(&ic_management_canister_types::InstallCodeArgs {
-                    mode: ic_management_canister_types::CanisterInstallMode::Upgrade,
+                Encode!(&ic_management_canister_types_private::InstallCodeArgs {
+                    mode: ic_management_canister_types_private::CanisterInstallMode::Upgrade,
                     canister_id: canister_id.get(),
                     wasm_module: vec![9, 8, 7, 6, 5, 4, 3, 2],
                     arg: Encode!().unwrap(),
@@ -1172,5 +1252,176 @@ fn add_environment_mock_list_upgrade_steps_call(
                 .collect(),
         })
         .unwrap()),
+    );
+}
+
+#[test]
+fn test_get_upgrade_journal_pagination() {
+    let mut governance = Governance::new(
+        GovernanceProto {
+            upgrade_journal: Some(UpgradeJournal {
+                entries: vec![
+                    UpgradeJournalEntry {
+                        event: Some(Event::UpgradeStarted(
+                            upgrade_journal_entry::UpgradeStarted {
+                                current_version: None,
+                                expected_version: None,
+                                reason: None,
+                            },
+                        )),
+                        timestamp_seconds: Some(1),
+                    },
+                    UpgradeJournalEntry {
+                        event: Some(Event::UpgradeOutcome(
+                            upgrade_journal_entry::UpgradeOutcome {
+                                human_readable: Some("success".to_string()),
+                                status: None,
+                            },
+                        )),
+                        timestamp_seconds: Some(2),
+                    },
+                    UpgradeJournalEntry {
+                        event: Some(Event::UpgradeStarted(
+                            upgrade_journal_entry::UpgradeStarted {
+                                current_version: None,
+                                expected_version: None,
+                                reason: None,
+                            },
+                        )),
+                        timestamp_seconds: Some(3),
+                    },
+                ],
+            }),
+            ..basic_governance_proto()
+        }
+        .try_into()
+        .unwrap(),
+        Box::new(NativeEnvironment::new(None)),
+        Box::new(DoNothingLedger {}),
+        Box::new(DoNothingLedger {}),
+        Box::new(FakeCmc::new()),
+    );
+
+    // Scenario 1: Default behavior shows most recent entries
+    let response = governance.get_upgrade_journal(GetUpgradeJournalRequest {
+        offset: None,
+        limit: Some(2),
+    });
+    assert_eq!(
+        response.clone().upgrade_journal.unwrap().entries[..],
+        governance.proto.upgrade_journal.as_ref().unwrap().entries[1..],
+    );
+    // Assert the timestamps explicitly for good measure
+    assert_eq!(
+        response
+            .clone()
+            .upgrade_journal
+            .unwrap()
+            .entries
+            .into_iter()
+            .filter_map(|event| event.timestamp_seconds)
+            .collect::<Vec<_>>(),
+        vec![2, 3],
+    );
+
+    // Scenario 2: Explicit start index
+    let response = governance.get_upgrade_journal(GetUpgradeJournalRequest {
+        offset: Some(0),
+        limit: Some(2),
+    });
+    assert_eq!(
+        response.clone().upgrade_journal.unwrap().entries[..],
+        governance.proto.upgrade_journal.as_ref().unwrap().entries[0..2],
+    );
+    // Assert the timestamps explicitly for good measure
+    assert_eq!(
+        response
+            .clone()
+            .upgrade_journal
+            .unwrap()
+            .entries
+            .into_iter()
+            .filter_map(|event| event.timestamp_seconds)
+            .collect::<Vec<_>>(),
+        vec![1, 2],
+    );
+
+    // Scenario 3: Start index beyond bounds returns empty list
+    let response = governance.get_upgrade_journal(GetUpgradeJournalRequest {
+        offset: Some(10),
+        limit: Some(2),
+    });
+    assert_eq!(response.upgrade_journal.unwrap().entries, Vec::new());
+
+    // Scenario 4: slice goes past the end of available entries (i.e. offset + max_entries much greater than len)
+    let response = governance.get_upgrade_journal(GetUpgradeJournalRequest {
+        offset: Some(1),
+        limit: Some(10),
+    });
+    assert_eq!(
+        response.clone().upgrade_journal.unwrap().entries[..],
+        governance.proto.upgrade_journal.as_ref().unwrap().entries[1..],
+    );
+    // Assert the timestamps explicitly for good measure
+    assert_eq!(
+        response
+            .clone()
+            .upgrade_journal
+            .unwrap()
+            .entries
+            .into_iter()
+            .filter_map(|event| event.timestamp_seconds)
+            .collect::<Vec<_>>(),
+        vec![2, 3],
+    );
+
+    // Scenario 5: API obeys the global limit when there are tons of entries
+    governance.proto.upgrade_journal = Some(UpgradeJournal {
+        entries: vec![
+            UpgradeJournalEntry::default();
+            MAX_UPGRADE_JOURNAL_ENTRIES_PER_REQUEST as usize + 1
+        ],
+    });
+    let response = governance.get_upgrade_journal(GetUpgradeJournalRequest {
+        offset: None,
+        limit: Some(MAX_UPGRADE_JOURNAL_ENTRIES_PER_REQUEST + 1),
+    });
+    assert_eq!(
+        response.upgrade_journal.unwrap().entries[..],
+        governance.proto.upgrade_journal.as_ref().unwrap().entries
+            [..(MAX_UPGRADE_JOURNAL_ENTRIES_PER_REQUEST as usize)],
+    );
+
+    // Scenario 6: The tail of the list is returned when no offset is specified
+    governance
+        .proto
+        .upgrade_journal
+        .as_mut()
+        .unwrap()
+        .entries
+        .push(UpgradeJournalEntry {
+            event: Some(Event::UpgradeOutcome(
+                upgrade_journal_entry::UpgradeOutcome {
+                    human_readable: Some("success".to_string()),
+                    status: None,
+                },
+            )),
+            timestamp_seconds: Some(220293), // crazy timestamp here to make sure tihs entry is unique
+        });
+    let response = governance.get_upgrade_journal(GetUpgradeJournalRequest {
+        offset: None,
+        limit: Some(1),
+    });
+    assert_eq!(
+        response.upgrade_journal.unwrap().entries,
+        vec![governance
+            .proto
+            .upgrade_journal
+            .as_ref()
+            .unwrap()
+            .entries
+            .last()
+            .unwrap()
+            .clone()],
     );
 }

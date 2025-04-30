@@ -66,9 +66,10 @@ use tokio::{
     net::{TcpSocket, TcpStream},
     sync::{
         mpsc::{channel, unbounded_channel, Sender, UnboundedReceiver},
-        watch, OnceCell,
+        watch,
     },
 };
+use tokio_util::sync::CancellationToken;
 use tower::{util::BoxCloneService, Service, ServiceExt};
 use tower_test::mock::Handle;
 
@@ -194,7 +195,7 @@ pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
         routing_table: Arc::new(RoutingTable::default()),
         canister_migrations: Arc::new(CanisterMigrations::default()),
         nns_subnet_id: subnet_test_id(1),
-        idkg_signing_subnets: Default::default(),
+        chain_key_enabled_subnets: Default::default(),
         bitcoin_mainnet_canister_id: None,
         bitcoin_testnet_canister_id: None,
     };
@@ -377,7 +378,7 @@ pub struct HttpEndpointBuilder {
     state_manager: Arc<dyn StateReader<State = ReplicatedState>>,
     consensus_cache: Arc<dyn ConsensusPoolCache>,
     registry_client: Arc<dyn RegistryClient>,
-    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
+    delegation_from_nns: Option<CertificateDelegation>,
     pprof_collector: Arc<dyn PprofCollector>,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
     certified_height: Option<Height>,
@@ -393,7 +394,7 @@ impl HttpEndpointBuilder {
             consensus_cache: Arc::new(basic_consensus_pool_cache()),
             registry_client: Arc::new(basic_registry_client()),
             ingress_pool_throttler: Arc::new(RwLock::new(basic_ingress_pool_throttler())),
-            delegation_from_nns: Arc::new(OnceCell::new()),
+            delegation_from_nns: None,
             pprof_collector: Arc::new(Pprof),
             tls_config: Arc::new(MockTlsConfig::new()),
             certified_height: None,
@@ -426,8 +427,8 @@ impl HttpEndpointBuilder {
         self
     }
 
-    pub fn with_delegation_from_nns(self, delegation_from_nns: CertificateDelegation) -> Self {
-        self.delegation_from_nns.set(delegation_from_nns).unwrap();
+    pub fn with_delegation_from_nns(mut self, delegation_from_nns: CertificateDelegation) -> Self {
+        self.delegation_from_nns = Some(delegation_from_nns);
         self
     }
 
@@ -456,6 +457,8 @@ impl HttpEndpointBuilder {
         let (query_exe, query_exe_handler) = setup_query_execution_mock();
         let (certified_height_watcher_tx, certified_height_watcher_rx) =
             watch::channel(self.certified_height.unwrap_or_default());
+        let (_nns_delegation_watcher_tx, nns_delegation_watcher_rx) =
+            watch::channel(self.delegation_from_nns);
 
         let (terminal_state_ingress_messages_tx, terminal_state_ingress_messages_rx) = channel(100);
 
@@ -492,11 +495,12 @@ impl HttpEndpointBuilder {
             self.consensus_cache,
             SubnetType::Application,
             MaliciousFlags::default(),
-            self.delegation_from_nns,
+            nns_delegation_watcher_rx,
             self.pprof_collector,
             ic_tracing::ReloadHandles::new(tracing_subscriber::reload::Layer::new(vec![]).1),
             certified_height_watcher_rx,
             terminal_state_ingress_messages_rx,
+            CancellationToken::new(),
         );
 
         HttpEndpointHandles {

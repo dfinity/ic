@@ -17,9 +17,11 @@ dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
+ic_consensus_system_test_utils = { path = "../consensus/utils" }
+ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-limits = { path = "../../limits" }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
-ic-networking-subnet-update-workload = { path = "./subnet_update_workload" } 
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
+ic-networking-subnet-update-workload = { path = "./subnet_update_workload" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-prep = { path = "../../prep" }
 ic-protobuf = { path = "../../protobuf" }
@@ -31,11 +33,15 @@ ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types = { path = "../../types/types" }
 ic-utils = { workspace = true }
+leb128 = { workspace = true }
 proxy_canister = { path = "../../rust_canisters/proxy_canister" }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-registry-canister = {path = "../../registry/canister"}
+registry-canister = { path = "../../registry/canister" }
 reqwest = { workspace = true }
+serde = { workspace = true }
+serde_cbor = { workspace = true }
+serde_json = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
@@ -51,6 +57,14 @@ path = "canister_http_fault_tolerance_test.rs"
 [[bin]]
 name = "ic-systest-canister-http-socks"
 path = "canister_http_socks_test.rs"
+
+[[bin]]
+name = "ic-systest-canister-http-stress"
+path = "canister_http_stress_test.rs"
+
+[[bin]]
+name = "ic-systest-canister-http-soak"
+path = "canister_http_soak_test.rs"
 
 [[bin]]
 name = "ic-systest-canister-http"
@@ -91,3 +105,7 @@ path = "update_workload_large_payload.rs"
 [[bin]]
 name = "ic-systest-cloner-canister-workload"
 path = "cloner_canister_workload.rs"
+
+[[bin]]
+name = "ic-systest-nns-delegation-test"
+path = "nns_delegation_test.rs"

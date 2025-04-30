@@ -34,7 +34,6 @@ use ic_types::{
     CanisterId, RegistryVersion, SubnetId,
 };
 use prometheus::Registry;
-use rand::Rng;
 use reqwest;
 
 use crate::{
@@ -45,8 +44,17 @@ use crate::{
     snapshot::{node_test_id, subnet_test_id, RegistrySnapshot, Snapshot, Snapshotter, Subnet},
 };
 
+#[macro_export]
+macro_rules! principal {
+    ($id:expr) => {{
+        candid::Principal::from_text($id).unwrap()
+    }};
+}
+
+pub use principal;
+
 #[derive(Debug)]
-struct TestHttpClient(usize);
+pub struct TestHttpClient(pub usize);
 
 #[async_trait]
 impl HttpClient for TestHttpClient {
@@ -65,10 +73,9 @@ impl HttpClient for TestHttpClient {
     }
 }
 
-fn new_random_certified_data() -> Digest {
-    let mut random_certified_data: [u8; 32] = [0; 32];
-    rand::thread_rng().fill(&mut random_certified_data);
-    Digest(random_certified_data)
+fn new_certified_data() -> Digest {
+    let data: [u8; 32] = [0; 32];
+    Digest(data)
 }
 
 pub fn valid_tls_certificate_and_validation_time() -> (X509PublicKeyCert, Time) {
@@ -98,7 +105,7 @@ pub fn valid_tls_certificate_and_validation_time() -> (X509PublicKeyCert, Time) 
 pub fn new_threshold_key() -> ThresholdSigPublicKey {
     let (_, pk, _) = CertificateBuilder::new(CanisterData {
         canister_id: CanisterId::from_u64(1),
-        certified_data: new_random_certified_data(),
+        certified_data: new_certified_data(),
     })
     .build();
 
@@ -124,7 +131,6 @@ pub fn test_subnet_record() -> SubnetRecord {
         max_number_of_canisters: 0,
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
-        ecdsa_config: None,
         chain_key_config: None,
     }
 }
@@ -315,6 +321,8 @@ pub fn setup_test_router(
     let subnets = registry_snapshot.load_full().unwrap().subnets.clone();
     persister.persist(subnets.clone());
 
+    let salt: Arc<ArcSwapOption<Vec<u8>>> = Arc::new(ArcSwapOption::empty());
+
     let router = setup_router(
         registry_snapshot,
         routing_table,
@@ -326,6 +334,7 @@ pub fn setup_test_router(
         enable_cache.then_some(Arc::new(
             Cache::new(10485760, 262144, Duration::from_secs(1), false).unwrap(),
         )),
+        salt,
     );
 
     let router = router.layer(axum::middleware::from_fn(add_conninfo));

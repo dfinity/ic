@@ -425,10 +425,14 @@ impl Payload {
         }
 
         // If we got here, we have at least one message.
-        let messages = self
-            .messages
-            .as_ref()
-            .expect("Non-zero byte size for empty `messages`.");
+        let messages = match self.messages.as_ref() {
+            Some(messages) => messages,
+            None => {
+                debug_assert!(false, "Non-zero byte size for empty `messages`.");
+                // Bail out.
+                return Ok((None, Some(self)));
+            }
+        };
 
         // Find the rightmost cutoff point that respects the provided limits.
         let mut byte_size = NON_EMPTY_PAYLOAD_FIXED_BYTES + self.header.count_bytes();
@@ -454,11 +458,14 @@ impl Payload {
         let cutoff = cutoff.unwrap_or_else(|| {
             // `count_bytes()` returned a value above `byte_limit`, but
             // `byte_size` (computed the same way) is below `byte_limit`.
-            panic!(
+            debug_assert!(
+                false,
                 "Invalid `messages_count_bytes`: was {}, expecting {}",
                 messages.count_bytes(),
                 byte_size
-            )
+            );
+            // Cut off before the last message.
+            messages.iter().next_back().unwrap().0.clone()
         });
 
         // Take the messages prefix, expect non-empty leftover postfix.

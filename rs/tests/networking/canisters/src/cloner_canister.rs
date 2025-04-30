@@ -12,7 +12,8 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 
 /// The amount of cycles that each created canister gets.
-const INITIAL_CYCLES_BALANCE: u128 = 10_u64.pow(11) as u128; // 100B Cycles;
+/// It is used to pay for the canister creation and wasm module installation.
+const INITIAL_CYCLES_BALANCE: u128 = 10_u64.pow(12) as u128; // 1T Cycles;
 
 /// This number should not exceed the length of the canister output queue,
 /// which is currently 500.

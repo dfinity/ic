@@ -1,5 +1,5 @@
 use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
-use crate::key_id::{KeyId, KeyIdInstantiationError};
+use crate::key_id::KeyId;
 use crate::types::{CspPop, CspPublicKey, CspSignature};
 use crate::ExternalPublicKeys;
 use ic_crypto_internal_logmon::metrics::KeyCounts;
@@ -25,6 +25,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgTranscriptOperation,
 };
+use ic_types::crypto::vetkd::{VetKdDerivationContext, VetKdEncryptedKeyShareContent};
 use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, CryptoError, CurrentNodePublicKeys};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
@@ -186,31 +187,31 @@ impl NodeKeysErrors {
     }
 
     pub fn keys_in_registry_missing_locally(&self) -> bool {
-        self.node_signing_key_error.as_ref().map_or(false, |err| {
+        self.node_signing_key_error.as_ref().is_some_and(|err| {
             err.external_public_key_error.is_none()
                 && err.contains_local_public_or_secret_key_error()
         }) || self
             .committee_signing_key_error
             .as_ref()
-            .map_or(false, |err| {
+            .is_some_and(|err| {
                 err.external_public_key_error.is_none()
                     && err.contains_local_public_or_secret_key_error()
             })
-            || self.tls_certificate_error.as_ref().map_or(false, |err| {
+            || self.tls_certificate_error.as_ref().is_some_and(|err| {
                 err.external_public_key_error.is_none()
                     && err.contains_local_public_or_secret_key_error()
             })
             || self
                 .dkg_dealing_encryption_key_error
                 .as_ref()
-                .map_or(false, |err| {
+                .is_some_and(|err| {
                     err.external_public_key_error.is_none()
                         && err.contains_local_public_or_secret_key_error()
                 })
             || self
                 .idkg_dealing_encryption_key_error
                 .as_ref()
-                .map_or(false, |err| {
+                .is_some_and(|err| {
                     err.external_public_key_error.is_none()
                         && err.contains_local_public_or_secret_key_error()
                 })
@@ -317,12 +318,6 @@ impl From<&NodeKeysError> for KeyCounts {
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct ExternalPublicKeyError(pub Box<String>);
 
-impl From<KeyIdInstantiationError> for ExternalPublicKeyError {
-    fn from(error: KeyIdInstantiationError) -> Self {
-        ExternalPublicKeyError(Box::new(format!("Cannot instantiate KeyId: {:?}", error)))
-    }
-}
-
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum LocalPublicKeyError {
     /// No local public key exists.
@@ -386,6 +381,7 @@ pub trait CspVault:
     + IDkgProtocolCspVault
     + ThresholdEcdsaSignerCspVault
     + ThresholdSchnorrSignerCspVault
+    + VetKdCspVault
     + SecretKeyStoreCspVault
     + TlsHandshakeCspVault
     + PublicRandomSeedGenerator
@@ -404,6 +400,7 @@ impl<T> CspVault for T where
         + IDkgProtocolCspVault
         + ThresholdEcdsaSignerCspVault
         + ThresholdSchnorrSignerCspVault
+        + VetKdCspVault
         + SecretKeyStoreCspVault
         + TlsHandshakeCspVault
         + PublicRandomSeedGenerator
@@ -952,6 +949,33 @@ pub enum ThresholdSchnorrCreateSigShareVaultError {
     InternalError(String),
     /// If a transient internal error occurs, e.g., an RPC error communicating with the remote vault
     TransientInternalError(String),
+}
+
+/// Operations of `CspVault` related to verifiably encrypted threshold key derivation (vetKD)
+/// (cf. [`ic_interfaces::crypto::VetKdProtocol`]).
+pub trait VetKdCspVault {
+    /// Generates an encrypted vetKD key share.
+    fn create_encrypted_vetkd_key_share(
+        &self,
+        key_id: KeyId,
+        master_public_key: Vec<u8>,
+        transport_public_key: Vec<u8>,
+        context: VetKdDerivationContext,
+        input: Vec<u8>,
+    ) -> Result<VetKdEncryptedKeyShareContent, VetKdEncryptedKeyShareCreationVaultError>;
+}
+
+/// Vault-level error for vetKD key share creation.
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub enum VetKdEncryptedKeyShareCreationVaultError {
+    /// If the secret key is missing in the key store of if it has the wrong type
+    SecretKeyMissingOrWrongType(String),
+    /// If a transient internal error occurs, e.g., an RPC error communicating with the remote vault
+    TransientInternalError(String),
+    /// If the given master public key is invalid
+    InvalidArgumentMasterPublicKey,
+    /// If the given encryption public key is invalid
+    InvalidArgumentEncryptionPublicKey,
 }
 
 /// An error returned by failing to generate a public seed from [`CspVault`].

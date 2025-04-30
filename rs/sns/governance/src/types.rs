@@ -1,6 +1,6 @@
 use crate::{
     governance::{Governance, TimeWarp, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER},
-    logs::{ERROR, INFO},
+    logs::INFO,
     pb::{
         sns_root_types::{
             set_dapp_controllers_request::CanisterIds, ManageDappCanisterSettingsRequest,
@@ -16,7 +16,7 @@ use crate::{
             governance::{
                 self,
                 neuron_in_flight_command::{self, SyncCommand},
-                SnsMetadata, Version,
+                Mode, SnsMetadata, Version,
             },
             governance_error::ErrorType,
             manage_neuron,
@@ -24,41 +24,43 @@ use crate::{
                 self, DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
             },
             nervous_system_function::FunctionType,
-            neuron::Followees,
+            neuron::{Followees, TopicFollowees},
             proposal::Action,
-            ClaimSwapNeuronsError, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
-            DefaultFollowees, DeregisterDappCanisters, Empty, ExecuteGenericNervousSystemFunction,
-            GovernanceError, ManageDappCanisterSettings, ManageLedgerParameters,
-            ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens, Motion, NervousSystemFunction,
-            NervousSystemParameters, Neuron, NeuronId, NeuronIds, NeuronPermission,
-            NeuronPermissionList, NeuronPermissionType, ProposalId, RegisterDappCanisters,
-            RewardEvent, SnsVersion, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
-            UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
+            ChunkedCanisterWasm, ClaimSwapNeuronsError, ClaimSwapNeuronsResponse,
+            ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters, Empty,
+            ExecuteGenericNervousSystemFunction, GovernanceError, ManageDappCanisterSettings,
+            ManageLedgerParameters, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens, Motion,
+            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronIds,
+            NeuronPermission, NeuronPermissionList, NeuronPermissionType, ProposalId,
+            RegisterDappCanisters, RewardEvent, SnsVersion, TransferSnsTreasuryFunds,
+            UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
         },
     },
     proposal::ValidGenericNervousSystemFunction,
 };
 use async_trait::async_trait;
+use candid::{Decode, Encode};
 use ic_base_types::CanisterId;
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
 use ic_icrc1_ledger::UpgradeArgs as LedgerUpgradeArgs;
 use ic_ledger_core::tokens::TOKEN_SUBDIVIDABLE_BY;
-use ic_management_canister_types::CanisterInstallModeError;
+use ic_management_canister_types_private::{
+    CanisterIdRecord, CanisterInstallModeError, StoredChunksReply,
+};
 use ic_nervous_system_common::{
     hash_to_hex_string, ledger_validation::MAX_LOGO_LENGTH, NervousSystemError,
     DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_common_validation::validate_proposal_url;
 use ic_nervous_system_proto::pb::v1::{Duration as PbDuration, Percentage};
-use ic_sns_governance_proposal_criticality::{
-    ProposalCriticality, VotingDurationParameters, VotingPowerThresholds,
-};
+use ic_sns_governance_api::format_full_hash;
+use ic_sns_governance_proposal_criticality::{ProposalCriticality, VotingDurationParameters};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     convert::TryFrom,
     fmt,
 };
@@ -72,9 +74,17 @@ const PROPOSAL_EXECUTE_SNS_FUNCTION_PAYLOAD_BYTES_MAX: usize = 70000;
 /// The number of e8s per governance token;
 pub const E8S_PER_TOKEN: u64 = TOKEN_SUBDIVIDABLE_BY;
 
+/// The maximum message size for inter-canister calls to a different subnet
+/// is 2MiB and thus we restrict the maximum joint size of the canister WASM
+/// and argument to 2MB (2,000,000B) to leave some slack for Candid overhead
+/// and a few constant-size fields (e.g., compute and memory allocation).
+pub const MAX_INSTALL_CODE_WASM_AND_ARG_SIZE: usize = 2_000_000; // 2MB
+
 /// The Governance spec gives each Action a u64 equivalent identifier. This module gives
 /// those u64 values a human-readable const variable for use in the SNS.
 pub mod native_action_ids {
+    use crate::pb::v1::NervousSystemFunction;
+
     /// Unspecified Action.
     pub const UNSPECIFIED: u64 = 0;
 
@@ -122,6 +132,31 @@ pub mod native_action_ids {
 
     /// AdvanceSnsTargetVersion Action.
     pub const ADVANCE_SNS_TARGET_VERSION: u64 = 15;
+
+    /// SetTopicsForCustomProposals Action.
+    pub const SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION: u64 = 16;
+
+    // When adding something to this list, make sure to update the below function.
+    pub fn nervous_system_functions() -> Vec<NervousSystemFunction> {
+        vec![
+            NervousSystemFunction::motion(),
+            NervousSystemFunction::manage_nervous_system_parameters(),
+            NervousSystemFunction::upgrade_sns_controlled_canister(),
+            NervousSystemFunction::add_generic_nervous_system_function(),
+            NervousSystemFunction::remove_generic_nervous_system_function(),
+            NervousSystemFunction::execute_generic_nervous_system_function(),
+            NervousSystemFunction::upgrade_sns_to_next_version(),
+            NervousSystemFunction::manage_sns_metadata(),
+            NervousSystemFunction::transfer_sns_treasury_funds(),
+            NervousSystemFunction::register_dapp_canisters(),
+            NervousSystemFunction::deregister_dapp_canisters(),
+            NervousSystemFunction::mint_sns_tokens(),
+            NervousSystemFunction::manage_ledger_parameters(),
+            NervousSystemFunction::manage_dapp_canister_settings(),
+            NervousSystemFunction::advance_sns_target_version(),
+            NervousSystemFunction::set_topics_for_custom_proposals(),
+        ]
+    }
 }
 
 impl governance::Mode {
@@ -215,7 +250,7 @@ impl governance::Mode {
         }
     }
 
-    pub fn proposal_types_disallowed_in_pre_initialization_swap() -> Vec<NervousSystemFunction> {
+    pub fn functions_disallowed_in_pre_initialization_swap() -> Vec<NervousSystemFunction> {
         vec![
             NervousSystemFunction::manage_nervous_system_parameters(),
             NervousSystemFunction::transfer_sns_treasury_funds(),
@@ -241,17 +276,20 @@ impl governance::Mode {
                 );
         }
 
-        let is_action_disallowed = Self::proposal_types_disallowed_in_pre_initialization_swap()
+        let nervous_system_function = NervousSystemFunction::from(action.clone());
+
+        let is_action_disallowed = Self::functions_disallowed_in_pre_initialization_swap()
             .into_iter()
-            .any(|t| t.id == NervousSystemFunction::from(action.clone()).id);
+            .any(|t| t.id == nervous_system_function.id);
 
         if is_action_disallowed {
             Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
-                    "This proposal type is not allowed while governance is in \
-                     PreInitializationSwap mode: {:#?}",
-                    action,
+                    "Proposal type for {:?} is not allowed while governance is in \
+                     PreInitializationSwap ({}) mode.",
+                    nervous_system_function,
+                    Mode::PreInitializationSwap as i32,
                 ),
             ))
         } else {
@@ -309,6 +347,7 @@ impl From<&manage_neuron::Command> for neuron_in_flight_command::Command {
             S::Configure              (x) => D::Configure              (x),
             S::Disburse               (x) => D::Disburse               (x),
             S::Follow                 (x) => D::Follow                 (x),
+            S::SetFollowing           (x) => D::SetFollowing           (x),
             S::MakeProposal           (x) => D::MakeProposal           (x),
             S::RegisterVote           (x) => D::RegisterVote           (x),
             S::Split                  (x) => D::Split                  (x),
@@ -450,6 +489,7 @@ impl NervousSystemParameters {
             max_dissolve_delay_bonus_percentage: Some(100),
             max_age_bonus_percentage: Some(25),
             maturity_modulation_disabled: Some(false),
+            automatically_advance_target_version: Some(true),
         }
     }
 
@@ -517,6 +557,9 @@ impl NervousSystemParameters {
             maturity_modulation_disabled: self
                 .maturity_modulation_disabled
                 .or(base.maturity_modulation_disabled),
+            automatically_advance_target_version: self
+                .automatically_advance_target_version
+                .or(base.automatically_advance_target_version),
         }
     }
 
@@ -961,6 +1004,8 @@ impl fmt::Display for GovernanceError {
     }
 }
 
+impl std::error::Error for crate::pb::v1::GovernanceError {}
+
 impl From<NervousSystemError> for GovernanceError {
     fn from(nervous_system_error: NervousSystemError) -> Self {
         GovernanceError {
@@ -1026,6 +1071,14 @@ impl NervousSystemFunction {
             Some(FunctionType::NativeNervousSystemFunction(_))
         )
     }
+
+    /// The special case if for `EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION` which wraps custom
+    /// proposals of this SNS. While technically being a native function, this one does not have
+    /// its own topic.
+    pub fn needs_topic(&self) -> bool {
+        self.id != native_action_ids::EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION
+    }
+
     fn unspecified() -> NervousSystemFunction {
         NervousSystemFunction {
             id: native_action_ids::UNSPECIFIED,
@@ -1189,6 +1242,15 @@ impl NervousSystemFunction {
             function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
         }
     }
+
+    fn set_topics_for_custom_proposals() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION,
+            name: "Set topics for custom proposals".to_string(),
+            description: Some("Proposal to set the topics for custom SNS proposals.".to_string()),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
 }
 
 impl From<Action> for NervousSystemFunction {
@@ -1231,6 +1293,9 @@ impl From<Action> for NervousSystemFunction {
             }
             Action::AdvanceSnsTargetVersion(_) => {
                 NervousSystemFunction::advance_sns_target_version()
+            }
+            Action::SetTopicsForCustomProposals(_) => {
+                NervousSystemFunction::set_topics_for_custom_proposals()
             }
         }
     }
@@ -1291,6 +1356,7 @@ impl manage_neuron::Command {
             manage_neuron::Command::Configure(_) => "Configure",
             manage_neuron::Command::Disburse(_) => "Disburse",
             manage_neuron::Command::Follow(_) => "Follow",
+            manage_neuron::Command::SetFollowing(_) => "SetFollowing",
             manage_neuron::Command::MakeProposal(_) => "MakeProposal",
             manage_neuron::Command::RegisterVote(_) => "RegisterVote",
             manage_neuron::Command::Split(_) => "Split",
@@ -1384,6 +1450,14 @@ impl ManageNeuronResponse {
         ManageNeuronResponse {
             command: Some(manage_neuron_response::Command::Follow(
                 manage_neuron_response::FollowResponse {},
+            )),
+        }
+    }
+
+    pub fn set_following_response() -> Self {
+        ManageNeuronResponse {
+            command: Some(manage_neuron_response::Command::SetFollowing(
+                manage_neuron_response::SetFollowingResponse {},
             )),
         }
     }
@@ -1624,21 +1698,16 @@ impl Action {
         }
     }
 
-    pub(crate) fn voting_power_thresholds(&self) -> VotingPowerThresholds {
-        // This just reduces to the method of the same name in
-        // ProposalCriticality
-        self.proposal_criticality().voting_power_thresholds()
-    }
-
     pub(crate) fn voting_duration_parameters(
         &self,
         nervous_system_parameters: &NervousSystemParameters,
+        proposal_criticality: ProposalCriticality,
     ) -> VotingDurationParameters {
         let initial_voting_period_seconds = nervous_system_parameters.initial_voting_period_seconds;
         let wait_for_quiet_deadline_increase_seconds =
             nervous_system_parameters.wait_for_quiet_deadline_increase_seconds;
 
-        match self.proposal_criticality() {
+        match proposal_criticality {
             ProposalCriticality::Normal => VotingDurationParameters {
                 initial_voting_period: PbDuration {
                     seconds: initial_voting_period_seconds,
@@ -1667,68 +1736,6 @@ impl Action {
             }
         }
     }
-
-    fn proposal_criticality(&self) -> ProposalCriticality {
-        use Action::*;
-        match self {
-            DeregisterDappCanisters(_) | TransferSnsTreasuryFunds(_) | MintSnsTokens(_) => {
-                ProposalCriticality::Critical
-            }
-
-            Unspecified(_)
-            | ManageNervousSystemParameters(_)
-            | UpgradeSnsControlledCanister(_)
-            | Motion(_)
-            | AddGenericNervousSystemFunction(_)
-            | RemoveGenericNervousSystemFunction(_)
-            | ExecuteGenericNervousSystemFunction(_)
-            | UpgradeSnsToNextVersion(_)
-            | AdvanceSnsTargetVersion(_)
-            | ManageSnsMetadata(_)
-            | ManageLedgerParameters(_)
-            | RegisterDappCanisters(_)
-            | ManageDappCanisterSettings(_) => ProposalCriticality::Normal,
-        }
-    }
-}
-
-pub(crate) fn function_id_to_proposal_criticality(function_id: u64) -> ProposalCriticality {
-    lazy_static! {
-        static ref FUNCTION_ID_TO_PROPOSAL_CRITICALITY: HashMap</* function_id */ u64, ProposalCriticality> = {
-            let mut result = HashMap::new();
-
-            for action in Action::iter() {
-                // Skip non-native, aka generic functions.
-                if let Action::ExecuteGenericNervousSystemFunction(_) = action {
-                    continue;
-                }
-
-                let function_id = u64::from(&action);
-                let previous_value = result.insert(function_id, action.proposal_criticality());
-                debug_assert!(previous_value.is_none(), "{:#?}", previous_value);
-            }
-
-            result
-        };
-    }
-
-    if let Some(result) = FUNCTION_ID_TO_PROPOSAL_CRITICALITY.get(&function_id) {
-        return *result;
-    }
-
-    // Default to Normal. This is not unusual; it happens when the function is a generic
-    // (user-defined) nervous system functions. Such functions have IDs that are >= MIN_ID.
-
-    if function_id < ValidGenericNervousSystemFunction::MIN_ID {
-        log!(
-            ERROR,
-            "Defaulting to ProposalCriticality::Normal, but the function ID is too small \
-             to be that of a generic nervous system function: {}",
-            function_id,
-        );
-    }
-
-    ProposalCriticality::Normal
 }
 
 impl UpgradeSnsControlledCanister {
@@ -1744,6 +1751,7 @@ impl UpgradeSnsControlledCanister {
                 .as_ref()
                 .map(|blob| summarize_blob_field(blob)),
             mode: self.mode,
+            chunked_canister_wasm: self.chunked_canister_wasm.clone(),
         }
     }
 
@@ -1754,6 +1762,7 @@ impl UpgradeSnsControlledCanister {
             canister_upgrade_arg: self.canister_upgrade_arg.clone(),
             mode: self.mode,
             new_canister_wasm: Vec::new(),
+            chunked_canister_wasm: self.chunked_canister_wasm.clone(),
         }
     }
 }
@@ -1839,9 +1848,6 @@ fn summarize_blob_field(blob: &[u8]) -> Vec<u8> {
 }
 
 // Mapping of action to the unique function id of that action.
-//
-// When adding/removing an action here, also add/remove from
-// `Action::native_actions_metadata()`.
 impl From<&Action> for u64 {
     fn from(action: &Action) -> Self {
         match action {
@@ -1871,6 +1877,9 @@ impl From<&Action> for u64 {
                 native_action_ids::MANAGE_DAPP_CANISTER_SETTINGS
             }
             Action::AdvanceSnsTargetVersion(_) => native_action_ids::ADVANCE_SNS_TARGET_VERSION,
+            Action::SetTopicsForCustomProposals(_) => {
+                native_action_ids::SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION
+            }
         }
     }
 }
@@ -1898,16 +1907,18 @@ impl From<ManageLedgerParameters> for LedgerUpgradeArgs {
             token_symbol,
             token_logo,
         } = manage_ledger_parameters;
-        let metadata = [("icrc1:logo", token_logo.map(MetadataValue::Text))]
-            .into_iter()
-            .filter_map(|(k, v)| v.map(|v| (k.to_string(), v)))
-            .collect();
+
+        let metadata = token_logo.map(|token_logo| {
+            let key = "icrc1:logo".to_string();
+            let value = MetadataValue::Text(token_logo);
+            vec![(key, value)]
+        });
 
         LedgerUpgradeArgs {
             transfer_fee: transfer_fee.map(|tf| tf.into()),
             token_name,
             token_symbol,
-            metadata: Some(metadata),
+            metadata,
             ..LedgerUpgradeArgs::default()
         }
     }
@@ -2301,6 +2312,14 @@ impl NeuronRecipe {
         }
     }
 
+    // TODO[NNS1-3676]: Provide a proper implementation for this function once new SNSs are
+    // TODO[NNS1-3676]: to begin using topics-based following.
+    pub(crate) fn construct_topic_followees(&self) -> TopicFollowees {
+        TopicFollowees {
+            topic_id_to_followees: btreemap! {},
+        }
+    }
+
     pub(crate) fn construct_auto_staking_maturity(&self) -> Option<bool> {
         if self.is_neurons_fund_neuron() {
             Some(true)
@@ -2445,6 +2464,7 @@ impl From<ManageDappCanisterSettings> for ManageDappCanisterSettingsRequest {
             reserved_cycles_limit,
             log_visibility,
             wasm_memory_limit,
+            wasm_memory_threshold,
         } = manage_dapp_canister_settings;
 
         ManageDappCanisterSettingsRequest {
@@ -2455,6 +2475,7 @@ impl From<ManageDappCanisterSettings> for ManageDappCanisterSettingsRequest {
             reserved_cycles_limit,
             log_visibility,
             wasm_memory_limit,
+            wasm_memory_threshold,
         }
     }
 }
@@ -2522,6 +2543,256 @@ impl From<DeregisterDappCanisters> for Action {
 impl From<MintSnsTokens> for Action {
     fn from(mint_sns_tokens: MintSnsTokens) -> Action {
         Action::MintSnsTokens(mint_sns_tokens)
+    }
+}
+
+pub enum Wasm {
+    Bytes(Vec<u8>),
+    Chunked {
+        wasm_module_hash: Vec<u8>,
+        store_canister_id: CanisterId,
+        chunk_hashes_list: Vec<Vec<u8>>,
+    },
+}
+
+/// Validates that the specified byte sequence meets the following requirements:
+/// 1. `new_canister_wasm` starts with Wasm or Gzip magic bytes.
+/// 2. Combined length of `new_canister_wasm` and `new_canister_wasm` is within ICP message limits.
+fn validate_wasm_bytes(
+    new_canister_wasm: &[u8],
+    canister_upgrade_arg: &Option<Vec<u8>>,
+) -> Result<(), Vec<String>> {
+    let mut defects = vec![];
+
+    // https://internetcomputer.org/docs/current/references/ic-interface-spec#canister-module-format
+    const RAW_WASM_HEADER: [u8; 4] = [0, 0x61, 0x73, 0x6d];
+    const GZIPPED_WASM_HEADER: [u8; 3] = [0x1f, 0x8b, 0x08];
+
+    if new_canister_wasm.len() < 4
+        || new_canister_wasm[..4] != RAW_WASM_HEADER[..]
+            && new_canister_wasm[..3] != GZIPPED_WASM_HEADER[..]
+    {
+        defects.push("new_canister_wasm lacks the magic value in its header.".into());
+    }
+
+    if new_canister_wasm.len().saturating_add(
+        canister_upgrade_arg
+            .as_ref()
+            .map(|arg| arg.len())
+            .unwrap_or_default(),
+    ) >= MAX_INSTALL_CODE_WASM_AND_ARG_SIZE
+    {
+        defects.push(format!(
+            "the maximum canister WASM and argument size \
+            for UpgradeSnsControlledCanister is {} bytes.",
+            MAX_INSTALL_CODE_WASM_AND_ARG_SIZE
+        ));
+    }
+
+    if !defects.is_empty() {
+        return Err(defects);
+    }
+
+    Ok(())
+}
+
+async fn validate_chunked_wasm(
+    env: &dyn Environment,
+    wasm_module_hash: &Vec<u8>,
+    store_canister_id: CanisterId,
+    chunk_hashes_list: &[Vec<u8>],
+) -> Result<(), Vec<String>> {
+    let mut defects = vec![];
+
+    match chunk_hashes_list {
+        [] => {
+            let defect = "chunked_canister_wasm.chunk_hashes_list cannot be empty.".to_string();
+            defects.push(defect);
+        }
+        [chunk_hash] if wasm_module_hash != chunk_hash => {
+            let defect = format!(
+                "chunked_canister_wasm.chunk_hashes_list specifies only one hash ({}), but \
+                it differs from chunked_canister_wasm.wasm_module_hash ({}).",
+                format_full_hash(chunk_hash),
+                format_full_hash(&wasm_module_hash[..]),
+            );
+            defects.push(defect);
+        }
+        _ => (),
+    }
+
+    let arg = match Encode!(&CanisterIdRecord::from(store_canister_id)) {
+        Ok(arg) => arg,
+        Err(err) => {
+            let defect = format!("Cannot encode stored_chunks arg: {err}");
+            defects.push(defect);
+            return Err(defects);
+        }
+    };
+
+    // TODO[NNS1-3550]: Enable stored chunks validation on mainnet.
+    #[cfg(feature = "test")]
+    let validate_stored_chunks: bool = true;
+    #[cfg(not(feature = "test"))]
+    let validate_stored_chunks: bool = false;
+    if validate_stored_chunks {
+        // TODO[NNS1-3550]: Switch this call to best-effort.
+        let stored_chunks_response = env
+            .call_canister(CanisterId::ic_00(), "stored_chunks", arg)
+            .await;
+
+        let stored_chunks_response = match stored_chunks_response {
+            Ok(stored_chunks_response) => stored_chunks_response,
+            Err(err) => {
+                let defect = format!("Cannot call stored_chunks for {store_canister_id}: {err:?}");
+                defects.push(defect);
+                return Err(defects);
+            }
+        };
+
+        let stored_chunks_response = match Decode!(&stored_chunks_response, StoredChunksReply) {
+            Ok(stored_chunks_response) => stored_chunks_response,
+            Err(err) => {
+                let defect = format!(
+                    "Cannot decode response from calling stored_chunks for {store_canister_id}: {err}"
+                );
+                defects.push(defect);
+                return Err(defects);
+            }
+        };
+
+        // Finally, check that the expected chunks were successfully uploaded to the store canister.
+        let available_chunks = stored_chunks_response
+            .0
+            .iter()
+            .map(|chunk| format_full_hash(&chunk.hash))
+            .collect::<BTreeSet<_>>();
+        let required_chunks = chunk_hashes_list
+            .iter()
+            .map(|chunk| format_full_hash(chunk))
+            .collect::<BTreeSet<_>>();
+
+        let missing_chunks = required_chunks
+            .difference(&available_chunks)
+            .cloned()
+            .collect::<Vec<_>>();
+        if !missing_chunks.is_empty() {
+            let defect = format!(
+                "{} out of {} expected WASM chunks were not uploaded to the store canister: {}",
+                missing_chunks.len(),
+                required_chunks.len(),
+                missing_chunks.join(", ")
+            );
+            defects.push(defect);
+        }
+    }
+
+    if !defects.is_empty() {
+        return Err(defects);
+    }
+
+    Ok(())
+}
+
+impl Wasm {
+    /// Returns the list of defects of this Wasm in Err result.
+    pub async fn validate(
+        &self,
+        env: &dyn Environment,
+        canister_upgrade_arg: &Option<Vec<u8>>,
+    ) -> Result<(), Vec<String>> {
+        match self {
+            Self::Bytes(bytes) => validate_wasm_bytes(bytes, canister_upgrade_arg),
+            Self::Chunked {
+                wasm_module_hash,
+                store_canister_id,
+                chunk_hashes_list,
+            } => {
+                validate_chunked_wasm(env, wasm_module_hash, *store_canister_id, chunk_hashes_list)
+                    .await
+            }
+        }
+    }
+
+    pub fn description(&self) -> String {
+        match self {
+            Self::Bytes(bytes) => {
+                let canister_wasm_sha256 = {
+                    let mut state = Sha256::new();
+                    state.write(&bytes[..]);
+                    let sha = state.finish();
+                    sha.to_vec()
+                };
+                format!(
+                    "Embedded module with {} bytes and SHA256 `{}`.",
+                    bytes.len(),
+                    format_full_hash(&canister_wasm_sha256)
+                )
+            }
+            Self::Chunked {
+                wasm_module_hash,
+                store_canister_id,
+                chunk_hashes_list,
+            } => {
+                format!(
+                    "Remote module stored on canister {} with SHA256 `{}`. \
+                     Split into {} chunks:\n  - {}",
+                    store_canister_id.get(),
+                    format_full_hash(wasm_module_hash),
+                    chunk_hashes_list.len(),
+                    chunk_hashes_list
+                        .iter()
+                        .map(|chunk_hash| { format!("`{}`", format_full_hash(chunk_hash)) })
+                        .collect::<Vec<_>>()
+                        .join("\n  - "),
+                )
+            }
+        }
+    }
+}
+
+impl TryFrom<&UpgradeSnsControlledCanister> for Wasm {
+    type Error = String;
+
+    fn try_from(upgrade: &UpgradeSnsControlledCanister) -> Result<Self, Self::Error> {
+        const ERR_PREFIX: &str = "Invalid UpgradeSnsControlledCanister";
+
+        match (
+            &upgrade.new_canister_wasm[..],
+            &upgrade.chunked_canister_wasm,
+        ) {
+            (
+                [],
+                Some(ChunkedCanisterWasm {
+                    wasm_module_hash,
+                    store_canister_id,
+                    chunk_hashes_list,
+                }),
+            ) => {
+                let Some(store_canister_id) = store_canister_id else {
+                    return Err(format!(
+                        "{ERR_PREFIX}.chunked_canister_wasm.store_canister_id must be \
+                             specified."
+                    ));
+                };
+
+                let store_canister_id = CanisterId::try_from_principal_id(*store_canister_id)
+                    .map_err(|err| {
+                        format!("{ERR_PREFIX}.chunked_canister_wasm.store_canister_id: {err}")
+                    })?;
+
+                Ok(Self::Chunked {
+                    wasm_module_hash: wasm_module_hash.clone(),
+                    store_canister_id,
+                    chunk_hashes_list: chunk_hashes_list.clone(),
+                })
+            }
+            (bytes, None) => Ok(Self::Bytes(bytes.to_vec())),
+            _ => Err(format!(
+                "{ERR_PREFIX}: Either .new_canister_wasm or \
+                     .chunked_canister_wasm (but not both) must be specified."
+            )),
+        }
     }
 }
 
@@ -2675,25 +2946,21 @@ pub mod test_helpers {
                 default_canister_call_response: Ok(vec![]),
                 required_canister_call_invocations: Arc::new(RwLock::new(vec![])),
                 // This needs to be non-zero
-                now: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs(),
+                now: Self::DEFAULT_TEST_START_TIMESTAMP_SECONDS,
             }
         }
     }
 
     impl NativeEnvironment {
+        pub const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
+
         pub fn new(local_canister_id: Option<CanisterId>) -> Self {
             Self {
                 local_canister_id,
                 canister_calls_map: Default::default(),
                 default_canister_call_response: Ok(vec![]),
                 required_canister_call_invocations: Arc::new(RwLock::new(vec![])),
-                now: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs(),
+                now: Self::DEFAULT_TEST_START_TIMESTAMP_SECONDS,
             }
         }
 
@@ -2835,1210 +3102,4 @@ pub mod test_helpers {
     }
 }
 #[cfg(test)]
-pub(crate) mod tests {
-    use super::*;
-    use crate::pb::v1::{
-        claim_swap_neurons_request::neuron_recipe,
-        governance::Mode::PreInitializationSwap,
-        nervous_system_function::{FunctionType, GenericNervousSystemFunction},
-        neuron::Followees,
-        ExecuteGenericNervousSystemFunction, Proposal, ProposalData, VotingRewardsParameters,
-    };
-    use ic_base_types::PrincipalId;
-    use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
-    use ic_nervous_system_proto::pb::v1::Principals;
-    use lazy_static::lazy_static;
-    use maplit::{btreemap, hashset};
-    use std::convert::TryInto;
-
-    #[test]
-    fn test_voting_period_parameters() {
-        let non_critical_action = Action::Motion(Default::default());
-        let critical_action = Action::TransferSnsTreasuryFunds(Default::default());
-
-        let normal_nervous_system_parameters = NervousSystemParameters {
-            initial_voting_period_seconds: Some(4 * ONE_DAY_SECONDS),
-            wait_for_quiet_deadline_increase_seconds: Some(2 * ONE_DAY_SECONDS),
-            ..Default::default()
-        };
-        assert_eq!(
-            non_critical_action.voting_duration_parameters(&normal_nervous_system_parameters),
-            VotingDurationParameters {
-                initial_voting_period: PbDuration {
-                    seconds: Some(4 * ONE_DAY_SECONDS),
-                },
-                wait_for_quiet_deadline_increase: PbDuration {
-                    seconds: Some(2 * ONE_DAY_SECONDS),
-                }
-            },
-        );
-        assert_eq!(
-            critical_action.voting_duration_parameters(&normal_nervous_system_parameters),
-            VotingDurationParameters {
-                initial_voting_period: PbDuration {
-                    seconds: Some(5 * ONE_DAY_SECONDS),
-                },
-                wait_for_quiet_deadline_increase: PbDuration {
-                    seconds: Some(2 * ONE_DAY_SECONDS + ONE_DAY_SECONDS / 2),
-                }
-            },
-        );
-
-        // This is even slower than the hard-coded values (5 days initial and 2.5 days wait for
-        // quiet) for critical proposals. Therefore, these values are used for both normal and
-        // critical proposals.
-        let slow_nervous_system_parameters = NervousSystemParameters {
-            initial_voting_period_seconds: Some(7 * ONE_DAY_SECONDS),
-            wait_for_quiet_deadline_increase_seconds: Some(4 * ONE_DAY_SECONDS),
-            ..Default::default()
-        };
-        assert_eq!(
-            non_critical_action.voting_duration_parameters(&slow_nervous_system_parameters),
-            VotingDurationParameters {
-                initial_voting_period: PbDuration {
-                    seconds: Some(7 * ONE_DAY_SECONDS),
-                },
-                wait_for_quiet_deadline_increase: PbDuration {
-                    seconds: Some(4 * ONE_DAY_SECONDS),
-                }
-            },
-        );
-        assert_eq!(
-            critical_action.voting_duration_parameters(&slow_nervous_system_parameters),
-            VotingDurationParameters {
-                initial_voting_period: PbDuration {
-                    seconds: Some(7 * ONE_DAY_SECONDS),
-                },
-                wait_for_quiet_deadline_increase: PbDuration {
-                    seconds: Some(4 * ONE_DAY_SECONDS),
-                }
-            },
-        );
-    }
-
-    #[test]
-    fn test_nervous_system_parameters_validate() {
-        NervousSystemParameters::with_default_values()
-            .validate()
-            .unwrap();
-
-        let invalid_params = vec![
-            NervousSystemParameters {
-                neuron_minimum_stake_e8s: None,
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                transaction_fee_e8s: Some(100),
-                neuron_minimum_stake_e8s: Some(10),
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                transaction_fee_e8s: None,
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                max_proposals_to_keep_per_action: None,
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                max_proposals_to_keep_per_action: Some(0),
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                max_proposals_to_keep_per_action: Some(
-                    NervousSystemParameters::MAX_PROPOSALS_TO_KEEP_PER_ACTION_CEILING + 1,
-                ),
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                initial_voting_period_seconds: None,
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                initial_voting_period_seconds: Some(
-                    NervousSystemParameters::INITIAL_VOTING_PERIOD_SECONDS_FLOOR - 1,
-                ),
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                initial_voting_period_seconds: Some(
-                    NervousSystemParameters::INITIAL_VOTING_PERIOD_SECONDS_CEILING + 1,
-                ),
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                default_followees: None,
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                max_number_of_neurons: None,
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                max_number_of_neurons: Some(0),
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                max_number_of_neurons: Some(
-                    NervousSystemParameters::MAX_NUMBER_OF_NEURONS_CEILING + 1,
-                ),
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                neuron_minimum_dissolve_delay_to_vote_seconds: None,
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                max_dissolve_delay_seconds: Some(10),
-                neuron_minimum_dissolve_delay_to_vote_seconds: Some(20),
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                max_followees_per_function: None,
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                max_followees_per_function: Some(
-                    NervousSystemParameters::MAX_FOLLOWEES_PER_FUNCTION_CEILING + 1,
-                ),
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                max_dissolve_delay_seconds: None,
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                max_neuron_age_for_age_bonus: None,
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                max_number_of_proposals_with_ballots: None,
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                max_number_of_proposals_with_ballots: Some(0),
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                max_number_of_proposals_with_ballots: Some(
-                    NervousSystemParameters::MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS_CEILING + 1,
-                ),
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                neuron_claimer_permissions: Some(NeuronPermissionList {
-                    permissions: vec![NeuronPermissionType::Vote as i32],
-                }),
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                neuron_claimer_permissions: None,
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                neuron_grantable_permissions: None,
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                max_number_of_principals_per_neuron: Some(0),
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                max_number_of_principals_per_neuron: Some(1000),
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                voting_rewards_parameters: Some(VotingRewardsParameters {
-                    round_duration_seconds: None,
-                    ..Default::default()
-                }),
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                max_number_of_principals_per_neuron: Some(4),
-                ..NervousSystemParameters::with_default_values()
-            },
-        ];
-
-        for params in invalid_params {
-            params.validate().unwrap_err();
-        }
-    }
-
-    #[test]
-    fn test_inherit_from() {
-        let default_params = NervousSystemParameters::with_default_values();
-
-        let proposed_params = NervousSystemParameters {
-            transaction_fee_e8s: Some(124),
-            max_number_of_neurons: Some(566),
-            max_number_of_proposals_with_ballots: Some(9801),
-            default_followees: Some(Default::default()),
-
-            // Set all other fields to None.
-            ..Default::default()
-        };
-
-        let new_params = proposed_params.inherit_from(&default_params);
-        let expected_params = NervousSystemParameters {
-            transaction_fee_e8s: Some(124),
-            max_number_of_neurons: Some(566),
-            max_number_of_proposals_with_ballots: Some(9801),
-            default_followees: Some(Default::default()),
-            ..default_params.clone()
-        };
-
-        assert_eq!(new_params, expected_params);
-
-        assert_eq!(new_params.maturity_modulation_disabled, Some(false));
-
-        let disable_maturity_modulation = NervousSystemParameters {
-            maturity_modulation_disabled: Some(true),
-
-            // Set all other fields to None.
-            ..Default::default()
-        };
-
-        assert_eq!(
-            disable_maturity_modulation.inherit_from(&default_params),
-            NervousSystemParameters {
-                maturity_modulation_disabled: Some(true),
-                ..default_params
-            },
-        );
-    }
-
-    lazy_static! {
-        static ref MANAGE_NEURON_COMMANDS: (Vec<manage_neuron::Command>, Vec<manage_neuron::Command>, manage_neuron::Command) = {
-            use manage_neuron::Command;
-
-            #[rustfmt::skip]
-            let allowed_in_pre_initialization_swap = vec! [
-                Command::Follow                  (Default::default()),
-                Command::MakeProposal            (Default::default()),
-                Command::RegisterVote            (Default::default()),
-                Command::AddNeuronPermissions    (Default::default()),
-                Command::RemoveNeuronPermissions (Default::default()),
-            ];
-
-            #[rustfmt::skip]
-            let disallowed_in_pre_initialization_swap = vec! [
-                Command::Configure        (Default::default()),
-                Command::Disburse         (Default::default()),
-                Command::Split            (Default::default()),
-                Command::MergeMaturity    (Default::default()),
-                Command::DisburseMaturity (Default::default()),
-            ];
-
-            // Only the swap canister is allowed to do this in PreInitializationSwap.
-            let claim_or_refresh = Command::ClaimOrRefresh(Default::default());
-
-            (allowed_in_pre_initialization_swap, disallowed_in_pre_initialization_swap, claim_or_refresh)
-        };
-    }
-
-    #[should_panic]
-    #[test]
-    fn test_mode_allows_manage_neuron_command_or_err_unspecified_kaboom() {
-        let caller_is_swap_canister = true;
-        let innocuous_command = &MANAGE_NEURON_COMMANDS.0[0];
-        let _clippy = governance::Mode::Unspecified
-            .allows_manage_neuron_command_or_err(innocuous_command, caller_is_swap_canister);
-    }
-
-    #[test]
-    fn test_mode_allows_manage_neuron_command_or_err_normal_is_generally_ok() {
-        let mut commands = MANAGE_NEURON_COMMANDS.0.clone();
-        commands.append(&mut MANAGE_NEURON_COMMANDS.1.clone());
-        commands.push(MANAGE_NEURON_COMMANDS.2.clone());
-
-        for command in commands {
-            for caller_is_swap_canister in [true, false] {
-                let result = governance::Mode::Normal
-                    .allows_manage_neuron_command_or_err(&command, caller_is_swap_canister);
-                assert!(result.is_ok(), "{:#?}", result);
-            }
-        }
-    }
-
-    #[test]
-    fn test_mode_allows_manage_neuron_command_or_err_pre_initialization_swap_ok() {
-        let allowed = &MANAGE_NEURON_COMMANDS.0;
-        for command in allowed {
-            for caller_is_swap_canister in [true, false] {
-                let result = PreInitializationSwap
-                    .allows_manage_neuron_command_or_err(command, caller_is_swap_canister);
-                assert!(result.is_ok(), "{:#?}", result);
-            }
-        }
-    }
-
-    #[test]
-    fn test_mode_allows_manage_neuron_command_or_err_pre_initialization_swap_verboten() {
-        let disallowed = &MANAGE_NEURON_COMMANDS.1;
-        for command in disallowed {
-            for caller_is_swap_canister in [true, false] {
-                let result = PreInitializationSwap
-                    .allows_manage_neuron_command_or_err(command, caller_is_swap_canister);
-                assert!(result.is_err(), "{:#?}", result);
-            }
-        }
-    }
-
-    #[test]
-    fn test_mode_allows_manage_neuron_command_or_err_pre_initialization_swap_claim_or_refresh() {
-        let claim_or_refresh = &MANAGE_NEURON_COMMANDS.2;
-
-        let caller_is_swap_canister = false;
-        let result = PreInitializationSwap
-            .allows_manage_neuron_command_or_err(claim_or_refresh, caller_is_swap_canister);
-        assert!(result.is_err(), "{:#?}", result);
-
-        let caller_is_swap_canister = true;
-        let result = PreInitializationSwap
-            .allows_manage_neuron_command_or_err(claim_or_refresh, caller_is_swap_canister);
-        assert!(result.is_ok(), "{:#?}", result);
-    }
-
-    const ROOT_TARGETING_FUNCTION_ID: u64 = 1001;
-    const GOVERNANCE_TARGETING_FUNCTION_ID: u64 = 1002;
-    const LEDGER_TARGETING_FUNCTION_ID: u64 = 1003;
-    const RANDOM_CANISTER_TARGETING_FUNCTION_ID: u64 = 1004;
-
-    #[rustfmt::skip]
-    lazy_static! {
-        static ref       ROOT_CANISTER_ID: PrincipalId =                    [101][..].try_into().unwrap();
-        static ref GOVERNANCE_CANISTER_ID: PrincipalId =                    [102][..].try_into().unwrap();
-        static ref     LEDGER_CANISTER_ID: PrincipalId =                    [103][..].try_into().unwrap();
-        static ref     RANDOM_CANISTER_ID: PrincipalId = [0xDE, 0xAD, 0xBE, 0xEF][..].try_into().unwrap();
-
-        static ref PROPOSAL_ACTIONS: (
-            Vec<Action>, // Allowed    in PreInitializationSwap.
-            Vec<Action>, // Disallowed in PreInitializationSwap.
-            Vec<Action>, // ExecuteGenericNervousSystemFunction where target is root, governance, or ledger
-            Action,      // ExecuteGenericNervousSystemFunction, but target is not one of the distinguished canisters.
-        ) = {
-            let allowed_in_pre_initialization_swap = vec! [
-                Action::Motion(Default::default()),
-                Action::AddGenericNervousSystemFunction(Default::default()),
-                Action::RemoveGenericNervousSystemFunction(Default::default()),
-            ]; 
-
-            let disallowed_in_pre_initialization_swap = vec! [
-                Action::ManageNervousSystemParameters(Default::default()),
-                Action::TransferSnsTreasuryFunds(Default::default()),
-                Action::MintSnsTokens(Default::default()),
-                Action::UpgradeSnsControlledCanister(Default::default()),
-                Action::RegisterDappCanisters(Default::default()),
-                Action::DeregisterDappCanisters(Default::default()),
-            ];
-
-            // Conditionally allow: No targeting SNS canisters.
-            fn execute(function_id: u64) -> Action {
-                Action::ExecuteGenericNervousSystemFunction(ExecuteGenericNervousSystemFunction {
-                    function_id,
-                    ..Default::default()
-                })
-            }
-
-            let target_sns_canister_actions = vec! [
-                execute(      ROOT_TARGETING_FUNCTION_ID),
-                execute(GOVERNANCE_TARGETING_FUNCTION_ID),
-                execute(    LEDGER_TARGETING_FUNCTION_ID),
-            ];
-
-            let target_random_canister_action = execute(RANDOM_CANISTER_TARGETING_FUNCTION_ID);
-
-            (
-                allowed_in_pre_initialization_swap,
-                disallowed_in_pre_initialization_swap,
-                target_sns_canister_actions,
-                target_random_canister_action
-            )
-        };
-
-        static ref ID_TO_NERVOUS_SYSTEM_FUNCTION: BTreeMap<u64, NervousSystemFunction> = {
-            fn new_fn(function_id: u64, target_canister_id: &PrincipalId) -> NervousSystemFunction {
-                NervousSystemFunction {
-                    id: function_id,
-                    name: "Amaze".to_string(),
-                    description: Some("Best function evar.".to_string()),
-                    function_type: Some(FunctionType::GenericNervousSystemFunction(GenericNervousSystemFunction {
-                        target_canister_id: Some(*target_canister_id),
-                        target_method_name: Some("Foo".to_string()),
-                        validator_canister_id: Some(*target_canister_id),
-                        validator_method_name: Some("Bar".to_string()),
-                    })),
-                }
-            }
-
-            vec![
-                new_fn(           ROOT_TARGETING_FUNCTION_ID,       &ROOT_CANISTER_ID),
-                new_fn(     GOVERNANCE_TARGETING_FUNCTION_ID, &GOVERNANCE_CANISTER_ID),
-                new_fn(         LEDGER_TARGETING_FUNCTION_ID,     &LEDGER_CANISTER_ID),
-                new_fn(RANDOM_CANISTER_TARGETING_FUNCTION_ID,     &RANDOM_CANISTER_ID),
-            ]
-            .into_iter()
-            .map(|f| (f.id, f))
-            .collect()
-        };
-
-        static ref DISALLOWED_TARGET_CANISTER_IDS: HashSet<CanisterId> = hashset! {
-            CanisterId::unchecked_from_principal(*ROOT_CANISTER_ID),
-            CanisterId::unchecked_from_principal(*GOVERNANCE_CANISTER_ID),
-            CanisterId::unchecked_from_principal(*LEDGER_CANISTER_ID),
-        };
-    }
-
-    #[should_panic]
-    #[test]
-    fn test_mode_allows_proposal_action_or_err_unspecified_kaboom() {
-        let innocuous_action = &PROPOSAL_ACTIONS.0[0];
-        let _clippy = governance::Mode::Unspecified.allows_proposal_action_or_err(
-            innocuous_action,
-            &DISALLOWED_TARGET_CANISTER_IDS,
-            &ID_TO_NERVOUS_SYSTEM_FUNCTION,
-        );
-    }
-
-    #[test]
-    fn test_mode_allows_proposal_action_or_err_normal_is_always_ok() {
-        // Flatten PROPOSAL_ACTIONS into one big Vec.
-        let mut actions = PROPOSAL_ACTIONS.0.clone();
-        actions.append(&mut PROPOSAL_ACTIONS.1.clone());
-        actions.append(&mut PROPOSAL_ACTIONS.2.clone());
-        actions.push(PROPOSAL_ACTIONS.3.clone());
-
-        for action in actions {
-            let result = governance::Mode::Normal.allows_proposal_action_or_err(
-                &action,
-                &DISALLOWED_TARGET_CANISTER_IDS,
-                &ID_TO_NERVOUS_SYSTEM_FUNCTION,
-            );
-            assert!(result.is_ok(), "{:#?} {:#?}", result, action);
-        }
-    }
-
-    #[test]
-    fn test_mode_allows_proposal_action_or_err_pre_initialization_swap_happy() {
-        for action in &PROPOSAL_ACTIONS.0 {
-            let result = PreInitializationSwap.allows_proposal_action_or_err(
-                action,
-                &DISALLOWED_TARGET_CANISTER_IDS,
-                &ID_TO_NERVOUS_SYSTEM_FUNCTION,
-            );
-            assert!(result.is_ok(), "{:#?} {:#?}", result, action);
-        }
-    }
-
-    #[test]
-    fn test_mode_allows_proposal_action_or_err_pre_initialization_swap_sad() {
-        for action in &PROPOSAL_ACTIONS.1 {
-            let result = PreInitializationSwap.allows_proposal_action_or_err(
-                action,
-                &DISALLOWED_TARGET_CANISTER_IDS,
-                &ID_TO_NERVOUS_SYSTEM_FUNCTION,
-            );
-            assert!(result.is_err(), "{:#?}", action);
-        }
-    }
-
-    #[test]
-    fn test_mode_allows_proposal_action_or_err_pre_initialization_swap_disallows_targeting_an_sns_canister(
-    ) {
-        for action in &PROPOSAL_ACTIONS.2 {
-            let result = PreInitializationSwap.allows_proposal_action_or_err(
-                action,
-                &DISALLOWED_TARGET_CANISTER_IDS,
-                &ID_TO_NERVOUS_SYSTEM_FUNCTION,
-            );
-            assert!(result.is_err(), "{:#?}", action);
-        }
-    }
-
-    #[test]
-    fn test_mode_allows_proposal_action_or_err_pre_initialization_swap_allows_targeting_a_random_canister(
-    ) {
-        let action = &PROPOSAL_ACTIONS.3;
-        let result = PreInitializationSwap.allows_proposal_action_or_err(
-            action,
-            &DISALLOWED_TARGET_CANISTER_IDS,
-            &ID_TO_NERVOUS_SYSTEM_FUNCTION,
-        );
-        assert!(result.is_ok(), "{:#?} {:#?}", result, action);
-    }
-
-    #[test]
-    fn test_mode_allows_proposal_action_or_err_function_not_found() {
-        let execute =
-            Action::ExecuteGenericNervousSystemFunction(ExecuteGenericNervousSystemFunction {
-                function_id: 0xDEADBEF,
-                ..Default::default()
-            });
-
-        let result = governance::Mode::PreInitializationSwap.allows_proposal_action_or_err(
-            &execute,
-            &DISALLOWED_TARGET_CANISTER_IDS,
-            &ID_TO_NERVOUS_SYSTEM_FUNCTION,
-        );
-
-        let err = match result {
-            Err(err) => err,
-            Ok(_) => panic!(
-                "Make proposal is supposed to result in NotFound when \
-                 it specifies an unknown function ID."
-            ),
-        };
-        assert_eq!(err.error_type, ErrorType::NotFound as i32, "{:#?}", err);
-    }
-
-    #[should_panic]
-    #[test]
-    fn test_mode_allows_proposal_action_or_err_panic_when_function_has_no_type() {
-        let function_id = 42;
-
-        let execute =
-            Action::ExecuteGenericNervousSystemFunction(ExecuteGenericNervousSystemFunction {
-                function_id,
-                ..Default::default()
-            });
-
-        let mut functions = ID_TO_NERVOUS_SYSTEM_FUNCTION.clone();
-        functions.insert(
-            function_id,
-            NervousSystemFunction {
-                id: function_id,
-                function_type: None, // This is evil.
-                name: "Toxic".to_string(),
-                description: None,
-            },
-        );
-
-        let _unused = governance::Mode::PreInitializationSwap.allows_proposal_action_or_err(
-            &execute,
-            &DISALLOWED_TARGET_CANISTER_IDS,
-            &functions,
-        );
-    }
-
-    #[should_panic]
-    #[test]
-    fn test_mode_allows_proposal_action_or_err_panic_when_function_has_no_target_canister_id() {
-        let function_id = 42;
-
-        let execute =
-            Action::ExecuteGenericNervousSystemFunction(ExecuteGenericNervousSystemFunction {
-                function_id,
-                ..Default::default()
-            });
-
-        let mut functions = ID_TO_NERVOUS_SYSTEM_FUNCTION.clone();
-        functions.insert(
-            function_id,
-            NervousSystemFunction {
-                id: function_id,
-                name: "Toxic".to_string(),
-                description: None,
-                function_type: Some(FunctionType::GenericNervousSystemFunction(
-                    GenericNervousSystemFunction {
-                        target_canister_id: None, // This is evil.
-                        ..Default::default()
-                    },
-                )),
-            },
-        );
-
-        let _unused = governance::Mode::PreInitializationSwap.allows_proposal_action_or_err(
-            &execute,
-            &DISALLOWED_TARGET_CANISTER_IDS,
-            &functions,
-        );
-    }
-
-    #[test]
-    fn test_sns_metadata_validate() {
-        let default = SnsMetadata {
-            logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
-            url: Some("https://forum.dfinity.org".to_string()),
-            name: Some("X".repeat(SnsMetadata::MIN_NAME_LENGTH)),
-            description: Some("X".repeat(SnsMetadata::MIN_DESCRIPTION_LENGTH)),
-        };
-
-        let valid_sns_metadata = vec![
-            default.clone(),
-            SnsMetadata {
-                url: Some("https://forum.dfinity.org/foo/bar/?".to_string()),
-                ..default.clone()
-            },
-            SnsMetadata {
-                url: Some("https://forum.dfinity.org/foo/bar/?".to_string()),
-                ..default.clone()
-            },
-            SnsMetadata {
-                url: Some("https://any-url.com/foo/bar/?".to_string()),
-                ..default.clone()
-            },
-        ];
-
-        let invalid_sns_metadata = vec![
-            SnsMetadata {
-                name: None,
-                ..default.clone()
-            },
-            SnsMetadata {
-                name: Some("X".repeat(SnsMetadata::MAX_NAME_LENGTH + 1)),
-                ..default.clone()
-            },
-            SnsMetadata {
-                name: Some("X".repeat(SnsMetadata::MIN_NAME_LENGTH - 1)),
-                ..default.clone()
-            },
-            SnsMetadata {
-                description: None,
-                ..default.clone()
-            },
-            SnsMetadata {
-                description: Some("X".repeat(SnsMetadata::MAX_DESCRIPTION_LENGTH + 1)),
-                ..default.clone()
-            },
-            SnsMetadata {
-                description: Some("X".repeat(SnsMetadata::MIN_DESCRIPTION_LENGTH - 1)),
-                ..default.clone()
-            },
-            SnsMetadata {
-                logo: Some("X".repeat(MAX_LOGO_LENGTH + 1)),
-                ..default.clone()
-            },
-            SnsMetadata {
-                url: None,
-                ..default.clone()
-            },
-            SnsMetadata {
-                url: Some("X".repeat(SnsMetadata::MAX_URL_LENGTH + 1)),
-                ..default.clone()
-            },
-            SnsMetadata {
-                url: Some("X".to_string()),
-                ..default.clone()
-            },
-            SnsMetadata {
-                url: Some("X".repeat(SnsMetadata::MIN_URL_LENGTH - 1)),
-                ..default.clone()
-            },
-            SnsMetadata {
-                url: Some("file://forum.dfinity.org".to_string()),
-                ..default.clone()
-            },
-            SnsMetadata {
-                url: Some("https://".to_string()),
-                ..default.clone()
-            },
-            SnsMetadata {
-                url: Some("https://forum.dfinity.org/https://forum.dfinity.org".to_string()),
-                ..default.clone()
-            },
-            SnsMetadata {
-                url: Some("https://example@forum.dfinity.org".to_string()),
-                ..default.clone()
-            },
-            SnsMetadata {
-                url: Some("http://internetcomputer".to_string()),
-                ..default.clone()
-            },
-            SnsMetadata {
-                url: Some("mailto:example@internetcomputer.org".to_string()),
-                ..default.clone()
-            },
-            SnsMetadata {
-                url: Some("internetcomputer".to_string()),
-                ..default
-            },
-        ];
-
-        for sns_metadata in invalid_sns_metadata {
-            if sns_metadata.validate().is_ok() {
-                panic!("Invalid metadata passed validation: {:?}", sns_metadata);
-            }
-        }
-
-        for sns_metadata in valid_sns_metadata {
-            if sns_metadata.validate().is_err() {
-                panic!("Valid metadata failed validation: {:?}", sns_metadata);
-            }
-        }
-    }
-
-    impl NeuronRecipe {
-        fn validate_default_direct_participant() -> Self {
-            Self {
-                controller: Some(*TEST_USER1_PRINCIPAL),
-                neuron_id: Some(NeuronId::new_test_neuron_id(0)),
-                stake_e8s: Some(E8S_PER_TOKEN),
-                dissolve_delay_seconds: Some(3 * ONE_MONTH_SECONDS),
-                followees: Some(NeuronIds::from(vec![NeuronId::new_test_neuron_id(1)])),
-                participant: Some(Participant::Direct(neuron_recipe::Direct {})),
-            }
-        }
-
-        fn validate_default_neurons_fund() -> Self {
-            Self {
-                controller: Some(PrincipalId::from(ic_nns_constants::GOVERNANCE_CANISTER_ID)),
-                neuron_id: Some(NeuronId::new_test_neuron_id(0)),
-                stake_e8s: Some(E8S_PER_TOKEN),
-                dissolve_delay_seconds: Some(3 * ONE_MONTH_SECONDS),
-                followees: Some(NeuronIds::from(vec![NeuronId::new_test_neuron_id(1)])),
-                participant: Some(Participant::NeuronsFund(neuron_recipe::NeuronsFund {
-                    nns_neuron_id: Some(2),
-                    nns_neuron_controller: Some(PrincipalId::new_user_test_id(13847)),
-                    nns_neuron_hotkeys: Some(Principals::from(vec![
-                        PrincipalId::new_user_test_id(13848),
-                        PrincipalId::new_user_test_id(13849),
-                    ])),
-                })),
-            }
-        }
-    }
-
-    mod neuron_recipe_validate_tests {
-        use super::*;
-
-        const NEURON_MINIMUM_STAKE_E8S: u64 = E8S_PER_TOKEN;
-        const MAX_FOLLOWEES_PER_FUNCTION: u64 = 1;
-        const MAX_NUMBER_OF_PRINCIPALS_PER_NEURON: u64 = 5;
-
-        fn validate_recipe(recipe: &NeuronRecipe) -> Result<(), String> {
-            recipe.validate(
-                NEURON_MINIMUM_STAKE_E8S,
-                MAX_FOLLOWEES_PER_FUNCTION,
-                MAX_NUMBER_OF_PRINCIPALS_PER_NEURON,
-            )
-        }
-
-        #[test]
-        fn test_default_direct_participant_is_valid() {
-            validate_recipe(&NeuronRecipe::validate_default_direct_participant()).unwrap();
-        }
-
-        #[test]
-        fn test_default_neurons_fund_is_valid() {
-            validate_recipe(&NeuronRecipe::validate_default_neurons_fund()).unwrap();
-        }
-
-        #[test]
-        fn test_invalid_missing_controller() {
-            let recipe = NeuronRecipe {
-                controller: None,
-                ..NeuronRecipe::validate_default_direct_participant()
-            };
-            validate_recipe(&recipe).unwrap_err();
-        }
-
-        #[test]
-        fn test_invalid_missing_neuron_id() {
-            let recipe = NeuronRecipe {
-                neuron_id: None,
-                ..NeuronRecipe::validate_default_direct_participant()
-            };
-            validate_recipe(&recipe).unwrap_err();
-        }
-
-        #[test]
-        fn test_invalid_missing_stake() {
-            let recipe = NeuronRecipe {
-                stake_e8s: None,
-                ..NeuronRecipe::validate_default_direct_participant()
-            };
-            validate_recipe(&recipe).unwrap_err();
-        }
-
-        #[test]
-        fn test_invalid_low_stake() {
-            let recipe = NeuronRecipe {
-                stake_e8s: Some(NEURON_MINIMUM_STAKE_E8S - 1),
-                ..NeuronRecipe::validate_default_direct_participant()
-            };
-            validate_recipe(&recipe).unwrap_err();
-        }
-
-        #[test]
-        fn test_invalid_missing_dissolve_delay() {
-            let recipe = NeuronRecipe {
-                dissolve_delay_seconds: None,
-                ..NeuronRecipe::validate_default_direct_participant()
-            };
-            validate_recipe(&recipe).unwrap_err();
-        }
-
-        #[test]
-        fn test_invalid_missing_followees() {
-            let recipe = NeuronRecipe {
-                followees: None,
-                ..NeuronRecipe::validate_default_direct_participant()
-            };
-            validate_recipe(&recipe).unwrap_err();
-        }
-
-        #[test]
-        fn test_invalid_too_many_followees() {
-            let recipe = NeuronRecipe {
-                followees: Some(NeuronIds::from(vec![
-                    NeuronId::new_test_neuron_id(1),
-                    NeuronId::new_test_neuron_id(2),
-                ])),
-                ..NeuronRecipe::validate_default_direct_participant()
-            };
-            validate_recipe(&recipe).unwrap_err();
-        }
-
-        #[test]
-        fn test_invalid_missing_participant() {
-            let recipe = NeuronRecipe {
-                participant: None,
-                ..NeuronRecipe::validate_default_direct_participant()
-            };
-            validate_recipe(&recipe).unwrap_err();
-        }
-
-        #[test]
-        fn test_invalid_neurons_fund_missing_nns_neuron_id() {
-            let recipe = NeuronRecipe {
-                participant: Some(Participant::NeuronsFund(neuron_recipe::NeuronsFund {
-                    nns_neuron_id: None,
-                    nns_neuron_controller: Some(PrincipalId::new_user_test_id(13847)),
-                    nns_neuron_hotkeys: Some(Principals::from(vec![
-                        PrincipalId::new_user_test_id(13848),
-                    ])),
-                })),
-                ..NeuronRecipe::validate_default_neurons_fund()
-            };
-            validate_recipe(&recipe).unwrap_err();
-        }
-
-        #[test]
-        fn test_invalid_neurons_fund_missing_controller() {
-            let recipe = NeuronRecipe {
-                participant: Some(Participant::NeuronsFund(neuron_recipe::NeuronsFund {
-                    nns_neuron_id: Some(2),
-                    nns_neuron_controller: None,
-                    nns_neuron_hotkeys: Some(Principals::from(vec![
-                        PrincipalId::new_user_test_id(13848),
-                    ])),
-                })),
-                ..NeuronRecipe::validate_default_neurons_fund()
-            };
-            validate_recipe(&recipe).unwrap_err();
-        }
-
-        #[test]
-        fn test_invalid_neurons_fund_missing_hotkeys() {
-            let recipe = NeuronRecipe {
-                participant: Some(Participant::NeuronsFund(neuron_recipe::NeuronsFund {
-                    nns_neuron_id: Some(2),
-                    nns_neuron_controller: Some(PrincipalId::new_user_test_id(13847)),
-                    nns_neuron_hotkeys: None,
-                })),
-                ..NeuronRecipe::validate_default_neurons_fund()
-            };
-            validate_recipe(&recipe).unwrap_err();
-        }
-
-        #[test]
-        fn test_invalid_neurons_fund_too_many_hotkeys() {
-            let recipe = NeuronRecipe {
-                participant: Some(Participant::NeuronsFund(neuron_recipe::NeuronsFund {
-                    nns_neuron_id: Some(2),
-                    nns_neuron_controller: Some(PrincipalId::new_user_test_id(13847)),
-                    nns_neuron_hotkeys: Some(Principals::from(vec![
-                        PrincipalId::new_user_test_id(13848),
-                        PrincipalId::new_user_test_id(13849),
-                        PrincipalId::new_user_test_id(13810),
-                        PrincipalId::new_user_test_id(13811),
-                        PrincipalId::new_user_test_id(13812),
-                    ])),
-                })),
-                ..NeuronRecipe::validate_default_neurons_fund()
-            };
-            validate_recipe(&recipe).unwrap_err();
-        }
-
-        #[test]
-        fn test_valid_zero_dissolve_delay() {
-            let recipe = NeuronRecipe {
-                dissolve_delay_seconds: Some(0),
-                ..NeuronRecipe::validate_default_direct_participant()
-            };
-            validate_recipe(&recipe).unwrap();
-        }
-
-        #[test]
-        fn test_valid_empty_followees() {
-            let recipe = NeuronRecipe {
-                followees: Some(NeuronIds::from(vec![])),
-                ..NeuronRecipe::validate_default_direct_participant()
-            };
-            validate_recipe(&recipe).unwrap();
-        }
-
-        #[test]
-        fn test_valid_minimum_stake() {
-            let recipe = NeuronRecipe {
-                stake_e8s: Some(NEURON_MINIMUM_STAKE_E8S),
-                ..NeuronRecipe::validate_default_neurons_fund()
-            };
-            validate_recipe(&recipe).unwrap();
-        }
-    }
-
-    #[test]
-    fn test_voting_rewards_parameters_set_to_zero_by_default() {
-        let parameters = NervousSystemParameters::with_default_values();
-        parameters.validate().unwrap();
-        let voting_rewards_parameters = parameters.voting_rewards_parameters.unwrap();
-        assert_eq!(
-            voting_rewards_parameters
-                .initial_reward_rate_basis_points
-                .unwrap(),
-            0
-        );
-        assert_eq!(
-            voting_rewards_parameters
-                .final_reward_rate_basis_points
-                .unwrap(),
-            0
-        );
-    }
-
-    #[test]
-    #[should_panic]
-    fn test_nervous_system_parameters_wont_validate_without_voting_rewards_parameters() {
-        let mut parameters = NervousSystemParameters::with_default_values();
-        parameters.voting_rewards_parameters = None;
-        // This is where we expect to panic.
-        parameters.validate().unwrap();
-    }
-
-    #[test]
-    fn test_nervous_system_parameters_wont_validate_without_the_required_claimer_permissions() {
-        for permission_to_omit in NervousSystemParameters::REQUIRED_NEURON_CLAIMER_PERMISSIONS {
-            let mut parameters = NervousSystemParameters::with_default_values();
-            parameters.neuron_claimer_permissions = Some(
-                NervousSystemParameters::REQUIRED_NEURON_CLAIMER_PERMISSIONS
-                    .iter()
-                    .filter(|p| *p != permission_to_omit)
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .into(),
-            );
-            parameters.validate().unwrap_err();
-        }
-    }
-
-    #[test]
-    fn test_validate_logo_lets_base64_through() {
-        SnsMetadata::validate_logo("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==").unwrap();
-    }
-
-    #[test]
-    fn test_validate_logo_doesnt_let_non_base64_through() {
-        // `_` is not in the base64 character set we're using
-        // so we should panic here.
-        SnsMetadata::validate_logo("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==_")
-            .unwrap_err();
-    }
-
-    #[test]
-    fn test_neuron_permission_list_display_impl() {
-        let neuron_permission_list = NeuronPermissionList::all();
-        assert_eq!(
-            format!("permissions: {neuron_permission_list}"),
-            format!("permissions: [Unspecified, ConfigureDissolveState, ManagePrincipals, SubmitProposal, Vote, Disburse, Split, MergeMaturity, DisburseMaturity, StakeMaturity, ManageVotingPermission]")
-        );
-    }
-
-    #[test]
-    fn test_neuron_permission_list_display_impl_doesnt_panic_unknown_permission() {
-        let invalid_permission = 10000;
-        let neuron_permission_list = {
-            let mut neuron_permission_list = NeuronPermissionList::all();
-            neuron_permission_list.permissions.push(invalid_permission); // Add an unknown permission to the list
-            neuron_permission_list
-        };
-        assert_eq!(
-            format!("permissions: {neuron_permission_list}"),
-            format!("permissions: [Unspecified, ConfigureDissolveState, ManagePrincipals, SubmitProposal, Vote, Disburse, Split, MergeMaturity, DisburseMaturity, StakeMaturity, ManageVotingPermission, <Invalid permission ({invalid_permission})>]")
-        );
-    }
-
-    mod neuron_recipe_construct_followees_tests {
-        use super::*;
-
-        #[test]
-        fn test_direct_participant_empty_followees() {
-            let [b0] = NeuronId::test_neuron_ids();
-            let recipe = NeuronRecipe {
-                followees: Some(NeuronIds::from(vec![])),
-                neuron_id: Some(b0.clone()),
-                ..NeuronRecipe::validate_default_direct_participant()
-            };
-            assert_eq!(recipe.construct_followees(), btreemap! {});
-        }
-
-        #[test]
-        fn test_direct_participant_single_followee() {
-            let [b0, b1] = NeuronId::test_neuron_ids();
-            let w = u64::from(&Action::Unspecified(Empty {}));
-            let recipe = NeuronRecipe {
-                followees: Some(NeuronIds::from(vec![b0.clone()])),
-                neuron_id: Some(b1.clone()),
-                ..NeuronRecipe::validate_default_direct_participant()
-            };
-            assert_eq!(
-                recipe.construct_followees(),
-                btreemap! { w => Followees { followees: vec![b0.clone()] } }
-            );
-        }
-
-        #[test]
-        fn test_direct_participant_multiple_followees() {
-            let [b0, b1, b2] = NeuronId::test_neuron_ids();
-            let w = u64::from(&Action::Unspecified(Empty {}));
-            let recipe = NeuronRecipe {
-                followees: Some(NeuronIds::from(vec![b0.clone(), b1.clone()])),
-                neuron_id: Some(b2.clone()),
-                ..NeuronRecipe::validate_default_direct_participant()
-            };
-            assert_eq!(
-                recipe.construct_followees(),
-                btreemap! { w => Followees { followees: vec![b0.clone(), b1.clone()] } }
-            );
-        }
-
-        #[test]
-        fn test_neurons_fund_empty_followees() {
-            let [b1] = NeuronId::test_neuron_ids();
-            let recipe = NeuronRecipe {
-                followees: Some(NeuronIds::from(vec![])),
-                neuron_id: Some(b1.clone()),
-                ..NeuronRecipe::validate_default_neurons_fund()
-            };
-            assert_eq!(recipe.construct_followees(), btreemap! {});
-        }
-
-        #[test]
-        fn test_neurons_fund_single_followee() {
-            let [b0, b1] = NeuronId::test_neuron_ids();
-            let w = u64::from(&Action::Unspecified(Empty {}));
-            let recipe = NeuronRecipe {
-                followees: Some(NeuronIds::from(vec![b0.clone()])),
-                neuron_id: Some(b1.clone()),
-                ..NeuronRecipe::validate_default_neurons_fund()
-            };
-            assert_eq!(
-                recipe.construct_followees(),
-                btreemap! { w => Followees { followees: vec![b0.clone()] } }
-            );
-        }
-
-        #[test]
-        fn test_neurons_fund_multiple_followees() {
-            let [b0, b1, b2, b3] = NeuronId::test_neuron_ids();
-            let w = u64::from(&Action::Unspecified(Empty {}));
-            let recipe = NeuronRecipe {
-                followees: Some(NeuronIds::from(vec![b0.clone(), b1.clone(), b2.clone()])),
-                neuron_id: Some(b3.clone()),
-                ..NeuronRecipe::validate_default_neurons_fund()
-            };
-            assert_eq!(
-                recipe.construct_followees(),
-                btreemap! { w => Followees { followees: vec![b0.clone(), b1.clone(), b2.clone()] } }
-            );
-        }
-    }
-
-    #[test]
-    fn test_summarize_blob_field() {
-        for len in 0..=64 {
-            let direct_copy_input = (0..len).collect::<Vec<u8>>();
-
-            assert_eq!(summarize_blob_field(&direct_copy_input), direct_copy_input);
-        }
-
-        let too_long = (0..65).collect::<Vec<u8>>();
-        let result = summarize_blob_field(&too_long);
-        assert_ne!(result, too_long);
-        assert!(result.len() > 64, "{:X?}", result);
-
-        let result = String::from_utf8(summarize_blob_field(&too_long)).unwrap();
-        assert!(
-            result.contains("⚠️ NOT THE ORIGINAL CONTENTS OF THIS FIELD ⚠"),
-            "{:X?}",
-            result,
-        );
-        assert!(result.contains("00 01 02 03"), "{:X?}", result);
-        assert!(result.contains("3D 3E 3F 40"), "{:X?}", result);
-        assert!(result.contains("Length: 65"), "{:X?}", result);
-        assert!(
-            // SHA256
-            result.contains(
-                // Independently calculating using Python.
-                "4B FD 2C 8B 6F 1E EC 7A \
-                 2A FE B4 8B 93 4E E4 B2 \
-                 69 41 82 02 7E 6D 0F C0 \
-                 75 07 4F 2F AB B3 17 81",
-            ),
-            "{:X?}",
-            result,
-        );
-    }
-
-    #[test]
-    fn test_limited_for_get_proposal() {
-        let motion_proposal = ProposalData {
-            proposal: Some(Proposal {
-                action: Some(Action::Motion(Motion {
-                    motion_text: "Hello, world!".to_string(),
-                })),
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-
-        assert_eq!(motion_proposal.limited_for_get_proposal(), motion_proposal,);
-
-        let upgrade_sns_controlled_canister_proposal = ProposalData {
-            proposal: Some(Proposal {
-                action: Some(Action::UpgradeSnsControlledCanister(
-                    UpgradeSnsControlledCanister {
-                        new_canister_wasm: (0..=255).collect(),
-                        ..Default::default()
-                    },
-                )),
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-
-        assert_ne!(
-            upgrade_sns_controlled_canister_proposal.limited_for_get_proposal(),
-            upgrade_sns_controlled_canister_proposal,
-        );
-
-        let execute_generic_nervous_system_function_proposal = ProposalData {
-            proposal: Some(Proposal {
-                action: Some(Action::ExecuteGenericNervousSystemFunction(
-                    ExecuteGenericNervousSystemFunction {
-                        payload: (0..=255).collect(),
-                        ..Default::default()
-                    },
-                )),
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-
-        assert_ne!(
-            execute_generic_nervous_system_function_proposal.limited_for_get_proposal(),
-            execute_generic_nervous_system_function_proposal,
-        );
-    }
-}
+mod tests;

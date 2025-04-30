@@ -4,16 +4,17 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-error-types",
     "//packages/icrc-ledger-client:icrc_ledger_client",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/ledger_suite/common/ledger_core",
+    "//rs/nervous_system/canisters",
     "//rs/nervous_system/common",
     "//rs/nervous_system/proxied_canister_calls_tracker",
     "//rs/nervous_system/runtime",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/types/base_types",
-    "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/utils",
     "@crate_index//:candid",

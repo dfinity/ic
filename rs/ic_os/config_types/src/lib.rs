@@ -14,15 +14,21 @@
 //! - **Removing Fields**: To prevent backwards-compatibility deserialization errors, required fields must not be removed directly: In a first step, they have to be made optional and code that reads the value must be removed/handle missing values. In a second step, after the first step has rolled out to all OSes and there is no risk of a rollback, the field can be removed. Additionally, to avoid reintroducing a previously removed field, add your removed field to the RESERVED_FIELD_NAMES list.
 //!
 //! - **Renaming Fields**: Avoid renaming fields unless absolutely necessary. If you must rename a field, use `#[serde(rename = "old_name")]`.
-use deterministic_ips::{Deployment, HwAddr};
+//!
+//! ## Logging Safety
+//!
+//! All configuration objects defined in this file are safe to log. They do not contain any secret material.
 use ic_types::malicious_behaviour::MaliciousBehaviour;
+use macaddr::MacAddr6;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use std::collections::HashMap;
+use std::fmt;
 use std::net::{Ipv4Addr, Ipv6Addr};
+use std::str::FromStr;
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.0.0";
+pub const CONFIG_VERSION: &str = "1.1.0";
 
 /// List of field names that have been removed and should not be reused.
 pub static RESERVED_FIELD_NAMES: &[&str] = &["DUMMY_RESERVED_VALUE"];
@@ -71,10 +77,9 @@ pub struct ICOSSettings {
     #[serde_as(as = "DisplayFromStr")]
     /// In nested testing, mgmt_mac is set in deployment.json.template,
     /// else found dynamically in call to config tool CreateSetuposConfig
-    pub mgmt_mac: HwAddr,
+    pub mgmt_mac: MacAddr6,
     #[serde_as(as = "DisplayFromStr")]
-    /// "mainnet" or "testnet"
-    pub deployment_environment: Deployment,
+    pub deployment_environment: DeploymentEnvironment,
     pub logging: Logging,
     pub use_nns_public_key: bool,
     /// The URL (HTTP) of the NNS node(s).
@@ -103,7 +108,13 @@ pub struct SetupOSSettings;
 pub struct HostOSSettings {
     pub vm_memory: u32,
     pub vm_cpu: String,
+    #[serde(default = "default_vm_nr_of_vcpus")]
+    pub vm_nr_of_vcpus: u32,
     pub verbose: bool,
+}
+
+const fn default_vm_nr_of_vcpus() -> u32 {
+    64
 }
 
 /// GuestOS-specific settings.
@@ -148,10 +159,43 @@ pub struct BackupSpoolSettings {
     pub backup_purging_interval_seconds: Option<u64>,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[non_exhaustive]
+pub enum DeploymentEnvironment {
+    Mainnet,
+    Testnet,
+}
+
+impl fmt::Display for DeploymentEnvironment {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            DeploymentEnvironment::Mainnet => write!(f, "mainnet"),
+            DeploymentEnvironment::Testnet => write!(f, "testnet"),
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum DeploymentParseError {
+    #[error("invalid deployment variant")]
+    InvalidVariant,
+}
+
+impl FromStr for DeploymentEnvironment {
+    type Err = DeploymentParseError;
+    fn from_str(s: &str) -> Result<DeploymentEnvironment, DeploymentParseError> {
+        match s.to_lowercase().as_str() {
+            "mainnet" => Ok(DeploymentEnvironment::Mainnet),
+            "testnet" => Ok(DeploymentEnvironment::Testnet),
+            _ => Err(DeploymentParseError::InvalidVariant),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
 pub struct Logging {
     /// Space-separated lists of hosts to ship logs to.
-    pub elasticsearch_hosts: String,
+    pub elasticsearch_hosts: Option<String>,
     /// Space-separated list of tags to apply to exported log records.
     pub elasticsearch_tags: Option<String>,
 }
@@ -198,6 +242,30 @@ mod tests {
     use std::collections::HashSet;
 
     #[test]
+    fn test_vm_nr_of_vcpus_deserialization() -> Result<(), Box<dyn std::error::Error>> {
+        // Test with vm_nr_of_vcpus specified
+        let json = r#"{
+            "vm_memory": 4096,
+            "vm_cpu": "host",
+            "vm_nr_of_vcpus": 4,
+            "verbose": true
+        }"#;
+        let settings: HostOSSettings = serde_json::from_str(json)?;
+        assert_eq!(settings.vm_nr_of_vcpus, 4);
+
+        // Test without vm_nr_of_vcpus (should use default)
+        let json = r#"{
+            "vm_memory": 4096,
+            "vm_cpu": "host",
+            "verbose": true
+        }"#;
+        let settings: HostOSSettings = serde_json::from_str(json)?;
+        assert_eq!(settings.vm_nr_of_vcpus, 64);
+
+        Ok(())
+    }
+
+    #[test]
     fn test_no_reserved_field_names_used() -> Result<(), Box<dyn std::error::Error>> {
         let reserved_field_names: HashSet<&str> = RESERVED_FIELD_NAMES.iter().cloned().collect();
 
@@ -209,13 +277,10 @@ mod tests {
                 domain_name: None,
             },
             icos_settings: ICOSSettings {
-                node_reward_type: Some(String::new()),
+                node_reward_type: None,
                 mgmt_mac: "00:00:00:00:00:00".parse()?,
-                deployment_environment: Deployment::Testnet,
-                logging: Logging {
-                    elasticsearch_hosts: String::new(),
-                    elasticsearch_tags: None,
-                },
+                deployment_environment: DeploymentEnvironment::Testnet,
+                logging: Logging::default(),
                 use_nns_public_key: false,
                 nns_urls: vec![],
                 use_node_operator_private_key: false,
@@ -226,6 +291,7 @@ mod tests {
             hostos_settings: HostOSSettings {
                 vm_memory: 0,
                 vm_cpu: String::new(),
+                vm_nr_of_vcpus: 0,
                 verbose: false,
             },
             guestos_settings: GuestOSSettings::default(),

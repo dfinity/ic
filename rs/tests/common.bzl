@@ -2,178 +2,8 @@
 Common dependencies for system-tests.
 """
 
+load("@mainnet_icos_versions//:defs.bzl", "mainnet_icos_versions")
 load(":qualifying_nns_canisters.bzl", "QUALIFYING_NNS_CANISTERS", "QUALIFYING_SNS_CANISTERS")
-
-DEPENDENCIES = [
-    "//packages/icrc-ledger-agent:icrc_ledger_agent",
-    "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/async_utils",
-    "//rs/bitcoin/ckbtc/agent",
-    "//rs/bitcoin/ckbtc/kyt",
-    "//rs/bitcoin/ckbtc/minter",
-    "//rs/boundary_node/certificate_issuance/certificate_orchestrator_interface",
-    "//rs/canister_client",
-    "//rs/canister_client/sender",
-    "//rs/ledger_suite/icrc1/test_utils",
-    "//rs/certification",
-    "//rs/config",
-    "//rs/limits",
-    "//rs/crypto/sha2",
-    "//rs/crypto/tree_hash",
-    "//rs/crypto/utils/threshold_sig_der",
-    "//rs/cup_explorer",
-    "//rs/cycles_account_manager",
-    "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
-    "//rs/http_utils",
-    "//rs/ic_os/deterministic_ips",
-    "//rs/interfaces",
-    "//rs/interfaces/registry",
-    "//rs/nervous_system/clients",
-    "//rs/nervous_system/common",
-    "//rs/nervous_system/common/test_keys",
-    "//rs/nervous_system/proto",
-    "//rs/nervous_system/root",
-    "//rs/nns/cmc",
-    "//rs/nns/common",
-    "//rs/nns/constants",
-    "//rs/nns/governance/api",
-    "//rs/nns/gtc",
-    "//rs/nns/handlers/lifeline/impl:lifeline",
-    "//rs/nns/handlers/root/impl:root",
-    "//rs/nns/init",
-    "//rs/nns/sns-wasm",
-    "//rs/nns/test_utils",
-    "//rs/phantom_newtype",
-    "//rs/prep",
-    "//rs/protobuf",
-    "//rs/registry/canister",
-    "//rs/registry/client",
-    "//rs/registry/helpers",
-    "//rs/registry/keys",
-    "//rs/registry/local_registry",
-    "//rs/registry/local_store",
-    "//rs/registry/local_store/artifacts",
-    "//rs/registry/nns_data_provider",
-    "//rs/registry/provisional_whitelist",
-    "//rs/registry/regedit",
-    "//rs/registry/routing_table",
-    "//rs/registry/subnet_features",
-    "//rs/registry/subnet_type",
-    "//rs/registry/transport",
-    "//rs/replay",
-    "//rs/rosetta-api/icp:rosetta-api",
-    "//rs/ledger_suite/icp:icp_ledger",
-    "//rs/ledger_suite/icrc1",
-    "//rs/ledger_suite/icrc1/index-ng",
-    "//rs/ledger_suite/icrc1/ledger",
-    "//rs/rosetta-api/icp/ledger_canister_blocks_synchronizer/test_utils",
-    "//rs/ledger_suite/common/ledger_core",
-    "//rs/rosetta-api/common/rosetta_core:rosetta-core",
-    "//rs/rosetta-api/icp/test_utils",
-    "//rs/rust_canisters/canister_test",
-    "//rs/rust_canisters/dfn_candid",
-    "//rs/rust_canisters/dfn_json",
-    "//rs/rust_canisters/dfn_protobuf",
-    "//rs/rust_canisters/http_types",
-    "//rs/rust_canisters/on_wire",
-    "//rs/rust_canisters/xnet_test",
-    "//rs/sns/governance",
-    "//rs/sns/init",
-    "//rs/sns/root",
-    "//rs/sns/swap",
-    "//rs/sys",
-    "//rs/test_utilities",
-    "//rs/test_utilities/identity",
-    "//rs/test_utilities/time",
-    "//rs/test_utilities/types",
-    "//rs/tests/consensus/utils",
-    "//rs/tests/consensus/tecdsa/utils",
-    "//rs/tests/driver:ic-system-test-driver",
-    "//rs/tests/test_canisters/message:lib",
-    "//rs/tree_deserializer",
-    "//rs/types/base_types",
-    "//rs/types/management_canister_types",
-    "//rs/registry/canister/api",
-    "//rs/types/types_test_utils",
-    "//rs/types/types",
-    "//rs/types/wasm_types",
-    "//rs/universal_canister/lib",
-    "@crate_index//:anyhow",
-    "@crate_index//:axum",
-    "@crate_index//:assert_matches",
-    "@crate_index//:assert-json-diff",
-    "@crate_index//:backon",
-    "@crate_index//:base64",
-    "@crate_index//:bincode",
-    "@crate_index//:bitcoincore-rpc",
-    "@crate_index//:candid",
-    "@crate_index//:chacha20poly1305",
-    "@crate_index//:chrono",
-    "@crate_index//:clap",
-    "@crate_index//:crossbeam-channel",
-    "@crate_index//:ed25519-dalek",
-    "@crate_index//:flate2",
-    "@crate_index//:futures",
-    "@crate_index//:hex",
-    "@crate_index//:humantime",
-    "@crate_index//:ic-agent",
-    "@crate_index//:ic-btc-interface",
-    "@crate_index//:ic-cdk",
-    "@crate_index//:ic-utils",
-    "@crate_index//:itertools",
-    "@crate_index//:json5",
-    "@crate_index//:k256",
-    "@crate_index//:k8s-openapi",
-    "@crate_index//:kube",
-    "@crate_index//:lazy_static",
-    "@crate_index//:leb128",
-    "@crate_index//:maplit",
-    "@crate_index//:nix",
-    "@crate_index//:num_cpus",
-    "@crate_index//:num-traits",
-    "@crate_index//:once_cell",
-    "@crate_index//:openssh-keys",
-    "@crate_index//:pem",
-    "@crate_index//:proptest",
-    "@crate_index//:prost",
-    "@crate_index//:quickcheck",
-    "@crate_index//:rand_chacha",
-    "@crate_index//:rand",
-    "@crate_index//:rayon",
-    "@crate_index//:rcgen",
-    "@crate_index//:regex",
-    "@crate_index//:reqwest",
-    "@crate_index//:rsa",
-    "@crate_index//:rust_decimal",
-    "@crate_index//:serde_bytes",
-    "@crate_index//:serde_cbor",
-    "@crate_index//:serde_json",
-    "@crate_index//:serde_yaml",
-    "@crate_index//:serde",
-    "@crate_index//:sha2",
-    "@crate_index//:slog-async",
-    "@crate_index//:slog-term",
-    "@crate_index//:slog",
-    "@crate_index//:ssh2",
-    "@crate_index//:strum",
-    "@crate_index//:tempfile",
-    "@crate_index//:thiserror",
-    "@crate_index//:time",
-    "@crate_index//:tokio-util",
-    "@crate_index//:tokio",
-    "@crate_index//:tracing-subscriber",
-    "@crate_index//:tracing",
-    "@crate_index//:url",
-    "@crate_index//:walkdir",
-    "@crate_index//:wat",
-]
-
-MACRO_DEPENDENCIES = [
-    "@crate_index//:async-recursion",
-    "@crate_index//:async-trait",
-    "@crate_index//:indoc",
-    "@crate_index//:strum_macros",
-]
 
 GUESTOS_DEV_VERSION = "//ic-os/guestos/envs/dev:version.txt"
 
@@ -182,7 +12,13 @@ GUESTOS_RUNTIME_DEPS = [
     "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
 ]
 
-MAINNET_REVISION_RUNTIME_DEPS = ["//testnet:mainnet_nns_revision"]
+MAINNET_NNS_SUBNET_REVISION = mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]
+MAINNET_APPLICATION_SUBNET_REVISION = mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]
+
+MAINNET_ENV = {
+    "MAINNET_NNS_SUBNET_REVISION_ENV": MAINNET_NNS_SUBNET_REVISION,
+    "MAINNET_APPLICATION_SUBNET_REVISION_ENV": MAINNET_APPLICATION_SUBNET_REVISION,
+}
 
 NNS_CANISTER_WASM_PROVIDERS = {
     "registry-canister": {
@@ -216,6 +52,10 @@ NNS_CANISTER_WASM_PROVIDERS = {
     "sns-wasm-canister": {
         "tip-of-branch": "//rs/nns/sns-wasm:sns-wasm-canister",
         "mainnet": "@mainnet_nns_sns-wasm-canister//file",
+    },
+    "node-rewards": {
+        "tip-of-branch": "//rs/node_rewards/canister:node-rewards-canister",
+        "mainnet": "@mainnet_node-rewards-canister//file",
     },
 }
 
@@ -309,9 +149,7 @@ UNIVERSAL_VM_RUNTIME_DEPS = [
     "//rs/tests:create-universal-vm-config-image.sh",
 ]
 
-GRAFANA_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS + [
-    "//rs/tests:grafana_dashboards",
-]
+GRAFANA_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS
 
 BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS = [
     "//ic-os/boundary-guestos:scripts/build-bootstrap-config-image.sh",
@@ -325,12 +163,11 @@ CANISTER_HTTP_RUNTIME_DEPS = [
 
 XNET_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/xnet_test:xnet-test-canister"]
 
-STATESYNC_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/statesync_test:statesync_test_canister"]
+STATESYNC_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/statesync_test:statesync-test-canister"]
 
 IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS = GUESTOS_RUNTIME_DEPS + \
                                        NNS_CANISTER_RUNTIME_DEPS + \
                                        BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + \
-                                       MAINNET_REVISION_RUNTIME_DEPS + \
                                        GRAFANA_RUNTIME_DEPS + [
     "//rs/sns/cli:sns",
     "//rs/tests:recovery/binaries",

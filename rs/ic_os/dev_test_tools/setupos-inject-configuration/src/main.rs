@@ -27,7 +27,7 @@ struct Cli {
     config_ini: ConfigIni,
 
     #[arg(long)]
-    private_key_path: Option<PathBuf>,
+    node_operator_private_key: Option<PathBuf>,
 
     #[arg(long, value_delimiter = ',')]
     public_keys: Option<Vec<String>>,
@@ -78,8 +78,15 @@ struct DeploymentConfig {
     #[arg(long)]
     cpu: Option<String>,
 
+    /// If None, is treated as 64.
+    #[arg(long)]
+    nr_of_vcpus: Option<u32>,
+
     #[arg(long)]
     mgmt_mac: Option<String>,
+
+    #[arg(long)]
+    deployment_environment: Option<String>,
 }
 
 #[tokio::main]
@@ -107,15 +114,12 @@ async fn main() -> Result<(), Error> {
         .await
         .context("failed to copy config file")?;
 
-    // Update node-provider private-key
-    if let Some(private_key_path) = cli.private_key_path {
+    // Update node_operator_private_key.pem
+    if let Some(key_path) = cli.node_operator_private_key {
         config
-            .write_file(
-                &private_key_path,
-                Path::new("/node_operator_private_key.pem"),
-            )
+            .write_file(&key_path, Path::new("/node_operator_private_key.pem"))
             .await
-            .context("failed to copy private-key")?;
+            .context("failed to write node_operator_private_key.pem")?;
     }
 
     // Print previous public keys
@@ -254,6 +258,14 @@ async fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<(), Er
 
     if let Some(cpu) = &cfg.cpu {
         deployment_json.resources.cpu = Some(cpu.to_owned());
+    }
+
+    if let Some(nr_of_vcpus) = &cfg.nr_of_vcpus {
+        deployment_json.resources.nr_of_vcpus = Some(nr_of_vcpus.to_owned());
+    }
+
+    if let Some(deployment_environment) = &cfg.deployment_environment {
+        deployment_json.deployment.name = deployment_environment.to_owned();
     }
 
     let mut f = File::create(path).context("failed to open deployment config file")?;

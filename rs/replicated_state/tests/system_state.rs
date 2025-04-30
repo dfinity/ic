@@ -130,7 +130,7 @@ impl SystemStateFixture {
         &mut self,
         msg: RequestOrResponse,
         input_queue_type: InputQueueType,
-    ) -> Result<(), (StateError, RequestOrResponse)> {
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
         self.system_state
             .queues_mut()
             .push_input(msg, input_queue_type)
@@ -198,9 +198,9 @@ fn correct_charging_target_canister_for_a_response() {
     let initial_cycles_balance = fixture.system_state.balance();
 
     // Enqueue the request.
-    fixture
+    assert!(fixture
         .push_input(default_input_request(), InputQueueType::RemoteSubnet)
-        .unwrap();
+        .unwrap());
     // Pop the Request, as if processing it.
     fixture.pop_input();
     // Assume it was processed and enqueue a response.
@@ -251,50 +251,54 @@ fn induct_messages_to_self_in_stopping_status_does_not_work() {
 
 #[test]
 fn induct_messages_to_self_respects_subnet_memory_limit() {
-    let mut subnet_available_memory = 0;
+    let mut subnet_available_guaranteed_response_memory = 0;
 
     induct_messages_to_self_memory_limit_test_impl(
-        &mut subnet_available_memory,
+        &mut subnet_available_guaranteed_response_memory,
         SubnetType::Application,
         0,
         true,
     );
 
-    assert_eq!(0, subnet_available_memory);
+    assert_eq!(0, subnet_available_guaranteed_response_memory);
 }
 
 #[test]
 fn application_subnet_induct_messages_to_self_best_effort_ignores_subnet_memory_limit() {
-    let mut subnet_available_memory = 0;
+    let mut subnet_available_guaranteed_response_memory = 0;
 
     induct_messages_to_self_memory_limit_test_impl(
-        &mut subnet_available_memory,
+        &mut subnet_available_guaranteed_response_memory,
         SubnetType::Application,
         1,
         false,
     );
 
-    assert_eq!(0, subnet_available_memory);
+    assert_eq!(0, subnet_available_guaranteed_response_memory);
 }
 
 #[test]
 fn system_subnet_induct_messages_to_self_ignores_subnet_memory_limit() {
-    let mut subnet_available_memory = 0;
-    let mut expected_subnet_available_memory = subnet_available_memory;
+    let mut subnet_available_guaranteed_response_memory = 0;
+    let mut expected_subnet_available_guaranteed_response_memory =
+        subnet_available_guaranteed_response_memory;
 
     induct_messages_to_self_memory_limit_test_impl(
-        &mut subnet_available_memory,
+        &mut subnet_available_guaranteed_response_memory,
         SubnetType::System,
         0,
         false,
     );
-    expected_subnet_available_memory -= MAX_RESPONSE_COUNT_BYTES as i64;
+    expected_subnet_available_guaranteed_response_memory -= MAX_RESPONSE_COUNT_BYTES as i64;
 
-    assert_eq!(expected_subnet_available_memory, subnet_available_memory);
+    assert_eq!(
+        expected_subnet_available_guaranteed_response_memory,
+        subnet_available_guaranteed_response_memory
+    );
 }
 
 fn induct_messages_to_self_memory_limit_test_impl(
-    subnet_available_memory: &mut i64,
+    subnet_available_guaranteed_response_memory: &mut i64,
     own_subnet_type: SubnetType,
     deadline: u32,
     should_enforce_limit: bool,
@@ -313,12 +317,12 @@ fn induct_messages_to_self_memory_limit_test_impl(
     );
 
     // Make a slot reservation for `response``.
-    fixture
+    assert!(fixture
         .push_input(
             RequestOrResponse::Request(request0),
             InputQueueType::RemoteSubnet,
         )
-        .unwrap();
+        .unwrap());
     fixture.pop_input().unwrap();
 
     // Pushing an outgoing response will release `MAX_RESPONSE_COUNT_BYTES`.
@@ -331,7 +335,7 @@ fn induct_messages_to_self_memory_limit_test_impl(
 
     fixture
         .system_state
-        .induct_messages_to_self(subnet_available_memory, own_subnet_type);
+        .induct_messages_to_self(subnet_available_guaranteed_response_memory, own_subnet_type);
 
     // Expect the response and first request to have been inducted.
     assert_eq!(
@@ -370,12 +374,12 @@ fn induct_messages_to_self_full_queue() {
     for _ in 0..DEFAULT_QUEUE_CAPACITY {
         let (request, _) = fixture.prepare_call(CANISTER_ID, NO_DEADLINE);
         requests.push(request.clone());
-        fixture
+        assert!(fixture
             .push_input(
                 RequestOrResponse::Request(request),
                 InputQueueType::LocalSubnet,
             )
-            .unwrap();
+            .unwrap());
     }
 
     fixture.induct_messages_to_self();
@@ -499,12 +503,12 @@ fn time_out_callbacks() {
     let c4 = simulate_outbound_call(&mut fixture, d2).originator_reply_callback;
 
     // Simulate a paused execution for `rep1`.
-    fixture
+    assert!(fixture
         .push_input(
             RequestOrResponse::Response(rep1),
             InputQueueType::RemoteSubnet,
         )
-        .unwrap();
+        .unwrap());
     let response1 = fixture.pop_input().unwrap();
     fixture
         .system_state
@@ -515,12 +519,12 @@ fn time_out_callbacks() {
         });
 
     // And enqueue `rep2`.
-    fixture
+    assert!(fixture
         .push_input(
             RequestOrResponse::Response(rep2.clone()),
             InputQueueType::RemoteSubnet,
         )
-        .unwrap();
+        .unwrap());
 
     // Time out callbacks with deadlines before `d2` (only applicable to `c3` now).
     assert!(!fixture.system_state.has_expired_callbacks(d1));

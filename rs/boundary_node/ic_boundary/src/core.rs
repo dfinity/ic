@@ -1,8 +1,8 @@
 #![allow(clippy::disallowed_types)]
 use std::{
     error::Error as StdError,
-    net::{Ipv6Addr, SocketAddr},
-    sync::Arc,
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
+    sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
 
@@ -31,14 +31,20 @@ use ic_bn_lib::{
     },
     types::RequestType,
 };
+use ic_canister_client::{Agent, Sender};
+use ic_config::crypto::CryptoConfig;
+use ic_crypto::CryptoComponent;
+use ic_crypto_utils_basic_sig::conversions::derive_node_id;
+use ic_interfaces::crypto::{BasicSigner, KeyManager};
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
-use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_local_store::{LocalStoreImpl, LocalStoreReader};
+use ic_logger::replica_logger::no_op_logger;
+use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
+use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_replicator::RegistryReplicator;
-use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
+use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, messages::MessageId};
 use nix::unistd::{getpgid, setpgid, Pid};
 use prometheus::Registry;
-use tokio::sync::RwLock;
+use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tower::{limit::ConcurrencyLimitLayer, util::MapResponseLayer, ServiceBuilder};
 use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, ServiceBuilderExt};
@@ -61,6 +67,7 @@ use crate::{
     rate_limiting::{generic, RateLimit},
     retry::{retry_request, RetryParams},
     routes::{self, ErrorCause, Health, Lookup, Proxy, ProxyRouter, RootKey},
+    salt_fetcher::AnonymizationSaltFetcher,
     snapshot::{
         generate_stub_snapshot, generate_stub_subnet, RegistrySnapshot, SnapshotPersister,
         Snapshotter,
@@ -127,6 +134,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         metrics_addr = cli.obs.obs_metrics_addr.to_string().as_str(),
     );
 
+    let mut runners: Vec<Box<dyn Run>> = vec![];
     let routing_table = Arc::new(ArcSwapOption::empty());
     let registry_snapshot = Arc::new(ArcSwapOption::empty());
 
@@ -185,6 +193,75 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     );
     let http_client = Arc::new(http_client);
 
+    // Setup registry-related stuff
+    let persister = Persister::new(Arc::clone(&routing_table));
+
+    // Snapshot update notification channels
+    let (channel_snapshot_send, channel_snapshot_recv) = tokio::sync::watch::channel(None);
+
+    // Registry Client
+    let (registry_client, registry_replicator, nns_pub_key) =
+        if let Some(v) = &cli.registry.registry_local_store_path {
+            // Store
+            let local_store = Arc::new(LocalStoreImpl::new(v.clone()));
+
+            // Client
+            let registry_client = Arc::new(RegistryClientImpl::new(local_store.clone(), None));
+            registry_client
+                .fetch_and_start_polling()
+                .context("failed to start registry client")?;
+
+            // Snapshotting
+            let (registry_replicator, nns_pub_key) = setup_registry(
+                &cli,
+                local_store.clone(),
+                registry_client.clone(),
+                registry_snapshot.clone(),
+                WithMetricsPersist(persister, MetricParamsPersist::new(&metrics_registry)),
+                http_client_check,
+                &metrics_registry,
+                channel_snapshot_send,
+                channel_snapshot_recv.clone(),
+                &mut runners,
+            )?;
+
+            (Some(registry_client), registry_replicator, nns_pub_key)
+        } else {
+            // Prepare a stub routing table and snapshot if there's no local store specified
+            let subnet = generate_stub_subnet(cli.registry.registry_stub_replica.clone());
+            let snapshot = generate_stub_snapshot(vec![subnet.clone()]);
+            let _ = persister.persist(vec![subnet]);
+            registry_snapshot.store(Some(Arc::new(snapshot)));
+
+            (None, None, None)
+        };
+
+    // IC Agent
+    let agent = if cli.rate_limiting.rate_limit_generic_canister_id.is_some()
+        || cli.obs.obs_log_anonymization_canister_id.is_some()
+    {
+        if cli.misc.crypto_config.is_some() && registry_client.is_none() {
+            return Err(anyhow!(
+                "IC-Agent: registry client is required when crypto-config is in use"
+            ));
+        }
+
+        if cli.misc.crypto_config.is_none() {
+            warn!("IC-Agent: crypto-config is missing, using anonymous principal");
+        }
+
+        let agent = create_agent(
+            cli.misc.crypto_config.clone(),
+            registry_client,
+            cli.listen.listen_http_port_loopback,
+        )
+        .await?;
+
+        Some(agent)
+    } else {
+        None
+    };
+
     // Caching
     let cache = cli.cache.cache_size.map(|x| {
         Arc::new(
@@ -206,9 +283,34 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     };
 
     // Generic Ratelimiter
-    let generic_limiter = Arc::new(generic::Limiter::new(
-        cli.rate_limiting.rate_limit_generic.clone(),
-    ));
+    let generic_limiter_opts = generic::Options {
+        tti: cli.rate_limiting.rate_limit_generic_tti,
+        max_shards: cli.rate_limiting.rate_limit_generic_max_shards,
+        poll_interval: cli.rate_limiting.rate_limit_generic_poll_interval,
+        autoscale: cli.rate_limiting.rate_limit_generic_autoscale,
+    };
+    let generic_limiter = if let Some(v) = &cli.rate_limiting.rate_limit_generic_file {
+        Some(Arc::new(generic::GenericLimiter::new_from_file(
+            v.clone(),
+            generic_limiter_opts,
+            channel_snapshot_recv,
+            &metrics_registry,
+        )))
+    } else if let Some(v) = cli.rate_limiting.rate_limit_generic_canister_id {
+        Some(Arc::new(generic::GenericLimiter::new_from_canister(
+            v,
+            agent.clone().unwrap(),
+            generic_limiter_opts,
+            cli.misc.crypto_config.is_some(),
+            channel_snapshot_recv,
+            &metrics_registry,
+        )))
+    } else {
+        None
+    };
+
+    // HTTP Logs Anonymization
+    let anonymization_salt = Arc::new(ArcSwapOption::<Vec<u8>>::empty());
 
     // Prepare Axum Router
     let router = setup_router(
@@ -216,15 +318,17 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         routing_table.clone(),
         http_client,
         bouncer,
-        Some(generic_limiter.clone()),
+        generic_limiter.clone(),
         &cli,
         &metrics_registry,
         cache.clone(),
+        anonymization_salt.clone(),
     );
 
     // HTTP server metrics
     let http_metrics = http::server::Metrics::new(&metrics_registry);
 
+    // HTTP server options
     let server_opts: http::server::Options = (&cli.http_server).into();
 
     // HTTP
@@ -242,6 +346,23 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let server_http_unix = cli.listen.listen_http_unix_socket.as_ref().map(|x| {
         http::Server::new(
             http::server::Addr::Unix(x.clone()),
+            router.clone(),
+            server_opts,
+            http_metrics.clone(),
+            None,
+        )
+    });
+
+    // HTTP loopback server.
+    // Allows internal agents to work and be independent of the normal listening ports.
+    // Probably we can find some way of working w/o a dedicated port (e.g. over memory) but it would be hard
+    // to adapt HTTP clients for it.
+    let server_http_loopback = agent.is_some().then(|| {
+        http::Server::new(
+            http::server::Addr::Tcp(SocketAddr::new(
+                Ipv4Addr::LOCALHOST.into(),
+                cli.listen.listen_http_port_loopback,
+            )),
             router.clone(),
             server_opts,
             http_metrics.clone(),
@@ -313,37 +434,32 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         ThrottleParams::new(5 * SECOND),
     );
 
-    let persister = Persister::new(Arc::clone(&routing_table));
-
-    let (registry_replicator, nns_pub_key, mut registry_runners) =
-        // Set up registry-related stuff if local store was specified
-        if cli.registry.registry_local_store_path.is_some() {
-            let RegistrySetupResult(registry_replicator, nns_pub_key, registry_runners) =
-                setup_registry(
-                    &cli,
-                    registry_snapshot.clone(),
-                    WithMetricsPersist(persister, MetricParamsPersist::new(&metrics_registry)),
-                    http_client_check,
-                    &metrics_registry,
-                )?;
-
-            (registry_replicator, nns_pub_key, registry_runners)
-        } else {
-            // Otherwise load a stub routing table and snapshot
-            let subnet = generate_stub_subnet(cli.registry.registry_stub_replica.clone());
-            let snapshot = generate_stub_snapshot(vec![subnet.clone()]);
-            let _ = persister.persist(vec![subnet]);
-            registry_snapshot.store(Some(Arc::new(snapshot)));
-
-            (None, None, vec![])
-        };
-
-    let generic_limiter_runner = WithThrottle(generic_limiter, ThrottleParams::new(10 * SECOND));
-
     // Runners
-    let mut runners: Vec<Box<dyn Run>> =
-        vec![Box::new(metrics_runner), Box::new(generic_limiter_runner)];
-    runners.append(&mut registry_runners);
+    runners.push(Box::new(metrics_runner));
+
+    if let Some(v) = generic_limiter {
+        runners.push(Box::new(v));
+    }
+
+    // HTTP Logs Anonymization
+    let salt_fetcher = cli
+        .obs
+        .obs_log_anonymization_canister_id
+        .and_then(|canister_id| {
+            agent.as_ref().map(|agent| {
+                Arc::new(AnonymizationSaltFetcher::new(
+                    agent.clone(),
+                    canister_id,
+                    cli.obs.obs_log_anonymization_poll_interval,
+                    anonymization_salt,
+                    &metrics_registry,
+                ))
+            })
+        });
+
+    if let Some(fetcher) = salt_fetcher {
+        runners.push(Box::new(fetcher));
+    }
 
     TokioScope::scope_and_block(move |s| {
         if let Some(v) = registry_replicator {
@@ -351,8 +467,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                 v.start_polling(cli.registry.registry_nns_urls, nns_pub_key)
                     .await
                     .context("failed to start registry replicator")?
-                    .await
-                    .context("registry replicator failed")?;
+                    .await;
 
                 Ok::<(), Error>(())
             });
@@ -391,6 +506,14 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             });
         }
 
+        if let Some(v) = server_http_loopback {
+            s.spawn(async move {
+                v.serve(CancellationToken::new())
+                    .map_err(|e| anyhow!("unable to serve http/tcp/loopback: {e:#}"))
+                    .await
+            });
+        }
+
         // Runners
         runners.into_iter().for_each(|mut r| {
             s.spawn(async move {
@@ -404,37 +527,86 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     Ok(())
 }
 
-// Return type for setup_registry() to make clippy happy
-struct RegistrySetupResult(
-    Option<RegistryReplicator>,
-    Option<ThresholdSigPublicKey>,
-    Vec<Box<dyn Run>>,
-);
+async fn create_sender(
+    crypto_config: CryptoConfig,
+    registry_client: Arc<RegistryClientImpl>,
+) -> Result<Sender, Error> {
+    let crypto_component = tokio::task::spawn_blocking({
+        let registry_client = Arc::clone(&registry_client);
+
+        move || {
+            Arc::new(CryptoComponent::new(
+                &crypto_config,
+                Some(tokio::runtime::Handle::current()),
+                registry_client,
+                no_op_logger(),
+                None,
+            ))
+        }
+    })
+    .await?;
+
+    let public_key = tokio::task::spawn_blocking({
+        let crypto_component = Arc::clone(&crypto_component);
+
+        move || {
+            crypto_component
+                .current_node_public_keys()
+                .map_err(|e| anyhow!("failed to retrieve public key: {e:#}"))?
+                .node_signing_public_key
+                .context("missing node public key")
+        }
+    })
+    .await??;
+
+    let node_id = derive_node_id(&public_key).expect("failed to derive node id");
+
+    // Custom Signer
+    Ok(Sender::Node {
+        pub_key: public_key.key_value,
+        sign: Arc::new(move |msg: &MessageId| {
+            #[allow(clippy::disallowed_methods)]
+            let sig = tokio::task::block_in_place(|| {
+                crypto_component
+                    .sign_basic(msg, node_id, registry_client.get_latest_version())
+                    .map(|value| value.get().0)
+                    .map_err(|err| anyhow!("failed to sign message: {err:?}"))
+            })?;
+
+            Ok(sig)
+        }),
+    })
+}
+
+async fn create_agent(
+    crypto_config: Option<CryptoConfig>,
+    registry_client: Option<Arc<RegistryClientImpl>>,
+    port: u16,
+) -> Result<Agent, Error> {
+    let sender = if let (Some(v), Some(r)) = (crypto_config, registry_client) {
+        create_sender(v, r).await?
+    } else {
+        Sender::Anonymous
+    };
+
+    let agent = Agent::new(format!("http://127.0.0.1:{port}").parse()?, sender);
+    Ok(agent)
+}
 
 // Sets up registry-related stuff
 fn setup_registry(
     cli: &Cli,
+    local_store: Arc<dyn LocalStore>,
+    registry_client: Arc<dyn RegistryClient>,
     registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     persister: WithMetricsPersist<Persister>,
     http_client_check: Arc<dyn http::Client>,
     metrics_registry: &Registry,
-) -> Result<RegistrySetupResult, Error> {
-    // Registry Client
-    let local_store = Arc::new(LocalStoreImpl::new(
-        cli.registry.registry_local_store_path.clone().unwrap(),
-    ));
-
-    let registry_client = Arc::new(RegistryClientImpl::new(
-        local_store.clone(), // data_provider
-        None,                // metrics_registry
-    ));
-
-    registry_client
-        .fetch_and_start_polling()
-        .context("failed to start registry client")?;
-
+    channel_snapshot_send: watch::Sender<Option<Arc<RegistrySnapshot>>>,
+    channel_snapshot_recv: watch::Receiver<Option<Arc<RegistrySnapshot>>>,
+    runners: &mut Vec<Box<dyn Run>>,
+) -> Result<(Option<RegistryReplicator>, Option<ThresholdSigPublicKey>), Error> {
     // Snapshots
-    let (channel_snapshot_send, channel_snapshot_recv) = tokio::sync::watch::channel(None);
     let snapshot_runner = WithMetricsSnapshot(
         {
             let mut snapshotter = Snapshotter::new(
@@ -462,6 +634,7 @@ fn setup_registry(
     );
 
     let snapshot_runner = WithThrottle(snapshot_runner, ThrottleParams::new(5 * SECOND));
+    runners.push(Box::new(snapshot_runner));
 
     // Checks
     let checker = Checker::new(http_client_check, cli.health.health_check_timeout);
@@ -475,6 +648,7 @@ fn setup_registry(
         cli.health.health_check_interval,
         cli.health.health_update_interval,
     );
+    runners.push(Box::new(check_runner));
 
     let (registry_replicator, nns_pub_key) = if !cli.registry.registry_disable_replicator {
         // Check if we require an NNS key
@@ -520,11 +694,7 @@ fn setup_registry(
         (None, None)
     };
 
-    Ok(RegistrySetupResult(
-        registry_replicator,
-        nns_pub_key,
-        vec![Box::new(snapshot_runner), Box::new(check_runner)],
-    ))
+    Ok((registry_replicator, nns_pub_key))
 }
 
 #[cfg(feature = "tls")]
@@ -657,15 +827,18 @@ pub fn setup_router(
     routing_table: Arc<ArcSwapOption<Routes>>,
     http_client: Arc<dyn http::Client>,
     bouncer: Option<Arc<bouncer::Bouncer>>,
-    generic_limiter: Option<Arc<generic::Limiter>>,
+    generic_limiter: Option<Arc<generic::GenericLimiter>>,
     cli: &Cli,
     metrics_registry: &Registry,
     cache: Option<Arc<Cache>>,
+    anonymization_salt: Arc<ArcSwapOption<Vec<u8>>>,
 ) -> Router {
     let proxy_router = ProxyRouter::new(
         http_client.clone(),
         Arc::clone(&routing_table),
         Arc::clone(&registry_snapshot),
+        cli.health.health_subnets_alive_threshold,
+        cli.health.health_nodes_per_subnet_alive_threshold,
     );
 
     let proxy_router = Arc::new(proxy_router);
@@ -677,13 +850,9 @@ pub fn setup_router(
         proxy_router.clone() as Arc<dyn Health>,
     );
 
-    let query_route = Router::new()
-        .route(routes::PATH_QUERY, {
-            post(routes::handle_canister).with_state(proxy.clone())
-        })
-        .layer(option_layer(cache.map(|x| {
-            middleware::from_fn_with_state(x.clone(), cache_middleware)
-        })));
+    let query_route = Router::new().route(routes::PATH_QUERY, {
+        post(routes::handle_canister).with_state(proxy.clone())
+    });
 
     let call_route = {
         let mut route = Router::new()
@@ -735,6 +904,7 @@ pub fn setup_router(
                 metrics_registry,
                 "http_request",
                 cli.obs.obs_log_failed_requests_only,
+                anonymization_salt,
             ),
             metrics::metrics_middleware,
         ),
@@ -831,6 +1001,9 @@ pub fn setup_router(
         .layer(common_service_layers.clone())
         .layer(middleware_subnet_lookup.clone())
         .layer(middleware_generic_limiter.clone())
+        .layer(option_layer(cache.map(|x| {
+            middleware::from_fn_with_state(x.clone(), cache_middleware)
+        })))
         .layer(middleware_retry.clone());
 
     let service_subnet_read = ServiceBuilder::new()
@@ -893,12 +1066,6 @@ impl<T: Run> Run for WithMetrics<T> {
         out
     }
 }
-
-#[allow(dead_code)]
-pub struct WithRetry<T>(
-    pub T,
-    pub Duration, // attempt_interval
-);
 
 pub struct ThrottleParams {
     pub throttle_duration: Duration,

@@ -48,16 +48,6 @@ async fn should_reschedule_refresh_fees() {
     .await;
 }
 
-#[tokio::test]
-async fn should_reschedule_distribute_kyt_fee() {
-    test_reschedule(
-        TaskType::DistributeKytFee,
-        || crate::guard::DistributeKytFeeGuard::new().unwrap(),
-        Duration::from_secs(24 * 60 * 60),
-    )
-    .await;
-}
-
 async fn test_reschedule<T, G: FnOnce() -> T>(
     task_type: TaskType,
     guard: G,

@@ -66,6 +66,7 @@ impl TransactionIdentifier {
             | RequestType::StakeMaturity { .. }
             | RequestType::NeuronInfo { .. }
             | RequestType::ListNeurons { .. }
+            | RequestType::RefreshVotingPower { .. }
             | RequestType::Follow { .. } => {
                 // Unfortunately, staking operations don't really have a transaction ID
                 Ok(TransactionIdentifier::from(

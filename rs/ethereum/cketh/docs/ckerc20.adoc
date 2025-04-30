@@ -113,27 +113,27 @@ The ckERC20 implementation consists of a suite of canisters:
 The ERC-20 deposit flow is similar to the ckETH deposit flow in that deposits will transit via a helper smart contract to be able to bind an Ethereum transaction with an IC principal.
 
 ----
- ┌────┐                      ┌───────────────┐                     ┌───────────────┐                        ┌──────┐
- │User│                      │ERC-20 Contract│                     │Helper Contract│                        │Minter│
- └─┬──┘                      └───────┬───────┘                     └───────┬───────┘                        └──┬───┘
-   │                                 │                                     │                                   │
-   │approve(helper_contract, amount) │                                     │                                   │
-   │────────────────────────────────>│                                     │                                   │
-   │                                 │                                     │                                   │
-   │                deposit(token_id, amount, principal)                   │                                   │
-   │──────────────────────────────────────────────────────────────────────>│                                   │
-   │                                 │ transferFrom(user, minter, amount)  │                                   │
-   │                                 │<────────────────────────────────────│                                   │
-   │                                 │                                     │                                   │
-   │                                 │                                     │       get_events                  │
-   │                                 │                                     │<──────────────────────────────────│
-   │                                 │                                     │Events(token_id, amount, principal)│
-   │                                 │                                     │──────────────────────────────────>│
-   │                                 │  mint(token_id, amount, principal)  │                                   │
-   │<──────────────────────────────────────────────────────────────────────────────────────────────────────────│
- ┌─┴──┐                      ┌───────┴───────┐                     ┌───────┴───────┐                        ┌──┴───┐
- │User│                      │ERC-20 Contract│                     │Helper Contract│                        │Minter│
- └────┘                      └───────────────┘                     └───────────────┘                        └──────┘
+ ┌────┐                      ┌───────────────┐                                      ┌───────────────┐                                                      ┌──────┐
+ │User│                      │ERC-20 Contract│                                      │Helper Contract│                                                      │Minter│
+ └─┬──┘                      └───────┬───────┘                                      └───────┬───────┘                                                      └──┬───┘
+   │                                 │                                                      │                                                                 │
+   │approve(helper_contract, amount) │                                                      │                                                                 │
+   │────────────────────────────────>│                                                      │                                                                 │
+   │                                 │                                                      │                                                                 │
+   │                depositErc20(token_id, amount, principal, subaccount)                   │                                                                 │
+   │───────────────────────────────────────────────────────────────────────────────────────>│                                                                 │
+   │                                 │           transferFrom(user, minter, amount)         │                                                                 │
+   │                                 │<─────────────────────────────────────────────────────│                                                                 │
+   │                                 │                                                      │                                                                 │
+   │                                 │                                                      │       get_events                                                │
+   │                                 │                                                      │<────────────────────────────────────────────────────────────────│
+   │                                 │                                                      │ReceivedEthOrErc20(token_id, user, amount, principal, subaccount)│
+   │                                 │                                                      │────────────────────────────────────────────────────────────────>│
+   │                                 │     mint(token_id, amount, principal, subaccount)    │                                                                 │
+   │<─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+ ┌─┴──┐                      ┌───────┴───────┐                                      ┌───────┴───────┐                                                      ┌──┴───┐
+ │User│                      │ERC-20 Contract│                                      │Helper Contract│                                                      │Minter│
+ └────┘                      └───────────────┘                                      └───────────────┘                                                      └──────┘
 ----
 
 [WARNING]
@@ -141,7 +141,7 @@ The ERC-20 deposit flow is similar to the ckETH deposit flow in that deposits wi
 ====
 The address of the helper smart contract may change in the future when the minter is upgraded.
 Please verify the address of the helper contract **before** any important transfer by querying the minter as follows
-and checking the field `erc20_helper_contract_address`:
+and checking the field `deposit_with_subaccount_helper_contract_address`:
 [source,shell]
 ----
 dfx canister --network ic call minter get_minter_info
@@ -164,7 +164,7 @@ The ERC-20 -> ckERC-20 flow involves the following steps:
 .. The ERC-20 smart contract address. This identifies the ERC-20 token being deposited.
 .. The amount of ERC-20 tokens being deposited.
 .. The IC principal encoded as a `bytes32`.
-.. The IC ledger subaccount (use `0x` for the default subaccount). The IC principal together with the IC ledger subaccount uniquely identify an IC ledger account to which the amount of ckERC-20 should be minted.
+.. The IC ledger subaccount (use `0x` for the default subaccount), which is a 32-byte array, encoded as a hexadecimal string and prefixed by `0x`. The IC principal together with the IC ledger subaccount uniquely identify an IC ledger account to which the amount of ckERC-20 should be minted.
 . The helper smart contract does the following steps within the *same* Ethereum transaction
 .. Call `transferFrom` on the ERC-20 smart contract to transfer the given amount of ERC-20 tokens from the user’s address to the minter’s address. (This requires that the smart contract’s address was previously approved as in step 2).
 .. Emits the `ReceivedEthOrErc20(address,address,uint,bytes32,bytes32)` event
@@ -190,21 +190,21 @@ dfx canister --network ic call minter get_minter_info
 ----
 ====
 
-.Deposit of Sepolia USDC -> ckSepoliaUSDC
+.Deposit of USDC -> ckUSDC
 ====
-To make things more concrete, we consider a deposit of 2 Sepolia USDC, whose contract is available at link:https://sepolia.etherscan.io/address/0x1c7d4b196cb0c7b01d743fbc6116a902379c7238[0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238], involving the following steps:
+To make things more concrete, we consider a deposit of USDC, whose contract is available at link:https://etherscan.io/token/0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48[0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48], involving the following steps:
 
-. The user approves the helper smart contract to use some of their Sepolia USDC tokens. Depending on the approved amount and the afterward deposited amount, this could be a one-time transaction per deposit or, if the approved amount is high enough, the same approval could be re-used for several deposits from that user and ERC-20 token.
-.. Transaction link:https://sepolia.etherscan.io/tx/0xfff3b1ce9ee6f97b062a4425a75b91d9a840d572ac0ce29c1337896a6c2280bc[0xfff3b1ce9ee6f97b062a4425a75b91d9a840d572ac0ce29c1337896a6c2280bc] to approve 2 Sepolia USDC tokens to be used by the helper smart contract.
-.. Gas: `55_437`
-. The user calls the `deposit` method of the helper smart contract to transfer the Sepolia USDC tokens to the minter's address. This is a one-time transaction per deposit.
-.. Transaction link:https://sepolia.etherscan.io/tx/0x09163e2159686fb076009e22846ac6b47dd003bab71bc71dec4fc5d832adaf50[0x09163e2159686fb076009e22846ac6b47dd003bab71bc71dec4fc5d832adaf50] to deposit 2 Sepolia USDC tokens to the minter's address.
-.. Gas: `54_113`
+. The user approves the helper smart contract to use some of their USDC tokens. Depending on the approved amount and the afterward deposited amount, this could be a one-time transaction per deposit or, if the approved amount is high enough, the same approval could be re-used for several deposits from that user and ERC-20 token.
+.. Transaction link:https://etherscan.io/tx/0x7ae0a41347cb7372ceb0e1ed56259a4fc02b6673d6e77cda7c4da5c6dd909e29[0x7ae0a41347cb7372ceb0e1ed56259a4fc02b6673d6e77cda7c4da5c6dd909e29] to approve `4_000` USDC tokens to be used by the helper smart contract. This corresponds to 0.004$ since USDC has 6 decimals.
+.. Gas: `55_546`
+. The user calls the `depositErc20` method of the helper smart contract to transfer the `4_000` USDC tokens to the minter's address. This is a one-time transaction per deposit.
+.. Transaction link:https://etherscan.io/tx/0x9a43bb8bdf52764c025853f8fa46dc5ce082ea07f6df4f83949fa525058604fc[0x9a43bb8bdf52764c025853f8fa46dc5ce082ea07f6df4f83949fa525058604fc] to deposit the USDC tokens to the minter's address.
+.. Gas: `56_970`
 
-Assuming a gas price of 25 gwei/gas and 3000 USD/ETH, a deposit costs around 8 USD that breaks as follows
+Assuming a gas price of 25 gwei/gas and 3000 USD/ETH, a deposit costs around 9 USD that breaks as follows
 
 . 4.2 USD for the approval transaction
-. 4.1 USD for the deposit transaction
+. 4.3 USD for the deposit transaction
 
 The exact cost will depend on the gas cost of the involved ERC-20 operations (`approve`, `transferFrom`) and will vary between each ERC-20 smart contract.
 ====

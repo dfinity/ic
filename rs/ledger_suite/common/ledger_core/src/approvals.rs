@@ -17,7 +17,7 @@ pub enum ApproveError<Tokens> {
 }
 
 // The implementations of this trait should store the allowance data
-// for (account, spender) pairs and the expirations and arrivals
+// for (account, spender) pairs and the expirations
 // of the allowances. The functions of the trait are meant to be simple
 // `insert` and `remove` type functions that can be implemented with
 // regular BTreeMaps or using the stable structures.
@@ -50,18 +50,6 @@ pub trait AllowancesData {
         account_spender: (Self::AccountId, Self::AccountId),
     );
 
-    fn insert_arrival(
-        &mut self,
-        timestamp: TimeStamp,
-        account_spender: (Self::AccountId, Self::AccountId),
-    );
-
-    fn remove_arrival(
-        &mut self,
-        timestamp: TimeStamp,
-        account_spender: (Self::AccountId, Self::AccountId),
-    );
-
     #[allow(clippy::type_complexity)]
     fn first_expiry(&self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))>;
 
@@ -73,13 +61,9 @@ pub trait AllowancesData {
         &mut self,
     ) -> Option<((Self::AccountId, Self::AccountId), Allowance<Self::Tokens>)>;
 
-    fn oldest_arrivals(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)>;
-
     fn len_allowances(&self) -> usize;
 
     fn len_expirations(&self) -> usize;
-
-    fn len_arrivals(&self) -> usize;
 
     fn clear_arrivals(&mut self);
 }
@@ -150,22 +134,6 @@ where
         self.expiration_queue.remove(&(timestamp, account_spender));
     }
 
-    fn insert_arrival(
-        &mut self,
-        timestamp: TimeStamp,
-        account_spender: (Self::AccountId, Self::AccountId),
-    ) {
-        self.arrival_queue.insert((timestamp, account_spender));
-    }
-
-    fn remove_arrival(
-        &mut self,
-        timestamp: TimeStamp,
-        account_spender: (Self::AccountId, Self::AccountId),
-    ) {
-        self.arrival_queue.remove(&(timestamp, account_spender));
-    }
-
     fn first_expiry(&self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
         self.expiration_queue.first().cloned()
     }
@@ -180,27 +148,12 @@ where
         self.allowances.pop_first()
     }
 
-    fn oldest_arrivals(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)> {
-        let mut result = vec![];
-        for (_t, key) in &self.arrival_queue {
-            if result.len() >= n {
-                break;
-            }
-            result.push(key.clone());
-        }
-        result
-    }
-
     fn len_allowances(&self) -> usize {
         self.allowances.len()
     }
 
     fn len_expirations(&self) -> usize {
         self.expiration_queue.len()
-    }
-
-    fn len_arrivals(&self) -> usize {
-        self.arrival_queue.len()
     }
 
     fn clear_arrivals(&mut self) {
@@ -323,7 +276,6 @@ where
                     if let Some(expires_at) = expires_at {
                         table.allowances_data.insert_expiry(expires_at, key.clone());
                     }
-                    table.allowances_data.insert_arrival(now, key.clone());
                     table.allowances_data.set_allowance(
                         key,
                         Allowance {
@@ -349,9 +301,6 @@ where
                             return Err(ApproveError::AllowanceChanged { current_allowance });
                         }
                     }
-                    table
-                        .allowances_data
-                        .remove_arrival(old_allowance.arrived_at, key.clone());
                     if amount == AD::Tokens::zero() {
                         if let Some(expires_at) = old_allowance.expires_at {
                             table.allowances_data.remove_expiry(expires_at, key.clone());
@@ -359,7 +308,6 @@ where
                         table.allowances_data.remove_allowance(&key);
                         return Ok(amount);
                     }
-                    table.allowances_data.insert_arrival(now, key.clone());
                     table.allowances_data.set_allowance(
                         key.clone(),
                         Allowance {
@@ -421,9 +369,6 @@ where
                             if let Some(expires_at) = old_allowance.expires_at {
                                 table.allowances_data.remove_expiry(expires_at, key.clone());
                             }
-                            table
-                                .allowances_data
-                                .remove_arrival(old_allowance.arrived_at, key.clone());
                             table.allowances_data.remove_allowance(&key);
                         } else {
                             table.allowances_data.set_allowance(key, new_allowance);
@@ -433,12 +378,6 @@ where
                 }
             }
         })
-    }
-
-    /// Returns a vector of pairs (account, spender) of size min(n, approvals_size)
-    /// that represent approvals selected for trimming.
-    pub fn select_approvals_to_trim(&self, n: usize) -> Vec<(AD::AccountId, AD::AccountId)> {
-        self.allowances_data.oldest_arrivals(n)
     }
 
     /// Prunes allowances that are expired, removes at most `limit` allowances.
@@ -460,9 +399,6 @@ where
                     let key = (account, spender);
                     if let Some(allowance) = table.allowances_data.get_allowance(&key) {
                         if allowance.expires_at.unwrap_or_else(remote_future) <= now {
-                            table
-                                .allowances_data
-                                .remove_arrival(allowance.arrived_at, key.clone());
                             table.allowances_data.remove_allowance(&key);
                             pruned += 1;
                         }

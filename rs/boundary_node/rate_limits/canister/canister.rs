@@ -5,12 +5,13 @@ use crate::confidentiality_formatting::{
 };
 use crate::disclose::{DisclosesRules, RulesDiscloser};
 use crate::getter::{ConfigGetter, EntityGetter, IncidentGetter, RuleGetter};
+use crate::logs::{self, Log, LogEntry, Priority, P0};
 use crate::metrics::{
-    export_metrics_as_http_response, with_metrics_registry, WithMetrics, LAST_CANISTER_CHANGE_TIME,
-    LAST_SUCCESSFUL_REGISTRY_POLL_TIME, REGISTRY_POLL_CALLS_COUNTER,
+    export_metrics_as_http_response, with_metrics_registry, WithMetrics, METRICS,
 };
 use crate::state::{init_version_and_config, with_canister_state, CanisterApi};
 use candid::Principal;
+use ic_canister_log::{export as export_logs, log};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::call::call;
 use ic_cdk_macros::{init, inspect_message, post_upgrade, query, update};
@@ -20,7 +21,7 @@ use rate_limits_api::{
     GetApiBoundaryNodeIdsRequest, GetConfigResponse, GetRuleByIdResponse,
     GetRulesByIncidentIdResponse, IncidentId, InitArg, InputConfig, RuleId, Version,
 };
-use std::{sync::Arc, time::Duration};
+use std::{borrow::BorrowMut, str::FromStr, sync::Arc, time::Duration};
 
 const REGISTRY_CANISTER_METHOD: &str = "get_api_boundary_node_ids";
 const UPDATE_METHODS: [&str; 2] = ["add_config", "disclose_rules"];
@@ -44,6 +45,10 @@ fn inspect_message() {
     if called_method == REPLICATED_QUERY_METHOD {
         if has_full_access || has_full_read_access {
             ic_cdk::api::call::accept_message();
+        } else {
+            ic_cdk::api::trap(
+                "message_inspection_failed: method call is prohibited in the current context",
+            );
         }
     } else if UPDATE_METHODS.contains(&called_method.as_str()) {
         if has_full_access {
@@ -80,8 +85,11 @@ fn init(init_arg: InitArg) {
         );
     });
     // Update metric.
-    LAST_CANISTER_CHANGE_TIME.with(|cell| {
-        cell.borrow_mut().set(current_time as i64);
+    METRICS.with(|cell| {
+        let mut cell = cell.borrow_mut();
+        cell.last_canister_change_time
+            .borrow_mut()
+            .set(current_time as i64);
     });
 }
 
@@ -142,14 +150,14 @@ fn get_rules_by_incident_id(incident_id: IncidentId) -> GetRulesByIncidentIdResp
 fn add_config(config: InputConfig) -> AddConfigResponse {
     let caller_id = ic_cdk::api::caller();
     let current_time = ic_cdk::api::time();
-    let result = with_canister_state(|state| {
+    with_canister_state(|state| {
         let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
         let adder = ConfigAdder::new(state);
         let adder = WithAuthorization::new(adder, access_resolver);
         let adder = WithMetrics::new(adder);
         adder.add_config(config, current_time)
     })?;
-    Ok(result)
+    Ok(())
 }
 
 /// Makes specified rules publicly accessible for viewing
@@ -160,14 +168,14 @@ fn add_config(config: InputConfig) -> AddConfigResponse {
 fn disclose_rules(args: DiscloseRulesArg) -> DiscloseRulesResponse {
     let caller_id = ic_cdk::api::caller();
     let disclose_time = ic_cdk::api::time();
-    let result = with_canister_state(|state| {
+    with_canister_state(|state| {
         let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
         let discloser = RulesDiscloser::new(state);
         let discloser = WithAuthorization::new(discloser, access_resolver);
         let discloser = WithMetrics::new(discloser);
         discloser.disclose_rules(args, disclose_time)
     })?;
-    Ok(result)
+    Ok(())
 }
 
 #[query(decoding_quota = 10000)]
@@ -176,6 +184,50 @@ fn http_request(request: HttpRequest) -> HttpResponse {
         "/metrics" => with_canister_state(|state| {
             with_metrics_registry(|registry| export_metrics_as_http_response(registry, state))
         }),
+        "/logs" => {
+            use serde_json;
+
+            let max_skip_timestamp = match request.raw_query_param("time") {
+                Some(arg) => match u64::from_str(arg) {
+                    Ok(value) => value,
+                    Err(_) => {
+                        return HttpResponseBuilder::bad_request()
+                            .with_body_and_content_length("failed to parse the 'time' parameter")
+                            .build()
+                    }
+                },
+                None => 0,
+            };
+
+            let mut entries: Log = Default::default();
+            for entry in export_logs(&logs::P0) {
+                entries.entries.push(LogEntry {
+                    timestamp: entry.timestamp,
+                    counter: entry.counter,
+                    priority: Priority::P0,
+                    file: entry.file.to_string(),
+                    line: entry.line,
+                    message: entry.message,
+                });
+            }
+            for entry in export_logs(&logs::P1) {
+                entries.entries.push(LogEntry {
+                    timestamp: entry.timestamp,
+                    counter: entry.counter,
+                    priority: Priority::P1,
+                    file: entry.file.to_string(),
+                    line: entry.line,
+                    message: entry.message,
+                });
+            }
+            entries
+                .entries
+                .retain(|entry| entry.timestamp >= max_skip_timestamp);
+            HttpResponseBuilder::ok()
+                .header("Content-Type", "application/json; charset=utf-8")
+                .with_body_and_content_length(serde_json::to_string(&entries).unwrap_or_default())
+                .build()
+        }
         _ => HttpResponseBuilder::not_found().build(),
     }
 }
@@ -201,22 +253,98 @@ fn periodically_poll_api_boundary_nodes(interval: u64, canister_api: Arc<dyn Can
                         canister_api.set_api_boundary_nodes_principals(
                             api_bn_records.into_iter().filter_map(|n| n.id).collect(),
                         );
-                        // Update metrics.
+                        // Update metric.
                         let current_time = ic_cdk::api::time() as i64;
-                        LAST_SUCCESSFUL_REGISTRY_POLL_TIME.with(|cell| {
-                            cell.borrow_mut().set(current_time);
+                        METRICS.with(|cell| {
+                            let mut cell = cell.borrow_mut();
+                            cell.last_successful_registry_poll_time
+                                .borrow_mut()
+                                .set(current_time);
                         });
                         ("success", "")
                     }
-                    Ok((Err(_),)) => ("failure", "calling_canister_method_failed"),
-                    Err(_) => ("failure", "canister_call_rejected"),
+                    Ok((Err(err),)) => {
+                        log!(
+                        P0,
+                        "[poll_api_boundary_nodes]: failed to fetch nodes from registry {err:?}",
+                    );
+                        ("failure", "calling_canister_method_failed")
+                    }
+                    Err(err) => {
+                        log!(
+                        P0,
+                        "[poll_api_boundary_nodes]: failed to fetch nodes from registry {err:?}",
+                    );
+                        ("failure", "canister_call_rejected")
+                    }
                 };
 
             // Update metric.
-            REGISTRY_POLL_CALLS_COUNTER.with(|cell| {
-                let metric = cell.borrow_mut();
-                metric.with_label_values(&[call_status, message]).inc();
+            METRICS.with(|cell| {
+                let mut cell = cell.borrow_mut();
+                cell.registry_poll_calls
+                    .borrow_mut()
+                    .with_label_values(&[call_status, message])
+                    .inc();
             });
         });
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn check_candid_interface_compatibility() {
+        use candid_parser::utils::{service_equal, CandidSource};
+
+        fn source_to_str(source: &CandidSource) -> String {
+            match source {
+                CandidSource::File(f) => {
+                    std::fs::read_to_string(f).unwrap_or_else(|_| "".to_string())
+                }
+                CandidSource::Text(t) => t.to_string(),
+            }
+        }
+
+        fn check_service_equal(
+            new_name: &str,
+            new: CandidSource,
+            old_name: &str,
+            old: CandidSource,
+        ) {
+            let new_str = source_to_str(&new);
+            let old_str = source_to_str(&old);
+            match service_equal(new, old) {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!(
+                        "{} is not compatible with {}!\n\n\
+                {}:\n\
+                {}\n\n\
+                {}:\n\
+                {}\n",
+                        new_name, old_name, new_name, new_str, old_name, old_str
+                    );
+                    panic!("{:?}", e);
+                }
+            }
+        }
+
+        candid::export_service!();
+
+        let new_interface = __export_service();
+
+        // check the public interface against the actual one
+        let old_interface = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+            .join("canister/interface.did");
+
+        check_service_equal(
+            "actual rate-limit candid interface",
+            candid_parser::utils::CandidSource::Text(&new_interface),
+            "declared candid interface in interface.did file",
+            candid_parser::utils::CandidSource::File(old_interface.as_path()),
+        );
+    }
 }

@@ -1,5 +1,5 @@
 {
-  "image": "ghcr.io/dfinity/ic-build@sha256:3cc80d1a2d5789b69f6a7f170280bb3763a54acce299430903f59718f904f273",
+  "image": "ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89",
   "remoteUser": "ubuntu",
   "privileged": true,
   "runArgs": [
@@ -16,7 +16,8 @@
   "workspaceFolder": "/ic",
   "initializeCommand": "mkdir -p ~/.aws ~/.ssh ~/.cache/cargo ~/.local/share/fish && touch ~/.zsh_history ~/.bash_history",
   "containerEnv": {
-    "CARGO_TARGET_DIR": "/home/ubuntu/.cache/cargo"
+    "CARGO_TARGET_DIR": "/home/ubuntu/.cache/cargo",
+    "USER": "${localEnv:USER}"
   },
   "mounts": [
     {

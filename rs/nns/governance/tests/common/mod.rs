@@ -2,10 +2,9 @@ use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::{
     governance::Governance,
-    pb::v1::{
-        manage_neuron, manage_neuron::NeuronIdOrSubaccount, ManageNeuron, ManageNeuronResponse,
-    },
+    pb::v1::{manage_neuron, manage_neuron::NeuronIdOrSubaccount, ManageNeuron},
 };
+use ic_nns_governance_api::pb::v1::ManageNeuronResponse;
 
 pub async fn increase_dissolve_delay_raw(
     gov: &mut Governance,

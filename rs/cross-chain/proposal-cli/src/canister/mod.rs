@@ -10,9 +10,9 @@ use strum_macros::EnumIter;
 #[derive(Clone, Eq, PartialEq, Debug, Ord, PartialOrd, EnumIter)]
 #[allow(clippy::enum_variant_names)]
 pub enum TargetCanister {
+    BtcChecker,
     CkBtcArchive,
     CkBtcIndex,
-    CkBtcKyt,
     CkBtcLedger,
     CkBtcMinter,
     CkEthArchive,
@@ -22,6 +22,7 @@ pub enum TargetCanister {
     IcpArchive1,
     IcpArchive2,
     IcpArchive3,
+    IcpArchive4,
     IcpIndex,
     IcpLedger,
     LedgerSuiteOrchestrator,
@@ -33,14 +34,15 @@ pub enum TargetCanister {
 impl TargetCanister {
     pub fn canister_name(&self) -> &str {
         match self {
+            TargetCanister::BtcChecker => "btc_checker",
             TargetCanister::CkBtcArchive | TargetCanister::CkEthArchive => "archive",
             TargetCanister::CkBtcIndex | TargetCanister::CkEthIndex => "index",
-            TargetCanister::CkBtcKyt => "kyt",
             TargetCanister::CkBtcLedger | TargetCanister::CkEthLedger => "ledger",
             TargetCanister::CkBtcMinter | TargetCanister::CkEthMinter => "minter",
             TargetCanister::IcpArchive1 => "icp-archive1",
             TargetCanister::IcpArchive2 => "icp-archive2",
             TargetCanister::IcpArchive3 => "icp-archive3",
+            TargetCanister::IcpArchive4 => "icp-archive4",
             TargetCanister::IcpIndex => "icp-index",
             TargetCanister::IcpLedger => "icp-ledger",
             TargetCanister::LedgerSuiteOrchestrator => "orchestrator",
@@ -52,9 +54,9 @@ impl TargetCanister {
 
     pub fn git_repository_url(&self) -> &str {
         match &self {
-            TargetCanister::CkBtcArchive
+            TargetCanister::BtcChecker
+            | TargetCanister::CkBtcArchive
             | TargetCanister::CkBtcIndex
-            | TargetCanister::CkBtcKyt
             | TargetCanister::CkBtcLedger
             | TargetCanister::CkBtcMinter
             | TargetCanister::CkEthArchive
@@ -64,6 +66,7 @@ impl TargetCanister {
             | TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
             | TargetCanister::IcpArchive3
+            | TargetCanister::IcpArchive4
             | TargetCanister::IcpIndex
             | TargetCanister::IcpLedger
             | TargetCanister::LedgerSuiteOrchestrator => "https://github.com/dfinity/ic.git",
@@ -79,6 +82,9 @@ impl TargetCanister {
 
     pub fn candid_file(&self) -> PathBuf {
         match &self {
+            TargetCanister::BtcChecker => {
+                PathBuf::from("rs/bitcoin/checker/btc_checker_canister.did")
+            }
             TargetCanister::CkBtcArchive | TargetCanister::CkEthArchive => {
                 PathBuf::from("rs/ledger_suite/icrc1/archive/archive.did")
             }
@@ -88,7 +94,6 @@ impl TargetCanister {
             TargetCanister::CkBtcLedger | TargetCanister::CkEthLedger => {
                 PathBuf::from("rs/ledger_suite/icrc1/ledger/ledger.did")
             }
-            TargetCanister::CkBtcKyt => PathBuf::from("rs/bitcoin/ckbtc/kyt/kyt.did"),
             TargetCanister::CkBtcMinter => {
                 PathBuf::from("rs/bitcoin/ckbtc/minter/ckbtc_minter.did")
             }
@@ -97,7 +102,8 @@ impl TargetCanister {
             }
             TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
-            | TargetCanister::IcpArchive3 => {
+            | TargetCanister::IcpArchive3
+            | TargetCanister::IcpArchive4 => {
                 PathBuf::from("rs/ledger_suite/icp/ledger_archive.did")
             }
             TargetCanister::IcpIndex => PathBuf::from("rs/ledger_suite/icp/index/index.did"),
@@ -113,9 +119,9 @@ impl TargetCanister {
 
     pub fn repo_dir(&self) -> Option<PathBuf> {
         match &self {
-            TargetCanister::CkBtcArchive
+            TargetCanister::BtcChecker
+            | TargetCanister::CkBtcArchive
             | TargetCanister::CkBtcIndex
-            | TargetCanister::CkBtcKyt
             | TargetCanister::CkBtcLedger
             | TargetCanister::CkBtcMinter
             | TargetCanister::CkEthArchive
@@ -125,6 +131,7 @@ impl TargetCanister {
             | TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
             | TargetCanister::IcpArchive3
+            | TargetCanister::IcpArchive4
             | TargetCanister::IcpIndex
             | TargetCanister::IcpLedger
             | TargetCanister::LedgerSuiteOrchestrator => {
@@ -140,7 +147,8 @@ impl TargetCanister {
         match &self {
             TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
-            | TargetCanister::IcpArchive3 => {
+            | TargetCanister::IcpArchive3
+            | TargetCanister::IcpArchive4 => {
                 vec![
                     PathBuf::from("packages/icrc-ledger_types"),
                     PathBuf::from("rs/ledger_suite/icp/archive"),
@@ -169,9 +177,9 @@ impl TargetCanister {
                     PathBuf::from("rs/ledger_suite/common/ledger_core/src"),
                 ]
             }
-            TargetCanister::CkBtcArchive
+            TargetCanister::BtcChecker
+            | TargetCanister::CkBtcArchive
             | TargetCanister::CkBtcIndex
-            | TargetCanister::CkBtcKyt
             | TargetCanister::CkBtcLedger
             | TargetCanister::CkBtcMinter
             | TargetCanister::CkEthArchive
@@ -187,9 +195,9 @@ impl TargetCanister {
 
     pub fn artifact(&self) -> PathBuf {
         match &self {
-            TargetCanister::CkBtcArchive
+            TargetCanister::BtcChecker
+            | TargetCanister::CkBtcArchive
             | TargetCanister::CkBtcIndex
-            | TargetCanister::CkBtcKyt
             | TargetCanister::CkBtcLedger
             | TargetCanister::CkBtcMinter
             | TargetCanister::CkEthArchive
@@ -199,6 +207,7 @@ impl TargetCanister {
             | TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
             | TargetCanister::IcpArchive3
+            | TargetCanister::IcpArchive4
             | TargetCanister::IcpIndex
             | TargetCanister::IcpLedger
             | TargetCanister::LedgerSuiteOrchestrator => {
@@ -212,9 +221,9 @@ impl TargetCanister {
 
     pub fn artifact_file_name(&self) -> &str {
         match &self {
+            TargetCanister::BtcChecker => "ic-btc-checker.wasm.gz",
             TargetCanister::CkBtcArchive => "ic-icrc1-archive.wasm.gz",
             TargetCanister::CkBtcIndex => "ic-icrc1-index-ng.wasm.gz",
-            TargetCanister::CkBtcKyt => "ic-ckbtc-kyt.wasm.gz",
             TargetCanister::CkBtcLedger => "ic-icrc1-ledger.wasm.gz",
             TargetCanister::CkBtcMinter => "ic-ckbtc-minter.wasm.gz",
             TargetCanister::CkEthArchive => "ic-icrc1-archive-u256.wasm.gz",
@@ -223,7 +232,8 @@ impl TargetCanister {
             TargetCanister::CkEthMinter => "ic-cketh-minter.wasm.gz",
             TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
-            | TargetCanister::IcpArchive3 => "ledger-archive-node-canister.wasm.gz",
+            | TargetCanister::IcpArchive3
+            | TargetCanister::IcpArchive4 => "ledger-archive-node-canister.wasm.gz",
             TargetCanister::IcpIndex => "ic-icp-index-canister.wasm.gz",
             TargetCanister::IcpLedger => "ledger-canister_notify-method.wasm.gz",
             TargetCanister::LedgerSuiteOrchestrator => {
@@ -237,9 +247,9 @@ impl TargetCanister {
 
     pub fn build_artifact(&self) -> Command {
         match &self {
-            TargetCanister::CkBtcArchive
+            TargetCanister::BtcChecker
+            | TargetCanister::CkBtcArchive
             | TargetCanister::CkBtcIndex
-            | TargetCanister::CkBtcKyt
             | TargetCanister::CkBtcLedger
             | TargetCanister::CkBtcMinter
             | TargetCanister::CkEthArchive
@@ -249,6 +259,7 @@ impl TargetCanister {
             | TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
             | TargetCanister::IcpArchive3
+            | TargetCanister::IcpArchive4
             | TargetCanister::IcpIndex
             | TargetCanister::IcpLedger
             | TargetCanister::LedgerSuiteOrchestrator => {
@@ -273,9 +284,9 @@ impl TargetCanister {
 
     pub fn canister_ids_json_file(&self) -> PathBuf {
         match self {
-            TargetCanister::CkBtcArchive
+            TargetCanister::BtcChecker
+            | TargetCanister::CkBtcArchive
             | TargetCanister::CkBtcIndex
-            | TargetCanister::CkBtcKyt
             | TargetCanister::CkBtcLedger
             | TargetCanister::CkBtcMinter => {
                 PathBuf::from("rs/bitcoin/ckbtc/mainnet/canister_ids.json")
@@ -290,6 +301,7 @@ impl TargetCanister {
             TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
             | TargetCanister::IcpArchive3
+            | TargetCanister::IcpArchive4
             | TargetCanister::IcpIndex
             | TargetCanister::IcpLedger => PathBuf::from("rs/ledger_suite/icp/canister_ids.json"),
             TargetCanister::EvmRpc
@@ -311,9 +323,9 @@ impl FromStr for TargetCanister {
         let canonicalized_canister = canister.to_ascii_lowercase();
         let parts: Vec<&str> = canonicalized_canister.split('-').collect();
         match &parts.as_slice() {
+            ["btc", "checker"] => Ok(TargetCanister::BtcChecker),
             ["ckbtc", "archive"] => Ok(TargetCanister::CkBtcArchive),
             ["ckbtc", "index"] => Ok(TargetCanister::CkBtcIndex),
-            ["ckbtc", "kyt"] => Ok(TargetCanister::CkBtcKyt),
             ["ckbtc", "ledger"] => Ok(TargetCanister::CkBtcLedger),
             ["ckbtc", "minter"] => Ok(TargetCanister::CkBtcMinter),
             ["cketh", "archive"] => Ok(TargetCanister::CkEthArchive),
@@ -324,6 +336,7 @@ impl FromStr for TargetCanister {
             ["icp", "archive1"] => Ok(TargetCanister::IcpArchive1),
             ["icp", "archive2"] => Ok(TargetCanister::IcpArchive2),
             ["icp", "archive3"] => Ok(TargetCanister::IcpArchive3),
+            ["icp", "archive4"] => Ok(TargetCanister::IcpArchive4),
             ["icp", "index"] => Ok(TargetCanister::IcpIndex),
             ["icp", "ledger"] => Ok(TargetCanister::IcpLedger),
             ["evm", "rpc"] => Ok(TargetCanister::EvmRpc),
@@ -337,9 +350,9 @@ impl FromStr for TargetCanister {
 impl Display for TargetCanister {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            TargetCanister::BtcChecker => write!(f, "BTC Checker"),
             TargetCanister::CkBtcArchive => write!(f, "ckBTC archive"),
             TargetCanister::CkBtcIndex => write!(f, "ckBTC index"),
-            TargetCanister::CkBtcKyt => write!(f, "ckBTC KYT"),
             TargetCanister::CkBtcLedger => write!(f, "ckBTC ledger"),
             TargetCanister::CkBtcMinter => write!(f, "ckBTC minter"),
             TargetCanister::CkEthArchive => write!(f, "ckETH archive"),
@@ -349,6 +362,7 @@ impl Display for TargetCanister {
             TargetCanister::IcpArchive1 => write!(f, "ICP archive1"),
             TargetCanister::IcpArchive2 => write!(f, "ICP archive2"),
             TargetCanister::IcpArchive3 => write!(f, "ICP archive3"),
+            TargetCanister::IcpArchive4 => write!(f, "ICP archive4"),
             TargetCanister::IcpIndex => write!(f, "ICP index"),
             TargetCanister::IcpLedger => write!(f, "ICP ledger"),
             TargetCanister::LedgerSuiteOrchestrator => write!(f, "ledger suite orchestrator"),

@@ -15,6 +15,8 @@ DEPENDENCIES = [
     "//rs/types/types",
     "//rs/types/wasm_types",
     "//rs/utils",
+    "//rs/utils/thread",
+    "@crate_index//:crossbeam-channel",
     "@crate_index//:hex",
     "@crate_index//:libc",
     "@crate_index//:prometheus",
@@ -36,7 +38,10 @@ DEV_DEPENDENCIES = [
     "@crate_index//:proptest",
 ]
 
-MACRO_DEV_DEPENDENCIES = []
+MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:test-strategy",
+]
 
 rust_library(
     name = "state_layout",

@@ -154,11 +154,9 @@ fn can_collect_leaves() {
     );
 }
 
-proptest! {
-    #[test]
-    fn tree_encoding_roundtrip(s in any::<S>()) {
-        let t = encode_as_tree(&s);
-        let s_decoded = decode(&t).expect("failed to decode a struct");
-        assert_eq!(s, s_decoded);
-    }
+#[test_strategy::proptest]
+fn tree_encoding_roundtrip(#[strategy(any::<S>())] s: S) {
+    let t = encode_as_tree(&s);
+    let s_decoded = decode(&t).expect("failed to decode a struct");
+    assert_eq!(s, s_decoded);
 }

@@ -12,7 +12,7 @@ use crate::{
 };
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_base_types::PrincipalId;
-use ic_btc_kyt::CheckAddressResponse;
+use ic_btc_checker::CheckAddressResponse;
 use ic_canister_log::log;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::account::Account;
@@ -22,7 +22,7 @@ use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use num_traits::cast::ToPrimitive;
 
-const MAX_CONCURRENT_PENDING_REQUESTS: usize = 1000;
+const MAX_CONCURRENT_PENDING_REQUESTS: usize = 5000;
 
 /// The arguments of the [retrieve_btc] endpoint.
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -54,9 +54,9 @@ pub struct RetrieveBtcOk {
 }
 
 pub enum ErrorCode {
-    // The retrieval address didn't pass the KYT check.
+    // The retrieval address didn't pass the Bitcoin check.
     TaintedAddress = 1,
-    KytCallFailed = 2,
+    CheckCallFailed = 2,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -67,7 +67,7 @@ pub enum RetrieveBtcError {
     /// The withdrawal amount is too low.
     AmountTooLow(u64),
 
-    /// The bitcoin address is not valid.
+    /// The Bitcoin address is not valid.
     MalformedAddress(String),
 
     /// The withdrawal account does not hold the requested ckBTC amount.
@@ -92,7 +92,7 @@ pub enum RetrieveBtcWithApprovalError {
     /// The withdrawal amount is too low.
     AmountTooLow(u64),
 
-    /// The bitcoin address is not valid.
+    /// The Bitcoin address is not valid.
     MalformedAddress(String),
 
     /// The withdrawal account does not hold the requested ckBTC amount.
@@ -165,7 +165,10 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         ic_cdk::trap("illegal retrieve_btc target");
     }
 
-    let _guard = retrieve_btc_guard(caller)?;
+    let _guard = retrieve_btc_guard(Account {
+        owner: caller,
+        subaccount: None,
+    })?;
     let (min_retrieve_amount, btc_network) =
         read_state(|s| (s.fee_based_retrieve_btc_min_amount, s.btc_network));
 
@@ -186,18 +189,18 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         return Err(RetrieveBtcError::InsufficientFunds { balance });
     }
 
-    let kyt_principal = read_state(|s| {
-        s.kyt_principal
-            .expect("BUG: upgrade procedure must ensure that the KYT principal is set")
+    let btc_checker_principal = read_state(|s| {
+        s.btc_checker_principal
+            .expect("BUG: upgrade procedure must ensure that the Bitcoin checker principal is set")
             .get()
             .into()
     });
-    let status = kyt_check_address(kyt_principal, args.address.clone()).await?;
+    let status = check_address(btc_checker_principal, args.address.clone()).await?;
     match status {
         BtcAddressCheckStatus::Tainted => {
             log!(
                 P1,
-                "rejected an attempt to withdraw {} BTC to address {} due to failed KYT check",
+                "rejected an attempt to withdraw {} BTC to address {} due to failed Bitcoin check",
                 crate::tx::DisplayAmount(args.amount),
                 args.address,
             );
@@ -237,7 +240,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         request.block_index
     );
 
-    mutate_state(|s| state::audit::accept_retrieve_btc_request(s, request));
+    mutate_state(|s| state::audit::accept_retrieve_btc_request(s, request, &IC_CANISTER_RUNTIME));
 
     assert_eq!(
         crate::state::RetrieveBtcStatus::Pending,
@@ -269,8 +272,11 @@ pub async fn retrieve_btc_with_approval(
     if args.address == main_address.display(state::read_state(|s| s.btc_network)) {
         ic_cdk::trap("illegal retrieve_btc target");
     }
-
-    let _guard = retrieve_btc_guard(caller)?;
+    let caller_account = Account {
+        owner: caller,
+        subaccount: args.from_subaccount,
+    };
+    let _guard = retrieve_btc_guard(caller_account)?;
     let (min_retrieve_amount, btc_network) =
         read_state(|s| (s.fee_based_retrieve_btc_min_amount, s.btc_network));
     if args.amount < min_retrieve_amount {
@@ -286,18 +292,21 @@ pub async fn retrieve_btc_with_approval(
         ));
     }
 
-    let kyt_principal = read_state(|s| {
-        s.kyt_principal
-            .expect("BUG: upgrade procedure must ensure that the KYT principal is set")
+    let btc_checker_principal = read_state(|s| {
+        s.btc_checker_principal
+            .expect("BUG: upgrade procedure must ensure that the Bitcoin checker principal is set")
             .get()
             .into()
     });
 
-    match kyt_check_address(kyt_principal, parsed_address.display(btc_network)).await {
+    match check_address(btc_checker_principal, parsed_address.display(btc_network)).await {
         Err(error) => {
             return Err(RetrieveBtcWithApprovalError::GenericError {
-                error_message: format!("Failed to call KYT canister with error: {:?}", error),
-                error_code: ErrorCode::KytCallFailed as u64,
+                error_message: format!(
+                    "Failed to call Bitcoin checker canister with error: {:?}",
+                    error
+                ),
+                error_code: ErrorCode::CheckCallFailed as u64,
             })
         }
         Ok(status) => match status {
@@ -317,10 +326,7 @@ pub async fn retrieve_btc_with_approval(
         status: None,
     };
     let block_index = burn_ckbtcs_icrc2(
-        Account {
-            owner: caller,
-            subaccount: args.from_subaccount,
-        },
+        caller_account,
         args.amount,
         crate::memo::encode(&burn_memo_icrc2).into(),
     )
@@ -338,7 +344,7 @@ pub async fn retrieve_btc_with_approval(
         }),
     };
 
-    mutate_state(|s| state::audit::accept_retrieve_btc_request(s, request));
+    mutate_state(|s| state::audit::accept_retrieve_btc_request(s, request, &IC_CANISTER_RUNTIME));
 
     assert_eq!(
         crate::state::RetrieveBtcStatus::Pending,
@@ -511,23 +517,23 @@ async fn burn_ckbtcs_icrc2(
     }
 }
 
-/// The outcome of an address KYT check.
+/// The outcome of a Bitcoin address check.
 #[derive(Copy, Clone, Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
 pub enum BtcAddressCheckStatus {
-    /// The KYT check did not find any issues with the address.
+    /// The Bitcoin check did not find any issues with the address.
     Clean,
-    /// The KYT check found issues with the address in question.
+    /// The Bitcoin check found issues with the address in question.
     Tainted,
 }
-async fn kyt_check_address(
-    kyt_principal: Principal,
+async fn check_address(
+    btc_checker_principal: Principal,
     address: String,
 ) -> Result<BtcAddressCheckStatus, RetrieveBtcError> {
-    match check_withdrawal_destination_address(kyt_principal, address.clone())
+    match check_withdrawal_destination_address(btc_checker_principal, address.clone())
         .await
         .map_err(|call_err| {
             RetrieveBtcError::TemporarilyUnavailable(format!(
-                "Failed to call KYT canister: {}",
+                "Failed to call Bitcoin checker canister: {}",
                 call_err
             ))
         })? {

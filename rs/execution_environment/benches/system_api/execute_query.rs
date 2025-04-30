@@ -81,9 +81,10 @@ pub fn execute_query_bench(c: &mut Criterion) {
     let sender = PrincipalId::new_node_test_id(common::REMOTE_CANISTER_ID);
     common::run_benchmarks(
         c,
-        "query",
+        "execution_environment:query",
         &benchmarks,
-        |exec_env: &ExecutionEnvironment,
+        |id: &str,
+         exec_env: &ExecutionEnvironment,
          expected_instructions,
          common::BenchmarkArgs {
              canister_state,
@@ -124,11 +125,16 @@ pub fn execute_query_bench(c: &mut Criterion) {
             assert_eq!(
                 expected_instructions,
                 executed_instructions.get(),
-                "Error comparing number of actual and expected instructions"
+                "update the reference number of instructions for '{id}' to {}",
+                executed_instructions.get()
             );
         },
     );
 }
 
-criterion_group!(benchmarks, execute_query_bench);
+criterion_group! {
+    name = benchmarks;
+    config = Criterion::default().sample_size(10);
+    targets = execute_query_bench
+}
 criterion_main!(benchmarks);

@@ -13,17 +13,9 @@ exports_files([
     "clippy.toml",
     "rustfmt.toml",
     "WORKSPACE.bazel",
-    "mainnet-canisters.json",
+    "mainnet-canister-revisions.json",
+    "mainnet-icos-images.bzl",
 ])
-
-# bazel/workspace_status.sh will write the current timestamp to this file on every run to provade an input that always changes for some targets.
-# The file does not have to and should not be committed, therefore will not exist on the first run on a clean source tree.
-# Therefore glob is used to not fail when the file does not exist.
-# buildifier: disable=constant-glob
-filegroup(
-    name = "bazel-timestamp",
-    srcs = glob(["bazel-timestamp.txt"]),
-)
 
 alias(
     name = "buildifier",
@@ -95,7 +87,18 @@ compile_pip_requirements(
 test_suite(
     name = "single_large_node",  # the "_test" postfix is dropped on purpose since this target is meant for interactive use.
     tags = ["manual"],
-    tests = ["//rs/tests/testing_verification/testnets:single_large_node"],
+    tests = ["//rs/tests/testnets:single_large_node"],
+)
+
+### Bitcoind
+
+alias(
+    name = "bitcoind",
+    actual = select({
+        "@bazel_tools//src/conditions:darwin_arm64": "@bitcoin_core_darwin_arm64//:bitcoind",
+        "@bazel_tools//src/conditions:darwin_x86_64": "@bitcoin_core_darwin_x86//:bitcoind",
+        "@bazel_tools//src/conditions:linux_x86_64": "@bitcoin_core_linux_x86//:bitcoind",
+    }),
 )
 
 ### Pocket IC

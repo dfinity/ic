@@ -26,7 +26,8 @@ pub struct SubnetTopology {
     pub subnet_features:
         ::core::option::Option<super::super::super::registry::subnet::v1::SubnetFeatures>,
     #[prost(message, repeated, tag = "6")]
-    pub idkg_keys_held: ::prost::alloc::vec::Vec<super::super::super::types::v1::MasterPublicKeyId>,
+    pub chain_keys_held:
+        ::prost::alloc::vec::Vec<super::super::super::types::v1::MasterPublicKeyId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetsEntry {
@@ -36,7 +37,7 @@ pub struct SubnetsEntry {
     pub subnet_topology: ::core::option::Option<SubnetTopology>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct IDkgKeyEntry {
+pub struct ChainKeySubnetEntry {
     #[prost(message, optional, tag = "1")]
     pub key_id: ::core::option::Option<super::super::super::types::v1::MasterPublicKeyId>,
     #[prost(message, repeated, tag = "2")]
@@ -62,7 +63,7 @@ pub struct NetworkTopology {
     pub bitcoin_mainnet_canister_ids:
         ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
     #[prost(message, repeated, tag = "8")]
-    pub idkg_signing_subnets: ::prost::alloc::vec::Vec<IDkgKeyEntry>,
+    pub chain_key_enabled_subnets: ::prost::alloc::vec::Vec<ChainKeySubnetEntry>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetupInitialDkgContext {
@@ -105,9 +106,9 @@ pub struct VetKdArguments {
     #[prost(message, optional, tag = "1")]
     pub key_id: ::core::option::Option<super::super::super::types::v1::VetKdKeyId>,
     #[prost(bytes = "vec", tag = "2")]
-    pub derivation_id: ::prost::alloc::vec::Vec<u8>,
+    pub input: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "3")]
-    pub encryption_public_key: ::prost::alloc::vec::Vec<u8>,
+    pub transport_public_key: ::prost::alloc::vec::Vec<u8>,
     #[prost(message, optional, tag = "4")]
     pub ni_dkg_id: ::core::option::Option<super::super::super::types::v1::NiDkgId>,
     #[prost(uint64, tag = "5")]
@@ -192,7 +193,7 @@ pub struct CanisterHttpRequestContextTree {
     pub context: ::core::option::Option<CanisterHttpRequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct IDkgDealingsContext {
+pub struct ReshareChainKeyContext {
     #[prost(message, optional, tag = "1")]
     pub request: ::core::option::Option<super::super::queues::v1::Request>,
     #[prost(message, optional, tag = "2")]
@@ -203,13 +204,15 @@ pub struct IDkgDealingsContext {
     pub registry_version: u64,
     #[prost(message, optional, tag = "5")]
     pub time: ::core::option::Option<Time>,
+    #[prost(bytes = "vec", tag = "6")]
+    pub target_id: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct IDkgDealingsContextTree {
+pub struct ReshareChainKeyContextTree {
     #[prost(uint64, tag = "1")]
     pub callback_id: u64,
     #[prost(message, optional, tag = "2")]
-    pub context: ::core::option::Option<IDkgDealingsContext>,
+    pub context: ::core::option::Option<ReshareChainKeyContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinGetSuccessorsContext {
@@ -350,7 +353,7 @@ pub struct SubnetCallContextManager {
     #[prost(message, repeated, tag = "16")]
     pub raw_rand_contexts: ::prost::alloc::vec::Vec<RawRandContext>,
     #[prost(message, repeated, tag = "17")]
-    pub idkg_dealings_contexts: ::prost::alloc::vec::Vec<IDkgDealingsContextTree>,
+    pub reshare_chain_key_contexts: ::prost::alloc::vec::Vec<ReshareChainKeyContextTree>,
     #[prost(message, repeated, tag = "18")]
     pub sign_with_threshold_contexts: ::prost::alloc::vec::Vec<SignWithThresholdContextTree>,
 }

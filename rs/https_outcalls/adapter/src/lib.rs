@@ -1,7 +1,6 @@
 //! The HTTP adapter makes http calls to the outside on behalf of the replica
 //! This is part of the http calls from canister feature
 
-mod cli;
 /// Main module of HTTP adapter. Receives gRPC calls from replica and makes outgoing requests
 mod rpc_server;
 
@@ -11,11 +10,10 @@ mod config;
 /// Adapter metrics
 mod metrics;
 
-pub use cli::Cli;
 pub use config::{Config, IncomingSource};
 
 use futures::StreamExt;
-use ic_async_utils::{incoming_from_first_systemd_socket, incoming_from_path};
+use ic_http_endpoints_async_utils::{incoming_from_nth_systemd_socket, incoming_from_path};
 use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsServiceServer;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -45,7 +43,7 @@ pub fn start_server(
         // Additionally, this is the only call to connect with the systemd socket and
         // therefore we are sole owner.
         {
-            unsafe { incoming_from_first_systemd_socket() }.boxed()
+            unsafe { incoming_from_nth_systemd_socket(1) }.boxed()
         }
     };
 

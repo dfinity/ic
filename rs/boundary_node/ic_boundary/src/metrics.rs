@@ -1,6 +1,9 @@
 #![allow(clippy::disallowed_types)]
 
-use std::{sync::Arc, time::Instant};
+use std::{
+    sync::{Arc, RwLock},
+    time::Instant,
+};
 
 use anyhow::Error;
 use arc_swap::ArcSwapOption;
@@ -20,8 +23,8 @@ use prometheus::{
     register_int_gauge_with_registry, Encoder, HistogramOpts, HistogramVec, IntCounterVec,
     IntGauge, IntGaugeVec, Registry, TextEncoder,
 };
+use sha3::{Digest, Sha3_256};
 use tikv_jemalloc_ctl::{epoch, stats};
-use tokio::sync::RwLock;
 use tower_http::request_id::RequestId;
 use tracing::info;
 
@@ -216,7 +219,7 @@ impl Run for MetricsRunner {
         }
 
         // Take a write lock, truncate the vector and encode the metrics into it
-        let mut metrics_cache = self.metrics_cache.write().await;
+        let mut metrics_cache = self.metrics_cache.write().unwrap();
         metrics_cache.buffer.clear();
         self.encoder
             .encode(&metric_families, &mut metrics_cache.buffer)?;
@@ -356,10 +359,16 @@ pub struct HttpMetricParams {
     pub durationer: HistogramVec,
     pub request_sizer: HistogramVec,
     pub response_sizer: HistogramVec,
+    pub anonymization_salt: Arc<ArcSwapOption<Vec<u8>>>,
 }
 
 impl HttpMetricParams {
-    pub fn new(registry: &Registry, action: &str, log_failed_requests_only: bool) -> Self {
+    pub fn new(
+        registry: &Registry,
+        action: &str,
+        log_failed_requests_only: bool,
+        anonymization_salt: Arc<ArcSwapOption<Vec<u8>>>,
+    ) -> Self {
         const LABELS_HTTP: &[&str] = &[
             "request_type",
             "status_code",
@@ -408,6 +417,8 @@ impl HttpMetricParams {
                 registry
             )
             .unwrap(),
+
+            anonymization_salt,
         }
     }
 }
@@ -489,8 +500,23 @@ pub async fn metrics_middleware(
     let ip_family = request
         .extensions()
         .get::<Arc<ConnInfo>>()
-        .map(|x| x.remote_addr.family())
-        .unwrap_or("0");
+        .map(|x| {
+            let f = x.remote_addr.family();
+            if f == "v4" {
+                4
+            } else if f == "v6" {
+                6
+            } else {
+                0
+            }
+        })
+        .unwrap_or(0);
+
+    let remote_addr = request
+        .extensions()
+        .get::<Arc<ConnInfo>>()
+        .map(|x| x.remote_addr.ip().to_canonical().to_string())
+        .unwrap_or_default();
 
     let request_type = &request
         .extensions()
@@ -537,8 +563,8 @@ pub async fn metrics_middleware(
         .cloned()
         .unwrap_or_default();
 
-    // Actual canister id is the one the request was routed to
-    // Might be different because of e.g. Bitcoin middleware
+    // Actual canister id is the one the request was routed to.
+    // Might be different from request canister id
     let canister_id_actual = response.extensions().get::<CanisterId>().cloned();
     let error_cause = response.extensions().get::<ErrorCause>().cloned();
     let retry_result = response.extensions().get::<RetryResult>().cloned();
@@ -561,6 +587,7 @@ pub async fn metrics_middleware(
         durationer,
         request_sizer,
         response_sizer,
+        anonymization_salt,
     } = metric_params;
 
     let (parts, body) = response.into_parts();
@@ -623,6 +650,29 @@ pub async fn metrics_middleware(
             .with_label_values(labels)
             .observe(response_size as f64);
 
+        // Anonymization
+        let salt = anonymization_salt.load();
+
+        let hash_fn = |input: &str| -> String {
+            let mut hasher = Sha3_256::new();
+
+            if let Some(v) = salt.as_ref() {
+                hasher.update(v.as_slice());
+            } else {
+                return "N/A".to_string();
+            }
+
+            hasher.update(input);
+            let result = hasher.finalize();
+
+            // SHA3-256 is guaranteed to be 32 bytes, so this is safe
+            hex::encode(&result[..16])
+        };
+
+        let remote_addr = hash_fn(&remote_addr);
+        let sender = hash_fn(&sender.unwrap_or_default());
+
+        // Log
         if !log_failed_requests_only || failed {
             info!(
                 action,
@@ -638,6 +688,7 @@ pub async fn metrics_middleware(
                 canister_id_actual = canister_id_actual.map(|x| x.to_string()),
                 canister_id_cbor = ctx.canister_id.map(|x| x.to_string()),
                 sender,
+                remote_addr,
                 method = ctx.method_name,
                 duration = proc_duration,
                 duration_full = full_duration,
@@ -668,7 +719,7 @@ pub async fn metrics_handler(
     // Get a read lock and clone the buffer contents
     (
         [(CONTENT_TYPE, PROMETHEUS_CONTENT_TYPE)],
-        cache.read().await.buffer.clone(),
+        cache.read().unwrap().buffer.clone(),
     )
 }
 

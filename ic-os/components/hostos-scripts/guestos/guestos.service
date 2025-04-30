@@ -13,6 +13,7 @@ ExecStart=/opt/ic/bin/start-guestos.sh
 ExecStartPost=/opt/ic/bin/manageboot.sh hostos confirm
 ExecStop=/opt/ic/bin/stop-guestos.sh
 Restart=on-failure
+RestartSec=300
 
 [Install]
 WantedBy=multi-user.target

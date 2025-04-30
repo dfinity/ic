@@ -9,12 +9,12 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 ic-agent = { workspace = true }
-ic-crypto-secp256k1 = { path = "../../../crypto/secp256k1" }
-ic-crypto-ed25519 = { path = "../../../crypto/ed25519" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../crypto/test_utils/reproducible_rng" }
+ic-ed25519 = { path = "../../../../packages/ic-ed25519" }
 ic-icrc1 = { path = ".." }
 ic-ledger-core = { path = "../../common/ledger_core" }
 ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
+ic-secp256k1 = { path = "../../../../packages/ic-secp256k1" }
 ic-types = { path = "../../../types/types" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-traits = { workspace = true }

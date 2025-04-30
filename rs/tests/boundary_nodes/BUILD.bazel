@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -10,6 +10,7 @@ TEST_CANISTERS_RUNTIME_DEPS = [
     "//rs/tests/test_canisters/http_counter",
     "//rs/tests/test_canisters/kv_store",
     "@asset_canister//file",
+    "@long_asset_canister//file",
 ]
 
 system_test_nns(
@@ -18,9 +19,9 @@ system_test_nns(
         "KV_STORE_WASM_PATH": "$(rootpath //rs/tests/test_canisters/kv_store)",
         "HTTP_COUNTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/http_counter)",
         "ASSET_CANISTER_WASM_PATH": "$(rootpath @asset_canister//file)",
+        "LONG_ASSET_CANISTER_WASM_PATH": "$(rootpath @long_asset_canister//file)",
     },
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
     tags = [
         "k8s",
     ],
@@ -39,7 +40,6 @@ system_test_nns(
 system_test_nns(
     name = "bn_reboot_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
     tags = [
         "k8s",
     ],
@@ -61,8 +61,8 @@ system_test_nns(
         "KV_STORE_WASM_PATH": "$(rootpath //rs/tests/test_canisters/kv_store)",
         "HTTP_COUNTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/http_counter)",
         "ASSET_CANISTER_WASM_PATH": "$(rootpath @asset_canister//file)",
+        "LONG_ASSET_CANISTER_WASM_PATH": "$(rootpath @long_asset_canister//file)",
     },
-    flaky = True,
     tags = [
         "system_test_hourly",
     ],
@@ -80,10 +80,8 @@ system_test_nns(
 
 system_test_nns(
     name = "bn_update_workload_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
-        "manual",  # TODO(BOUN-1039): remove "manual" and add back "system_test_hourly" and "system_test_nightly" when the test is not flaky anymore
+        "manual",  # TODO(BOUN-1039): remove "manual" and add back "long_test" when the test is not flaky anymore
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
@@ -100,7 +98,6 @@ system_test_nns(
     env = {
         "CERTIFICATE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator)",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
@@ -127,10 +124,44 @@ system_test_nns(
 )
 
 system_test_nns(
+    name = "salt_sharing_canister_test",
+    env = {
+        "SALT_SHARING_CANISTER_WASM_PATH": "$(rootpath //rs/boundary_node/salt_sharing:salt_sharing_canister)",
+    },
+    proc_macro_deps = [],
+    tags = [
+        "k8s",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + [
+        "//rs/boundary_node/salt_sharing:salt_sharing_canister",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/boundary_node/salt_sharing/api:salt_sharing_api",
+        "//rs/nns/constants",
+        "//rs/nns/test_utils",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/boundary_nodes/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-agent",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+        "@crate_index//:wat",
+    ],
+)
+
+system_test_nns(
     name = "rate_limit_canister_test",
     env = {
         "RATE_LIMIT_CANISTER_WASM_PATH": "$(rootpath //rs/boundary_node/rate_limits:rate_limit_canister)",
     },
+    proc_macro_deps = ["@crate_index//:async-trait"],
     tags = [
         "k8s",
     ],
@@ -141,8 +172,13 @@ system_test_nns(
     deps = [
         # Keep sorted.
         "//rs/boundary_node/rate_limits/api:rate_limits_api",
+        "//rs/nns/constants",
+        "//rs/nns/test_utils",
         "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/boundary_nodes/utils",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
@@ -153,6 +189,7 @@ system_test_nns(
         "@crate_index//:regex",
         "@crate_index//:slog",
         "@crate_index//:tokio",
+        "@crate_index//:wat",
     ],
 )
 
@@ -164,8 +201,6 @@ system_test_nns(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
-    flaky = False,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["manual"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
@@ -187,8 +222,6 @@ system_test(
         "boot_image_minimal_size_gibibytes": 500,
     },
     env_inherit = ["BOUNDARY_NODE_IPV6"],
-    flaky = False,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "manual",
@@ -212,8 +245,6 @@ system_test(
         "boot_image_minimal_size_gibibytes": 500,
     },
     env_inherit = ["BOUNDARY_NODE_IPV6"],
-    flaky = False,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "manual",
@@ -231,7 +262,6 @@ system_test(
 system_test_nns(
     name = "api_bn_decentralization_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.

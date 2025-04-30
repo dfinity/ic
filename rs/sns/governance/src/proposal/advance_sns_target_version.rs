@@ -67,28 +67,6 @@ fn standard_governance_proto_for_tests(deployed_version: Option<Version>) -> Gov
 }
 
 #[test]
-fn test_format_timestamp() {
-    for (expected, timestamp_seconds) in [
-        (Some("1970-01-01 00:00:00 UTC"), 0),
-        (Some("2024-11-29 16:14:10 UTC"), 1732896850),
-        (Some("2038-01-19 03:14:07 UTC"), i32::MAX as u64),
-        (Some("4571-09-24 08:52:47 UTC"), 82102668767),
-        (Some("9999-12-31 23:59:59 UTC"), 253402300799),
-        (None, 253402300800),
-        (None, i64::MAX as u64),
-        (None, u64::MAX),
-    ] {
-        let observed = format_timestamp(timestamp_seconds);
-        assert_eq!(
-            observed,
-            expected.map(|s| s.to_string()),
-            "unexpected result from format_timestamp({})",
-            timestamp_seconds,
-        );
-    }
-}
-
-#[test]
 fn test_validate_and_render_advance_target_version_action() {
     // Prepare the world.
     let pre_deployed_version = sns_version_for_tests();

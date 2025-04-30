@@ -1317,7 +1317,7 @@ impl<const WINDOW_SIZE: usize> WindowInfo<WINDOW_SIZE> {
     /// Returns the number of windows if scalar_bits bits are used
     #[inline(always)]
     pub(crate) const fn number_of_windows_for_bits(scalar_bits: usize) -> usize {
-        (scalar_bits + WINDOW_SIZE - 1) / WINDOW_SIZE
+        scalar_bits.div_ceil(WINDOW_SIZE)
     }
 
     /// Extract a window from a serialized scalar value
@@ -1336,7 +1336,7 @@ impl<const WINDOW_SIZE: usize> WindowInfo<WINDOW_SIZE> {
         const BITS_IN_BYTE: usize = 8;
 
         let scalar_bytes = scalar.len();
-        let windows = (scalar_bytes * 8 + WINDOW_SIZE - 1) / WINDOW_SIZE;
+        let windows = (scalar_bytes * 8).div_ceil(WINDOW_SIZE);
 
         // to compute the correct bit offset for bit lengths that are not a power of 2,
         // we need to start from the inverted value or otherwise we will have multiple options

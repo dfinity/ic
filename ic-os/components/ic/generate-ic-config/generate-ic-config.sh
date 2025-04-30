@@ -6,7 +6,7 @@
 function usage() {
     cat <<EOF
 Usage:
-  generate-ic-config [-n network.conf] [-c nns.conf] [-b backup.conf] [-m malicious_behavior.conf] [-q query_stats.conf] -i ic.json5.template -o ic.json5
+  generate-ic-config [-n network.conf] [-c nns.conf] [-b backup.conf] [-m malicious_behavior.conf] [-q query_stats.conf] [ -r reward.conf ] -i ic.json5.template -o ic.json5
 
   Generate replica config from template file.
 
@@ -15,6 +15,7 @@ Usage:
   -b backup.conf: Optional, parameters of the artifact backup
   -m malicious_behavior.conf: Optional, malicious behavior parameters
   -q query_stats.conf: Optional, query statistics epoch length configuration
+  -r reward.conf: Optional, node reward type configuration
   -t jaeger_addr.conf: Optional, Jaeger address
   -i infile: input ic.json5.template file
   -o outfile: output ic.json5 file
@@ -139,6 +140,15 @@ function read_query_stats_variables() {
     done <"$1"
 }
 
+# Read node reward type config variables from file. The file contains a single value which is the node reward type.
+function read_node_reward_type_variable() {
+    while IFS="=" read -r key value; do
+        case "$key" in
+            "node_reward_type") node_reward_type="${value}" ;;
+        esac
+    done <"$1"
+}
+
 # Read Jaeger address variable from file. The file contains a single value Jaeger node address used in system tests.
 function read_jaeger_addr_variable() {
     while IFS="=" read -r key value; do
@@ -148,7 +158,7 @@ function read_jaeger_addr_variable() {
     done <"$1"
 }
 
-while getopts "l:m:q:n:c:t:i:o:b:" OPT; do
+while getopts "l:m:q:r:n:c:t:i:o:b:" OPT; do
     case "${OPT}" in
         n)
             NETWORK_CONFIG_FILE="${OPTARG}"
@@ -164,6 +174,9 @@ while getopts "l:m:q:n:c:t:i:o:b:" OPT; do
             ;;
         q)
             QUERY_STATS_CONFIG_FILE="${OPTARG}"
+            ;;
+        r)
+            NODE_REWARD_TYPE="${OPTARG}"
             ;;
         t)
             JAEGER_ADDR_FILE="${OPTARG}"
@@ -204,6 +217,10 @@ fi
 
 if [ "${QUERY_STATS_CONFIG_FILE}" != "" -a -e "${QUERY_STATS_CONFIG_FILE}" ]; then
     read_query_stats_variables "${QUERY_STATS_CONFIG_FILE}"
+fi
+
+if [ "${NODE_REWARD_TYPE}" != "" -a -e "${NODE_REWARD_TYPE}" ]; then
+    read_node_reward_type_variable "${NODE_REWARD_TYPE}"
 fi
 
 if [ "${JAEGER_ADDR_FILE}" != "" -a -e "${JAEGER_ADDR_FILE}" ]; then
@@ -249,6 +266,7 @@ sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
     -e "s@{{ backup_purging_interval_secs }}@${BACKUP_PURGING_INTERVAL_SECS}@" \
     -e "s@{{ malicious_behavior }}@${MALICIOUS_BEHAVIOR}@" \
     -e "s@{{ query_stats_epoch_length }}@${QUERY_STATS_EPOCH_LENGTH}@" \
+    -e "s@{{ node_reward_type }}@${NODE_REWARD_TYPE}@" \
     -e "s@{{ jaeger_addr }}@${JAEGER_ADDR}@" \
     "${IN_FILE}" >"${OUT_FILE}"
 

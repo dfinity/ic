@@ -4,8 +4,7 @@ use super::*;
 use crate::{
     artifact::PbArtifact,
     crypto::threshold_sig::ni_dkg::{
-        config::NiDkgConfig, NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag,
-        NiDkgTargetId, NiDkgTranscript,
+        config::NiDkgConfig, NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
     },
     messages::CallbackId,
     ReplicaVersion,
@@ -209,10 +208,8 @@ impl Summary {
     /// Returns a reference to the current transcript for the given tag. Note
     /// that currently we expect that a valid summary contains the current
     /// transcript for any DKG tag.
-    pub fn current_transcript(&self, tag: &NiDkgTag) -> &NiDkgTranscript {
-        self.current_transcripts
-            .get(tag)
-            .unwrap_or_else(|| panic!("No current transcript available for tag {:?}", tag))
+    pub fn current_transcript(&self, tag: &NiDkgTag) -> Option<&NiDkgTranscript> {
+        self.current_transcripts.get(tag)
     }
 
     /// Returns a reference to the current transcripts.
@@ -238,20 +235,6 @@ impl Summary {
             .into_iter()
             .chain(self.next_transcripts)
             .map(|(_, t)| t)
-            .collect()
-    }
-
-    /// Return the set of next transcripts for all tags. If for some tag
-    /// the next transcript is not available, the current transcript is used.
-    /// This function avoids expensive copying when transcripts are large.
-    pub fn into_next_transcripts(self) -> BTreeMap<NiDkgTag, NiDkgTranscript> {
-        let mut next_transcripts = self.next_transcripts;
-        self.current_transcripts
-            .into_iter()
-            .map(|(tag, current)| {
-                let new_next_transcripts = next_transcripts.remove(&tag).unwrap_or(current);
-                (tag, new_next_transcripts)
-            })
             .collect()
     }
 
@@ -293,19 +276,12 @@ impl Summary {
     }
 }
 
-fn build_tagged_transcripts_vec(
+fn build_transcripts_vec(
     transcripts: &BTreeMap<NiDkgTag, NiDkgTranscript>,
-) -> Vec<pb::TaggedNiDkgTranscript> {
+) -> Vec<pb::NiDkgTranscript> {
     transcripts
-        .iter()
-        .map(|(tag, transcript)| pb::TaggedNiDkgTranscript {
-            tag: pb::NiDkgTag::from(tag) as i32,
-            transcript: Some(pb::NiDkgTranscript::from(transcript)),
-            key_id: match tag {
-                NiDkgTag::HighThresholdForKey(k) => Some(pb::MasterPublicKeyId::from(k)),
-                _ => None,
-            },
-        })
+        .values()
+        .map(pb::NiDkgTranscript::from)
         .collect()
 }
 
@@ -355,12 +331,8 @@ impl From<&Summary> for pb::Summary {
                 .values()
                 .map(pb::NiDkgConfig::from)
                 .collect(),
-            current_transcripts_deprecated: build_tagged_transcripts_vec(
-                &summary.current_transcripts,
-            ),
-            current_transcripts_new: Vec::new(),
-            next_transcripts_deprecated: build_tagged_transcripts_vec(&summary.next_transcripts),
-            next_transcripts_new: Vec::new(),
+            current_transcripts: build_transcripts_vec(&summary.current_transcripts),
+            next_transcripts: build_transcripts_vec(&summary.next_transcripts),
             interval_length: summary.interval_length.get(),
             next_interval_length: summary.next_interval_length.get(),
             height: summary.height.get(),
@@ -373,75 +345,15 @@ impl From<&Summary> for pb::Summary {
 }
 
 fn build_tagged_transcripts_map(
-    transcripts_deprecated: &[pb::TaggedNiDkgTranscript],
-    transcripts_new: &[pb::NiDkgTranscript],
+    transcripts: &[pb::NiDkgTranscript],
 ) -> Result<BTreeMap<NiDkgTag, NiDkgTranscript>, ProxyDecodeError> {
-    transcripts_deprecated
+    transcripts
         .iter()
-        .map(|tagged_transcript| {
-            tagged_transcript
-                .transcript
-                .as_ref()
-                .ok_or_else(|| ProxyDecodeError::MissingField("TaggedNiDkgTranscript::transcript"))
-                .and_then(|t| {
-                    Ok((
-                        match tagged_transcript.tag {
-                            1 => {
-                                if tagged_transcript.key_id.is_some() {
-                                    Err(ProxyDecodeError::Other(
-                                        "Failed to convert NiDkgTag of transcript: \
-                                        Invalid DkgTag: expected the master public key \
-                                        ID to be empty"
-                                            .to_string(),
-                                    ))
-                                } else {
-                                    Ok(NiDkgTag::LowThreshold)
-                                }
-                            }
-                            2 => {
-                                if tagged_transcript.key_id.is_some() {
-                                    Err(ProxyDecodeError::Other(
-                                        "Failed to convert NiDkgTag of transcript: \
-                                        Invalid DkgTag: expected the master public key \
-                                        ID to be empty"
-                                            .to_string(),
-                                    ))
-                                } else {
-                                    Ok(NiDkgTag::HighThreshold)
-                                }
-                            }
-                            3 => {
-                                let mpkid_proto =
-                                    tagged_transcript.key_id.as_ref().ok_or_else(|| {
-                                        ProxyDecodeError::Other(
-                                            "Failed to convert NiDkgTag of transcript: \
-                                            Invalid DkgTag: missing key ID"
-                                                .to_string(),
-                                        )
-                                    })?;
-                                let mpkid = NiDkgMasterPublicKeyId::try_from(mpkid_proto.clone())
-                                    .map_err(|e| {
-                                    ProxyDecodeError::Other(format!(
-                                        "Failed to convert NiDkgTag of transcript: \
-                                            Invalid MasterPublicKeyId: {e}"
-                                    ))
-                                })?;
-                                Ok(NiDkgTag::HighThresholdForKey(mpkid))
-                            }
-                            _ => Err(ProxyDecodeError::Other(
-                                "Failed to convert NiDkgTag of transcript: Invalid DKG tag"
-                                    .to_string(),
-                            )),
-                        }?,
-                        NiDkgTranscript::try_from(t).map_err(ProxyDecodeError::Other)?,
-                    ))
-                })
-        })
-        .chain(transcripts_new.iter().map(|transcript_pb| {
+        .map(|transcript_pb| {
             let transcript =
                 NiDkgTranscript::try_from(transcript_pb).map_err(ProxyDecodeError::Other)?;
             Ok((transcript.dkg_id.dkg_tag.clone(), transcript))
-        }))
+        })
         .collect::<Result<BTreeMap<_, _>, _>>()
 }
 
@@ -515,14 +427,8 @@ impl TryFrom<pb::Summary> for Summary {
                 .map(|config| NiDkgConfig::try_from(config).map(|c| (c.dkg_id.clone(), c)))
                 .collect::<Result<BTreeMap<_, _>, _>>()
                 .map_err(ProxyDecodeError::Other)?,
-            current_transcripts: build_tagged_transcripts_map(
-                &summary.current_transcripts_deprecated,
-                &summary.current_transcripts_new,
-            )?,
-            next_transcripts: build_tagged_transcripts_map(
-                &summary.next_transcripts_deprecated,
-                &summary.next_transcripts_new,
-            )?,
+            current_transcripts: build_tagged_transcripts_map(&summary.current_transcripts)?,
+            next_transcripts: build_tagged_transcripts_map(&summary.next_transcripts)?,
             interval_length: Height::from(summary.interval_length),
             next_interval_length: Height::from(summary.next_interval_length),
             height: Height::from(summary.height),
@@ -588,6 +494,15 @@ impl DkgDataPayload {
             messages,
         }
     }
+
+    /// Returns true if the payload is empty
+    pub fn is_empty(&self) -> bool {
+        let DkgDataPayload {
+            start_height: _,
+            messages,
+        } = self;
+        messages.is_empty()
+    }
 }
 
 impl NiDkgTag {
@@ -650,7 +565,8 @@ impl TryFrom<pb::DkgPayload> for Payload {
 mod tests {
 
     use super::*;
-    use ic_management_canister_types::{VetKdCurve, VetKdKeyId};
+    use crate::crypto::threshold_sig::ni_dkg::NiDkgMasterPublicKeyId;
+    use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
     use strum::EnumCount;
     use strum::IntoEnumIterator;
 

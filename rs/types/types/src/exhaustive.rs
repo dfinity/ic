@@ -1,5 +1,7 @@
 //! Implementations and serialization tests of the ExhaustiveSet trait
 
+use crate::artifact::IngressMessageId;
+use crate::batch::VetKdAgreement;
 use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
 use crate::consensus::idkg::ecdsa::QuadrupleInCreation;
@@ -28,6 +30,7 @@ use crate::crypto::{
     CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, CryptoHashable,
     IndividualMultiSig, IndividualMultiSigOf, Signed, ThresholdSigShare, ThresholdSigShareOf,
 };
+use crate::messages::{CallbackId, SignedRequestBytes};
 use crate::signature::{
     BasicSignature, BasicSignatureBatch, MultiSignature, MultiSignatureShare, ThresholdSignature,
     ThresholdSignatureShare,
@@ -42,15 +45,16 @@ use ic_btc_replica_types::{
 use ic_crypto_internal_types::NodeIndex;
 use ic_error_types::RejectCode;
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::{
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+use ic_management_canister_types_private::{
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
+    VetKdKeyId,
 };
 use ic_protobuf::types::v1 as pb;
 use phantom_newtype::{AmountOf, Id};
 use prost::Message;
 use rand::{CryptoRng, RngCore};
 use std::collections::{BTreeMap, BTreeSet};
-use strum::IntoEnumIterator;
+use strum::{EnumCount, IntoEnumIterator};
 
 /// A trait for creating an exhaustive set of fake values for a type, which we
 /// use to test serialization correctness.
@@ -215,6 +219,12 @@ impl ExhaustiveSet for () {
     }
 }
 
+impl ExhaustiveSet for bool {
+    fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
+        vec![true, false]
+    }
+}
+
 impl ExhaustiveSet for String {
     fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
         vec!["0123abcd!@#$.,;()[]<>".to_string(), "".to_string()]
@@ -375,15 +385,48 @@ impl ExhaustiveSet for SchnorrKeyId {
     }
 }
 
+impl ExhaustiveSet for VetKdCurve {
+    fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
+        VetKdCurve::iter().collect()
+    }
+}
+
+impl ExhaustiveSet for VetKdKeyId {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        <(VetKdCurve, String)>::exhaustive_set(rng)
+            .into_iter()
+            .map(|elem| Self {
+                curve: elem.0,
+                name: elem.1,
+            })
+            .collect()
+    }
+}
+
 impl ExhaustiveSet for MasterPublicKeyId {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        assert_eq!(MasterPublicKeyId::COUNT, 3);
         let ecdsa_key_ids = EcdsaKeyId::exhaustive_set(rng);
         let schnorr_key_ids = SchnorrKeyId::exhaustive_set(rng);
+        let vetkd_key_ids = VetKdKeyId::exhaustive_set(rng);
 
         ecdsa_key_ids
             .into_iter()
             .map(MasterPublicKeyId::Ecdsa)
             .chain(schnorr_key_ids.into_iter().map(MasterPublicKeyId::Schnorr))
+            .chain(vetkd_key_ids.into_iter().map(MasterPublicKeyId::VetKd))
+            .collect()
+    }
+}
+
+impl ExhaustiveSet for IDkgMasterPublicKeyId {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        MasterPublicKeyId::exhaustive_set(rng)
+            .into_iter()
+            .filter_map(|key_id| match IDkgMasterPublicKeyId::try_from(key_id) {
+                Ok(idkg_key_id) => Some(idkg_key_id),
+                Err(_) => None,
+            })
             .collect()
     }
 }
@@ -632,28 +675,36 @@ impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, MultiSignature<T>> {
     }
 }
 
-// TODO(CON-1433): Remove once NiDkgTag::HighThresholdForKey variant is supported by the mainnet version
-impl ExhaustiveSet for NiDkgTag {
-    fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
-        vec![NiDkgTag::LowThreshold, NiDkgTag::HighThreshold]
-    }
-}
-
 impl ExhaustiveSet for NiDkgConfig {
-    fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
-        vec![NiDkgConfig::new(valid_dkg_config_data()).unwrap()]
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        let nidkg_ids = <(NiDkgId, bool)>::exhaustive_set(rng);
+        nidkg_ids
+            .into_iter()
+            .map(|(id, resharing)| {
+                let mut config_data = valid_dkg_config_data();
+                config_data.dkg_id = id;
+                config_data.resharing_transcript =
+                    resharing.then_some(config_data.resharing_transcript.unwrap().clone());
+                NiDkgConfig::new(config_data).unwrap()
+            })
+            .collect()
     }
 }
 
 impl ExhaustiveSet for NiDkgTranscript {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         let nodes = NodeId::exhaustive_set(rng);
-        vec![NiDkgTranscript::dummy_transcript_for_tests_with_params(
-            nodes,
-            NiDkgTag::HighThreshold,
-            1,
-            rng.next_u32() as u64,
-        )]
+        NiDkgTag::exhaustive_set(rng)
+            .into_iter()
+            .map(|tag| {
+                NiDkgTranscript::dummy_transcript_for_tests_with_params(
+                    nodes.clone(),
+                    tag,
+                    1,
+                    rng.next_u32() as u64,
+                )
+            })
+            .collect()
     }
 }
 
@@ -954,6 +1005,8 @@ impl HasId<IDkgMasterPublicKeyId> for MasterKeyTranscript {
     }
 }
 
+impl HasId<CallbackId> for VetKdAgreement {}
+impl HasId<IngressMessageId> for SignedRequestBytes {}
 impl HasId<IDkgReshareRequest> for ReshareOfUnmaskedParams {}
 impl HasId<PseudoRandomId> for CompletedSignature {}
 impl HasId<IDkgReshareRequest> for CompletedReshareRequest {}

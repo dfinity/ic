@@ -18,13 +18,12 @@ use icp_rosetta_integration_tests::{start_rosetta, RosettaContext};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
 use num_traits::cast::ToPrimitive;
-use pocket_ic::WasmResult;
 use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
 use rosetta_core::objects::ObjectMap;
 use serde::Deserialize;
 use std::path::PathBuf;
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use tempfile::TempDir;
 use url::Url;
 
@@ -412,7 +411,7 @@ fn matches_blockchain_is_empty_error(error: &rosetta_core::miscellaneous::Error)
             .as_ref()
             .unwrap()
             .get("error_message")
-            .map_or(false, |e| {
+            .is_some_and( |e| {
                 e == "Blockchain is empty" || e == "Block not found: 0" || e == "RosettaBlocks was activated and there are no RosettaBlocks in the database yet. The synch is ongoing, please wait until the first RosettaBlock is written to the database."
             })
 }
@@ -506,7 +505,7 @@ async fn test_rosetta_blocks_mode_enabled() {
     );
 }
 
-// a simple trait to simplify unwrapping and decoding a WasmResult
+// a simple trait to simplify unwrapping and decoding Vec<u8>
 trait UnwrapCandid {
     fn unwrap(&self) -> &[u8];
     fn unwrap_as<T: CandidType + for<'a> Deserialize<'a>>(&self) -> T {
@@ -514,12 +513,9 @@ trait UnwrapCandid {
     }
 }
 
-impl UnwrapCandid for WasmResult {
+impl UnwrapCandid for Vec<u8> {
     fn unwrap(&self) -> &[u8] {
-        match self {
-            WasmResult::Reply(bytes) => bytes,
-            WasmResult::Reject(err) => panic!("Cannot unwrap Reject: {err}"),
-        }
+        self.as_slice()
     }
 }
 
@@ -550,7 +546,8 @@ async fn test_rosetta_blocks_enabled_after_first_block() {
     ])
     .await;
 
-    let rosetta_block1_expected_time_ts = TimeStamp::from(env.pocket_ic.get_time().await);
+    let system_time: SystemTime = env.pocket_ic.get_time().await.try_into().unwrap();
+    let rosetta_block1_expected_time_ts = TimeStamp::from(system_time);
     let rosetta_block1_expected_time_millis =
         rosetta_block1_expected_time_ts.as_nanos_since_unix_epoch() / 1_000_000;
 
@@ -708,7 +705,8 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
     ])
     .await;
 
-    let rosetta_block1_expected_time_ts = TimeStamp::from(env.pocket_ic.get_time().await);
+    let system_time: SystemTime = env.pocket_ic.get_time().await.try_into().unwrap();
+    let rosetta_block1_expected_time_ts = TimeStamp::from(system_time);
     let rosetta_block1_expected_time_millis =
         rosetta_block1_expected_time_ts.as_nanos_since_unix_epoch() / 1_000_000;
 

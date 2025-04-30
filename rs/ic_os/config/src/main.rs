@@ -3,7 +3,8 @@ use clap::{Args, Parser, Subcommand};
 use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::deployment_json::get_deployment_settings;
 use config::serialize_and_write_config;
-use deterministic_ips::{Deployment, HwAddr};
+use config::update_config::{update_guestos_config, update_hostos_config};
+use macaddr::MacAddr6;
 use network::resolve_mgmt_mac;
 use regex::Regex;
 use std::fs::File;
@@ -24,15 +25,6 @@ pub enum Commands {
 
         #[arg(long, default_value = config::DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH, value_name = "deployment.json")]
         deployment_json_path: PathBuf,
-
-        #[arg(long, default_value_t = true)]
-        use_nns_public_key: bool,
-
-        #[arg(long, default_value_t = false)]
-        use_ssh_authorized_keys: bool,
-
-        #[arg(long, default_value_t = true)]
-        use_node_operator_private_key: bool,
 
         #[arg(long, default_value = config::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
         setupos_config_json_path: PathBuf,
@@ -55,6 +47,18 @@ pub enum Commands {
     },
     /// Creates a GuestOSConfig object directly from GenerateTestnetConfigClapArgs. Only used for testing purposes.
     GenerateTestnetConfig(GenerateTestnetConfigClapArgs),
+    /// Creates a GuestOSConfig object from existing guestos configuration files
+    UpdateGuestosConfig,
+    UpdateHostosConfig {
+        #[arg(long, default_value = config::DEFAULT_HOSTOS_CONFIG_INI_FILE_PATH, value_name = "config.ini")]
+        config_ini_path: PathBuf,
+
+        #[arg(long, default_value = config::DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH, value_name = "deployment.json")]
+        deployment_json_path: PathBuf,
+
+        #[arg(long, default_value = config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
+        hostos_config_json_path: PathBuf,
+    },
 }
 
 #[derive(Parser)]
@@ -91,9 +95,9 @@ pub struct GenerateTestnetConfigClapArgs {
     #[arg(long)]
     pub node_reward_type: Option<String>,
     #[arg(long)]
-    pub mgmt_mac: Option<HwAddr>,
+    pub mgmt_mac: Option<MacAddr6>,
     #[arg(long)]
-    pub deployment_environment: Option<Deployment>,
+    pub deployment_environment: Option<DeploymentEnvironment>,
     #[arg(long)]
     pub elasticsearch_hosts: Option<String>,
     #[arg(long)]
@@ -147,9 +151,6 @@ pub fn main() -> Result<()> {
         Some(Commands::CreateSetuposConfig {
             config_ini_path,
             deployment_json_path,
-            use_nns_public_key,
-            use_ssh_authorized_keys,
-            use_node_operator_private_key,
             setupos_config_json_path,
         }) => {
             // get config.ini settings
@@ -194,32 +195,30 @@ pub fn main() -> Result<()> {
             // get deployment.json variables
             let deployment_json_settings = get_deployment_settings(&deployment_json_path)?;
 
-            let logging = Logging {
-                elasticsearch_hosts: deployment_json_settings.logging.hosts.to_string(),
-                elasticsearch_tags: None,
-            };
-
             let mgmt_mac = resolve_mgmt_mac(deployment_json_settings.deployment.mgmt_mac)?;
 
-            let node_reward_type = node_reward_type.expect("Node reward type is required.");
-
-            let node_reward_type_pattern = Regex::new(r"^type[0-9]+(\.[0-9])?$")?;
-            if !node_reward_type_pattern.is_match(&node_reward_type) {
-                anyhow::bail!(
-                    "Invalid node_reward_type '{}'. It must match the pattern ^type[0-9]+(\\.[0-9])?$",
-                    node_reward_type
-                );
+            if let Some(ref node_reward_type) = node_reward_type {
+                let node_reward_type_pattern = Regex::new(r"^type[0-9]+(\.[0-9])?$")?;
+                if !node_reward_type_pattern.is_match(node_reward_type) {
+                    anyhow::bail!(
+                            "Invalid node_reward_type '{}'. It must match the pattern ^type[0-9]+(\\.[0-9])?$",
+                            node_reward_type
+                        );
+                }
+            } else {
+                println!("Node reward type is not set. Skipping validation.");
             }
 
             let icos_settings = ICOSSettings {
-                node_reward_type: Some(node_reward_type),
+                node_reward_type,
                 mgmt_mac,
                 deployment_environment: deployment_json_settings.deployment.name.parse()?,
-                logging,
-                use_nns_public_key,
+                logging: Logging::default(),
+                use_nns_public_key: Path::new("/data/nns_public_key.pem").exists(),
                 nns_urls: deployment_json_settings.nns.url.clone(),
-                use_node_operator_private_key,
-                use_ssh_authorized_keys,
+                use_node_operator_private_key: Path::new("/config/node_operator_private_key.pem")
+                    .exists(),
+                use_ssh_authorized_keys: Path::new("/config/ssh_authorized_keys").exists(),
                 icos_dev_settings: ICOSDevSettings::default(),
             };
 
@@ -232,6 +231,7 @@ pub fn main() -> Result<()> {
                     .cpu
                     .clone()
                     .unwrap_or("kvm".to_string()),
+                vm_nr_of_vcpus: deployment_json_settings.resources.nr_of_vcpus.unwrap_or(64),
                 verbose,
             };
 
@@ -245,6 +245,7 @@ pub fn main() -> Result<()> {
                 hostos_settings,
                 guestos_settings,
             };
+            // SetupOSConfig is safe to log; it does not contain any secret material
             println!("SetupOSConfig: {:?}", setupos_config);
 
             let setupos_config_json_path = Path::new(&setupos_config_json_path);
@@ -367,6 +368,19 @@ pub fn main() -> Result<()> {
 
             generate_testnet_config(args, clap_args.guestos_config_json_path)
         }
+        // TODO(NODE-1518): delete UpdateGuestosConfig and UpdateHostosConfig after moved to new config format
+        // Regenerate config.json on *every boot* in case the config structure changes between
+        // when we roll out the update-config service and when we roll out the 'config integration'
+        Some(Commands::UpdateGuestosConfig) => update_guestos_config(),
+        Some(Commands::UpdateHostosConfig {
+            config_ini_path,
+            deployment_json_path,
+            hostos_config_json_path,
+        }) => update_hostos_config(
+            &config_ini_path,
+            &deployment_json_path,
+            &hostos_config_json_path,
+        ),
         None => {
             println!("No command provided. Use --help for usage information.");
             Ok(())

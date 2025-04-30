@@ -21,8 +21,7 @@ impl<T: IngressPool> PoolMutationsProducer<T> for IngressManager {
     type Mutations = Mutations;
 
     fn on_state_change(&self, pool: &T) -> Mutations {
-        // Skip on_state_change when ingress_message_setting is not available in
-        // registry.
+        // Skip on_state_change when ingress_message_setting is not available in registry.
         let registry_version = self.registry_client.get_latest_version();
         let Some(ingress_message_settings) = self.get_ingress_message_settings(registry_version)
         else {
@@ -80,14 +79,25 @@ impl<T: IngressPool> PoolMutationsProducer<T> for IngressManager {
                     consensus_time,
                     registry_version,
                 ) {
-                    Ok(()) => MoveToValidated(IngressMessageId::from(ingress_object)),
+                    Ok(()) => {
+                        self.metrics
+                            .observe_validated_ingress_message(self.time_source.as_ref(), artifact);
+                        MoveToValidated(IngressMessageId::from(ingress_object))
+                    }
                     Err(err) => {
-                        debug!(
-                            self.log,
-                            "ingress_message_remove_unvalidated";
-                            ingress_message.message_id => ingress_object.message_id.to_string(),
-                            ingress_message.reason => err.to_string(),
-                        );
+                        let reason_label = match err {
+                            IngressMessageValidationError::IngressMessageTooLarge { .. } => {
+                                "ingress_message_too_large"
+                            }
+                            IngressMessageValidationError::IngressMessageAlreadyKnown => {
+                                "ingress_message_already_known"
+                            }
+                            IngressMessageValidationError::InvalidRequest(_) => "invalid_request",
+                        };
+                        self.metrics
+                            .invalidated_ingress_message_count
+                            .with_label_values(&[reason_label])
+                            .inc();
 
                         RemoveFromUnvalidated(IngressMessageId::from(ingress_object))
                     }
@@ -118,9 +128,9 @@ impl<T: IngressPool> PoolMutationsProducer<T> for IngressManager {
         // Also include finalized messages that were requested to purge.
         let mut to_purge = self.messages_to_purge.write().unwrap();
         while let Some(message_ids) = to_purge.pop() {
-            message_ids
-                .into_iter()
-                .for_each(|id| change_set.push(RemoveFromValidated(id)))
+            for id in message_ids {
+                change_set.push(RemoveFromValidated(id));
+            }
         }
 
         change_set
@@ -129,7 +139,7 @@ impl<T: IngressPool> PoolMutationsProducer<T> for IngressManager {
 
 enum IngressMessageValidationError {
     IngressMessageTooLarge { max: usize, actual: usize },
-    UnexpectedStatus(IngressStatus),
+    IngressMessageAlreadyKnown,
     InvalidRequest(RequestValidationError),
 }
 
@@ -139,10 +149,9 @@ impl std::fmt::Display for IngressMessageValidationError {
             IngressMessageValidationError::IngressMessageTooLarge { max, actual } => {
                 write!(f, "Ingress Message is too large {} > {}", actual, max)
             }
-            IngressMessageValidationError::UnexpectedStatus(status) => write!(
+            IngressMessageValidationError::IngressMessageAlreadyKnown => write!(
                 f,
-                "Ingress Message is not `Unknown` to the IngressHistoryReader: {:?}",
-                status
+                "Ingress Message is already known to the IngressHistoryReader",
             ),
             IngressMessageValidationError::InvalidRequest(error) => {
                 write!(f, "Ingress Message failed validation: {}", error)
@@ -169,9 +178,11 @@ impl IngressManager {
             });
         }
 
-        let status = ingress_message_status(&ingress_object.message_id);
-        if status != IngressStatus::Unknown {
-            return Err(IngressMessageValidationError::UnexpectedStatus(status));
+        match ingress_message_status(&ingress_object.message_id) {
+            IngressStatus::Known { .. } => {
+                return Err(IngressMessageValidationError::IngressMessageAlreadyKnown);
+            }
+            IngressStatus::Unknown => {}
         }
 
         // Check signatures, remove from unvalidated if they can't be

@@ -1,3 +1,4 @@
+use std::cmp::Reverse;
 use std::fs::{create_dir_all, write};
 use std::net::Ipv6Addr;
 use std::path::Path;
@@ -5,9 +6,9 @@ use std::process::Command;
 
 use anyhow::{Context, Result};
 
-use crate::info::NetworkInfo;
 use crate::interfaces::{get_interfaces, has_ipv6_connectivity, Interface};
-use deterministic_ips::HwAddr;
+use config_types::DeterministicIpv6Config;
+use macaddr::MacAddr6;
 
 pub static DEFAULT_SYSTEMD_NETWORK_DIR: &str = "/run/systemd/network";
 
@@ -74,10 +75,57 @@ pub fn restart_systemd_networkd() {
     // Explicitly don't care about return code status...
 }
 
+pub fn generate_systemd_config_files(
+    output_directory: &Path,
+    ipv6_config: &DeterministicIpv6Config,
+    generated_mac: Option<&MacAddr6>,
+    ipv6_address: &Ipv6Addr,
+) -> Result<()> {
+    let mut interfaces = get_interfaces()?;
+    interfaces.sort_by_key(|v| Reverse(v.speed_mbps));
+    eprintln!("Interfaces sorted decending by speed: {:?}", interfaces);
+
+    let ping_target = ipv6_config.gateway.to_string();
+
+    let fastest_interface = interfaces
+        .iter()
+        .find(|i| {
+            match has_ipv6_connectivity(i, ipv6_address, ipv6_config.prefix_length, &ping_target) {
+                Ok(result) => result,
+                Err(e) => {
+                    eprintln!("Error testing connectivity on {}: {}", &i.name, e);
+                    false
+                }
+            }
+        })
+        .context("Could not find any network interfaces")?;
+
+    eprintln!("Using fastest interface: {:?}", fastest_interface);
+
+    // Format the IP address to include the subnet length. See `man systemd.network`.
+    let ipv6_address = format!(
+        "{}/{}",
+        &ipv6_address.to_string(),
+        ipv6_config.prefix_length
+    );
+    generate_and_write_systemd_files(
+        output_directory,
+        fastest_interface,
+        generated_mac,
+        &ipv6_address,
+        &ipv6_config.gateway.to_string(),
+    )?;
+
+    println!("Restarting systemd networkd");
+    restart_systemd_networkd();
+
+    Ok(())
+}
+
 fn generate_and_write_systemd_files(
     output_directory: &Path,
     interface: &Interface,
-    generated_mac: Option<&HwAddr>,
+    generated_mac: Option<&MacAddr6>,
     ipv6_address: &str,
     ipv6_gateway: &str,
 ) -> Result<()> {
@@ -109,55 +157,6 @@ fn generate_and_write_systemd_files(
     );
     eprintln!("Writing {}", bridge6_path.to_string_lossy());
     write(bridge6_path, bridge6_content)?;
-
-    Ok(())
-}
-
-pub fn generate_systemd_config_files(
-    output_directory: &Path,
-    network_info: &NetworkInfo,
-    generated_mac: Option<&HwAddr>,
-    ipv6_address: &Ipv6Addr,
-) -> Result<()> {
-    let mut interfaces = get_interfaces()?;
-    interfaces.sort_by(|a, b| a.speed_mbps.cmp(&b.speed_mbps));
-    eprintln!("Interfaces sorted by speed: {:?}", interfaces);
-
-    let ping_target = network_info.ipv6_gateway.to_string();
-    // Old nodes are still configured with a local IPv4 interface connection
-    // Local IPv4 interfaces must be filtered out
-    let ipv6_interfaces: Vec<&Interface> = interfaces
-        .iter()
-        .filter(|i| {
-            match has_ipv6_connectivity(i, ipv6_address, network_info.ipv6_subnet, &ping_target) {
-                Ok(result) => result,
-                Err(e) => {
-                    eprintln!("Error testing connectivity on {}: {}", &i.name, e);
-                    false
-                }
-            }
-        })
-        .collect();
-
-    // Only assign the fastest interface to ipv6.
-    let fastest_interface = ipv6_interfaces
-        .first()
-        .context("Could not find any network interfaces")?;
-
-    eprintln!("Using fastest interface: {:?}", fastest_interface);
-
-    // Format the ip address to include the subnet length. See `man systemd.network`.
-    let ipv6_address = format!("{}/{}", &ipv6_address.to_string(), network_info.ipv6_subnet);
-    generate_and_write_systemd_files(
-        output_directory,
-        fastest_interface,
-        generated_mac,
-        &ipv6_address,
-        &network_info.ipv6_gateway.to_string(),
-    )?;
-
-    println!("Restarting systemd networkd");
-    restart_systemd_networkd();
 
     Ok(())
 }

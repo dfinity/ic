@@ -5,33 +5,39 @@ use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
+use ic_nervous_system_common::{
+    ledger::compute_neuron_staking_subaccount_bytes, ONE_DAY_SECONDS, ONE_YEAR_SECONDS,
+};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
     TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
+use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::governance::INITIAL_NEURON_DISSOLVE_DELAY;
 use ic_nns_governance_api::pb::v1::{
     governance_error::ErrorType,
+    list_neurons::NeuronSubaccount,
     manage_neuron::{Command, Merge, NeuronIdOrSubaccount, Spawn},
-    manage_neuron_response::{
-        Command as CommandResponse, {self},
-    },
+    manage_neuron_response::{self, Command as CommandResponse},
     neuron::DissolveState,
-    GovernanceError, ListNeurons, ManageNeuron, ManageNeuronResponse, Neuron, NeuronState,
+    Account as GovernanceAccount, GovernanceError, ListNeurons, MakeProposalRequest, ManageNeuron,
+    ManageNeuronResponse, Motion, Neuron, NeuronState, ProposalActionRequest,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
     state_test_helpers::{
-        list_neurons, list_neurons_by_principal, nns_add_hot_key, nns_claim_or_refresh_neuron,
-        nns_disburse_neuron, nns_governance_get_full_neuron, nns_governance_get_neuron_info,
-        nns_join_community_fund, nns_leave_community_fund, nns_remove_hot_key,
-        nns_send_icp_to_claim_or_refresh_neuron, nns_start_dissolving, setup_nns_canisters,
-        state_machine_builder_for_nns_tests,
+        icrc1_balance, list_neurons, list_neurons_by_principal, nns_add_hot_key,
+        nns_claim_or_refresh_neuron, nns_disburse_maturity, nns_disburse_neuron,
+        nns_governance_get_full_neuron, nns_governance_get_neuron_info,
+        nns_governance_make_proposal, nns_increase_dissolve_delay, nns_join_community_fund,
+        nns_leave_community_fund, nns_remove_hot_key, nns_send_icp_to_claim_or_refresh_neuron,
+        nns_start_dissolving, setup_nns_canisters, state_machine_builder_for_nns_tests,
     },
 };
 use icp_ledger::{tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Tokens};
+use icrc_ledger_types::icrc1::account::Account;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[test]
@@ -277,6 +283,111 @@ fn test_spawn_neuron() {
 
         Err("Spawned neuron's stake did not show up.".to_string())
     });
+}
+
+#[test]
+fn test_neuron_disburse_maturity() {
+    // Step 1.1: Prepare the world by setting up NNS canisters with 2000 ICP in a ledger account.
+    let state_machine = state_machine_builder_for_nns_tests().build();
+    let test_user_principal = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_ledger_account(
+            AccountIdentifier::new(test_user_principal, None),
+            Tokens::from_e8s(200_000_000_000),
+        )
+        .build();
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+
+    // Step 1.2: Create a neuron with 100 ICP and make sure it has enough dissolve delay.
+    let nonce = 123_456;
+    nns_send_icp_to_claim_or_refresh_neuron(
+        &state_machine,
+        test_user_principal,
+        Tokens::from_e8s(100_000_000_000),
+        nonce,
+    );
+    let test_neuron_id = nns_claim_or_refresh_neuron(&state_machine, test_user_principal, nonce);
+    nns_increase_dissolve_delay(
+        &state_machine,
+        test_user_principal,
+        test_neuron_id,
+        ONE_YEAR_SECONDS * 7,
+    )
+    .unwrap();
+
+    // Step 1.3: Make a proposal and wait for rewards distribution so that the neuron has some maturity.
+    nns_governance_make_proposal(
+        &state_machine,
+        test_user_principal,
+        test_neuron_id,
+        &MakeProposalRequest {
+            title: Some("some title".to_string()),
+            url: "".to_string(),
+            summary: "some summary".to_string(),
+            action: Some(ProposalActionRequest::Motion(Motion {
+                motion_text: "some motion text".to_string(),
+            })),
+        },
+    );
+    state_machine.advance_time(Duration::from_secs(ONE_DAY_SECONDS * 5));
+    for _ in 0..100 {
+        state_machine.advance_time(Duration::from_secs(1));
+        state_machine.tick();
+    }
+    let neuron =
+        nns_governance_get_full_neuron(&state_machine, test_user_principal, test_neuron_id.id)
+            .expect("Failed to get neuron");
+    assert!(neuron.maturity_e8s_equivalent > 0, "{:#?}", neuron);
+    println!("{:#?}", neuron);
+
+    // Step 2: Call the code under test - disburse maturity.
+    let disburse_destination = PrincipalId::new_self_authenticating(&[1u8]);
+    let disburse_response = nns_disburse_maturity(
+        &state_machine,
+        test_user_principal,
+        test_neuron_id,
+        100,
+        Some(GovernanceAccount {
+            owner: Some(disburse_destination),
+            subaccount: None,
+        }),
+    )
+    .panic_if_error("Failed to disburse maturity");
+
+    let Some(CommandResponse::DisburseMaturity(disburse_maturity_response)) =
+        disburse_response.command
+    else {
+        panic!("Failed to disburse maturity: {:#?}", disburse_response)
+    };
+    assert!(disburse_maturity_response.amount_disbursed_e8s() > 0);
+
+    let get_balance_e8s_of_disburse_destination = || {
+        icrc1_balance(
+            &state_machine,
+            LEDGER_CANISTER_ID,
+            Account {
+                owner: disburse_destination.0,
+                subaccount: None,
+            },
+        )
+        .get_e8s()
+    };
+
+    // Step 3: Wait for 7 days and check that the disbursement was successful.
+    for _ in 0..7 {
+        // The destination account should be empty before the disbursement is finalized.
+        assert_eq!(get_balance_e8s_of_disburse_destination(), 0);
+
+        state_machine.advance_time(Duration::from_secs(ONE_DAY_SECONDS));
+
+        // Because of how timer works, the time needs to be "flowing" in order for the tasks to be executed.
+        for _ in 0..20 {
+            state_machine.advance_time(Duration::from_secs(1));
+            state_machine.tick();
+        }
+    }
+    let balance = get_balance_e8s_of_disburse_destination();
+    assert!(balance > 0, "{}", balance);
 }
 
 /// If a neuron's controller is added as a hot key and then removed, assert that Governance
@@ -551,6 +662,9 @@ fn test_list_neurons() {
             include_neurons_readable_by_caller: false,
             include_empty_neurons_readable_by_caller: Some(false),
             include_public_neurons_in_full_neurons: None,
+            page_number: None,
+            page_size: None,
+            neuron_subaccounts: None,
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 3);
@@ -565,6 +679,9 @@ fn test_list_neurons() {
             include_neurons_readable_by_caller: true,
             include_empty_neurons_readable_by_caller: Some(true),
             include_public_neurons_in_full_neurons: None,
+            page_number: None,
+            page_size: None,
+            neuron_subaccounts: None,
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 2);
@@ -579,6 +696,9 @@ fn test_list_neurons() {
             include_neurons_readable_by_caller: true,
             include_empty_neurons_readable_by_caller: Some(false),
             include_public_neurons_in_full_neurons: None,
+            page_number: None,
+            page_size: None,
+            neuron_subaccounts: Some(vec![]), // Should be equivalent to None
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 1);
@@ -592,8 +712,33 @@ fn test_list_neurons() {
         ListNeurons {
             neuron_ids: vec![neuron_id_3.id],
             include_neurons_readable_by_caller: true,
-            include_empty_neurons_readable_by_caller: None,
+            include_empty_neurons_readable_by_caller: Some(true),
             include_public_neurons_in_full_neurons: None,
+            page_number: None,
+            page_size: None,
+            neuron_subaccounts: Some(vec![]),
+        },
+    );
+    assert_eq!(list_neurons_response.neuron_infos.len(), 3);
+    assert_eq!(list_neurons_response.full_neurons.len(), 2);
+
+    // Step 6: Same but specify neuron 3 by subaccount.
+    // empty neurons, also specifying neuron 3 which the caller does not control.
+
+    let subaccount = compute_neuron_staking_subaccount_bytes(principal_2, 3);
+    let list_neurons_response = list_neurons(
+        &state_machine,
+        principal_1,
+        ListNeurons {
+            neuron_ids: vec![],
+            include_neurons_readable_by_caller: true,
+            include_empty_neurons_readable_by_caller: Some(true),
+            include_public_neurons_in_full_neurons: None,
+            page_number: None,
+            page_size: None,
+            neuron_subaccounts: Some(vec![NeuronSubaccount {
+                subaccount: subaccount.to_vec(),
+            }]),
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 3);

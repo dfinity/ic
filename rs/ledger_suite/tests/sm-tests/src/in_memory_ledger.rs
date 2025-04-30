@@ -1,6 +1,6 @@
-use super::{get_all_ledger_and_archive_blocks, AllowanceProvider};
+use super::{get_all_ledger_and_archive_blocks, AllowanceProvider, BalanceProvider};
 use crate::metrics::parse_metric;
-use candid::{CandidType, Decode, Encode, Nat, Principal};
+use candid::{CandidType, Principal};
 use ic_agent::identity::Identity;
 use ic_base_types::CanisterId;
 use ic_icrc1::Operation;
@@ -13,6 +13,8 @@ use icp_ledger::AccountIdentifier;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::HashMap;
 use std::hash::Hash;
+use std::time::Instant;
+use std::time::SystemTime;
 
 #[cfg(test)]
 mod tests;
@@ -316,7 +318,7 @@ where
 
 impl<AccountId, Tokens> InMemoryLedger<AccountId, Tokens>
 where
-    AccountId: PartialEq + Ord + Clone + Hash,
+    AccountId: PartialEq + Ord + Clone + Hash + std::fmt::Debug,
     Tokens: TokensType,
 {
     fn decrease_allowance(
@@ -387,16 +389,37 @@ where
     ) {
         let key = ApprovalKey::from((from, spender));
         if let Some(expected_allowance) = expected_allowance {
-            let current_allowance_amount = self
-                .allowances
-                .get(&key)
-                .map(|allowance| allowance.amount.clone())
-                .unwrap_or(Tokens::zero());
-            if current_allowance_amount != *expected_allowance {
-                panic!(
-                    "Expected allowance ({:?}) does not match current allowance ({:?})",
-                    expected_allowance, current_allowance_amount
-                );
+            match self.allowances.get(&key) {
+                None => {
+                    // No in-memory allowance, so the expected allowance should be zero
+                    assert!(expected_allowance.is_zero(),
+                        "Expected allowance of ({:?}) for key {:?} does not match in-memory allowance (None, interpreted as 0)",
+                            expected_allowance,
+                            key
+                    );
+                }
+                Some(in_memory_allowance) => {
+                    // An in-memory allowance is set
+                    let in_memory_allowance_amount = match &in_memory_allowance.expires_at {
+                        // If the in-memory allowance has no expiration, use the amount as-is
+                        None => &in_memory_allowance.amount.clone(),
+                        Some(expires_at) => {
+                            &if expires_at >= &arrived_at {
+                                // If the in-memory allowance has not expired, use the amount as-is
+                                in_memory_allowance.amount.clone()
+                            } else {
+                                // If the in-memory allowance has expired, interpret as zero
+                                Tokens::zero()
+                            }
+                        }
+                    };
+                    assert_eq!(
+                        in_memory_allowance_amount,
+                        expected_allowance,
+                        "Expected allowance of ({:?}) for key {:?} does not match in-memory allowance ({:?})",
+                        expected_allowance, key, in_memory_allowance_amount
+                    );
+                }
             }
         }
         if amount == &Tokens::zero() {
@@ -571,7 +594,8 @@ where
         + Hash
         + Eq
         + std::fmt::Debug
-        + AllowanceProvider,
+        + AllowanceProvider
+        + BalanceProvider,
     Tokens: Default + TokensType + PartialEq + std::fmt::Debug + std::fmt::Display,
 {
     pub fn new(burns_without_spender: Option<BurnsWithoutSpender<AccountId>>) -> Self {
@@ -681,14 +705,10 @@ where
             "Checking {} balances and {} allowances",
             actual_num_balances, actual_num_approvals
         );
+        let mut balances_checked = 0;
+        let now = Instant::now();
         for (account, balance) in self.balances.iter() {
-            let actual_balance = Decode!(
-                &env.query(ledger_id, "icrc1_balance_of", Encode!(account).unwrap())
-                    .expect("failed to query balance")
-                    .bytes(),
-                Nat
-            )
-            .expect("failed to decode balance_of response");
+            let actual_balance = AccountId::get_balance(env, ledger_id, *account);
 
             assert_eq!(
                 &Tokens::try_from(actual_balance.clone()).unwrap(),
@@ -698,7 +718,30 @@ where
                 balance,
                 actual_balance
             );
+            if balances_checked % 100000 == 0 && balances_checked > 0 {
+                println!(
+                    "Checked {} balances in {:?}",
+                    balances_checked,
+                    now.elapsed()
+                );
+            }
+            balances_checked += 1;
         }
+        println!(
+            "{} balances checked in {:?}",
+            balances_checked,
+            now.elapsed()
+        );
+        let now = Instant::now();
+        let mut allowances_checked = 0;
+        let mut expiration_in_future_count = 0;
+        let mut expiration_in_past_count = 0;
+        let mut no_expiration_count = 0;
+        let timestamp = env
+            .time()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
         for (approval, allowance) in self.allowances.iter() {
             let (from, spender): (AccountId, AccountId) = approval.clone().into();
             assert!(
@@ -707,18 +750,70 @@ where
                 &from,
                 &spender
             );
+            if let Some(in_memory_expires_at) = allowance.expires_at {
+                if in_memory_expires_at.as_nanos_since_unix_epoch() < timestamp {
+                    println!(
+                        "In memory expires_at is in the past ({:?} vs {:?}), ignoring",
+                        in_memory_expires_at, timestamp
+                    );
+                    continue;
+                }
+            }
             let actual_allowance = AccountId::get_allowance(env, ledger_id, from, spender);
+            match actual_allowance.expires_at {
+                None => {
+                    no_expiration_count += 1;
+                }
+                Some(expires_at) => {
+                    if expires_at > timestamp {
+                        expiration_in_future_count += 1;
+                    } else {
+                        // This should never happen, since the allowance returned from the ledger
+                        // should have an amount of 0, and no expires_at.
+                        expiration_in_past_count += 1;
+                    }
+                }
+            }
             assert_eq!(
                 allowance.amount,
                 Tokens::try_from(actual_allowance.allowance.clone()).unwrap(),
-                "Mismatch in allowance for approval from {:?} spender {:?}: {:?} ({:?} vs {:?})",
+                "Mismatch in allowance for approval from {:?} spender {:?}: {:?} ({:?} vs {:?}) at {:?}",
                 &from,
                 &spender,
                 approval,
                 allowance,
-                actual_allowance
+                actual_allowance,
+                env.time()
             );
+            assert_eq!(
+                allowance.expires_at.map(|t| t.as_nanos_since_unix_epoch()),
+                actual_allowance.expires_at,
+                "Mismatch in allowance expiration for approval from {:?} spender {:?}: {:?} ({:?} vs {:?}) at {:?}",
+                &from,
+                &spender,
+                approval,
+                allowance,
+                actual_allowance,
+                env.time()
+            );
+            if allowances_checked % 10000 == 0 && allowances_checked > 0 {
+                println!(
+                    "Checked {} allowances in {:?}",
+                    allowances_checked,
+                    now.elapsed()
+                );
+            }
+            allowances_checked += 1;
         }
+        println!(
+            "{} allowances checked in {:?}",
+            allowances_checked,
+            now.elapsed()
+        );
+        println!(
+            "allowances with no expiration: {}, expiration in future: {}, expiration in past: {}",
+            no_expiration_count, expiration_in_future_count, expiration_in_past_count
+        );
     }
 }
 

@@ -1,5 +1,4 @@
 use ic00::BitcoinGetBlockHeadersArgs;
-use ic_async_utils::incoming_from_path;
 use ic_base_types::CanisterId;
 use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
 use ic_btc_replica_types::{GetSuccessorsResponseComplete, GetSuccessorsResponsePartial};
@@ -14,7 +13,8 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_error_types::RejectCode;
-use ic_management_canister_types::{
+use ic_http_endpoints_async_utils::incoming_from_path;
+use ic_management_canister_types_private::{
     self as ic00, BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs,
     BitcoinGetSuccessorsArgs, BitcoinGetUtxosArgs, BitcoinSendTransactionArgs,
     BitcoinSendTransactionInternalArgs, EmptyBlob, Method, Payload,

@@ -5,7 +5,7 @@ use crate::metadata_state::subnet_call_context_manager::{
 use assert_matches::assert_matches;
 use ic_error_types::{ErrorCode, UserError};
 use ic_limits::MAX_INGRESS_TTL;
-use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, IC_00};
+use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, IC_00};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_test_utilities_types::{
     ids::{
@@ -128,246 +128,6 @@ fn entries_sorted_lexicographically() {
         .collect();
 
     assert_eq!(actual, expected);
-}
-
-#[test]
-fn streams_stats() {
-    // Two local canisters, `local_a` and `local_b`.
-    let local_a = canister_test_id(1);
-    let local_b = canister_test_id(2);
-    // Two remote canisters, `remote_1` on `SUBNET_1` and `remote_2` on `SUBNET_2`.
-    let remote_1 = canister_test_id(3);
-    let remote_2 = canister_test_id(4);
-
-    fn request(sender: CanisterId, receiver: CanisterId) -> RequestOrResponse {
-        RequestBuilder::default()
-            .sender(sender)
-            .receiver(receiver)
-            .build()
-            .into()
-    }
-    fn response(
-        respondent: CanisterId,
-        originator: CanisterId,
-        payload: &str,
-    ) -> (RequestOrResponse, usize) {
-        let rep: RequestOrResponse = ResponseBuilder::default()
-            .respondent(respondent)
-            .originator(originator)
-            .response_payload(Payload::Data(payload.as_bytes().to_vec()))
-            .build()
-            .into();
-        let req_bytes = rep.count_bytes();
-        (rep, req_bytes)
-    }
-
-    // A bunch of requests and responses from local canisters to remote ones.
-    let req_a1 = request(local_a, remote_1);
-    let (rep_a1, rep_a1_size) = response(local_a, remote_1, "a");
-    let (rep_b1, rep_b1_size) = response(local_b, remote_1, "bb");
-    let (rep_b2, rep_b2_size) = response(local_b, remote_2, "ccc");
-
-    let mut streams = Streams::new();
-    // Empty response size map.
-    let mut expected_responses_size = Default::default();
-    assert_eq!(
-        streams.guaranteed_responses_size_bytes(),
-        &expected_responses_size
-    );
-
-    streams.push(SUBNET_1, req_a1);
-    // Pushed a request, response size stats are unchanged.
-    assert_eq!(
-        streams.guaranteed_responses_size_bytes(),
-        &expected_responses_size
-    );
-
-    // Push response via `Streams::push()`.
-    streams.push(SUBNET_1, rep_a1);
-    // `rep_a1` is now accounted for against `local_a`.
-    expected_responses_size.insert(local_a, rep_a1_size);
-    assert_eq!(
-        streams.guaranteed_responses_size_bytes(),
-        &expected_responses_size
-    );
-
-    // Push response via `StreamHandle::push()`.
-    streams.get_mut(&SUBNET_1).unwrap().push(rep_b1);
-    // `rep_b1` is accounted for against `local_b`.
-    expected_responses_size.insert(local_b, rep_b1_size);
-    assert_eq!(
-        streams.guaranteed_responses_size_bytes(),
-        &expected_responses_size
-    );
-
-    // Push response via `StreamHandle::push()` after `get_mut_or_insert()`.
-    streams.get_mut_or_insert(SUBNET_2).push(rep_b2);
-    // `rep_b2` is accounted for against `local_b`.
-    *expected_responses_size.get_mut(&local_b).unwrap() += rep_b2_size;
-    assert_eq!(
-        streams.guaranteed_responses_size_bytes(),
-        &expected_responses_size
-    );
-
-    // Discard `req_a1` and `rep_a1` from the stream for `SUBNET_1`.
-    streams
-        .get_mut(&SUBNET_1)
-        .unwrap()
-        .discard_messages_before(2.into(), &Default::default());
-    // No more responses from `local_a` in `streams`.
-    *expected_responses_size.get_mut(&local_a).unwrap() = 0;
-    assert_eq!(
-        streams.guaranteed_responses_size_bytes(),
-        &expected_responses_size
-    );
-
-    streams.prune_zero_guaranteed_responses_size_bytes();
-    // Zero valued entry for `local_a` pruned.
-    expected_responses_size.remove(&local_a);
-    assert_eq!(
-        streams.guaranteed_responses_size_bytes(),
-        &expected_responses_size
-    );
-
-    // Discard `rep_b2` from the stream for `SUBNET_2`.
-    streams
-        .get_mut(&SUBNET_2)
-        .unwrap()
-        .discard_messages_before(1.into(), &Default::default());
-    // `rep_b2` is gone.
-    *expected_responses_size.get_mut(&local_b).unwrap() -= rep_b2_size;
-    assert_eq!(
-        streams.guaranteed_responses_size_bytes(),
-        &expected_responses_size
-    );
-}
-
-#[test]
-fn streams_stats_best_effort_messages() {
-    let local = canister_test_id(1);
-    let remote = canister_test_id(2);
-
-    let request = |sender: CanisterId, receiver: CanisterId| -> RequestOrResponse {
-        RequestBuilder::default()
-            .sender(sender)
-            .receiver(receiver)
-            .deadline(CoarseTime::from_secs_since_unix_epoch(1))
-            .build()
-            .into()
-    };
-    let response =
-        |respondent: CanisterId, originator: CanisterId, payload: &str| -> RequestOrResponse {
-            ResponseBuilder::default()
-                .respondent(respondent)
-                .originator(originator)
-                .response_payload(Payload::Data(payload.as_bytes().to_vec()))
-                .deadline(CoarseTime::from_secs_since_unix_epoch(1))
-                .build()
-                .into()
-        };
-
-    // A bunch of best-effort requests and responses from the local canister to the remote one.
-    let req = request(local, remote);
-    let rep_1 = response(local, remote, "a");
-    let rep_2 = response(local, remote, "bb");
-    let rep_3 = response(local, remote, "ccc");
-
-    let mut streams = Streams::new();
-
-    // Expecting no guaranteed responses throughout.
-    let expected_responses_size = BTreeMap::default();
-    assert_eq!(
-        streams.guaranteed_responses_size_bytes(),
-        &expected_responses_size
-    );
-
-    streams.push(SUBNET_1, req);
-    // Pushed a request, response size stats are unchanged.
-    assert_eq!(
-        streams.guaranteed_responses_size_bytes(),
-        &expected_responses_size
-    );
-
-    // Push response via `Streams::push()`.
-    streams.push(SUBNET_1, rep_1);
-    assert_eq!(
-        streams.guaranteed_responses_size_bytes(),
-        &expected_responses_size
-    );
-
-    // Push response via `StreamHandle::push()`.
-    streams.get_mut(&SUBNET_1).unwrap().push(rep_2);
-    assert_eq!(
-        streams.guaranteed_responses_size_bytes(),
-        &expected_responses_size
-    );
-
-    // Push response via `StreamHandle::push()` after `get_mut_or_insert()`.
-    streams.get_mut_or_insert(SUBNET_2).push(rep_3);
-    assert_eq!(
-        streams.guaranteed_responses_size_bytes(),
-        &expected_responses_size
-    );
-
-    // Discard everything from the stream for `SUBNET_1`.
-    streams
-        .get_mut(&SUBNET_1)
-        .unwrap()
-        .discard_messages_before(3.into(), &Default::default());
-    assert_eq!(
-        streams.guaranteed_responses_size_bytes(),
-        &expected_responses_size
-    );
-
-    streams.prune_zero_guaranteed_responses_size_bytes();
-    assert_eq!(
-        streams.guaranteed_responses_size_bytes(),
-        &expected_responses_size
-    );
-
-    // Discard `rep_b2` from the stream for `SUBNET_2`.
-    streams
-        .get_mut(&SUBNET_2)
-        .unwrap()
-        .discard_messages_before(1.into(), &Default::default());
-    assert_eq!(
-        streams.guaranteed_responses_size_bytes(),
-        &expected_responses_size
-    );
-}
-
-#[test]
-fn streams_stats_after_deserialization() {
-    let mut system_metadata = SystemMetadata::new(SUBNET_0, SubnetType::Application);
-    let streams = Arc::make_mut(&mut system_metadata.streams);
-
-    streams.push(
-        SUBNET_1,
-        ResponseBuilder::default()
-            .respondent(canister_test_id(1))
-            .originator(canister_test_id(2))
-            .build()
-            .into(),
-    );
-
-    let system_metadata_proto: ic_protobuf::state::system_metadata::v1::SystemMetadata =
-        (&system_metadata).into();
-    let deserialized_system_metadata = (
-        system_metadata_proto,
-        &DummyMetrics as &dyn CheckpointLoadingMetrics,
-    )
-        .try_into()
-        .unwrap();
-
-    // Ensure that the deserialized `SystemMetadata` is equal to the original.
-    assert_eq!(system_metadata, deserialized_system_metadata);
-    // Double-check that the stats match.
-    assert_eq!(
-        system_metadata.streams.guaranteed_responses_size_bytes(),
-        deserialized_system_metadata
-            .streams
-            .guaranteed_responses_size_bytes()
-    );
 }
 
 #[test]
@@ -569,10 +329,9 @@ fn system_metadata_roundtrip_encoding() {
     system_metadata.network_topology = network_topology;
 
     use ic_crypto_test_utils_keys::public_keys::valid_node_signing_public_key;
-    let pk_der =
-        ic_crypto_ed25519::PublicKey::deserialize_raw(&valid_node_signing_public_key().key_value)
-            .unwrap()
-            .serialize_rfc8410_der();
+    let pk_der = ic_ed25519::PublicKey::deserialize_raw(&valid_node_signing_public_key().key_value)
+        .unwrap()
+        .serialize_rfc8410_der();
 
     system_metadata.node_public_keys = btreemap! {
         node_test_id(1) => pk_der,
@@ -684,10 +443,8 @@ fn system_metadata_split() {
     // Only ingress messages for `CANISTER_2` should be retained on `SUBNET_B`.
     let is_canister_on_subnet_b = |canister_id: CanisterId| canister_id == CANISTER_2;
 
-    let streams = Streams {
-        streams: btreemap! { SUBNET_C => Stream::new(StreamIndexedQueue::with_begin(13.into()), 14.into()) },
-        guaranteed_responses_size_bytes: btreemap! { CANISTER_1 => 169 },
-    };
+    let streams =
+        btreemap! { SUBNET_C => Stream::new(StreamIndexedQueue::with_begin(13.into()), 14.into()) };
 
     // Use uncommon `SubnetType::VerifiedApplication` to make it more likely to
     // detect a regression in the subnet type assigned to subnet B.
@@ -933,7 +690,7 @@ fn empty_network_topology() {
     };
 
     assert_eq!(
-        network_topology.idkg_signing_subnets(&MasterPublicKeyId::Ecdsa(make_key_id())),
+        network_topology.chain_key_enabled_subnets(&MasterPublicKeyId::Ecdsa(make_key_id())),
         vec![]
     );
 }
@@ -946,14 +703,14 @@ fn network_topology_ecdsa_subnets() {
         routing_table: Arc::new(RoutingTable::default()),
         canister_migrations: Arc::new(CanisterMigrations::default()),
         nns_subnet_id: subnet_test_id(42),
-        idkg_signing_subnets: btreemap! {
+        chain_key_enabled_subnets: btreemap! {
             key.clone() => vec![subnet_test_id(1)],
         },
         ..Default::default()
     };
 
     assert_eq!(
-        network_topology.idkg_signing_subnets(&key),
+        network_topology.chain_key_enabled_subnets(&key),
         &[subnet_test_id(1)]
     );
 }
@@ -1695,30 +1452,6 @@ fn stream_pushing_signals_increments_signals_end() {
 }
 
 #[test]
-fn stream_handle_pushing_signals_increments_signals_end() {
-    let mut stream = generate_stream(
-        MessageConfig {
-            begin: 30,
-            count: 0,
-        },
-        SignalConfig { end: 30 },
-    );
-    assert!(stream.reject_signals().is_empty());
-
-    let mut guaranteed_responses_size_bytes = BTreeMap::default();
-    let mut handle = StreamHandle::new(&mut stream, &mut guaranteed_responses_size_bytes);
-
-    handle.push_accept_signal();
-    assert_eq!(StreamIndex::new(31), handle.signals_end());
-    handle.push_reject_signal(RejectReason::CanisterNotFound);
-    assert_eq!(
-        &VecDeque::from([RejectSignal::new(RejectReason::CanisterNotFound, 31.into()),]),
-        handle.reject_signals()
-    );
-    assert_eq!(StreamIndex::new(32), handle.signals_end());
-}
-
-#[test]
 fn stream_roundtrip_encoding() {
     let mut messages = StreamIndexedQueue::with_begin(30.into());
     // Push a fully specified `Request`.
@@ -1836,6 +1569,82 @@ fn compatibility_for_reject_reason() {
             .collect::<Vec<i32>>(),
         [1, 2, 3, 4, 5, 6, 7]
     );
+}
+
+#[test]
+fn stream_responses_tracking() {
+    let mut stream = Stream::new(StreamIndexedQueue::with_begin(0.into()), 0.into());
+    assert!(stream.guaranteed_response_counts().is_empty());
+
+    let response = ResponseBuilder::default()
+        .respondent(*LOCAL_CANISTER)
+        .originator(*REMOTE_CANISTER)
+        .build();
+    stream.push(response.into());
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 1 }
+    );
+
+    // Best-effort responses don't count.
+    let response = ResponseBuilder::default()
+        .respondent(*LOCAL_CANISTER)
+        .originator(*REMOTE_CANISTER)
+        .deadline(CoarseTime::from_secs_since_unix_epoch(1))
+        .build();
+    stream.push(response.into());
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 1 }
+    );
+
+    let response = ResponseBuilder::default()
+        .respondent(*LOCAL_CANISTER)
+        .originator(*REMOTE_CANISTER)
+        .build();
+    stream.push(response.into());
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 2 }
+    );
+
+    // Response from a different respondent.
+    let response = ResponseBuilder::default()
+        .respondent(*REMOTE_CANISTER)
+        .originator(*LOCAL_CANISTER)
+        .build();
+    stream.push(response.into());
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 2, *REMOTE_CANISTER => 1 }
+    );
+
+    // Requests don't count.
+    let request = RequestBuilder::default()
+        .sender(*LOCAL_CANISTER)
+        .receiver(*REMOTE_CANISTER)
+        .build();
+    stream.push(request.into());
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 2, *REMOTE_CANISTER => 1 }
+    );
+
+    // Discard everything in the same order.
+    stream.discard_messages_before(StreamIndex::new(1), &vec![].into());
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 1, *REMOTE_CANISTER => 1 }
+    );
+    stream.discard_messages_before(StreamIndex::new(2), &vec![].into());
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 1, *REMOTE_CANISTER => 1 }
+    );
+    stream.discard_messages_before(StreamIndex::new(4), &vec![].into());
+    assert!(stream.guaranteed_response_counts().is_empty());
+    stream.discard_messages_before(StreamIndex::new(5), &vec![].into());
+    assert!(stream.guaranteed_response_counts().is_empty());
 }
 
 #[test]
@@ -2295,7 +2104,7 @@ fn compatibility_for_cycles_use_case() {
         CyclesUseCase::iter()
             .map(|x| x as i32)
             .collect::<Vec<i32>>(),
-        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     );
 }
 
@@ -2309,69 +2118,65 @@ const BATCH_TIME_RANGE: Range<u64> = (u64::MAX / 2)..(u64::MAX / 2 + MAX_NUM_DAY
 #[allow(dead_code)]
 const NODE_ID_RANGE: Range<u64> = 0..20;
 
-proptest! {
-    /// Checks that `check_soft_invariants()` does not return an error when observing random
-    /// node IDs at random mostly sorted and slightly permuted timestamps.
-    /// Such invariants are checked indirectly at the bottom of `observe()` where
-    /// `check_soft_invariants()` is called. There is an additional call to
-    /// `check_soft_invariants()` at the end of the test to ensure the test doesn't
-    /// silently pass when the production code is changed.
-    /// Querying `metrics_since()` is also checked using completely random time stamps to
-    /// ensure there are no hidden panics.
-    #[test]
-    fn blockmaker_metrics_check_soft_invariants(
-        (mut time_u64, random_time_u64, node_ids_u64) in (0..MAX_NUM_DAYS)
-        .prop_flat_map(|num_elements| {
-            (
-                proptest::collection::vec(BATCH_TIME_RANGE, num_elements),
-                proptest::collection::vec(any::<u64>(), num_elements),
-                proptest::collection::vec(NODE_ID_RANGE, num_elements),
-            )
-        })
-    ) {
-        // Sort timestamps, then slightly permute them by inserting some
-        // duplicates and swapping elements in some places.
-        time_u64.sort();
-        if !time_u64.is_empty() {
-            for index in 0..(time_u64.len() - 1) {
-                if time_u64[index] % 23 == 0 {
-                    time_u64[index + 1] = time_u64[index];
-                }
-                if time_u64[index] % 27 == 0 {
-                    time_u64.swap(index, index + 1);
-                }
+/// Checks that `check_soft_invariants()` does not return an error when observing random
+/// node IDs at random mostly sorted and slightly permuted timestamps.
+/// Such invariants are checked indirectly at the bottom of `observe()` where
+/// `check_soft_invariants()` is called. There is an additional call to
+/// `check_soft_invariants()` at the end of the test to ensure the test doesn't
+/// silently pass when the production code is changed.
+/// Querying `metrics_since()` is also checked using completely random time stamps to
+/// ensure there are no hidden panics.
+#[test_strategy::proptest]
+fn blockmaker_metrics_check_soft_invariants(
+    #[strategy(0..MAX_NUM_DAYS)] _num_elements: usize,
+    #[strategy(proptest::collection::vec(BATCH_TIME_RANGE, #_num_elements))] mut time_u64: Vec<u64>,
+    #[strategy(proptest::collection::vec(any::<u64>(), #_num_elements))] random_time_u64: Vec<u64>,
+    #[strategy(proptest::collection::vec(NODE_ID_RANGE, #_num_elements))] node_ids_u64: Vec<u64>,
+) {
+    // Sort timestamps, then slightly permute them by inserting some
+    // duplicates and swapping elements in some places.
+    time_u64.sort();
+    if !time_u64.is_empty() {
+        for index in 0..(time_u64.len() - 1) {
+            if time_u64[index] % 23 == 0 {
+                time_u64[index + 1] = time_u64[index];
+            }
+            if time_u64[index] % 27 == 0 {
+                time_u64.swap(index, index + 1);
             }
         }
-
-        let mut metrics = BlockmakerMetricsTimeSeries::default();
-        // Observe a unique node ID first to ensure the pruning process
-        // is triggered once the metrics reach capacity.
-        metrics.observe(
-            Time::from_nanos_since_unix_epoch(0),
-            &BlockmakerMetrics {
-                blockmaker: node_test_id(NODE_ID_RANGE.end + 10),
-                failed_blockmakers: vec![],
-            }
-        );
-        // Observe random node IDs at random increasing timestamps; `check_runtime_invariants()`
-        // will be triggered passively each time `observe()` is called.
-        // Additionally, query snapshots at random times and consume the iterator to ensure
-        // there are no hidden panics in `metrics_since()`.
-        for ((batch_time_u64, query_time_u64), node_id_u64) in time_u64
-            .into_iter()
-            .zip(random_time_u64.into_iter())
-            .zip(node_ids_u64.into_iter())
-        {
-            metrics.observe(
-                Time::from_nanos_since_unix_epoch(batch_time_u64),
-                &BlockmakerMetrics {
-                    blockmaker: node_test_id(node_id_u64),
-                    failed_blockmakers: vec![node_test_id(node_id_u64 + 1)],
-                }
-            );
-            metrics.metrics_since(Time::from_nanos_since_unix_epoch(query_time_u64)).count();
-        }
-
-        prop_assert!(metrics.check_soft_invariants().is_ok());
     }
+
+    let mut metrics = BlockmakerMetricsTimeSeries::default();
+    // Observe a unique node ID first to ensure the pruning process
+    // is triggered once the metrics reach capacity.
+    metrics.observe(
+        Time::from_nanos_since_unix_epoch(0),
+        &BlockmakerMetrics {
+            blockmaker: node_test_id(NODE_ID_RANGE.end + 10),
+            failed_blockmakers: vec![],
+        },
+    );
+    // Observe random node IDs at random increasing timestamps; `check_runtime_invariants()`
+    // will be triggered passively each time `observe()` is called.
+    // Additionally, query snapshots at random times and consume the iterator to ensure
+    // there are no hidden panics in `metrics_since()`.
+    for ((batch_time_u64, query_time_u64), node_id_u64) in time_u64
+        .into_iter()
+        .zip(random_time_u64.into_iter())
+        .zip(node_ids_u64.into_iter())
+    {
+        metrics.observe(
+            Time::from_nanos_since_unix_epoch(batch_time_u64),
+            &BlockmakerMetrics {
+                blockmaker: node_test_id(node_id_u64),
+                failed_blockmakers: vec![node_test_id(node_id_u64 + 1)],
+            },
+        );
+        metrics
+            .metrics_since(Time::from_nanos_since_unix_epoch(query_time_u64))
+            .count();
+    }
+
+    prop_assert!(metrics.check_soft_invariants().is_ok());
 }

@@ -41,7 +41,7 @@ wat = { workspace = true }
 serde_cbor = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 num-traits = { workspace = true }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-nns-common = { path = "../../nns/common" }
 ic-certification = { path = "../../certification" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
@@ -53,14 +53,6 @@ axum = { workspace = true }
 ic-registry-transport = { path = "../../registry/transport" }
 prost = { workspace = true }
 url = { workspace = true }
-
-# TODO: Delete this. We can delete once we finish migrating all [[bin]]s (in
-# this file) as described in Notion:
-#
-#   https://www.notion.so/dfinityorg/How-to-Break-Up-rs-tests-11bef9d9b80c80b0a0bfdd03a21d45e9?showMoveTo=true&saveParent=true
-#
-# (The name of migrated [[bin]]s begin with "ic-systest-".)
-tests = { path = ".." }
 
 [[bin]]
 name = "nns_upgrade_test"

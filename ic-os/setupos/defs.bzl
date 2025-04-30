@@ -31,6 +31,7 @@ def image_deps(mode, _malicious = False):
         "bootfs": {},
         "rootfs": {
             "//rs/ic_os/release:setupos_tool": "/opt/ic/bin/setupos_tool:0755",
+            "//rs/ic_os/release:config": "/opt/ic/bin/config:0755",
         },
 
         # Set various configuration values
@@ -43,7 +44,7 @@ def image_deps(mode, _malicious = False):
         "extra_boot_args": Label("//ic-os/setupos/context:extra_boot_args"),
 
         # Add any custom partitions to the manifest
-        "custom_partitions": lambda: (_custom_partitions)(mode),
+        "custom_partitions": _custom_partitions,
     }
 
     dev_build_args = ["BUILD_TYPE=dev"]
@@ -80,11 +81,11 @@ def _custom_partitions(mode):
     if mode == "dev":
         guest_image = Label("//ic-os/guestos/envs/dev:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/dev:disk-img.tar.zst")
-        nns_url = "https://wiki.internetcomputer.org"
+        nns_url = "https://cloudflare.com/cdn-cgi/trace"
     elif mode == "local-base-dev":
         guest_image = Label("//ic-os/guestos/envs/local-base-dev:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/local-base-dev:disk-img.tar.zst")
-        nns_url = "https://wiki.internetcomputer.org"
+        nns_url = "https://cloudflare.com/cdn-cgi/trace"
     elif mode == "local-base-prod":
         guest_image = Label("//ic-os/guestos/envs/local-base-prod:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/local-base-prod:disk-img.tar.zst")
@@ -101,7 +102,7 @@ def _custom_partitions(mode):
         src = guest_image,
         out = "guest-os.img.tar.zst",
         allow_symlink = True,
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
     )
 
     copy_file(
@@ -109,7 +110,7 @@ def _custom_partitions(mode):
         src = host_image,
         out = "host-os.img.tar.zst",
         allow_symlink = True,
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
     )
 
     config_dict = {
@@ -158,18 +159,18 @@ def _custom_partitions(mode):
         ],
         mode = "0644",
         package_dir = "data",
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
     )
 
     ext4_image(
         name = "partition-data.tzst",
         src = "data_tar",
-        partition_size = "1750M",
+        partition_size = "2250M",
         subdir = "data",
         target_compatible_with = [
             "@platforms//os:linux",
         ],
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
     )
 
     return [

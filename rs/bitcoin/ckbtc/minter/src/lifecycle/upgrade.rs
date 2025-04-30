@@ -1,8 +1,9 @@
 use crate::logs::P0;
-use crate::state::eventlog::{replay, Event};
+use crate::state::eventlog::{replay, EventType};
 use crate::state::invariants::CheckInvariantsImpl;
 use crate::state::{replace_state, Mode};
-use crate::storage::{count_events, events, record_event};
+use crate::storage::{count_events, events, migrate_old_events_if_not_empty, record_event};
+use crate::IC_CANISTER_RUNTIME;
 use candid::{CandidType, Deserialize};
 use ic_base_types::CanisterId;
 use ic_canister_log::log;
@@ -29,10 +30,25 @@ pub struct UpgradeArgs {
     pub mode: Option<Mode>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub check_fee: Option<u64>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[deprecated(note = "use check_fee instead")]
     pub kyt_fee: Option<u64>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub btc_checker_principal: Option<CanisterId>,
+
+    /// The principal of the kyt canister.
+    /// NOTE: this field is optional for backward compatibility.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[deprecated(note = "use btc_checker_principal instead")]
     pub kyt_principal: Option<CanisterId>,
+
+    /// The expiration duration (in seconds) for cached entries in
+    /// the get_utxos cache.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub get_utxos_cache_expiration_seconds: Option<u64>,
 }
 
 pub fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {
@@ -42,11 +58,14 @@ pub fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {
             "[upgrade]: updating configuration with {:?}",
             upgrade_args
         );
-        record_event(&Event::Upgrade(upgrade_args));
+        record_event(EventType::Upgrade(upgrade_args), &IC_CANISTER_RUNTIME);
     };
 
     let start = ic_cdk::api::instruction_counter();
 
+    if let Some(removed) = migrate_old_events_if_not_empty() {
+        log!(P0, "[upgrade]: {} empty events removed", removed)
+    }
     log!(P0, "[upgrade]: replaying {} events", count_events());
 
     let state = replay::<CheckInvariantsImpl>(events()).unwrap_or_else(|e| {

@@ -52,8 +52,8 @@ use ic_base_types::{NumBytes, PrincipalId};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::{
-    CanisterHttpRequestArgs, HttpHeader, HttpMethod, TransformContext,
+use ic_management_canister_types_private::{
+    CanisterHttpRequestArgs, DataSize, HttpHeader, HttpMethod, TransformContext,
 };
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -457,6 +457,10 @@ pub struct CanisterHttpRequest {
     pub id: CanisterHttpRequestId,
     /// The context of the request which captures all the metadata about this request
     pub context: CanisterHttpRequestContext,
+    /// The most up to date api boundary nodes address that should be used as a socks proxy in the case of a request to an IPv4 address.
+    /// The addresses should be sent in the following format: "socks5://[<ip>]:<port>", for example:
+    /// "socks5://[2602:fb2b:110:10:506f:cff:feff:fe69]:1080"
+    pub socks_proxy_addrs: Vec<String>,
 }
 
 /// The content of a response after the transformation
@@ -471,7 +475,16 @@ pub struct CanisterHttpResponse {
 
 impl CountBytes for CanisterHttpResponse {
     fn count_bytes(&self) -> usize {
-        size_of::<CallbackId>() + size_of::<Time>() + self.content.count_bytes()
+        let CanisterHttpResponse {
+            id,
+            timeout,
+            canister_id,
+            content,
+        } = &self;
+        size_of_val(id)
+            + size_of_val(timeout)
+            + canister_id.get_ref().data_size()
+            + content.count_bytes()
     }
 }
 
@@ -514,7 +527,11 @@ impl From<&CanisterHttpReject> for RejectContext {
 
 impl CountBytes for CanisterHttpReject {
     fn count_bytes(&self) -> usize {
-        size_of::<RejectCode>() + self.message.len()
+        let CanisterHttpReject {
+            reject_code,
+            message,
+        } = &self;
+        size_of_val(reject_code) + message.len()
     }
 }
 
@@ -569,7 +586,8 @@ pub struct CanisterHttpResponseWithConsensus {
 
 impl CountBytes for CanisterHttpResponseWithConsensus {
     fn count_bytes(&self) -> usize {
-        self.proof.count_bytes() + self.content.count_bytes()
+        let CanisterHttpResponseWithConsensus { content, proof } = &self;
+        proof.count_bytes() + content.count_bytes()
     }
 }
 
@@ -585,7 +603,8 @@ pub struct CanisterHttpResponseDivergence {
 
 impl CountBytes for CanisterHttpResponseDivergence {
     fn count_bytes(&self) -> usize {
-        self.shares.iter().map(|share| share.count_bytes()).sum()
+        let CanisterHttpResponseDivergence { shares } = &self;
+        shares.iter().map(|share| share.count_bytes()).sum()
     }
 }
 
@@ -749,6 +768,174 @@ mod tests {
                 .map(|x| x as i32)
                 .collect::<Vec<i32>>(),
             [1, 2, 3]
+        );
+    }
+}
+
+#[cfg(test)]
+mod validate_http_headers_and_body_tests {
+    use super::*;
+    use assert_matches::assert_matches;
+    use ic_management_canister_types_private::HttpHeader;
+
+    #[test]
+    fn test_empty_request() {
+        let empty_headers: Vec<HttpHeader> = vec![];
+        let empty_body = b"";
+        assert!(validate_http_headers_and_body(&empty_headers, empty_body).is_ok());
+    }
+
+    #[test]
+    fn test_valid_request() {
+        let headers = vec![HttpHeader {
+            name: "Content-Type".to_string(),
+            value: "application/json".to_string(),
+        }];
+        let body = b"Hello";
+        assert!(validate_http_headers_and_body(&headers, body).is_ok());
+    }
+
+    #[test]
+    fn test_headers_at_max_count() {
+        // Create exactly the maximum allowed number of headers
+        let headers = (0..MAX_CANISTER_HTTP_HEADER_NUM)
+            .map(|i| HttpHeader {
+                name: format!("Header-{}", i),
+                value: "value".to_string(),
+            })
+            .collect::<Vec<_>>();
+        let body = b"";
+
+        let result = validate_http_headers_and_body(&headers, body);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_header_name_at_max_length() {
+        // Create a header with name exactly at the limit
+        let headers = vec![HttpHeader {
+            name: "a".repeat(MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH),
+            value: "value".to_string(),
+        }];
+        let body = b"";
+
+        let result = validate_http_headers_and_body(&headers, body);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_header_value_at_max_length() {
+        // Create a header with value exactly at the limit
+        let headers = vec![HttpHeader {
+            name: "Header".to_string(),
+            value: "b".repeat(MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH),
+        }];
+        let body = b"";
+
+        let result = validate_http_headers_and_body(&headers, body);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_headers_at_max_total_size() {
+        // We'll keep the size of the header name and value to sum up to MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH.
+        let headers_needed =
+            MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE / MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH;
+
+        let headers = (0..headers_needed)
+            .map(|i| {
+                let header_name = format!("Header-{}", i);
+                HttpHeader {
+                    name: header_name.clone(),
+                    // Going over a single byte for each header value should do it.
+                    value: "a"
+                        .repeat(MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH - header_name.len()),
+                }
+            })
+            .collect::<Vec<_>>();
+        let body = b"";
+
+        let result = validate_http_headers_and_body(&headers, body);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_too_many_headers() {
+        // Create more headers than allowed
+        let headers = (0..=MAX_CANISTER_HTTP_HEADER_NUM)
+            .map(|i| HttpHeader {
+                name: format!("Header-{}", i),
+                value: "value".to_string(),
+            })
+            .collect::<Vec<_>>();
+        let body = b"";
+
+        let result = validate_http_headers_and_body(&headers, body);
+        assert_matches!(
+            result,
+            Err(CanisterHttpRequestContextError::TooManyHeaders(count))
+            if count == MAX_CANISTER_HTTP_HEADER_NUM + 1
+        );
+    }
+
+    #[test]
+    fn test_header_name_too_long() {
+        // Create a header with name exceeding the limit
+        let headers = vec![HttpHeader {
+            name: "a".repeat(MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH + 1),
+            value: "value".to_string(),
+        }];
+        let body = b"";
+
+        let result = validate_http_headers_and_body(&headers, body);
+        assert_matches!(
+            result,
+            Err(CanisterHttpRequestContextError::TooLongHeaderName(size))
+            if size == MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH + 1
+        );
+    }
+
+    #[test]
+    fn test_header_value_too_long() {
+        // Create a header with value exceeding the limit
+        let headers = vec![HttpHeader {
+            name: "Header".to_string(),
+            value: "b".repeat(MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH + 1),
+        }];
+        let body = b"";
+
+        let result = validate_http_headers_and_body(&headers, body);
+        assert_matches!(
+            result,
+            Err(CanisterHttpRequestContextError::TooLongHeaderValue(size))
+            if size == MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH + 1
+        );
+    }
+
+    #[test]
+    fn test_headers_total_size_too_large() {
+        let headers_needed =
+            MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE / MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH;
+
+        let headers = (0..headers_needed)
+            .map(|i| {
+                let header_name = format!("Header-{}", i);
+                HttpHeader {
+                    name: header_name.clone(),
+                    // Going over a single byte for each header value should do it.
+                    value: "a"
+                        .repeat(MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH - header_name.len() + 1),
+                }
+            })
+            .collect::<Vec<_>>();
+        let body = b"";
+
+        let result = validate_http_headers_and_body(&headers, body);
+
+        assert_matches!(
+            result,
+            Err(CanisterHttpRequestContextError::TooLargeHeaders(size))
+            if size > MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE
         );
     }
 }

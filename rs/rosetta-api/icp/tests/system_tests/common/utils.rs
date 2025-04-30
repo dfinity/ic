@@ -1,6 +1,5 @@
 use crate::common::constants::MAX_ROSETTA_SYNC_ATTEMPTS;
 use candid::{Decode, Encode};
-use ic_agent::agent::http_transport::ReqwestTransport;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Agent;
 use ic_agent::Identity;
@@ -8,9 +7,9 @@ use ic_icp_rosetta_client::RosettaClient;
 use ic_ledger_core::block::BlockType;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_constants::LEDGER_CANISTER_ID;
-use ic_nns_governance::pb::v1::ListNeurons;
-use ic_nns_governance::pb::v1::ListNeuronsResponse;
 use ic_nns_governance_api::pb::v1::GovernanceError;
+use ic_nns_governance_api::pb::v1::ListNeurons;
+use ic_nns_governance_api::pb::v1::ListNeuronsResponse;
 use ic_rosetta_api::convert::to_hash;
 use icp_ledger::GetBlocksArgs;
 use icp_ledger::QueryEncodedBlocksResponse;
@@ -37,10 +36,10 @@ pub async fn get_custom_agent(basic_identity: Arc<dyn Identity>, port: u16) -> A
     let replica_url = Url::parse(&format!("http://localhost:{}", port)).unwrap();
 
     // Setup the agent
-    let transport = ReqwestTransport::create(replica_url.clone()).unwrap();
     let agent = Agent::builder()
+        .with_url(replica_url.clone())
+        .with_http_client(reqwest::Client::new())
         .with_identity(basic_identity)
-        .with_arc_transport(Arc::new(transport))
         .build()
         .unwrap();
 
@@ -157,7 +156,7 @@ pub async fn query_encoded_blocks(
     let current_chain_tip_index = response.chain_length.saturating_sub(1);
     let block_request = GetBlocksArgs {
         start: std::cmp::min(min_block_height, current_chain_tip_index),
-        length: std::cmp::min(num_blocks, response.chain_length) as usize,
+        length: std::cmp::min(num_blocks, response.chain_length),
     };
     Decode!(
         &agent
@@ -181,6 +180,9 @@ pub async fn list_neurons(agent: &Agent) -> ListNeuronsResponse {
                     include_neurons_readable_by_caller: true,
                     include_empty_neurons_readable_by_caller: Some(true),
                     include_public_neurons_in_full_neurons: None,
+                    page_number: None,
+                    page_size: None,
+                    neuron_subaccounts: None
                 })
                 .unwrap()
             )

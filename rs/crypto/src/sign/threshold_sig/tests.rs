@@ -22,6 +22,7 @@ use ic_types::crypto::{CombinedThresholdSig, SignableMock, ThresholdSigShare};
 use ic_types::Height;
 use ic_types::SubnetId;
 use ic_types_test_utils::ids::{NODE_1, SUBNET_1};
+use sign::tests::REG_V1;
 
 pub const NODE_ID: NodeId = NODE_1;
 
@@ -344,7 +345,7 @@ mod verify_threshold_sig_share {
     fn should_return_ok_if_sig_verification_ok_and_public_key_not_in_store() {
         let (sig_share, message, csp_public_key) = (sig_share(), signable_mock(), csp_public_key());
         let threshold_sig_data_store =
-            threshold_sig_data_store_with_non_empty_coeffs_and_indices_for_dkg_id(&NI_DKG_ID_1);
+            threshold_sig_data_store_with_non_empty_transcript_data_for_dkg_id(&NI_DKG_ID_1);
         let mut csp = MockAllCryptoServiceProvider::new();
         csp.expect_threshold_individual_public_key()
             .times(1)
@@ -391,7 +392,7 @@ mod verify_threshold_sig_share {
         let verification_error = sig_verification_error();
         let (sig_share, message, csp_public_key) = (sig_share(), signable_mock(), csp_public_key());
         let threshold_sig_data_store =
-            threshold_sig_data_store_with_non_empty_coeffs_and_indices_for_dkg_id(&NI_DKG_ID_1);
+            threshold_sig_data_store_with_non_empty_transcript_data_for_dkg_id(&NI_DKG_ID_1);
         let mut csp = MockAllCryptoServiceProvider::new();
         csp.expect_threshold_individual_public_key()
             .times(1)
@@ -417,7 +418,7 @@ mod verify_threshold_sig_share {
     fn should_have_correct_public_key_in_store_after_sig_verification_if_not_in_store_before() {
         let (sig_share, message, csp_public_key) = (sig_share(), signable_mock(), csp_public_key());
         let threshold_sig_data_store =
-            threshold_sig_data_store_with_non_empty_coeffs_and_indices_for_dkg_id(&NI_DKG_ID_1);
+            threshold_sig_data_store_with_non_empty_transcript_data_for_dkg_id(&NI_DKG_ID_1);
         let mut csp = MockAllCryptoServiceProvider::new();
         csp.expect_threshold_individual_public_key()
             .times(1)
@@ -521,7 +522,7 @@ mod verify_threshold_sig_share {
     fn should_fail_with_malformed_signature_if_signature_has_invalid_length() {
         let (sig_share, message) = (invalid_threshold_sig_share(), signable_mock());
         let threshold_sig_data_store =
-            threshold_sig_data_store_with_non_empty_coeffs_and_indices_for_dkg_id(&NI_DKG_ID_1);
+            threshold_sig_data_store_with_non_empty_transcript_data_for_dkg_id(&NI_DKG_ID_1);
         let mut csp = MockAllCryptoServiceProvider::new();
         csp.expect_threshold_individual_public_key().times(0);
         csp.expect_threshold_verify_individual_signature().times(0);
@@ -1598,17 +1599,20 @@ fn threshold_sig_data_store_with(
     let store = LockableThresholdSigDataStore::new();
     store
         .write()
-        .insert_transcript_data(dkg_id, public_coeffs, indices);
+        .insert_transcript_data(dkg_id, public_coeffs, indices, REG_V1);
     store
 }
 
-fn threshold_sig_data_store_with_non_empty_coeffs_and_indices_for_dkg_id(
+fn threshold_sig_data_store_with_non_empty_transcript_data_for_dkg_id(
     ni_dkg_id: &NiDkgId,
 ) -> LockableThresholdSigDataStore {
     let store = LockableThresholdSigDataStore::new();
-    store
-        .write()
-        .insert_transcript_data(ni_dkg_id, pub_coeffs(), indices(vec![(NODE_ID, 1)]));
+    store.write().insert_transcript_data(
+        ni_dkg_id,
+        pub_coeffs(),
+        indices(vec![(NODE_ID, 1)]),
+        REG_V1,
+    );
     store
 }
 
@@ -1621,6 +1625,7 @@ fn threshold_sig_data_store_with_coeffs(
         dkg_id,
         csp_public_coefficients,
         BTreeMap::new(),
+        REG_V1,
     );
     threshold_sig_data_store
 }
@@ -1633,7 +1638,7 @@ fn threshold_sig_data_store_with_coeffs_and_pubkey(
     let threshold_sig_data_store = LockableThresholdSigDataStore::new();
     {
         let mut locked_store = threshold_sig_data_store.write();
-        locked_store.insert_transcript_data(dkg_id, pub_coeffs(), BTreeMap::new());
+        locked_store.insert_transcript_data(dkg_id, pub_coeffs(), BTreeMap::new(), REG_V1);
         locked_store.insert_individual_public_key(dkg_id, node_id, public_key);
     }
     threshold_sig_data_store

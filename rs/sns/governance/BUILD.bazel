@@ -1,5 +1,6 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:canbench.bzl", "rust_canbench")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
@@ -19,6 +20,7 @@ DEPENDENCIES = [
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/ledger_suite/icrc1/ledger",
+    "//rs/nervous_system/canisters",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/collections/union_multi_map",
     "//rs/nervous_system/common",
@@ -29,6 +31,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
+    "//rs/nervous_system/timestamp",
     "//rs/nns/constants",
     "//rs/protobuf",
     "//rs/rust_canisters/canister_log",
@@ -51,6 +54,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-metrics-encoder",
+    "@crate_index//:itertools",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
     "@crate_index//:num-traits",
@@ -60,8 +64,9 @@ DEPENDENCIES = [
     "@crate_index//:rust_decimal",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
+    "@crate_index//:serde_json",
     "@crate_index//:strum",
-    "@crate_index//:time",
+    "@crate_index//:thiserror",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -128,6 +133,20 @@ rust_library(
     deps = DEPENDENCIES + [":build_script"],
 )
 
+rust_library(
+    name = "governance--canbench_feature",
+    srcs = LIB_SRCS,
+    aliases = ALIASES,
+    crate_features = ["canbench-rs"],
+    crate_name = "ic_sns_governance",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES + [
+        ":build_script",
+        "@crate_index//:canbench-rs",
+    ],
+)
+
 rust_canister(
     name = "sns-governance-canister",
     srcs = ["canister/canister.rs"],
@@ -138,7 +157,6 @@ rust_canister(
     deps = DEPENDENCIES + [
         ":build_script",
         ":governance",
-        "//rs/nervous_system/canisters",
     ],
 )
 
@@ -153,7 +171,6 @@ rust_canister(
     deps = DEPENDENCIES + [
         ":build_script",
         ":governance",
-        "//rs/nervous_system/canisters",
     ],
 )
 
@@ -161,6 +178,15 @@ rust_test(
     name = "governance_test",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":governance"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
+)
+
+rust_test(
+    name = "governance_test--test-feature",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate_features = ["test"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":governance"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )
@@ -174,7 +200,6 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
         ":governance",
-        "//rs/nervous_system/canisters",
     ],
 )
 
@@ -188,7 +213,6 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
         ":governance",
-        "//rs/nervous_system/canisters",
     ],
 )
 
@@ -227,5 +251,38 @@ generated_files_check(
         "//rs/sns/governance/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",
+    ],
+)
+
+# Usage
+# =====
+#
+# For benchmarking (see `canbench/canbench_results.yml`):
+# ```
+# bazel run //rs/sns/governance:governance-canbench
+# ```
+#
+# For updating the results file:
+# ```
+# bazel run //rs/sns/governance:governance-canbench_update
+# ```
+#
+# To run the test:
+# ```
+# bazel test //rs/sns/governance:governance_canbench_test
+# ```
+#
+# Currently, updating the results file is not automated, and there are no tests to avoid
+# regression. For now, we can use it as an example for benchmarking as part
+# of an investigation of potential performance issues, or when we make a change that can affect
+# the performance measured in this benchmark.
+rust_canbench(
+    name = "governance-canbench",
+    srcs = ["canbench/main.rs"],
+    add_test = True,
+    results_file = "canbench/canbench_results.yml",
+    deps = [
+        # Keep sorted.
+        ":governance--canbench_feature",
     ],
 )

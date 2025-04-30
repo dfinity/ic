@@ -1,19 +1,36 @@
 use super::*;
-
 use crate::test_utils::{create_fake_registry_client, valid_tls_certificate_and_validation_time};
+use ic_registry_routing_table::CanisterIdRange;
 
-#[tokio::test]
-async fn test_routing_table() -> Result<(), Error> {
+#[allow(clippy::type_complexity)]
+pub fn test_registry_snapshot(
+    subnets: usize,
+    nodes_per_subnet: usize,
+) -> (
+    RegistrySnapshot,
+    Vec<(NodeId, String)>,
+    Vec<(SubnetId, CanisterIdRange)>,
+) {
     let snapshot = Arc::new(ArcSwapOption::empty());
 
-    let (reg, nodes, ranges) = create_fake_registry_client(4, 1, None);
+    let (reg, nodes, ranges) = create_fake_registry_client(subnets, nodes_per_subnet, None);
     let reg = Arc::new(reg);
 
     let (channel_send, _) = watch::channel(None);
     let mut snapshotter =
         Snapshotter::new(Arc::clone(&snapshot), channel_send, reg, Duration::ZERO);
-    snapshotter.snapshot()?;
-    let snapshot = snapshot.load_full().unwrap();
+    snapshotter.snapshot().unwrap();
+
+    (
+        snapshot.load_full().unwrap().as_ref().clone(),
+        nodes,
+        ranges,
+    )
+}
+
+#[tokio::test]
+async fn test_routing_table() -> Result<(), Error> {
+    let (snapshot, nodes, ranges) = test_registry_snapshot(4, 1);
 
     assert_eq!(snapshot.version, 1);
     assert_eq!(snapshot.subnets.len(), 4);

@@ -133,6 +133,8 @@ POLICY_PRE_ISOLATION_CANISTERS="${RUN_DIR}/pre_isolation_canisters.txt"
 POLICY_DENYLIST_ALLOWLIST="${RUN_DIR}/allowlist.txt"
 POLICY_DENYLIST_SEED="${RUN_DIR}/denylist.json"
 DOMAIN_CANISTER_ALIAS="identity:rdmx6-jaaaa-aaaaa-aaadq-cai,nns:qoctq-giaaa-aaaaa-aaaea-cai"
+DOMAIN_CUSTOM_PROVIDER="https://boundary.caffeine.ai/subdomains,https://beta.boundary.caffeine.ai/subdomains,https://dev.boundary.caffeine.ai/subdomains"
+DOMAIN_CUSTOM_PROVIDER_POLL_INTERVAL="10s"
 GEOIP_DB="${RUN_DIR}/GeoLite2-Country.mmdb"
 IC_URL="http://127.0.0.1:9000"
 IC_ROOT_KEY="${ROOT_KEY}"
@@ -148,9 +150,6 @@ CACHE_XFETCH_BETA="3.0"
 SHED_SYSTEM_EWMA="0.9"
 SHED_SYSTEM_CPU="0.95"
 SHED_SYSTEM_MEMORY="0.95"
-SHED_SHARDED_EWMA="0.6"
-SHED_SHARDED_PASSTHROUGH="20000"
-SHED_SHARDED_LATENCY="query:1s,call:1s,sync_call:13s,read_state:1s,read_state_subnet:1s,status:100ms,health:100ms,registrations:5s,http:5s"
 EOF
 
     if [ ! -z "${DENYLIST_URL:-}" ]; then
@@ -165,10 +164,6 @@ EOF
 
     if [ ! -z "${MAX_CONCURRENCY:-}" ]; then
         echo "LOAD_MAX_CONCURRENCY=\"${MAX_CONCURRENCY}\"" >>"${ENV_FILE}"
-    fi
-
-    if [ ! -z "${SHED_EWMA_PARAM:-}" ]; then
-        echo "LOAD_SHED_EWMA_PARAM=\"${SHED_EWMA_PARAM}\"" >>"${ENV_FILE}"
     fi
 }
 

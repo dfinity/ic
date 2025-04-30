@@ -13,7 +13,7 @@ use ic_crypto_tree_hash::MixedHashTree;
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_from_der;
 use ic_ledger_core::tokens::CheckedAdd;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_management_canister_types::{CanisterIdRecord, CanisterStatusResult};
+use ic_management_canister_types_private::{CanisterIdRecord, CanisterStatusResultV2};
 use ic_nervous_system_clients::canister_status::CanisterStatusResult as RootCanisterStatusResult;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL,
@@ -545,7 +545,7 @@ pub fn test(env: TestEnv) {
 
         let nonce_size = 8; // see RemoteTestRuntime::get_nonce_vec
 
-        let new_canister_status: CanisterStatusResult =
+        let new_canister_status: CanisterStatusResultV2 =
             runtime_from_url(app_node.get_public_url(), app_node.effective_canister_id())
                 .get_management_canister_with_effective_canister_id(new_canister_id.into())
                 .update_from_sender(
@@ -634,7 +634,7 @@ pub fn test(env: TestEnv) {
 
             let nonce_size = 8; // see RemoteTestRuntime::get_nonce_vec
 
-            let new_canister_status: CanisterStatusResult =
+            let new_canister_status: CanisterStatusResultV2 =
                 runtime_from_url(app_node.get_public_url(), app_node.effective_canister_id())
                     .get_management_canister_with_effective_canister_id(new_canister_id.into())
                     .update_from_sender(
@@ -698,7 +698,7 @@ pub fn test(env: TestEnv) {
             .unwrap();
 
         /* Check the controller / cycles balance. */
-        let new_canister_status: CanisterStatusResult = nns
+        let new_canister_status: CanisterStatusResultV2 = nns
             .get_management_canister_with_effective_canister_id(new_canister_id.into())
             .update_from_sender(
                 "canister_status",
@@ -730,7 +730,7 @@ pub fn test(env: TestEnv) {
                 .unwrap();
 
             /* Check the controller / cycles balance. */
-            let new_canister_status: CanisterStatusResult = nns
+            let new_canister_status: CanisterStatusResultV2 = nns
                 .get_management_canister_with_effective_canister_id(new_canister_id.into())
                 .update_from_sender(
                     "canister_status",
@@ -851,7 +851,7 @@ pub fn test(env: TestEnv) {
         /* Exceed the daily cycles minting limit. */
         info!(logger, "creating canister (exceeding daily limit)");
 
-        let amount = Tokens::new(100_000, 0).unwrap();
+        let amount = Tokens::new(300_000, 0).unwrap();
 
         let (err, refund_block) = user1
             .create_canister_cmc(amount, None, &controller_user, None, None)
@@ -873,7 +873,7 @@ pub fn test(env: TestEnv) {
 
         // remove when ledger notify goes away
         {
-            let amount = Tokens::new(100_000, 0).unwrap();
+            let amount = Tokens::new(300_000, 0).unwrap();
             user1
                 .transfer(
                     Tokens::from_e8s(amount.get_e8s() + DEFAULT_TRANSFER_FEE.get_e8s()),

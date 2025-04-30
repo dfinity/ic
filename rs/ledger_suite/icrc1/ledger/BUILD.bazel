@@ -101,16 +101,6 @@ package(default_visibility = ["//visibility:public"])
                 "//rs/ledger_suite/icrc1/tokens_u256",
             ],
         ),
-        (
-            "_icrc3_compatible_data_certificate",
-            "",
-            [
-                "icrc3-compatible-data-certificate",
-            ],
-            [
-                "//rs/ledger_suite/icrc1/tokens_u64",
-            ],
-        ),
     ]
 ]
 
@@ -242,14 +232,6 @@ package(default_visibility = ["//visibility:public"])
                 "//rs/ledger_suite/icrc1/tokens_u256",
             ],
         ),
-        (
-            "_icrc3_compatible_data_certificate",
-            ["icrc3-compatible-data-certificate"],
-            [
-                ":ledger_icrc3_compatible_data_certificate",
-                "//rs/ledger_suite/icrc1/tokens_u64",
-            ],
-        ),
     ]
 ]
 
@@ -272,26 +254,40 @@ rust_test(
         crate_features = features,
         data = [
             ":block.cddl",
-            ":ledger_canister" + name_suffix + ".wasm",
-            ":ledger_canister" + name_suffix + "_lowupgradeinstructionlimits.wasm",
-            ":ledger_canister" + name_suffix + "_nextledgerversion.wasm",
+            ":ledger_canister" + name_suffix + ".wasm.gz",
+            ":ledger_canister" + name_suffix + "_lowupgradeinstructionlimits.wasm.gz",
+            ":ledger_canister" + name_suffix + "_nextledgerversion.wasm.gz",
             "//rs/ledger_suite/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz",
-            "//rs/ledger_suite/icrc1/ledger:ledger_canister_icrc3_compatible_data_certificate",
             "//rs/universal_canister/impl:universal_canister.wasm.gz",
+            "@mainnet_ckbtc_ic-icrc1-ledger-v1//file",
+            "@mainnet_ckbtc_ic-icrc1-ledger-v2-noledgerversion//file",
+            "@mainnet_ckbtc_ic-icrc1-ledger-v2//file",
+            "@mainnet_ckbtc_ic-icrc1-ledger-v3//file",
             "@mainnet_ckbtc_ic-icrc1-ledger//file",
+            "@mainnet_cketh_ic-icrc1-ledger-u256-v1//file",
+            "@mainnet_cketh_ic-icrc1-ledger-u256-v2-noledgerversion//file",
+            "@mainnet_cketh_ic-icrc1-ledger-u256-v2//file",
+            "@mainnet_cketh_ic-icrc1-ledger-u256-v3//file",
             "@mainnet_cketh_ic-icrc1-ledger-u256//file",
             "@mainnet_ic-icrc1-ledger//file",
         ],
         env = {
             "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1/ledger",
             "CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ckbtc_ic-icrc1-ledger//file)",
+            "CKBTC_IC_ICRC1_LEDGER_V1_VERSION_WASM_PATH": "$(rootpath @mainnet_ckbtc_ic-icrc1-ledger-v1//file)",
+            "CKBTC_IC_ICRC1_LEDGER_V2_VERSION_WASM_PATH": "$(rootpath @mainnet_ckbtc_ic-icrc1-ledger-v2//file)",
+            "CKBTC_IC_ICRC1_LEDGER_V2_NOLEDGERLEVRION_VERSION_WASM_PATH": "$(rootpath @mainnet_ckbtc_ic-icrc1-ledger-v2-noledgerversion//file)",
+            "CKBTC_IC_ICRC1_LEDGER_V3_VERSION_WASM_PATH": "$(rootpath @mainnet_ckbtc_ic-icrc1-ledger-v3//file)",
             "CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_cketh_ic-icrc1-ledger-u256//file)",
+            "CKETH_IC_ICRC1_LEDGER_V1_VERSION_WASM_PATH": "$(rootpath @mainnet_cketh_ic-icrc1-ledger-u256-v1//file)",
+            "CKETH_IC_ICRC1_LEDGER_V2_VERSION_WASM_PATH": "$(rootpath @mainnet_cketh_ic-icrc1-ledger-u256-v2//file)",
+            "CKETH_IC_ICRC1_LEDGER_V2_NOLEDGERLEVRION_VERSION_WASM_PATH": "$(rootpath @mainnet_cketh_ic-icrc1-ledger-u256-v2-noledgerversion//file)",
+            "CKETH_IC_ICRC1_LEDGER_V3_VERSION_WASM_PATH": "$(rootpath @mainnet_cketh_ic-icrc1-ledger-u256-v3//file)",
             "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz)",
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
-            "IC_ICRC1_LEDGER_ICRC3_COMPATIBLE_DATA_CERTIFICATE_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_icrc3_compatible_data_certificate)",
-            "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + ".wasm)",
-            "IC_ICRC1_LEDGER_WASM_INSTR_LIMITS_PATH": "$(rootpath :ledger_canister" + name_suffix + "_lowupgradeinstructionlimits.wasm)",
-            "IC_ICRC1_LEDGER_NEXT_VERSION_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + "_nextledgerversion.wasm)",
+            "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + ".wasm.gz)",
+            "IC_ICRC1_LEDGER_WASM_INSTR_LIMITS_PATH": "$(rootpath :ledger_canister" + name_suffix + "_lowupgradeinstructionlimits.wasm.gz)",
+            "IC_ICRC1_LEDGER_NEXT_VERSION_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + "_nextledgerversion.wasm.gz)",
             "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
         },
         deps = [
@@ -304,7 +300,6 @@ rust_test(
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1/test_utils",
-            "//rs/rust_canisters/dfn_http_metrics",
             "//rs/state_machine_tests",
             "//rs/test_utilities/load_wasm",
             "//rs/types/base_types",
@@ -314,6 +309,7 @@ rust_test(
             "@crate_index//:ciborium",
             "@crate_index//:hex",
             "@crate_index//:ic-agent",
+            "@crate_index//:ic-cbor",
             "@crate_index//:ic-certification",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:leb128",

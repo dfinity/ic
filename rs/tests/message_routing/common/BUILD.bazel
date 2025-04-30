@@ -11,7 +11,9 @@ rust_library(
         "//rs/rust_canisters/dfn_candid",
         "//rs/rust_canisters/xnet_test",
         "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:candid",
         "@crate_index//:futures",
+        "@crate_index//:ic-cdk",
         "@crate_index//:slog",
     ],
 )

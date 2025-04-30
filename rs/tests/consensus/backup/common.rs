@@ -50,11 +50,10 @@ use ic_system_test_driver::{
         test_env::{HasIcPrepDir, TestEnv},
         test_env_api::*,
     },
-    util::{block_on, get_nns_node, MessageCanister, UniversalCanister},
+    util::{block_on, get_nns_node, MessageCanister},
 };
 use ic_types::{Height, ReplicaVersion};
 use slog::{debug, error, info, Logger};
-use std::fs::File;
 use std::{
     ffi::OsStr,
     fs::{self, OpenOptions},
@@ -63,6 +62,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
+use std::{fs::File, time::Duration};
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
@@ -133,8 +133,7 @@ pub fn test_downgrade(env: TestEnv) {
     let nns_node = get_nns_node(&env.topology_snapshot());
     let initial_version =
         get_assigned_replica_version(&nns_node).expect("There should be assigned replica version");
-    let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt")
-        .expect("could not read mainnet version!");
+    let mainnet_version = get_mainnet_nns_revision();
     info!(log, "Elect the mainnet replica version");
     info!(log, "TARGET_VERSION: {}", mainnet_version);
     block_on(bless_public_replica_version(
@@ -181,12 +180,32 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
     fs::create_dir_all(&backup_binaries_dir).expect("failure creating backup binaries directory");
 
     // Copy all the binaries needed for the replay of the current version in order to avoid downloading them
-    let testing_dir = get_dependency_path("rs/tests");
-    let binaries_path = testing_dir.join("backup/binaries");
-    copy_file(&binaries_path, &backup_binaries_dir, "ic-replay");
-    copy_file(&binaries_path, &backup_binaries_dir, "sandbox_launcher");
-    copy_file(&binaries_path, &backup_binaries_dir, "canister_sandbox");
-    copy_file(&binaries_path, &backup_binaries_dir, "compiler_sandbox");
+    copy_file(
+        &get_dependency_path(std::env::var("IC_REPLAY_PATH").expect("IC_REPLAY_PATH not set")),
+        &backup_binaries_dir,
+        "ic-replay",
+    );
+    copy_file(
+        &get_dependency_path(
+            std::env::var("SANDBOX_LAUNCHER_PATH").expect("SANDBOX_LAUNCHER_PATH not set"),
+        ),
+        &backup_binaries_dir,
+        "sandbox_launcher",
+    );
+    copy_file(
+        &get_dependency_path(
+            std::env::var("CANISTER_SANDBOX_PATH").expect("CANISTER_SANDBOX_PATH not set"),
+        ),
+        &backup_binaries_dir,
+        "canister_sandbox",
+    );
+    copy_file(
+        &get_dependency_path(
+            std::env::var("COMPILER_SANDBOX_PATH").expect("COMPILER_SANDBOX_PATH not set"),
+        ),
+        &backup_binaries_dir,
+        "compiler_sandbox",
+    );
 
     // Generate keypair and store the private key
     info!(log, "Create backup user credentials");
@@ -219,7 +238,14 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
     let id = nns_node.effective_canister_id();
     let canister_id_hex: String = block_on({
         async move {
-            let canister = UniversalCanister::new_with_retries(&agent, id, &log2).await;
+            let canister = MessageCanister::new_with_retries(
+                &agent,
+                id,
+                &log2,
+                Duration::from_secs(120),
+                Duration::from_secs(1),
+            )
+            .await;
             hex::encode(canister.canister_id().as_slice())
         }
     });
@@ -275,8 +301,9 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
     write!(f, "{}", config_str).expect("Should be able to write the config file");
 
     info!(log, "Start the backup process in a separate thread");
-    let ic_backup_path = binaries_path.join("ic-backup");
-    let mut command = Command::new(&ic_backup_path);
+    let ic_backup_path =
+        &get_dependency_path(std::env::var("IC_BACKUP_PATH").expect("IC_BACKUP_PATH not set"));
+    let mut command = Command::new(ic_backup_path);
     command
         .arg("--config-file")
         .arg(&config_file)
@@ -355,6 +382,7 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
         "Restart and wait for cold storage and divergence to happen"
     );
     child.kill().expect("Error killing backup process");
+    child.wait().expect("Error waiting for backup process");
 
     let checkpoint =
         some_checkpoint_dir(&backup_dir, &subnet_id).expect("Checkpoint doesn't exist");
@@ -372,7 +400,7 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
     modify_byte_in_file(memory_artifact_path).expect("Modifying a byte failed");
 
     info!(log, "Start again the backup process in a separate thread");
-    let mut command = Command::new(&ic_backup_path);
+    let mut command = Command::new(ic_backup_path);
     command
         .arg("--config-file")
         .arg(&config_file)
@@ -425,6 +453,7 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
 
     info!(log, "Kill child process");
     child.kill().expect("Error killing backup process");
+    child.wait().expect("Error waiting for backup process");
 
     assert!(hash_mismatch);
     info!(log, "There was a divergence of the state");
@@ -491,12 +520,8 @@ fn dir_exists_and_have_file(log: &Logger, dir: &PathBuf) -> bool {
     have_file
 }
 
-fn copy_file(binaries_path: &Path, backup_binaries_dir: &Path, file_name: &str) {
-    fs::copy(
-        binaries_path.join(file_name),
-        backup_binaries_dir.join(file_name),
-    )
-    .expect("failed to copy file");
+fn copy_file(binary_path: &Path, backup_binaries_dir: &Path, file_name: &str) {
+    fs::copy(binary_path, backup_binaries_dir.join(file_name)).expect("failed to copy file");
 }
 
 fn highest_dir_entry(dir: &PathBuf, radix: u32) -> u64 {

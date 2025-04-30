@@ -7,6 +7,7 @@ edition = "2021"
 anyhow = { workspace = true }
 config_types = { path = "../config_types" }
 deterministic_ips = { path = "../deterministic_ips" }
+macaddr = { workspace = true }
 ping = { version = "^0.5.0" }
 rayon = { workspace = true }
 regex = { workspace = true }

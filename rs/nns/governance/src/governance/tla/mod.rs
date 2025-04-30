@@ -10,7 +10,7 @@ pub use tla_instrumentation::{
     Destination, GlobalState, InstrumentationState, Label, ResolvedStatePair,
     TlaConstantAssignment, TlaValue, ToTla, Update, UpdateTrace, VarAssignment,
 };
-pub use tla_instrumentation_proc_macros::tla_update_method;
+pub use tla_instrumentation_proc_macros::{tla_function, tla_update_method};
 
 pub use tla_instrumentation::checker::{check_tla_code_link, PredicateDescription};
 
@@ -21,15 +21,25 @@ mod common;
 mod store;
 
 pub use common::{account_to_tla, opt_subaccount_to_tla, subaccount_to_tla};
-use common::{function_domain_union, governance_account_id};
+use common::{function_domain_union, function_range_union, governance_account_id};
 pub use store::{TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX};
 
 mod claim_neuron;
+mod disburse_neuron;
+mod disburse_to_neuron;
 mod merge_neurons;
+mod refresh_neuron;
+mod spawn_neuron;
+mod spawn_neurons;
 mod split_neuron;
 
 pub use claim_neuron::CLAIM_NEURON_DESC;
+pub use disburse_neuron::DISBURSE_NEURON_DESC;
+pub use disburse_to_neuron::DISBURSE_TO_NEURON_DESC;
 pub use merge_neurons::MERGE_NEURONS_DESC;
+pub use refresh_neuron::REFRESH_NEURON_DESC;
+pub use spawn_neuron::SPAWN_NEURON_DESC;
+pub use spawn_neurons::SPAWN_NEURONS_DESC;
 pub use split_neuron::SPLIT_NEURON_DESC;
 
 fn neuron_global(gov: &Governance) -> TlaValue {
@@ -53,6 +63,18 @@ fn neuron_global(gov: &Governance) -> TlaValue {
                             (
                                 "maturity".to_string(),
                                 neuron.maturity_e8s_equivalent.to_tla_value(),
+                            ),
+                            (
+                                ("state".to_string()),
+                                TlaValue::Variant {
+                                    tag: (if neuron.spawn_at_timestamp_seconds.is_some() {
+                                        "Spawning"
+                                    } else {
+                                        "NotSpawning"
+                                    })
+                                    .to_string(),
+                                    value: Box::new(TlaValue::Constant("UNIT".to_string())),
+                                },
                             ),
                         ])),
                     )
@@ -104,6 +126,20 @@ pub fn get_tla_globals(gov: &Governance) -> GlobalState {
             .to_tla_value(),
     );
     state.add("transaction_fee", gov.transaction_fee().to_tla_value());
+    state.add(
+        "spawning_neurons",
+        gov.heap_data
+            .spawning_neurons
+            .unwrap_or(false)
+            .to_tla_value(),
+    );
+    state.add(
+        "cached_maturity_basis_points",
+        gov.heap_data
+            .cached_daily_maturity_modulation_basis_points
+            .unwrap_or(0)
+            .to_tla_value(),
+    );
     state
 }
 
@@ -167,6 +203,11 @@ fn post_process_trace(trace: &mut Vec<ResolvedStatePair>) {
                  .0
                 .remove("min_stake")
                 .expect("Didn't record the min stake");
+            state
+                .0
+                 .0
+                .remove("cached_maturity_basis_points")
+                .expect("Didn't record the cached maturity basis points");
             if !state.0 .0.contains_key("governance_to_ledger") {
                 state.0 .0.insert(
                     "governance_to_ledger".to_string(),
@@ -249,7 +290,7 @@ pub fn check_traces() {
             );
         }
         println!(
-            "Total of {} state pairs to be checked with Apalache; will retain {}",
+            "Total of {} state pairs to be checked with Apalache; will retain at most {}",
             total_pairs, STATE_PAIR_COUNT_LIMIT
         )
     }
@@ -291,16 +332,20 @@ pub fn check_traces() {
     }
 
     // A poor man's parallel_map; process up to MAX_THREADS state pairs in parallel. Use mpsc channels
-    // to signal threads becoming available.
+    // to signal threads becoming available. Additionally, use the channels to signal any errors while
+    // performing the Apalache checks.
     const MAX_THREADS: usize = 20;
     let mut running_threads = 0;
-    let (thread_freed_tx, thread_freed_rx) = mpsc::channel::<()>();
+    let (thread_freed_tx, thread_freed_rx) = mpsc::channel::<bool>();
     for (i, (update, constants, pair)) in all_pairs.iter().enumerate() {
         println!("Checking state pair #{}", i + 1);
         if running_threads >= MAX_THREADS {
-            thread_freed_rx
+            if thread_freed_rx
                 .recv()
-                .expect("Error while waiting for the thread completion signal");
+                .expect("Error while waiting for the thread completion signal")
+            {
+                panic!("An Apalache thread signalled an error")
+            }
             running_threads -= 1;
         }
 
@@ -314,7 +359,7 @@ pub fn check_traces() {
 
         running_threads += 1;
         let _handle = thread::spawn(move || {
-            let _ = check_tla_code_link(
+            let res = check_tla_code_link(
                 &apalache,
                 PredicateDescription {
                     tla_module,
@@ -329,20 +374,26 @@ pub fn check_traces() {
                 println!("If you are confident that your change is correct, please contact the #formal-models Slack channel and describe the problem.");
                 println!("You can edit nns/governance/feature_flags.bzl to disable TLA checks in the CI and get on with your business.");
                 println!("-------------------");
-                println!("Error occured while checking the state pair:\n{:#?}\nwith constants:\n{:#?}", e.pair, e.constants);
+                println!("Error occured in TLA model {:?} and state pair:\n{:#?}\nwith constants:\n{:#?}", e.model, e.pair, e.constants);
+                let diff = e.pair.diff();
+                if !diff.is_empty() {
+                    println!("Diff between states: {:#?}", diff);
+                }
                 println!("Apalache returned:\n{:#?}", e.apalache_error);
-                panic!("Apalache check failed")
             });
             thread_freed_rx
-                .send(())
+                .send(res.is_err())
                 .expect("Couldn't send the thread completion signal");
         });
     }
 
     while running_threads > 0 {
-        thread_freed_rx
+        if thread_freed_rx
             .recv()
-            .expect("Error while waiting for the thread completion signal");
+            .expect("Error while waiting for the thread completion signal")
+        {
+            panic!("An Apalache thread signalled an error")
+        }
         running_threads -= 1;
     }
 }

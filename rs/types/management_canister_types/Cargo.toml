@@ -1,5 +1,5 @@
 [package]
-name = "ic-management-canister-types"
+name = "ic-management-canister-types-private"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -12,7 +12,7 @@ candid = { workspace = true }
 ic-base-types = { path = "../base_types" }
 ic-btc-interface = { workspace = true }
 ic-btc-replica-types = { path = "../../bitcoin/replica_types" }
-ic-error-types = { path = "../error_types" }
+ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-protobuf = { path = "../../protobuf" }
 ic-utils = { path = "../../utils" }
 num-traits = { workspace = true }

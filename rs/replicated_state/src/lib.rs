@@ -70,17 +70,19 @@ pub use canister_state::{
     execution_state::Memory,
     num_bytes_try_from,
     system_state::{
-        memory_required_to_push_request, CallContext, CallContextAction, CallContextManager,
-        CallOrigin, CanisterMetrics, CanisterStatus, ExecutionTask, SystemState,
+        memory_usage_of_request, CallContext, CallContextAction, CallContextManager, CallOrigin,
+        CanisterMetrics, CanisterStatus, ExecutionTask, SystemState,
     },
-    CanisterQueues, CanisterState, EmbedderCache, ExecutionState, ExportedFunctions, Global,
-    NumWasmPages, SchedulerState,
+    CanisterQueues, CanisterState, EmbedderCache, ExecutionState, ExportedFunctions, NumWasmPages,
+    SchedulerState,
 };
 pub use metadata_state::{
     IngressHistoryState, NetworkTopology, Stream, SubnetTopology, SystemMetadata,
 };
 pub use page_map::{PageIndex, PageMap};
-pub use replicated_state::{InputQueueType, InputSource, ReplicatedState, StateError};
+pub use replicated_state::{
+    InputQueueType, InputSource, MessageMemoryUsage, ReplicatedState, StateError,
+};
 
 /// Encapsulates metrics related to errors that can occur on checkpoint loading.
 /// The intention is to pass an implementation of this trait along with the actual

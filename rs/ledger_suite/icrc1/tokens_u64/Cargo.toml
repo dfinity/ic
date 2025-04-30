@@ -1,8 +1,10 @@
 [package]
 name = "ic-icrc1-tokens-u64"
-version = "0.1.0"
-authors = ["The Internet Computer Project Developers"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }

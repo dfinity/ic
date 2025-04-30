@@ -33,6 +33,11 @@ use crate::{
 
 const QUIC_METRIC_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);
 
+/// The event loop is responsible for managing a single connection. The event loop will exist if 1 out of 3 conditions happen.
+///   1. The connection is broken
+///   2. The peer closed the connection (e.g. due to topology change, peer thinking the connection is broken)
+///   3. The connection is closed locally (e.g. due to topology change, new incoming connection from the same peer)
+///
 /// Note: The event loop is cancel-safe.
 pub async fn start_stream_acceptor(
     log: ReplicaLogger,

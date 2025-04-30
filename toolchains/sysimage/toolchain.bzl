@@ -342,6 +342,12 @@ def _ext4_image_impl(ctx):
     if len(ctx.attr.strip_paths) > 0:
         args += ["--strip-paths"] + ctx.attr.strip_paths
 
+    if ctx.attr.extra_files.items():
+        args.append("--extra-files")
+    for input_target, install_target in ctx.attr.extra_files.items():
+        args.append(input_target.files.to_list()[0].path + ":" + install_target)
+        inputs += input_target.files.to_list()
+
     _run_with_icos_wrapper(
         ctx,
         executable = tool.path,
@@ -369,6 +375,10 @@ ext4_image = _icos_build_rule(
         ),
         "subdir": attr.string(
             default = "/",
+        ),
+        "extra_files": attr.label_keyed_string_dict(
+            allow_files = True,
+            mandatory = False,
         ),
         "_build_ext4_image": attr.label(
             allow_files = True,

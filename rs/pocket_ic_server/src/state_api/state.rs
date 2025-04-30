@@ -6,11 +6,10 @@ use crate::pocket_ic::{
     AdvanceTimeAndTick, ApiResponse, EffectivePrincipal, PocketIc, ProcessCanisterHttpInternal,
 };
 use crate::state_api::canister_id::{self, DomainResolver, ResolvesDomain};
-use crate::state_api::routes::verify_cbor_content_header;
 use crate::{InstanceId, OpId, Operation};
+use async_trait::async_trait;
 use axum::{
-    body::Body,
-    extract::{DefaultBodyLimit, Path, Request as AxumRequest, State},
+    extract::{Request as AxumRequest, State},
     response::{IntoResponse, Response},
     routing::{get, post},
     Router,
@@ -25,38 +24,39 @@ use http::{
         ACCEPT_RANGES, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, COOKIE, DNT,
         IF_MODIFIED_SINCE, IF_NONE_MATCH, RANGE, USER_AGENT,
     },
-    HeaderName, Method, StatusCode, Uri,
+    HeaderName, Method, StatusCode,
 };
-use http_body_util::{BodyExt, Full, LengthLimitError, Limited};
-use hyper::body::{Bytes, Incoming};
-use hyper::{Request, Response as HyperResponse};
-use hyper_util::client::legacy::{connect::HttpConnector, Client};
-use ic_http_endpoints_public::cors_layer;
+use ic_bn_lib::http::body::buffer_body;
+use ic_bn_lib::http::headers::{X_IC_CANISTER_ID, X_REQUESTED_WITH, X_REQUEST_ID};
+use ic_bn_lib::http::proxy::proxy;
+use ic_bn_lib::http::{Client, Error as IcBnError};
 use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
-use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, PrincipalId, SubnetId};
+use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, NodeId, PrincipalId, SubnetId};
 use itertools::Itertools;
 use pocket_ic::common::rest::{
     CanisterHttpRequest, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
     HttpGatewayInfo, Topology,
 };
-use pocket_ic::{ErrorCode, UserError, WasmResult};
+use pocket_ic::RejectResponse;
+use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    fmt,
     path::PathBuf,
     str::FromStr,
     sync::atomic::AtomicU64,
     sync::Arc,
     time::{Duration, SystemTime},
 };
+use strum::Display;
 use tokio::{
     sync::mpsc::error::TryRecvError,
     sync::mpsc::Receiver,
     sync::{mpsc, Mutex, RwLock},
     task::{spawn, spawn_blocking, JoinHandle, JoinSet},
-    time::{self, sleep, Instant},
+    time::{self, sleep},
 };
+use tower::ServiceExt;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, error, trace};
 
@@ -230,7 +230,7 @@ impl PocketIcApiStateBuilder {
 pub enum OpOut {
     NoOutput,
     Time(u64),
-    CanisterResult(Result<WasmResult, UserError>),
+    CanisterResult(Result<Vec<u8>, RejectResponse>),
     CanisterId(CanisterId),
     Controllers(Vec<PrincipalId>),
     Cycles(u128),
@@ -255,24 +255,9 @@ pub enum PocketIcError {
     InvalidMockCanisterHttpResponses((usize, usize)),
     InvalidRejectCode(u64),
     SettingTimeIntoPast((u64, u64)),
-}
-
-impl From<Result<ic_state_machine_tests::WasmResult, ic_state_machine_tests::UserError>> for OpOut {
-    fn from(
-        r: Result<ic_state_machine_tests::WasmResult, ic_state_machine_tests::UserError>,
-    ) -> Self {
-        let res = {
-            match r {
-                Ok(ic_state_machine_tests::WasmResult::Reply(wasm)) => Ok(WasmResult::Reply(wasm)),
-                Ok(ic_state_machine_tests::WasmResult::Reject(s)) => Ok(WasmResult::Reject(s)),
-                Err(user_err) => Err(UserError {
-                    code: ErrorCode::try_from(user_err.code() as u64).unwrap(),
-                    description: user_err.description().to_string(),
-                }),
-            }
-        };
-        OpOut::CanisterResult(res)
-    }
+    Forbidden(String),
+    BlockmakerNotFound(NodeId),
+    BlockmakerContainedInFailed(NodeId),
 }
 
 impl std::fmt::Debug for OpOut {
@@ -302,6 +287,12 @@ impl std::fmt::Debug for OpOut {
             OpOut::Error(PocketIcError::SubnetNotFound(sid)) => {
                 write!(f, "SubnetNotFound({})", sid)
             }
+            OpOut::Error(PocketIcError::BlockmakerNotFound(nid)) => {
+                write!(f, "BlockmakerNotFound({})", nid)
+            }
+            OpOut::Error(PocketIcError::BlockmakerContainedInFailed(nid)) => {
+                write!(f, "BlockmakerContainedInFailed({})", nid)
+            }
             OpOut::Error(PocketIcError::RequestRoutingError(msg)) => {
                 write!(f, "RequestRoutingError({:?})", msg)
             }
@@ -327,6 +318,9 @@ impl std::fmt::Debug for OpOut {
             }
             OpOut::Error(PocketIcError::SettingTimeIntoPast((current, set))) => {
                 write!(f, "SettingTimeIntoPast(current={},set={})", current, set)
+            }
+            OpOut::Error(PocketIcError::Forbidden(msg)) => {
+                write!(f, "Forbidden({})", msg)
             }
             OpOut::Bytes(bytes) => write!(f, "Bytes({})", base64::encode(bytes)),
             OpOut::StableMemBytes(bytes) => write!(f, "StableMemory({})", base64::encode(bytes)),
@@ -421,20 +415,6 @@ pub trait HasStateLabel {
     fn get_state_label(&self) -> StateLabel;
 }
 
-enum ApiVersion {
-    V2,
-    V3,
-}
-
-impl std::fmt::Display for ApiVersion {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ApiVersion::V2 => write!(f, "v2"),
-            ApiVersion::V3 => write!(f, "v3"),
-        }
-    }
-}
-
 fn received_stop_signal(rx: &mut Receiver<()>) -> bool {
     match rx.try_recv() {
         Ok(_) | Err(TryRecvError::Disconnected) => true,
@@ -444,9 +424,11 @@ fn received_stop_signal(rx: &mut Receiver<()>) -> bool {
 
 // ADAPTED from ic-gateway
 
-const HEADER_IC_CANISTER_ID: HeaderName = HeaderName::from_static("x-ic-canister-id");
 const MAX_REQUEST_BODY_SIZE: usize = 10 * 1_048_576;
 const MINUTE: Duration = Duration::from_secs(60);
+
+const X_OC_JWT: HeaderName = HeaderName::from_static("x-oc-jwt");
+const X_OC_API_KEY: HeaderName = HeaderName::from_static("x-oc-api-key");
 
 fn layer(methods: &[Method]) -> CorsLayer {
     CorsLayer::new()
@@ -456,7 +438,8 @@ fn layer(methods: &[Method]) -> CorsLayer {
             ACCEPT_RANGES,
             CONTENT_LENGTH,
             CONTENT_RANGE,
-            HEADER_IC_CANISTER_ID,
+            X_REQUEST_ID,
+            X_IC_CANISTER_ID,
         ])
         .allow_headers([
             USER_AGENT,
@@ -467,47 +450,80 @@ fn layer(methods: &[Method]) -> CorsLayer {
             CONTENT_TYPE,
             RANGE,
             COOKIE,
-            HEADER_IC_CANISTER_ID,
+            X_REQUESTED_WITH,
+            X_IC_CANISTER_ID,
+        ])
+        .max_age(10 * MINUTE)
+}
+
+fn http_gw_layer(methods: &[Method]) -> CorsLayer {
+    CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(methods.to_vec())
+        .expose_headers([
+            ACCEPT_RANGES,
+            CONTENT_LENGTH,
+            CONTENT_RANGE,
+            X_REQUEST_ID,
+            X_IC_CANISTER_ID,
+        ])
+        .allow_headers([
+            USER_AGENT,
+            DNT,
+            IF_NONE_MATCH,
+            IF_MODIFIED_SINCE,
+            CACHE_CONTROL,
+            CONTENT_TYPE,
+            RANGE,
+            COOKIE,
+            X_REQUESTED_WITH,
+            X_IC_CANISTER_ID,
+            X_OC_JWT,
+            X_OC_API_KEY,
         ])
         .max_age(10 * MINUTE)
 }
 
 // Categorized possible causes for request processing failures
 // Not using Error as inner type since it's not cloneable
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Display)]
 enum ErrorCause {
+    ClientBodyTooLarge,
+    ClientBodyTimeout,
+    ClientBodyError(String),
     ConnectionFailure(String),
-    UnableToReadBody(String),
-    RequestTooLarge,
     CanisterIdNotFound,
+    Other(String),
 }
 
 impl ErrorCause {
     const fn status_code(&self) -> StatusCode {
         match self {
+            Self::ClientBodyTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
+            Self::ClientBodyTimeout => StatusCode::REQUEST_TIMEOUT,
+            Self::ClientBodyError(_) => StatusCode::BAD_REQUEST,
             Self::ConnectionFailure(_) => StatusCode::BAD_GATEWAY,
-            Self::UnableToReadBody(_) => StatusCode::REQUEST_TIMEOUT,
-            Self::RequestTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             Self::CanisterIdNotFound => StatusCode::BAD_REQUEST,
+            Self::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
     fn details(&self) -> Option<String> {
         match self {
+            Self::ClientBodyError(x) => Some(x.clone()),
             Self::ConnectionFailure(x) => Some(x.clone()),
-            Self::UnableToReadBody(x) => Some(x.clone()),
+            Self::Other(x) => Some(x.clone()),
             _ => None,
         }
     }
-}
 
-impl fmt::Display for ErrorCause {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::ConnectionFailure(_) => write!(f, "connection_failure"),
-            Self::UnableToReadBody(_) => write!(f, "unable_to_read_body"),
-            Self::RequestTooLarge => write!(f, "request_too_large"),
-            Self::CanisterIdNotFound => write!(f, "canister_id_not_found"),
+    // Convert from client-side error
+    pub fn from_client_error(e: IcBnError) -> Self {
+        match e {
+            IcBnError::BodyReadingFailed(v) => Self::ClientBodyError(v),
+            IcBnError::BodyTimedOut => Self::ClientBodyTimeout,
+            IcBnError::BodyTooBig => Self::ClientBodyTooLarge,
+            _ => Self::Other(e.to_string()),
         }
     }
 }
@@ -526,9 +542,25 @@ impl IntoResponse for ErrorCause {
     }
 }
 
+#[derive(Debug)]
+struct ReqwestClient(reqwest::Client);
+
+impl ReqwestClient {
+    pub fn new(client: reqwest::Client) -> Self {
+        Self(client)
+    }
+}
+
+#[async_trait]
+impl Client for ReqwestClient {
+    async fn execute(&self, req: reqwest::Request) -> Result<reqwest::Response, reqwest::Error> {
+        self.0.execute(req).await
+    }
+}
+
 pub(crate) struct HandlerState {
     http_gateway_client: HttpGatewayClient,
-    backend_client: Client<HttpConnector, Body>,
+    backend_client: Arc<dyn Client>,
     resolver: DomainResolver,
     replica_url: String,
 }
@@ -536,7 +568,7 @@ pub(crate) struct HandlerState {
 impl HandlerState {
     fn new(
         http_gateway_client: HttpGatewayClient,
-        backend_client: Client<HttpConnector, Body>,
+        backend_client: Arc<dyn Client>,
         resolver: DomainResolver,
         replica_url: String,
     ) -> Self {
@@ -553,20 +585,6 @@ impl HandlerState {
     }
 }
 
-enum HandlerResponse {
-    ResponseBody(Response<Body>),
-    ResponseIncoming(Response<Incoming>),
-}
-
-impl IntoResponse for HandlerResponse {
-    fn into_response(self) -> Response {
-        match self {
-            HandlerResponse::ResponseBody(response) => response.into_response(),
-            HandlerResponse::ResponseIncoming(response) => response.into_response(),
-        }
-    }
-}
-
 // Main HTTP->IC request handler
 async fn handler(
     State(state): State<Arc<HandlerState>>,
@@ -574,7 +592,7 @@ async fn handler(
     query_param_canister_id: Option<canister_id::QueryParam>,
     referer_host_canister_id: Option<canister_id::RefererHeaderHost>,
     referer_query_param_canister_id: Option<canister_id::RefererHeaderQueryParam>,
-    mut request: AxumRequest,
+    request: AxumRequest,
 ) -> Result<impl IntoResponse, ErrorCause> {
     // Resolve the domain
     let lookup =
@@ -593,7 +611,7 @@ async fn handler(
         .ok_or(ErrorCause::CanisterIdNotFound);
 
     if request.uri().path().starts_with("/_/") && canister_id.is_err() {
-        *request.uri_mut() = Uri::from_str(&format!(
+        let url = Url::parse(&format!(
             "{}{}",
             state.replica_url,
             request
@@ -603,28 +621,20 @@ async fn handler(
                 .unwrap_or_default()
         ))
         .unwrap();
-        state
-            .backend_client
-            .request(request)
+        proxy(url, request, &state.backend_client.clone())
             .await
-            .map(HandlerResponse::ResponseIncoming)
             .map_err(|e| ErrorCause::ConnectionFailure(e.to_string()))
     } else {
         let (parts, body) = request.into_parts();
 
         // Collect the request body up to the limit
-        let body = Limited::new(body, MAX_REQUEST_BODY_SIZE)
-            .collect()
-            .await
-            .map_err(|e| {
-                // TODO improve the inferring somehow
-                e.downcast_ref::<LengthLimitError>().map_or_else(
-                    || ErrorCause::UnableToReadBody(e.to_string()),
-                    |_| ErrorCause::RequestTooLarge,
-                )
-            })?
-            .to_bytes()
-            .to_vec();
+        let body = buffer_body(body, MAX_REQUEST_BODY_SIZE, Duration::from_secs(60)).await;
+        let body = match body {
+            Ok(v) => v,
+            Err(e) => {
+                return Err(ErrorCause::from_client_error(e));
+            }
+        };
 
         let args = HttpGatewayRequestArgs {
             canister_request: CanisterRequest::from_parts(parts, body),
@@ -639,10 +649,7 @@ async fn handler(
             req.send().await
         };
 
-        // Convert it into Axum response
-        let response = resp.canister_response.into_response();
-
-        Ok(HandlerResponse::ResponseBody(response))
+        Ok(resp.canister_response.into_response())
     }
 }
 
@@ -738,15 +745,15 @@ impl ApiState {
         Self::read_result(self.graph.clone(), state_label, op_id)
     }
 
-    pub async fn add_instance<F>(&self, f: F) -> (InstanceId, Topology)
+    pub async fn add_instance<F>(&self, f: F) -> Result<(InstanceId, Topology), String>
     where
-        F: FnOnce(u64) -> PocketIc + std::marker::Send + 'static,
+        F: FnOnce(u64) -> Result<PocketIc, String> + std::marker::Send + 'static,
     {
         let seed = self.seed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         // create the instance using `spawn_blocking` before acquiring a lock
         let instance = tokio::task::spawn_blocking(move || f(seed))
             .await
-            .expect("Failed to create PocketIC instance");
+            .expect("Failed to create PocketIC instance")?;
         let topology = instance.topology();
         let mut instances = self.instances.write().await;
         let instance_id = instances.len();
@@ -754,7 +761,7 @@ impl ApiState {
             progress_thread: None,
             state: InstanceState::Available(instance),
         }));
-        (instance_id, topology)
+        Ok((instance_id, topology))
     }
 
     pub async fn delete_instance(&self, instance_id: InstanceId) {
@@ -794,140 +801,22 @@ impl ApiState {
         &self,
         http_gateway_config: HttpGatewayConfig,
     ) -> Result<HttpGatewayInfo, String> {
-        async fn handler_status(
-            State(replica_url): State<String>,
-            bytes: Bytes,
-        ) -> Result<HyperResponse<Incoming>, ErrorCause> {
-            let client =
-                Client::builder(hyper_util::rt::TokioExecutor::new()).build(HttpConnector::new());
-            let url = format!("{}/api/v2/status", replica_url);
-            let req = Request::builder()
-                .uri(url)
-                .header(CONTENT_TYPE, "application/cbor")
-                .body(Full::<Bytes>::new(bytes))
-                .unwrap();
-            client
-                .request(req)
-                .await
-                .map_err(|e| ErrorCause::ConnectionFailure(e.to_string()))
-        }
-
-        async fn handler_api_canister(
-            api_version: ApiVersion,
-            replica_url: String,
-            effective_canister_id: CanisterId,
-            endpoint: &str,
-            bytes: Bytes,
-        ) -> Result<HyperResponse<Incoming>, ErrorCause> {
-            let client =
-                Client::builder(hyper_util::rt::TokioExecutor::new()).build(HttpConnector::new());
+        async fn proxy_handler(
+            State((replica_url, client)): State<(String, Arc<dyn Client>)>,
+            request: AxumRequest,
+        ) -> Result<Response, ErrorCause> {
             let url = format!(
-                "{}/api/{}/canister/{}/{}",
-                replica_url, api_version, effective_canister_id, endpoint
+                "{}{}",
+                replica_url,
+                request
+                    .uri()
+                    .path_and_query()
+                    .map(|p| p.as_str())
+                    .unwrap_or_default()
             );
-            let req = Request::builder()
-                .method(Method::POST)
-                .uri(url)
-                .header(CONTENT_TYPE, "application/cbor")
-                .body(Full::<Bytes>::new(bytes))
-                .unwrap();
-            client
-                .request(req)
+            proxy(Url::parse(&url).unwrap(), request, &client)
                 .await
                 .map_err(|e| ErrorCause::ConnectionFailure(e.to_string()))
-        }
-
-        async fn handler_api_subnet(
-            api_version: ApiVersion,
-            replica_url: String,
-            subnet_id: SubnetId,
-            endpoint: &str,
-            bytes: Bytes,
-        ) -> Result<HyperResponse<Incoming>, ErrorCause> {
-            let client =
-                Client::builder(hyper_util::rt::TokioExecutor::new()).build(HttpConnector::new());
-            let url = format!(
-                "{}/api/{}/subnet/{}/{}",
-                replica_url, api_version, subnet_id, endpoint
-            );
-            let req = Request::builder()
-                .method(Method::POST)
-                .uri(url)
-                .header(CONTENT_TYPE, "application/cbor")
-                .body(Full::<Bytes>::new(bytes))
-                .unwrap();
-            client
-                .request(req)
-                .await
-                .map_err(|e| ErrorCause::ConnectionFailure(e.to_string()))
-        }
-
-        async fn handler_call_v2(
-            State(replica_url): State<String>,
-            Path(effective_canister_id): Path<CanisterId>,
-            bytes: Bytes,
-        ) -> Result<HyperResponse<Incoming>, ErrorCause> {
-            handler_api_canister(
-                ApiVersion::V2,
-                replica_url,
-                effective_canister_id,
-                "call",
-                bytes,
-            )
-            .await
-        }
-
-        async fn handler_call_v3(
-            State(replica_url): State<String>,
-            Path(effective_canister_id): Path<CanisterId>,
-            bytes: Bytes,
-        ) -> Result<HyperResponse<Incoming>, ErrorCause> {
-            handler_api_canister(
-                ApiVersion::V3,
-                replica_url,
-                effective_canister_id,
-                "call",
-                bytes,
-            )
-            .await
-        }
-
-        async fn handler_query(
-            State(replica_url): State<String>,
-            Path(effective_canister_id): Path<CanisterId>,
-            bytes: Bytes,
-        ) -> Result<HyperResponse<Incoming>, ErrorCause> {
-            handler_api_canister(
-                ApiVersion::V2,
-                replica_url,
-                effective_canister_id,
-                "query",
-                bytes,
-            )
-            .await
-        }
-
-        async fn handler_canister_read_state(
-            State(replica_url): State<String>,
-            Path(effective_canister_id): Path<CanisterId>,
-            bytes: Bytes,
-        ) -> Result<HyperResponse<Incoming>, ErrorCause> {
-            handler_api_canister(
-                ApiVersion::V2,
-                replica_url,
-                effective_canister_id,
-                "read_state",
-                bytes,
-            )
-            .await
-        }
-
-        async fn handler_subnet_read_state(
-            State(replica_url): State<String>,
-            Path(subnet_id): Path<SubnetId>,
-            bytes: Bytes,
-        ) -> Result<HyperResponse<Incoming>, ErrorCause> {
-            handler_api_subnet(ApiVersion::V2, replica_url, subnet_id, "read_state", bytes).await
         }
 
         let https_config = if let Some(ref https_config) = http_gateway_config.https_config {
@@ -966,7 +855,10 @@ impl ApiState {
             .with_url(replica_url.clone())
             .build()
             .unwrap();
-        agent.fetch_root_key().await.map_err(|e| e.to_string())?;
+        time::timeout(DEFAULT_SYNC_WAIT_DURATION, agent.fetch_root_key())
+            .await
+            .map_err(|_| format!("Timed out fetching root key from {}", replica_url))?
+            .map_err(|e| e.to_string())?;
 
         let replica_url = replica_url.trim_end_matches('/').to_string();
 
@@ -984,67 +876,70 @@ impl ApiState {
                 .with_agent(agent)
                 .build()
                 .unwrap();
-            let backend_client =
-                Client::builder(hyper_util::rt::TokioExecutor::new()).build(HttpConnector::new());
             let domain_resolver = DomainResolver::new(domains);
+            let backend_client = Arc::new(ReqwestClient::new(reqwest::Client::new()));
             let state_handler = Arc::new(HandlerState::new(
                 http_gateway_client,
-                backend_client,
+                backend_client.clone(),
                 domain_resolver,
                 replica_url.clone(),
             ));
 
+            // ADAPTED from ic-gateway
+            let cors_post = layer(&[Method::POST]);
+            let cors_get = layer(&[Method::HEAD, Method::GET]);
+            // IC API proxy routers
             let router_api_v2 = Router::new()
                 .route(
-                    "/canister/:ecid/call",
-                    post(handler_call_v2)
-                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                    "/canister/{principal}/query",
+                    post(proxy_handler).layer(cors_post.clone()),
                 )
                 .route(
-                    "/canister/:ecid/query",
-                    post(handler_query)
-                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                    "/canister/{principal}/call",
+                    post(proxy_handler).layer(cors_post.clone()),
                 )
                 .route(
-                    "/canister/:ecid/read_state",
-                    post(handler_canister_read_state)
-                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                    "/canister/{principal}/read_state",
+                    post(proxy_handler).layer(cors_post.clone()),
                 )
                 .route(
-                    "/subnet/:sid/read_state",
-                    post(handler_subnet_read_state)
-                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                    "/subnet/{principal}/read_state",
+                    post(proxy_handler).layer(cors_post.clone()),
                 )
-                .route("/status", get(handler_status))
-                .fallback(|| async { (StatusCode::NOT_FOUND, "") });
+                .route("/status", get(proxy_handler).layer(cors_get.clone()))
+                .fallback(|| async { (StatusCode::NOT_FOUND, "") })
+                .with_state((format!("{}/api/v2", replica_url), backend_client.clone()));
             let router_api_v3 = Router::new()
                 .route(
-                    "/canister/:ecid/call",
-                    post(handler_call_v3)
-                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                    "/canister/{principal}/call",
+                    post(proxy_handler).layer(cors_post.clone()),
                 )
-                .fallback(|| async { (StatusCode::NOT_FOUND, "") });
+                .fallback(|| async { (StatusCode::NOT_FOUND, "") })
+                .with_state((format!("{}/api/v3", replica_url), backend_client.clone()));
+
+            let router_http = Router::new().fallback(
+                post(handler)
+                    .get(handler)
+                    .put(handler)
+                    .delete(handler)
+                    .patch(handler)
+                    .layer(http_gw_layer(&[
+                        Method::HEAD,
+                        Method::GET,
+                        Method::POST,
+                        Method::PUT,
+                        Method::DELETE,
+                        Method::PATCH,
+                    ]))
+                    .with_state(state_handler),
+            );
+            // Top-level router
             let router = Router::new()
                 .nest("/api/v2", router_api_v2)
                 .nest("/api/v3", router_api_v3)
-                .fallback(
-                    post(handler)
-                        .get(handler)
-                        .put(handler)
-                        .delete(handler)
-                        .layer(layer(&[
-                            Method::HEAD,
-                            Method::GET,
-                            Method::POST,
-                            Method::PUT,
-                            Method::DELETE,
-                        ]))
-                        .with_state(state_handler),
-                )
-                .layer(DefaultBodyLimit::disable())
-                .layer(cors_layer())
-                .with_state(replica_url)
+                .fallback(|request: AxumRequest| async move { router_http.oneshot(request).await })
                 .into_make_service();
+            // END ADAPTED from ic-gateway
 
             match https_config {
                 Some(config) => {
@@ -1124,7 +1019,6 @@ impl ApiState {
                 debug!("Starting auto progress for instance {}.", instance_id);
                 let mut now = SystemTime::now();
                 loop {
-                    let start = Instant::now();
                     let old = std::mem::replace(&mut now, SystemTime::now());
                     let op = AdvanceTimeAndTick(now.duration_since(old).unwrap_or_default());
                     if Self::execute_operation(
@@ -1152,12 +1046,8 @@ impl ApiState {
                     {
                         break;
                     }
-                    let duration = start.elapsed();
-                    sleep(std::cmp::max(
-                        duration,
-                        std::cmp::max(artificial_delay, MIN_OPERATION_DELAY),
-                    ))
-                    .await;
+                    let sleep_duration = std::cmp::max(artificial_delay, MIN_OPERATION_DELAY);
+                    sleep(sleep_duration).await;
                     if received_stop_signal(&mut rx) {
                         break;
                     }
@@ -1169,6 +1059,12 @@ impl ApiState {
         } else {
             Err("Auto progress mode has already been enabled.".to_string())
         }
+    }
+
+    pub async fn get_auto_progress(&self, instance_id: InstanceId) -> bool {
+        let instances = self.instances.read().await;
+        let instance = instances[instance_id].lock().await;
+        instance.progress_thread.is_some()
     }
 
     pub async fn stop_progress(&self, instance_id: InstanceId) {

@@ -6,7 +6,6 @@ use ic_sns_governance::pb::v1::{
     upgrade_journal_entry::{Event, UpgradeStepsRefreshed},
     DisburseMaturityInProgress, Neuron, UpgradeJournal, UpgradeJournalEntry,
 };
-use ic_sns_governance_api::pb::v1 as api;
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
 use std::collections::HashSet;
@@ -66,7 +65,7 @@ fn test_set_time_warp() {
 fn test_populate_finalize_disbursement_timestamp_seconds() {
     // Step 1: prepare a neuron with 2 in progress disbursement, one with
     // finalize_disbursement_timestamp_seconds as None, and the other has incorrect timestamp.
-    let mut governance_proto = GovernanceProto {
+    let mut governance_proto = sns_gov_pb::Governance {
         neurons: btreemap! {
             "1".to_string() => Neuron {
                 disburse_maturity_in_progress: vec![
@@ -91,7 +90,7 @@ fn test_populate_finalize_disbursement_timestamp_seconds() {
     populate_finalize_disbursement_timestamp_seconds(&mut governance_proto);
 
     // Step 3: verifies that both disbursements have the correct finalization timestamps.
-    let expected_governance_proto = GovernanceProto {
+    let expected_governance_proto = sns_gov_pb::Governance {
         neurons: btreemap! {
             "1".to_string() => Neuron {
                 disburse_maturity_in_progress: vec![
@@ -134,11 +133,9 @@ fn test_upgrade_journal() {
         }],
     };
 
-    let journal = api::UpgradeJournal::from(journal);
-
     // Currently, the `/journal` Http endpoint serves the entries directly, rather than the whole
     // journal object.
-    let http_response = serve_journal(&journal.entries);
+    let http_response = serve_journal(journal);
     let expected_headers: HashSet<(_, _)> = HashSet::from_iter([
         ("Content-Type".to_string(), "application/json".to_string()),
         ("Content-Length".to_string(), "277".to_string()),

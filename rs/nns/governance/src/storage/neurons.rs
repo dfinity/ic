@@ -2,7 +2,8 @@ use crate::{
     neuron::{DecomposedNeuron, Neuron},
     neuron_store::NeuronStoreError,
     pb::v1::{
-        neuron::Followees, AbridgedNeuron, BallotInfo, KnownNeuronData, NeuronStakeTransfer, Topic,
+        neuron::Followees, AbridgedNeuron, BallotInfo, KnownNeuronData, MaturityDisbursement,
+        NeuronStakeTransfer, Topic,
     },
     storage::validate_stable_btree_map,
 };
@@ -38,6 +39,7 @@ pub(crate) struct StableNeuronStoreBuilder<Memory> {
     pub hot_keys: Memory,
     pub recent_ballots: Memory,
     pub followees: Memory,
+    pub maturity_disbursements: Memory,
 
     // Singletons
     pub known_neuron_data: Memory,
@@ -51,6 +53,7 @@ pub(crate) struct NeuronSections {
     pub hot_keys: bool,
     pub recent_ballots: bool,
     pub followees: bool,
+    pub maturity_disbursements: bool,
     pub known_neuron_data: bool,
     pub transfer: bool,
 }
@@ -60,6 +63,7 @@ impl NeuronSections {
         hot_keys: false,
         recent_ballots: false,
         followees: false,
+        maturity_disbursements: false,
         known_neuron_data: false,
         transfer: false,
     };
@@ -68,6 +72,7 @@ impl NeuronSections {
         hot_keys: true,
         recent_ballots: true,
         followees: true,
+        maturity_disbursements: true,
         known_neuron_data: true,
         transfer: true,
     };
@@ -85,6 +90,7 @@ where
             hot_keys,
             recent_ballots,
             followees,
+            maturity_disbursements,
 
             // Singletons
             known_neuron_data,
@@ -98,6 +104,7 @@ where
             hot_keys_map: StableBTreeMap::init(hot_keys),
             followees_map: StableBTreeMap::init(followees),
             recent_ballots_map: StableBTreeMap::init(recent_ballots),
+            maturity_disbursements_map: StableBTreeMap::init(maturity_disbursements),
 
             // Singletons
             known_neuron_data_map: StableBTreeMap::init(known_neuron_data),
@@ -116,6 +123,8 @@ where
     hot_keys_map: StableBTreeMap<(NeuronId, /* index */ u64), Principal, Memory>,
     recent_ballots_map: StableBTreeMap<(NeuronId, /* index */ u64), BallotInfo, Memory>,
     followees_map: StableBTreeMap<FolloweesKey, NeuronId, Memory>,
+    maturity_disbursements_map:
+        StableBTreeMap<(NeuronId, /* index */ u64), MaturityDisbursement, Memory>,
 
     // Singletons
     known_neuron_data_map: StableBTreeMap<NeuronId, KnownNeuronData, Memory>,
@@ -172,6 +181,7 @@ where
             hot_keys,
             recent_ballots,
             followees,
+            maturity_disbursements_in_progress,
 
             known_neuron_data,
             transfer,
@@ -210,6 +220,11 @@ where
         );
         update_repeated_field(neuron_id, recent_ballots, &mut self.recent_ballots_map);
         self.update_followees(neuron_id, followees);
+        update_repeated_field(
+            neuron_id,
+            maturity_disbursements_in_progress,
+            &mut self.maturity_disbursements_map,
+        );
 
         update_singleton_field(
             neuron_id,
@@ -288,6 +303,24 @@ where
         Ok(())
     }
 
+    /// Updates the main part of an existing neuron.
+    pub fn with_main_part_mut<R>(
+        &mut self,
+        neuron_id: NeuronId,
+        f: impl FnOnce(&mut AbridgedNeuron) -> R,
+    ) -> Result<R, NeuronStoreError> {
+        let mut main_neuron_part = self
+            .main
+            .get(&neuron_id)
+            // Deal with no entry by blaming it on the caller.
+            .ok_or_else(|| NeuronStoreError::not_found(neuron_id))?;
+
+        let result = f(&mut main_neuron_part);
+        self.main.insert(neuron_id, main_neuron_part);
+
+        Ok(result)
+    }
+
     /// Changes an existing entry.
     ///
     /// If the entry does not already exist, returns a NotFound Err.
@@ -305,6 +338,7 @@ where
             hot_keys,
             recent_ballots,
             followees,
+            maturity_disbursements_in_progress,
 
             known_neuron_data,
             transfer,
@@ -350,8 +384,15 @@ where
         if followees != old_neuron.followees {
             self.update_followees(neuron_id, followees);
         }
+        if maturity_disbursements_in_progress != old_neuron.maturity_disbursements_in_progress {
+            update_repeated_field(
+                neuron_id,
+                maturity_disbursements_in_progress,
+                &mut self.maturity_disbursements_map,
+            );
+        }
 
-        if known_neuron_data != old_neuron.known_neuron_data {
+        if known_neuron_data.as_ref() != old_neuron.known_neuron_data() {
             update_singleton_field(
                 neuron_id,
                 known_neuron_data,
@@ -420,6 +461,7 @@ where
         // We want our ranges for sub iterators to include start and end
         let hotkeys_range = (start, u64::MIN)..=(end, u64::MAX);
         let ballots_range = (start, u64::MIN)..=(end, u64::MAX);
+        let maturity_disbursements_range = (start, u64::MIN)..=(end, u64::MAX);
 
         let followees_range = FolloweesKey {
             follower_id: start,
@@ -440,6 +482,10 @@ where
         let mut hot_keys_iter = self.hot_keys_map.range(hotkeys_range).peekable();
         let mut recent_ballots_iter = self.recent_ballots_map.range(ballots_range).peekable();
         let mut followees_iter = self.followees_map.range(followees_range).peekable();
+        let mut maturity_disbursements_iter = self
+            .maturity_disbursements_map
+            .range(maturity_disbursements_range)
+            .peekable();
         let mut known_neuron_data_iter = self.known_neuron_data_map.range(range.clone()).peekable();
         let mut transfer_iter = self.transfer_map.range(range).peekable();
 
@@ -479,6 +525,17 @@ where
                 vec![]
             };
 
+            let maturity_disbursements_in_progress = if sections.maturity_disbursements {
+                collect_values_for_neuron_from_peekable_range(
+                    &mut maturity_disbursements_iter,
+                    main_neuron_id,
+                    |((neuron_id, _), _)| *neuron_id,
+                    |((_, _), maturity_disbursement)| maturity_disbursement,
+                )
+            } else {
+                vec![]
+            };
+
             let current_known_neuron_data = if sections.known_neuron_data {
                 collect_values_for_neuron_from_peekable_range(
                     &mut known_neuron_data_iter,
@@ -509,6 +566,7 @@ where
                 hot_keys,
                 recent_ballots: ballots,
                 followees: self.reconstitute_followees_from_range(followees.into_iter()),
+                maturity_disbursements_in_progress,
                 known_neuron_data: current_known_neuron_data,
                 transfer: current_transfer,
             })
@@ -531,6 +589,7 @@ where
         validate_stable_btree_map(&self.hot_keys_map);
         validate_stable_btree_map(&self.recent_ballots_map);
         validate_stable_btree_map(&self.followees_map);
+        validate_stable_btree_map(&self.maturity_disbursements_map);
         validate_stable_btree_map(&self.known_neuron_data_map);
         validate_stable_btree_map(&self.transfer_map);
     }
@@ -558,6 +617,11 @@ where
         } else {
             HashMap::new()
         };
+        let maturity_disbursements = if sections.maturity_disbursements {
+            read_repeated_field(neuron_id, &self.maturity_disbursements_map)
+        } else {
+            Vec::new()
+        };
 
         let known_neuron_data = if sections.known_neuron_data {
             self.known_neuron_data_map.get(&neuron_id)
@@ -580,6 +644,7 @@ where
                 .collect(),
             recent_ballots,
             followees,
+            maturity_disbursements_in_progress: maturity_disbursements,
 
             known_neuron_data,
             transfer,
@@ -701,6 +766,7 @@ pub(crate) fn new_heap_based() -> StableNeuronStore<VectorMemory> {
         hot_keys: VectorMemory::default(),
         recent_ballots: VectorMemory::default(),
         followees: VectorMemory::default(),
+        maturity_disbursements: VectorMemory::default(),
 
         // Singletons
         known_neuron_data: VectorMemory::default(),
@@ -748,6 +814,18 @@ impl Storable for BallotInfo {
         max_size: 48,
         is_fixed_size: false,
     };
+}
+
+impl Storable for MaturityDisbursement {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::from(self.encode_to_vec())
+    }
+
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
+        Self::decode(&bytes[..]).expect("Unable to deserialize Neuron.")
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 impl Storable for KnownNeuronData {

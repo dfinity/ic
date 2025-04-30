@@ -5,7 +5,6 @@ pub mod batch_delivery;
 pub(crate) mod block_maker;
 pub mod bounds;
 mod catchup_package_maker;
-pub mod dkg_key_manager;
 mod finalizer;
 pub mod malicious_consensus;
 pub(crate) mod metrics;
@@ -23,19 +22,16 @@ pub mod validator;
 #[cfg(all(test, feature = "proptest"))]
 mod proptests;
 
-use crate::{
-    bouncer_metrics::BouncerMetrics,
-    consensus::{
-        block_maker::BlockMaker, catchup_package_maker::CatchUpPackageMaker,
-        dkg_key_manager::DkgKeyManager, finalizer::Finalizer, metrics::ConsensusMetrics,
-        notary::Notary, payload_builder::PayloadBuilderImpl, priority::new_bouncer, purger::Purger,
-        random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
-        share_aggregator::ShareAggregator, validator::Validator,
-    },
+use crate::consensus::{
+    block_maker::BlockMaker, catchup_package_maker::CatchUpPackageMaker, finalizer::Finalizer,
+    metrics::ConsensusMetrics, notary::Notary, payload_builder::PayloadBuilderImpl,
+    priority::new_bouncer, purger::Purger, random_beacon_maker::RandomBeaconMaker,
+    random_tape_maker::RandomTapeMaker, share_aggregator::ShareAggregator, validator::Validator,
 };
+use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::{
-    crypto::ConsensusCrypto, get_notarization_delay_settings, membership::Membership,
-    pool_reader::PoolReader, RoundRobin,
+    bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto, get_notarization_delay_settings,
+    membership::Membership, pool_reader::PoolReader, RoundRobin,
 };
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
@@ -83,10 +79,6 @@ enum ConsensusSubcomponent {
     Aggregator,
     Purger,
 }
-
-/// When purging consensus or certification artifacts, we always keep a
-/// minimum chain length below the catch-up height.
-pub(crate) const MINIMUM_CHAIN_LENGTH: u64 = 50;
 
 /// Describe expected version and artifact version when there is a mismatch.
 #[derive(Debug)]
@@ -147,6 +139,7 @@ impl ConsensusImpl {
         self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
         canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
         query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
+        vetkd_payload_builder: Arc<dyn BatchPayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         idkg_pool: Arc<RwLock<dyn IDkgPool>>,
         dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
@@ -175,6 +168,7 @@ impl ConsensusImpl {
             self_validating_payload_builder,
             canister_http_payload_builder,
             query_stats_payload_builder,
+            vetkd_payload_builder,
             metrics_registry.clone(),
             logger.clone(),
         ));
@@ -685,6 +679,7 @@ mod tests {
             Arc::new(FakeXNetPayloadBuilder::new()),
             Arc::new(FakeSelfValidatingPayloadBuilder::new()),
             Arc::new(FakeCanisterHttpPayloadBuilder::new()),
+            Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             dkg_pool,
             idkg_pool,

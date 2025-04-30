@@ -16,9 +16,9 @@ use ic_logger::{warn, ReplicaLogger};
 use ic_protobuf::{proxy::ProtoProxy, types::v1 as pb};
 use ic_quic_transport::Transport;
 use ic_types::{
-    artifact::{ConsensusMessageId, IngressMessageId},
+    artifact::ConsensusMessageId,
     consensus::{BlockPayload, ConsensusMessage},
-    messages::SignedIngress,
+    messages::{SignedIngress, SignedRequestBytes},
     NodeId,
 };
 use rand::{rngs::SmallRng, seq::IteratorRandom, SeedableRng};
@@ -26,7 +26,10 @@ use tokio::time::{sleep_until, timeout_at, Instant};
 
 use super::{
     metrics::{FetchStrippedConsensusArtifactMetrics, IngressSenderMetrics},
-    types::rpc::{GetIngressMessageInBlockRequest, GetIngressMessageInBlockResponse},
+    types::{
+        rpc::{GetIngressMessageInBlockRequest, GetIngressMessageInBlockResponse},
+        SignedIngressId,
+    },
 };
 
 type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
@@ -58,13 +61,19 @@ impl Pools {
     /// Retrieves the request [`SignedIngress`] from either of the pools.
     fn get(
         &self,
-        ingress_message_id: &IngressMessageId,
+        signed_ingress_id: &SignedIngressId,
         block_proposal_id: &ConsensusMessageId,
-    ) -> Result<SignedIngress, PoolsAccessError> {
+    ) -> Result<SignedRequestBytes, PoolsAccessError> {
+        let ingress_message_id = &signed_ingress_id.ingress_message_id;
+
         // First check if the requested ingress message exists in the Ingress Pool.
         if let Some(ingress_message) = self.ingress_pool.read().unwrap().get(ingress_message_id) {
-            self.metrics.ingress_messages_in_ingress_pool.inc();
-            return Ok(ingress_message);
+            // Make sure that this is the correct ingress message. [`IngressMessageId`] does _not_
+            // uniquely identify ingress messages, we thus need to perform an extra check.
+            if SignedIngressId::from(&ingress_message) == *signed_ingress_id {
+                self.metrics.ingress_messages_in_ingress_pool.inc();
+                return Ok(ingress_message.into());
+            }
         }
 
         // Otherwise find the block which should contain the ingress message.
@@ -83,12 +92,22 @@ impl Pools {
             return Err(PoolsAccessError::SummaryBlock);
         };
 
-        match data_payload.batch.ingress.get_by_id(ingress_message_id) {
-            Some(ingress_message) => {
+        match data_payload
+            .batch
+            .ingress
+            .get_serialized_by_id(ingress_message_id)
+        {
+            Some(bytes)
+            // Make sure that this is the correct ingress message. [`IngressMessageId`]
+            // does _not_ uniquely identify ingress messages, we thus need to perform
+            // an extra check.
+                if SignedIngressId::new(ingress_message_id.clone(), bytes)
+                    == *signed_ingress_id =>
+            {
                 self.metrics.ingress_messages_in_block.inc();
-                Ok(ingress_message)
+                Ok(bytes.clone())
             }
-            None => {
+            _ => {
                 self.metrics.ingress_messages_not_found.inc();
                 Err(PoolsAccessError::IngressMessageNotFound)
             }
@@ -112,10 +131,12 @@ async fn rpc_handler(State(pools): State<Pools>, payload: Bytes) -> Result<Bytes
         let request = GetIngressMessageInBlockRequest::try_from(request_proto)
             .map_err(|_| StatusCode::BAD_REQUEST)?;
 
-        match pools.get(&request.ingress_message_id, &request.block_proposal_id) {
-            Ok(ingress_message) => Ok::<_, StatusCode>(Bytes::from(
+        match pools.get(&request.signed_ingress_id, &request.block_proposal_id) {
+            Ok(serialized_ingress_message) => Ok::<_, StatusCode>(Bytes::from(
                 pb::GetIngressMessageInBlockResponse::proxy_encode(
-                    GetIngressMessageInBlockResponse { ingress_message },
+                    GetIngressMessageInBlockResponse {
+                        serialized_ingress_message,
+                    },
                 ),
             )),
             Err(PoolsAccessError::IngressMessageNotFound | PoolsAccessError::BlockNotFound) => {
@@ -137,7 +158,7 @@ async fn rpc_handler(State(pools): State<Pools>, payload: Bytes) -> Result<Bytes
 /// Downloads the missing ingress messages from a random peer.
 pub(crate) async fn download_ingress<P: Peers>(
     transport: Arc<dyn Transport>,
-    ingress_message_id: IngressMessageId,
+    signed_ingress_id: SignedIngressId,
     block_proposal_id: ConsensusMessageId,
     log: &ReplicaLogger,
     metrics: &FetchStrippedConsensusArtifactMetrics,
@@ -153,7 +174,7 @@ pub(crate) async fn download_ingress<P: Peers>(
     let mut rng = SmallRng::from_entropy();
 
     let request = GetIngressMessageInBlockRequest {
-        ingress_message_id: ingress_message_id.clone(),
+        signed_ingress_id: signed_ingress_id.clone(),
         block_proposal_id,
     };
     let bytes = Bytes::from(pb::GetIngressMessageInBlockRequest::proxy_encode(request));
@@ -167,16 +188,12 @@ pub(crate) async fn download_ingress<P: Peers>(
         if let Some(peer) = { peer_rx.peers().into_iter().choose(&mut rng) } {
             match timeout_at(next_request_at, transport.rpc(&peer, request.clone())).await {
                 Ok(Ok(response)) if response.status() == StatusCode::OK => {
-                    let body = response.into_body();
-                    if let Ok(response) = pb::GetIngressMessageInBlockResponse::proxy_decode(&body)
-                        .and_then(|proto: pb::GetIngressMessageInBlockResponse| {
-                            GetIngressMessageInBlockResponse::try_from(proto)
-                        })
-                    {
-                        if IngressMessageId::from(&response.ingress_message) == ingress_message_id {
+                    if let Some(ingress_message) = parse_response(response.into_body(), metrics) {
+                        if SignedIngressId::from(&ingress_message) == signed_ingress_id {
                             metrics.active_ingress_message_downloads.dec();
-                            return (response.ingress_message, peer);
+                            return (ingress_message, peer);
                         } else {
+                            metrics.report_download_error("mismatched_signed_ingress_id");
                             warn!(
                                 log,
                                 "Peer {} responded with wrong artifact for advert", peer
@@ -184,14 +201,41 @@ pub(crate) async fn download_ingress<P: Peers>(
                         }
                     }
                 }
-                _ => {
-                    metrics.total_ingress_message_download_errors.inc();
+                Ok(Ok(_response)) => {
+                    metrics.report_download_error("status_not_ok");
+                }
+                Ok(Err(_rpc_error)) => {
+                    metrics.report_download_error("rpc_error");
+                }
+                Err(_timeout) => {
+                    metrics.report_download_error("timeout");
                 }
             }
         }
 
         sleep_until(next_request_at).await;
     }
+}
+
+fn parse_response(
+    body: Bytes,
+    metrics: &FetchStrippedConsensusArtifactMetrics,
+) -> Option<SignedIngress> {
+    let Ok(response) = pb::GetIngressMessageInBlockResponse::proxy_decode(&body).and_then(
+        |proto: pb::GetIngressMessageInBlockResponse| {
+            GetIngressMessageInBlockResponse::try_from(proto)
+        },
+    ) else {
+        metrics.report_download_error("response_decoding_failed");
+        return None;
+    };
+
+    let Ok(ingress) = SignedIngress::try_from(response.serialized_ingress_message) else {
+        metrics.report_download_error("ingress_deserialization_failed");
+        return None;
+    };
+
+    Some(ingress)
 }
 
 #[cfg(test)]
@@ -203,19 +247,20 @@ mod tests {
     use super::*;
 
     use http_body_util::Full;
+    use ic_canister_client_sender::Sender;
     use ic_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_p2p_test_utils::mocks::{MockPeers, MockTransport, MockValidatedPoolReader};
     use ic_test_utilities_types::messages::SignedIngressBuilder;
+    use ic_types::{artifact::IngressMessageId, time::UNIX_EPOCH};
     use ic_types_test_utils::ids::NODE_1;
     use tower::ServiceExt;
 
     fn mock_pools(
         ingress_message: Option<SignedIngress>,
         consensus_message: Option<ConsensusMessage>,
+        expect_consensus_pool_access: bool,
     ) -> Pools {
-        let should_call_consensus_pool = ingress_message.is_none();
-
         let mut ingress_pool = MockValidatedPoolReader::<SignedIngress>::default();
         if let Some(ingress_message) = ingress_message {
             ingress_pool
@@ -238,7 +283,7 @@ mod tests {
                 )))
                 .once()
                 .return_const(consensus_message.clone());
-        } else if should_call_consensus_pool {
+        } else if expect_consensus_pool_access {
             consensus_pool.expect_get().once().return_const(None);
         }
 
@@ -278,54 +323,114 @@ mod tests {
     async fn rpc_get_from_ingress_pool_test() {
         let ingress_message = SignedIngressBuilder::new().nonce(1).build();
         let block = fake_block_proposal(vec![]);
-        let pools = mock_pools(Some(ingress_message.clone()), None);
+        let pools = mock_pools(
+            Some(ingress_message.clone()),
+            None,
+            /*expect_consensus_pool_access=*/ false,
+        );
         let router = build_axum_router(pools);
 
         let response = send_request(
             router,
             request(
                 ConsensusMessageId::from(&block),
-                IngressMessageId::from(&ingress_message),
+                SignedIngressId::from(&ingress_message),
             ),
         )
         .await
         .expect("Should return a valid response");
 
-        assert_eq!(response.ingress_message, ingress_message);
+        assert_eq!(
+            &response.serialized_ingress_message,
+            ingress_message.binary()
+        );
     }
 
     #[tokio::test]
     async fn rpc_get_from_consensus_pool_test() {
         let ingress_message = SignedIngressBuilder::new().nonce(1).build();
         let block = fake_block_proposal(vec![ingress_message.clone()]);
-        let pools = mock_pools(None, Some(block.clone()));
+        let pools = mock_pools(
+            None,
+            Some(block.clone()),
+            /*expect_consensus_pool_access=*/ true,
+        );
         let router = build_axum_router(pools);
 
         let response = send_request(
             router,
             request(
                 ConsensusMessageId::from(&block),
-                IngressMessageId::from(&ingress_message),
+                SignedIngressId::from(&ingress_message),
             ),
         )
         .await
         .expect("Should return a valid response");
 
-        assert_eq!(response.ingress_message, ingress_message);
+        assert_eq!(
+            &response.serialized_ingress_message,
+            ingress_message.binary()
+        );
     }
 
     #[tokio::test]
     async fn rpc_get_not_found_test() {
         let ingress_message = SignedIngressBuilder::new().nonce(1).build();
         let block = fake_block_proposal(vec![]);
-        let pools = mock_pools(None, None);
+        let pools = mock_pools(None, None, /*expect_consensus_pool_access=*/ true);
         let router = build_axum_router(pools);
 
         let response = send_request(
             router,
             request(
                 ConsensusMessageId::from(&block),
-                IngressMessageId::from(&ingress_message),
+                SignedIngressId::from(&ingress_message),
+            ),
+        )
+        .await;
+
+        assert_eq!(response, Err(StatusCode::NOT_FOUND));
+    }
+
+    #[tokio::test]
+    async fn rpc_get_not_found_mismatched_hash_test() {
+        let ingress_message = |signature: Vec<u8>| {
+            SignedIngressBuilder::new()
+                .nonce(1)
+                .expiry_time(UNIX_EPOCH)
+                .sign_for_sender(&Sender::Node {
+                    pub_key: vec![0, 1, 2, 3],
+                    sign: Arc::new(move |_| Ok(signature.clone())),
+                })
+                .build()
+        };
+
+        let ingress_message_1 = ingress_message(vec![1, 1, 1]);
+        let ingress_message_2 = ingress_message(vec![2, 2, 2]);
+        let ingress_message_3 = ingress_message(vec![3, 3, 3]);
+
+        assert_eq!(
+            IngressMessageId::from(&ingress_message_1),
+            IngressMessageId::from(&ingress_message_2)
+        );
+        assert_eq!(
+            IngressMessageId::from(&ingress_message_2),
+            IngressMessageId::from(&ingress_message_3)
+        );
+
+        let block = fake_block_proposal(vec![ingress_message_2.clone()]);
+        let pools = mock_pools(
+            Some(ingress_message_1.clone()),
+            Some(block.clone()),
+            /*expect_consensus_pool_access=*/ true,
+        );
+        let router = build_axum_router(pools);
+
+        let response = send_request(
+            router,
+            request(
+                ConsensusMessageId::from(&block),
+                SignedIngressId::from(&ingress_message_3),
             ),
         )
         .await;
@@ -337,14 +442,18 @@ mod tests {
     async fn rpc_get_summary_block_returns_bad_request_test() {
         let ingress_message = SignedIngressBuilder::new().nonce(1).build();
         let block = fake_summary_block_proposal();
-        let pools = mock_pools(None, Some(block.clone()));
+        let pools = mock_pools(
+            None,
+            Some(block.clone()),
+            /*expect_consensus_pool_access=*/ true,
+        );
         let router = build_axum_router(pools);
 
         let response = send_request(
             router,
             request(
                 ConsensusMessageId::from(&block),
-                IngressMessageId::from(&ingress_message),
+                SignedIngressId::from(&ingress_message),
             ),
         )
         .await;
@@ -366,7 +475,7 @@ mod tests {
 
         let response = download_ingress(
             Arc::new(mock_transport),
-            IngressMessageId::from(&ingress_message),
+            SignedIngressId::from(&ingress_message),
             ConsensusMessageId::from(&block),
             &no_op_logger(),
             &FetchStrippedConsensusArtifactMetrics::new(&MetricsRegistry::new()),
@@ -378,7 +487,6 @@ mod tests {
     }
 
     // Utility functions below
-
     fn fake_block_proposal(ingress_messages: Vec<SignedIngress>) -> ConsensusMessage {
         let block_proposal = fake_block_proposal_with_ingresses(ingress_messages);
 
@@ -387,10 +495,10 @@ mod tests {
 
     fn request(
         consensus_message_id: ConsensusMessageId,
-        ingress_message_id: IngressMessageId,
+        signed_ingress_id: SignedIngressId,
     ) -> Bytes {
         let request = GetIngressMessageInBlockRequest {
-            ingress_message_id,
+            signed_ingress_id,
             block_proposal_id: consensus_message_id,
         };
 
@@ -401,7 +509,9 @@ mod tests {
         axum::response::Response::builder()
             .body(Bytes::from(
                 pb::GetIngressMessageInBlockResponse::proxy_encode(
-                    GetIngressMessageInBlockResponse { ingress_message },
+                    GetIngressMessageInBlockResponse {
+                        serialized_ingress_message: ingress_message.binary().clone(),
+                    },
                 ),
             ))
             .unwrap()

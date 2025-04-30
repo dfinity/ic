@@ -26,6 +26,7 @@ use ic_consensus_utils::{
 use ic_interfaces::{
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, MessageRoutingError},
+    time_source::system_time_now,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{debug, trace, ReplicaLogger};
@@ -35,9 +36,7 @@ use ic_types::{
     replica_config::ReplicaConfig,
     Height,
 };
-use std::cell::RefCell;
-use std::sync::Arc;
-use std::time::Instant;
+use std::{cell::RefCell, sync::Arc, time::Instant};
 
 pub struct Finalizer {
     pub(crate) replica_config: ReplicaConfig,
@@ -116,7 +115,7 @@ impl Finalizer {
             .collect()
     }
 
-    // Write logs, report metrics depending on the batch deliver result.
+    /// Write logs, report metrics depending on the batch deliver result.
     #[allow(clippy::too_many_arguments)]
     fn process_batch_delivery_result(
         &self,
@@ -133,6 +132,13 @@ impl Finalizer {
                         .observe(now.duration_since(last_batch_delivered_at).as_secs_f64());
                 }
                 self.last_batch_delivered_at.borrow_mut().replace(now);
+                // Batch creation time is essentially wall time (on some replica), so the median
+                // duration across the subnet is meaningful.
+                self.metrics.batch_delivery_latency.observe(
+                    system_time_now()
+                        .saturating_duration_since(block_stats.block_time)
+                        .as_secs_f64(),
+                );
 
                 self.metrics.process(&block_stats, &batch_stats);
 
@@ -247,16 +253,9 @@ impl Finalizer {
 mod tests {
     //! Finalizer unit tests
     use super::*;
-    use crate::consensus::batch_delivery::generate_responses_to_setup_initial_dkg_calls;
     use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
-    use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types::SetupInitialDKGResponse;
     use ic_metrics::MetricsRegistry;
-    use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{
-        metadata_state::subnet_call_context_manager::SetupInitialDkgContext, SystemMetadata,
-    };
     use ic_test_utilities::{
         ingress_selector::FakeIngressSelector, message_routing::FakeMessageRouting,
     };
@@ -264,15 +263,9 @@ mod tests {
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         consensus::{HasHeight, HashedBlock},
-        crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet},
-        messages::{CallbackId, Payload, Request, NO_DEADLINE},
-        CanisterId, Cycles, PrincipalId, RegistryVersion, SubnetId,
+        RegistryVersion,
     };
-    use std::{
-        collections::{BTreeMap, BTreeSet},
-        str::FromStr,
-        sync::Arc,
-    };
+    use std::sync::Arc;
 
     /// Given a single block, just finalize it
     #[test]
@@ -470,87 +463,5 @@ mod tests {
                 block_proposal.height().increment(),
             );
         })
-    }
-
-    #[test]
-    fn test_generate_responses_to_subnet_calls() {
-        const TARGET_ID: NiDkgTargetId = NiDkgTargetId::new([8; 32]);
-
-        // Manually create `SystemMetadata` with custom context
-        let mut metadata = SystemMetadata::new(subnet_test_id(0), SubnetType::System);
-        metadata
-            .subnet_call_context_manager
-            .setup_initial_dkg_contexts = vec![(
-            CallbackId::from(0),
-            // NOTE: From this struct we only need the target id, therefore we will initialize the
-            // rest with dummy data
-            SetupInitialDkgContext {
-                request: Request {
-                    receiver: CanisterId::from(0),
-                    sender: CanisterId::from(0),
-                    sender_reply_callback: CallbackId::from(0),
-                    payment: Cycles::zero(),
-                    method_name: "".to_string(),
-                    method_payload: vec![],
-                    metadata: Default::default(),
-                    deadline: NO_DEADLINE,
-                },
-                nodes_in_target_subnet: BTreeSet::new(),
-                target_id: TARGET_ID,
-                registry_version: RegistryVersion::from(1),
-                time: metadata.batch_time,
-            },
-        )]
-        .drain(..)
-        .collect::<BTreeMap<_, _>>();
-
-        // Build some transcipts with matching ids and tags
-        let transcripts_for_remote_subnets = vec![
-            (
-                NiDkgId {
-                    start_block_height: Height::from(0),
-                    dealer_subnet: subnet_test_id(0),
-                    dkg_tag: NiDkgTag::LowThreshold,
-                    target_subnet: NiDkgTargetSubnet::Remote(TARGET_ID),
-                },
-                CallbackId::from(1),
-                Ok(dummy_transcript_for_tests()),
-            ),
-            (
-                NiDkgId {
-                    start_block_height: Height::from(0),
-                    dealer_subnet: subnet_test_id(0),
-                    dkg_tag: NiDkgTag::HighThreshold,
-                    target_subnet: NiDkgTargetSubnet::Remote(TARGET_ID),
-                },
-                CallbackId::from(1),
-                Ok(dummy_transcript_for_tests()),
-            ),
-        ]
-        .drain(..)
-        .collect::<Vec<_>>();
-
-        // Run the
-        let result = generate_responses_to_setup_initial_dkg_calls(
-            &transcripts_for_remote_subnets[..],
-            &no_op_logger(),
-        );
-        assert_eq!(result.len(), 1);
-
-        // Deserialize the `SetupInitialDKGResponse` and check the subnet id
-        let payload = match &result[0].payload {
-            Payload::Data(data) => data,
-            Payload::Reject(_) => panic!("Payload was rejected unexpectedly"),
-        };
-        let initial_transcript_records = SetupInitialDKGResponse::decode(payload).unwrap();
-        assert_eq!(
-            initial_transcript_records.fresh_subnet_id,
-            SubnetId::from(
-                PrincipalId::from_str(
-                    "icdrs-3sfmz-hm6r3-cdzf5-cfroa-3cddh-aght7-azz25-eo34b-4strl-wae"
-                )
-                .unwrap()
-            )
-        );
     }
 }

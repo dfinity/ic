@@ -11,7 +11,7 @@ pub(crate) const SEPOLIA_PROVIDERS: [RpcNodeProvider; 4] = [
     RpcNodeProvider::Sepolia(SepoliaProvider::BlockPi),
     RpcNodeProvider::Sepolia(SepoliaProvider::PublicNode),
     RpcNodeProvider::Sepolia(SepoliaProvider::Alchemy),
-    RpcNodeProvider::Sepolia(SepoliaProvider::RpcSepolia),
+    RpcNodeProvider::Sepolia(SepoliaProvider::Ankr),
 ];
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
@@ -64,7 +64,7 @@ pub(crate) enum SepoliaProvider {
     PublicNode,
     // https://www.alchemy.com/chain-connect/endpoints/rpc-sepolia-sepolia
     Alchemy,
-    RpcSepolia,
+    Ankr,
 }
 
 impl SepoliaProvider {
@@ -73,7 +73,7 @@ impl SepoliaProvider {
             SepoliaProvider::BlockPi => "https://ethereum-sepolia.blockpi.network/v1/rpc/public",
             SepoliaProvider::PublicNode => "https://ethereum-sepolia-rpc.publicnode.com",
             SepoliaProvider::Alchemy => "https://eth-sepolia.g.alchemy.com/v2/demo",
-            SepoliaProvider::RpcSepolia => "https://rpc.sepolia.org",
+            SepoliaProvider::Ankr => "https://rpc.ankr.com/eth_sepolia",
         }
     }
 }

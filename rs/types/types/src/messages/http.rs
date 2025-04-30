@@ -335,23 +335,20 @@ impl HttpRequestContent for Query {
     }
 
     fn sender(&self) -> UserId {
-        match self.source {
-            QuerySource::User { user_id, .. } => user_id,
-            QuerySource::Anonymous => UserId::from(PrincipalId::default()),
-        }
+        self.source.user_id()
     }
 
     fn ingress_expiry(&self) -> u64 {
         match self.source {
             QuerySource::User { ingress_expiry, .. } => ingress_expiry,
-            QuerySource::Anonymous => 0,
+            QuerySource::System => 0,
         }
     }
 
     fn nonce(&self) -> Option<Vec<u8>> {
         match &self.source {
             QuerySource::User { nonce, .. } => nonce.clone(),
-            QuerySource::Anonymous => None,
+            QuerySource::System => None,
         }
     }
 }
@@ -757,13 +754,12 @@ pub enum ReplicaHealthStatus {
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct HttpStatusResponse {
-    pub ic_api_version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub impl_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub root_key: Option<Blob>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub impl_version: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub impl_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub replica_health_status: Option<ReplicaHealthStatus>,
     #[serde(skip_serializing_if = "Option::is_none")]

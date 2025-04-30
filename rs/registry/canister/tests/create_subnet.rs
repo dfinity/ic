@@ -4,13 +4,13 @@ use canister_test::Runtime;
 use common::test_helpers::{
     get_added_subnet, get_cup_contents, get_subnet_list_record, prepare_registry_with_nodes,
     set_up_universal_canister_as_governance, setup_registry_synced_with_fake_client,
-    wait_for_chain_key_setup, wait_for_ecdsa_setup,
+    wait_for_chain_key_setup,
 };
 use dfn_candid::candid;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_config::Config;
 use ic_interfaces_registry::RegistryClient;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
 };
 use ic_nns_test_utils::itest_helpers::try_call_via_universal_canister;
@@ -22,8 +22,8 @@ use ic_nns_test_utils::{
     registry::{invariant_compliant_mutation_as_atomic_req, INITIAL_MUTATION_ID},
 };
 use ic_protobuf::registry::subnet::v1::{
-    ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
-    SubnetListRecord as SubnetListRecordPb, SubnetRecord as SubnetRecordPb,
+    ChainKeyConfig as ChainKeyConfigPb, SubnetListRecord as SubnetListRecordPb,
+    SubnetRecord as SubnetRecordPb,
 };
 use ic_protobuf::types::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
 use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
@@ -35,7 +35,6 @@ use ic_registry_transport::{pb::v1::RegistryAtomicMutateRequest, upsert};
 use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
 use ic_types::{NodeId, ReplicaVersion};
 use prost::Message;
-use registry_canister::mutations::do_create_subnet::{EcdsaInitialConfig, EcdsaKeyRequest};
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::do_create_subnet::{
@@ -206,162 +205,6 @@ fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
             .is_some());
 
         Ok(())
-    });
-}
-
-// TODO[NNS1-3022]: Remove this test.
-#[test]
-fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet_legacy() {
-    let ic_config = get_ic_config();
-
-    let (config, _tmpdir) = Config::temp_config();
-    canister_test_with_config_async(config, ic_config, |local_runtime| async move {
-        let data_provider = local_runtime.registry_data_provider.clone();
-        let fake_client = local_runtime.registry_client.clone();
-
-        let runtime = Runtime::Local(local_runtime);
-
-        let key_1 = EcdsaKeyId {
-            curve: EcdsaCurve::Secp256k1,
-            name: "foo-bar".to_string(),
-        };
-
-        let (init_mutate, node_ids) = prepare_registry_with_nodes(5, INITIAL_MUTATION_ID);
-
-        // Here we discover the IC's subnet ID (from our test harness)
-        // and then modify it to hold the key.
-        let subnet_list_record = SubnetListRecordPb::decode(
-            fake_client
-                .get_value(
-                    &make_subnet_list_record_key(),
-                    fake_client.get_latest_version(),
-                )
-                .unwrap()
-                .unwrap()
-                .as_slice(),
-        )
-        .unwrap();
-
-        let subnet_principals = subnet_list_record
-            .subnets
-            .iter()
-            .map(|record| PrincipalId::try_from(record).unwrap())
-            .collect::<Vec<_>>();
-        let system_subnet_principal = subnet_principals.first().unwrap();
-
-        let system_subnet_id = SubnetId::new(*system_subnet_principal);
-        let mut subnet_record = SubnetRecordPb::decode(
-            fake_client
-                .get_value(
-                    &make_subnet_record_key(system_subnet_id),
-                    fake_client.get_latest_version(),
-                )
-                .unwrap()
-                .unwrap()
-                .as_slice(),
-        )
-        .unwrap();
-
-        subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(ChainKeyConfig {
-            key_configs: vec![KeyConfigInternal {
-                key_id: MasterPublicKeyId::Ecdsa(key_1.clone()),
-                pre_signatures_to_create_in_advance: 100,
-                max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
-            }],
-            signature_request_timeout_ns: None,
-            idkg_key_rotation_period_ms: None,
-        }));
-
-        let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
-            mutations: vec![upsert(
-                make_subnet_record_key(system_subnet_id),
-                subnet_record.encode_to_vec(),
-            )],
-            preconditions: vec![],
-        };
-
-        let registry = setup_registry_synced_with_fake_client(
-            &runtime,
-            fake_client.clone(),
-            data_provider,
-            vec![init_mutate, modify_base_subnet_mutate],
-        )
-        .await;
-
-        // Install the universal canister in place of the governance canister
-        let fake_governance_canister = set_up_universal_canister_as_governance(&runtime).await;
-
-        wait_for_ecdsa_setup(&runtime, &fake_governance_canister, &key_1).await;
-
-        // First, we get the initial list of subnets
-        let initial_subnet_list_record = get_subnet_list_record(&registry).await;
-
-        // Create payload message with EcdsaKeyRequest
-        let signature_request_timeout_ns = Some(12345);
-        let idkg_key_rotation_period_ms = Some(12345);
-        let payload = {
-            let mut payload = make_create_subnet_payload(node_ids.clone());
-            payload.ecdsa_config = Some(EcdsaInitialConfig {
-                quadruples_to_create_in_advance: 101,
-                keys: vec![EcdsaKeyRequest {
-                    key_id: key_1.clone(),
-                    subnet_id: Some(*system_subnet_principal),
-                }],
-                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-                signature_request_timeout_ns,
-                idkg_key_rotation_period_ms,
-            });
-            payload
-        };
-
-        // When we create subnet with ecdsa_keys enabled
-        try_call_via_universal_canister(
-            &fake_governance_canister,
-            &registry,
-            "create_subnet",
-            Encode!(&payload).unwrap(),
-        )
-        .await
-        .unwrap();
-
-        // We get a new subnet
-        let (subnet_id, subnet_record) =
-            get_added_subnet(&registry, &initial_subnet_list_record).await;
-
-        // Registry adds those keys to the CUP
-        let cup_contents = get_cup_contents(&registry, subnet_id).await;
-
-        // Check EcdsaInitializations
-        let dealings = &cup_contents.chain_key_initializations;
-        assert_eq!(dealings.len(), 1);
-        assert_eq!(
-            dealings[0_usize].key_id,
-            Some(MasterPublicKeyIdPb::from(&MasterPublicKeyId::Ecdsa(
-                EcdsaKeyId {
-                    curve: EcdsaCurve::Secp256k1,
-                    name: "foo-bar".to_string(),
-                }
-            )))
-        );
-
-        // Check ChainKeyConfigPb is correctly updated
-        let chain_key_config = subnet_record.chain_key_config.unwrap();
-        assert_eq!(
-            chain_key_config.signature_request_timeout_ns,
-            signature_request_timeout_ns
-        );
-        assert_eq!(
-            chain_key_config.idkg_key_rotation_period_ms,
-            idkg_key_rotation_period_ms
-        );
-        assert_eq!(
-            chain_key_config.key_configs,
-            vec![KeyConfigPb {
-                key_id: Some(MasterPublicKeyIdPb::from(&MasterPublicKeyId::Ecdsa(key_1))),
-                pre_signatures_to_create_in_advance: Some(101),
-                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-            }],
-        );
     });
 }
 
@@ -549,7 +392,6 @@ fn make_create_subnet_payload(node_ids: Vec<NodeId>) -> CreateSubnetPayload {
         max_number_of_canisters: 0,
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
-        ecdsa_config: None,
         chain_key_config: None,
         // Unused section follows
         ingress_bytes_per_block_soft_cap: Default::default(),
