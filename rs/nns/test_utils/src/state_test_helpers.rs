@@ -889,13 +889,12 @@ pub fn nns_send_icp_to_claim_or_refresh_neuron(
     .unwrap();
 }
 
-#[must_use]
 fn manage_neuron(
     state_machine: &StateMachine,
     sender: PrincipalId,
     neuron_id: NeuronId,
     command: nns_governance_pb::ManageNeuronCommandRequest,
-) -> ManageNeuronResponse {
+) -> Result<ManageNeuronResponse, String> {
     let result = state_machine
         .execute_ingress_as(
             sender,
@@ -908,14 +907,25 @@ fn manage_neuron(
             })
             .unwrap(),
         )
-        .unwrap();
+        .map_err(|e| e.to_string())?;
 
     let result = match result {
         WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!("Call to manage_neuron failed: {:#?}", s),
+        WasmResult::Reject(s) => return Err(s),
     };
+    let response = Decode!(&result, ManageNeuronResponse).unwrap();
 
-    Decode!(&result, ManageNeuronResponse).unwrap()
+    Ok(response)
+}
+
+#[must_use]
+fn manage_neuron_or_panic(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+    command: nns_governance_pb::ManageNeuronCommandRequest,
+) -> ManageNeuronResponse {
+    manage_neuron(state_machine, sender, neuron_id, command).expect("manage_neuron failed")
 }
 
 trait NnsManageNeuronConfigureOperation {
@@ -948,7 +958,7 @@ fn nns_configure_neuron(
     nns_governance_pb::manage_neuron_response::ConfigureResponse,
     nns_governance_pb::GovernanceError,
 > {
-    let result = manage_neuron(
+    let result = manage_neuron_or_panic(
         state_machine,
         sender,
         neuron_id,
@@ -972,6 +982,7 @@ fn nns_configure_neuron(
 pub fn nns_create_super_powerful_neuron(
     state_machine: &StateMachine,
     controller: PrincipalId,
+    tokens: Tokens,
 ) -> NeuronId {
     let memo = 0xCAFE_F00D;
 
@@ -981,8 +992,7 @@ pub fn nns_create_super_powerful_neuron(
         Some(compute_neuron_staking_subaccount(controller, memo)),
     );
     // "Overwhelmingly" large, but still small enough to avoid addition overflow.
-    let amount = Tokens::from_e8s(u64::MAX / 4);
-    mint_icp(state_machine, destination, amount);
+    mint_icp(state_machine, destination, tokens);
 
     // Create the Neuron.
     let neuron_id = nns_claim_or_refresh_neuron(state_machine, controller, memo);
@@ -1054,7 +1064,7 @@ pub fn nns_disburse_neuron(
     amount_e8s: Option<u64>,
     to_account: Option<AccountIdentifier>,
 ) -> ManageNeuronResponse {
-    manage_neuron(
+    manage_neuron_or_panic(
         state_machine,
         sender,
         neuron_id,
@@ -1112,7 +1122,7 @@ pub fn nns_disburse_maturity(
     percentage_to_disburse: u32,
     to_account: Option<GovernanceAccount>,
 ) -> ManageNeuronResponse {
-    manage_neuron(
+    manage_neuron_or_panic(
         state_machine,
         sender,
         neuron_id,
@@ -1249,13 +1259,23 @@ pub fn nns_cast_vote(
     neuron_id: NeuronId,
     proposal_id: u64,
     vote: Vote,
-) -> ManageNeuronResponse {
+) -> Result<ManageNeuronResponse, String> {
     let command = ManageNeuronCommandRequest::RegisterVote(RegisterVote {
         proposal: Some(ic_nns_common::pb::v1::ProposalId { id: proposal_id }),
         vote: vote as i32,
     });
 
     manage_neuron(state_machine, sender, neuron_id, command)
+}
+
+pub fn nns_cast_vote_or_panic(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+    proposal_id: u64,
+    vote: Vote,
+) -> ManageNeuronResponse {
+    nns_cast_vote(state_machine, sender, neuron_id, proposal_id, vote).expect("Failed to cast vote")
 }
 
 pub fn nns_split_neuron(
@@ -1266,7 +1286,7 @@ pub fn nns_split_neuron(
 ) -> ManageNeuronResponse {
     let command = ManageNeuronCommandRequest::Split(Split { amount_e8s: amount });
 
-    manage_neuron(state_machine, sender, neuron_id, command)
+    manage_neuron_or_panic(state_machine, sender, neuron_id, command)
 }
 
 pub fn get_neuron_ids(state_machine: &StateMachine, sender: PrincipalId) -> Vec<u64> {
@@ -1311,7 +1331,7 @@ pub fn nns_join_community_fund(
         operation: Some(Operation::JoinCommunityFund(JoinCommunityFund {})),
     });
 
-    manage_neuron(state_machine, sender, neuron_id, command)
+    manage_neuron_or_panic(state_machine, sender, neuron_id, command)
 }
 
 pub fn nns_leave_community_fund(
@@ -1323,7 +1343,7 @@ pub fn nns_leave_community_fund(
         operation: Some(Operation::LeaveCommunityFund(LeaveCommunityFund {})),
     });
 
-    manage_neuron(state_machine, sender, neuron_id, command)
+    manage_neuron_or_panic(state_machine, sender, neuron_id, command)
 }
 
 pub fn nns_governance_make_proposal(
@@ -1334,7 +1354,7 @@ pub fn nns_governance_make_proposal(
 ) -> ManageNeuronResponse {
     let command = ManageNeuronCommandRequest::MakeProposal(Box::new(proposal.clone()));
 
-    manage_neuron(state_machine, sender, neuron_id, command)
+    manage_neuron_or_panic(state_machine, sender, neuron_id, command)
 }
 
 pub fn nns_add_hot_key(
@@ -1349,7 +1369,7 @@ pub fn nns_add_hot_key(
         })),
     });
 
-    manage_neuron(state_machine, sender, neuron_id, command)
+    manage_neuron_or_panic(state_machine, sender, neuron_id, command)
 }
 
 pub fn nns_set_followees_for_neuron(
@@ -1367,7 +1387,7 @@ pub fn nns_set_followees_for_neuron(
             .collect(),
     });
 
-    manage_neuron(state_machine, sender, neuron_id, command)
+    manage_neuron_or_panic(state_machine, sender, neuron_id, command)
 }
 
 pub fn nns_remove_hot_key(
@@ -1382,7 +1402,7 @@ pub fn nns_remove_hot_key(
         })),
     });
 
-    manage_neuron(state_machine, sender, neuron_id, command)
+    manage_neuron_or_panic(state_machine, sender, neuron_id, command)
 }
 
 pub fn nns_stake_maturity(
@@ -1395,7 +1415,7 @@ pub fn nns_stake_maturity(
         percentage_to_stake,
     });
 
-    manage_neuron(state_machine, sender, neuron_id, command)
+    manage_neuron_or_panic(state_machine, sender, neuron_id, command)
 }
 
 pub fn nns_list_proposals(

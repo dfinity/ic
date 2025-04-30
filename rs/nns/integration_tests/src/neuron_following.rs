@@ -19,7 +19,7 @@ use ic_nns_test_utils::{
         submit_proposal, TestNeuronOwner,
     },
     state_test_helpers::{
-        get_neuron_ids, nns_cast_vote, nns_governance_get_full_neuron,
+        get_neuron_ids, nns_cast_vote_or_panic, nns_governance_get_full_neuron,
         nns_governance_get_proposal_info, nns_governance_get_proposal_info_as_anonymous,
         nns_set_followees_for_neuron, nns_split_neuron, setup_nns_canisters,
         state_machine_builder_for_nns_tests,
@@ -234,7 +234,7 @@ fn vote_propagation_with_following() {
     assert_eq!(ballot_n2, (VOTING_POWER_NEURON_2, Vote::Yes));
 
     // re-vote explicitly, still no change
-    nns_cast_vote(
+    nns_cast_vote_or_panic(
         &state_machine,
         n2.principal_id,
         n2.neuron_id,
@@ -245,7 +245,7 @@ fn vote_propagation_with_following() {
     assert_eq!(votes, VOTING_POWER_NEURON_2);
 
     // n1 needs to vote explicitly
-    nns_cast_vote(
+    nns_cast_vote_or_panic(
         &state_machine,
         n1.principal_id,
         n1.neuron_id,
