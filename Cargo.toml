@@ -1,17 +1,19 @@
 [workspace]
 
 members = [
+    "packages/canlog",
+    "packages/canlog_derive",
     "packages/icrc-cbor",
     "packages/icrc-ledger-agent",
     "packages/icrc-ledger-client",
     "packages/icrc-ledger-client-cdk",
     "packages/icrc-ledger-types",
-    "packages/ic-http-types",
     "packages/ic-dummy-getrandom-for-wasm",
     "packages/ic-ed25519",
     "packages/ic-ethereum-types",
     "packages/ic-error-types",
     "packages/ic-hpke",
+    "packages/ic-http-types",
     "packages/ic-metrics-assert",
     "packages/ic-secp256k1",
     "packages/ic-sha3",
@@ -331,7 +333,6 @@ members = [
     "rs/rust_canisters/dfn_protobuf",
     "rs/rust_canisters/downstream_calls_test",
     "rs/rust_canisters/ecdsa",
-    "rs/rust_canisters/http_types",
     "rs/rust_canisters/load_simulator",
     "rs/rust_canisters/memory_test",
     "rs/rust_canisters/on_wire",
@@ -587,7 +588,7 @@ ic-certification = "3"
 ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "469d2daee8b44aadb46400bcb2832d560baf7272" }
 ic-http-certification = "3.0.3"
 ic-http-gateway = "0.2.0"
-ic-management-canister-types = "0.2.1"
+ic-management-canister-types = "0.3.0"
 ic-response-verification = "3"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"

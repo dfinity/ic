@@ -55,32 +55,18 @@ pub(crate) fn with_chunks<R>(f: impl FnOnce(&Chunks<VM>) -> R) -> R {
     })
 }
 
-/// Encodes the argument.
+/// Converts to HighCapacity version of input.
 ///
-/// If the input is too large, this "chunkifies" it. That is, instead of
-/// inlining value, it is replaced with a LargeValueChunkKeys, which points to
-/// pieces of the original value, and each piece can be fetched via the
-/// `get_chunk` canister method.
-///
-/// Possible panic reasons include: input is hyper too large. See
-/// MAX_CHUNKABLE_ATOMIC_MUTATION_LEN.
-pub(crate) fn maybe_chunkify_and_encode(original_mutation: RegistryAtomicMutateRequest) -> Vec<u8> {
-    if !is_chunkifying_large_values_enabled() {
-        return original_mutation.encode_to_vec();
-    }
-    // In release builds, code bellow this line is not active. Instead, only the
-    // old behavior (implemented above) takes place.
-
-    let upgraded_mutation = maybe_chunkify(original_mutation);
-
-    // TODO(Nikola.Milosavljevic@dfinity.org): Populate timestamp_seconds field.
-
-    upgraded_mutation.encode_to_vec()
-}
-
-fn maybe_chunkify(
+/// When the input is "too large", "large" blobs are stored into CHUNKS, rather
+/// than remaining inline.
+pub(crate) fn chunkify_composite_mutation_if_too_large(
     original_mutation: RegistryAtomicMutateRequest,
 ) -> HighCapacityRegistryAtomicMutateRequest {
+    // If chunking is not enabled, simply transcribe.
+    if !is_chunkifying_large_values_enabled() {
+        return HighCapacityRegistryAtomicMutateRequest::from(original_mutation);
+    }
+
     // Panic if the input is too large.
     if original_mutation.encoded_len() > MAX_CHUNKABLE_ATOMIC_MUTATION_LEN {
         let first_key = original_mutation

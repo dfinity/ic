@@ -265,3 +265,7 @@ load("//bazel:idl2json.bzl", "idl_to_json")
 idl_to_json(name = "idl2json")
 
 mainnet_icos_images()
+
+load("//bazel:spawn_proto_library.bzl", "spawn_proto_library")
+
+spawn_proto_library(name = "spawn_proto_library")

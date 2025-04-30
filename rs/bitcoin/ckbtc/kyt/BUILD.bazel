@@ -31,7 +31,7 @@ rust_canister(
     deps = [
         # Keep sorted.
         ":kyt",
-        "//rs/rust_canisters/http_types",
+        "//packages/ic-http-types",
         "@crate_index//:askama",
         "@crate_index//:candid",
         "@crate_index//:ciborium",
