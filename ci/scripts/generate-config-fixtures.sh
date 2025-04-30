@@ -25,4 +25,4 @@ if ! git diff --cached --quiet; then
     EXIT_STATUS=1
 fi
 
-exit "${EXIT_STATUS}" 
+exit "${EXIT_STATUS}"
