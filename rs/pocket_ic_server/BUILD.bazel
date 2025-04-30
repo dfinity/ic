@@ -67,6 +67,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:ic-http-gateway",
     "@crate_index//:ic-utils",
     "@crate_index//:itertools",
+    "@crate_index//:libc",
     "@crate_index//:rand",
     "@crate_index//:reqwest",
     "@crate_index//:serde",
