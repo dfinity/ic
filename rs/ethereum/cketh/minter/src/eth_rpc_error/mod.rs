@@ -1,9 +1,6 @@
-use crate::eth_rpc::{Hash, JsonRpcReply, JsonRpcResult, SendRawTransactionResult};
+use crate::eth_rpc::{Hash, JsonRpcResult, SendRawTransactionResult};
 use crate::logs::DEBUG;
 use ic_canister_log::log;
-
-#[cfg(test)]
-mod tests;
 
 /// Possible errors returned by calling `eth_sendRawTransaction` endpoint.
 /// Unfortunately, error codes and error messages are not standardized in
@@ -196,52 +193,4 @@ impl ErrorParser for Parser {
             .iter()
             .find_map(|parser| parser.try_parse_send_raw_transaction_error(code, message.clone()))
     }
-}
-
-/// Sanitizes the response of `eth_sendRawTransaction` to hide implementation details of the various Ethereum clients
-/// queried by HTTP outcalls and the fact that `eth_sendRawTransaction` is not idempotent.
-/// The type `JsonRpcReply<Hash>` of the original response is transformed into `JsonRpcReply<SendRawTxResult>`.
-pub fn sanitize_send_raw_transaction_result<T: ErrorParser>(body_bytes: &mut Vec<u8>, parser: T) {
-    let response: JsonRpcReply<Hash> = match serde_json::from_slice(body_bytes) {
-        Ok(response) => response,
-        Err(e) => {
-            log!(DEBUG, "Error deserializing: {:?}", e);
-            return;
-        }
-    };
-
-    let sanitized_result = match response.result {
-        JsonRpcResult::Result(_) => JsonRpcResult::Result(SendRawTransactionResult::Ok),
-        JsonRpcResult::Error { code, message } => {
-            if let Some(error) = parser.try_parse_send_raw_transaction_error(code, message.clone())
-            {
-                match error {
-                    //transaction already in the mempool, so it was sent successfully
-                    SendRawTransactionError::AlreadyKnown => {
-                        JsonRpcResult::Result(SendRawTransactionResult::Ok)
-                    }
-                    SendRawTransactionError::InsufficientFunds => {
-                        JsonRpcResult::Result(SendRawTransactionResult::InsufficientFunds)
-                    }
-                    SendRawTransactionError::NonceTooLow => {
-                        JsonRpcResult::Result(SendRawTransactionResult::NonceTooLow)
-                    }
-                    SendRawTransactionError::NonceTooHigh => {
-                        JsonRpcResult::Result(SendRawTransactionResult::NonceTooHigh)
-                    }
-                }
-            } else {
-                JsonRpcResult::Error { code, message }
-            }
-        }
-    };
-    let sanitized_reply: JsonRpcReply<SendRawTransactionResult> = JsonRpcReply {
-        id: response.id,
-        jsonrpc: response.jsonrpc,
-        result: sanitized_result,
-    };
-
-    *body_bytes = serde_json::to_string(&sanitized_reply)
-        .expect("BUG: failed to serialize error response")
-        .into_bytes();
 }

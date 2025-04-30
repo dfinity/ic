@@ -406,15 +406,6 @@ pub struct Block {
     pub base_fee_per_gas: Wei,
 }
 
-#[derive(Eq, PartialEq, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct JsonRpcReply<T> {
-    pub id: u64,
-    pub jsonrpc: String,
-    #[serde(flatten)]
-    pub result: JsonRpcResult<T>,
-}
-
 /// An envelope for all JSON-RPC replies.
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]

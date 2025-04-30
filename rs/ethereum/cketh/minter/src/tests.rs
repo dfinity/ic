@@ -24,29 +24,6 @@ fn deserialize_block_spec() {
     );
 }
 
-#[test]
-fn deserialize_json_reply() {
-    use crate::eth_rpc::*;
-    let reply: JsonRpcReply<String> =
-        serde_json::from_str(r#"{"id":2,"jsonrpc":"2.0","result":"0x1639e49bba16280000"}"#)
-            .unwrap();
-    assert_eq!(
-        reply.result,
-        JsonRpcResult::Result("0x1639e49bba16280000".to_string())
-    );
-
-    let reply: JsonRpcReply<String> =
-        serde_json::from_str(r#"{"jsonrpc": "2.0", "error": {"code": -32602, "message": "Invalid params: invalid username"}, "id": 1}"#)
-            .unwrap();
-    assert_eq!(
-        reply.result,
-        JsonRpcResult::Error {
-            code: -32602,
-            message: "Invalid params: invalid username".to_string(),
-        }
-    );
-}
-
 mod eth_get_logs {
     use crate::numeric::{BlockNumber, LogIndex};
     use ic_ethereum_types::Address;
