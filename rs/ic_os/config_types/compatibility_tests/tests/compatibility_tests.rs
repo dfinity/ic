@@ -1,5 +1,5 @@
 use config_types::*;
-use config_types_compatibility_lib::{get_previous_version, version_greater_than, ConfigFixture};
+use config_types_compatibility_lib::ConfigFixture;
 use serde_json;
 use std::path::PathBuf;
 
