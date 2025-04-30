@@ -7,10 +7,10 @@ The script requires only the public key and neuron index, and automatically deri
 
 Examples:
     # Get balance for a neuron (requires only public key and neuron index)
-    python3 get_neuron_balance.py --node-address http://localhost:8081 --neuron-index 0 --public-key ba5242d02642aede88a5f9fe82482a9fd0b6dc25f38c729253116c6865384a9d --curve-type edwards25519
+    python3 get_neuron_balance.py --node-address http://localhost:8081 --neuron-index 0 --public-key 022ac5b9bd21fa735e66bdd24c23e938daef472b95165a11bad4a43b2c95627ef3 --curve-type edwards25519
 
     # With verbose output
-    python3 get_neuron_balance.py --node-address http://localhost:8081 --public-key ba5242d02642aede88a5f9fe82482a9fd0b6dc25f38c729253116c6865384a9d --verbose
+    python3 get_neuron_balance.py --node-address http://localhost:8081 --public-key 022ac5b9bd21fa735e66bdd24c23e938daef472b95165a11bad4a43b2c95627ef3 --curve-type edwards25519 --verbose
 """
 
 from rosetta_client import RosettaClient
@@ -29,7 +29,7 @@ def main():
     parser.add_argument("--node-address", type=str, required=True, help="Rosetta node address")
     parser.add_argument("--neuron-index", type=int, default=0, help="Neuron index")
     parser.add_argument("--public-key", type=str, required=True, help="Public key for neuron account (hex)")
-    parser.add_argument("--curve-type", type=str, default="edwards25519", help="Curve type for neuron public key")
+    parser.add_argument("--curve-type", type=str, required=True, help="Curve type for neuron public key (e.g., edwards25519, secp256k1)")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
     
     args = parser.parse_args()
@@ -52,6 +52,7 @@ def main():
     print(f"\nDerived neuron account ID: {neuron_account_id}")
     print(f"Using neuron index: {args.neuron_index}")
     print(f"Using public key: {args.public_key}")
+    print(f"Using curve type: {args.curve_type}")
     
     # Fetch neuron balance
     print(f"\nFetching neuron balance...")

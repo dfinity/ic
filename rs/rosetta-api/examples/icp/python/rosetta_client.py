@@ -24,6 +24,10 @@ class RosettaClient:
         curve_type (str): The curve type for the cryptographic keys.
     """
     
+    # Default currency information for the Internet Computer
+    DEFAULT_CURRENCY_SYMBOL = "ICP"
+    DEFAULT_CURRENCY_DECIMALS = 8
+    
     def __init__(self, node_address, private_key_path=None, signature_type="ecdsa"):
         """
         Initialize the Rosetta client.
@@ -35,12 +39,66 @@ class RosettaClient:
         """
         self.node_address = node_address.rstrip('/')
         self.network = self.get_network_list()[0]['network']
-        last_block = self.get_last_block()
-        currency = last_block['block']['transactions'][0]['operations'][0]['amount']['currency']
         self.signature_type = signature_type
-        self.currency_symbol = currency['symbol']
-        self.currency_decimals = currency['decimals']
+        
+        # Initialize with default currency values
+        self.currency_symbol = self.DEFAULT_CURRENCY_SYMBOL
+        self.currency_decimals = self.DEFAULT_CURRENCY_DECIMALS
+        
+        # Try to get actual currency info from the blockchain
+        try:
+            currency_info = self._get_currency_info()
+            if currency_info:
+                self.currency_symbol = currency_info['symbol']
+                self.currency_decimals = currency_info['decimals']
+        except Exception as e:
+            print(f"Warning: Unable to retrieve currency information from the blockchain. Using defaults. Error: {e}")
+            
         self._set_up_crypto(private_key_path)
+
+    def _get_currency_info(self):
+        """
+        Get currency information from the blockchain by examining recent blocks.
+        
+        Returns:
+            dict: Currency information with symbol and decimals, or None if not found.
+        """
+        try:
+            # Try to get currency info from the last block
+            last_block = self.get_last_block()
+            
+            # Check if the block has transactions
+            if 'block' in last_block and 'transactions' in last_block['block'] and last_block['block']['transactions']:
+                # Look through all transactions and operations for an amount field with currency info
+                for tx in last_block['block']['transactions']:
+                    if 'operations' in tx:
+                        for op in tx['operations']:
+                            if 'amount' in op and 'currency' in op['amount']:
+                                return op['amount']['currency']
+            
+            # If not found in last block, try a few more blocks
+            current_index = last_block['block']['block_identifier']['index']
+            for i in range(1, 6):  # Try up to 5 previous blocks
+                try:
+                    block = self.get_block(current_index - i)
+                    if 'block' in block and 'transactions' in block['block'] and block['block']['transactions']:
+                        for tx in block['block']['transactions']:
+                            if 'operations' in tx:
+                                for op in tx['operations']:
+                                    if 'amount' in op and 'currency' in op['amount']:
+                                        return op['amount']['currency']
+                except Exception:
+                    continue
+                    
+            # If still not found, try network options which might contain currency info
+            options = self.get_network_options()
+            if 'allow' in options and 'currency' in options['allow']:
+                return options['allow']['currency']
+                
+            return None
+        except Exception as e:
+            print(f"Error retrieving currency information: {e}")
+            return None
 
     def _set_up_crypto(self, private_key_path):
         """

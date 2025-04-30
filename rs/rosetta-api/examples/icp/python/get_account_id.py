@@ -14,7 +14,7 @@ Examples:
     python3 get_account_id.py --node-address http://localhost:8081 --public-key ba5242d02642aede88a5f9fe82482a9fd0b6dc25f38c729253116c6865384a9d --curve-type edwards25519 --neuron-index 5
 
     # With verbose output
-    python3 get_account_id.py --node-address http://localhost:8081 --public-key ba5242d02642aede88a5f9fe82482a9fd0b6dc25f38c729253116c6865384a9d --verbose
+    python3 get_account_id.py --node-address http://localhost:8081 --public-key ba5242d02642aede88a5f9fe82482a9fd0b6dc25f38c729253116c6865384a9d --curve-type edwards25519 --verbose
 """
 
 from rosetta_client import RosettaClient
@@ -24,7 +24,7 @@ def main():
     parser = argparse.ArgumentParser(description='Derive account identifiers from public keys')
     parser.add_argument("--node-address", type=str, required=True, help="Rosetta node address")
     parser.add_argument("--public-key", type=str, required=True, help="Public key (hex)")
-    parser.add_argument("--curve-type", type=str, default="edwards25519", help="Curve type for public key")
+    parser.add_argument("--curve-type", type=str, required=True, help="Curve type for public key (e.g., edwards25519, secp256k1)")
     parser.add_argument("--neuron-index", type=int, default=0, help="Neuron index for neuron account ID (default: 0)")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
     
