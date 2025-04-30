@@ -1,17 +1,15 @@
-use candid::{candid_method, Decode};
 use ic_base_types::PrincipalId;
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::{
-    api::call::arg_data_raw, caller as ic_cdk_caller, heartbeat, post_upgrade, pre_upgrade,
-    println, query, spawn, update,
+    caller as ic_cdk_caller, heartbeat, init, post_upgrade, pre_upgrade, println, query, spawn,
+    update,
 };
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_canisters::cmc::CMCCanister;
 use ic_nervous_system_common::{
     memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
     serve_metrics,
 };
 use ic_nervous_system_runtime::CdkRuntime;
-use ic_nervous_system_time_helpers::now_seconds;
 use ic_nns_common::{
     access_control::{check_caller_is_gtc, check_caller_is_ledger},
     pb::v1::{NeuronId as NeuronIdProto, ProposalId as ProposalIdProto},
@@ -40,9 +38,9 @@ use ic_nns_governance_api::pb::v1::{
     manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
     ClaimOrRefreshNeuronFromAccountResponse, GetNeuronsFundAuditInfoRequest,
     GetNeuronsFundAuditInfoResponse, Governance as ApiGovernanceProto, GovernanceError,
-    ListKnownNeuronsResponse, ListNeurons, ListNeuronsProto, ListNeuronsResponse,
-    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListNodeProvidersResponse,
-    ListProposalInfo, ListProposalInfoResponse, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListNodeProviderRewardsRequest,
+    ListNodeProviderRewardsResponse, ListNodeProvidersResponse, ListProposalInfo,
+    ListProposalInfoResponse, ManageNeuronCommandRequest, ManageNeuronRequest,
     ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo,
     NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
     SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
@@ -50,9 +48,6 @@ use ic_nns_governance_api::pb::v1::{
 };
 #[cfg(feature = "test")]
 use ic_nns_governance_api::test_api::TimeWarp;
-use prost::Message;
-use rand::{RngCore, SeedableRng};
-use rand_chacha::ChaCha20Rng;
 use std::sync::Arc;
 use std::{boxed::Box, time::Duration};
 
@@ -125,55 +120,11 @@ fn debug_log(s: &str) {
     }
 }
 
-fn panic_with_probability(probability: f64, message: &str) {
-    // We cannot use the `CanisterEnv::random_u64` method here, since panicking rolls back the
-    // state, which makes sure that the next time still panics, unless some other operation modifies
-    // the `rng` successfully, such as spawning a neuron.
-    let random = ChaCha20Rng::seed_from_u64(now_seconds()).next_u64();
-    let should_panic = (random as f64) / (u64::MAX as f64) <= probability;
-    if should_panic {
-        panic!("{}", message);
-    }
+#[init]
+fn canister_init(governance: ApiGovernanceProto) {
+    canister_init_(governance);
 }
 
-#[export_name = "canister_init"]
-fn canister_init() {
-    ic_cdk::setup();
-
-    let init_bytes = arg_data_raw();
-    let init_result = if init_bytes.starts_with(b"DIDL") {
-        match Decode!(&init_bytes, ApiGovernanceProto) {
-            Err(err) => {
-                println!(
-                    "Error deserializing canister state in initialization: {}.",
-                    err
-                );
-                Err(err.to_string())
-            }
-            Ok(proto) => {
-                canister_init_(proto);
-                Ok(())
-            }
-        }
-    } else {
-        match ApiGovernanceProto::decode(&init_bytes[..]) {
-            Err(err) => {
-                println!(
-                    "Error deserializing canister state in initialization: {}.",
-                    err
-                );
-                Err(err.to_string())
-            }
-            Ok(proto) => {
-                canister_init_(proto);
-                Ok(())
-            }
-        }
-    };
-    init_result.expect("Couldn't initialize canister.");
-}
-
-#[candid_method(init)]
 fn canister_init_(init_payload: ApiGovernanceProto) {
     println!(
         "{}canister_init: Initializing with: economics: \
@@ -276,13 +227,6 @@ async fn forward_vote(
 #[update(hidden = true)]
 fn transfer_notification() {
     debug_log("neuron_stake_transfer_notification");
-    check_caller_is_ledger();
-    panic!("Method removed. Please use ManageNeuron::ClaimOrRefresh.",)
-}
-
-#[update(hidden = true)]
-fn transfer_notification_pb() {
-    debug_log("neuron_stake_transfer_notification_pb");
     check_caller_is_ledger();
     panic!("Method removed. Please use ManageNeuron::ClaimOrRefresh.",)
 }
@@ -553,62 +497,6 @@ async fn heartbeat() {
 }
 
 // Protobuf interface.
-
-#[export_name = "canister_update manage_neuron_pb"]
-fn manage_neuron_pb() {
-    debug_log("manage_neuron_pb");
-    panic_with_probability(
-        1.0,
-        "manage_neuron_pb is deprecated. Please use manage_neuron instead.",
-    );
-
-    let input = arg_data_raw();
-
-    ic_cdk::spawn(async move {
-        ic_cdk::setup();
-        let request =
-            ManageNeuronRequest::decode(&input[..]).expect("Could not decode ManageNeuronRequest");
-        let res: ManageNeuronResponse = manage_neuron(request).await;
-        let mut buf = Vec::with_capacity(res.encoded_len());
-        res.encode(&mut buf)
-            .map_err(|e| e.to_string())
-            .expect("Could not encode response");
-        ic_cdk::api::call::reply_raw(&buf)
-    })
-}
-
-#[export_name = "canister_update claim_or_refresh_neuron_from_account_pb"]
-fn claim_or_refresh_neuron_from_account_pb() {
-    debug_log("claim_or_refresh_neuron_from_account_pb");
-    panic!("Method removed. Please use ManageNeuron::ClaimOrRefresh.",)
-}
-
-#[export_name = "canister_query list_proposals_pb"]
-fn list_proposals_pb() {
-    debug_log("list_proposals_pb");
-    panic!("Method removed.  Please use list_proposals instead.")
-}
-
-#[export_name = "canister_query list_neurons_pb"]
-fn list_neurons_pb() {
-    debug_log("list_neurons_pb");
-    panic_with_probability(
-        1.0,
-        "list_neurons_pb is deprecated. Please use list_neurons instead.",
-    );
-
-    ic_cdk::setup();
-    let request =
-        ListNeuronsProto::decode(&arg_data_raw()[..]).expect("Could not decode ListNeuronsProto");
-    let candid_request = ListNeurons::from(request);
-    let res: ListNeuronsResponse = list_neurons(candid_request);
-    let mut buf = Vec::with_capacity(res.encoded_len());
-    res.encode(&mut buf)
-        .map_err(|e| e.to_string())
-        .expect("Could not encode response");
-    ic_cdk::api::call::reply_raw(&buf);
-}
-
 #[update]
 fn update_node_provider(req: UpdateNodeProvider) -> Result<(), GovernanceError> {
     debug_log("update_node_provider");

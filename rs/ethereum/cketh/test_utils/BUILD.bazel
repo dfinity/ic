@@ -18,12 +18,12 @@ rust_library(
         # Keep sorted.
         "//packages/ic-error-types",
         "//packages/ic-ethereum-types",
+        "//packages/ic-http-types",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/ethereum/cketh/minter",
         "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
         "//rs/ethereum/ledger-suite-orchestrator/test_utils",
         "//rs/ledger_suite/icrc1/ledger",
-        "//rs/rust_canisters/http_types",
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",

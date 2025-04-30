@@ -65,6 +65,7 @@ ic-utils = { workspace = true }
 ic-utils-thread = { path = "../utils/thread" }
 ic-validator-ingress-message = { path = "../validator/ingress_message" }
 itertools = { workspace = true }
+libc = { workspace = true }
 pocket-ic = { path = "../../packages/pocket-ic" }
 rand = { workspace = true }
 reqwest = { workspace = true }
