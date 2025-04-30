@@ -13,7 +13,7 @@ use ic_registry_transport::{
     deserialize_get_value_response,
     pb::v1::{Precondition, RegistryDelta, RegistryGetLatestVersionResponse, RegistryMutation},
     serialize_atomic_mutate_request, serialize_get_changes_since_request,
-    serialize_get_value_request, Error,
+    serialize_get_value_request, Error, GetChunk,
 };
 use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, RegistryVersion, Time};
 
@@ -25,16 +25,16 @@ pub struct RegistryCanister {
     agent: Vec<Agent>,
 }
 
-/// The only thing this implements in FetchLargeValue is
+/// The only thing this implements in GetChunk is
 /// get_chunk_no_validation. The other methods use the default implementation
-/// from FetchLargeValue.
-struct AgentBasedFetchLargeValue<'a> {
+/// from GetChunk.
+struct AgentBasedGetChunk<'a> {
     registry_canister_id: CanisterId,
     agent: &'a Agent,
 }
 
 #[async_trait]
-impl crate::certification::FetchLargeValue for AgentBasedFetchLargeValue<'_> {
+impl GetChunk for AgentBasedGetChunk<'_> {
     /// Just calls the Registry canister's get_chunk method.
     async fn get_chunk_no_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String> {
         fn new_err(cause: impl std::fmt::Debug) -> String {
@@ -122,7 +122,17 @@ impl RegistryCanister {
             .await
         {
             Ok(result) => match result {
-                Some(response) => deserialize_get_changes_since_response(response),
+                Some(response) => {
+                    deserialize_get_changes_since_response(
+                        response,
+                        &AgentBasedGetChunk {
+                            registry_canister_id: self.canister_id,
+                            agent: self.choose_random_agent(),
+                        },
+                    )
+                    .await
+                }
+
                 None => Err(ic_registry_transport::Error::UnknownError(
                     "No response was received from registry_get_changes_since.".to_string(),
                 )),
@@ -183,7 +193,7 @@ impl RegistryCanister {
             &self.canister_id,
             nns_public_key,
             &response[..],
-            &AgentBasedFetchLargeValue {
+            &AgentBasedGetChunk {
                 registry_canister_id: self.canister_id,
                 agent: self.choose_random_agent(),
             },

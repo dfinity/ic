@@ -1,16 +1,20 @@
-use async_trait::async_trait;
+// DO NOT MERGE - use async_trait::async_trait;
 use ic_certification::{verify_certified_data, CertificateValidationError};
-use ic_crypto_sha2::Sha256;
+// DO NOT MERGE - use ic_crypto_sha2::Sha256;
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces_registry::RegistryTransportRecord;
-use ic_registry_transport::pb::v1::{
-    high_capacity_registry_mutation, registry_mutation::Type, CertifiedResponse,
-    HighCapacityRegistryAtomicMutateRequest, HighCapacityRegistryMutation, LargeValueChunkKeys,
+use ic_registry_transport::{
+    fetch_large_value,
+    pb::v1::{
+        high_capacity_registry_mutation, registry_mutation::Type, CertifiedResponse,
+        HighCapacityRegistryAtomicMutateRequest, HighCapacityRegistryMutation,
+    },
+    GetChunk,
 };
 use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, RegistryVersion, SubnetId, Time,
 };
-use mockall::automock;
+// DO NOT MERGE use mockall::automock;
 use prost::Message;
 use serde::Deserialize;
 use std::{collections::BTreeMap, convert::TryFrom, fmt::Debug};
@@ -121,53 +125,6 @@ fn validate_version_range(
     Ok(p.current_version.0)
 }
 
-/// Converts LargeValueChunkKeys into a blob by (repeatedly) calling Registry
-/// canister's get_chunk method.
-///
-/// This is made pub so that it can be used in an integration test. Otherwise,
-/// it is preferred that this not be used outside this package.
-#[automock]
-#[async_trait]
-pub trait FetchLargeValue {
-    /// This is just a "thin wrapper" around Registry's `get_chunk` method.
-    ///
-    /// The only required method in this trait.
-    async fn get_chunk_no_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String>;
-
-    /// Verification is needed because `get_chunk` is a query.
-    async fn get_chunk_with_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String> {
-        let chunk_content = self.get_chunk_no_validation(content_sha256).await?;
-
-        // Verify chunk.
-        if Sha256::hash(&chunk_content) != content_sha256 {
-            let len = chunk_content.len();
-            let snippet_len = 20.min(len);
-            return Err(format!(
-                "Chunk content hash does not match: len={}, head={:?}, tail={:?} SHA256={:?}",
-                len,
-                &chunk_content[..snippet_len],
-                &chunk_content[len - snippet_len..len],
-                content_sha256,
-            ));
-        }
-
-        Ok(chunk_content)
-    }
-
-    /// Returns concatenation of chunks.
-    ///
-    /// Fetches each chunk using get_chunk_with_validation.
-    async fn fetch_large_value(&self, keys: &LargeValueChunkKeys) -> Result<Vec<u8>, String> {
-        let mut result = vec![];
-        // Chunks could instead be fetched in parallel.
-        for key in &keys.chunk_content_sha256s {
-            let mut chunk_content = self.get_chunk_with_validation(key).await?;
-            result.append(&mut chunk_content);
-        }
-        Ok(result)
-    }
-}
-
 /// Returns a blob.
 ///
 /// If the mutation was a delete, returns None.
@@ -183,7 +140,7 @@ pub trait FetchLargeValue {
 ///   2. content does not have value
 async fn get_monolithic_value(
     mutation: HighCapacityRegistryMutation,
-    fetch_large_value: &(impl FetchLargeValue + Sync),
+    get_chunk: &(impl GetChunk + Sync),
 ) -> Result<Option<Vec<u8>>, CertificationError> {
     let mutation_type = Type::try_from(mutation.mutation_type).map_err(|err| {
         CertificationError::InvalidDeltas(format!(
@@ -215,8 +172,7 @@ async fn get_monolithic_value(
         }
     };
 
-    let monolithic_blob = fetch_large_value
-        .fetch_large_value(&large_value_chunk_keys)
+    let monolithic_blob = fetch_large_value(get_chunk, &large_value_chunk_keys)
         .await
         .map_err(CertificationError::InvalidDeltas)?;
 
@@ -227,7 +183,7 @@ async fn get_monolithic_value(
 pub async fn decode_hash_tree(
     since_version: u64,
     hash_tree: MixedHashTree,
-    fetch_large_value: &(impl FetchLargeValue + Sync),
+    fetch_large_value: &(impl GetChunk + Sync),
 ) -> Result<(Vec<RegistryTransportRecord>, RegistryVersion), CertificationError> {
     // Extract structured deltas from their tree representation.
     let labeled_tree = LabeledTree::<Vec<u8>>::try_from(hash_tree).map_err(|err| {
@@ -281,7 +237,7 @@ pub(crate) async fn decode_certified_deltas(
     canister_id: &CanisterId,
     nns_pk: &ThresholdSigPublicKey,
     payload: &[u8],
-    fetch_large_value: &(impl FetchLargeValue + Sync),
+    fetch_large_value: &(impl GetChunk + Sync),
 ) -> Result<(Vec<RegistryTransportRecord>, RegistryVersion, Time), CertificationError> {
     let certified_response = CertifiedResponse::decode(payload).map_err(|err| {
         CertificationError::DeserError(format!(
