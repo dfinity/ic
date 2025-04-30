@@ -43,7 +43,6 @@ async fn test_registry_value_syncing() {
         .unwrap();
 
     let decoded = Decode!(&response, Result<Option<Vec<u8>>, String>).unwrap();
-
     assert_eq!(decoded, Ok(None));
 
     // Advance time and tick so the sync will run
@@ -65,7 +64,6 @@ async fn test_registry_value_syncing() {
     // Now we are asserting that there is something in this recod
     let decoded = Decode!(&response, Result<Option<Vec<u8>>, String>).unwrap();
     let unwrapped = decoded.unwrap().unwrap();
-
     // Assert that this Registry value is actually a valid sequence of bits
     let subnet_record = SubnetRecord::decode(unwrapped.as_slice()).unwrap();
     assert_eq!(subnet_record.subnet_type(), SubnetType::System);
