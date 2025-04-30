@@ -1054,6 +1054,12 @@ impl WasmExecutor for SandboxedExecutionController {
                     if wasm_binary.binary.is_file() {
                         self.metrics.inc_cache_lookup(CACHE_MISS_FALLBACK_FILE);
                     }
+                    eprintln!(
+                        "create_execution_state: cache miss for {:?}, is_file: {}",
+                        wasm_binary.binary.module_hash(),
+                        wasm_binary.binary.is_file()
+                    );
+
                     let _compilation_timer = self
                         .metrics
                         .sandboxed_execution_replica_create_exe_state_wait_compile_duration
@@ -1832,6 +1838,11 @@ fn open_wasm(
             if wasm_binary.binary.is_file() {
                 metrics.inc_cache_lookup(CACHE_MISS_FALLBACK_FILE);
             }
+            eprintln!(
+                "open_wasm: cache miss for {:?}, is_file: {}",
+                wasm_binary.binary.module_hash(),
+                wasm_binary.binary.is_file()
+            );
             let compiler_command = create_compiler_sandbox_argv().ok_or_else(|| {
                 HypervisorError::WasmEngineError(ic_wasm_types::WasmEngineError::Unexpected(
                     "Couldn't find compiler binary".to_string(),
