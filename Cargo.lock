@@ -10493,6 +10493,7 @@ dependencies = [
  "ic-nervous-system-common",
  "ic-nervous-system-runtime",
  "ic-nns-constants",
+ "ic-registry-canister-api",
  "ic-registry-transport",
  "icp-ledger",
  "icrc-ledger-types",
