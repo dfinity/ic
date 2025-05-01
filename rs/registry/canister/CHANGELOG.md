@@ -10,6 +10,16 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 
 INSERT NEW RELEASES HERE
 
+
+# 2025-04-25: Proposal 136371
+
+http://dashboard.internetcomputer.org/proposal/136371
+
+## Changed
+
+* `get_node_providers_monthly_xdr_rewards` can now take an optional paramter to specify the Registry version to use when
+  calculating the rewards.
+
 # 2025-03-28: Proposal 136007
 
 https://dashboard.internetcomputer.org/proposal/136007
