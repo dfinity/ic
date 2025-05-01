@@ -12185,6 +12185,7 @@ dependencies = [
 name = "ic-replay"
 version = "0.9.0"
 dependencies = [
+ "async-trait",
  "candid",
  "clap 4.5.27",
  "hex",
@@ -12211,6 +12212,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-nns-governance-api",
  "ic-protobuf",
+ "ic-registry-canister-api",
  "ic-registry-client",
  "ic-registry-client-helpers",
  "ic-registry-keys",

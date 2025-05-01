@@ -4,6 +4,8 @@ use crate::{
     ingress::IngressWithPrinter,
     validator::{InvalidArtifact, ReplayValidator},
 };
+use async_trait::async_trait;
+use candid::{Decode, Encode};
 use ic_artifact_pool::{
     certification_pool::CertificationPoolImpl,
     consensus_pool::{ConsensusPoolImpl, UncachedConsensusPoolImpl},
@@ -36,6 +38,7 @@ use ic_protobuf::{
     registry::{replica_version::v1::BlessedReplicaVersions, subnet::v1::SubnetRecord},
     types::v1 as pb,
 };
+use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::{deserialize_registry_value, subnet::SubnetRegistry};
 use ic_registry_keys::{make_blessed_replica_versions_key, make_subnet_record_key};
@@ -47,7 +50,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{
     deserialize_get_changes_since_response, deserialize_get_latest_version_response,
     deserialize_get_value_response, serialize_get_changes_since_request,
-    serialize_get_value_request,
+    serialize_get_value_request, GetChunk,
 };
 use ic_state_manager::StateManagerImpl;
 use ic_types::{
@@ -73,7 +76,7 @@ use slog_async::AsyncGuard;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 use tempfile::TempDir;
@@ -972,9 +975,21 @@ impl Player {
             .unwrap()
         {
             Ok((Ok(wasm_result), _)) => match wasm_result {
-                WasmResult::Reply(v) => deserialize_get_changes_since_response(v)
-                    .and_then(|(deltas, _)| registry_deltas_to_registry_transport_records(deltas))
-                    .map_err(|err| format!("{:?}", err)),
+                WasmResult::Reply(v) => self.runtime.block_on(async {
+                    let query_handler = Arc::new(Mutex::new(self.query_handler.clone()));
+                    let get_chunk = GetChunkImpl {
+                        query_handler,
+                        ingress_expiry,
+                    };
+
+                    deserialize_get_changes_since_response(v, &get_chunk)
+                        .await
+                        .and_then(|(deltas, _)| {
+                            registry_deltas_to_registry_transport_records(deltas)
+                        })
+                        .map_err(|err| format!("{:?}", err))
+                }),
+
                 WasmResult::Reject(e) => Err(format!("Query rejected: {}", e)),
             },
             Ok((Err(err), _)) => Err(format!("Query failed: {:?}", err)),
@@ -1265,6 +1280,82 @@ impl Player {
 
     fn get_state_hash(&self, height: Height) -> Option<CryptoHashOfState> {
         get_state_hash(self.state_manager.as_ref(), &self.log, height)
+    }
+}
+
+struct GetChunkImpl {
+    query_handler: Arc<Mutex<QueryExecutionService>>,
+    ingress_expiry: Time,
+}
+
+#[async_trait]
+impl GetChunk for GetChunkImpl {
+    async fn get_chunk_no_validation(
+        &self,
+        chunk_content_sha256: &[u8],
+    ) -> Result<Vec<u8>, String> {
+        // Construct request.
+        let request = GetChunkRequest {
+            content_sha256: Some(chunk_content_sha256.to_vec()),
+        };
+        let request = Encode!(&request)
+            .map_err(|err| {
+                todo!(); "".to_string() // DO NOT MERGE
+            })?;
+        let request = Query {
+            source: QuerySource::User {
+                user_id: UserId::from(PrincipalId::new_anonymous()),
+                ingress_expiry: self.ingress_expiry.as_nanos_since_unix_epoch(),
+                nonce: None,
+            },
+            receiver: REGISTRY_CANISTER_ID,
+            method_name: "get_chunk".to_string(),
+            method_payload: request,
+        };
+
+        // Send request.
+        let result = {
+            let query_handler = self.query_handler.lock().unwrap().clone();
+            // Release hold.
+
+            query_handler.oneshot((request, None)).await.unwrap()
+        };
+
+        // Handle problems with sending.
+        let (result, _) = match result {
+            Ok(ok) => ok,
+            Err(QueryExecutionError::CertifiedStateUnavailable) => {
+                panic!("Certified state unavailable for query call.");
+            }
+        };
+
+        // Handle more problems...
+        let result: WasmResult = result.map_err(|err| format!("Query failed: {:?}", err))?;
+
+        // Handle canister replied vs. rejected.
+        let result: Vec<u8> = match result {
+            WasmResult::Reply(ok) => ok,
+            WasmResult::Reject(err) => {
+                return Err(format!("Query rejected: {}", err));
+            }
+        };
+
+        // Handle reply.
+        let result = Decode!(&result, Result<Chunk, String>)
+            .map_err(|err| {
+                todo!(); "".to_string() // DO NOT MERGE
+            })?;
+        let chunk = result
+            .map_err(|err| {
+                todo!(); "".to_string() // DO NOT MERGE
+            })?;
+        let Chunk { content } = chunk;
+        let Some(content) = content else {
+            todo!(); // DO NOT MERGE
+        };
+
+        // Nice reply!
+        Ok(content)
     }
 }
 
