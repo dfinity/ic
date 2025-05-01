@@ -113,6 +113,11 @@ RUN curl -sSL "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kub
     echo "7506a0ae7a59b35089853e1da2b0b9ac0258c5309ea3d165c3412904a9051d48  ${KUBECTL_BIN}" | sha256sum -c - && \
     chmod +x "${KUBECTL_BIN}"
 
+# Add yq (https://github.com/mikefarah/yq/)
+ARG YQ_BIN="/usr/local/bin/yq"
+ARG YQ_VERSION="v4.45.1"
+RUN curl -sL -o "${YQ_BIN}" "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64" && chmod +x "${YQ_BIN}"
+
 RUN . /opt/nvm/nvm.sh && \
     nvm install ${dependency_mgmt_nns_dapp_node_version} && \
     nvm install ${dependency_mgmt_default_node_version} && \
