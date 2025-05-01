@@ -4000,3 +4000,16 @@ impl From<ic_nns_governance_api::test_api::TimeWarp> for crate::TimeWarp {
         }
     }
 }
+
+impl From<pb::MaturityDisbursement> for pb_api::MaturityDisbursement {
+    fn from(item: pb::MaturityDisbursement) -> Self {
+        Self {
+            amount_e8s: Some(item.amount_e8s),
+            account_to_disburse_to: item.account_to_disburse_to.map(|x| x.into()),
+            timestamp_of_disbursement_seconds: Some(item.timestamp_of_disbursement_seconds),
+            finalize_disbursement_timestamp_seconds: Some(
+                item.finalize_disbursement_timestamp_seconds,
+            ),
+        }
+    }
+}
