@@ -56,6 +56,9 @@ impl CanisterId {
         self.0
     }
 
+    pub fn is_routable(&self) -> bool {
+        Self::try_from_principal_id(self.0).is_ok()
+    }
     /// Converts WITHOUT any validation.
     ///
     /// If you want validation, use try_from_principal_id. Do NOT use
