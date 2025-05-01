@@ -1939,6 +1939,15 @@ impl NeuronBuilder {
         self
     }
 
+    #[cfg(test)]
+    pub fn with_maturity_disbursements_in_progress(
+        mut self,
+        maturity_disbursements_in_progress: Vec<MaturityDisbursement>,
+    ) -> Self {
+        self.maturity_disbursements_in_progress = maturity_disbursements_in_progress;
+        self
+    }
+
     pub fn build(self) -> Neuron {
         let NeuronBuilder {
             id,
