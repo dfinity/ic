@@ -171,11 +171,11 @@ message StopCanisterContext {
 }
 
 message CanisterStatusRunning {
-  reserved 1;
+  CallContextManager call_context_manager = 1;
 }
 
 message CanisterStatusStopping {
-  reserved 1;
+  CallContextManager call_context_manager = 1;
   repeated StopCanisterContext stop_contexts = 2;
 }
 

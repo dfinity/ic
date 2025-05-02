@@ -16,7 +16,8 @@ use ic_replicated_state::{
     canister_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
         system_state::{
-            wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase, TaskQueue,
+            to_canister_status_pb, wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory,
+            CyclesUseCase, TaskQueue,
         },
     },
     page_map::{Shard, StorageLayout, StorageResult},
@@ -2631,7 +2632,10 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             cycles_debit: Some(item.cycles_debit.into()),
             reserved_balance: Some(item.reserved_balance.into()),
             reserved_balance_limit: item.reserved_balance_limit.map(|v| v.into()),
-            canister_status: Some((&item.status).into()),
+            canister_status: Some(to_canister_status_pb(
+                &item.status,
+                &item.call_context_manager,
+            )),
             scheduled_as_first: item.scheduled_as_first,
             skipped_round_due_to_no_messages: item.skipped_round_due_to_no_messages,
             executed: item.executed,

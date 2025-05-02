@@ -419,16 +419,24 @@ impl CanisterStatus {
     }
 }
 
-impl From<&CanisterStatus> for pb::canister_state_bits::CanisterStatus {
-    fn from(item: &CanisterStatus) -> Self {
-        match item {
-            CanisterStatus::Running => Self::Running(pb::CanisterStatusRunning {}),
-            CanisterStatus::Stopped => Self::Stopped(pb::CanisterStatusStopped {}),
-            CanisterStatus::Stopping { stop_contexts } => {
-                Self::Stopping(pb::CanisterStatusStopping {
-                    stop_contexts: stop_contexts.iter().map(|context| context.into()).collect(),
-                })
-            }
+pub fn to_canister_status_pb(
+    canister_status: &CanisterStatus,
+    call_context_manager: &CallContextManager,
+) -> pb::canister_state_bits::CanisterStatus {
+    match canister_status {
+        CanisterStatus::Running => {
+            pb::canister_state_bits::CanisterStatus::Running(pb::CanisterStatusRunning {
+                call_context_manager: Some(call_context_manager.into()),
+            })
+        }
+        CanisterStatus::Stopped => {
+            pb::canister_state_bits::CanisterStatus::Stopped(pb::CanisterStatusStopped {})
+        }
+        CanisterStatus::Stopping { stop_contexts } => {
+            pb::canister_state_bits::CanisterStatus::Stopping(pb::CanisterStatusStopping {
+                call_context_manager: Some(call_context_manager.into()),
+                stop_contexts: stop_contexts.iter().map(|context| context.into()).collect(),
+            })
         }
     }
 }
@@ -437,14 +445,15 @@ impl TryFrom<pb::canister_state_bits::CanisterStatus> for CanisterStatus {
     type Error = ProxyDecodeError;
     fn try_from(value: pb::canister_state_bits::CanisterStatus) -> Result<Self, Self::Error> {
         let canister_status = match value {
-            pb::canister_state_bits::CanisterStatus::Running(pb::CanisterStatusRunning {}) => {
-                Self::Running
-            }
+            pb::canister_state_bits::CanisterStatus::Running(pb::CanisterStatusRunning {
+                ..
+            }) => Self::Running,
             pb::canister_state_bits::CanisterStatus::Stopped(pb::CanisterStatusStopped {}) => {
                 Self::Stopped
             }
             pb::canister_state_bits::CanisterStatus::Stopping(pb::CanisterStatusStopping {
                 stop_contexts,
+                ..
             }) => {
                 let mut contexts = Vec::<StopCanisterContext>::with_capacity(stop_contexts.len());
                 for context in stop_contexts.into_iter() {
