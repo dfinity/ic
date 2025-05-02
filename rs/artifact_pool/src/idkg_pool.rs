@@ -22,19 +22,23 @@ use ic_interfaces::p2p::consensus::{
 };
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_types::consensus::{
-    idkg::{
-        EcdsaSigShare, IDkgArtifactId, IDkgMessage, IDkgMessageType, IDkgPrefixOf, IDkgStats,
-        SchnorrSigShare, SigShare, SignedIDkgComplaint, SignedIDkgOpening,
-    },
-    CatchUpPackage,
-};
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
 use ic_types::{artifact::IDkgMessageId, consensus::idkg::VetKdKeyShare};
+use ic_types::{
+    consensus::{
+        idkg::{
+            EcdsaSigShare, IDkgArtifactId, IDkgMessage, IDkgMessageType, IDkgPrefixOf, IDkgStats,
+            SchnorrSigShare, SigShare, SignedIDkgComplaint, SignedIDkgOpening,
+        },
+        CatchUpPackage,
+    },
+    crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
+};
 use prometheus::IntCounter;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::fmt::Debug;
+use std::rc::Rc;
 use strum::IntoEnumIterator;
 
 const POOL_IDKG: &str = "idkg";
@@ -99,23 +103,53 @@ impl IDkgObjectPool {
     where
         <T as TryFrom<IDkgMessage>>::Error: Debug,
     {
-        // TODO: currently uses a simple O(n) scheme: iterate to the first match for the prefix
+        self.iter_impl(prefix.get(), |message_id| message_id.prefix())
+    }
+
+    fn iter_by_transcript_id<T: TryFrom<IDkgMessage>>(
+        &self,
+        transcript_id: IDkgTranscriptId,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, T)> + '_>
+    where
+        <T as TryFrom<IDkgMessage>>::Error: Debug,
+    {
+        self.iter_impl(
+            u64::to_be_bytes(transcript_id.id()).to_vec(),
+            |message_id| u64::to_be_bytes(message_id.prefix().group_tag()).to_vec(),
+        )
+    }
+
+    fn iter_impl<'a, T: TryFrom<IDkgMessage>, U: Clone + PartialEq + 'a>(
+        &'a self,
+        group: U,
+        id_to_group: impl Fn(&IDkgMessageId) -> U + 'a,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, T)> + 'a>
+    where
+        <T as TryFrom<IDkgMessage>>::Error: Debug,
+    {
+        // TODO: currently uses a simple O(n) scheme: iterate to the first match for the group
         // and take the following matching items. This avoids any complex two level maps/trie style
         // indexing for partial matching. Since the in memory map is fairly fast, this should not
         // be a problem, revisit if needed.
 
+        let group = Rc::new(group);
+        let id_to_group = Rc::new(id_to_group);
+
         // Find the first entry that matches the prefix.
-        let prefix_cl = prefix.as_ref().clone();
-        let first = self
-            .objects
-            .iter()
-            .skip_while(move |(key, _)| key.prefix() != prefix_cl);
+        let first = self.objects.iter().skip_while({
+            let group = Rc::clone(&group);
+            let id_to_group = Rc::clone(&id_to_group);
+            move |(key, _)| (*id_to_group)(key) != *group
+        });
 
         // Keep collecting while the prefix matches.
-        let prefix_cl = prefix.as_ref().clone();
         Box::new(
             first
-                .take_while(move |(key, _)| key.prefix() == prefix_cl)
+                .take_while({
+                    let group = Rc::clone(&group);
+                    let id_to_group = Rc::clone(&id_to_group);
+                    move |(key, _)| (*id_to_group)(key) == *group
+                })
                 .map(|(key, object)| {
                     let inner = T::try_from(object.clone()).unwrap_or_else(|err| {
                         panic!("Failed to convert IDkgMessage to inner type: {:?}", err)
@@ -202,6 +236,14 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
         object_pool.iter_by_prefix(prefix)
     }
 
+    fn signed_dealings_by_transcript_id(
+        &self,
+        transcript_id: &IDkgTranscriptId,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)> + '_> {
+        let object_pool = self.get_pool(IDkgMessageType::Dealing);
+        object_pool.iter_by_transcript_id(transcript_id.clone())
+    }
+
     fn dealing_support(
         &self,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_> {
@@ -215,6 +257,14 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_> {
         let object_pool = self.get_pool(IDkgMessageType::DealingSupport);
         object_pool.iter_by_prefix(prefix)
+    }
+
+    fn dealing_support_by_transcript_id(
+        &self,
+        transcript_id: &IDkgTranscriptId,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_> {
+        let object_pool = self.get_pool(IDkgMessageType::DealingSupport);
+        object_pool.iter_by_transcript_id(transcript_id.clone())
     }
 
     fn ecdsa_signature_shares(

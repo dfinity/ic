@@ -5,7 +5,9 @@ use ic_types::consensus::idkg::{
     EcdsaSigShare, IDkgMessage, IDkgPrefixOf, IDkgStats, SchnorrSigShare, SigShare,
     SignedIDkgComplaint, SignedIDkgOpening, VetKdKeyShare,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
+use ic_types::crypto::canister_threshold_sig::idkg::{
+    IDkgDealingSupport, IDkgTranscriptId, SignedIDkgDealing,
+};
 
 #[derive(Debug)]
 pub enum IDkgChangeAction {
@@ -62,6 +64,14 @@ pub trait IDkgPoolSection: Send + Sync {
         unimplemented!()
     }
 
+    /// Iterator for signed dealing objects matching the transcript id.
+    fn signed_dealings_by_transcript_id(
+        &self,
+        _transcript_id: &IDkgTranscriptId,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)> + '_> {
+        unimplemented!()
+    }
+
     /// Iterator for dealing support objects.
     fn dealing_support(&self)
         -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_>;
@@ -70,6 +80,14 @@ pub trait IDkgPoolSection: Send + Sync {
     fn dealing_support_by_prefix(
         &self,
         _prefix: IDkgPrefixOf<IDkgDealingSupport>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_> {
+        unimplemented!()
+    }
+
+    /// Iterator for dealing support objects matching the transcript id.
+    fn dealing_support_by_transcript_id(
+        &self,
+        _transcript_id: &IDkgTranscriptId,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_> {
         unimplemented!()
     }
