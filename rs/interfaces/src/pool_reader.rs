@@ -3,7 +3,15 @@
 use crate::consensus_pool::{
     ConsensusBlockCache, ConsensusPool, ConsensusPoolCache, HeightRange, OnlyError,
 };
-use ic_types::{consensus::catchup::*, consensus::*, crypto::CryptoHashOf, Height, Time};
+use ic_types::{
+    consensus::{
+        Block, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessageHashable,
+        FinalizationShare, HasHeight, HashedBlock, NotarizationShare, Payload, RandomBeacon,
+        RandomBeaconShare, RandomTape, RandomTapeShare,
+    },
+    crypto::CryptoHashOf,
+    Height, Time,
+};
 use std::{cmp::Ordering, time::Instant};
 
 /// A struct and corresponding impl with helper methods to obtain particular
