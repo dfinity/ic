@@ -420,10 +420,7 @@ fn induct_messages_to_self_best_effort_callback_gone() {
 
     // Pop the resulting reject response and execute it (consuming the callback).
     assert_matches!(fixture.pop_input(), Some(CanisterMessage::Response(_)));
-    assert_matches!(
-        fixture.system_state.unregister_callback(callback),
-        Ok(Some(_))
-    );
+    assert_matches!(fixture.system_state.unregister_callback(callback), Some(_));
 
     // A few rounds later, have the running call context produce a response.
     fixture.push_output_response(response);
@@ -463,10 +460,7 @@ fn induct_messages_to_self_guaranteed_response_callback_gone() {
     fixture.push_output_response(response.clone());
 
     // Pretend that a duplicate response has consumed the callback.
-    assert_matches!(
-        fixture.system_state.unregister_callback(callback),
-        Ok(Some(_))
-    );
+    assert_matches!(fixture.system_state.unregister_callback(callback), Some(_));
 
     // Trying to induct the response should panic (or bail out in release mode).
     fixture.induct_messages_to_self();

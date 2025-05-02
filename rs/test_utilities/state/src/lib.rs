@@ -817,31 +817,25 @@ pub fn register_callback(
     respondent: CanisterId,
     deadline: CoarseTime,
 ) -> CallbackId {
-    let call_context_id = canister_state
-        .system_state
-        .new_call_context(
-            CallOrigin::SystemTask,
-            Cycles::zero(),
-            Time::from_nanos_since_unix_epoch(0),
-            Default::default(),
-        )
-        .unwrap();
+    let call_context_id = canister_state.system_state.new_call_context(
+        CallOrigin::SystemTask,
+        Cycles::zero(),
+        Time::from_nanos_since_unix_epoch(0),
+        Default::default(),
+    );
 
-    canister_state
-        .system_state
-        .register_callback(Callback::new(
-            call_context_id,
-            originator,
-            respondent,
-            Cycles::zero(),
-            Cycles::new(42),
-            Cycles::new(84),
-            WasmClosure::new(0, 2),
-            WasmClosure::new(0, 2),
-            None,
-            deadline,
-        ))
-        .unwrap()
+    canister_state.system_state.register_callback(Callback::new(
+        call_context_id,
+        originator,
+        respondent,
+        Cycles::zero(),
+        Cycles::new(42),
+        Cycles::new(84),
+        WasmClosure::new(0, 2),
+        WasmClosure::new(0, 2),
+        None,
+        deadline,
+    ))
 }
 
 /// Helper function to insert a canister in the provided `ReplicatedState`.

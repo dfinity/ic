@@ -99,16 +99,12 @@ impl CanisterStateFixture {
     }
 
     fn make_callback_to(&mut self, respondent: CanisterId, deadline: CoarseTime) -> CallbackId {
-        let call_context_id = self
-            .canister_state
-            .system_state
-            .new_call_context(
-                CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1), NO_DEADLINE),
-                Cycles::zero(),
-                Time::from_nanos_since_unix_epoch(0),
-                Default::default(),
-            )
-            .unwrap();
+        let call_context_id = self.canister_state.system_state.new_call_context(
+            CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1), NO_DEADLINE),
+            Cycles::zero(),
+            Time::from_nanos_since_unix_epoch(0),
+            Default::default(),
+        );
         self.canister_state
             .system_state
             .register_callback(Callback::new(
@@ -123,7 +119,6 @@ impl CanisterStateFixture {
                 None,
                 deadline,
             ))
-            .unwrap()
     }
 
     fn push_input(

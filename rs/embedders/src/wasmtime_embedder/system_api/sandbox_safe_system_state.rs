@@ -464,9 +464,7 @@ impl SystemStateModifications {
                     if let Some(receiver) = callback_changes.get(&expected_id) {
                         callback.respondent = *receiver;
                     }
-                    let id = system_state
-                        .register_callback(callback)
-                        .map_err(|_| Self::error("Call context manager does not exist"))?;
+                    let id = system_state.register_callback(callback);
                     if id != expected_id {
                         return Err(Self::error("Failed to register update callback"));
                     }
@@ -474,7 +472,6 @@ impl SystemStateModifications {
                 CallbackUpdate::Unregister(callback_id) => {
                     system_state
                         .unregister_callback(callback_id)
-                        .map_err(|_| Self::error("Call context manager does not exist"))?
                         .ok_or_else(|| {
                             Self::error("Tried to unregister callback with an ID that isn't in use")
                         })?;
@@ -601,10 +598,7 @@ pub struct SandboxSafeSystemState {
     call_context_balance: Option<Cycles>,
     call_context_deadline: Option<CoarseTime>,
     cycles_account_manager: CyclesAccountManager,
-    // None indicates that we are in a context where the canister cannot
-    // register callbacks (e.g. running the `start` method when installing a
-    // canister.)
-    next_callback_id: Option<u64>,
+    next_callback_id: u64,
     /// The number of calls / callbacks that can still be made. This is the maximum
     /// available in either the subnet shared pool or the canister quota.
     available_callbacks: u64,
@@ -638,7 +632,7 @@ impl SandboxSafeSystemState {
         call_context_balance: Option<Cycles>,
         call_context_deadline: Option<CoarseTime>,
         cycles_account_manager: CyclesAccountManager,
-        next_callback_id: Option<u64>,
+        next_callback_id: u64,
         available_callbacks: u64,
         available_request_slots: BTreeMap<CanisterId, usize>,
         ic00_available_request_slots: usize,
@@ -786,7 +780,7 @@ impl SandboxSafeSystemState {
             call_context_balance,
             call_context_deadline,
             cycles_account_manager,
-            Some(system_state.call_context_manager().next_callback_id()),
+            system_state.call_context_manager().next_callback_id(),
             available_callbacks,
             available_request_slots,
             ic00_available_request_slots,
@@ -829,20 +823,12 @@ impl SandboxSafeSystemState {
     /// Only public for use in tests.
     #[doc(hidden)]
     pub fn register_callback(&mut self, callback: Callback) -> HypervisorResult<CallbackId> {
-        match &mut self.next_callback_id {
-            Some(next_callback_id) => {
-                *next_callback_id += 1;
-                let id = CallbackId::from(*next_callback_id);
-                self.system_state_modifications
-                    .callback_updates
-                    .push(CallbackUpdate::Register(id, callback));
-                Ok(id)
-            }
-            None => Err(HypervisorError::ToolchainContractViolation {
-                error: "Tried to register a callback in a context where it isn't allowed."
-                    .to_string(),
-            }),
-        }
+        self.next_callback_id += 1;
+        let id = CallbackId::from(self.next_callback_id);
+        self.system_state_modifications
+            .callback_updates
+            .push(CallbackUpdate::Register(id, callback));
+        Ok(id)
     }
 
     /// Only public for use in tests.
@@ -1529,7 +1515,7 @@ mod tests {
                 subnet_test_id(0),
                 CyclesAccountManagerConfig::application_subnet(),
             ),
-            Some(0),
+            0,
             0,
             BTreeMap::new(),
             0,
@@ -1580,7 +1566,7 @@ mod tests {
                 subnet_test_id(0),
                 CyclesAccountManagerConfig::application_subnet(),
             ),
-            Some(0),
+            0,
             0,
             BTreeMap::new(),
             0,

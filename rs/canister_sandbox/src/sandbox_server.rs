@@ -209,7 +209,7 @@ mod tests {
                 subnet_test_id(0),
                 CyclesAccountManagerConfig::application_subnet(),
             ),
-            Some(0),
+            0,
             0,
             BTreeMap::new(),
             0,

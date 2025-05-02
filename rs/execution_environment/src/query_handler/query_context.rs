@@ -505,8 +505,6 @@ impl<'a> QueryContext<'a> {
         canister
             .system_state
             .on_canister_result(call_context_id, callback_id, result, instructions_used)
-            // This `unwrap()` cannot fail because of the non-optional `call_context_id`.
-            .unwrap()
             .0
     }
 

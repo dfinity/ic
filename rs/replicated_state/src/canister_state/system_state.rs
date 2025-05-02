@@ -1022,10 +1022,9 @@ impl SystemState {
         cycles: Cycles,
         time: Time,
         metadata: RequestMetadata,
-    ) -> Result<CallContextId, StateError> {
-        Ok(self
-            .call_context_manager
-            .new_call_context(call_origin, cycles, time, metadata))
+    ) -> CallContextId {
+        self.call_context_manager
+            .new_call_context(call_origin, cycles, time, metadata)
     }
 
     /// Withdraws cycles from the call context with the given ID.
@@ -1050,13 +1049,13 @@ impl SystemState {
         callback_id: Option<CallbackId>,
         result: Result<Option<WasmResult>, HypervisorError>,
         instructions_used: NumInstructions,
-    ) -> Result<(CallContextAction, Option<CallContext>), StateError> {
-        Ok(self.call_context_manager.on_canister_result(
+    ) -> (CallContextAction, Option<CallContext>) {
+        self.call_context_manager.on_canister_result(
             call_context_id,
             callback_id,
             result,
             instructions_used,
-        ))
+        )
     }
 
     /// Marks all call contexts as deleted and produces reject responses for the
@@ -1075,17 +1074,14 @@ impl SystemState {
     //
     // TODO: Check whether this could be done implicitly, when pushing an outbound
     // request.
-    pub fn register_callback(&mut self, callback: Callback) -> Result<CallbackId, StateError> {
-        Ok(self.call_context_manager.register_callback(callback))
+    pub fn register_callback(&mut self, callback: Callback) -> CallbackId {
+        self.call_context_manager.register_callback(callback)
     }
 
     /// Unregisters the callback with the given ID (when a response was received for
     /// it) and returns the callback. Returns an error if the canister is `Stopped`.
-    pub fn unregister_callback(
-        &mut self,
-        callback_id: CallbackId,
-    ) -> Result<Option<Arc<Callback>>, StateError> {
-        Ok(self.call_context_manager.unregister_callback(callback_id))
+    pub fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Arc<Callback>> {
+        self.call_context_manager.unregister_callback(callback_id)
     }
 
     /// Pushes a `Request` type message into the relevant output queue.
@@ -1653,6 +1649,11 @@ impl SystemState {
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
     ) -> (usize, Vec<StateError>) {
+        if self.status == CanisterStatus::Stopped {
+            // Stopped canisters have no callbacks.
+            return (0, Vec::new());
+        }
+
         let aborted_or_paused_callback_id = self
             .aborted_or_paused_response()
             .map(|response| response.originator_reply_callback);

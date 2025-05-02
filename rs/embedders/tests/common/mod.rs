@@ -248,14 +248,12 @@ pub fn get_system_api(
 
 pub fn get_system_state() -> SystemState {
     let mut system_state = SystemStateBuilder::new().build();
-    system_state
-        .new_call_context(
-            CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
-            Cycles::new(50),
-            Time::from_nanos_since_unix_epoch(0),
-            Default::default(),
-        )
-        .unwrap();
+    system_state.new_call_context(
+        CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
+        Cycles::new(50),
+        Time::from_nanos_since_unix_epoch(0),
+        Default::default(),
+    );
     system_state
 }
 
