@@ -179,9 +179,7 @@ message CanisterStatusStopping {
   repeated StopCanisterContext stop_contexts = 2;
 }
 
-message CanisterStatusStopped {
-  CallContextManager call_context_manager = 1;
-}
+message CanisterStatusStopped {}
 
 message ExecutionTask {
   enum CanisterTask {

@@ -342,7 +342,7 @@ pub fn get_call_context_and_callback(
     logger: &ReplicaLogger,
     unexpected_response_error: &IntCounter,
 ) -> Option<(Callback, CallbackId, CallContext, CallContextId)> {
-    let call_context_manager = canister.system_state.call_context_manager().unwrap();
+    let call_context_manager = canister.system_state.call_context_manager();
 
     let callback_id = response.originator_reply_callback;
 

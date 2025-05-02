@@ -291,11 +291,8 @@ pub struct CanisterStatusStopping {
     #[prost(message, repeated, tag = "2")]
     pub stop_contexts: ::prost::alloc::vec::Vec<StopCanisterContext>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CanisterStatusStopped {
-    #[prost(message, optional, tag = "1")]
-    pub call_context_manager: ::core::option::Option<CallContextManager>,
-}
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct CanisterStatusStopped {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExecutionTask {
     #[prost(oneof = "execution_task::Task", tags = "1, 2")]

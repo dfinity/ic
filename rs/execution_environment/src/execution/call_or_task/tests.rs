@@ -1249,7 +1249,6 @@ fn test_call_context_instructions_executed_is_updated_on_err_update() {
     let call_context_manager = test
         .canister_state(a_id)
         .system_state
-        .call_context_manager()
-        .unwrap();
+        .call_context_manager();
     assert!(call_context_manager.call_contexts().is_empty());
 }

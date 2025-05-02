@@ -22,7 +22,7 @@ use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType,
     LogVisibilityV2,
 };
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::ingress::WasmResult;
@@ -308,10 +308,10 @@ pub struct SystemState {
     pub freeze_threshold: NumSeconds,
     /// The status of the canister: `Running`, `Stopping`, or `Stopped`.
     /// Different statuses allow for different behaviors on the `SystemState`.
-    ///
+    status: CanisterStatus,
     /// Must remain private, to ensure that the `CallContextManager` is consistent
     /// with `queues`.
-    status: CanisterStatus,
+    call_context_manager: CallContextManager,
     /// Certified data blob allows canisters to certify parts of their state to
     /// securely answer queries from a single machine.
     ///
@@ -402,50 +402,36 @@ pub struct SystemState {
 /// A wrapper around the different canister statuses.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CanisterStatus {
-    Running {
-        call_context_manager: CallContextManager,
-    },
+    Running,
     Stopping {
-        call_context_manager: CallContextManager,
         /// Info about the messages that requested the canister to stop.
         /// The reason this is a vec is because it's possible to receive
         /// multiple requests to stop the canister while it is stopping. All
         /// of them would be tracked here so that they can all get a response.
         stop_contexts: Vec<StopCanisterContext>,
     },
-    Stopped {
-        call_context_manager: CallContextManager,
-    },
+    Stopped,
 }
 
 impl CanisterStatus {
     pub fn new_running() -> Self {
-        Self::Running {
-            call_context_manager: CallContextManager::default(),
-        }
+        Self::Running
     }
 }
 
 impl From<&CanisterStatus> for pb::canister_state_bits::CanisterStatus {
     fn from(item: &CanisterStatus) -> Self {
         match item {
-            CanisterStatus::Running {
-                call_context_manager,
-            } => Self::Running(pb::CanisterStatusRunning {
-                call_context_manager: Some(call_context_manager.into()),
+            CanisterStatus::Running => Self::Running(pb::CanisterStatusRunning {
+                call_context_manager: None,
             }),
-            CanisterStatus::Stopped {
-                call_context_manager,
-            } => Self::Stopped(pb::CanisterStatusStopped {
-                call_context_manager: Some(call_context_manager.into()),
-            }),
-            CanisterStatus::Stopping {
-                call_context_manager,
-                stop_contexts,
-            } => Self::Stopping(pb::CanisterStatusStopping {
-                call_context_manager: Some(call_context_manager.into()),
-                stop_contexts: stop_contexts.iter().map(|context| context.into()).collect(),
-            }),
+            CanisterStatus::Stopped => Self::Stopped(pb::CanisterStatusStopped {}),
+            CanisterStatus::Stopping { stop_contexts } => {
+                Self::Stopping(pb::CanisterStatusStopping {
+                    call_context_manager: None,
+                    stop_contexts: stop_contexts.iter().map(|context| context.into()).collect(),
+                })
+            }
         }
     }
 }
@@ -455,34 +441,20 @@ impl TryFrom<pb::canister_state_bits::CanisterStatus> for CanisterStatus {
     fn try_from(value: pb::canister_state_bits::CanisterStatus) -> Result<Self, Self::Error> {
         let canister_status = match value {
             pb::canister_state_bits::CanisterStatus::Running(pb::CanisterStatusRunning {
-                call_context_manager,
-            }) => Self::Running {
-                call_context_manager: try_from_option_field(
-                    call_context_manager,
-                    "CanisterStatus::Running::call_context_manager",
-                )?,
-            },
-            pb::canister_state_bits::CanisterStatus::Stopped(pb::CanisterStatusStopped {
-                call_context_manager,
-            }) => Self::Stopped {
-                call_context_manager: try_from_option_field(
-                    call_context_manager,
-                    "CanisterStatus::Stopped::call_context_manager",
-                )?,
-            },
+                ..
+            }) => Self::Running,
+            pb::canister_state_bits::CanisterStatus::Stopped(pb::CanisterStatusStopped {}) => {
+                Self::Stopped
+            }
             pb::canister_state_bits::CanisterStatus::Stopping(pb::CanisterStatusStopping {
-                call_context_manager,
                 stop_contexts,
+                ..
             }) => {
                 let mut contexts = Vec::<StopCanisterContext>::with_capacity(stop_contexts.len());
                 for context in stop_contexts.into_iter() {
                     contexts.push(context.try_into()?);
                 }
                 Self::Stopping {
-                    call_context_manager: try_from_option_field(
-                        call_context_manager,
-                        "CanisterStatus::Stopping::call_context_manager",
-                    )?,
                     stop_contexts: contexts,
                 }
             }
@@ -779,6 +751,7 @@ impl SystemState {
             wasm_memory_threshold: NumBytes::new(0),
             freeze_threshold,
             status,
+            call_context_manager: CallContextManager::default(),
             certified_data: Default::default(),
             canister_metrics: CanisterMetrics::default(),
             task_queue: Default::default(),
@@ -803,6 +776,7 @@ impl SystemState {
         wasm_memory_threshold: NumBytes,
         freeze_threshold: NumSeconds,
         status: CanisterStatus,
+        call_context_manager: CallContextManager,
         certified_data: Vec<u8>,
         canister_metrics: CanisterMetrics,
         cycles_balance: Cycles,
@@ -830,6 +804,7 @@ impl SystemState {
             wasm_memory_threshold,
             freeze_threshold,
             status,
+            call_context_manager,
             certified_data,
             canister_metrics,
             cycles_balance,
@@ -883,7 +858,6 @@ impl SystemState {
             initial_cycles,
             freeze_threshold,
             CanisterStatus::Stopping {
-                call_context_manager: CallContextManager::default(),
                 stop_contexts: Vec::default(),
             },
         )
@@ -900,9 +874,7 @@ impl SystemState {
             controller,
             initial_cycles,
             freeze_threshold,
-            CanisterStatus::Stopped {
-                call_context_manager: CallContextManager::default(),
-            },
+            CanisterStatus::Stopped,
         )
     }
 
@@ -1042,19 +1014,8 @@ impl SystemState {
 
     /// Returns a reference to the `CallContextManager` in a `Running` or `Stopping`
     /// canister.
-    pub fn call_context_manager(&self) -> Option<&CallContextManager> {
-        match &self.status {
-            CanisterStatus::Running {
-                call_context_manager,
-            } => Some(call_context_manager),
-            CanisterStatus::Stopping {
-                call_context_manager,
-                ..
-            } => Some(call_context_manager),
-            CanisterStatus::Stopped {
-                call_context_manager,
-            } => Some(call_context_manager),
-        }
+    pub fn call_context_manager(&self) -> &CallContextManager {
+        &self.call_context_manager
     }
 
     /// Creates a new call context and returns its ID. Returns an error if the
@@ -1066,8 +1027,8 @@ impl SystemState {
         time: Time,
         metadata: RequestMetadata,
     ) -> Result<CallContextId, StateError> {
-        Ok(call_context_manager_mut(&mut self.status)
-            .ok_or(StateError::CanisterStopped(self.canister_id))?
+        Ok(self
+            .call_context_manager
             .new_call_context(call_origin, cycles, time, metadata))
     }
 
@@ -1081,8 +1042,7 @@ impl SystemState {
         call_context_id: CallContextId,
         cycles: Cycles,
     ) -> Result<&CallContext, &str> {
-        call_context_manager_mut(&mut self.status)
-            .ok_or("Canister is stopped")?
+        self.call_context_manager
             .withdraw_cycles(call_context_id, cycles)
     }
 
@@ -1095,9 +1055,12 @@ impl SystemState {
         result: Result<Option<WasmResult>, HypervisorError>,
         instructions_used: NumInstructions,
     ) -> Result<(CallContextAction, Option<CallContext>), StateError> {
-        Ok(call_context_manager_mut(&mut self.status)
-            .ok_or(StateError::CanisterStopped(self.canister_id))?
-            .on_canister_result(call_context_id, callback_id, result, instructions_used))
+        Ok(self.call_context_manager.on_canister_result(
+            call_context_id,
+            callback_id,
+            result,
+            instructions_used,
+        ))
     }
 
     /// Marks all call contexts as deleted and produces reject responses for the
@@ -1108,9 +1071,7 @@ impl SystemState {
         &mut self,
         reject: impl Fn(&CallContext) -> Option<R>,
     ) -> Vec<R> {
-        call_context_manager_mut(&mut self.status)
-            .map(|call_context_manager| call_context_manager.delete_all_call_contexts(reject))
-            .unwrap_or_default()
+        self.call_context_manager.delete_all_call_contexts(reject)
     }
 
     /// Registers a callback and returns its ID. Returns an error if the canister is
@@ -1119,9 +1080,7 @@ impl SystemState {
     // TODO: Check whether this could be done implicitly, when pushing an outbound
     // request.
     pub fn register_callback(&mut self, callback: Callback) -> Result<CallbackId, StateError> {
-        Ok(call_context_manager_mut(&mut self.status)
-            .ok_or(StateError::CanisterStopped(self.canister_id))?
-            .register_callback(callback))
+        Ok(self.call_context_manager.register_callback(callback))
     }
 
     /// Unregisters the callback with the given ID (when a response was received for
@@ -1130,9 +1089,7 @@ impl SystemState {
         &mut self,
         callback_id: CallbackId,
     ) -> Result<Option<Arc<Callback>>, StateError> {
-        Ok(call_context_manager_mut(&mut self.status)
-            .ok_or(StateError::CanisterStopped(self.canister_id))?
-            .unregister_callback(callback_id))
+        Ok(self.call_context_manager.unregister_callback(callback_id))
     }
 
     /// Pushes a `Request` type message into the relevant output queue.
@@ -1227,7 +1184,7 @@ impl SystemState {
             CanisterId::unchecked_from_principal(PrincipalId::new_anonymous());
         const SOME_DEADLINE: CoarseTime = CoarseTime::from_secs_since_unix_epoch(1);
 
-        let call_context_manager = self.call_context_manager().unwrap();
+        let call_context_manager = self.call_context_manager();
         let (originator, respondent, deadline) =
             match call_context_manager.callbacks().get(&callback_id) {
                 // Populate reject responses from the callback.
@@ -1312,14 +1269,14 @@ impl SystemState {
 
         match (&msg, &self.status) {
             // Best-effort responses are silently dropped when stopped.
-            (RequestOrResponse::Response(response), CanisterStatus::Stopped { .. })
+            (RequestOrResponse::Response(response), CanisterStatus::Stopped)
                 if response.is_best_effort() =>
             {
                 Ok(false)
             }
 
             // Requests are rejected when stopped.
-            (RequestOrResponse::Request(_), CanisterStatus::Stopped { .. }) => {
+            (RequestOrResponse::Request(_), CanisterStatus::Stopped) => {
                 Err((StateError::CanisterStopped(self.canister_id()), msg))
             }
 
@@ -1329,30 +1286,13 @@ impl SystemState {
             }
 
             // Everything else is accepted iff there is available memory and queue slots.
-            (
-                _,
-                CanisterStatus::Running {
-                    call_context_manager,
-                },
-            )
-            | (
-                RequestOrResponse::Response(_),
-                CanisterStatus::Stopping {
-                    call_context_manager,
-                    ..
-                },
-            )
-            | (
-                RequestOrResponse::Response(_),
-                CanisterStatus::Stopped {
-                    call_context_manager,
-                    ..
-                },
-            ) => {
+            (_, CanisterStatus::Running)
+            | (RequestOrResponse::Response(_), CanisterStatus::Stopping { .. })
+            | (RequestOrResponse::Response(_), CanisterStatus::Stopped) => {
                 if let RequestOrResponse::Response(response) = &msg {
                     if !should_enqueue_input(
                         response,
-                        call_context_manager,
+                        &self.call_context_manager,
                         self.aborted_or_paused_response(),
                     )
                     .map_err(|err| (err, msg.clone()))?
@@ -1406,25 +1346,16 @@ impl SystemState {
     /// contexts if the canister was previously in `Stopping` state.
     pub fn start_canister(&mut self) -> Vec<StopCanisterContext> {
         match &mut self.status {
-            CanisterStatus::Running { .. } => Vec::new(),
+            CanisterStatus::Running => Vec::new(),
 
-            CanisterStatus::Stopping {
-                call_context_manager,
-                stop_contexts,
-            } => {
+            CanisterStatus::Stopping { stop_contexts } => {
                 let stop_contexts = std::mem::take(stop_contexts);
-                self.status = CanisterStatus::Running {
-                    call_context_manager: std::mem::take(call_context_manager),
-                };
+                self.status = CanisterStatus::Running;
                 stop_contexts
             }
 
-            CanisterStatus::Stopped {
-                call_context_manager,
-            } => {
-                self.status = CanisterStatus::Running {
-                    call_context_manager: std::mem::take(call_context_manager),
-                };
+            CanisterStatus::Stopped => {
+                self.status = CanisterStatus::Running;
                 Vec::new()
             }
         }
@@ -1441,7 +1372,7 @@ impl SystemState {
     ) -> Option<StopCanisterContext> {
         match &mut self.status {
             // Return the stop context, nothing to do here.
-            CanisterStatus::Stopped { .. } => Some(stop_context),
+            CanisterStatus::Stopped => Some(stop_context),
 
             CanisterStatus::Stopping {
                 ref mut stop_contexts,
@@ -1452,12 +1383,9 @@ impl SystemState {
                 None
             }
 
-            CanisterStatus::Running {
-                call_context_manager,
-            } => {
+            CanisterStatus::Running => {
                 // Transition the canister into the stopping state.
                 self.status = CanisterStatus::Stopping {
-                    call_context_manager: std::mem::take(call_context_manager),
                     // Track the stop message to respond to it once the canister is fully stopped.
                     stop_contexts: vec![stop_context],
                 };
@@ -1484,15 +1412,12 @@ impl SystemState {
 
             // Canister is ready to stop.
             CanisterStatus::Stopping {
-                ref mut call_context_manager,
                 ref mut stop_contexts,
-            } if call_context_manager.canister_ready_to_stop() => {
+            } if self.call_context_manager.canister_ready_to_stop() => {
                 let stop_contexts = std::mem::take(stop_contexts);
 
                 // Transition the canister to "stopped".
-                self.status = CanisterStatus::Stopped {
-                    call_context_manager: std::mem::take(call_context_manager),
-                };
+                self.status = CanisterStatus::Stopped;
 
                 // Reply to all pending stop_canister requests.
                 (true, stop_contexts)
@@ -1523,10 +1448,7 @@ impl SystemState {
     pub fn ready_to_stop(&self) -> bool {
         match &self.status {
             CanisterStatus::Running { .. } => false,
-            CanisterStatus::Stopping {
-                call_context_manager,
-                ..
-            } => call_context_manager.canister_ready_to_stop(),
+            CanisterStatus::Stopping { .. } => self.call_context_manager.canister_ready_to_stop(),
             CanisterStatus::Stopped { .. } => true,
         }
     }
@@ -1574,14 +1496,7 @@ impl SystemState {
         // rejected by subnet A').
         match self.status {
             CanisterStatus::Running { .. } | CanisterStatus::Stopped { .. } => {}
-            CanisterStatus::Stopping {
-                ref mut call_context_manager,
-                ..
-            } => {
-                self.status = CanisterStatus::Running {
-                    call_context_manager: std::mem::take(call_context_manager),
-                }
-            }
+            CanisterStatus::Stopping { .. } => self.status = CanisterStatus::Running,
         }
     }
 
@@ -1637,9 +1552,7 @@ impl SystemState {
     ) {
         // Bail out if the canister is not running.
         let call_context_manager = match &self.status {
-            CanisterStatus::Running {
-                call_context_manager,
-            } => call_context_manager,
+            CanisterStatus::Running => &self.call_context_manager,
             CanisterStatus::Stopped { .. } | CanisterStatus::Stopping { .. } => return,
         };
 
@@ -1729,8 +1642,7 @@ impl SystemState {
     /// deadlines `< current_time`.
     pub fn has_expired_callbacks(&self, current_time: CoarseTime) -> bool {
         self.call_context_manager()
-            .map(|ccm| ccm.has_expired_callbacks(current_time))
-            .unwrap_or(false)
+            .has_expired_callbacks(current_time)
     }
 
     /// Enqueues "deadline expired" references for all expired best-effort callbacks
@@ -1751,7 +1663,7 @@ impl SystemState {
             .map(|response| response.originator_reply_callback);
 
         // Safe to unwrap because we just checked that the status is not `Stopped`.
-        let call_context_manager = call_context_manager_mut(&mut self.status).unwrap();
+        let call_context_manager = &mut self.call_context_manager;
 
         let mut expired_callback_count = 0;
         let mut errors = Vec::new();
@@ -1970,8 +1882,7 @@ impl SystemState {
         // Callbacks still awaiting a (potentially already enqueued) response.
         let pending_callbacks = self
             .call_context_manager()
-            .map(|ccm| ccm.unresponded_callback_count(self.aborted_or_paused_response()))
-            .unwrap_or_default();
+            .unresponded_callback_count(self.aborted_or_paused_response());
 
         let input_queue_responses = self.queues.input_queues_response_count();
         let input_queue_reserved_slots = self.queues.input_queues_reserved_slots();
@@ -1987,10 +1898,7 @@ impl SystemState {
 
         let unresponded_call_contexts = self
             .call_context_manager()
-            .map(|ccm| {
-                ccm.unresponded_canister_update_call_contexts(self.aborted_or_paused_request())
-            })
-            .unwrap_or_default();
+            .unresponded_canister_update_call_contexts(self.aborted_or_paused_request());
 
         let input_queue_requests = self.queues.input_queues_request_count();
         let output_queue_reserved_slots = self.queues.output_queues_reserved_slots();
@@ -2172,24 +2080,6 @@ pub(crate) fn should_enqueue_input(
     }
 }
 
-/// Helper function to get a mutable reference to the `CallContextManager` when
-/// `Running` or `Stopping`, `None` if `Stopped`.
-fn call_context_manager_mut(status: &mut CanisterStatus) -> Option<&mut CallContextManager> {
-    match status {
-        CanisterStatus::Running {
-            call_context_manager,
-        }
-        | CanisterStatus::Stopping {
-            call_context_manager,
-            ..
-        } => Some(call_context_manager),
-
-        CanisterStatus::Stopped {
-            call_context_manager,
-        } => Some(call_context_manager),
-    }
-}
-
 pub mod testing {
     pub use super::call_context_manager::testing::*;
     use super::*;
@@ -2255,13 +2145,11 @@ pub mod testing {
         }
 
         fn with_call_context(&mut self, call_context: CallContext) -> CallContextId {
-            call_context_manager_mut(&mut self.status)
-                .unwrap()
-                .with_call_context(call_context)
+            self.call_context_manager.with_call_context(call_context)
         }
 
         fn with_callback(&mut self, respondent: CanisterId, deadline: CoarseTime) -> CallbackId {
-            let call_context_manager = call_context_manager_mut(&mut self.status).unwrap();
+            let call_context_manager = &mut self.call_context_manager;
             let time = Time::from_nanos_since_unix_epoch(1);
             let call_context_id = call_context_manager.new_call_context(
                 CallOrigin::SystemTask,
@@ -2329,9 +2217,8 @@ pub mod testing {
             memory_allocation: Default::default(),
             wasm_memory_threshold: Default::default(),
             freeze_threshold: Default::default(),
-            status: CanisterStatus::Stopped {
-                call_context_manager: CallContextManager::default(),
-            },
+            status: CanisterStatus::Stopped,
+            call_context_manager: CallContextManager::default(),
             certified_data: Default::default(),
             canister_metrics: Default::default(),
             cycles_balance: Default::default(),

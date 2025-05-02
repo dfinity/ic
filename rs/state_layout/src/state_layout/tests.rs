@@ -24,7 +24,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
     CanisterStateBits {
         controllers: BTreeSet::new(),
         last_full_execution_round: ExecutionRound::from(0),
-        call_context_manager: None,
+        call_context_manager: CallContextManager::default(),
         compute_allocation: ComputeAllocation::try_from(0).unwrap(),
         accumulated_priority: AccumulatedPriority::default(),
         priority_credit: AccumulatedPriority::default(),
@@ -37,9 +37,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         cycles_debit: Cycles::zero(),
         reserved_balance: Cycles::zero(),
         reserved_balance_limit: None,
-        status: CanisterStatus::Stopped {
-            call_context_manager: CallContextManager::default(),
-        },
+        status: CanisterStatus::Stopped,
         scheduled_as_first: 0,
         skipped_round_due_to_no_messages: 0,
         executed: 0,

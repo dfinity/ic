@@ -10,7 +10,7 @@ use ic_replicated_state::{
     canister_state::execution_state::{WasmBinary, WasmMetadata},
     page_map::{Buffer, TestPageAllocatorFileDescriptorImpl},
     testing::{ReplicatedStateTesting, SystemStateTesting},
-    CallContextManager, CanisterStatus, ExecutionState, ExportedFunctions, NumWasmPages, PageIndex,
+    CanisterStatus, ExecutionState, ExportedFunctions, NumWasmPages, PageIndex,
 };
 use ic_state_layout::{
     StateLayout, CANISTER_FILE, CANISTER_STATES_DIR, CHECKPOINTS_DIR, SYSTEM_METADATA_FILE,
@@ -463,7 +463,6 @@ fn can_recover_a_stopping_canister() {
             canister.system_state.get_status(),
             &CanisterStatus::Stopping {
                 stop_contexts: vec![stop_context],
-                call_context_manager: CallContextManager::default(),
             }
         );
     });

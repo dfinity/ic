@@ -2028,25 +2028,24 @@ fn observe_replicated_state_metrics(
         if !canister_id_ranges.contains(&canister.canister_id()) {
             canisters_not_in_routing_table += 1;
         }
-        if let Some(manager) = canister.system_state.call_context_manager() {
-            let old_call_contexts =
-                manager.call_contexts_older_than(state.time(), OLD_CALL_CONTEXT_CUTOFF_ONE_DAY);
-            // Log all old call contexts, but not (nearly) every round.
-            if current_round.get() % SPAMMY_LOG_INTERVAL_ROUNDS == 0 {
-                for (origin, origin_time) in &old_call_contexts {
-                    warn!(
-                        logger,
-                        "Call context on canister {} with origin {:?} has been open for {:?}",
-                        canister.canister_id(),
-                        origin,
-                        state.time().saturating_duration_since(*origin_time),
-                    );
-                }
+        let manager = canister.system_state.call_context_manager();
+        let old_call_contexts =
+            manager.call_contexts_older_than(state.time(), OLD_CALL_CONTEXT_CUTOFF_ONE_DAY);
+        // Log all old call contexts, but not (nearly) every round.
+        if current_round.get() % SPAMMY_LOG_INTERVAL_ROUNDS == 0 {
+            for (origin, origin_time) in &old_call_contexts {
+                warn!(
+                    logger,
+                    "Call context on canister {} with origin {:?} has been open for {:?}",
+                    canister.canister_id(),
+                    origin,
+                    state.time().saturating_duration_since(*origin_time),
+                );
             }
-            if !old_call_contexts.is_empty() {
-                old_call_contexts_count += old_call_contexts.len();
-                canisters_with_old_open_call_contexts += 1;
-            }
+        }
+        if !old_call_contexts.is_empty() {
+            old_call_contexts_count += old_call_contexts.len();
+            canisters_with_old_open_call_contexts += 1;
         }
     });
     metrics

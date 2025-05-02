@@ -1304,7 +1304,7 @@ fn call_perform_not_enough_cycles_does_not_trap() {
         )
         .unwrap();
     assert_eq!(system_state.balance(), initial_cycles);
-    let call_context_manager = system_state.call_context_manager().unwrap();
+    let call_context_manager = system_state.call_context_manager();
     assert_eq!(call_context_manager.call_contexts().len(), 1);
     assert_eq!(call_context_manager.callbacks().len(), 0);
 }
@@ -2129,7 +2129,6 @@ fn ic0_call_with_best_effort_response_feature_stages() {
             };
             let callback = system_state
                 .call_context_manager()
-                .unwrap()
                 .callbacks()
                 .values()
                 .next()

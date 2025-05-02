@@ -365,15 +365,10 @@ impl Hypervisor {
         }
         let caller = api_type.caller();
         let subnet_available_callbacks = round_limits.subnet_available_callbacks.max(0) as u64;
-        let remaining_canister_callback_quota = system_state.call_context_manager().map_or(
-            // The default is never used (since we would never end up here with no
-            // `CallContextManager`) but preferrable to an `unwrap()`.
-            self.canister_guaranteed_callback_quota,
-            |ccm| {
-                self.canister_guaranteed_callback_quota
-                    .saturating_sub(ccm.callbacks().len())
-            },
-        ) as u64;
+        let remaining_canister_callback_quota = self
+            .canister_guaranteed_callback_quota
+            .saturating_sub(system_state.call_context_manager().callbacks().len())
+            as u64;
         // Maximum between remaining canister quota and available subnet shared pool.
         let available_callbacks = subnet_available_callbacks.max(remaining_canister_callback_quota);
         let static_system_state = SandboxSafeSystemState::new(
