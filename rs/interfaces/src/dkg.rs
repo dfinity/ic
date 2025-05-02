@@ -1,7 +1,8 @@
 //! The DKG public interface.
 use ic_interfaces_state_manager::StateManagerError;
 use ic_types::{
-    consensus::dkg,
+    batch::ValidationContext,
+    consensus::{dkg, Block, BlockPayload},
     crypto::{
         threshold_sig::ni_dkg::errors::{
             create_transcript_error::DkgCreateTranscriptError,
@@ -13,7 +14,28 @@ use ic_types::{
     Height, NodeId,
 };
 
-use crate::validation::ValidationError;
+use crate::{
+    pool_reader::PoolReader,
+    validation::{ValidationError, ValidationResult},
+};
+
+// TODO: Document trait
+pub trait DkgPayloadBuilder {
+    fn create_payload(
+        pool_reader: &PoolReader<'_>,
+        parent: &Block,
+        context: &ValidationContext,
+        max_dealings_per_block: usize,
+    ) -> Result<dkg::Payload, DkgPayloadCreationError>;
+
+    fn validate_payload(
+        payload: &BlockPayload,
+        pool_reader: &PoolReader<'_>,
+        parent: &Block,
+        context: &ValidationContext,
+        max_dealings_per_block: usize,
+    ) -> ValidationResult<PayloadValidationError>;
+}
 
 /// Errors which could occur when creating a Dkg payload.
 #[derive(PartialEq, Debug)]
