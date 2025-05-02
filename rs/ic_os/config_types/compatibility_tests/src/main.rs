@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use config_types::CONFIG_VERSION;
 use config_types_compatibility_lib::generate_fixtures;
 use std::path::PathBuf;
@@ -18,12 +18,10 @@ fn main() -> Result<()> {
 }
 
 /// Get the repository root directory by looking for the .git directory
-fn get_repo_root() -> Result<PathBuf, std::io::Error> {
+fn get_repo_root() -> Result<PathBuf> {
     std::env::current_dir()?
         .ancestors()
         .find(|dir| dir.join(".git").exists())
-        .ok_or_else(|| {
-            std::io::Error::new(std::io::ErrorKind::Other, "Could not find .git directory")
-        })
+        .context("Could not find .git directory")
         .map(|p| p.to_path_buf())
 }
