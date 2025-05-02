@@ -293,7 +293,6 @@ pub(crate) fn spawn_tip_thread(
                             debug_assert!(tip_state.tip_folder_state.has_protos.is_none());
                             tip_state.tip_folder_state.has_protos = Some(height);
                             serialize_to_tip(
-                                &log,
                                 &replicated_state,
                                 &tip_handler.tip(height).unwrap_or_else(|err| {
                                     fatal!(
@@ -780,7 +779,6 @@ fn merge(
 }
 
 fn serialize_to_tip(
-    log: &ReplicaLogger,
     state: &ReplicatedState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     thread_pool: &mut scoped_threadpool::Pool,
@@ -824,7 +822,7 @@ fn serialize_to_tip(
     })?;
 
     let results = parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
-        serialize_canister_to_tip(log, canister_state, tip, metrics, lsmt_config)
+        serialize_canister_to_tip(canister_state, tip, metrics, lsmt_config)
     });
 
     for result in results.into_iter() {
@@ -853,7 +851,6 @@ fn serialize_to_tip(
 }
 
 fn serialize_canister_to_tip(
-    log: &ReplicaLogger,
     canister_state: &CanisterState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     metrics: &StorageMetrics,
@@ -868,26 +865,18 @@ fn serialize_canister_to_tip(
     let execution_state_bits = match &canister_state.execution_state {
         Some(execution_state) => {
             let wasm_binary = &execution_state.wasm_binary.binary;
-            match wasm_binary.file() {
-                Some(path) => {
-                    let wasm = canister_layout.wasm();
-                    // This if should always be false, as we reflink copy the entire checkpoint to the tip
-                    // It is left in mainly as defensive programming
-                    if !wasm.raw_path().exists() {
-                        ic_state_layout::utils::do_copy(log, path, wasm.raw_path()).map_err(
-                            |io_err| CheckpointError::IoError {
-                                path: path.to_path_buf(),
-                                message: "failed to copy Wasm file".to_string(),
-                                io_err: io_err.to_string(),
-                            },
-                        )?;
-                    }
-                }
-                None => {
-                    // Canister was installed/upgraded. Persist the new wasm binary.
-                    canister_layout
-                        .wasm()
-                        .serialize(&execution_state.wasm_binary.binary)?;
+            if !wasm_binary.is_file() {
+                // Canister was installed/upgraded. Persist the new wasm binary.
+                canister_layout
+                    .wasm()
+                    .serialize(&execution_state.wasm_binary.binary)?;
+            } else {
+                let wasm = canister_layout.wasm();
+                // This if should always be false, as we hardlink the entire checkpoint to the tip
+                // It is left in mainly as defensive programming
+                if !wasm.raw_path().exists() {
+                    debug_assert!(false);
+                    wasm.serialize(wasm_binary)?;
                 }
             }
             execution_state.wasm_memory.page_map.persist_delta(
@@ -1041,7 +1030,7 @@ fn serialize_snapshot_to_tip(
 
     // Like for canisters, the wasm binary is either already present on disk, or it is new and needs to be written.
     let wasm_binary = canister_snapshot.canister_module();
-    if wasm_binary.file().is_none() {
+    if !wasm_binary.is_file() {
         snapshot_layout.wasm().serialize(wasm_binary)?;
     } else {
         // During `flush_page_maps` we created copied this file from the canister directory.

@@ -7,9 +7,9 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::{
     manage_neuron_response::Command, CreateServiceNervousSystem, MakeProposalRequest,
-    ManageNeuronCommandRequest, ProposalActionRequest, ProposalInfo, Topic,
+    ManageNeuronCommandRequest, ProposalActionRequest, ProposalInfo,
 };
-use ic_nns_governance_api::pb::v1::{ExecuteNnsFunction, ListNeurons, Neuron, NnsFunction};
+use ic_nns_governance_api::pb::v1::{ExecuteNnsFunction, ListNeurons, Neuron, NnsFunction, Topic};
 use ic_sns_wasm::pb::v1::get_deployed_sns_by_proposal_id_response::GetDeployedSnsByProposalIdResult;
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens, TransferArgs};
@@ -117,7 +117,7 @@ pub async fn wait_for_proposal_execution<
         if let Some(failure_reason) = &proposal_info.failure_reason {
             return Err(format!(
                 "Execution failed for {:?} proposal '{}': {:#?}",
-                Topic::try_from(proposal_info.topic).unwrap(),
+                Topic::from_repr(proposal_info.topic).unwrap(),
                 proposal_info
                     .proposal
                     .unwrap()
