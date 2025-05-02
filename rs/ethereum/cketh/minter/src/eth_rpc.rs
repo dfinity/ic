@@ -5,6 +5,7 @@ use crate::endpoints::CandidBlockTag;
 use crate::numeric::{BlockNumber, LogIndex, Wei, WeiPerGas};
 use candid::CandidType;
 use ethnum;
+use evm_rpc_client::BlockTag as EvmBlockTag;
 use evm_rpc_client::{
     HttpOutcallError as EvmHttpOutcallError,
     SendRawTransactionStatus as EvmSendRawTransactionStatus,
@@ -198,6 +199,16 @@ pub enum BlockTag {
     /// See
     /// <https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels>
     Finalized,
+}
+
+impl From<BlockTag> for EvmBlockTag {
+    fn from(block_tag: BlockTag) -> Self {
+        match block_tag {
+            BlockTag::Latest => EvmBlockTag::Latest,
+            BlockTag::Safe => EvmBlockTag::Safe,
+            BlockTag::Finalized => EvmBlockTag::Finalized,
+        }
+    }
 }
 
 impl From<CandidBlockTag> for BlockTag {
