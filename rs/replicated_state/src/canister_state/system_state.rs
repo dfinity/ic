@@ -422,13 +422,10 @@ impl CanisterStatus {
 impl From<&CanisterStatus> for pb::canister_state_bits::CanisterStatus {
     fn from(item: &CanisterStatus) -> Self {
         match item {
-            CanisterStatus::Running => Self::Running(pb::CanisterStatusRunning {
-                call_context_manager: None,
-            }),
+            CanisterStatus::Running => Self::Running(pb::CanisterStatusRunning {}),
             CanisterStatus::Stopped => Self::Stopped(pb::CanisterStatusStopped {}),
             CanisterStatus::Stopping { stop_contexts } => {
                 Self::Stopping(pb::CanisterStatusStopping {
-                    call_context_manager: None,
                     stop_contexts: stop_contexts.iter().map(|context| context.into()).collect(),
                 })
             }
@@ -440,15 +437,14 @@ impl TryFrom<pb::canister_state_bits::CanisterStatus> for CanisterStatus {
     type Error = ProxyDecodeError;
     fn try_from(value: pb::canister_state_bits::CanisterStatus) -> Result<Self, Self::Error> {
         let canister_status = match value {
-            pb::canister_state_bits::CanisterStatus::Running(pb::CanisterStatusRunning {
-                ..
-            }) => Self::Running,
+            pb::canister_state_bits::CanisterStatus::Running(pb::CanisterStatusRunning {}) => {
+                Self::Running
+            }
             pb::canister_state_bits::CanisterStatus::Stopped(pb::CanisterStatusStopped {}) => {
                 Self::Stopped
             }
             pb::canister_state_bits::CanisterStatus::Stopping(pb::CanisterStatusStopping {
                 stop_contexts,
-                ..
             }) => {
                 let mut contexts = Vec::<StopCanisterContext>::with_capacity(stop_contexts.len());
                 for context in stop_contexts.into_iter() {
@@ -1275,8 +1271,8 @@ impl SystemState {
                 Ok(false)
             }
 
-            // Requests are rejected when stopped.
-            (RequestOrResponse::Request(_), CanisterStatus::Stopped) => {
+            // Requests and guaranteed responses are both rejected when stopped.
+            (_, CanisterStatus::Stopped) => {
                 Err((StateError::CanisterStopped(self.canister_id()), msg))
             }
 
@@ -1287,8 +1283,7 @@ impl SystemState {
 
             // Everything else is accepted iff there is available memory and queue slots.
             (_, CanisterStatus::Running)
-            | (RequestOrResponse::Response(_), CanisterStatus::Stopping { .. })
-            | (RequestOrResponse::Response(_), CanisterStatus::Stopped) => {
+            | (RequestOrResponse::Response(_), CanisterStatus::Stopping { .. }) => {
                 if let RequestOrResponse::Response(response) = &msg {
                     if !should_enqueue_input(
                         response,
@@ -1408,7 +1403,7 @@ impl SystemState {
     ) -> (bool, Vec<StopCanisterContext>) {
         match self.status {
             // Canister is not stopping so we can skip it.
-            CanisterStatus::Running { .. } | CanisterStatus::Stopped { .. } => (false, Vec::new()),
+            CanisterStatus::Running | CanisterStatus::Stopped => (false, Vec::new()),
 
             // Canister is ready to stop.
             CanisterStatus::Stopping {
@@ -1447,9 +1442,9 @@ impl SystemState {
     /// Only relevant for a `Stopping` system state.
     pub fn ready_to_stop(&self) -> bool {
         match &self.status {
-            CanisterStatus::Running { .. } => false,
+            CanisterStatus::Running => false,
             CanisterStatus::Stopping { .. } => self.call_context_manager.canister_ready_to_stop(),
-            CanisterStatus::Stopped { .. } => true,
+            CanisterStatus::Stopped => true,
         }
     }
 
@@ -1470,9 +1465,9 @@ impl SystemState {
     /// Returns the canister status as a string.
     pub fn status_string(&self) -> &'static str {
         match self.status {
-            CanisterStatus::Running { .. } => "Running",
+            CanisterStatus::Running => "Running",
             CanisterStatus::Stopping { .. } => "Stopping",
-            CanisterStatus::Stopped { .. } => "Stopped",
+            CanisterStatus::Stopped => "Stopped",
         }
     }
 
@@ -1495,7 +1490,7 @@ impl SystemState {
         // contexts (the calls corresponding to the dropped stop contexts will be
         // rejected by subnet A').
         match self.status {
-            CanisterStatus::Running { .. } | CanisterStatus::Stopped { .. } => {}
+            CanisterStatus::Running | CanisterStatus::Stopped => {}
             CanisterStatus::Stopping { .. } => self.status = CanisterStatus::Running,
         }
     }
@@ -1553,7 +1548,7 @@ impl SystemState {
         // Bail out if the canister is not running.
         let call_context_manager = match &self.status {
             CanisterStatus::Running => &self.call_context_manager,
-            CanisterStatus::Stopped { .. } | CanisterStatus::Stopping { .. } => return,
+            CanisterStatus::Stopped | CanisterStatus::Stopping { .. } => return,
         };
 
         let mut guaranteed_response_memory_usage =
@@ -2174,7 +2169,7 @@ pub mod testing {
 
         fn add_stop_context(&mut self, stop_context: StopCanisterContext) {
             match &mut self.status {
-                CanisterStatus::Running { .. } | CanisterStatus::Stopped { .. } => {
+                CanisterStatus::Running | CanisterStatus::Stopped => {
                     panic!("Should never add_stop_context to a non-stopping canister.")
                 }
                 CanisterStatus::Stopping { stop_contexts, .. } => stop_contexts.push(stop_context),

@@ -169,15 +169,9 @@ fn stopped_canister_rejects_responses() {
     assert_eq!(
         fixture.push_input(default_input_response(CallbackId::new(123))),
         Err((
-            StateError::NonMatchingResponse {
-                err_str: "unknown callback ID".to_string(),
-                originator: CANISTER_ID,
-                callback_id: CallbackId::new(123),
-                respondent: OTHER_CANISTER_ID,
-                deadline: CoarseTime::from_secs_since_unix_epoch(0)
-            },
-            default_input_response(CallbackId::new(123))
-        ))
+            StateError::CanisterStopped(CANISTER_ID),
+            default_input_response(CallbackId::new(123)),
+        )),
     );
 }
 

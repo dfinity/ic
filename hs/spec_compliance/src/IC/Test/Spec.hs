@@ -1539,6 +1539,45 @@ icTests my_sub other_sub conf =
                                                                                                              step "Now release"
                                                                                                              release
                                                                                                              awaitStatus grs1 >>= isReject [4], -- still a reject
+                                                                                                           testCaseSteps "deleted call contexts prevent stopping" $ \step -> do
+                                                                                                             cid <- install ecid noop
+
+                                                                                                             step "Create message hold"
+                                                                                                             (messageHold, release) <- createMessageHold ecid
+
+                                                                                                             step "Create long-running call"
+                                                                                                             grs1 <- submitCall cid $ callRequest cid messageHold
+                                                                                                             awaitKnown grs1 >>= isPendingOrProcessing
+
+                                                                                                             step "Uninstall"
+                                                                                                             ic_uninstall ic00 cid
+
+                                                                                                             step "Long-running call is rejected"
+                                                                                                             awaitStatus grs1 >>= isReject [4]
+
+                                                                                                             step "Stop"
+                                                                                                             grs2 <- submitCall cid $ stopRequest cid
+                                                                                                             awaitKnown grs2 >>= isPendingOrProcessing
+
+                                                                                                             step "Is stopping (via management)?"
+                                                                                                             cs <- ic_canister_status ic00 cid
+                                                                                                             cs .! #status @?= enum #stopping
+
+                                                                                                             step "Next stop waits, too"
+                                                                                                             grs3 <- submitCall cid $ stopRequest cid
+                                                                                                             awaitKnown grs3 >>= isPendingOrProcessing
+
+                                                                                                             step "Release the held message"
+                                                                                                             release
+
+                                                                                                             step "Wait for calls to complete"
+                                                                                                             awaitStatus grs1 >>= isReject [4] -- still a reject
+                                                                                                             awaitStatus grs2 >>= isReply >>= is (Candid.encode ())
+                                                                                                             awaitStatus grs3 >>= isReply >>= is (Candid.encode ())
+
+                                                                                                             step "Is stopped (via management)?"
+                                                                                                             cs <- ic_canister_status ic00 cid
+                                                                                                             cs .! #status @?= enum #stopped,
                                                                                                            testCaseSteps "deleted call contexts are not delivered" $ \step -> do
                                                                                                              -- This is a tricky one: We make one long-running call,
                                                                                                              -- then uninstall (rejecting the call), then re-install fresh code,

@@ -279,15 +279,10 @@ pub mod stop_canister_context {
         Canister(Canister),
     }
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CanisterStatusRunning {
-    #[prost(message, optional, tag = "1")]
-    pub call_context_manager: ::core::option::Option<CallContextManager>,
-}
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct CanisterStatusRunning {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStatusStopping {
-    #[prost(message, optional, tag = "1")]
-    pub call_context_manager: ::core::option::Option<CallContextManager>,
     #[prost(message, repeated, tag = "2")]
     pub stop_contexts: ::prost::alloc::vec::Vec<StopCanisterContext>,
 }

@@ -1029,28 +1029,8 @@ impl CallContextManager {
         reject_responses
     }
 
-    /// Returns true iff all open call contexts are marked as deleted
-    /// and all outstanding callbacks refer to open call contexts.
     pub fn canister_ready_to_stop(&self) -> bool {
-        println!(
-            "deleted: {:?}",
-            self.call_contexts()
-                .iter()
-                .all(|(_, ctxt)| ctxt.is_deleted())
-        );
-        println!(
-            "Referenced exists: {:?}",
-            self.callbacks
-                .iter()
-                .all(|(_, callback)| self.call_contexts.contains_key(&callback.call_context_id))
-        );
-        self.call_contexts()
-            .iter()
-            .all(|(_, ctxt)| ctxt.is_deleted())
-            && self
-                .callbacks
-                .iter()
-                .all(|(_, callback)| self.call_contexts.contains_key(&callback.call_context_id))
+        self.callbacks().is_empty() && self.call_contexts().is_empty()
     }
 }
 

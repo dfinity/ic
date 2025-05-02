@@ -342,7 +342,27 @@ pub fn get_call_context_and_callback(
     logger: &ReplicaLogger,
     unexpected_response_error: &IntCounter,
 ) -> Option<(Callback, CallbackId, CallContext, CallContextId)> {
-    let call_context_manager = canister.system_state.call_context_manager();
+    debug_assert_ne!(canister.status(), CanisterStatusType::Stopped);
+    let call_context_manager = match canister.status() {
+        CanisterStatusType::Stopped => {
+            // A canister by definition can only be stopped when no open call contexts.
+            // Hence, if we receive a response for a stopped canister then that is
+            // a either a bug in the code or potentially a faulty (or
+            // malicious) subnet generating spurious messages.
+            unexpected_response_error.inc();
+            error!(
+                logger,
+                "[EXC-BUG] Stopped canister got a response.  originator {} respondent {}.",
+                response.originator,
+                response.respondent,
+            );
+            return None;
+        }
+        CanisterStatusType::Running | CanisterStatusType::Stopping => {
+            // We are sure there's a call context manager since the canister isn't stopped.
+            canister.system_state.call_context_manager()
+        }
+    };
 
     let callback_id = response.originator_reply_callback;
 
