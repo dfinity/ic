@@ -170,9 +170,12 @@ message StopCanisterContext {
   }
 }
 
-message CanisterStatusRunning {}
+message CanisterStatusRunning {
+  reserved 1;
+}
 
 message CanisterStatusStopping {
+  reserved 1;
   repeated StopCanisterContext stop_contexts = 2;
 }
 
