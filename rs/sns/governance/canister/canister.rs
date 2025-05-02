@@ -5,9 +5,9 @@ use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canister_profiler::{measure_span, measure_span_async};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::{caller as cdk_caller, init, post_upgrade, pre_upgrade, query, update};
 use ic_cdk_timers::TimerId;
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_canisters::{cmc::CMCCanister, ledger::IcpLedgerCanister};
 use ic_nervous_system_clients::{
     canister_status::CanisterStatusResultV2, ledger_client::LedgerCanister,

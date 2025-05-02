@@ -1,4 +1,5 @@
 use crate::{
+    is_disburse_maturity_enabled,
     neuron::Neuron,
     neuron_store::NeuronStore,
     pb::v1::Topic,
@@ -55,6 +56,14 @@ pub enum ValidationIssue {
     KnownNeuronIndexCardinalityMismatch {
         primary: u64,
         index: u64,
+    },
+    MaturityDisbursementIndexCardinalityMismatch {
+        primary: u64,
+        index: u64,
+    },
+    MaturityDisbursementMissingFromIndex {
+        neuron_id: NeuronId,
+        missing_maturity_disbursement_finalization_timestamps: Vec<u64>,
     },
 }
 
@@ -219,6 +228,14 @@ impl ValidationInProgress {
         tasks.push_back(Box::new(CardinalitiesValidationTask::<
             KnownNeuronIndexValidator,
         >::new()));
+        if is_disburse_maturity_enabled() {
+            tasks.push_back(Box::new(NeuronRangeValidationTask::<
+                MaturityDisbursementIndexValidator,
+            >::new()));
+            tasks.push_back(Box::new(CardinalitiesValidationTask::<
+                MaturityDisbursementIndexValidator,
+            >::new()));
+        }
 
         Self {
             started_time_seconds: now,
@@ -628,6 +645,67 @@ impl CardinalityAndRangeValidator for KnownNeuronIndexValidator {
     }
 }
 
+struct MaturityDisbursementIndexValidator;
+
+impl CardinalityAndRangeValidator for MaturityDisbursementIndexValidator {
+    const NEURON_SECTIONS: NeuronSections = NeuronSections {
+        maturity_disbursements: true,
+        ..NeuronSections::NONE
+    };
+
+    fn validate_cardinalities(_neuron_store: &NeuronStore) -> Option<ValidationIssue> {
+        let cardinality_primary = with_stable_neuron_store(|stable_neuron_store| {
+            stable_neuron_store.lens().maturity_disbursements
+        });
+        let cardinality_index =
+            with_stable_neuron_indexes(|indexes| indexes.maturity_disbursement().num_entries())
+                as u64;
+        // Because there can be multiple maturity disbursements for the same neuron and finalization
+        // timestamp, the primary data might have larger cardinality than the index. Therefore we
+        // only report an issue when index size is larger than primary.
+        if cardinality_primary < cardinality_index {
+            Some(
+                ValidationIssue::MaturityDisbursementIndexCardinalityMismatch {
+                    primary: cardinality_primary,
+                    index: cardinality_index,
+                },
+            )
+        } else {
+            None
+        }
+    }
+
+    fn validate_primary_neuron_has_corresponding_index_entries(
+        neuron: &Neuron,
+    ) -> Option<ValidationIssue> {
+        let neuron_id = neuron.id();
+        let missing_maturity_disbursement_finalization_timestamps: Vec<_> = neuron
+            .maturity_disbursements_in_progress()
+            .iter()
+            .filter(|disbursement| {
+                let finalize_disbursement_timestamp_seconds =
+                    disbursement.finalize_disbursement_timestamp_seconds;
+
+                let disbursement_exists_in_index = with_stable_neuron_indexes(|indexes| {
+                    indexes
+                        .maturity_disbursement()
+                        .contains_entry(neuron_id.id, finalize_disbursement_timestamp_seconds)
+                });
+                !disbursement_exists_in_index
+            })
+            .map(|disbursement| disbursement.finalize_disbursement_timestamp_seconds)
+            .collect();
+        if !missing_maturity_disbursement_finalization_timestamps.is_empty() {
+            Some(ValidationIssue::MaturityDisbursementMissingFromIndex {
+                neuron_id,
+                missing_maturity_disbursement_finalization_timestamps,
+            })
+        } else {
+            None
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -638,7 +716,7 @@ mod tests {
 
     use crate::{
         neuron::{DissolveStateAndAge, NeuronBuilder},
-        pb::v1::{neuron::Followees, KnownNeuronData},
+        pb::v1::{neuron::Followees, KnownNeuronData, MaturityDisbursement},
         storage::with_stable_neuron_indexes_mut,
     };
 
@@ -682,6 +760,16 @@ mod tests {
                 ],
             },
         })
+        .with_maturity_disbursements_in_progress(vec![
+            MaturityDisbursement {
+                finalize_disbursement_timestamp_seconds: 1,
+                ..Default::default()
+            },
+            MaturityDisbursement {
+                finalize_disbursement_timestamp_seconds: 2,
+                ..Default::default()
+            },
+        ])
         .with_known_neuron_data(Some(KnownNeuronData {
             name: known_neuron_name,
             description: None,
@@ -747,6 +835,20 @@ mod tests {
                 ],
             },
         })
+        .with_maturity_disbursements_in_progress(vec![
+            MaturityDisbursement {
+                finalize_disbursement_timestamp_seconds: 1,
+                ..Default::default()
+            },
+            MaturityDisbursement {
+                finalize_disbursement_timestamp_seconds: 1,
+                ..Default::default()
+            },
+            MaturityDisbursement {
+                finalize_disbursement_timestamp_seconds: 2,
+                ..Default::default()
+            },
+        ])
         .build();
 
         let neuron_store = NeuronStore::new(btreemap! {neuron.id().id => neuron});
@@ -788,11 +890,14 @@ mod tests {
         }
         let summary = validator.summary();
 
-        // Step 3: Check validation summary for current issues. It has 4 issues related to primary
+        // Step 3: Check validation summary for current issues. It has 5 issues related to primary
         // data missing from indexes, and 2 issues for cardinality mismatches for subaccount and
         // known neuron, since those are checked for exact matches.
         let issue_groups = summary.current_issues_summary.unwrap().issue_groups;
-        assert_eq!(issue_groups.len(), 6);
+        assert_eq!(
+            issue_groups.len(),
+            if is_disburse_maturity_enabled() { 7 } else { 6 }
+        );
         assert!(
             issue_groups
                 .iter()
@@ -861,6 +966,19 @@ mod tests {
             "{:?}",
             issue_groups
         );
+        if is_disburse_maturity_enabled() {
+            assert!(
+                issue_groups
+                    .iter()
+                    .any(|issue_group| issue_group.issues_count == 2
+                        && matches!(
+                            issue_group.example_issues[0],
+                            ValidationIssue::MaturityDisbursementMissingFromIndex { .. }
+                        )),
+                "{:?}",
+                issue_groups
+            );
+        }
     }
 
     #[test]
@@ -894,7 +1012,10 @@ mod tests {
         // data missing from indexes, and 2 issues for cardinality mismatches for subaccount and
         // known neuron, since those are checked for exact matches.
         let issue_groups = summary.current_issues_summary.unwrap().issue_groups;
-        assert_eq!(issue_groups.len(), 4);
+        assert_eq!(
+            issue_groups.len(),
+            if is_disburse_maturity_enabled() { 5 } else { 4 }
+        );
         assert!(
             issue_groups
                 .iter()
@@ -943,6 +1064,20 @@ mod tests {
             "{:?}",
             issue_groups
         );
+        if is_disburse_maturity_enabled() {
+            assert!(
+                issue_groups
+                    .iter()
+                    .any(|issue_group| issue_group.issues_count == 1
+                        && issue_group.example_issues[0]
+                            == ValidationIssue::MaturityDisbursementIndexCardinalityMismatch {
+                                primary: 0,
+                                index: 4
+                            }),
+                "{:?}",
+                issue_groups
+            );
+        }
     }
 
     #[test]

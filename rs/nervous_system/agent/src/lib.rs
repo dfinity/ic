@@ -56,6 +56,10 @@ pub trait CallCanisters: sealed::Sealed {
     ) -> impl Future<Output = Result<CanisterInfo, Self::Error>> + Send;
 }
 
+pub trait AgentFor: sealed::Sealed {
+    fn agent_for(&self, principal: impl Into<Principal>) -> impl CallCanisters;
+}
+
 // Functions that use 'call' need to be able
 // to determine if a call to the canister failed due to the canister being stopped.
 // Matching on a specific error outside of the trait implementation is not viable

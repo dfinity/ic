@@ -7,7 +7,7 @@ use core::{
 use dfn_core::api::time_nanos;
 use ic_base_types::CanisterId;
 use ic_canister_log::{export, GlobalBuffer, LogBuffer, LogEntry};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_ledger_core::{
     tokens::{CheckedAdd, CheckedSub},
     Tokens,

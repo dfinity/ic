@@ -13,8 +13,6 @@ on the process that this file is part of, see
 
 ## Deprecated
 
-* Custom proposals that were not yet assigned to a topic are no longer allowed to be submitted.
-
 ## Removed
 
 ## Fixed
