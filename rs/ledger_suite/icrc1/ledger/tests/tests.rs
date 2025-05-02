@@ -523,6 +523,13 @@ fn test_archiving_in_chunks_returns_disjoint_block_range_locations() {
 }
 
 #[test]
+fn test_archiving_hits_instruction_limit_purging_blocks_from_ledger() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_hits_instruction_limit_purging_blocks_from_ledger(
+        ledger_wasm(), encode_init_args, 250_000,
+    );
+}
+
+#[test]
 fn test_get_blocks_returns_multiple_archive_callbacks() {
     ic_ledger_suite_state_machine_tests::archiving::test_get_blocks_returns_multiple_archive_callbacks(
         ledger_wasm(),
