@@ -19,19 +19,11 @@ fn main() -> Result<()> {
 
 /// Get the repository root directory by looking for the .git directory
 fn get_repo_root() -> Result<PathBuf, std::io::Error> {
-    let mut current_dir = std::env::current_dir()?;
-
-    // Look for the .git directory by walking up the directory tree
-    loop {
-        if current_dir.join(".git").exists() {
-            return Ok(current_dir);
-        }
-
-        if !current_dir.pop() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Could not find .git directory",
-            ));
-        }
-    }
+    std::env::current_dir()?
+        .ancestors()
+        .find(|dir| dir.join(".git").exists())
+        .ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::Other, "Could not find .git directory")
+        })
+        .map(|p| p.to_path_buf())
 }
