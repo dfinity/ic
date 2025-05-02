@@ -11,6 +11,15 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-04-25: Proposal 136370
+
+http://dashboard.internetcomputer.org/proposal/136370
+
+## Fixed
+
+* Use `StableBTreeMap::init` instead of `::new` for voting power snapshots.
+
+
 # 2025-04-15: Proposal 136285
 
 http://dashboard.internetcomputer.org/proposal/136285
