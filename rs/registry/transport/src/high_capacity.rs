@@ -5,6 +5,9 @@
 //! feel free to add needed conversions that seem to be missing.) As such, this
 //! module can stay private (which is nice).
 //!
+//! Note that when converting to HighCapacity types, there is no chunking; the
+//! conversion is just a "transcription".
+//!
 //! Note that when converting TO HighCapacity the From trait is used, but when
 //! converting FROM HighCapacity, TryFrom should be used. This asymetry is for
 //! the usual reason(s): every non-HighCapacity object has an equivalent

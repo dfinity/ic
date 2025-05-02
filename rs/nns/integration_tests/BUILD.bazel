@@ -44,6 +44,7 @@ BASE_DEPENDENCIES = [
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
         "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/ic-http-types",
         "//rs/canister_client/sender",
         "//rs/config",
         "//rs/crypto",
@@ -59,7 +60,6 @@ BASE_DEPENDENCIES = [
         "//rs/registry/transport",
         "//rs/rosetta-api/tvl/xrc_mock",
         "//rs/rust_canisters/canister_test",
-        "//rs/rust_canisters/http_types",
         "//rs/rust_canisters/on_wire",
         "//rs/state_machine_tests",
         "//rs/test_utilities",
@@ -334,45 +334,6 @@ rust_ic_test(
     crate_root = "src/upgrade_canisters_with_golden_nns_state.rs",
     data = DEV_DATA,
     env = DEV_ENV,
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    tags = [
-        "nns_tests_nightly",  # Run this test in the nns-tests-nightly GitHub Action job.
-        "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
-        "requires-network",  # Because mainnet state is downloaded (and used).
-    ],
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
-)
-
-# Run this test as follows:
-#
-#     bazel \
-#         test \
-#         --test_env=SSH_AUTH_SOCK \
-#         --test_output=streamed \
-#         --test_arg=--nocapture \
-#         //rs/nns/integration_tests:test_node_rewards_migration_with_golden_nns_state
-#
-# Required Environment Variables:
-#
-#     * `--test_env=SSH_AUTH_SOCK`: This causes the SSH_AUTH_SOCK environment
-#       variable to be "forwarded" from your shell to the sandbox where the test
-#       is run. This authorizes the test to download the test data.
-#
-# // TODO(NNS1-3748): Remove this test
-rust_ic_test(
-    name = "test_node_rewards_migration_with_golden_nns_state",
-    # This uses on the order of 10 GB of disk space.
-    # Therefore, size = "large" is not large enough.
-    size = "enormous",
-    srcs = [
-        "src/node_provider_remuneration_migration.rs",
-    ],
-    aliases = ALIASES,
-    crate_root = "src/node_provider_remuneration_migration.rs",
-    data = DEV_DATA,
-    env = DEV_ENV | {
-        "RUN_GOLDEN_STATE_TEST": "1",
-    },
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "nns_tests_nightly",  # Run this test in the nns-tests-nightly GitHub Action job.
