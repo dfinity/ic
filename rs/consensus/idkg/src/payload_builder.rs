@@ -7,9 +7,9 @@ use crate::{
 };
 pub(super) use errors::IDkgPayloadError;
 use errors::MembershipError;
-use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
+use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_crypto::retrieve_mega_public_key_from_registry;
-use ic_interfaces::idkg::IDkgPool;
+use ic_interfaces::{idkg::IDkgPool, pool_reader::PoolReader};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{error, info, warn, ReplicaLogger};

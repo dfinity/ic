@@ -15,6 +15,7 @@ pub mod ingress_manager;
 pub mod ingress_pool;
 pub mod messaging;
 pub mod p2p;
+pub mod pool_reader;
 pub mod query_stats;
 pub mod self_validating_payload;
 pub mod time_source;

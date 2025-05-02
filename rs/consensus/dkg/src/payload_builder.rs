@@ -2,10 +2,11 @@ use crate::{
     utils::{self, tags_iter, vetkd_key_ids_for_subnet},
     MAX_REMOTE_DKGS_PER_INTERVAL, MAX_REMOTE_DKG_ATTEMPTS, REMOTE_DKG_REPEATED_FAILURE_ERROR,
 };
-use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
+use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_interfaces::{
     crypto::ErrorReproducibility,
     dkg::{DkgPayloadCreationError, DkgPool},
+    pool_reader::PoolReader,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;

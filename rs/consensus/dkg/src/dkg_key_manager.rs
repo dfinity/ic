@@ -3,8 +3,11 @@
 //! there is something to do. On high-level, it's responsible of spawning
 //! threads triggering long-running CSP operation and book-keeping of
 //! thread-handles.
-use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
-use ic_interfaces::crypto::{ErrorReproducibility, LoadTranscriptResult, NiDkgAlgorithm};
+use ic_consensus_utils::crypto::ConsensusCrypto;
+use ic_interfaces::{
+    crypto::{ErrorReproducibility, LoadTranscriptResult, NiDkgAlgorithm},
+    pool_reader::PoolReader,
+};
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_types::{

@@ -1,7 +1,8 @@
 use crate::{crypto_validate_dealing, payload_builder, utils};
-use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
+use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::HasRegistryVersionAtHeight};
 use ic_interfaces::{
     dkg::{DkgPayloadValidationFailure, DkgPool, InvalidDkgPayloadReason, PayloadValidationError},
+    pool_reader::PoolReader,
     validation::ValidationResult,
 };
 use ic_interfaces_registry::RegistryClient;

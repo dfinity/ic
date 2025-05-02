@@ -33,9 +33,10 @@ use crate::{
         IDkgBlockReaderImpl, InvalidChainCacheError,
     },
 };
-use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
+use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::HasRegistryVersionAtHeight};
 use ic_interfaces::{
     crypto::{ThresholdEcdsaSigVerifier, ThresholdSchnorrSigVerifier},
+    pool_reader::PoolReader,
     validation::{ValidationError, ValidationResult},
 };
 use ic_interfaces_registry::RegistryClient;

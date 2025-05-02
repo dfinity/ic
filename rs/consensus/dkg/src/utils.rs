@@ -1,5 +1,4 @@
-use ic_consensus_utils::pool_reader::PoolReader;
-use ic_interfaces::dkg::DkgPayloadCreationError;
+use ic_interfaces::{dkg::DkgPayloadCreationError, pool_reader::PoolReader};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
 use ic_management_canister_types_private::MasterPublicKeyId;

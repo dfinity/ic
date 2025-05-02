@@ -1,8 +1,9 @@
 //! Consensus utility functions
-use crate::{crypto::Aggregate, membership::Membership, pool_reader::PoolReader};
+use crate::{crypto::Aggregate, membership::Membership};
 use ic_interfaces::{
     consensus::{PayloadValidationError, PayloadValidationFailure},
     consensus_pool::ConsensusPoolCache,
+    pool_reader::PoolReader,
     validation::ValidationError,
 };
 use ic_interfaces_registry::RegistryClient;

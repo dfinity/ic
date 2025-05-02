@@ -20,7 +20,7 @@
 //!    in the latest CatchUpPackage can be purged.
 use super::bounds::validated_pool_within_bounds;
 use crate::consensus::metrics::PurgerMetrics;
-use ic_consensus_utils::{pool_reader::PoolReader, MINIMUM_CHAIN_LENGTH};
+use ic_consensus_utils::MINIMUM_CHAIN_LENGTH;
 use ic_interfaces::{
     consensus_pool::{ChangeAction, HeightRange, Mutations, PurgeableArtifactType},
     messaging::MessageRouting,
