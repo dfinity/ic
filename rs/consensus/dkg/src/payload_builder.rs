@@ -38,6 +38,20 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+pub struct DkgPayloadBuilderImpl {
+    subnet_id: SubnetId,
+    registry_client: Arc<dyn RegistryClient>,
+    crypto: Arc<dyn ConsensusCrypto>,
+    dkg_pool: Arc<RwLock<dyn DkgPool>>,
+    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    // TODO: Metrics?
+    log: ReplicaLogger,
+}
+
+// TODO: Impl a new fn
+// TODO: Create an instance during initialization of Block maker
+// TODO: Impl trait
+
 /// Creates the DKG payload for a new block proposal with the given parent. If
 /// the new height corresponds to a new DKG start interval, creates a summary,
 /// otherwise it creates a payload containing new dealings for the current
