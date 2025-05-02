@@ -49,7 +49,7 @@ pub fn valid_init_arg() -> InitArg {
 pub mod arb {
     use crate::checked_amount::CheckedAmountOf;
     use crate::eth_logs::LedgerSubaccount;
-    use crate::eth_rpc::{Block, Data, FeeHistory, FixedSizeData, Hash, LogEntry};
+    use crate::eth_rpc::{Data, FeeHistory, FixedSizeData, Hash, LogEntry};
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
     use crate::numeric::BlockRangeInclusive;
     use candid::Principal;
@@ -137,15 +137,6 @@ pub mod arb {
 
     pub fn arb_data() -> impl Strategy<Value = Data> {
         vec(any::<u8>(), 1..1000).prop_map(Data)
-    }
-
-    pub fn arb_block() -> impl Strategy<Value = Block> {
-        (arb_checked_amount_of(), arb_checked_amount_of()).prop_map(|(number, base_fee_per_gas)| {
-            Block {
-                number,
-                base_fee_per_gas,
-            }
-        })
     }
 
     pub fn arb_log_entry() -> impl Strategy<Value = LogEntry> {

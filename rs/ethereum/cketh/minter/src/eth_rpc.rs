@@ -408,8 +408,7 @@ impl From<BlockNumber> for BlockSpec {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Block {
     ///The block number. `None` when its pending block.
     pub number: BlockNumber,
