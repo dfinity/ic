@@ -125,7 +125,7 @@ dfx canister --network ic call minter retrieve_btc_status "(record { block_index
    │         icrc1_transfer(account)            │                   │
    │───────────────────────────────────────────>│                   │
    │                             │              │                   │
-   │retrieve_btc(adddress,amount)│              │                   │
+   │retrieve_btc(address,amount) │              │                   │
    │────────────────────────────>│              │                   │
    │                             │              │                   │
    │                             │  Send BTC to withdrawal address  │
