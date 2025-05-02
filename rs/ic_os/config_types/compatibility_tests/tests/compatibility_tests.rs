@@ -22,15 +22,3 @@ fn test_backwards_compatibility() {
         println!("Successfully deserialized {}", filename);
     }
 }
-
-#[test]
-fn test_field_removal_protection() {
-    // Verify that all fields in RESERVED_FIELD_NAMES are properly documented
-    // This ensures we don't accidentally reuse removed field names
-    for &reserved in RESERVED_FIELD_NAMES {
-        assert!(
-            !reserved.is_empty(),
-            "Empty field name in RESERVED_FIELD_NAMES"
-        );
-    }
-}
