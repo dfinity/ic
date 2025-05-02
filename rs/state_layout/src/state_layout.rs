@@ -2686,10 +2686,11 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             .execution_state_bits
             .map(|b| b.try_into())
             .transpose()?;
-        let call_context_manager = try_from_option_field(
-            value.call_context_manager,
-            "CanisterStateBits::call_context_manager",
-        )?;
+        let call_context_manager = value
+            .call_context_manager
+            .map(|ccm| ccm.try_into())
+            .transpose()?
+            .unwrap_or_default();
 
         let consumed_cycles =
             try_from_option_field(value.consumed_cycles, "CanisterStateBits::consumed_cycles")
