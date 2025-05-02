@@ -60,4 +60,3 @@ ic-vetkd-utils = { path = "../ic-vetkd-utils" }
 k256 = { workspace = true }
 lazy_static = { workspace = true }
 wat = { workspace = true }
-ic-universal-canister = { path = "../../rs/universal_canister/lib" }

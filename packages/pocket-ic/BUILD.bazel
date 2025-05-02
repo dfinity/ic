@@ -37,7 +37,6 @@ TEST_DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-error-types",
     "//packages/ic-vetkd-utils",
-    "//rs/universal_canister/lib",
     #TODO: try upgrading this to the latest bitcion crate
     "@crate_index//:bitcoin_0_28",
     "@crate_index//:candid_parser",
@@ -76,10 +75,8 @@ rust_test_suite(
         "//packages/pocket-ic/test_canister:test_canister.wasm.gz",
         "//rs/pocket_ic_server:pocket-ic-server",
         "@mozilla_root_ca_store//file",
-	"//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
     env = {
-        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
         "RUST_TEST_THREADS": "2",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",

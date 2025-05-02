@@ -3138,27 +3138,45 @@ fn test_stop_canister_with_deleted_call_contexts() {
 
     // Make an inter-canister call to the other universal canister that keeps the call open
     // by looping until a high number of instructions is executed.
-    let hold_msg_id = env
-        .send_ingress(
-            PrincipalId::new_anonymous(),
-            canister_id,
-            "update",
-            wasm()
-                .call_simple(
-                    callee,
-                    "update",
-                    call_args()
-                        .other_side(wasm().instruction_counter_is_at_least(29_000_000_000).build()),
-                )
-                .build(),
-        );
+    let hold_msg_id = env.send_ingress(
+        PrincipalId::new_anonymous(),
+        canister_id,
+        "update",
+        wasm()
+            .call_simple(
+                callee,
+                "update",
+                call_args().other_side(
+                    wasm()
+                        .instruction_counter_is_at_least(29_000_000_000)
+                        .build(),
+                ),
+            )
+            .build(),
+    );
     let hold_msg_status = env.ingress_status(&hold_msg_id);
-    assert!(matches!(hold_msg_status, IngressStatus::Known { state: IngressState::Processing, .. }));
+    assert!(matches!(
+        hold_msg_status,
+        IngressStatus::Known {
+            state: IngressState::Processing,
+            ..
+        }
+    ));
 
-    let stop_msg_id = env.
-        send_ingress(PrincipalId::new_anonymous(), IC_00, Method::StopCanister, Encode!(&CanisterIdRecord::from(canister_id)).unwrap());
+    let stop_msg_id = env.send_ingress(
+        PrincipalId::new_anonymous(),
+        IC_00,
+        Method::StopCanister,
+        Encode!(&CanisterIdRecord::from(canister_id)).unwrap(),
+    );
     let stop_msg_status = env.ingress_status(&stop_msg_id);
-    assert!(matches!(stop_msg_status, IngressStatus::Known { state: IngressState::Processing, .. }));
+    assert!(matches!(
+        stop_msg_status,
+        IngressStatus::Known {
+            state: IngressState::Processing,
+            ..
+        }
+    ));
 
     env.uninstall_code(canister_id).unwrap();
 
@@ -3169,7 +3187,7 @@ fn test_stop_canister_with_deleted_call_contexts() {
     env.stop_canister(canister_id).unwrap();
 
     for _ in 0..100 {
-      //println!("cycles: {:?}", env.cycle_balance(callee));
-      env.tick();
+        //println!("cycles: {:?}", env.cycle_balance(callee));
+        env.tick();
     }
 }

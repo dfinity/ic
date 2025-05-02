@@ -37,7 +37,9 @@ fn default_canister_state_bits() -> CanisterStateBits {
         cycles_debit: Cycles::zero(),
         reserved_balance: Cycles::zero(),
         reserved_balance_limit: None,
-        status: CanisterStatus::Stopped { call_context_manager: CallContextManager::default() },
+        status: CanisterStatus::Stopped {
+            call_context_manager: CallContextManager::default(),
+        },
         scheduled_as_first: 0,
         skipped_round_due_to_no_messages: 0,
         executed: 0,

@@ -18240,7 +18240,6 @@ dependencies = [
  "ic-error-types",
  "ic-management-canister-types",
  "ic-transport-types",
- "ic-universal-canister",
  "ic-vetkd-utils",
  "k256 0.13.4",
  "lazy_static",

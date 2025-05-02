@@ -415,7 +415,7 @@ pub enum CanisterStatus {
     },
     Stopped {
         call_context_manager: CallContextManager,
-    }
+    },
 }
 
 impl CanisterStatus {
@@ -434,7 +434,9 @@ impl From<&CanisterStatus> for pb::canister_state_bits::CanisterStatus {
             } => Self::Running(pb::CanisterStatusRunning {
                 call_context_manager: Some(call_context_manager.into()),
             }),
-            CanisterStatus::Stopped { call_context_manager } => Self::Stopped(pb::CanisterStatusStopped {
+            CanisterStatus::Stopped {
+                call_context_manager,
+            } => Self::Stopped(pb::CanisterStatusStopped {
                 call_context_manager: Some(call_context_manager.into()),
             }),
             CanisterStatus::Stopping {
@@ -462,14 +464,12 @@ impl TryFrom<pb::canister_state_bits::CanisterStatus> for CanisterStatus {
             },
             pb::canister_state_bits::CanisterStatus::Stopped(pb::CanisterStatusStopped {
                 call_context_manager,
-            }) => {
-                Self::Stopped {
-                    call_context_manager: try_from_option_field(
-                        call_context_manager,
-                        "CanisterStatus::Stopped::call_context_manager",
-                    )?,
-                }
-            }
+            }) => Self::Stopped {
+                call_context_manager: try_from_option_field(
+                    call_context_manager,
+                    "CanisterStatus::Stopped::call_context_manager",
+                )?,
+            },
             pb::canister_state_bits::CanisterStatus::Stopping(pb::CanisterStatusStopping {
                 call_context_manager,
                 stop_contexts,
@@ -1051,7 +1051,9 @@ impl SystemState {
                 call_context_manager,
                 ..
             } => Some(call_context_manager),
-            CanisterStatus::Stopped { call_context_manager } => Some(call_context_manager),
+            CanisterStatus::Stopped {
+                call_context_manager,
+            } => Some(call_context_manager),
         }
     }
 
@@ -1417,9 +1419,11 @@ impl SystemState {
                 stop_contexts
             }
 
-            CanisterStatus::Stopped { call_context_manager } => {
+            CanisterStatus::Stopped {
+                call_context_manager,
+            } => {
                 self.status = CanisterStatus::Running {
-                  call_context_manager: std::mem::take(call_context_manager),
+                    call_context_manager: std::mem::take(call_context_manager),
                 };
                 Vec::new()
             }
@@ -1482,13 +1486,12 @@ impl SystemState {
             CanisterStatus::Stopping {
                 ref mut call_context_manager,
                 ref mut stop_contexts,
-            } if call_context_manager.canister_ready_to_stop() =>
-            {
+            } if call_context_manager.canister_ready_to_stop() => {
                 let stop_contexts = std::mem::take(stop_contexts);
 
                 // Transition the canister to "stopped".
                 self.status = CanisterStatus::Stopped {
-                  call_context_manager: std::mem::take(call_context_manager),
+                    call_context_manager: std::mem::take(call_context_manager),
                 };
 
                 // Reply to all pending stop_canister requests.
@@ -2182,7 +2185,7 @@ fn call_context_manager_mut(status: &mut CanisterStatus) -> Option<&mut CallCont
         } => Some(call_context_manager),
 
         CanisterStatus::Stopped {
-          call_context_manager,
+            call_context_manager,
         } => Some(call_context_manager),
     }
 }
@@ -2326,7 +2329,9 @@ pub mod testing {
             memory_allocation: Default::default(),
             wasm_memory_threshold: Default::default(),
             freeze_threshold: Default::default(),
-            status: CanisterStatus::Stopped { call_context_manager: CallContextManager::default() },
+            status: CanisterStatus::Stopped {
+                call_context_manager: CallContextManager::default(),
+            },
             certified_data: Default::default(),
             canister_metrics: Default::default(),
             cycles_balance: Default::default(),
