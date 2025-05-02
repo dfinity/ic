@@ -46,9 +46,11 @@ enum Step {
     #[strum(serialize = "step_8")]
     Small = 8,
     #[strum(serialize = "step_4kb")]
-    Page = 4096,
+    Page = PAGE_SIZE as isize,
     #[strum(serialize = "step_16kb")]
-    FourPages = 16384,
+    FourPages = 4 * PAGE_SIZE as isize,
+    #[strum(serialize = "step_2mb")]
+    HugePage = 512 * PAGE_SIZE as isize,
 }
 
 #[derive(Copy, Clone, Display, EnumIter)]
@@ -111,7 +113,7 @@ fn loop_body(op: &str, mem: Mem, dir: Dir, size: Size, step: Step) -> String {
                 (loop $loop
                     (local.set $address (i{mem}.sub (local.get $address) (i{mem}.const {step})))
                     {op}
-                    (br_if $loop (i{mem}.gt_s (local.get $address) (i{mem}.const 0)))
+                    (br_if $loop (i{mem}.ge_s (local.get $address) (i{mem}.const {step})))
                 )
             "#
         ),
