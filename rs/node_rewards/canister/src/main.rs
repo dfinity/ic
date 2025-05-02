@@ -46,7 +46,7 @@ fn schedule_timers() {
     schedule_registry_sync();
 }
 
-// The frquency of regular registry syncs.  This is set to 1 hour to avoid
+// The frequency of regular registry syncs.  This is set to 1 hour to avoid
 // making too many requests.  Before meaningful calculations are made, however, the
 // registry data should be updated.
 const REGISTRY_SYNC_INTERVAL_SECONDS: Duration = Duration::from_secs(60 * 60); // 1 hour
@@ -65,7 +65,7 @@ fn schedule_registry_sync() {
     });
 }
 
-fn panic_if_not_governance() {
+fn panic_if_caller_not_governance() {
     if ic_cdk::caller() != GOVERNANCE_CANISTER_ID.get().0 {
         panic!("Only the governance canister can call this method");
     }
@@ -81,7 +81,7 @@ fn get_registry_value(key: String) -> Result<Option<Vec<u8>>, String> {
 async fn get_node_providers_monthly_xdr_rewards(
     request: GetNodeProvidersMonthlyXdrRewardsRequest,
 ) -> GetNodeProvidersMonthlyXdrRewardsResponse {
-    panic_if_not_governance();
+    panic_if_caller_not_governance();
     NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(&CANISTER, request).await
 }
 

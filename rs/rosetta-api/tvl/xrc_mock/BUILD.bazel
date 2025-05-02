@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/rust_canisters/http_types",
+    "//packages/ic-http-types",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:futures",

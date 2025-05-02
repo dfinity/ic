@@ -11,6 +11,28 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-04-25: Proposal 136370
+
+http://dashboard.internetcomputer.org/proposal/136370
+
+## Fixed
+
+* Use `StableBTreeMap::init` instead of `::new` for voting power snapshots.
+
+
+# 2025-04-15: Proposal 136285
+
+http://dashboard.internetcomputer.org/proposal/136285
+
+## Added
+
+* A timer task is added to take daily snapshots of voting power for standard proposals.
+
+## Fixed
+
+* Turned off `DisburseMaturity` that was incorrectly turned on before.
+
+
 # 2025-04-11: Proposal 136224
 
 http://dashboard.internetcomputer.org/proposal/136224

@@ -8,7 +8,7 @@ use crate::{
         SubmittedBtcTransaction,
     },
     test_fixtures::arbitrary,
-    tx, BuildTxError, Network, MINTER_ADDRESS_DUST_LIMIT,
+    tx, BuildTxError, CacheWithExpiration, Network, MINTER_ADDRESS_DUST_LIMIT,
 };
 use bitcoin::network::constants::Network as BtcNetwork;
 use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
@@ -26,6 +26,7 @@ use proptest::{
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::str::FromStr;
+use std::time::Duration;
 
 #[allow(deprecated)]
 fn default_init_args() -> InitArgs {
@@ -41,6 +42,7 @@ fn default_init_args() -> InitArgs {
         btc_checker_principal: None,
         kyt_principal: None,
         kyt_fee: None,
+        get_utxos_cache_expiration_seconds: None,
     }
 }
 
@@ -1130,5 +1132,97 @@ fn serialize_network_preserves_capitalization() {
         let name = value.as_text().unwrap();
         let first_char = name.chars().next().unwrap();
         assert!(first_char.is_uppercase());
+    }
+}
+
+#[test]
+fn test_cache_expiration_zero() {
+    let mut cache = CacheWithExpiration::new(Duration::from_nanos(0));
+    assert_eq!(cache.len(), 0);
+
+    cache.insert(1, 1, 1);
+    assert_eq!(cache.len(), 1);
+    assert_eq!(cache.get(&1, 1), Some(&1));
+    assert_eq!(cache.get(&1, 2), None);
+
+    cache.insert_without_prune(2, 2, 2);
+    assert_eq!(cache.len(), 2);
+    assert_eq!(cache.get(&1, 1), Some(&1));
+    assert_eq!(cache.get(&1, 2), None);
+    assert_eq!(cache.get(&2, 2), Some(&2));
+
+    cache.prune(2);
+    assert_eq!(cache.len(), 1);
+    assert_eq!(cache.get(&2, 2), Some(&2));
+
+    // This is an update
+    cache.insert_without_prune(2, 2, 1);
+    assert_eq!(cache.len(), 1);
+    assert_eq!(cache.get(&2, 1), Some(&2));
+    assert_eq!(cache.get(&2, 2), None);
+
+    cache.prune(2);
+    assert_eq!(cache.len(), 0);
+}
+
+#[test]
+fn test_cache_expiration_two() {
+    let mut cache = CacheWithExpiration::new(Duration::from_nanos(2));
+    cache.insert(1, 1, 1);
+    cache.insert(2, 2, 2);
+    cache.insert(3, 3, 3);
+    assert_eq!(cache.len(), 3);
+    assert_eq!(cache.get(&1, 3), Some(&1));
+    assert_eq!(cache.get(&1, 4), None);
+    assert_eq!(cache.get(&2, 4), Some(&2));
+    assert_eq!(cache.get(&3, 4), Some(&3));
+
+    // This is an update
+    cache.insert_without_prune(2, 2, 4);
+    assert_eq!(cache.len(), 3);
+    assert_eq!(cache.get(&2, 4), Some(&2));
+
+    // This will remove 1
+    cache.prune(4);
+    assert_eq!(cache.len(), 2);
+    assert_eq!(cache.get(&1, 4), None);
+    assert_eq!(cache.get(&2, 4), Some(&2));
+    assert_eq!(cache.get(&3, 4), Some(&3));
+
+    // This will prune first and then insert
+    cache.insert(4, 4, 6);
+    assert_eq!(cache.len(), 2);
+    assert_eq!(cache.get(&2, 6), Some(&2));
+    assert_eq!(cache.get(&4, 6), Some(&4));
+}
+
+proptest! {
+    #[test]
+    fn test_cache_batch_inserts(
+        expiration in 1u64..10,
+        max_key in 1u64..20,
+    ) {
+        let mut cache = CacheWithExpiration::new(Duration::from_nanos(expiration));
+        assert_eq!(cache.len(), 0);
+        for i in 1..=max_key {
+            cache.insert(i, i, i);
+        }
+
+        cache.prune(max_key);
+        let expected_len = if max_key <= expiration {
+            max_key
+        } else {
+            expiration + 1
+        };
+        assert_eq!(cache.len(), expected_len as usize);
+
+        for i in 1..=max_key {
+            let expected_val = if i <= max_key - expected_len {
+                None
+            } else {
+                Some(&i)
+            };
+            assert_eq!(cache.get(&i, max_key), expected_val);
+        }
     }
 }

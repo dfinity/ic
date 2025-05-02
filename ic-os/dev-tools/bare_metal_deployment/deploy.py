@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import functools
 import os
+import re
 import site
 import sys
 import time
@@ -115,6 +116,9 @@ class Args:
     # Run benchmarks if True
     benchmark: bool = flag(default=False)
 
+    # Run HostOS metrics check if True
+    check_hostos_metrics: bool = flag(default=False)
+
     # Check HSM capability if True
     hsm: bool = flag(default=False)
 
@@ -164,6 +168,7 @@ class BMCInfo:
     password: str
     network_image_url: str
     guestos_ipv6_address: Optional[IPv6Address] = None
+    hostos_ipv6_address: Optional[IPv6Address] = None
 
     def __post_init__(self):
         def assert_not_empty(name: str, x: Any) -> None:
@@ -175,7 +180,7 @@ class BMCInfo:
 
     # Don't print secrets
     def __str__(self):
-        return f"BMCInfo(ip_address={self.ip_address}, username={self.username}, password=<redacted>, network_image_url={self.network_image_url}, guestos_ipv6_address={self.guestos_ipv6_address})"
+        return f"BMCInfo(ip_address={self.ip_address}, username={self.username}, password=<redacted>, network_image_url={self.network_image_url}, hostos_ipv6_address={self.hostos_ipv6_address}), guestos_ipv6_address={self.guestos_ipv6_address})"
 
     def __repr__(self):
         return self.__str__()
@@ -206,12 +211,15 @@ def parse_from_row(row: List[str], network_image_url: str) -> BMCInfo:
 
     if len(row) == 4:
         ip_address, username, password, guestos_ipv6_address = row
+        hostos_ipv6_address = guestos_ipv6_address.replace("6801", "6800", 1)
+
         return BMCInfo(
             ip_address,
             username,
             password,
             network_image_url,
             IPv6Address(guestos_ipv6_address),
+            IPv6Address(hostos_ipv6_address),
         )
 
     assert False, f"Invalid csv row found. Must be 3 or 4 items: {row}"
@@ -242,6 +250,28 @@ def get_url_content(url: str, timeout_secs: int = 1) -> Optional[str]:
         return None
 
 
+def check_hostos_power_metrics(ip_address: IPv6Address, timeout_secs: int) -> bool:
+    metrics_endpoint = f"https://[{ip_address.exploded}]:9100/metrics"
+    log.info(f"Attempting GET on metrics at {metrics_endpoint}...")
+    metrics_output = get_url_content(metrics_endpoint, timeout_secs)
+    if not metrics_output:
+        log.warning(f"Request to {metrics_endpoint} failed.")
+        return False
+
+    log.info("Got metrics result from HostOS")
+    try:
+        power_metric_line = next(
+            line
+            for line in metrics_output.splitlines()
+            if not line.startswith("#") and re.fullmatch(r"power_average_watts \d+", line)
+        )
+        log.info(f"power consumption metric: {power_metric_line}")
+        return True
+    except StopIteration:
+        log.warning("power_average_watts metric in HostOS metrics not found or invalid")
+        return False
+
+
 def check_guestos_ping_connectivity(ip_address: IPv6Address, timeout_secs: int) -> bool:
     # Ping target with count of 1, STRICT timeout of `timeout_secs`.
     # This will break if latency is > `timeout_secs`.
@@ -262,11 +292,15 @@ def check_guestos_metrics_version(ip_address: IPv6Address, timeout_secs: int) ->
         return False
 
     log.info("Got metrics result from GuestOS")
-    guestos_version_line = next(
-        line for line in metrics_output.splitlines() if not line.startswith("#") and "guestos_version{" in line
-    )
-    log.info(f"GuestOS version metric: {guestos_version_line}")
-    return True
+    try:
+        guestos_version_line = next(
+            line for line in metrics_output.splitlines() if not line.startswith("#") and "guestos_version{" in line
+        )
+        log.info(f"GuestOS version metric: {guestos_version_line}")
+        return True
+    except StopIteration:
+        log.warning("guestos_version metric not found in GuestOS metrics")
+        return False
 
 
 def check_guestos_hsm_capability(ip_address: IPv6Address, ssh_key_file: Optional[str] = None) -> bool:
@@ -533,6 +567,37 @@ def benchmark_nodes(
         return True
 
 
+def check_node_hostos_metrics(bmc_info: BMCInfo):
+    log.info("Checking HostOS metrics.")
+    timeout_secs = 5
+    result = check_hostos_power_metrics(bmc_info.hostos_ipv6_address, timeout_secs)
+    return OperationResult(bmc_info, success=result)
+
+
+def check_nodes_hostos_metrics(
+    bmc_infos: List[BMCInfo],
+    parallelism: int,
+):
+    results: List[OperationResult] = []
+
+    with Pool(parallelism) as p:
+        results = p.map(check_node_hostos_metrics, bmc_infos)
+
+    log.info("HostOS metrics check summary:")
+    metrics_check_failure = False
+    for res in results:
+        log.info(res)
+        if not res.success:
+            metrics_check_failure = True
+
+    if metrics_check_failure:
+        log.error("The metrics check failed on one or more nodes.")
+        return False
+    else:
+        log.info("All nodes correctly export the hostOS metrics.")
+        return True
+
+
 def create_file_share_endpoint(file_share_url: str, file_share_username: Optional[str]) -> str:
     return file_share_url if file_share_username is None else f"{file_share_username}@{file_share_url}"
 
@@ -662,7 +727,11 @@ def main():
             args.inject_image_domain,
         )
 
-    # Benchmark these nodes, rather than deploy them.
+    if args.benchmark and args.check_hostos_metrics:
+        log.error("Cannot run both benchmark and check_hostos_metrics at the same time. Please choose one.")
+        sys.exit(1)
+
+    # Benchmark the nodes (no deployment)
     if args.benchmark:
         success = benchmark_nodes(
             bmc_infos=bmc_infos,
@@ -671,6 +740,18 @@ def main():
             benchmark_runner_script=args.benchmark_runner_script,
             benchmark_tools=args.benchmark_tools,
             file_share_ssh_key=args.file_share_ssh_key,
+        )
+
+        if not success:
+            sys.exit(1)
+
+        sys.exit(0)
+
+    # Check that all important hostos metrics are available (no deployment)
+    if args.check_hostos_metrics:
+        success = check_nodes_hostos_metrics(
+            bmc_infos=bmc_infos,
+            parallelism=args.parallel,
         )
 
         if not success:
