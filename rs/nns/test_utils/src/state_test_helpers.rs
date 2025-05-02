@@ -87,7 +87,7 @@ use num_traits::ToPrimitive;
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayload;
 use serde::Serialize;
-use std::{convert::TryInto, time::Duration};
+use std::time::Duration;
 
 /// A `StateMachine` builder setting the IC time to the current time
 /// and using the canister ranges of both the NNS and II subnets.
