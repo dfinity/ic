@@ -41,7 +41,7 @@ fn setup(env: TestEnv) {
 fn upgrade_downgrade_nns_subnet(env: TestEnv) {
     let nns_node = env.get_first_healthy_system_node_snapshot();
     let branch_version = bless_branch_version(&env, &nns_node);
-    let (faulty_node, can_id, msg) =
+    let (faulty_node, can_id, stop_can_id, msg) =
         upgrade(&env, &nns_node, &branch_version, SubnetType::System, None);
     let mainnet_version = get_mainnet_nns_revision();
     upgrade(&env, &nns_node, &mainnet_version, SubnetType::System, None);
@@ -50,6 +50,13 @@ fn upgrade_downgrade_nns_subnet(env: TestEnv) {
         &env.logger(),
         &faulty_node.get_public_url(),
         can_id,
+        &msg,
+        /*retries=*/ 3
+    ));
+    assert!(can_read_msg_with_retries(
+        &env.logger(),
+        &faulty_node.get_public_url(),
+        stop_can_id,
         &msg,
         /*retries=*/ 3
     ));

@@ -2,6 +2,7 @@ use anyhow::bail;
 use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_system_test_driver::{driver::test_env_api::*, util::*};
+use ic_utils::interfaces::ManagementCanister;
 use reqwest::Url;
 use slog::{debug, info, Logger};
 use std::time::Duration;
@@ -137,6 +138,13 @@ async fn can_read_msg_impl(
 
         match create_agent(url.as_str()).await {
             Ok(agent) => {
+                // Make sure the canister is running.
+                let ic00 = ManagementCanister::create(&agent);
+                ic00.start_canister(&canister_id)
+                    .await
+                    .unwrap_or_else(|err| {
+                        panic!("Could not start canister {}: {}", canister_id, err)
+                    });
                 debug!(log, "Try to get canister reference");
                 let mcan = MessageCanister::from_canister_id(&agent, canister_id);
                 debug!(log, "Success, will try to read next");

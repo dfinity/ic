@@ -27,9 +27,10 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{test_env::TestEnv, test_env_api::*},
-    util::{block_on, MessageCanister},
+    util::{assert_create_agent, block_on, MessageCanister},
 };
 use ic_types::SubnetId;
+use ic_utils::interfaces::ManagementCanister;
 use slog::{info, Logger};
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -120,7 +121,7 @@ pub fn upgrade(
     upgrade_version: &str,
     subnet_type: SubnetType,
     ecdsa_canister_key: Option<&(MessageCanister, BTreeMap<MasterPublicKeyId, Vec<u8>>)>,
-) -> (IcNodeSnapshot, Principal, String) {
+) -> (IcNodeSnapshot, Principal, Principal, String) {
     let logger = env.logger();
     let (subnet_id, subnet_node, faulty_node, redundant_nodes) =
         if subnet_type == SubnetType::System {
@@ -167,6 +168,25 @@ pub fn upgrade(
         can_id,
         msg
     ));
+    let stop_can_id = store_message(
+        &subnet_node.get_public_url(),
+        subnet_node.effective_canister_id(),
+        msg,
+        &logger,
+    );
+    assert!(can_read_msg(
+        &logger,
+        &subnet_node.get_public_url(),
+        stop_can_id,
+        msg
+    ));
+    block_on(async {
+        let agent = assert_create_agent(subnet_node.get_public_url().as_str()).await;
+        let ic00 = ManagementCanister::create(&agent);
+        ic00.stop_canister(&stop_can_id)
+            .await
+            .unwrap_or_else(|err| panic!("Could not stop canister {}: {}", stop_can_id, err));
+    });
     info!(logger, "Could store and read message '{}'", msg);
 
     stop_node(&logger, &faulty_node);
@@ -225,7 +245,7 @@ pub fn upgrade(
         start_node(&logger, redundant_node);
     }
 
-    (faulty_node.clone(), can_id, msg.into())
+    (faulty_node.clone(), can_id, stop_can_id, msg.into())
 }
 
 fn upgrade_to(
