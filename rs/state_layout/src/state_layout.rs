@@ -2686,11 +2686,21 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             .execution_state_bits
             .map(|b| b.try_into())
             .transpose()?;
+
+        let status: CanisterStatus =
+            try_from_option_field(value.canister_status, "CanisterStateBits::canister_status")?;
         let call_context_manager = value
             .call_context_manager
             .map(|ccm| ccm.try_into())
             .transpose()?
-            .unwrap_or_default();
+            .unwrap_or_else(|| {
+                assert!(
+                    matches!(status, CanisterStatus::Stopped),
+                    "No call context manager found for canister with status {:?}",
+                    status
+                );
+                CallContextManager::default()
+            });
 
         let consumed_cycles =
             try_from_option_field(value.consumed_cycles, "CanisterStateBits::consumed_cycles")
@@ -2763,10 +2773,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             cycles_debit,
             reserved_balance,
             reserved_balance_limit: value.reserved_balance_limit.map(|v| v.into()),
-            status: try_from_option_field(
-                value.canister_status,
-                "CanisterStateBits::canister_status",
-            )?,
+            status,
             scheduled_as_first: value.scheduled_as_first,
             skipped_round_due_to_no_messages: value.skipped_round_due_to_no_messages,
             executed: value.executed,
