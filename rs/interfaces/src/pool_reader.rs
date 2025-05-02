@@ -1,14 +1,10 @@
 //! Wrapper to read the consensus pool
 
-use crate::{
-    batch_payload::PastPayload,
-    consensus_pool::{
-        ConsensusBlockCache, ConsensusPool, ConsensusPoolCache, HeightRange, OnlyError,
-    },
+use crate::consensus_pool::{
+    ConsensusBlockCache, ConsensusPool, ConsensusPoolCache, HeightRange, OnlyError,
 };
 use ic_types::{consensus::catchup::*, consensus::*, crypto::CryptoHashOf, Height, Time};
-use std::cmp::Ordering;
-use std::time::Instant;
+use std::{cmp::Ordering, time::Instant};
 
 /// A struct and corresponding impl with helper methods to obtain particular
 /// artifacts/messages from the artifact pool.
@@ -549,29 +545,4 @@ impl<'a> PoolReader<'a> {
             .dkg
             .get_next_start_height()
     }
-}
-
-/// Take a slice returned by [`PoolReader::get_payloads_from_height`]
-/// and return it in the [`PastPayload`] format that is used by the batch payload builders
-///
-/// The returned vector contains only the values for which the supplied closure `filter`
-/// returns Some(value).
-pub fn filter_past_payloads<'a, P>(
-    input: &'a [(Height, Time, Payload)],
-    filter: P,
-) -> Vec<PastPayload<'a>>
-where
-    P: Fn(&'a Height, &'a Time, &'a Payload) -> Option<&'a [u8]>,
-{
-    input
-        .iter()
-        .filter_map(|(height, time, payload)| {
-            filter(height, time, payload).map(|data| PastPayload {
-                height: *height,
-                time: *time,
-                block_hash: payload.get_hash().clone(),
-                payload: data,
-            })
-        })
-        .collect()
 }

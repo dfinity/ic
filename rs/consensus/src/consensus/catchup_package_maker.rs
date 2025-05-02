@@ -15,9 +15,9 @@
 
 use ic_consensus_utils::{
     active_high_threshold_nidkg_id, crypto::ConsensusCrypto,
-    get_oldest_idkg_state_registry_version, membership::Membership, pool_reader::PoolReader,
+    get_oldest_idkg_state_registry_version, membership::Membership,
 };
-use ic_interfaces::messaging::MessageRouting;
+use ic_interfaces::{messaging::MessageRouting, pool_reader::PoolReader};
 use ic_interfaces_state_manager::{
     PermanentStateHashError::*, StateHashError, StateManager, TransientStateHashError::*,
 };

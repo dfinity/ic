@@ -28,9 +28,9 @@ use ic_consensus_utils::{
     crypto::ConsensusCrypto,
     find_lowest_ranked_non_disqualified_proposals, get_notarization_delay_settings,
     membership::{Membership, MembershipError},
-    pool_reader::PoolReader,
+    pool_reader::HasRegistryVersionAtHeight,
 };
-use ic_interfaces::time_source::TimeSource;
+use ic_interfaces::{pool_reader::PoolReader, time_source::TimeSource};
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{error, trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;

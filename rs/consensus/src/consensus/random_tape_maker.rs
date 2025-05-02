@@ -24,9 +24,8 @@ use ic_consensus_utils::{
     active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
     membership::{Membership, MembershipError},
-    pool_reader::PoolReader,
 };
-use ic_interfaces::messaging::MessageRouting;
+use ic_interfaces::{messaging::MessageRouting, pool_reader::PoolReader};
 use ic_logger::{error, trace, ReplicaLogger};
 use ic_types::{
     consensus::{HasCommittee, RandomTape, RandomTapeContent, RandomTapeShare},

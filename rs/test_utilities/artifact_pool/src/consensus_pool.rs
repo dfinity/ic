@@ -3,7 +3,7 @@ use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_artifact_pool::dkg_pool::DkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_dkg::get_dkg_summary_from_cup_contents;
-use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
+use ic_consensus_utils::membership::Membership;
 use ic_interfaces::{
     consensus_pool::{
         ChangeAction, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool, ConsensusPoolCache,
@@ -12,6 +12,7 @@ use ic_interfaces::{
     crypto::{MultiSigner, ThresholdSigner},
     dkg::DkgPool,
     p2p::consensus::{ArtifactTransmits, MutablePool},
+    pool_reader::PoolReader,
     time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;

@@ -21,11 +21,12 @@ use crate::consensus::{
     metrics::{BatchStats, BlockStats, FinalizerMetrics},
 };
 use ic_consensus_utils::{
-    crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
+    crypto::ConsensusCrypto, membership::Membership, pool_reader::HasRegistryVersionAtHeight,
 };
 use ic_interfaces::{
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, MessageRoutingError},
+    pool_reader::PoolReader,
     time_source::system_time_now,
 };
 use ic_interfaces_registry::RegistryClient;

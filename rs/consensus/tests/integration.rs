@@ -6,8 +6,9 @@ use crate::framework::{
     ConsensusRunner, ConsensusRunnerConfig, StopPredicate,
 };
 use framework::test_master_public_key_ids;
-use ic_consensus_utils::pool_reader::PoolReader;
-use ic_interfaces::{consensus_pool::ConsensusPool, messaging::MessageRouting};
+use ic_interfaces::{
+    consensus_pool::ConsensusPool, messaging::MessageRouting, pool_reader::PoolReader,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};

@@ -24,6 +24,7 @@ use ic_consensus_utils::MINIMUM_CHAIN_LENGTH;
 use ic_interfaces::{
     consensus_pool::{ChangeAction, HeightRange, Mutations, PurgeableArtifactType},
     messaging::MessageRouting,
+    pool_reader::PoolReader,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;

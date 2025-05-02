@@ -14,7 +14,7 @@ use ic_consensus_utils::{
     crypto::ConsensusCrypto,
     get_oldest_idkg_state_registry_version,
     membership::{Membership, MembershipError},
-    pool_reader::PoolReader,
+    pool_reader::HasRegistryVersionAtHeight,
     RoundRobin,
 };
 use ic_interfaces::{
@@ -23,6 +23,7 @@ use ic_interfaces::{
     consensus_pool::*,
     dkg::DkgPool,
     messaging::MessageRouting,
+    pool_reader::PoolReader,
     time_source::TimeSource,
     validation::{ValidationError, ValidationResult},
 };

@@ -1,5 +1,6 @@
 use crate::registry_version_at_height;
-use ic_types::{Height, RegistryVersion};
+use ic_interfaces::{batch_payload::PastPayload, pool_reader::PoolReader};
+use ic_types::{consensus::Payload, Height, RegistryVersion, Time};
 
 pub trait HasRegistryVersionAtHeight {
     /// Return the registry version to be used for the given height.
@@ -12,6 +13,31 @@ impl HasRegistryVersionAtHeight for PoolReader<'_> {
     fn registry_version(&self, height: Height) -> Option<RegistryVersion> {
         registry_version_at_height(self.as_cache(), height)
     }
+}
+
+/// Take a slice returned by [`PoolReader::get_payloads_from_height`]
+/// and return it in the [`PastPayload`] format that is used by the batch payload builders
+///
+/// The returned vector contains only the values for which the supplied closure `filter`
+/// returns Some(value).
+pub fn filter_past_payloads<'a, P>(
+    input: &'a [(Height, Time, Payload)],
+    filter: P,
+) -> Vec<PastPayload<'a>>
+where
+    P: Fn(&'a Height, &'a Time, &'a Payload) -> Option<&'a [u8]>,
+{
+    input
+        .iter()
+        .filter_map(|(height, time, payload)| {
+            filter(height, time, payload).map(|data| PastPayload {
+                height: *height,
+                time: *time,
+                block_hash: payload.get_hash().clone(),
+                payload: data,
+            })
+        })
+        .collect()
 }
 
 #[cfg(test)]

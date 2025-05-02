@@ -5,8 +5,11 @@ use crate::consensus::{
     add_all_to_validated, block_maker, block_maker::BlockMaker, finalizer::Finalizer,
     notary::Notary,
 };
-use ic_consensus_utils::pool_reader::PoolReader;
-use ic_interfaces::consensus_pool::{ChangeAction, HeightRange, Mutations};
+use ic_consensus_utils::pool_reader::HasRegistryVersionAtHeight;
+use ic_interfaces::{
+    consensus_pool::{ChangeAction, HeightRange, Mutations},
+    pool_reader::PoolReader,
+};
 use ic_logger::{info, trace, ReplicaLogger};
 use ic_types::{
     consensus::{

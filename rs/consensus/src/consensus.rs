@@ -31,7 +31,7 @@ use crate::consensus::{
 use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::{
     bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto, get_notarization_delay_settings,
-    membership::Membership, pool_reader::PoolReader, RoundRobin,
+    membership::Membership, RoundRobin,
 };
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
@@ -43,6 +43,7 @@ use ic_interfaces::{
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, XNetPayloadBuilder},
     p2p::consensus::{Bouncer, BouncerFactory, PoolMutationsProducer},
+    pool_reader::PoolReader,
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };

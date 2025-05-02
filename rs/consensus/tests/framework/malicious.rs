@@ -3,11 +3,11 @@
 use super::ComponentModifier;
 use ic_consensus::consensus::ConsensusImpl;
 use ic_consensus_idkg::{malicious_pre_signer, IDkgImpl};
-use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::{
     consensus_pool::{ChangeAction::*, ConsensusPool, Mutations, ValidatedConsensusArtifact},
     idkg::{IDkgChangeSet, IDkgPool},
     p2p::consensus::PoolMutationsProducer,
+    pool_reader::PoolReader,
 };
 use ic_protobuf::types::v1 as pb;
 use ic_types::{

@@ -2,10 +2,10 @@ use super::{delivery::*, execution::*, types::*};
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_certification::{CertificationCrypto, CertifierImpl};
 use ic_consensus_dkg::DkgKeyManager;
-use ic_consensus_utils::{
-    crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
+use ic_consensus_utils::{crypto::ConsensusCrypto, membership::Membership};
+use ic_interfaces::{
+    consensus_pool::ConsensusPoolCache, pool_reader::PoolReader, time_source::TimeSource,
 };
-use ic_interfaces::{consensus_pool::ConsensusPoolCache, time_source::TimeSource};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_types::{malicious_flags::MaliciousFlags, Height, Time};

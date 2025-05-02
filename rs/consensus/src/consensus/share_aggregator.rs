@@ -7,7 +7,7 @@ use ic_consensus_utils::{
     active_high_threshold_nidkg_id, active_low_threshold_nidkg_id, aggregate,
     crypto::ConsensusCrypto, membership::Membership, registry_version_at_height,
 };
-use ic_interfaces::messaging::MessageRouting;
+use ic_interfaces::{messaging::MessageRouting, pool_reader::PoolReader};
 use ic_logger::ReplicaLogger;
 use ic_types::{
     consensus::{

@@ -1,7 +1,9 @@
 use super::types::*;
 use ic_consensus::consensus::bounds::validated_pool_within_bounds;
-use ic_consensus_utils::pool_reader::PoolReader;
-use ic_interfaces::p2p::consensus::{BouncerValue, MutablePool, UnvalidatedArtifact};
+use ic_interfaces::{
+    p2p::consensus::{BouncerValue, MutablePool, UnvalidatedArtifact},
+    pool_reader::PoolReader,
+};
 use ic_logger::{trace, ReplicaLogger};
 use ic_test_utilities_types::ids::node_test_id;
 use ic_types::time::Time;

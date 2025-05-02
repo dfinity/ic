@@ -11,15 +11,14 @@ use ic_consensus_idkg::utils::{
     generate_responses_to_signature_request_contexts, get_idkg_subnet_public_keys,
     get_pre_signature_ids_to_deliver,
 };
-use ic_consensus_utils::{
-    crypto_hashable_to_seed, membership::Membership, pool_reader::PoolReader,
-};
+use ic_consensus_utils::{crypto_hashable_to_seed, membership::Membership};
 use ic_consensus_vetkd::VetKdPayloadBuilderImpl;
 use ic_error_types::RejectCode;
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_interfaces::{
     batch_payload::IntoMessages,
     messaging::{MessageRouting, MessageRoutingError},
+    pool_reader::PoolReader,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{debug, error, info, warn, ReplicaLogger};
