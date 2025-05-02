@@ -34,7 +34,6 @@ rust_library(
         "@crate_index//:chrono",
         "@crate_index//:futures",
         "@crate_index//:ic-agent",
-        "@crate_index//:ic-utils",
         "@crate_index//:leb128",
         "@crate_index//:openssh-keys",
         "@crate_index//:prost",

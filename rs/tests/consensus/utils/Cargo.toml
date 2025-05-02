@@ -28,7 +28,6 @@ ic-registry-nns-data-provider = { path = "../../../registry/nns_data_provider" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
-ic-utils = { workspace = true }
 ic_consensus_threshold_sig_system_test_utils = { path = "../tecdsa/utils" }
 leb128 = "0.2.5"
 openssh-keys = "0.5.0"

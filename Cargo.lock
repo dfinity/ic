@@ -14704,7 +14704,6 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
- "ic-utils 0.39.3",
  "ic_consensus_threshold_sig_system_test_utils",
  "leb128",
  "openssh-keys",

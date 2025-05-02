@@ -217,6 +217,13 @@ pub fn upgrade(
         can_id,
         msg
     ));
+    block_on(async {
+        let agent = assert_create_agent(faulty_node.get_public_url().as_str()).await;
+        let ic00 = ManagementCanister::create(&agent);
+        ic00.start_canister(&stop_can_id)
+            .await
+            .unwrap_or_else(|err| panic!("Could not start canister {}: {}", stop_can_id, err));
+    });
     info!(logger, "After upgrade could read message '{}'", msg);
 
     let msg_2 = &format!("hello after upgrade to {upgrade_version}");
