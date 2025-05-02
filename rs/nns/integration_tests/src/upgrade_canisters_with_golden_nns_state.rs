@@ -3,21 +3,24 @@ use cycles_minting_canister::CyclesCanisterInitPayload;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
+use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NODE_REWARDS_CANISTER_ID,
     REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::Vote;
+use ic_nns_governance_api::pb::v1::{MonthlyNodeProviderRewards, Vote};
 use ic_nns_test_utils::{
     common::modify_wasm_bytes,
     state_test_helpers::{
         get_canister_status, nns_cast_vote, nns_create_super_powerful_neuron,
-        nns_propose_upgrade_nns_canister, wait_for_canister_upgrade_to_succeed,
+        nns_get_most_recent_monthly_node_provider_rewards, nns_propose_upgrade_nns_canister,
+        scrape_metrics, wait_for_canister_upgrade_to_succeed,
     },
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
+use ic_state_machine_tests::StateMachine;
 use icp_ledger::Tokens;
 use std::{
     env,
@@ -309,4 +312,95 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     }
 
     perform_sequence_of_upgrades(&nns_canister_upgrade_sequence);
+
+    perform_sanity_check_after_upgrade(&state_machine, &nns_canister_upgrade_sequence);
+}
+
+fn perform_sanity_check_after_upgrade(
+    state_machine: &StateMachine,
+    nns_canister_upgrade_sequence: &[NnsCanisterUpgrade],
+) {
+    for nns_canister_upgrade in nns_canister_upgrade_sequence {
+        println!(
+            "Performing sanity check after upgrade of {}",
+            nns_canister_upgrade.nns_canister_name
+        );
+        if nns_canister_upgrade.nns_canister_name.as_str() == "governance" {
+            perform_sanity_check_after_upgrade_governance(state_machine);
+        }
+    }
+}
+
+fn get_governance_latest_reward_event_timestamp_seconds(state_machine: &StateMachine) -> f64 {
+    let metrics = scrape_metrics(state_machine, GOVERNANCE_CANISTER_ID);
+    let metric = metrics
+        .samples
+        .iter()
+        .find(|sample| &sample.metric == "governance_latest_reward_event_timestamp_seconds")
+        .unwrap();
+    if let prometheus_parse::Value::Gauge(value) = &metric.value {
+        *value
+    } else {
+        panic!("governance_latest_reward_event_timestamp_seconds is not a gauge");
+    }
+}
+
+fn total_minted_node_rewards_value(
+    most_recent_monthly_node_provider_rewards: &MonthlyNodeProviderRewards,
+) -> f64 {
+    let total_rewards = most_recent_monthly_node_provider_rewards
+        .rewards
+        .iter()
+        .map(|reward| reward.amount_e8s as f64)
+        .sum::<f64>();
+    let xdr_permyriad_per_icp = *most_recent_monthly_node_provider_rewards
+        .xdr_conversion_rate
+        .as_ref()
+        .unwrap()
+        .xdr_permyriad_per_icp
+        .as_ref()
+        .unwrap();
+    total_rewards * (xdr_permyriad_per_icp as f64) / 10_000f64
+}
+
+fn perform_sanity_check_after_upgrade_governance(state_machine: &StateMachine) {
+    let latest_reward_event_timestamp_seconds_before =
+        get_governance_latest_reward_event_timestamp_seconds(state_machine);
+    let node_provier_rewards_before =
+        nns_get_most_recent_monthly_node_provider_rewards(state_machine).unwrap();
+
+    state_machine.advance_time(std::time::Duration::from_secs(ONE_MONTH_SECONDS));
+    for _ in 0..100 {
+        state_machine.advance_time(std::time::Duration::from_secs(1));
+        state_machine.tick();
+    }
+    let latest_reward_event_timestamp_seconds_after =
+        get_governance_latest_reward_event_timestamp_seconds(state_machine);
+    let node_provier_rewards_after =
+        nns_get_most_recent_monthly_node_provider_rewards(state_machine).unwrap();
+
+    assert!(
+        latest_reward_event_timestamp_seconds_after > latest_reward_event_timestamp_seconds_before,
+        "After advancing some time after upgrade, latest reward event timestamp did not increase, which means \
+        the reward event did not happen as expected."
+    );
+    assert!(
+        node_provier_rewards_after.timestamp > node_provier_rewards_before.timestamp,
+        "After advancing some time after upgrade, the node provider rewards timestamp did not increase, which means \
+        the reward event did not happen as expected. Before: {:#?}, After: {:#?}",
+        node_provier_rewards_before, node_provier_rewards_after
+    );
+    let total_rewards_xdr_e8s_before =
+        total_minted_node_rewards_value(&node_provier_rewards_before);
+    let total_rewards_xdr_e8s_after = total_minted_node_rewards_value(&node_provier_rewards_after);
+    assert!(
+        total_rewards_xdr_e8s_after < total_rewards_xdr_e8s_before * 1.2,
+        "After advancing some time after upgrade, total minted node provider rewards increased too much. Before: {}, After: {}",
+        total_rewards_xdr_e8s_before, total_rewards_xdr_e8s_after
+    );
+    assert!(
+        total_rewards_xdr_e8s_after > total_rewards_xdr_e8s_before * 0.8,
+        "After advancing some time after upgrade, total minted node provider rewards decreased too much. Before: {}, After: {}",
+        total_rewards_xdr_e8s_before, total_rewards_xdr_e8s_after
+    );
 }
