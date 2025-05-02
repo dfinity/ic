@@ -866,13 +866,13 @@ impl RosettaRequestHandler {
     ) -> Result<NeuronInfoResponse, ApiError> {
         let res = self.ledger.neuron_info(neuron_id, verified).await?;
 
-        use ic_nns_governance_api::pb::v1::NeuronState as PbNeuronState;
-        let state = match PbNeuronState::try_from(res.state).ok() {
-            Some(PbNeuronState::NotDissolving) => NeuronState::NotDissolving,
-            Some(PbNeuronState::Spawning) => NeuronState::Spawning,
-            Some(PbNeuronState::Dissolving) => NeuronState::Dissolving,
-            Some(PbNeuronState::Dissolved) => NeuronState::Dissolved,
-            Some(PbNeuronState::Unspecified) | None => {
+        use ic_nns_governance_api::pb::v1::NeuronState as GovernanceNeuronState;
+        let state = match GovernanceNeuronState::from_repr(res.state) {
+            Some(GovernanceNeuronState::NotDissolving) => NeuronState::NotDissolving,
+            Some(GovernanceNeuronState::Spawning) => NeuronState::Spawning,
+            Some(GovernanceNeuronState::Dissolving) => NeuronState::Dissolving,
+            Some(GovernanceNeuronState::Dissolved) => NeuronState::Dissolved,
+            Some(GovernanceNeuronState::Unspecified) | None => {
                 return Err(ApiError::internal_error(format!(
                     "unsupported neuron state code: {}",
                     res.state

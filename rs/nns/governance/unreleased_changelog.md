@@ -4,12 +4,13 @@ In general, upcoming/unreleased behavior changes are described here. For details
 on the process that this file is part of, see
 `rs/nervous_system/changelog_process.md`.
 
-
 # Next Upgrade Proposal
 
 ## Added
 
 ## Changed
+
+* The Governance canister will fetch rewards from the new Node Rewards Canister instead of from Registry.
 
 ## Deprecated
 
@@ -19,7 +20,5 @@ on the process that this file is part of, see
   as protobuf.
 
 ## Fixed
-
-* Use `StableBTreeMap::init` instead of `::new` for voting power snapshots.
 
 ## Security

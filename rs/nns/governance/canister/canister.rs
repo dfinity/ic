@@ -1,9 +1,9 @@
 use ic_base_types::PrincipalId;
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::{
     caller as ic_cdk_caller, heartbeat, init, post_upgrade, pre_upgrade, println, query, spawn,
     update,
 };
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_canisters::cmc::CMCCanister;
 use ic_nervous_system_common::{
     memory_manager_upgrade_storage::{load_protobuf, store_protobuf},

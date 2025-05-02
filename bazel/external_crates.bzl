@@ -638,7 +638,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.1.1",
             ),
             "ic-management-canister-types": crate.spec(
-                version = "0.2.1",
+                version = "0.3.0",
             ),
             "ic_principal": crate.spec(
                 version = "^0.1.1",

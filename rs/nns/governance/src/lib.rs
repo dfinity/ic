@@ -206,8 +206,7 @@ thread_local! {
 
     static IS_DISBURSE_MATURITY_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
 
-    static USE_NODE_PROVIDER_REWARD_CANISTER: Cell<bool>
-        = const { Cell::new(cfg!(feature = "test")) };
+    static USE_NODE_PROVIDER_REWARD_CANISTER: Cell<bool> = const { Cell::new(true) };
 }
 
 thread_local! {

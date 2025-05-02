@@ -11,6 +11,15 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-04-25: Proposal 136373
+
+http://dashboard.internetcomputer.org/proposal/136373
+
+## Deprecated
+
+* Custom proposals that were not yet assigned to a topic are no longer allowed to be submitted.
+
+
 # 2025-04-11: Proposal 136227
 
 http://dashboard.internetcomputer.org/proposal/136227

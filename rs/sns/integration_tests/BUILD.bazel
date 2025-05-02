@@ -61,6 +61,7 @@ MACRO_DEPENDENCIES = [
 
 BASE_DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-http-types",
     "//rs/canister_client/sender",
     "//rs/crypto",
     "//rs/ledger_suite/icp:icp_ledger",
@@ -69,7 +70,6 @@ BASE_DEV_DEPENDENCIES = [
     "//rs/nervous_system/root",
     "//rs/nns/common",
     "//rs/protobuf",
-    "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/on_wire",
     "//rs/sns/governance:build_script",
     "//rs/sns/init",
