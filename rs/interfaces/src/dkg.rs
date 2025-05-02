@@ -28,10 +28,6 @@ pub enum DkgPayloadCreationError {
 }
 
 /// Reasons for why a dkg payload might be invalid.
-// The `Debug` implementation is ignored during the dead code analysis and we are getting a `field
-// is never used` warning on this enum even though we are implicitly reading them when we log the
-// enum. See https://github.com/rust-lang/rust/issues/88900
-#[allow(dead_code)]
 #[derive(PartialEq, Debug)]
 pub enum InvalidDkgPayloadReason {
     CryptoError(CryptoError),
