@@ -29,6 +29,26 @@ jobs:
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
       - uses: actions/checkout@v4
 
+      - name: Build pocketic
+        run: |
+          bazel \
+            --noworkspace_rc \
+            --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
+            build \
+            --config=ci --config=macos_ci \
+            //rs/pocket_ic_server:pocket-ic-server
+      
+      - name: Copy pocketic
+        run: |
+          cp ./bazel-bin/rs/pocket_ic_server/pocket-ic-server pocket-ic-server
+      
+      - name: Upload pocketic
+        uses: actions/upload-artifact@v4
+        with:
+          name: pocketic
+          path: |
+            ./pocket-ic-server
+
       # Build and test, excluding 'upload' jobs that are not required on macOS (used in reproducibility tests)
       - name: Test
         run: |
