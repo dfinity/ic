@@ -359,7 +359,6 @@ pub fn get_call_context_and_callback(
             return None;
         }
         CanisterStatusType::Running | CanisterStatusType::Stopping => {
-            // We are sure there's a call context manager since the canister isn't stopped.
             canister.system_state.call_context_manager()
         }
     };

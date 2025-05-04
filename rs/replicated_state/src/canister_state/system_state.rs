@@ -1017,14 +1017,12 @@ impl SystemState {
         }
     }
 
-    /// Returns a reference to the `CallContextManager` in a `Running` or `Stopping`
-    /// canister.
+    /// Returns a reference to the `CallContextManager`.
     pub fn call_context_manager(&self) -> &CallContextManager {
         &self.call_context_manager
     }
 
-    /// Creates a new call context and returns its ID. Returns an error if the
-    /// canister is `Stopped`.
+    /// Creates a new call context and returns its ID.
     pub fn new_call_context(
         &mut self,
         call_origin: CallOrigin,
@@ -1032,6 +1030,7 @@ impl SystemState {
         time: Time,
         metadata: RequestMetadata,
     ) -> CallContextId {
+        debug_assert!(!matches!(self.status, CanisterStatus::Stopped));
         self.call_context_manager
             .new_call_context(call_origin, cycles, time, metadata)
     }
@@ -1039,13 +1038,14 @@ impl SystemState {
     /// Withdraws cycles from the call context with the given ID.
     ///
     /// Returns a reference to the `CallContext` if successful. Returns an error
-    /// message if the canister is `Stopped`; the call context does not exist; or
+    /// message if the call context does not exist or
     /// if the call context does not have enough cycles.
     pub fn withdraw_cycles(
         &mut self,
         call_context_id: CallContextId,
         cycles: Cycles,
     ) -> Result<&CallContext, &str> {
+        debug_assert!(!matches!(self.status, CanisterStatus::Stopped));
         self.call_context_manager
             .withdraw_cycles(call_context_id, cycles)
     }
@@ -1059,6 +1059,7 @@ impl SystemState {
         result: Result<Option<WasmResult>, HypervisorError>,
         instructions_used: NumInstructions,
     ) -> (CallContextAction, Option<CallContext>) {
+        debug_assert!(!matches!(self.status, CanisterStatus::Stopped));
         self.call_context_manager.on_canister_result(
             call_context_id,
             callback_id,
@@ -1078,18 +1079,19 @@ impl SystemState {
         self.call_context_manager.delete_all_call_contexts(reject)
     }
 
-    /// Registers a callback and returns its ID. Returns an error if the canister is
-    /// `Stopped`.
+    /// Registers a callback and returns its ID.
     //
     // TODO: Check whether this could be done implicitly, when pushing an outbound
     // request.
     pub fn register_callback(&mut self, callback: Callback) -> CallbackId {
+        debug_assert!(!matches!(self.status, CanisterStatus::Stopped));
         self.call_context_manager.register_callback(callback)
     }
 
     /// Unregisters the callback with the given ID (when a response was received for
-    /// it) and returns the callback. Returns an error if the canister is `Stopped`.
+    /// it) and returns the callback.
     pub fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Arc<Callback>> {
+        debug_assert!(!matches!(self.status, CanisterStatus::Stopped));
         self.call_context_manager.unregister_callback(callback_id)
     }
 
@@ -1667,7 +1669,6 @@ impl SystemState {
             .aborted_or_paused_response()
             .map(|response| response.originator_reply_callback);
 
-        // Safe to unwrap because we just checked that the status is not `Stopped`.
         let call_context_manager = &mut self.call_context_manager;
 
         let mut expired_callback_count = 0;

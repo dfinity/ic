@@ -1617,20 +1617,18 @@ fn push_output_request_respects_memory_limits() {
         api_type.call_context_id(),
     );
     let own_canister_id = system_state.canister_id;
-    let callback_id = sandbox_safe_system_state
-        .register_callback(Callback::new(
-            call_context_test_id(0),
-            own_canister_id,
-            canister_test_id(0),
-            Cycles::zero(),
-            Cycles::zero(),
-            Cycles::zero(),
-            WasmClosure::new(0, 0),
-            WasmClosure::new(0, 0),
-            None,
-            NO_DEADLINE,
-        ))
-        .unwrap();
+    let callback_id = sandbox_safe_system_state.register_callback(Callback::new(
+        call_context_test_id(0),
+        own_canister_id,
+        canister_test_id(0),
+        Cycles::zero(),
+        Cycles::zero(),
+        Cycles::zero(),
+        WasmClosure::new(0, 0),
+        WasmClosure::new(0, 0),
+        None,
+        NO_DEADLINE,
+    ));
     let mut api = SystemApiImpl::new(
         api_type,
         sandbox_safe_system_state,
@@ -1727,20 +1725,18 @@ fn push_output_request_oversized_request_memory_limits() {
         api_type.call_context_id(),
     );
     let own_canister_id = system_state.canister_id;
-    let callback_id = sandbox_safe_system_state
-        .register_callback(Callback::new(
-            call_context_test_id(0),
-            own_canister_id,
-            canister_test_id(0),
-            Cycles::zero(),
-            Cycles::zero(),
-            Cycles::zero(),
-            WasmClosure::new(0, 0),
-            WasmClosure::new(0, 0),
-            None,
-            NO_DEADLINE,
-        ))
-        .unwrap();
+    let callback_id = sandbox_safe_system_state.register_callback(Callback::new(
+        call_context_test_id(0),
+        own_canister_id,
+        canister_test_id(0),
+        Cycles::zero(),
+        Cycles::zero(),
+        Cycles::zero(),
+        WasmClosure::new(0, 0),
+        WasmClosure::new(0, 0),
+        None,
+        NO_DEADLINE,
+    ));
     let mut api = SystemApiImpl::new(
         api_type,
         sandbox_safe_system_state,

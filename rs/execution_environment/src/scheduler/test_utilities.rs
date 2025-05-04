@@ -1353,20 +1353,18 @@ impl TestWasmExecutorCore {
             .cycles_account_manager
             .prepayment_for_response_transmission(self.subnet_size);
         let deadline = NO_DEADLINE;
-        let callback = system_state
-            .register_callback(Callback {
-                call_context_id,
-                originator: sender,
-                respondent: receiver,
-                cycles_sent: Cycles::zero(),
-                prepayment_for_response_execution,
-                prepayment_for_response_transmission,
-                on_reply: closure.clone(),
-                on_reject: closure,
-                on_cleanup: None,
-                deadline,
-            })
-            .map_err(|err| err.to_string())?;
+        let callback = system_state.register_callback(Callback {
+            call_context_id,
+            originator: sender,
+            respondent: receiver,
+            cycles_sent: Cycles::zero(),
+            prepayment_for_response_execution,
+            prepayment_for_response_transmission,
+            on_reply: closure.clone(),
+            on_reject: closure,
+            on_cleanup: None,
+            deadline,
+        });
         let request = Request {
             receiver,
             sender,

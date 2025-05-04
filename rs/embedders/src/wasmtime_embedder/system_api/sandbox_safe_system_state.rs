@@ -822,13 +822,13 @@ impl SandboxSafeSystemState {
 
     /// Only public for use in tests.
     #[doc(hidden)]
-    pub fn register_callback(&mut self, callback: Callback) -> HypervisorResult<CallbackId> {
+    pub fn register_callback(&mut self, callback: Callback) -> CallbackId {
         self.next_callback_id += 1;
         let id = CallbackId::from(self.next_callback_id);
         self.system_state_modifications
             .callback_updates
             .push(CallbackUpdate::Register(id, callback));
-        Ok(id)
+        id
     }
 
     /// Only public for use in tests.

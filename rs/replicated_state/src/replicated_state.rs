@@ -643,10 +643,7 @@ impl ReplicatedState {
         if let CanisterStatus::Stopped = canister.system_state.get_status() {
             Err(UserError::new(
                 ErrorCode::CanisterStopped,
-                format!(
-                    "Canister {} is stopped and therefore does not have a CallContextManager",
-                    canister.canister_id()
-                ),
+                format!("Canister {} is stopped", canister.canister_id()),
             ))
         } else {
             Ok(canister)
