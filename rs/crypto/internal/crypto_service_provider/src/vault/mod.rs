@@ -124,6 +124,9 @@ impl From<CspBasicSignatureError> for CryptoError {
             CspBasicSignatureError::TransientInternalError { internal_error } => {
                 CryptoError::TransientInternalError { internal_error }
             }
+            CspBasicSignatureError::PublicKeyNotFound => CryptoError::InternalError {
+                internal_error: "missing node signing public key in public key store".to_string(),
+            },
         }
     }
 }
@@ -154,6 +157,10 @@ impl From<CspMultiSignatureError> for CryptoError {
             CspMultiSignatureError::TransientInternalError { internal_error } => {
                 CryptoError::TransientInternalError { internal_error }
             }
+            CspMultiSignatureError::PublicKeyNotFound => CryptoError::InternalError {
+                internal_error: "missing committee signing public key in public key store"
+                    .to_string(),
+            },
         }
     }
 }

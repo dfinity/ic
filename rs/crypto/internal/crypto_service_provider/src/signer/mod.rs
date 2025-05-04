@@ -20,14 +20,14 @@ impl CspSigner for Csp {
         &self,
         algorithm_id: AlgorithmId,
         message: Vec<u8>,
-        key_id: KeyId,
+        _key_id: KeyId,
     ) -> CryptoResult<CspSignature> {
         let message_len = message.len();
         match algorithm_id {
             AlgorithmId::Ed25519 => {
                 let result = self
                     .csp_vault
-                    .sign(algorithm_id, message, key_id)
+                    .sign(algorithm_id, message)
                     .map_err(CspBasicSignatureError::into);
                 self.metrics.observe_parameter_size(
                     MetricsDomain::BasicSignature,
@@ -41,7 +41,7 @@ impl CspSigner for Csp {
             AlgorithmId::MultiBls12_381 => {
                 let result = self
                     .csp_vault
-                    .multi_sign(algorithm_id, message, key_id)
+                    .multi_sign(algorithm_id, message)
                     .map_err(CspMultiSignatureError::into);
                 self.metrics.observe_parameter_size(
                     MetricsDomain::MultiSignature,

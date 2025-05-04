@@ -41,7 +41,8 @@ should_have_a_strategy_for_each_variant!(
     UnsupportedAlgorithm { .. },
     WrongSecretKeyType { .. },
     MalformedSecretKey { .. },
-    TransientInternalError { .. }
+    TransientInternalError { .. },
+    PublicKeyNotFound
 );
 
 use ic_crypto_internal_csp::types::CspSignature;
@@ -115,7 +116,8 @@ should_have_a_strategy_for_each_variant!(
     SecretKeyNotFound { .. },
     UnsupportedAlgorithm { .. },
     WrongSecretKeyType { .. },
-    TransientInternalError { .. }
+    TransientInternalError { .. },
+    PublicKeyNotFound
 );
 
 use ic_crypto_internal_csp::vault::api::CspMultiSignatureKeygenError;

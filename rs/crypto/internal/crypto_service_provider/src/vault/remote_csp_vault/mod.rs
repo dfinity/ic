@@ -69,7 +69,6 @@ pub trait TarpcCspVault {
     async fn sign(
         algorithm_id: AlgorithmId,
         message: ByteBuf,
-        key_id: KeyId,
     ) -> Result<CspSignature, CspBasicSignatureError>;
 
     // Corresponds to `BasicSignatureCspVault.gen_node_signing_key_pair()`.
@@ -79,7 +78,6 @@ pub trait TarpcCspVault {
     async fn multi_sign(
         algorithm_id: AlgorithmId,
         message: ByteBuf,
-        key_id: KeyId,
     ) -> Result<CspSignature, CspMultiSignatureError>;
 
     // Corresponds to `MultiSignatureCspVault.gen_committee_signing_key_pair()`.
