@@ -994,7 +994,9 @@ impl IcNodeSnapshot {
 pub trait HasTopologySnapshot {
     fn topology_snapshot(&self) -> TopologySnapshot;
     fn topology_snapshot_by_name(&self, name: &str) -> TopologySnapshot;
+    fn maybe_topology_snapshot(&self) -> Option<TopologySnapshot>;
 
+    fn maybe_topology_snapshot_by_name(&self, name: &str) -> Option<TopologySnapshot>;
     fn create_topology_snapshot<S: ToString, P: AsRef<Path>>(
         name: S,
         local_store_path: P,
@@ -1016,19 +1018,26 @@ pub trait HasTopologySnapshot {
 
 impl HasTopologySnapshot for TestEnv {
     fn topology_snapshot(&self) -> TopologySnapshot {
-        let local_store_path = self
-            .prep_dir("")
-            .expect("No no-name Internet Computer")
-            .registry_local_store_path();
-        Self::create_topology_snapshot("", local_store_path, self.clone())
+        let name = "";
+        self.maybe_topology_snapshot_by_name(name)
+            .unwrap_or_else(|| panic!("No snapshot for internet computer: {:?}", name))
     }
 
     fn topology_snapshot_by_name(&self, name: &str) -> TopologySnapshot {
-        let local_store_path = self
-            .prep_dir(name)
+        self.maybe_topology_snapshot_by_name(name)
             .unwrap_or_else(|| panic!("No snapshot for internet computer: {:?}", name))
-            .registry_local_store_path();
-        Self::create_topology_snapshot(name, local_store_path, self.clone())
+    }
+
+    fn maybe_topology_snapshot(&self) -> Option<TopologySnapshot> {
+        self.maybe_topology_snapshot_by_name("")
+    }
+
+    fn maybe_topology_snapshot_by_name(&self, name: &str) -> Option<TopologySnapshot> {
+        self.prep_dir(name).map(|dir| {
+            let local_store_path = dir.registry_local_store_path();
+
+            Self::create_topology_snapshot(name, local_store_path, self.clone())
+        })
     }
 }
 
