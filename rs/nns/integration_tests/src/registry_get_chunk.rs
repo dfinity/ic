@@ -6,7 +6,7 @@ use ic_nervous_system_chunks::{
 };
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_test_utils::{
-    common::{build_registry_wasm, NnsInitPayloadsBuilder},
+    common::{build_test_registry_wasm, NnsInitPayloadsBuilder},
     state_test_helpers::{
         registry_get_chunk, registry_get_value, registry_high_capacity_get_changes_since,
         registry_latest_version, registry_mutate_daniel_wong, setup_nns_canisters,
@@ -309,7 +309,7 @@ fn test_get_chunk() {
         .install_wasm_in_mode(
             REGISTRY_CANISTER_ID,
             CanisterInstallMode::Upgrade,
-            build_registry_wasm(&["test"]).bytes(),
+            build_test_registry_wasm().bytes(),
             vec![],
         )
         .unwrap();

@@ -1,7 +1,7 @@
 use crate::common::{
     build_cmc_wasm, build_genesis_token_wasm, build_governance_wasm_with_features,
-    build_ledger_wasm, build_lifeline_wasm, build_node_rewards_wasm, build_registry_wasm,
-    build_root_wasm, build_sns_wasms_wasm, NnsInitPayloads,
+    build_ledger_wasm, build_lifeline_wasm, build_node_rewards_wasm,
+    build_registry_wasm_with_features, build_root_wasm, build_sns_wasms_wasm, NnsInitPayloads,
 };
 use candid::{CandidType, Decode, Encode, Nat};
 use canister_test::Wasm;
@@ -679,7 +679,7 @@ pub fn setup_registry_with_correct_canister_id(
     setup_nns_canister_at_position(
         machine,
         REGISTRY_CANISTER_INDEX_IN_NNS_SUBNET,
-        build_registry_wasm(features),
+        build_registry_wasm_with_features(features),
         Encode!(&init_payload).unwrap(),
     );
 }
