@@ -396,6 +396,7 @@ impl TNet {
                 "set -xe; \
                 mkdir -p /tnet/{vm_name}; \
                 curl --user-agent curl-k8s-test --retry 10 --retry-delay 1 -o /tnet/{vm_name}/img.tar.zst {image_url}; \
+                file /tnet/{vm_name}/img.tar.zst | grep -i 'zstandard' || exit 1; \
                 tar -x --zstd -vf /tnet/{vm_name}/img.tar.zst -C /tnet/{vm_name}; \
                 file /tnet/{vm_name}/disk.img | grep -q 'DOS/MBR boot sector' || exit 1; \
                 for i in $(seq 1 12); do \
@@ -407,6 +408,7 @@ impl TNet {
                     unzstd -o /tnet/{vm_name}/config_disk.img /tnet/{vm_name}/config_disk.img.zst; \
                     break; \
                 done; \
+                test -f /tnet/{vm_name}/config_disk.img || exit 1; \
                 chmod -R 777 /tnet/{vm_name}; \
                 rm -f /tnet/{vm_name}/img.tar.zst /tnet/{vm_name}/img.tar",
                 vm_name = vm_name,
