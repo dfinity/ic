@@ -28,7 +28,7 @@ use crate::pb::v1::{
     RegistryDelta, RegistryGetChangesSinceResponse, RegistryMutation, RegistryValue,
 };
 
-mod down_grade_get_changes_since_response {
+mod downgrade_get_changes_since_response {
     use super::*;
 
     impl TryFrom<HighCapacityRegistryGetChangesSinceResponse> for RegistryGetChangesSinceResponse {
@@ -105,7 +105,7 @@ mod down_grade_get_changes_since_response {
             })
         }
     }
-} // mod down_grade_get_changes_since_response
+} // mod downgrade_get_changes_since_response
 
 impl From<RegistryAtomicMutateRequest> for HighCapacityRegistryAtomicMutateRequest {
     fn from(original: RegistryAtomicMutateRequest) -> HighCapacityRegistryAtomicMutateRequest {
