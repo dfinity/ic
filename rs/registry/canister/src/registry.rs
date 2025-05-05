@@ -346,12 +346,12 @@ impl Registry {
                 })?;
                 let presence_requirement = mutation_type.presence_requirement();
 
-                let is_currently_present = self
+                let is_record_currently_present = self
                     .get_last(key)
                     .map(HighCapacityRegistryValue::is_present)
                     .unwrap_or(false);
 
-                presence_requirement.verify(is_currently_present, key)
+                presence_requirement.verify(is_record_currently_present, key)
             })
             .flat_map(Result::err)
             .collect()
