@@ -1769,10 +1769,6 @@ fn test_change_voting_rewards_round_duration() {
             .await_reward_event_after(reward_event_0.end_timestamp_seconds.unwrap())
             .await;
 
-        let proposal_data = sns_canisters.get_proposal(proposal_1_id).await;
-
-        println!(">>> proposal_1: {:#?}", proposal_data);
-
         // Step 2.2: proposal 2.
         current_voting_rewards_round_duration_seconds =
             original_voting_rewards_round_duration_seconds / 2;
@@ -1807,10 +1803,6 @@ fn test_change_voting_rewards_round_duration() {
         let reward_event_2 = sns_canisters
             .await_reward_event_after(reward_event_1.end_timestamp_seconds.unwrap())
             .await;
-
-        let proposal_data = sns_canisters.get_proposal(proposal_2_id).await;
-
-        println!(">>> proposal_2: {:#?}", proposal_data);
 
         // Step 2.3: proposal 3.
         current_voting_rewards_round_duration_seconds =
