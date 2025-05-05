@@ -6,9 +6,9 @@ set -e
 
 source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
+source /opt/ic/bin/config.sh
 
 MICROCODE_FILE="/sys/devices/system/cpu/cpu0/microcode/version"
-HOSTOS_CONFIG_FILE="/boot/config/config.json"
 
 function update_microcode_metric() {
     if [[ ! -r "${MICROCODE_FILE}" ]]; then
@@ -26,19 +26,13 @@ function update_microcode_metric() {
 }
 
 function update_config_version_metric() {
-    if [[ ! -r "${HOSTOS_CONFIG_FILE}" ]]; then
-        write_log "ERROR: Cannot read HostOS config object file: ${HOSTOS_CONFIG_FILE}"
-        return 1
-    fi
-
-    config_version=$(jq -r '.config_version' ${HOSTOS_CONFIG_FILE})
+    config_version=$(get_config_value '.config_version')
     write_log "Found HostOS config version: ${config_version}"
     write_metric_attr "hostos_config_version" \
         "{version=\"${config_version}\"}" \
         "1" \
         "HostOS config version" \
         "gauge"
-
 }
 
 function main() {

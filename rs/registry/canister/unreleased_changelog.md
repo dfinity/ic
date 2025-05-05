@@ -9,10 +9,10 @@ on the process that this file is part of, see
 
 ## Added
 
-## Changed
+* Added new endpoint for `migrate_canisters` which is only callable by governance, and currently has no functionality.
+  This will be used for the canister migrations feature.
 
-* `get_node_providers_monthly_xdr_rewards` can now take an optional paramter to specify the Registry version to use when
-  calculating the rewards.
+## Changed
 
 ## Deprecated
 

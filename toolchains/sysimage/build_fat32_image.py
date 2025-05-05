@@ -12,6 +12,7 @@ import os
 import subprocess
 import sys
 import tarfile
+import tempfile
 
 
 def untar_to_fat32(tf, fs_basedir, out_file, path_transform):
@@ -124,9 +125,7 @@ def main():
     limit_prefix = args.path
     extra_files = args.extra_files
 
-    tmpdir = os.getenv("ICOS_TMPDIR")
-    if not tmpdir:
-        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
+    tmpdir = tempfile.mkdtemp()
 
     fs_basedir = os.path.join(tmpdir, "fs")
     os.mkdir(fs_basedir)
@@ -177,6 +176,8 @@ def main():
         ],
         check=True,
     )
+
+    # tempfile cleanup is handled by proc_wrapper.sh
 
 
 if __name__ == "__main__":

@@ -232,6 +232,8 @@ where
 /// Deserializes consensus artifacts, reading them from the backup spool height
 /// by height and inserting them into the consensus pool. It stops at certain
 /// points which require the execution state to catch up.
+// TODO(CON-1494): change the return type of this function. Most variants of ExitPoint
+// are not result of errors.
 pub(crate) fn deserialize_consensus_artifacts(
     registry_client: Arc<dyn RegistryClient>,
     crypto: Arc<dyn CryptoComponentForVerificationOnly>,

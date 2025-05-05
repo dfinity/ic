@@ -1,6 +1,6 @@
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_index_ng::{GetBlocksResponse, IndexArg, InitArg as IndexInitArg, Log, Status};
 use ic_icrc1_ledger::{FeatureFlags, InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;

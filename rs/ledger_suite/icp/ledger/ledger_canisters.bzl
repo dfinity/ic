@@ -25,6 +25,7 @@ LEDGER_CANISTER_RUSTC_ENV = {
 
 LEDGER_CANISTER_DEPS = [
     # Keep sorted.
+    "//packages/ic-http-types",
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/ledger_suite/common/ledger_canister_core",
@@ -35,7 +36,6 @@ LEDGER_CANISTER_DEPS = [
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_protobuf",
-    "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",
     "@crate_index//:candid",
