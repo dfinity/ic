@@ -300,7 +300,7 @@ fn test_protocol_execution() {
     let rng = &mut reproducible_rng();
 
     let nodes = 31;
-    let threshold = 11;
+    let threshold = 21;
 
     let setup = VetkdTestProtocolSetup::new(rng, nodes, threshold);
     let proto = VetkdTestProtocolExecution::new(rng, &setup);
