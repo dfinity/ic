@@ -5,6 +5,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## Unreleased
 
+## [2.1.4] - 2025-05-10
+### Added
+- Token-specific metrics for better monitoring in multi-token environments ([#4790](https://github.com/dfinity/ic/pull/4790))
+- New PocketIC Time type for improved testing ([#4864](https://github.com/dfinity/ic/pull/4864))
+
+### Changed
+- Replaced imports from ic_canisters_http_types to new ic_http_types crate ([#4866](https://github.com/dfinity/ic/pull/4866))
+- Increased the sync thread watchdog timeout from 10 to 60 seconds to better handle IC instability ([#4863](https://github.com/dfinity/ic/pull/4863))
+- Refactored and augmented Rosetta ICP metrics for better observability ([#3642](https://github.com/dfinity/ic/pull/3642))
+- Migrated from dfn to cdk architecture ([#4436](https://github.com/dfinity/ic/pull/4436))
+
+### Fixed
+- Write ICP Rosetta port file atomically to fix flaky test issues ([#4760](https://github.com/dfinity/ic/pull/4760))
+- Removed canister client library dependency for better architecture ([#4530](https://github.com/dfinity/ic/pull/4530))
+
 ## [2.1.3] - 2025-03-12
 ### Fixes
 - Potential source of deadlock when accessing the database client. [#4147](https://github.com/dfinity/ic/pull/4147)

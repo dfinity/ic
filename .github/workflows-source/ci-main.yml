@@ -70,6 +70,7 @@ jobs:
       release_build: ${{ steps.config.outputs.release_build }}
       diff_only: ${{ steps.config.outputs.diff_only }}
       skip_long_tests: ${{ steps.config.outputs.skip_long_tests }}
+      full_macos_build: ${{ steps.config.outputs.full_macos_build }}
     steps:
       - name: Infer build config
         id: config
@@ -111,6 +112,13 @@ jobs:
               skip_long_tests="true"
           fi
 
+          if [[ $release_build == 'true' ]] || [[ '${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_MACOS_INTEL') }}' == 'true' ]]; then
+              full_macos_build="true"
+          else
+              full_macos_build="false"
+          fi
+
+
           echo "| config | value |" >> "$GITHUB_STEP_SUMMARY"
           echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
 
@@ -126,6 +134,9 @@ jobs:
           echo "skip_long_tests=$skip_long_tests" >> "$GITHUB_OUTPUT"
           echo "| \`skip_long_tests\` | \`$skip_long_tests\` |" >> "$GITHUB_STEP_SUMMARY"
 
+          echo "full_macos_build: $full_macos_build"
+          echo "full_macos_build=$full_macos_build" >> "$GITHUB_OUTPUT"
+          echo "| \`full_macos_build\` | \`$full_macos_build\` |" >> "$GITHUB_STEP_SUMMARY"
 
   bazel-test-all:
     name: Bazel Test All
@@ -203,14 +214,13 @@ jobs:
 
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
+    needs: [ config ]
     timeout-minutes: 130
     runs-on:
       labels: macOS
     # Run on protected branches, but only on public repo
     # Allow running if CI_MACOS_INTEL label is used
-    if: |
-      (github.ref_protected && github.repository == 'dfinity/ic') ||
-      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_MACOS_INTEL'))
+    if: github.repository == 'dfinity/ic'
 
     steps:
       - <<: *checkout
@@ -220,11 +230,20 @@ jobs:
           echo "$HOME/.cargo/bin:" >> $GITHUB_PATH
           # use llvm-clang instead of apple's
           echo "CC=/usr/local/opt/llvm/bin/clang" >> "$GITHUB_ENV"
-      - name: Run Bazel Test Darwin x86-64
+      - name: Infer macos intel build command
+        id: cfg
+        run: |
+          if [[ '${{ needs.config.outputs.full_macos_build }}' == 'true' ]]; then
+            echo build-command='test --config=ci --config=macos_ci --test_tag_filters=test_macos' >> "$GITHUB_OUTPUT"
+          else
+            echo build-command='build --config=ci --config=macos_ci --test_tag_filters=test_macos --nobuild' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run Bazel Checks on Darwin x86-64
         id: bazel-test-darwin-x86-64
         uses:  ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: test --config=ci --config=macos_ci --test_tag_filters=test_macos
+          BAZEL_COMMAND: ${{ steps.cfg.outputs.build-command }}
           BAZEL_TARGETS: //rs/... //publish/binaries/...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ''

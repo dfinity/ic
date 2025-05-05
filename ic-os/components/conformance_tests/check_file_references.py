@@ -88,7 +88,7 @@ def main():
 
     files = args.files.split(",")
 
-    tmpdir = tempfile.mkdtemp(prefix="icosbuild")
+    tmpdir = tempfile.mkdtemp(prefix="icostest")
     atexit.register(lambda: subprocess.run(["rm", "-rf", tmpdir], check=True))
     partition_tar_path = os.path.join(tmpdir, "partition.tar")
     subprocess.run(["zstd", "-q", "--threads=0", "-f", "-d", args.image, "-o", partition_tar_path], check=True)

@@ -5283,6 +5283,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             voting_power_refreshed_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
             deciding_voting_power: Some(expected_voting_power),
             potential_voting_power: Some(expected_voting_power),
+            maturity_disbursements_in_progress: Some(vec![]),
             ..Default::default()
         }
     );
@@ -5320,8 +5321,8 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
                     driver.now(),
                     *RANDOM_PRINCIPAL_ID
                 )
-                .state(),
-            NeuronState::Dissolved
+                .state,
+            NeuronState::Dissolved as i32
         );
     } else {
         driver.advance_time_by(
@@ -6109,7 +6110,7 @@ fn test_cant_disburse_without_paying_fees() {
         .unwrap();
 
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err().error_type(), ErrorType::External);
+    assert_eq!(result.unwrap_err().error_type, ErrorType::External as i32);
 
     assert_eq!(
         0,
@@ -6142,7 +6143,7 @@ fn test_cant_disburse_without_paying_fees() {
         .unwrap();
 
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err().error_type(), ErrorType::External);
+    assert_eq!(result.unwrap_err().error_type, ErrorType::External as i32);
 
     // Finally try to disburse only the current stake (the initial
     // stake - the fees);
@@ -6233,8 +6234,8 @@ fn test_neuron_split_fails() {
                 driver.now(),
                 *RANDOM_PRINCIPAL_ID
             )
-            .state(),
-        NeuronState::NotDissolving
+            .state,
+        NeuronState::NotDissolving as i32
     );
 
     let neuron_before = neuron.clone();
@@ -6360,10 +6361,10 @@ fn test_neuron_split() {
                 driver.now(),
                 *RANDOM_PRINCIPAL_ID,
             )
-            .state()
+            .state
     };
 
-    assert_eq!(neuron_state, NeuronState::NotDissolving);
+    assert_eq!(neuron_state, NeuronState::NotDissolving as i32);
 
     let transaction_fee = governance
         .heap_data
@@ -6488,8 +6489,8 @@ fn test_seed_neuron_split() {
                 driver.now(),
                 *RANDOM_PRINCIPAL_ID
             )
-            .state(),
-        NeuronState::NotDissolving
+            .state,
+        NeuronState::NotDissolving as i32
     );
 
     let child_nid = gov
@@ -6566,9 +6567,9 @@ fn test_neuron_spawn() {
     assert_eq!(
         gov.with_neuron(&id, |neuron| neuron
             .get_neuron_info(voting_power_economics, now, *RANDOM_PRINCIPAL_ID)
-            .state())
+            .state)
             .unwrap(),
-        NeuronState::NotDissolving
+        NeuronState::NotDissolving as i32
     );
 
     let child_controller = *TEST_NEURON_2_OWNER_PRINCIPAL;
@@ -6756,9 +6757,9 @@ fn test_neuron_spawn_with_subaccount() {
     assert_eq!(
         gov.with_neuron(&id, |neuron| neuron
             .get_neuron_info(gov.voting_power_economics(), now, *RANDOM_PRINCIPAL_ID)
-            .state())
+            .state)
             .unwrap(),
-        NeuronState::NotDissolving
+        NeuronState::NotDissolving as i32
     );
 
     let neuron_before = gov
@@ -6914,9 +6915,9 @@ fn test_maturity_correctly_reset_if_spawn_fails() {
     assert_eq!(
         gov.with_neuron(&id, |neuron| neuron
             .get_neuron_info(gov.voting_power_economics(), now, *RANDOM_PRINCIPAL_ID)
-            .state())
+            .state)
             .unwrap(),
-        NeuronState::NotDissolving
+        NeuronState::NotDissolving as i32
     );
 
     // Artificially set the neuron's maturity to sufficient value
@@ -7065,8 +7066,8 @@ fn assert_neuron_spawn_partial(
                 driver.now(),
                 *RANDOM_PRINCIPAL_ID
             )
-            .state(),
-        NeuronState::NotDissolving
+            .state,
+        NeuronState::NotDissolving as i32
     );
 
     let child_controller = *TEST_NEURON_2_OWNER_PRINCIPAL;
@@ -7455,8 +7456,8 @@ fn test_disburse_to_neuron() {
                 driver.now(),
                 *RANDOM_PRINCIPAL_ID
             )
-            .state(),
-        NeuronState::Dissolved
+            .state,
+        NeuronState::Dissolved as i32
     );
 
     let child_controller = *TEST_NEURON_2_OWNER_PRINCIPAL;
@@ -7633,7 +7634,10 @@ async fn test_not_for_profit_neurons() {
         )
         .await;
     assert!(result.is_err());
-    assert_eq!(result.err().unwrap().error_type(), ErrorType::NotAuthorized);
+    assert_eq!(
+        result.err().unwrap().error_type,
+        ErrorType::NotAuthorized as i32
+    );
 
     // A not for profit neuron, on the other hand, can.
     // The followee of the managed neuron must make the proposal, in this case.
@@ -7731,8 +7735,8 @@ fn test_hot_keys_cant_change_followees_of_manage_neuron_topic() {
 
     assert!(result.is_err());
     assert_eq!(
-        result.clone().err().unwrap().error_type(),
-        api::governance_error::ErrorType::NotAuthorized
+        result.clone().err().unwrap().error_type,
+        api::governance_error::ErrorType::NotAuthorized as i32,
     );
     assert_eq!(
         result.err().unwrap().error_message,
@@ -10308,9 +10312,7 @@ fn test_start_dissolving() {
 /// Tests that a neuron in a dissolving state will panic if a "start_dissolving"
 /// command is issued.
 #[test]
-#[should_panic(
-    expected = "Manage neuron failed: GovernanceError { error_type: RequiresNotDissolving, error_message: \"\" }"
-)]
+#[should_panic(expected = "Manage neuron failed: RequiresNotDissolving: ")]
 fn test_start_dissolving_panics() {
     let fake_driver = fake::FakeDriver::default();
     let id: u64 = 1;
@@ -10418,9 +10420,7 @@ fn test_stop_dissolving() {
 /// Tests that a neuron in a non-dissolving state will panic if a
 /// "stop_dissolving" command is issued.
 #[test]
-#[should_panic(
-    expected = "Manage neuron failed: GovernanceError { error_type: RequiresDissolving, error_message: \"\" }"
-)]
+#[should_panic(expected = "Manage neuron failed: RequiresDissolving: ")]
 fn test_stop_dissolving_panics() {
     let fake_driver = fake::FakeDriver::default();
     let id: u64 = 1;
@@ -10787,8 +10787,8 @@ fn test_join_neurons_fund() {
             .now_or_never()
             .unwrap();
         assert_eq!(
-            result.err().unwrap().error_type(),
-            api::governance_error::ErrorType::NotAuthorized,
+            result.err().unwrap().error_type,
+            api::governance_error::ErrorType::NotAuthorized as i32,
         );
     }
     // Join the Neurons' Fund for neuron 3.
@@ -10896,8 +10896,8 @@ fn test_join_neurons_fund() {
             .now_or_never()
             .unwrap();
         assert_eq!(
-            result.err().unwrap().error_type(),
-            api::governance_error::ErrorType::AlreadyJoinedCommunityFund,
+            result.err().unwrap().error_type,
+            api::governance_error::ErrorType::AlreadyJoinedCommunityFund as i32,
         );
     }
     // Principal B leaves the Neurons' Fund for Neuron 3
@@ -10942,8 +10942,8 @@ fn test_join_neurons_fund() {
             .now_or_never()
             .unwrap();
         assert_eq!(
-            result.err().unwrap().error_type(),
-            api::governance_error::ErrorType::NotInTheCommunityFund,
+            result.err().unwrap().error_type,
+            api::governance_error::ErrorType::NotInTheCommunityFund as i32,
         );
     }
     // Run periodic tasks to populate metrics. Need to call it twice
@@ -11386,6 +11386,7 @@ fn test_include_public_neurons_in_full_neurons() {
             voting_power_refreshed_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
             deciding_voting_power: Some(20 * E8),
             potential_voting_power: Some(20 * E8),
+            maturity_disbursements_in_progress: Some(vec![]),
 
             ..Default::default()
         }

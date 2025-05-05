@@ -90,7 +90,7 @@ pub async fn await_proposal_execution(
             .await
             .unwrap_or_else(|| panic!("could not obtain proposal status"));
 
-        match ProposalStatus::try_from(proposal_info.status).unwrap() {
+        match ProposalStatus::from_repr(proposal_info.status).unwrap() {
             ProposalStatus::Open => {
                 // This proposal is still open
                 info!(log, "{:?} is open...", proposal_id,)
