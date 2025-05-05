@@ -1,5 +1,5 @@
 {
-  "checksum": "32ac92142350018426c4f44265498fc4041bed4f87c9ccd07316d0dcf5042b1e",
+  "checksum": "5137f1963be7aa57edb852432b8e72297ef16b46a40221a0891a409727de1fcb",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -15784,7 +15784,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/cranelift-assembler-x64/0.119.0/download",
-          "sha256": "263cc79b8a23c29720eb596d251698f604546b48c34d0d84f8fd2761e5bf8888"
+          "sha256": "263cc79b8a23c29720eb596d251698f604546b48c34d0d84f8fd2761e5bf8888",
+          "patch_args": [
+            "-p3"
+          ],
+          "patches": [
+            "@@//bazel:cranelift-assembler-lib.patch"
+          ]
         }
       },
       "targets": [
@@ -16463,8 +16469,7 @@
             "-p4"
           ],
           "patches": [
-            "@@//bazel:cranelift-isle-build.patch",
-            "@@//bazel:cranelift-isle-codegen.patch"
+            "@@//bazel:cranelift-isle.patch"
           ]
         }
       },
