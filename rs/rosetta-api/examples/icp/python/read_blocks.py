@@ -15,10 +15,12 @@ Block information includes:
 Examples:
     # Basic usage
     python3 read_blocks.py --node-address http://localhost:8081
+
 """
 
-from rosetta_client import RosettaClient
 import argparse
+
+from rosetta_client import RosettaClient
 
 
 def main():
@@ -29,10 +31,10 @@ def main():
     client1 = RosettaClient(args.node_address)
 
     last_block = client1.get_last_block()
-    last_block_index = last_block['block']['block_identifier']['index']
+    last_block_index = last_block["block"]["block_identifier"]["index"]
     print(f"Last block index: {last_block_index}")
 
-    print(f"Previous 10 blocks:")
+    print("Previous 10 blocks:")
     for i in range(1, 11):
         block = client1.get_block(last_block_index - i)
         print(block)

@@ -21,19 +21,21 @@ Examples:
 
     # With verbose output
     python3 list_known_neurons.py --node-address http://localhost:8081 --verbose
+
 """
 
-from rosetta_client import RosettaClient
 import argparse
 import json
 from datetime import datetime, timedelta
+
+from rosetta_client import RosettaClient
 
 
 def format_timestamp(timestamp_seconds):
     """Format a Unix timestamp to a human-readable string"""
     if not timestamp_seconds:
         return "N/A"
-    return datetime.fromtimestamp(timestamp_seconds).strftime('%Y-%m-%d %H:%M:%S')
+    return datetime.fromtimestamp(timestamp_seconds).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def format_duration(seconds):
@@ -58,24 +60,20 @@ def format_duration(seconds):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description='List known neurons on the Internet Computer NNS')
-    parser.add_argument("--node-address", type=str,
-                        required=True, help="Rosetta node address")
-    parser.add_argument("--verbose", action="store_true",
-                        help="Enable verbose output")
-    parser.add_argument("--raw", action="store_true",
-                        help="Display raw JSON response")
-    parser.add_argument("--sort-by", type=str, choices=["stake", "age", "id"], default="stake",
-                        help="Sort neurons by stake, age, or ID")
-    parser.add_argument("--min-stake", type=float,
-                        help="Filter neurons with minimum stake (in ICP)")
+    parser = argparse.ArgumentParser(description="List known neurons on the Internet Computer NNS")
+    parser.add_argument("--node-address", type=str, required=True, help="Rosetta node address")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
+    parser.add_argument("--raw", action="store_true", help="Display raw JSON response")
+    parser.add_argument(
+        "--sort-by", type=str, choices=["stake", "age", "id"], default="stake", help="Sort neurons by stake, age, or ID"
+    )
+    parser.add_argument("--min-stake", type=float, help="Filter neurons with minimum stake (in ICP)")
 
     args = parser.parse_args()
 
     client = RosettaClient(args.node_address)
 
-    print(f"Fetching known neurons from the NNS...")
+    print("Fetching known neurons from the NNS...")
     response = client.list_known_neurons(verbose=args.verbose)
 
     if args.raw:
@@ -83,10 +81,9 @@ def main():
         return
 
     # Extract neurons from the response
-    if 'result' in response and 'known_neurons' in response['result']:
-        known_neurons = response['result']['known_neurons']
-        print(
-            f"\nFound {len(known_neurons)} known neuron{'s' if len(known_neurons) != 1 else ''}")
+    if "result" in response and "known_neurons" in response["result"]:
+        known_neurons = response["result"]["known_neurons"]
+        print(f"\nFound {len(known_neurons)} known neuron{'s' if len(known_neurons) != 1 else ''}")
 
         # Convert to more usable format
         neurons = []
@@ -94,40 +91,37 @@ def main():
             neuron = {}
 
             # Extract neuron ID
-            if 'id' in kn and 'id' in kn['id']:
-                neuron['id'] = kn['id']['id']
+            if "id" in kn and "id" in kn["id"]:
+                neuron["id"] = kn["id"]["id"]
             else:
-                neuron['id'] = 'Unknown'
+                neuron["id"] = "Unknown"
 
             # Extract neuron metadata
-            if 'known_neuron_data' in kn:
-                data = kn['known_neuron_data']
-                neuron['name'] = data.get('name', 'Unnamed')
-                neuron['description'] = data.get('description', '')
+            if "known_neuron_data" in kn:
+                data = kn["known_neuron_data"]
+                neuron["name"] = data.get("name", "Unnamed")
+                neuron["description"] = data.get("description", "")
 
             neurons.append(neuron)
 
         # Apply minimum stake filter if provided
         if args.min_stake is not None:
-            print(
-                f"Note: Stake information not available in known_neurons response, skipping min_stake filter")
+            print("Note: Stake information not available in known_neurons response, skipping min_stake filter")
 
         # Sort based on the criteria
         if args.sort_by == "stake":
-            print(
-                f"Note: Stake information not available in known_neurons response, sorting by ID instead")
-            neurons.sort(key=lambda n: n.get('id', 0))
+            print("Note: Stake information not available in known_neurons response, sorting by ID instead")
+            neurons.sort(key=lambda n: n.get("id", 0))
         elif args.sort_by == "age":
-            print(
-                f"Note: Age information not available in known_neurons response, sorting by ID instead")
-            neurons.sort(key=lambda n: n.get('id', 0))
+            print("Note: Age information not available in known_neurons response, sorting by ID instead")
+            neurons.sort(key=lambda n: n.get("id", 0))
         elif args.sort_by == "id":
-            neurons.sort(key=lambda n: n.get('id', 0))
+            neurons.sort(key=lambda n: n.get("id", 0))
 
         for i, neuron in enumerate(neurons):
-            neuron_id = neuron.get('id', 'Unknown')
-            neuron_name = neuron.get('name', 'Unnamed')
-            neuron_description = neuron.get('description', '')
+            neuron_id = neuron.get("id", "Unknown")
+            neuron_name = neuron.get("name", "Unnamed")
+            neuron_description = neuron.get("description", "")
 
             print(f"\n--- Neuron {i+1} ---")
             print(f"ID: {neuron_id}")

@@ -21,30 +21,28 @@ Examples:
 
     # With verbose output
     python3 get_network_info.py --node-address http://localhost:8081 --verbose
+
 """
 
-from rosetta_client import RosettaClient
 import argparse
 import json
 from datetime import datetime
+
+from rosetta_client import RosettaClient
 
 
 def format_timestamp(timestamp_ms):
     """Format a Unix timestamp (in milliseconds) to a human-readable string"""
     if not timestamp_ms:
         return "N/A"
-    return datetime.fromtimestamp(timestamp_ms/1000).strftime('%Y-%m-%d %H:%M:%S')
+    return datetime.fromtimestamp(timestamp_ms / 1000).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description='Fetch Internet Computer network information via Rosetta API')
-    parser.add_argument("--node-address", type=str,
-                        required=True, help="Rosetta node address")
-    parser.add_argument("--verbose", action="store_true",
-                        help="Enable verbose output")
-    parser.add_argument("--raw", action="store_true",
-                        help="Display raw JSON response")
+    parser = argparse.ArgumentParser(description="Fetch Internet Computer network information via Rosetta API")
+    parser.add_argument("--node-address", type=str, required=True, help="Rosetta node address")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
+    parser.add_argument("--raw", action="store_true", help="Display raw JSON response")
 
     args = parser.parse_args()
 
@@ -74,20 +72,20 @@ def main():
         print("\nNetwork Status:")
 
         # Current block
-        current_block = status.get('current_block_identifier', {})
-        current_block_index = current_block.get('index', 'Unknown')
-        current_block_hash = current_block.get('hash', 'Unknown')
+        current_block = status.get("current_block_identifier", {})
+        current_block_index = current_block.get("index", "Unknown")
+        current_block_hash = current_block.get("hash", "Unknown")
 
         # Current block timestamp
-        current_time = status.get('current_block_timestamp', 0)
+        current_time = status.get("current_block_timestamp", 0)
 
         # Genesis block
-        genesis_block = status.get('genesis_block_identifier', {})
-        genesis_block_index = genesis_block.get('index', 'Unknown')
-        genesis_block_hash = genesis_block.get('hash', 'Unknown')
+        genesis_block = status.get("genesis_block_identifier", {})
+        genesis_block_index = genesis_block.get("index", "Unknown")
+        genesis_block_hash = genesis_block.get("hash", "Unknown")
 
         # Peers
-        peers = status.get('peers', [])
+        peers = status.get("peers", [])
 
         print(f"  Current Block Index: {current_block_index}")
         print(f"  Current Block Hash: {current_block_hash}")
@@ -99,8 +97,8 @@ def main():
         if peers:
             print("\n  Peer List:")
             for i, peer in enumerate(peers):
-                peer_id = peer.get('peer_id', 'Unknown')
-                metadata = peer.get('metadata', {})
+                peer_id = peer.get("peer_id", "Unknown")
+                metadata = peer.get("metadata", {})
                 print(f"    {i+1}. Peer ID: {peer_id}")
                 if metadata:
                     for key, value in metadata.items():
@@ -117,16 +115,16 @@ def main():
         print("\nNetwork Options:")
 
         # Version information
-        version = options.get('version', {})
-        node_version = version.get('node_version', 'Unknown')
-        middleware_version = version.get('middleware_version', 'Unknown')
-        rosetta_version = version.get('rosetta_version', 'Unknown')
+        version = options.get("version", {})
+        node_version = version.get("node_version", "Unknown")
+        middleware_version = version.get("middleware_version", "Unknown")
+        rosetta_version = version.get("rosetta_version", "Unknown")
 
         # Operation types and statuses
-        allowed_ops = options.get('allow', {})
-        operation_types = allowed_ops.get('operation_types', [])
-        operation_statuses = allowed_ops.get('operation_statuses', [])
-        errors = allowed_ops.get('errors', [])
+        allowed_ops = options.get("allow", {})
+        operation_types = allowed_ops.get("operation_types", [])
+        operation_statuses = allowed_ops.get("operation_statuses", [])
+        errors = allowed_ops.get("errors", [])
 
         print(f"  Node Version: {node_version}")
         print(f"  Middleware Version: {middleware_version}")
@@ -134,20 +132,19 @@ def main():
 
         print(f"\n  Supported Operation Types: {', '.join(operation_types)}")
 
-        print(f"\n  Operation Statuses:")
+        print("\n  Operation Statuses:")
         for status in operation_statuses:
-            status_text = status.get('status', 'Unknown')
-            successful = status.get('successful', False)
+            status_text = status.get("status", "Unknown")
+            successful = status.get("successful", False)
             print(f"    - {status_text} (Successful: {successful})")
 
         if errors:
-            print(f"\n  Supported Error Types:")
+            print("\n  Supported Error Types:")
             for error in errors:
-                error_code = error.get('code', 'Unknown')
-                error_message = error.get('message', 'Unknown')
-                retriable = error.get('retriable', False)
-                print(
-                    f"    - {error_code}: {error_message} (Retriable: {retriable})")
+                error_code = error.get("code", "Unknown")
+                error_message = error.get("message", "Unknown")
+                retriable = error.get("retriable", False)
+                print(f"    - {error_code}: {error_message} (Retriable: {retriable})")
 
 
 if __name__ == "__main__":

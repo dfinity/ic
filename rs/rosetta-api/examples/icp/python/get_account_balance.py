@@ -11,11 +11,12 @@ Examples:
 
     # With verbose output
     python3 get_account_balance.py --node-address http://localhost:8081 --account-id 8b84c3a3529d02a9decb5b1a27e7c8d886e17e07ea0a538269697ef09c2a27b4 --verbose
+
 """
 
-from rosetta_client import RosettaClient
 import argparse
-import json
+
+from rosetta_client import RosettaClient
 
 
 def format_balance(balance):
@@ -27,14 +28,15 @@ def format_balance(balance):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description='Fetch account balances using Rosetta API')
-    parser.add_argument("--node-address", type=str,
-                        required=True, help="Rosetta node address")
-    parser.add_argument("--account-id", type=str, required=True,
-                        help="Account identifier to check balance for")
-    parser.add_argument("--verbose", action="store_true",
-                        help="Enable verbose output")
+    parser = argparse.ArgumentParser(description="Fetch account balances using Rosetta API")
+    parser.add_argument("--node-address", type=str, required=True, help="Rosetta node address")
+    parser.add_argument(
+        "--account-id",
+        type=str,
+        required=True,
+        help="Account identifier to check balance for",
+    )
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
 
     args = parser.parse_args()
 
