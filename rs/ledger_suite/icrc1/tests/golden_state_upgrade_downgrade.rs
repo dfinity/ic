@@ -730,11 +730,11 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         "os3ua-lqaaa-aaaaq-aaefq-cai",
         "FomoWell",
     );
-    const FUEL_EV_LEDGER_SUITE: (&str, &str, &str) = (
-        "nfjys-2iaaa-aaaaq-aaena-cai",
-        "nxppl-wyaaa-aaaaq-aaeoa-cai",
-        "FuelEV",
-    );
+    // const FUEL_EV_LEDGER_SUITE: (&str, &str, &str) = (
+    //     "nfjys-2iaaa-aaaaq-aaena-cai",
+    //     "nxppl-wyaaa-aaaaq-aaeoa-cai",
+    //     "FuelEV",
+    // );
     const GOLDDAO_LEDGER_SUITE: (&str, &str, &str) = (
         "tyyy3-4aaaa-aaaaq-aab7a-cai",
         "efv5g-kqaaa-aaaaq-aacaa-cai",
