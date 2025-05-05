@@ -5,7 +5,6 @@ use ic_registry_transport::pb::v1::{
     registry_mutation::{self, Type as MutationType},
     HighCapacityRegistryValue, Precondition,
 };
-use lazy_static::lazy_static;
 use prost::Message;
 use std::{
     cell::{RefCell, RefMut},
