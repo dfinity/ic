@@ -473,54 +473,6 @@ async fn test_sns_lifecycle(
         .await
         .expect("cannot find SNS neuron with dissolve delay over 6 months.");
 
-    // Make all developer neurons follow this one on all topics.
-    let set_following = sns_pb::manage_neuron::SetFollowing {
-        topic_following: [
-            sns_pb::topics::Topic::DappCanisterManagement,
-            sns_pb::topics::Topic::ApplicationBusinessLogic,
-            sns_pb::topics::Topic::Governance,
-            sns_pb::topics::Topic::TreasuryAssetManagement,
-            sns_pb::topics::Topic::CriticalDappOperations,
-            sns_pb::topics::Topic::DaoCommunitySettings,
-            sns_pb::topics::Topic::SnsFrameworkManagement,
-        ]
-        .iter()
-        .map(|topic| sns_pb::neuron::FolloweesForTopic {
-            topic: Some(*topic),
-            followees: vec![sns_pb::Followee {
-                neuron_id: Some(sns_neuron_id.clone()),
-                alias: Some("Majority holder".to_string()),
-            }],
-        })
-        .collect(),
-    };
-
-    for dev_neuron in original_sns_neurons {
-        let dev_neuron_id = dev_neuron.id.unwrap();
-        let dev_controllers = dev_neuron
-            .permissions
-            .iter()
-            .map(|sns_pb::NeuronPermission { principal, .. }| principal.unwrap())
-            .collect::<BTreeSet<_>>();
-
-        let sender = developer_neuron_controller_principal_ids
-            .iter()
-            .find(|developer_neuron_controller_principal_id| {
-                dev_controllers.contains(developer_neuron_controller_principal_id)
-            })
-            .unwrap();
-
-        sns::governance::set_following(
-            &pocket_ic,
-            sns.governance.canister_id,
-            *sender,
-            dev_neuron_id,
-            set_following.clone(),
-        )
-        .await
-        .expect("Failed to follow the dev neuron");
-    }
-
     // Currently, we are not allowed to make `ManageNervousSystemParameter` proposals.
     {
         let err = sns::governance::propose_and_wait(
@@ -1218,15 +1170,63 @@ async fn test_sns_lifecycle(
     // launched, and that `PreInitializationSwap` mode limitations are still in place if and only
     // if the swap aborted.
     {
+        // Make all neurons follow this developer neuron to ensure that a critical proposal passes.
+        let set_following = sns_pb::manage_neuron::SetFollowing {
+            topic_following: [
+                sns_pb::topics::Topic::DappCanisterManagement,
+                sns_pb::topics::Topic::ApplicationBusinessLogic,
+                sns_pb::topics::Topic::Governance,
+                sns_pb::topics::Topic::TreasuryAssetManagement,
+                sns_pb::topics::Topic::CriticalDappOperations,
+                sns_pb::topics::Topic::DaoCommunitySettings,
+                sns_pb::topics::Topic::SnsFrameworkManagement,
+            ]
+            .iter()
+            .map(|topic| sns_pb::neuron::FolloweesForTopic {
+                topic: Some(*topic),
+                followees: vec![sns_pb::Followee {
+                    neuron_id: Some(sns_neuron_id.clone()),
+                    alias: Some("Majority holder".to_string()),
+                }],
+            })
+            .collect(),
+        };
+
+        for neuron in sns::governance::list_neurons(&pocket_ic, sns.governance.canister_id)
+            .await
+            .neurons {
+            let neuron_id = neuron.id.unwrap();
+            let controllers = neuron
+                .permissions
+                .iter()
+                .map(|sns_pb::NeuronPermission { principal, .. }| principal.unwrap())
+                .collect::<BTreeSet<_>>();
+
+            let sender = developer_neuron_controller_principal_ids
+                .iter()
+                .find(|developer_neuron_controller_principal_id| {
+                    controllers.contains(developer_neuron_controller_principal_id)
+                })
+                .unwrap();
+
+            sns::governance::set_following(
+                &pocket_ic,
+                sns.governance.canister_id,
+                *sender,
+                neuron_id,
+                set_following.clone(),
+            )
+            .await
+            .expect("Failed to follow the dev neuron");
+        }
+
         let proposal_result = sns::governance::propose_and_wait(
             &pocket_ic,
             sns.governance.canister_id,
             sns_neuron_principal_id,
             sns_neuron_id.clone(),
             sns_pb::Proposal {
-                title: "Try to smuggle in a ManageNervousSystemParameters proposal while \
-                        in PreInitializationSwap mode."
-                    .to_string(),
+                title: "ManageNervousSystemParameters".to_string(),
                 summary: "".to_string(),
                 url: "".to_string(),
                 action: Some(sns_pb::proposal::Action::ManageNervousSystemParameters(
