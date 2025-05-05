@@ -12,6 +12,7 @@ from ipaddress import IPv6Address
 from multiprocessing import Pool
 from pathlib import Path
 from typing import Any, List, Optional
+import tempfile
 
 import fabric
 import invoke
@@ -764,9 +765,8 @@ def main():
         assert_ssh_connectivity(file_share_endpoint, args.file_share_ssh_key)
 
         if args.inject_image_ipv6_prefix:
-            tmpdir = os.getenv("ICOS_TMPDIR")
-            if not tmpdir:
-                raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
+            tmpdir = tempfile.mkdtemp()
+
             modified_image_path = inject_config_into_image(
                 Path(args.inject_configuration_tool),
                 Path(tmpdir),
