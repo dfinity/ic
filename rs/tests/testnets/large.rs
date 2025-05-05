@@ -98,7 +98,7 @@ pub fn setup(env: TestEnv) {
         ic = ic.add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_required_host_features(vec![HostFeature::Host(
-                    "se1-dll02.se1.dfinity.network".to_string(),
+                    "dm1-dll45.dm1.dfinity.network".to_string(),
                 )])
                 .add_nodes(1),
         );
