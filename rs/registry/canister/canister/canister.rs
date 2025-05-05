@@ -14,8 +14,8 @@ use ic_protobuf::registry::{
     node_rewards::v2::UpdateNodeRewardsTableProposalPayload,
 };
 use ic_registry_canister_api::{
-    AddNodePayload, Chunk, GetChunkRequest, UpdateNodeDirectlyPayload,
-    UpdateNodeIPv4ConfigDirectlyPayload,
+    AddNodePayload, Chunk, GetChunkRequest, GetNodeProvidersMonthlyXdrRewardsRequest,
+    UpdateNodeDirectlyPayload, UpdateNodeIPv4ConfigDirectlyPayload,
 };
 use ic_registry_transport::{
     deserialize_atomic_mutate_request, deserialize_get_changes_since_request,
@@ -87,6 +87,9 @@ use std::ptr::addr_of_mut;
 use dfn_core::println;
 use dfn_core::stable::stable64_read;
 use ic_nervous_system_common::memory_manager_upgrade_storage::{load_protobuf, store_protobuf};
+use registry_canister::mutations::do_migrate_canisters::{
+    MigrateCanistersPayload, MigrateCanistersResponse,
+};
 use registry_canister::storage::with_upgrades_memory;
 
 static mut REGISTRY: Option<Registry> = None;
@@ -111,6 +114,20 @@ fn registry_mut() -> &'static mut Registry {
 fn check_caller_is_governance_and_log(method_name: &str) {
     let caller = dfn_core::api::caller();
     println!("{}call: {} from: {}", LOG_PREFIX, method_name, caller);
+    assert_eq!(
+        caller,
+        GOVERNANCE_CANISTER_ID.into(),
+        "{}Principal: {} is not authorized to call this method: {}",
+        LOG_PREFIX,
+        caller,
+        method_name
+    );
+}
+
+fn check_caller_is_canister_migration_orchestrator_and_log(method_name: &str) {
+    let caller = dfn_core::api::caller();
+    println!("{}call: {} from: {}", LOG_PREFIX, method_name, caller);
+    // TODO - change GOVERNANCE_CANISTER to the new canister when the constant is available.
     assert_eq!(
         caller,
         GOVERNANCE_CANISTER_ID.into(),
@@ -907,20 +924,33 @@ fn complete_canister_migration_(payload: CompleteCanisterMigrationPayload) {
     recertify_registry();
 }
 
+#[export_name = "canister_update migrate_canisters"]
+fn migrate_canisters() {
+    check_caller_is_canister_migration_orchestrator_and_log("migrate_canisters");
+    over(candid_one, migrate_canisters_);
+}
+
+#[candid_method(update, rename = "migrate_canisters")]
+fn migrate_canisters_(payload: MigrateCanistersPayload) -> MigrateCanistersResponse {
+    registry_mut().do_migrate_canisters(payload)
+}
+
 #[export_name = "canister_query get_node_providers_monthly_xdr_rewards"]
 fn get_node_providers_monthly_xdr_rewards() {
     check_caller_is_governance_and_log("get_node_providers_monthly_xdr_rewards");
     over(
         candid_one,
-        |()| -> Result<NodeProvidersMonthlyXdrRewards, String> {
-            get_node_providers_monthly_xdr_rewards_()
+        |request: Option<GetNodeProvidersMonthlyXdrRewardsRequest>| -> Result<NodeProvidersMonthlyXdrRewards, String> {
+            get_node_providers_monthly_xdr_rewards_(request)
         },
     )
 }
 
 #[candid_method(query, rename = "get_node_providers_monthly_xdr_rewards")]
-fn get_node_providers_monthly_xdr_rewards_() -> Result<NodeProvidersMonthlyXdrRewards, String> {
-    registry().get_node_providers_monthly_xdr_rewards()
+fn get_node_providers_monthly_xdr_rewards_(
+    arg: Option<GetNodeProvidersMonthlyXdrRewardsRequest>,
+) -> Result<NodeProvidersMonthlyXdrRewards, String> {
+    registry().get_node_providers_monthly_xdr_rewards(arg.unwrap_or_default())
 }
 
 #[export_name = "canister_query get_api_boundary_node_ids"]

@@ -25,8 +25,8 @@ WORKDIR /tmp
 
 # Download and verify ic-gateway
 RUN \
-    curl -L -O https://github.com/dfinity/ic-gateway/releases/download/v0.2.5/ic-gateway_0.2.5_amd64.deb && \
-    echo "db4bd7ef1ac858c8bff665916efa37a7635b315ef2fcdf5aef8d59b7c6d46573  ic-gateway_0.2.5_amd64.deb" | sha256sum -c
+    curl -L -O https://github.com/dfinity/ic-gateway/releases/download/v0.2.11/ic-gateway_0.2.11_amd64.deb && \
+    echo "dbb08171f0d61ea78bb243053a962db66b7cfbe42f9a0494354eee18cd3bfdc1  ic-gateway_0.2.11_amd64.deb" | sha256sum -c
 
 #
 # Second build stage:
@@ -56,9 +56,9 @@ FROM image-${BUILD_TYPE}
 
 USER root:root
 
-COPY --from=download /tmp/ic-gateway_0.2.5_amd64.deb /tmp/ic-gateway_0.2.5_amd64.deb
-RUN dpkg -i --force-confold /tmp/ic-gateway_0.2.5_amd64.deb && \
-    rm /tmp/ic-gateway_0.2.5_amd64.deb
+COPY --from=download /tmp/ic-gateway_0.2.11_amd64.deb /tmp/ic-gateway_0.2.11_amd64.deb
+RUN dpkg -i --force-confold /tmp/ic-gateway_0.2.11_amd64.deb && \
+    rm /tmp/ic-gateway_0.2.11_amd64.deb
 
 RUN mkdir -p /boot/config \
              /boot/efi \

@@ -9,8 +9,6 @@ on the process that this file is part of, see
 
 ## Added
 
-* A timer task is added to take daily snapshots of voting power for standard proposals.
-
 ## Changed
 
 ## Deprecated

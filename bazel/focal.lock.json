@@ -1705,6 +1705,41 @@
 			"sha256": "4f93394bda7be86b94fb32ac1bdf1a0b7124b8150962b55512371c3a816a382d",
 			"url": "https://snapshot.ubuntu.com/ubuntu/20240301T030400Z/pool/main/g/gdbm/libgdbm-compat4_1.18.1-5_amd64.deb",
 			"version": "1.18.1-5"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [
+				{
+					"key": "liblzma5_5.2.4-1ubuntu1.1_amd64",
+					"name": "liblzma5",
+					"version": "5.2.4-1ubuntu1.1"
+				},
+				{
+					"key": "libc6_2.31-0ubuntu9.14_amd64",
+					"name": "libc6",
+					"version": "2.31-0ubuntu9.14"
+				},
+				{
+					"key": "libcrypt1_1-4.4.10-10ubuntu4_amd64",
+					"name": "libcrypt1",
+					"version": "1:4.4.10-10ubuntu4"
+				},
+				{
+					"key": "libgcc-s1_10.5.0-1ubuntu1_20.04_amd64",
+					"name": "libgcc-s1",
+					"version": "10.5.0-1ubuntu1~20.04"
+				},
+				{
+					"key": "gcc-10-base_10.5.0-1ubuntu1_20.04_amd64",
+					"name": "gcc-10-base",
+					"version": "10.5.0-1ubuntu1~20.04"
+				}
+			],
+			"key": "xz-utils_5.2.4-1ubuntu1.1_amd64",
+			"name": "xz-utils",
+			"sha256": "6b192aa8e56c7e16ad7b3f39e6978a8ca899194e4d7af05ca4640170eafa8272",
+			"url": "https://snapshot.ubuntu.com/ubuntu/20240301T030400Z/pool/main/x/xz-utils/xz-utils_5.2.4-1ubuntu1.1_amd64.deb",
+			"version": "5.2.4-1ubuntu1.1"
 		}
 	],
 	"version": 1
