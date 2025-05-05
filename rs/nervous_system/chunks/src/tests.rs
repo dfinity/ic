@@ -21,8 +21,7 @@ fn test_chunks() {
     assert_eq!(keys.len(), 3, "{:#?}", keys);
     assert_eq!(keys, *MEGA_BLOB_CHUNK_KEYS);
 
-    // Step 3.2: Inspect reconstituted blob. assert_eq is not used directly,
-    // because that would cause a large amount of spam.
+    // Step 3.2: Inspect reconstituted blob.
 
     // Step 3.2.1: Reconstitute.
     let reconstituted_monolithic_blob = keys
@@ -45,5 +44,7 @@ fn test_chunks() {
     );
 
     // Step 3.2.3: Finally, make sure the whole thing survived the round trip.
+    // assert_eq is not used directly, because that would cause a large amount
+    // of spam.
     assert!(reconstituted_monolithic_blob == *MEGA_BLOB);
 }
