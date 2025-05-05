@@ -344,41 +344,14 @@ impl Registry {
                 let mutation_type = Type::try_from(*mutation_type).map_err(|err| {
                     Error::MalformedMessage(format!("Unable to convert mutation_type: {}", err,))
                 })?;
-                let Some(requires_already_present) = mutation_type.requires_already_present()
-                else {
-                    return Ok(());
-                };
+                let presence_requirement = mutation_type.presence_requirement();
 
-                let already_present = self
+                let is_currently_present = self
                     .get_last(key)
-                    .map(|registry_value| match registry_value.content {
-                        Some(high_capacity_registry_value::Content::DeletionMarker(
-                            deletion_marker,
-                        )) => !deletion_marker,
-
-                        None
-                        | Some(high_capacity_registry_value::Content::Value(_))
-                        | Some(high_capacity_registry_value::Content::LargeValueChunkKeys(_)) => {
-                            true
-                        }
-                    })
+                    .map(HighCapacityRegistryValue::is_present)
                     .unwrap_or(false);
-                if requires_already_present == already_present {
-                    return Ok(());
-                }
 
-                // Something is wrong, so Err will be returned, but a more
-                // precise description of the problem still needs to be
-                // decided...
-
-                let key = key.to_vec();
-                let err = if already_present {
-                    Error::KeyAlreadyPresent(key)
-                } else {
-                    Error::KeyNotPresent(key)
-                };
-
-                Err(err)
+                presence_requirement.verify(is_currently_present, key)
             })
             .flat_map(Result::err)
             .collect()

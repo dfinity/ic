@@ -113,6 +113,37 @@ impl From<Error> for RegistryError {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PresenceRequirement {
+    MustBePresent,
+    MustBeAbsent,
+    NoRequirement,
+}
+
+impl PresenceRequirement {
+    /// The second argument does NOT determine whether the result is Ok or Err;
+    /// rather, it is only used to populate Error.
+    pub fn verify(self, is_currently_present: bool, key: &[u8]) -> Result<(), Error> {
+        match self {
+            Self::MustBePresent => {
+                if !is_currently_present {
+                    return Err(Error::KeyNotPresent(key.to_vec()));
+                }
+            }
+
+            Self::MustBeAbsent => {
+                if is_currently_present {
+                    return Err(Error::KeyAlreadyPresent(key.to_vec()));
+                }
+            }
+
+            Self::NoRequirement => (),
+        };
+
+        Ok(())
+    }
+}
+
 impl registry_mutation::Type {
     pub fn is_delete(self) -> bool {
         // Do not simply replace this with self == Delete, because that assumes
@@ -128,19 +159,13 @@ impl registry_mutation::Type {
         }
     }
 
-    /// Returns whether key being touched
-    ///
-    ///   * must be present. In this case, Some(true) is returned.
-    ///   * must be absence. In this case, Some(false) is returned.
-    ///   * can be present or absent: In this case None is returned.
-    pub fn requires_already_present(self) -> Option<bool> {
+    /// Returns whether record being modified must already be present, absent,
+    /// or there is no presence/absence requiremnt.
+    pub fn presence_requirement(self) -> PresenceRequirement {
         match self {
-            registry_mutation::Type::Upsert => None, // Anything goes!
-
-            // Destructive operations must have SOME value to destroy.
-            registry_mutation::Type::Delete | registry_mutation::Type::Update => Some(true),
-
-            registry_mutation::Type::Insert => Some(false), // Do NOT clobber!
+            registry_mutation::Type::Upsert => PresenceRequirement::NoRequirement,
+            registry_mutation::Type::Delete | registry_mutation::Type::Update => PresenceRequirement::MustBePresent,
+            registry_mutation::Type::Insert => PresenceRequirement::MustBeAbsent,
         }
     }
 }

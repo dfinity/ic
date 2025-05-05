@@ -187,6 +187,27 @@ impl TryFrom<high_capacity_registry_value::Content>
     }
 }
 
+impl HighCapacityRegistryValue {
+    pub fn is_present(&self) -> bool {
+        match &self.content {
+            Some(high_capacity_registry_value::Content::DeletionMarker(
+                deletion_marker,
+            )) => {
+                // In general, we would expect deletion_marker to be true. But
+                // if it is false, it is always treated the same as
+                // Value(vec![]).
+                !deletion_marker
+            }
+
+            None // This is treated like Value(vec![]).
+            | Some(high_capacity_registry_value::Content::Value(_))
+            | Some(high_capacity_registry_value::Content::LargeValueChunkKeys(_)) => {
+                true
+            }
+        }
+    }
+}
+
 #[path = "high_capacity_tests.rs"]
 #[cfg(test)]
 mod tests;
