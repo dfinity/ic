@@ -29,18 +29,25 @@ impl SnapshotVotingPowerTask {
 
 impl RecurringSyncTask for SnapshotVotingPowerTask {
     fn execute(self) -> (Duration, Self) {
-        let (now_seconds, voting_power_snapshot) = self.governance.with_borrow_mut(|governance| {
-            let now_seconds = governance.env.now();
+        let now_seconds = self
+            .governance
+            .with_borrow(|governance| governance.env.now());
+        if self
+            .snapshots
+            .with_borrow(|snapshots| snapshots.is_latest_snapshot_a_spike(now_seconds))
+        {
+            return (VOTING_POWER_SNAPSHOT_INTERVAL, self);
+        }
+
+        let voting_power_snapshot = self.governance.with_borrow_mut(|governance| {
             let voting_power_economics = governance.voting_power_economics();
-            let voting_power_snapshot = governance
+            governance
                 .neuron_store
                 .compute_voting_power_snapshot_for_standard_proposal(
                     voting_power_economics,
                     now_seconds,
                 )
-                .expect("Voting power snapshot failed");
-
-            (now_seconds, voting_power_snapshot)
+                .expect("Voting power snapshot failed")
         });
 
         self.snapshots.with_borrow_mut(|snapshots| {
@@ -75,6 +82,7 @@ impl RecurringSyncTask for SnapshotVotingPowerTask {
 mod tests {
     use super::*;
 
+    use ic_nervous_system_common::ONE_DAY_SECONDS;
     use ic_nns_common::pb::v1::NeuronId;
     use ic_stable_structures::{
         memory_manager::{MemoryId, MemoryManager},
@@ -157,27 +165,51 @@ mod tests {
         });
 
         let task = SnapshotVotingPowerTask::new(&TEST_GOVERNANCE, &TEST_VOTING_POWER_SNAPSHOTS);
-        let (delay, _) = task.execute();
+        let (delay, task) = task.execute();
 
         assert_eq!(delay, VOTING_POWER_SNAPSHOT_INTERVAL);
-        let now_seconds = TEST_GOVERNANCE.with_borrow(|governance| governance.env.now());
         TEST_VOTING_POWER_SNAPSHOTS.with_borrow(|snapshots| {
             // After the first snapshot, the latest snapshot timestamp should be the current time,
             // and we should disable early adoption given a large deciding voting power.
-            assert_eq!(
-                snapshots.latest_snapshot_timestamp_seconds(),
-                Some(now_seconds)
-            );
+            assert_eq!(snapshots.latest_snapshot_timestamp_seconds(), Some(0));
             let (timestamp, previous_snapshot) = snapshots
                 .previous_ballots_if_voting_power_spike_detected(u64::MAX, 0)
                 .unwrap();
 
             // We only do some sanity checks here to make sure the task is working as expected.
-            assert_eq!(timestamp, now_seconds);
+            assert_eq!(timestamp, 0);
             let (ballots, total_potential_voting_power) =
                 previous_snapshot.create_ballots_and_total_potential_voting_power();
             assert!(ballots.get(&1).unwrap().voting_power > 0);
             assert!(total_potential_voting_power > 0);
+        });
+
+        // Run the task again after a day, with a doubled voting power.
+        set_time(ONE_DAY_SECONDS);
+        TEST_GOVERNANCE.with_borrow_mut(|governance| {
+            governance
+                .neuron_store
+                .with_neuron_mut(&NeuronId { id: 1 }, |neuron| {
+                    neuron.cached_neuron_stake_e8s *= 2
+                })
+                .unwrap();
+        });
+        let (_, task) = task.execute();
+        TEST_VOTING_POWER_SNAPSHOTS.with_borrow(|snapshots| {
+            assert_eq!(
+                snapshots.latest_snapshot_timestamp_seconds(),
+                Some(ONE_DAY_SECONDS)
+            );
+        });
+
+        // Run the task again after another day should not do anything since there is a spike in the snapshots.
+        set_time(2 * ONE_DAY_SECONDS);
+        task.execute();
+        TEST_VOTING_POWER_SNAPSHOTS.with_borrow(|snapshots| {
+            assert_eq!(
+                snapshots.latest_snapshot_timestamp_seconds(),
+                Some(ONE_DAY_SECONDS)
+            );
         });
     }
 
