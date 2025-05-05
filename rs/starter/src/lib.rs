@@ -1,4 +1,4 @@
-use ic_config::embedders::{BestEffortResponsesFeature, FeatureFlags};
+use ic_config::embedders::FeatureFlags;
 use ic_config::flag_status::FlagStatus;
 use ic_config::{
     embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
@@ -14,7 +14,6 @@ pub fn hypervisor_config(canister_sandboxing: bool) -> HypervisorConfig {
         embedders_config: EmbeddersConfig {
             feature_flags: FeatureFlags {
                 rate_limiting_of_debug_prints: FlagStatus::Disabled,
-                best_effort_responses: BestEffortResponsesFeature::Enabled,
                 wasm64: FlagStatus::Enabled,
                 canister_backtrace: FlagStatus::Enabled,
                 ..FeatureFlags::default()

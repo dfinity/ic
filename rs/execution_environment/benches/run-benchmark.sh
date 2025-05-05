@@ -21,7 +21,10 @@ TMP_FILE="${TMP_FILE:-${MIN_FILE%.*}.tmp}"
 bash -c "set -o pipefail; \
     bazel run '${BENCH}' -- ${FILTER} ${BENCH_ARGS} \
         2>&1 | tee '${LOG_FILE}' | rg '^(test .* )?bench:' --line-buffered \
-        | sed -uEe 's/^test (.+) ... bench: (.+)...... ns\/iter [(].*/> bench: \1 \2 ms\/iter/'" \
+        | sed -uE \
+            -e 's/^test (.+) ... bench: +([0-9]+)...... ns\/iter [(].*/> bench: \1 \2 ms\/iter/' \
+            -e 's/^test (.+) ... bench: +([0-9]+)... ns\/iter [(].*/> bench: \1 \2 µs\/iter/' \
+        " \
     || (
         echo "Error running the benchmark:"
         tail -10 "${LOG_FILE}" | sed 's/^/! /'

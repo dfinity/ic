@@ -253,27 +253,14 @@ impl NeuronStore {
         voting_power_economics: &VotingPowerEconomics,
         now_seconds: u64,
     ) -> NeuronMetrics {
-        let mut metrics = if self.allow_active_neurons_in_stable_memory {
-            NeuronMetrics::default()
-        } else {
-            // If we are not using stable memory for all neurons, we still assume
-            // these base level metrics
-            NeuronMetrics {
-                garbage_collectable_neurons_count: with_stable_neuron_store(
-                    |stable_neuron_store| stable_neuron_store.len() as u64,
-                ),
-                ..Default::default()
-            }
-        };
+        let mut metrics = NeuronMetrics::default();
 
-        if self.allow_active_neurons_in_stable_memory {
-            self.compute_neuron_metrics_all_stable(
-                &mut metrics,
-                neuron_minimum_stake_e8s,
-                voting_power_economics,
-                now_seconds,
-            );
-        }
+        self.compute_neuron_metrics_all_stable(
+            &mut metrics,
+            neuron_minimum_stake_e8s,
+            voting_power_economics,
+            now_seconds,
+        );
         // During migration, some neurons may be in the heap, so we need to compute
         // metrics for them as well.
         self.compute_neuron_metrics_current(

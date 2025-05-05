@@ -1,0 +1,46 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_doc_test", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "@crate_index//:candid",
+    "@crate_index//:ic-canister-log",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:regex",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/canlog_derive",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:proptest",
+]
+
+rust_library(
+    name = "canlog",
+    srcs = glob(["src/**/*.rs"]),
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":canlog",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_doc(
+    name = "doc",
+    crate = ":canlog",
+)
+
+rust_doc_test(
+    name = "doc_test",
+    crate = ":canlog",
+    deps = [":canlog"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)

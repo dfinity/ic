@@ -1,47 +1,52 @@
+use candid::Encode;
+use ic_nervous_system_agent::nns::node_rewards::get_node_providers_monthly_xdr_rewards;
+use ic_nervous_system_agent::AgentFor;
 use ic_nns_constants::NODE_REWARDS_CANISTER_ID;
-use ic_nns_test_utils::state_test_helpers::{
-    setup_nns_node_rewards_with_correct_canister_id, state_machine_builder_for_nns_tests,
-    update_with_sender,
-};
-use ic_node_rewards_canister_api::monthly_rewards::{
-    GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
-};
+use ic_nns_test_utils::common::build_node_rewards_test_wasm;
+use ic_node_rewards_canister_api::monthly_rewards::GetNodeProvidersMonthlyXdrRewardsRequest;
 use ic_types::PrincipalId;
+use pocket_ic::PocketIcBuilder;
 
-#[test]
-fn get_node_providers_monthly_xdr_rewards_is_only_callable_by_governance() {
-    let state_machine = state_machine_builder_for_nns_tests().build();
-    setup_nns_node_rewards_with_correct_canister_id(&state_machine);
+#[tokio::test]
+async fn get_node_providers_monthly_xdr_rewards_is_only_callable_by_governance() {
+    let pocket_ic = PocketIcBuilder::new()
+        .with_sns_subnet()
+        .with_nns_subnet()
+        .build_async()
+        .await;
+
+    pocket_ic
+        .create_canister_with_id(None, None, NODE_REWARDS_CANISTER_ID.get().0)
+        .await
+        .expect("Failed to create node rewards canister");
+
+    pocket_ic
+        .install_canister(
+            NODE_REWARDS_CANISTER_ID.get().0,
+            build_node_rewards_test_wasm().bytes(),
+            Encode!().unwrap(),
+            None,
+        )
+        .await;
 
     let request = GetNodeProvidersMonthlyXdrRewardsRequest {
         registry_version: None,
     };
 
-    let attempt_with_bad_caller: Result<GetNodeProvidersMonthlyXdrRewardsResponse, String> =
-        update_with_sender(
-            &state_machine,
-            NODE_REWARDS_CANISTER_ID,
-            "get_node_providers_monthly_xdr_rewards",
-            request.clone(),
-            PrincipalId::new_user_test_id(1),
-        );
-    let actual_error = attempt_with_bad_caller.unwrap_err();
+    let anon_agent = pocket_ic.agent_for(PrincipalId::new_anonymous());
+    let attempt_with_anonymous_caller =
+        get_node_providers_monthly_xdr_rewards(&anon_agent, request.clone()).await;
+    let error = attempt_with_anonymous_caller.unwrap_err();
 
     assert!(
-        actual_error.contains("Only the governance canister can call this method"),
+        error.contains("Only the governance canister can call this method"),
         "Expected error message not found, was {}",
-        actual_error
+        error
     );
 
-    let attempt_with_governance: Result<GetNodeProvidersMonthlyXdrRewardsResponse, String> =
-        update_with_sender(
-            &state_machine,
-            NODE_REWARDS_CANISTER_ID,
-            "get_node_providers_monthly_xdr_rewards",
-            request,
-            ic_nns_constants::GOVERNANCE_CANISTER_ID.get(),
-        );
-
+    let governance_agent = pocket_ic.agent_for(ic_nns_constants::GOVERNANCE_CANISTER_ID.get());
+    let attempt_with_governance =
+        get_node_providers_monthly_xdr_rewards(&governance_agent, request).await;
     let error = attempt_with_governance.unwrap().error.unwrap();
 
     // Registry canister isn't installed, so this is the expected error when you use the right caller.
