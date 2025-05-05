@@ -1,6 +1,9 @@
 use canister_test::CanisterInstallMode;
 use ic_base_types::PrincipalId;
-use ic_nervous_system_chunks::{Chunks, test_data::{MEGA_BLOB, MEGA_BLOB_CHUNK_KEYS}};
+use ic_nervous_system_chunks::{
+    test_data::{MEGA_BLOB, MEGA_BLOB_CHUNK_KEYS},
+    Chunks,
+};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_test_utils::{
     common::{build_registry_wasm, NnsInitPayloadsBuilder},

@@ -1023,7 +1023,11 @@ pub async fn upgrade_nns_canister_to_tip_of_master_or_panic(
     } else if canister_id == SNS_WASM_CANISTER_ID {
         (build_sns_wasms_wasm(), ROOT_CANISTER_ID.get(), "SNS-W")
     } else if canister_id == REGISTRY_CANISTER_ID {
-        (build_registry_wasm(&["test"]), ROOT_CANISTER_ID.get(), "Registry")
+        (
+            build_registry_wasm(&["test"]),
+            ROOT_CANISTER_ID.get(),
+            "Registry",
+        )
     } else {
         panic!("ID {} does not identify a known NNS canister.", canister_id);
     };

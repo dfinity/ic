@@ -1,4 +1,7 @@
-use super::{*, test_data::{MEGA_BLOB, MEGA_BLOB_CHUNK_KEYS}};
+use super::{
+    test_data::{MEGA_BLOB, MEGA_BLOB_CHUNK_KEYS},
+    *,
+};
 use std::{cell::RefCell, rc::Rc};
 
 #[test]
