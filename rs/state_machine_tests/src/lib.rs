@@ -2050,6 +2050,21 @@ impl StateMachine {
             .build()
     }
 
+    /// Same as [restart_node], but enables snapshot downloading.
+    pub fn restart_node_with_snapshot_download_enabled(self) -> Self {
+        // We must drop self before setup_form_dir so that we don't have two StateManagers pointing
+        // to the same root.
+        let (state_dir, nonce, time, checkpoint_interval_length) = self.into_components();
+
+        StateMachineBuilder::new()
+            .with_state_machine_state_dir(state_dir)
+            .with_nonce(nonce)
+            .with_time(time)
+            .with_checkpoint_interval_length(checkpoint_interval_length)
+            .with_snapshot_download_enabled(true)
+            .build()
+    }
+
     /// Same as [restart_node], but the subnet will have the specified `config`
     /// after the restart.
     pub fn restart_node_with_config(self, config: StateMachineConfig) -> Self {

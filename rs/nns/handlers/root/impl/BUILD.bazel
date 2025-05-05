@@ -16,6 +16,7 @@ filegroup(
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-http-types",
     "//rs/crypto/sha2",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
@@ -29,7 +30,6 @@ BASE_DEPENDENCIES = [
     "//rs/registry/keys",
     "//rs/registry/routing_table",
     "//rs/registry/transport",
-    "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",

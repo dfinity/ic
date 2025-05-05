@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import functools
 import os
+import re
 import site
 import sys
 import time
@@ -260,12 +261,14 @@ def check_hostos_power_metrics(ip_address: IPv6Address, timeout_secs: int) -> bo
     log.info("Got metrics result from HostOS")
     try:
         power_metric_line = next(
-            line for line in metrics_output.splitlines() if not line.startswith("#") and "power_average_watts" in line
+            line
+            for line in metrics_output.splitlines()
+            if not line.startswith("#") and re.fullmatch(r"power_average_watts \d+", line)
         )
         log.info(f"power consumption metric: {power_metric_line}")
         return True
     except StopIteration:
-        log.warning("power_average_watts metric not found in HostOS metrics")
+        log.warning("power_average_watts metric in HostOS metrics not found or invalid")
         return False
 
 

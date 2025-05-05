@@ -35,7 +35,7 @@ use ic_state_layout::{
 use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height, SnapshotId};
 use ic_utils::thread::parallel_map;
 use ic_utils_thread::JoinOnDrop;
-use ic_wasm_types::CanisterModule;
+use ic_wasm_types::{CanisterModule, ModuleLoadingStatus};
 use prometheus::HistogramTimer;
 use std::collections::BTreeSet;
 use std::convert::identity;
@@ -199,7 +199,6 @@ pub(crate) fn spawn_tip_thread(
                             {
                                 let _timer = request_timer(&metrics, "serialize_wasm_binaries");
                                 serialize_wasm_binaries(
-                                    &log,
                                     &state,
                                     &tip_handler.tip(height).unwrap(),
                                     &mut thread_pool,
@@ -584,16 +583,18 @@ fn switch_to_checkpoint(
                 .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?,
             );
 
+        let new_snapshot_wasm_binary = &new_snapshot.execution_snapshot().wasm_binary;
         let wasm_binary = snapshot_layout
             .wasm()
-            .deserialize(
-                new_snapshot
-                    .execution_snapshot()
-                    .wasm_binary
-                    .module_hash()
-                    .into(),
+            .lazy_load_with_module_hash(
+                new_snapshot_wasm_binary.module_hash().into(),
+                Some(new_snapshot_wasm_binary.len()),
             )
             .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
+        debug_assert_eq!(
+            wasm_binary.module_loading_status(),
+            ModuleLoadingStatus::FileNotLoaded
+        );
         new_snapshot.execution_snapshot_mut().wasm_binary = wasm_binary;
     }
 
@@ -604,13 +605,29 @@ fn switch_to_checkpoint(
             // We can reuse the cache because the Wasm binary has the same
             // contents, only the storage of that binary changed.
             let embedder_cache = Arc::clone(&tip_state.wasm_binary.embedder_cache);
+            let tip_state_wasm_binary = &tip_state.wasm_binary.binary;
             let wasm_binary = canister_layout
                 .wasm()
-                .deserialize(tip_state.wasm_binary.binary.module_hash().into())
+                .lazy_load_with_module_hash(
+                    tip_state_wasm_binary.module_hash().into(),
+                    Some(tip_state_wasm_binary.len()),
+                )
                 .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
             debug_assert_eq!(
                 tip_state.wasm_binary.binary.as_slice(),
-                wasm_binary.as_slice()
+                canister_layout
+                    .wasm()
+                    .lazy_load_with_module_hash(
+                        tip_state.wasm_binary.binary.module_hash().into(),
+                        Some(tip_state_wasm_binary.len())
+                    )
+                    .unwrap()
+                    .as_slice()
+            );
+
+            debug_assert_eq!(
+                wasm_binary.module_loading_status(),
+                ModuleLoadingStatus::FileNotLoaded
             );
             tip_state.wasm_binary = Arc::new(
                 ic_replicated_state::canister_state::execution_state::WasmBinary {
@@ -1033,7 +1050,6 @@ fn serialize_protos_to_tip(
 }
 
 fn serialize_wasm_binaries(
-    log: &ReplicaLogger,
     state: &ReplicatedState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     thread_pool: &mut scoped_threadpool::Pool,
@@ -1041,7 +1057,7 @@ fn serialize_wasm_binaries(
     metrics: &StorageMetrics,
 ) -> Result<(), CheckpointError> {
     parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
-        serialize_canister_wasm_binary(log, canister_state, tip, metrics, lsmt_config)
+        serialize_canister_wasm_binary(canister_state, tip, metrics, lsmt_config)
     })
     .into_iter()
     .try_for_each(identity)?;
@@ -1049,7 +1065,7 @@ fn serialize_wasm_binaries(
         thread_pool,
         state.canister_snapshots.iter(),
         |(snapshot_id, snapshot)| {
-            serialize_snapshot_wasm_binary(log, snapshot_id, snapshot, tip, metrics, lsmt_config)
+            serialize_snapshot_wasm_binary(snapshot_id, snapshot, tip, metrics, lsmt_config)
         },
     )
     .into_iter()
@@ -1057,35 +1073,24 @@ fn serialize_wasm_binaries(
 }
 
 fn serialize_wasm_binary(
-    log: &ReplicaLogger,
     wasm_file: &WasmFile<RwPolicy<TipHandler>>,
     binary: &CanisterModule,
 ) -> Result<(), CheckpointError> {
-    match binary.file() {
-        Some(path) => {
-            // This if should always be false, as we reflink copy the entire checkpoint to the tip
-            // It is left in mainly as defensive programming
-            if !wasm_file.raw_path().exists() {
-                ic_state_layout::utils::do_copy(log, path, wasm_file.raw_path()).map_err(
-                    |io_err| CheckpointError::IoError {
-                        path: path.to_path_buf(),
-                        message: "failed to copy Wasm file".to_string(),
-                        io_err: io_err.to_string(),
-                    },
-                )?;
-            }
-        }
-        None => {
-            // Canister was installed/upgraded. Persist the new wasm binary.
+    if !binary.is_file() {
+        // Canister was installed/upgraded. Persist the new wasm binary.
+        wasm_file.serialize(binary)?;
+    } else {
+        // This if should always be false, as we hardlink the entire checkpoint to the tip
+        // It is left in mainly as defensive programming
+        if !wasm_file.raw_path().exists() {
+            debug_assert!(false);
             wasm_file.serialize(binary)?;
         }
     }
-
     Ok(())
 }
 
 fn serialize_canister_wasm_binary(
-    log: &ReplicaLogger,
     canister_state: &CanisterState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     metrics: &StorageMetrics,
@@ -1096,11 +1101,7 @@ fn serialize_canister_wasm_binary(
 
     match &canister_state.execution_state {
         Some(execution_state) => {
-            serialize_wasm_binary(
-                log,
-                &canister_layout.wasm(),
-                &execution_state.wasm_binary.binary,
-            )?;
+            serialize_wasm_binary(&canister_layout.wasm(), &execution_state.wasm_binary.binary)?;
             execution_state.wasm_memory.page_map.persist_delta(
                 &canister_layout.vmemory_0(),
                 tip.height(),
@@ -1136,7 +1137,6 @@ fn serialize_canister_wasm_binary(
 }
 
 fn serialize_snapshot_wasm_binary(
-    log: &ReplicaLogger,
     snapshot_id: &SnapshotId,
     snapshot: &CanisterSnapshot,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
@@ -1146,11 +1146,7 @@ fn serialize_snapshot_wasm_binary(
     let snapshot_layout = tip.snapshot(snapshot_id)?;
 
     let execution_snapshot = snapshot.execution_snapshot();
-    serialize_wasm_binary(
-        log,
-        &snapshot_layout.wasm(),
-        &execution_snapshot.wasm_binary,
-    )?;
+    serialize_wasm_binary(&snapshot_layout.wasm(), &execution_snapshot.wasm_binary)?;
     execution_snapshot.wasm_memory.page_map.persist_delta(
         &snapshot_layout.vmemory_0(),
         tip.height(),
