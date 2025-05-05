@@ -299,8 +299,8 @@ fn random_subset<R: rand::Rng, T: Clone>(rng: &mut R, items: &[T], include: usiz
 fn test_protocol_execution() {
     let rng = &mut reproducible_rng();
 
-    let nodes = 31;
-    let threshold = 21;
+    let nodes = 34;
+    let threshold = 23;
 
     let setup = VetkdTestProtocolSetup::new(rng, nodes, threshold);
     let proto = VetkdTestProtocolExecution::new(rng, &setup);
