@@ -84,7 +84,7 @@ runs:
           bazel run //bazel:execution_log_compact_to_csv \
             $([[ "$(uname)" == "Linux" ]] && echo '--repository_cache=/cache/bazel') -- \
             --input_execlog="$execlog" \
-            --whitelist_pat='^//'
+            --whitelist_pat='*'
         done > '${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv'
 
     - name: Upload execution log
