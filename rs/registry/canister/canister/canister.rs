@@ -466,15 +466,15 @@ fn get_chunk_(request: GetChunkRequest) -> Result<Chunk, String> {
 /// is protected from prematurely (i.e. before clients are ready) doing those
 /// things.
 #[cfg(feature = "test")]
-#[export_name = "canister_update mutate_daniel_wong"]
-fn mutate_daniel_wong() {
+#[export_name = "canister_update mutate_daniel_wong_for_test"]
+fn mutate_daniel_wong_for_test() {
     // Since these should only be used in tests, we do not put these at the top of the file.
-    use ic_registry_canister_api::mutate_daniel_wong::Request;
+    use ic_registry_canister_api::mutate_daniel_wong_for_test::Request;
     #[cfg(feature = "test")]
     use registry_canister::flags::temporarily_enable_chunkifying_large_values;
 
     over(candid_one, |request: Request| -> /* version */ u64 {
-        check_caller_is_governance_and_log("mutate_daniel_wong");
+        check_caller_is_governance_and_log("mutate_daniel_wong_for_test");
 
         let _restore_on_drop = temporarily_enable_chunkifying_large_values();
 
