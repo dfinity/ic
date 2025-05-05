@@ -61,8 +61,8 @@ mod test {
         registry_create_subnet_with_nodes,
     };
     use crate::mutations::routing_table::routing_table_into_registry_mutation;
+    use ic_base_types::CanisterId;
     use ic_base_types::PrincipalId;
-    use ic_base_types::{CanisterId, NodeId};
     use ic_registry_routing_table::CanisterIdRange;
     use ic_registry_routing_table::RoutingTable;
     use ic_registry_transport::pb::v1::registry_mutation;
