@@ -6,6 +6,7 @@ import os
 import re
 import site
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from ipaddress import IPv6Address
@@ -20,7 +21,6 @@ import tqdm
 from loguru import logger as log
 from simple_parsing import field, parse
 from simple_parsing.helpers import flag
-import tempfile
 
 DEFAULT_IDRAC_SCRIPT_DIR = f"{site.getuserbase()}/bin"
 
