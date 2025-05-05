@@ -2208,7 +2208,7 @@ impl CanisterManager {
         };
         let snapshot_id = args.get_snapshot_id();
         // If not found, the operation fails due to invalid parameters.
-        let Some(snapshot) = state.canister_snapshots.get(snapshot_id) else {
+        let Some(snapshot) = state.canister_snapshots.get_mut(snapshot_id) else {
             return (
                 Err(CanisterManagerError::CanisterSnapshotNotFound {
                     canister_id: canister.canister_id(),
@@ -2227,20 +2227,32 @@ impl CanisterManager {
                 NumInstructions::new(0),
             );
         }
-        // Write data where it belongs. The memory has already been paid for in `create_snapshot_from_metadata`,
+        // Write data where it belongs, as indicated by the `CanisterSnapshotDataOffset` variant.
+        // The memory has already been paid for in `create_snapshot_from_metadata`,
         // but the instructions used have to be accounted for.
-        let mut snapshot = snapshot;
+        let snapshot_inner = Arc::make_mut(snapshot);
         match args.kind {
             CanisterSnapshotDataOffset::WasmModule { offset } => {
-                // TODO: this type has no good write access. writing would invalidate the module.
-                // snapshot.execution_snapshot_mut().wasm_binary.
+                let res = snapshot_inner
+                    .execution_snapshot_mut()
+                    .wasm_binary
+                    .write(&args.chunk, offset as usize);
+                if res.is_err() {
+                    return (
+                        Err(CanisterManagerError::InvalidSubslice {
+                            offset,
+                            size: args.chunk.len() as u64,
+                        }),
+                        NumInstructions::new(0),
+                    );
+                }
             }
             CanisterSnapshotDataOffset::MainMemory { offset } => {
-                let mut buffer = Buffer::new(snapshot.wasm_memory().page_map.clone());
+                let mut buffer = Buffer::new(snapshot_inner.wasm_memory().page_map.clone());
                 buffer.write(&args.chunk, offset as usize);
             }
             CanisterSnapshotDataOffset::StableMemory { offset } => {
-                let mut buffer = Buffer::new(snapshot.stable_memory().page_map.clone());
+                let mut buffer = Buffer::new(snapshot_inner.stable_memory().page_map.clone());
                 buffer.write(&args.chunk, offset as usize);
             }
             CanisterSnapshotDataOffset::WasmChunk => {
