@@ -111,20 +111,6 @@ impl CanisterModule {
         }
     }
 
-    /// Overwrite the module at `offset` with `buf`. This may invalidate the
-    /// module, and will change its hash. It's useful for uploading a module
-    /// chunk by chunk.
-    /// Returns an error if `offset` + `buf.len()` > `module.len()`.
-    pub fn write(&mut self, buf: &[u8], offset: usize) -> Result<(), String> {
-        match self.module.write(buf, offset) {
-            Ok(()) => {
-                self.module_hash = ic_crypto_sha2::Sha256::hash(self.module.as_slice());
-                Ok(())
-            }
-            Err(e) => Err(e),
-        }
-    }
-
     pub fn as_slice(&self) -> &[u8] {
         self.module.as_slice()
     }
