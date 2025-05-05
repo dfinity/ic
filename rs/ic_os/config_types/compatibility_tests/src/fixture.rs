@@ -1,16 +1,14 @@
+use anyhow::{bail, Result};
 use config_types::*;
 use std::fs;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::Path;
 
 /// Generates fixtures for the current version, enforcing version increment if config_types has been modified
-pub fn generate_fixtures(fixtures_dir: &Path) -> std::io::Result<()> {
+pub fn generate_fixtures(fixtures_dir: &Path) -> Result<()> {
     let fixture_path = fixtures_dir.join(format!("hostos_v{}.json", CONFIG_VERSION));
     if config_structure_changed(&fixture_path) {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!("CONFIG_VERSION in lib.rs ({}) already has a fixture, but the config structure has changed. Please increment config_types CONFIG_VERSION before generating a new fixture.", CONFIG_VERSION)
-        ));
+        bail!("CONFIG_VERSION in lib.rs ({}) already has a fixture, but the config structure has changed. Please increment config_types CONFIG_VERSION before generating a new fixture.", CONFIG_VERSION);
     }
 
     let hostos_config = generate_default_hostos_config();
