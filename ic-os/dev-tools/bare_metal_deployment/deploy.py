@@ -20,6 +20,7 @@ import tqdm
 from loguru import logger as log
 from simple_parsing import field, parse
 from simple_parsing.helpers import flag
+import tempfile
 
 DEFAULT_IDRAC_SCRIPT_DIR = f"{site.getuserbase()}/bin"
 
@@ -764,9 +765,7 @@ def main():
         assert_ssh_connectivity(file_share_endpoint, args.file_share_ssh_key)
 
         if args.inject_image_ipv6_prefix:
-            tmpdir = os.getenv("ICOS_TMPDIR")
-            if not tmpdir:
-                raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
+            tmpdir = tempfile.mkdtemp()
             modified_image_path = inject_config_into_image(
                 Path(args.inject_configuration_tool),
                 Path(tmpdir),
