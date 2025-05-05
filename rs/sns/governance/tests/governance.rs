@@ -3508,7 +3508,6 @@ fn test_set_following() {
     };
 
     let cleared_topic_following_for_all_non_critical_proposals = [
-        Topic::DaoCommunitySettings,
         Topic::SnsFrameworkManagement,
         Topic::DappCanisterManagement,
         Topic::ApplicationBusinessLogic,
@@ -3740,7 +3739,6 @@ fn test_set_following() {
             ],
             Some(TopicFollowees {
                 topic_id_to_followees: btreemap! {
-                    Topic::DaoCommunitySettings as i32 => FolloweesForTopic { followees: vec![expected_followee.clone()], topic: Some(Topic::DaoCommunitySettings as i32) },
                     Topic::SnsFrameworkManagement as i32 => FolloweesForTopic { followees: vec![expected_followee.clone()], topic: Some(Topic::SnsFrameworkManagement as i32) },
                     Topic::DappCanisterManagement as i32 => FolloweesForTopic { followees: vec![expected_followee.clone()], topic: Some(Topic::DappCanisterManagement as i32) },
                     Topic::ApplicationBusinessLogic as i32 => FolloweesForTopic { followees: vec![expected_followee.clone()], topic: Some(Topic::ApplicationBusinessLogic as i32) },
