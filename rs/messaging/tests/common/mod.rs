@@ -461,7 +461,8 @@ impl SubnetPair {
                     .unwrap()
                     .system_state
                     .call_context_manager()
-                    .map_or(0, |manager| manager.call_contexts().len());
+                    .call_contexts()
+                    .len();
                 (canister, count)
             })
             .collect()

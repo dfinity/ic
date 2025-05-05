@@ -1978,7 +1978,6 @@ fn check_stream_handler_generated_reject_signal_canister_stopping() {
                 .unwrap()
                 .system_state
                 .set_status(CanisterStatus::Stopping {
-                    call_context_manager: Default::default(),
                     stop_contexts: Default::default(),
                 });
         },

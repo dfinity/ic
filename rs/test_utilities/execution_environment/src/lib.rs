@@ -511,8 +511,7 @@ impl ExecutionTest {
                 let call_context_manager = self
                     .canister_state(canister_id)
                     .system_state
-                    .call_context_manager()
-                    .unwrap();
+                    .call_context_manager();
                 let callback = call_context_manager
                     .callback(callback_id)
                     .expect("Unknown callback id.");

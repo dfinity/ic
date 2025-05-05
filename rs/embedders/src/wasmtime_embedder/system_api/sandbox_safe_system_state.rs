@@ -733,9 +733,8 @@ impl SandboxSafeSystemState {
         let call_context = call_context_id.and_then(|call_context_id| {
             system_state
                 .call_context_manager()
-                .and_then(|call_context_manager| {
-                    call_context_manager.call_contexts().get(&call_context_id)
-                })
+                .call_contexts()
+                .get(&call_context_id)
         });
 
         let call_context_balance = call_context.map(|call_context| call_context.available_cycles());
@@ -787,9 +786,7 @@ impl SandboxSafeSystemState {
             call_context_balance,
             call_context_deadline,
             cycles_account_manager,
-            system_state
-                .call_context_manager()
-                .map(|c| c.next_callback_id()),
+            Some(system_state.call_context_manager().next_callback_id()),
             available_callbacks,
             available_request_slots,
             ic00_available_request_slots,

@@ -1246,7 +1246,6 @@ fn reverts_stopping_status_after_split() {
     canister_state
         .system_state
         .set_status(CanisterStatus::Stopping {
-            call_context_manager: call_context_manager.clone(),
             stop_contexts: vec![StopCanisterContext::Ingress {
                 sender: user_test_id(1),
                 message_id: message_test_id(1),
@@ -1258,9 +1257,7 @@ fn reverts_stopping_status_after_split() {
     let mut expected_state = canister_state.clone();
     expected_state
         .system_state
-        .set_status(CanisterStatus::Running {
-            call_context_manager,
-        });
+        .set_status(CanisterStatus::Running);
 
     canister_state.drop_in_progress_management_calls_after_split();
 
