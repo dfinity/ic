@@ -5,7 +5,7 @@ use crate::{
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_config::artifact_pool::BACKUP_GROUP_SIZE;
 use ic_consensus_dkg::DkgKeyManager;
-use ic_consensus_utils::pool_reader::PoolReader;
+use ic_consensus_utils::pool_reader::PoolReaderImpl;
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_interfaces::{
     consensus_pool::{ChangeAction, Mutations, ValidatedConsensusArtifact},
@@ -286,7 +286,7 @@ pub(crate) fn deserialize_consensus_artifacts(
             return Ok(());
         }
 
-        let pool_reader = PoolReader::new(pool);
+        let pool_reader = PoolReaderImpl::new(pool);
         let registry_version = pool_reader
             .registry_version(height)
             .expect("Cannot retrieve the registry version from the pool");

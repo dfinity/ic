@@ -14,13 +14,13 @@ use std::time::Instant;
 ///
 /// An important invariant is that the validated pool always has at least one
 /// valid random beacon and one valid block that is considered finalized.
-pub struct PoolReader<'a> {
+pub struct PoolReaderImpl<'a> {
     pool: &'a dyn ConsensusPool,
     pub(crate) cache: &'a dyn ConsensusPoolCache,
     pub(crate) block_cache: &'a dyn ConsensusBlockCache,
 }
 
-impl<'a> PoolReader<'a> {
+impl<'a> PoolReaderImpl<'a> {
     /// Create a PoolReader for a ConsensusPool.
     pub fn new(pool: &'a dyn ConsensusPool) -> Self {
         Self {
@@ -47,6 +47,7 @@ impl<'a> PoolReader<'a> {
         registry_version_at_height(self.cache, height)
     }
 
+    // TODO: Remove
     /// Follow `block`'s ancestors until a block with `height` is found.
     pub fn follow_to_height(&self, block: Block, height: Height) -> Option<Block> {
         self.chain_iterator(block)
@@ -61,6 +62,7 @@ impl<'a> PoolReader<'a> {
         self.cache.chain_iterator(self.pool, block)
     }
 
+    // TODO: Remove
     /// Get the range of ancestor blocks of `block` specified (inclusively) by
     /// `min` and `max`. This assumes the correctness of the state of the pool.
     pub fn get_range(
@@ -74,6 +76,7 @@ impl<'a> PoolReader<'a> {
             .take_while(move |block| block.height >= min)
     }
 
+    // TODO: Remove
     /// Return a `Vec` of all of the `Payload` between the provided `start`
     /// height and the `target` block. The result is empty if `target` block
     /// height < `start`.
@@ -91,6 +94,7 @@ impl<'a> PoolReader<'a> {
             .collect()
     }
 
+    // TODO: Remove
     /// Returns the parent of the given block if there exists one.
     pub fn get_parent(&self, child: &HashedBlock) -> Option<HashedBlock> {
         match child.height().cmp(&self.get_catch_up_height()) {
@@ -105,6 +109,7 @@ impl<'a> PoolReader<'a> {
         }
     }
 
+    // TODO: Remove
     /// Return a valid block with the matching hash and height if it exists.
     pub fn get_block(
         &self,
@@ -138,6 +143,7 @@ impl<'a> PoolReader<'a> {
         }
     }
 
+    // TODO: Remove
     /// Return a valid notarized block with the matching hash and height if it
     /// exists.
     pub fn get_notarized_block(
@@ -170,6 +176,7 @@ impl<'a> PoolReader<'a> {
         self.pool.block_instant(hash)
     }
 
+    // TODO: Remove
     /// Return the finalized block of a given height which is either the genesis
     /// (or CatchUpPackage) block, or the parent of another finalized block,
     /// or one with a valid finalization signature. Or return None if not
@@ -227,6 +234,7 @@ impl<'a> PoolReader<'a> {
         }
     }
 
+    // TODO: Remove
     /// Return all valid notarized blocks of a given height.
     pub fn get_notarized_blocks(&'a self, h: Height) -> Box<dyn Iterator<Item = HashedBlock> + 'a> {
         match h.cmp(&self.get_catch_up_height()) {
@@ -244,6 +252,7 @@ impl<'a> PoolReader<'a> {
         }
     }
 
+    // TODO: Remove
     /// Return all valid blocks at a given height.
     pub fn get_valid_blocks(&self, h: Height) -> Box<dyn Iterator<Item = Block> + 'a> {
         match h.cmp(&self.get_catch_up_height()) {
@@ -264,6 +273,7 @@ impl<'a> PoolReader<'a> {
         }
     }
 
+    // TODO: Remove
     /// Get the max height of all valid random beacons.
     pub fn get_random_beacon_height(&self) -> Height {
         let catch_up_height = self.get_catch_up_height();
@@ -275,6 +285,7 @@ impl<'a> PoolReader<'a> {
             .max(catch_up_height)
     }
 
+    // TODO: Remove
     /// Get max height of valid notarized blocks. Note that this is different
     /// than the max height of valid notarization signatures, because the
     /// notarization signature may not exist at the height of CatchUpPackage
@@ -289,6 +300,7 @@ impl<'a> PoolReader<'a> {
             .max(catch_up_height)
     }
 
+    // TODO: Remove
     /// Get max height of valid finalized blocks. Note that this is different
     /// than the max height of valid finalization signatures, because the
     /// finalization signature may not exist at the height of CatchUpPackage
@@ -312,11 +324,13 @@ impl<'a> PoolReader<'a> {
         self.cache.summary_block()
     }
 
+    // TODO: Remove
     /// Get the height of highest CatchUpPackage.
     pub fn get_catch_up_height(&self) -> Height {
         self.get_highest_catch_up_package().height()
     }
 
+    // TODO: Remove
     /// Get a valid random beacon at the given height if it exists. Note that we would also return
     /// the random beacons below the CUP height if they still exists. This should help slower
     /// nodes to deliver batches even if they have already received the new CUP. This helps because
@@ -339,6 +353,7 @@ impl<'a> PoolReader<'a> {
         }
     }
 
+    // TODO: Remove
     /// Get the random beacon with greatest height.
     pub fn get_random_beacon_tip(&self) -> RandomBeacon {
         let height = self.get_random_beacon_height();
@@ -346,6 +361,7 @@ impl<'a> PoolReader<'a> {
             .unwrap_or_else(|| panic!("Can't find latest random beacon at height {}", height))
     }
 
+    // TODO: Remove
     /// Get the round start time of a given height, which is the max timestamp
     /// of first notarization and random beacon of the previous height. Return
     /// `None` if no suitable artifact indicating a round start has been found.
@@ -385,6 +401,7 @@ impl<'a> PoolReader<'a> {
             })
     }
 
+    // TODO: Remove
     /// Get the round start instant of a given height, which is the max instant
     /// of first notarization and random beacon of the previous height. If either
     /// of the messages don't have instants, we use the given fallback instance.
@@ -614,7 +631,7 @@ pub mod test {
             // This block is expected to be the summary of the next block, so we'll get it
             // back.
             assert!(block.payload.is_summary());
-            let pool_reader = PoolReader::new(&pool);
+            let pool_reader = PoolReaderImpl::new(&pool);
             assert_eq!(Some(block.clone()), pool_reader.dkg_summary_block(&block));
             assert_eq!(
                 Some(block.clone()),
@@ -627,7 +644,7 @@ pub mod test {
 
             // Skip one DKG interval.
             pool.advance_round_normal_operation_n(interval_length);
-            let pool_reader = PoolReader::new(&pool);
+            let pool_reader = PoolReaderImpl::new(&pool);
             // Make sure we do not get summaries for too old blocks.
             assert_eq!(None, pool_reader.dkg_summary_block(&block2));
             assert_eq!(
@@ -642,7 +659,7 @@ pub mod test {
             pool.advance_round_normal_operation_n(interval_length - 1);
             let block4 = pool.get_cache().finalized_block();
             // Make sure block4 points to the latest summary.
-            let pool_reader = PoolReader::new(&pool);
+            let pool_reader = PoolReaderImpl::new(&pool);
             assert_eq!(Some(block3.clone()), pool_reader.dkg_summary_block(&block4));
             assert_eq!(
                 Some(block3.clone()),
@@ -654,7 +671,7 @@ pub mod test {
             let block5 = pool.get_cache().finalized_block();
             // A summary block higher than block4 exists. While `dkg_summary_block` should return `None`,
             // `dkg_summary_block_for_finalized_height` should continue to return block3.
-            let pool_reader = PoolReader::new(&pool);
+            let pool_reader = PoolReaderImpl::new(&pool);
             assert_eq!(None, pool_reader.dkg_summary_block(&block4));
             assert_eq!(
                 Some(block3),
@@ -701,7 +718,7 @@ pub mod test {
                 .unwrap();
             pool.finalize(&ten_block);
 
-            let pool_reader = PoolReader::new(&pool);
+            let pool_reader = PoolReaderImpl::new(&pool);
             pool_reader
                 .get_finalized_block(Height::from(10))
                 .expect("Can't find finalized block at 10");
@@ -735,7 +752,7 @@ pub mod test {
             let catch_up_package = pool.make_catch_up_package(notarization.height());
             pool.insert_validated(catch_up_package);
             pool.purge_validated_below(notarization);
-            let pool_reader = PoolReader::new(&pool);
+            let pool_reader = PoolReaderImpl::new(&pool);
             // notarized/finalized height are still 3, same as catchup height
             assert_eq!(pool_reader.get_notarized_height(), Height::from(5));
             assert_eq!(pool_reader.get_finalized_height(), Height::from(5));
@@ -818,7 +835,7 @@ pub mod test {
                 vec![(1, record.clone())],
             );
             let subnet_id = replica_config.subnet_id;
-            let pool_reader = PoolReader::new(&pool);
+            let pool_reader = PoolReaderImpl::new(&pool);
             // Right now we only have the genesis block. For the genesis interval and the
             // interval behind it, we will use the RegistryVersion = 1, as it is
             // currently used in genesis generation inside the summary and
@@ -864,7 +881,7 @@ pub mod test {
             pool.advance_round_normal_operation_n(total_length);
 
             // Now all heights, abobe the 3rd DKG round should use registry version 2
-            let pool_reader = PoolReader::new(&pool);
+            let pool_reader = PoolReaderImpl::new(&pool);
             for h in (2 * total_length)..(3 * total_length) {
                 assert_eq!(
                     pool_reader.registry_version(Height::from(h)).unwrap(),

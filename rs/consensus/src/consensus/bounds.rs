@@ -4,7 +4,7 @@
 
 use super::notary::ACCEPTABLE_NOTARIZATION_CUP_GAP;
 use ic_consensus_utils::{
-    pool_reader::PoolReader, registry_version_at_height, MINIMUM_CHAIN_LENGTH,
+    pool_reader::PoolReaderImpl, registry_version_at_height, MINIMUM_CHAIN_LENGTH,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -128,7 +128,7 @@ fn get_maximum_validated_artifacts(node_count: usize, dkg_interval: usize) -> Ar
 /// Returns excess event when our validated pool exceeds the bounds. Otherwise,
 /// or if the registry client doesn't have the relevant records, returns `None`.
 pub fn validated_pool_within_bounds(
-    pool_reader: &PoolReader,
+    pool_reader: &PoolReaderImpl,
     registry_client: &dyn RegistryClient,
     replica_config: &ReplicaConfig,
 ) -> Option<ExcessEvent> {
@@ -222,7 +222,7 @@ mod tests {
             pool.advance_round_normal_operation_n(max_counts.finalization as u64);
             assert_eq!(
                 validated_pool_within_bounds(
-                    &PoolReader::new(&pool),
+                    &PoolReaderImpl::new(&pool),
                     registry.as_ref(),
                     &replica_config,
                 ),
@@ -232,7 +232,7 @@ mod tests {
             // One too many finalizations should trigger excess event.
             pool.advance_round_normal_operation();
             assert!(validated_pool_within_bounds(
-                &PoolReader::new(&pool),
+                &PoolReaderImpl::new(&pool),
                 registry.as_ref(),
                 &replica_config,
             )

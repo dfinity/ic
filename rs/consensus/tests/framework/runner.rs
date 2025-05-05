@@ -3,7 +3,7 @@ use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_certification::{CertificationCrypto, CertifierImpl};
 use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::{
-    crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
+    crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReaderImpl,
 };
 use ic_interfaces::{consensus_pool::ConsensusPoolCache, time_source::TimeSource};
 use ic_logger::{info, warn, ReplicaLogger};
@@ -127,7 +127,7 @@ impl<'a> ConsensusRunner<'a> {
         modifier: Option<ComponentModifier>,
         deps: &'a ConsensusDependencies,
         pool_config: ArtifactPoolConfig,
-        pool_reader: &PoolReader<'_>,
+        pool_reader: &PoolReaderImpl<'_>,
     ) {
         let node_id = deps.replica_config.node_id;
 

@@ -15,7 +15,7 @@ use dkg::DkgDataPayload;
 use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, ingress_pool::IngressPoolImpl};
 use ic_config::state_manager::Config as StateManagerConfig;
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
-use ic_consensus_utils::pool_reader::PoolReader;
+use ic_consensus_utils::pool_reader::PoolReaderImpl;
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
@@ -305,7 +305,7 @@ fn add_past_blocks(
 fn validate_payload(
     now: Time,
     payload: &Payload,
-    pool_reader: &PoolReader<'_>,
+    pool_reader: &PoolReaderImpl<'_>,
     tip: &Block,
     payload_builder: &dyn PayloadBuilder,
 ) -> ValidationResult<PayloadValidationError> {
@@ -347,7 +347,7 @@ fn validate_payload_benchmark(criterion: &mut Criterion) {
              consensus_pool: &mut ConsensusPoolImpl,
              payload_builder: &dyn PayloadBuilder| {
                 let tip = add_past_blocks(consensus_pool, now, message_count);
-                let pool_reader = PoolReader::new(consensus_pool);
+                let pool_reader = PoolReaderImpl::new(consensus_pool);
 
                 let seed = CERTIFIED_HEIGHT + PAST_PAYLOAD_HEIGHT + 10;
                 let ingress =

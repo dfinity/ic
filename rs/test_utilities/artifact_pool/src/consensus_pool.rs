@@ -3,7 +3,7 @@ use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_artifact_pool::dkg_pool::DkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_dkg::get_dkg_summary_from_cup_contents;
-use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
+use ic_consensus_utils::{membership::Membership, pool_reader::PoolReaderImpl};
 use ic_interfaces::{
     consensus_pool::{
         ChangeAction, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool, ConsensusPoolCache,
@@ -150,7 +150,7 @@ fn dkg_payload_builder_fn(
             subnet_id,
             &*registry_client,
             &*crypto,
-            &PoolReader::new(cons_pool),
+            &PoolReaderImpl::new(cons_pool),
             dkg_pool.clone(),
             &parent,
             &*state_manager,
@@ -224,7 +224,7 @@ impl TestConsensusPool {
     /// Utility function to determine the identity of the block maker with the
     /// specified rank at a given height. Panics if this rank does not exist.
     pub fn get_block_maker_by_rank(&self, height: Height, rank: Rank) -> NodeId {
-        let pool_reader = PoolReader::new(&self.pool);
+        let pool_reader = PoolReaderImpl::new(&self.pool);
         let prev_beacon = pool_reader.get_random_beacon(height.decrement()).unwrap();
         *self
             .membership

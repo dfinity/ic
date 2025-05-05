@@ -13,7 +13,7 @@ use ic_consensus::consensus::batch_delivery::deliver_batches;
 use ic_consensus_certification::VerifierImpl;
 use ic_consensus_utils::{
     crypto_hashable_to_seed, lookup_replica_version, membership::Membership,
-    pool_reader::PoolReader,
+    pool_reader::PoolReaderImpl,
 };
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -237,7 +237,7 @@ impl Player {
 
         let replica_version = if let Some(pool) = &consensus_pool {
             // Use the replica version from the finalized tip in the pool.
-            PoolReader::new(pool).get_finalized_tip().version().clone()
+            PoolReaderImpl::new(pool).get_finalized_tip().version().clone()
         } else {
             Default::default()
         };
@@ -477,7 +477,7 @@ impl Player {
             other => other?,
         };
 
-        let pool_reader = &PoolReader::new(consensus_pool);
+        let pool_reader = &PoolReaderImpl::new(consensus_pool);
         let finalized_height = pool_reader.get_finalized_height();
         let target_height = finalized_height.min(
             self.replay_target_height
@@ -693,7 +693,7 @@ impl Player {
     fn deliver_batches(
         &self,
         message_routing: &dyn MessageRouting,
-        pool: &PoolReader<'_>,
+        pool: &PoolReaderImpl<'_>,
         membership: &Membership,
         replay_target_height: Option<Height>,
     ) -> Height {
@@ -739,7 +739,7 @@ impl Player {
                 ReplicaVersion::default(),
             ),
             Some(pool) => {
-                let pool = PoolReader::new(pool);
+                let pool = PoolReaderImpl::new(pool);
                 let finalized_height = pool.get_finalized_height();
                 let last_block = pool
                     .get_finalized_block(finalized_height)
@@ -944,7 +944,7 @@ impl Player {
 
     /// Return the highest CatchUpPackage
     pub fn get_highest_catch_up_package(&self) -> CatchUpPackage {
-        PoolReader::new(self.consensus_pool.as_ref().unwrap()).get_highest_catch_up_package()
+        PoolReaderImpl::new(self.consensus_pool.as_ref().unwrap()).get_highest_catch_up_package()
     }
 
     /// Query the registry canister and return registry records since the given
@@ -1057,7 +1057,7 @@ impl Player {
             .validator
             .as_ref()
             .unwrap()
-            .new_key_manager(&PoolReader::new(self.consensus_pool.as_ref().unwrap()));
+            .new_key_manager(&PoolReaderImpl::new(self.consensus_pool.as_ref().unwrap()));
         let mut invalid_artifacts = Vec::new();
         // We start with the specified height and restore heights until we run out of
         // heights on the backup spool or bump into a newer replica version.
@@ -1083,7 +1083,7 @@ impl Player {
 
             let last_batch_height = self.deliver_batches(
                 self.message_routing.as_ref(),
-                &PoolReader::new(self.consensus_pool.as_ref().unwrap()),
+                &PoolReaderImpl::new(self.consensus_pool.as_ref().unwrap()),
                 self.membership.as_ref().unwrap(),
                 replay_target_height,
             );

@@ -1,4 +1,4 @@
-use ic_consensus_utils::pool_reader::PoolReader;
+use ic_consensus_utils::pool_reader::PoolReaderImpl;
 use ic_interfaces::{
     consensus_pool::ConsensusPool,
     p2p::consensus::{Bouncer, BouncerValue, BouncerValue::*},
@@ -10,7 +10,7 @@ pub fn new_bouncer(
     pool: &dyn ConsensusPool,
     expected_batch_height: Height,
 ) -> Bouncer<ConsensusMessageId> {
-    let pool_reader = PoolReader::new(pool);
+    let pool_reader = PoolReaderImpl::new(pool);
     let cup_height = pool_reader.get_catch_up_height();
     let next_cup_height = pool_reader.get_next_cup_height();
     let finalized_height = pool_reader.get_finalized_height();
@@ -290,7 +290,7 @@ mod tests {
             ));
             assert!(
                 block.height().get()
-                    > PoolReader::new(&pool).get_finalized_height().get() + LOOK_AHEAD
+                    > PoolReaderImpl::new(&pool).get_finalized_height().get() + LOOK_AHEAD
             );
             // Recompute bouncer function since pool content has changed
             let bouncer = new_bouncer(&pool, expected_batch_height);

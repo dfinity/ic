@@ -6,7 +6,7 @@ use crate::framework::{
     ConsensusRunner, ConsensusRunnerConfig, StopPredicate,
 };
 use framework::test_master_public_key_ids;
-use ic_consensus_utils::pool_reader::PoolReader;
+use ic_consensus_utils::pool_reader::PoolReaderImpl;
 use ic_interfaces::{consensus_pool::ConsensusPool, messaging::MessageRouting};
 use ic_interfaces_registry::RegistryClient;
 use ic_test_utilities_time::FastForwardTimeSource;
@@ -283,7 +283,7 @@ fn run_test(
                 modifier,
                 deps,
                 pool_config.clone(),
-                &PoolReader::new(&*deps.consensus_pool.read().unwrap()),
+                &PoolReaderImpl::new(&*deps.consensus_pool.read().unwrap()),
             );
         }
         assert_eq!(runner.run_until(stop_predicate), finish);

@@ -409,7 +409,7 @@ mod tests {
         dependencies, dependencies_with_subnet_params,
         dependencies_with_subnet_records_with_raw_state_manager, Dependencies,
     };
-    use ic_consensus_utils::pool_reader::PoolReader;
+    use ic_consensus_utils::pool_reader::PoolReaderImpl;
     use ic_interfaces::{
         consensus_pool::ConsensusPool,
         p2p::consensus::{MutablePool, UnvalidatedArtifact},
@@ -463,8 +463,11 @@ mod tests {
 
                 // Now we instantiate the DKG component for node Id = 1, who is a dealer.
                 let replica_1 = node_test_id(1);
-                let dkg_key_manager =
-                    new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
+                let dkg_key_manager = new_dkg_key_manager(
+                    crypto.clone(),
+                    logger.clone(),
+                    &PoolReaderImpl::new(&pool),
+                );
                 let dkg = DkgImpl::new(
                     replica_1,
                     crypto.clone(),
@@ -530,8 +533,11 @@ mod tests {
                 // Create another dealer and add his dealings into the unvalidated pool of
                 // replica 1.
                 let replica_2 = node_test_id(2);
-                let dkg_key_manager_2 =
-                    new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
+                let dkg_key_manager_2 = new_dkg_key_manager(
+                    crypto.clone(),
+                    logger.clone(),
+                    &PoolReaderImpl::new(&pool),
+                );
                 let dkg_2 = DkgImpl::new(
                     replica_2,
                     crypto,
@@ -598,8 +604,11 @@ mod tests {
                 } = dependencies(pool_config.clone(), 2);
                 let mut dkg_pool = DkgPoolImpl::new(MetricsRegistry::new(), logger.clone());
                 // Let's check that replica 3, who's not a dealer, does not produce dealings.
-                let dkg_key_manager =
-                    new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
+                let dkg_key_manager = new_dkg_key_manager(
+                    crypto.clone(),
+                    logger.clone(),
+                    &PoolReaderImpl::new(&pool),
+                );
                 let dkg = DkgImpl::new(
                     node_test_id(3),
                     crypto.clone(),
@@ -611,8 +620,11 @@ mod tests {
                 assert!(dkg.on_state_change(&dkg_pool).is_empty());
 
                 // Now we instantiate the DKG component for node Id = 1, who is a dealer.
-                let dkg_key_manager =
-                    new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
+                let dkg_key_manager = new_dkg_key_manager(
+                    crypto.clone(),
+                    logger.clone(),
+                    &PoolReaderImpl::new(&pool),
+                );
                 let dkg = DkgImpl::new(
                     node_test_id(1),
                     crypto,
@@ -699,8 +711,11 @@ mod tests {
                 );
 
                 // Now we instantiate the DKG component for node Id = 1, who is a dealer.
-                let dkg_key_manager =
-                    new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
+                let dkg_key_manager = new_dkg_key_manager(
+                    crypto.clone(),
+                    logger.clone(),
+                    &PoolReaderImpl::new(&pool),
+                );
                 let dkg = DkgImpl::new(
                     node_test_id(1),
                     crypto,
@@ -810,7 +825,7 @@ mod tests {
 
             // Verify that the first summary block contains only two local configs and the
             // two errors for the remote DKG request.
-            let block: Block = PoolReader::new(&pool).get_highest_finalized_summary_block();
+            let block: Block = PoolReaderImpl::new(&pool).get_highest_finalized_summary_block();
             if let BlockPayload::Summary(summary) = block.payload.as_ref() {
                 assert_eq!(
                     summary.dkg.configs.len(),
@@ -867,7 +882,7 @@ mod tests {
                     let dkg_key_manager_1 = new_dkg_key_manager(
                         crypto.clone(),
                         logger.clone(),
-                        &PoolReader::new(&consensus_pool_1),
+                        &PoolReaderImpl::new(&consensus_pool_1),
                     );
                     let dkg_1 = DkgImpl::new(
                         node_id_1,
@@ -881,7 +896,7 @@ mod tests {
                     let dkg_key_manager_2 = new_dkg_key_manager(
                         crypto.clone(),
                         logger.clone(),
-                        &PoolReader::new(&consensus_pool_2),
+                        &PoolReaderImpl::new(&consensus_pool_2),
                     );
                     let dkg_2 = DkgImpl::new(
                         node_id_2,
@@ -1302,7 +1317,7 @@ mod tests {
                     pool_1.advance_round_normal_operation_n(dkg_interval_length + 1);
                     pool_2.advance_round_normal_operation_n(dkg_interval_length + 1);
                     let block: Block =
-                        PoolReader::new(&pool_1).get_highest_finalized_summary_block();
+                        PoolReaderImpl::new(&pool_1).get_highest_finalized_summary_block();
                     if let BlockPayload::Summary(summary) = block.payload.as_ref() {
                         assert_eq!(summary.dkg.configs.len(), 2);
                         for (dkg_id, _) in summary.dkg.configs.iter() {
@@ -1321,7 +1336,7 @@ mod tests {
                     pool_1.advance_round_normal_operation_n(dkg_interval_length + 1);
                     pool_2.advance_round_normal_operation_n(dkg_interval_length + 1);
                     let block: Block =
-                        PoolReader::new(&pool_1).get_highest_finalized_summary_block();
+                        PoolReaderImpl::new(&pool_1).get_highest_finalized_summary_block();
                     if let BlockPayload::Summary(summary) = block.payload.as_ref() {
                         assert_eq!(summary.dkg.configs.len(), 4);
                     } else {
@@ -1335,7 +1350,7 @@ mod tests {
                     let dgk_key_manager_1 = new_dkg_key_manager(
                         crypto_1.clone(),
                         logger.clone(),
-                        &PoolReader::new(&pool_1),
+                        &PoolReaderImpl::new(&pool_1),
                     );
                     let dkg_1 = DkgImpl::new(
                         node_test_id(1),
@@ -1350,7 +1365,11 @@ mod tests {
                         node_test_id(2),
                         crypto_2.clone(),
                         pool_2.get_cache(),
-                        new_dkg_key_manager(crypto_2, logger.clone(), &PoolReader::new(&pool_2)),
+                        new_dkg_key_manager(
+                            crypto_2,
+                            logger.clone(),
+                            &PoolReaderImpl::new(&pool_2),
+                        ),
                         MetricsRegistry::new(),
                         logger.clone(),
                     );
@@ -1762,7 +1781,7 @@ mod tests {
             );
 
             // Get the latest summary block, which is the genesis block
-            let cup = PoolReader::new(&pool).get_highest_catch_up_package();
+            let cup = PoolReaderImpl::new(&pool).get_highest_catch_up_package();
             let dkg_block = cup.content.block.as_ref();
             assert_eq!(
                 dkg_block.context.registry_version,
@@ -1824,7 +1843,7 @@ mod tests {
             // Skip till the next DKG summary and make sure the new summary block contains
             // correct data.
             pool.advance_round_normal_operation_n(dkg_interval_length);
-            let cup = PoolReader::new(&pool).get_highest_catch_up_package();
+            let cup = PoolReaderImpl::new(&pool).get_highest_catch_up_package();
             let dkg_block = cup.content.block.as_ref();
             assert_eq!(
                 dkg_block.context.registry_version,
@@ -1890,7 +1909,7 @@ mod tests {
             // Skip till the next DKG summary and make sure the new summary block contains
             // correct data.
             pool.advance_round_normal_operation_n(dkg_interval_length);
-            let cup = PoolReader::new(&pool).get_highest_catch_up_package();
+            let cup = PoolReaderImpl::new(&pool).get_highest_catch_up_package();
             let dkg_block = cup.content.block.as_ref();
             assert_eq!(
                 dkg_block.context.registry_version,
@@ -1940,7 +1959,7 @@ mod tests {
 
             // Skip till the next DKG round
             pool.advance_round_normal_operation_n(dkg_interval_length + 1);
-            let cup = PoolReader::new(&pool).get_highest_catch_up_package();
+            let cup = PoolReaderImpl::new(&pool).get_highest_catch_up_package();
             let dkg_block = cup.content.block.as_ref();
             assert_eq!(
                 dkg_block.context.registry_version,
@@ -1988,7 +2007,7 @@ mod tests {
 
             // Skip till the next DKG round
             pool.advance_round_normal_operation_n(dkg_interval_length + 1);
-            let cup = PoolReader::new(&pool).get_highest_catch_up_package();
+            let cup = PoolReaderImpl::new(&pool).get_highest_catch_up_package();
             let dkg_block = cup.content.block.as_ref();
             assert_eq!(
                 dkg_block.context.registry_version,
@@ -2039,7 +2058,7 @@ mod tests {
     fn new_dkg_key_manager(
         crypto: Arc<dyn ConsensusCrypto>,
         logger: ReplicaLogger,
-        pool_reader: &PoolReader<'_>,
+        pool_reader: &PoolReaderImpl<'_>,
     ) -> Arc<Mutex<DkgKeyManager>> {
         Arc::new(Mutex::new(DkgKeyManager::new(
             MetricsRegistry::new(),
@@ -2057,7 +2076,7 @@ mod tests {
     fn sync_dkg_key_manager(mngr: &Arc<Mutex<DkgKeyManager>>, pool: &TestConsensusPool) {
         let mut mngr = mngr.lock().unwrap();
 
-        mngr.on_state_change(&PoolReader::new(pool));
+        mngr.on_state_change(&PoolReaderImpl::new(pool));
         mngr.sync();
     }
 

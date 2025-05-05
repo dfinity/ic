@@ -1,5 +1,5 @@
 use crate::{crypto_validate_dealing, payload_builder, utils, PayloadCreationError};
-use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
+use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReaderImpl};
 use ic_interfaces::{
     dkg::DkgPool,
     validation::{ValidationError, ValidationResult},
@@ -116,7 +116,7 @@ pub fn validate_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     crypto: &dyn ConsensusCrypto,
-    pool_reader: &PoolReader<'_>,
+    pool_reader: &PoolReaderImpl<'_>,
     dkg_pool: &dyn DkgPool,
     parent: Block,
     payload: &BlockPayload,
@@ -222,7 +222,7 @@ pub fn validate_payload(
 // Validates the payload containing dealings.
 fn validate_dealings_payload(
     crypto: &dyn ConsensusCrypto,
-    pool_reader: &PoolReader<'_>,
+    pool_reader: &PoolReaderImpl<'_>,
     dkg_pool: &dyn DkgPool,
     last_summary: &Summary,
     dealings: &DkgDataPayload,
@@ -355,7 +355,7 @@ mod tests {
 
             // Advance the blockchain to height `dkg_interval_length - 1`
             pool.advance_round_normal_operation_n(dkg_interval_length - 1);
-            let parent_block = PoolReader::new(&pool).get_finalized_tip();
+            let parent_block = PoolReaderImpl::new(&pool).get_finalized_tip();
             // This will be a regular block, since we are not at dkg_interval_length height
             let block = Block::from(pool.make_next_block());
             let block_payload = block.payload.as_ref();
@@ -364,7 +364,7 @@ mod tests {
                 subnet_test_id(0),
                 registry.as_ref(),
                 crypto.as_ref(),
-                &PoolReader::new(&pool),
+                &PoolReaderImpl::new(&pool),
                 dkg_pool.read().unwrap().deref(),
                 parent_block,
                 block_payload,
@@ -377,7 +377,7 @@ mod tests {
 
             // Advance the blockchain by one block to height `dkg_interval_length`
             pool.advance_round_normal_operation();
-            let parent_block = PoolReader::new(&pool).get_finalized_tip();
+            let parent_block = PoolReaderImpl::new(&pool).get_finalized_tip();
             // This will be a summary block, since we are at dkg_interval_length height
             let block = Block::from(pool.make_next_block());
             let summary = block.payload.as_ref();
@@ -386,7 +386,7 @@ mod tests {
                 subnet_test_id(0),
                 registry.as_ref(),
                 crypto.as_ref(),
-                &PoolReader::new(&pool),
+                &PoolReaderImpl::new(&pool),
                 dkg_pool.read().unwrap().deref(),
                 parent_block,
                 summary,
@@ -582,7 +582,7 @@ mod tests {
                 subnet_id,
                 registry.as_ref(),
                 crypto.as_ref(),
-                &PoolReader::new(&pool),
+                &PoolReaderImpl::new(&pool),
                 dkg_pool.read().unwrap().deref(),
                 parent.clone(),
                 &block_payload,
@@ -704,7 +704,7 @@ mod tests {
                 MetricsRegistry::new(),
                 crypto.clone(),
                 no_op_logger(),
-                &PoolReader::new(&pool),
+                &PoolReaderImpl::new(&pool),
             );
             let key_manager = Arc::new(Mutex::new(key_manager));
             let dkg_impl = DkgImpl::new(
@@ -757,7 +757,7 @@ mod tests {
                 subnet_id,
                 registry.as_ref(),
                 crypto.as_ref(),
-                &PoolReader::new(&pool),
+                &PoolReaderImpl::new(&pool),
                 &dkg_pool,
                 parent.clone(),
                 &block_payload,
@@ -777,7 +777,7 @@ mod tests {
                 subnet_id,
                 registry.as_ref(),
                 crypto.as_ref(),
-                &PoolReader::new(&pool),
+                &PoolReaderImpl::new(&pool),
                 &dkg_pool,
                 parent,
                 &block_payload,

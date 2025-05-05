@@ -2,7 +2,7 @@ use crate::{
     utils::{self, tags_iter, vetkd_key_ids_for_subnet},
     MAX_REMOTE_DKGS_PER_INTERVAL, MAX_REMOTE_DKG_ATTEMPTS, REMOTE_DKG_REPEATED_FAILURE_ERROR,
 };
-use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
+use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReaderImpl};
 use ic_interfaces::{crypto::ErrorReproducibility, dkg::DkgPool};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
@@ -60,7 +60,7 @@ pub fn create_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     crypto: &dyn ConsensusCrypto,
-    pool_reader: &PoolReader<'_>,
+    pool_reader: &PoolReaderImpl<'_>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
     parent: &Block,
     state_manager: &dyn StateManager<State = ReplicatedState>,
@@ -106,7 +106,7 @@ pub fn create_payload(
 }
 
 fn create_data_payload(
-    pool_reader: &PoolReader<'_>,
+    pool_reader: &PoolReaderImpl<'_>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
     parent: &Block,
     max_dealings_per_block: usize,
@@ -166,7 +166,7 @@ pub(super) fn create_summary_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     crypto: &dyn ConsensusCrypto,
-    pool_reader: &PoolReader<'_>,
+    pool_reader: &PoolReaderImpl<'_>,
     last_summary: &Summary,
     parent: &Block,
     registry_version: RegistryVersion,
@@ -1355,7 +1355,7 @@ mod tests {
                     subnet_test_id(222),
                     registry.as_ref(),
                     crypto.as_ref(),
-                    &PoolReader::new(&pool),
+                    &PoolReaderImpl::new(&pool),
                     &last_summary.clone(),
                     &latest_block,
                     RegistryVersion::from(112),
@@ -1663,7 +1663,7 @@ mod tests {
             );
 
             // Get the latest summary block, which is the genesis block
-            let cup = PoolReader::new(&pool).get_highest_catch_up_package();
+            let cup = PoolReaderImpl::new(&pool).get_highest_catch_up_package();
             let dkg_block = cup.content.block.as_ref();
             assert_eq!(
                 dkg_block.context.registry_version,
@@ -1719,7 +1719,7 @@ mod tests {
             registry.update_to_latest_version();
 
             pool.advance_round_normal_operation_n(dkg_interval_length);
-            let cup = PoolReader::new(&pool).get_highest_catch_up_package();
+            let cup = PoolReaderImpl::new(&pool).get_highest_catch_up_package();
             let dkg_block = cup.content.block.as_ref();
             assert_eq!(
                 dkg_block.context.registry_version,
@@ -1773,7 +1773,7 @@ mod tests {
             }
 
             pool.advance_round_normal_operation_n(dkg_interval_length + 1);
-            let cup = PoolReader::new(&pool).get_highest_catch_up_package();
+            let cup = PoolReaderImpl::new(&pool).get_highest_catch_up_package();
             let dkg_block = cup.content.block.as_ref();
             assert_eq!(
                 dkg_block.context.registry_version,
@@ -1825,7 +1825,7 @@ mod tests {
             }
 
             pool.advance_round_normal_operation_n(dkg_interval_length + 1);
-            let cup = PoolReader::new(&pool).get_highest_catch_up_package();
+            let cup = PoolReaderImpl::new(&pool).get_highest_catch_up_package();
             let dkg_block = cup.content.block.as_ref();
             assert_eq!(
                 dkg_block.context.registry_version,

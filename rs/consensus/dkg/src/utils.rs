@@ -1,5 +1,5 @@
 use crate::PayloadCreationError;
-use ic_consensus_utils::pool_reader::PoolReader;
+use ic_consensus_utils::pool_reader::PoolReaderImpl;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
 use ic_management_canister_types_private::MasterPublicKeyId;
@@ -81,7 +81,7 @@ pub fn get_vetkey_public_keys(
 }
 
 pub(super) fn get_dealers_from_chain(
-    pool_reader: &PoolReader<'_>,
+    pool_reader: &PoolReaderImpl<'_>,
     block: &Block,
 ) -> HashSet<(NiDkgId, NodeId)> {
     get_dkg_dealings(pool_reader, block)
@@ -98,7 +98,7 @@ pub(super) fn get_dealers_from_chain(
 // the node Id to the dealing. This function panics if multiple dealings
 // from one dealer are discovered, hence, we assume a valid block chain.
 pub(super) fn get_dkg_dealings(
-    pool_reader: &PoolReader<'_>,
+    pool_reader: &PoolReaderImpl<'_>,
     block: &Block,
 ) -> BTreeMap<NiDkgId, BTreeMap<NodeId, NiDkgDealing>> {
     pool_reader

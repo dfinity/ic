@@ -11,7 +11,7 @@ use ic_consensus_certification::CertificationCrypto;
 use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::{
     active_high_threshold_nidkg_id, crypto::ConsensusCrypto, membership::Membership,
-    pool_reader::PoolReader, registry_version_at_height,
+    pool_reader::PoolReaderImpl, registry_version_at_height,
 };
 use ic_interfaces::{
     certification::Verifier,
@@ -156,7 +156,7 @@ impl ReplayValidator {
 
     /// `on_state_change()` of [DkgKeyManager] requires mutable access. We delegate
     /// ownership to the caller, to allow [ReplayValidator] to stay immutable.
-    pub fn new_key_manager(&self, pool_reader: &PoolReader) -> DkgKeyManager {
+    pub fn new_key_manager(&self, pool_reader: &PoolReaderImpl) -> DkgKeyManager {
         DkgKeyManager::new(
             self.metrics_registry.clone(),
             self.consensus_crypto.clone(),
@@ -292,7 +292,7 @@ impl ReplayValidator {
 
         loop {
             let changes = {
-                let pool_reader = &PoolReader::new(pool);
+                let pool_reader = &PoolReaderImpl::new(pool);
                 dkg.on_state_change(pool_reader);
                 validator.on_state_change(pool_reader)
             };
@@ -330,7 +330,7 @@ impl ReplayValidator {
             }
         }
 
-        let new_height = PoolReader::new(pool).get_finalized_height();
+        let new_height = PoolReaderImpl::new(pool).get_finalized_height();
         println!(
             "Validated artifacts up to new finalized height: {}",
             new_height
@@ -355,7 +355,7 @@ impl ReplayValidator {
         target_height: Height,
     ) -> Result<Vec<InvalidArtifact>, ReplayError> {
         let mut pool = self.get_new_unvalidated(consensus_pool, cup);
-        let mut dkg = self.new_key_manager(&PoolReader::new(&pool));
+        let mut dkg = self.new_key_manager(&PoolReaderImpl::new(&pool));
         self.validate(&mut pool, &mut HashMap::new(), &mut dkg, target_height)
     }
 }

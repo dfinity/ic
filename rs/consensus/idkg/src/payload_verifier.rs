@@ -33,7 +33,7 @@ use crate::{
         IDkgBlockReaderImpl, InvalidChainCacheError,
     },
 };
-use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
+use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReaderImpl};
 use ic_interfaces::{
     crypto::{ThresholdEcdsaSigVerifier, ThresholdSchnorrSigVerifier},
     validation::{ValidationError, ValidationResult},
@@ -188,7 +188,7 @@ pub fn validate_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     crypto: &dyn ConsensusCrypto,
-    pool_reader: &PoolReader<'_>,
+    pool_reader: &PoolReaderImpl<'_>,
     state_manager: &dyn StateManager<State = ReplicatedState>,
     context: &ValidationContext,
     parent_block: &Block,
@@ -237,7 +237,7 @@ pub fn validate_payload(
 fn validate_summary_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
-    pool_reader: &PoolReader<'_>,
+    pool_reader: &PoolReaderImpl<'_>,
     context: &ValidationContext,
     parent_block: &Block,
     summary_payload: Option<&idkg::IDkgPayload>,
@@ -288,7 +288,7 @@ fn validate_data_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     crypto: &dyn ConsensusCrypto,
-    pool_reader: &PoolReader<'_>,
+    pool_reader: &PoolReaderImpl<'_>,
     state_manager: &dyn StateManager<State = ReplicatedState>,
     context: &ValidationContext,
     parent_block: &Block,
