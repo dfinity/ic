@@ -474,9 +474,7 @@ fn mutate_daniel_wong() {
     use registry_canister::flags::temporarily_enable_chunkifying_large_values;
 
     over(candid_one, |request: Request| -> /* version */ u64 {
-        if dfn_core::api::caller() != PrincipalId::from(GOVERNANCE_CANISTER_ID) {
-            panic!("Only the Governance canister is allowed to call mutate_daniel_wong.")
-        };
+        check_caller_is_governance_and_log("mutate_daniel_wong");
 
         let _restore_on_drop = temporarily_enable_chunkifying_large_values();
 
