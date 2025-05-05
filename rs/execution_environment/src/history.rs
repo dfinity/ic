@@ -4,10 +4,11 @@ use ic_interfaces::execution_environment::{
     IngressHistoryError, IngressHistoryReader, IngressHistoryWriter,
 };
 use ic_interfaces::time_source::system_time_now;
-use ic_interfaces_state_manager::{StateManagerError, StateReader};
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{fatal, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_replicated_state::ReplicatedState;
+use ic_types::state_manager::StateManagerError;
 use ic_types::{ingress::IngressState, ingress::IngressStatus, messages::MessageId, Height, Time};
 use prometheus::{Histogram, HistogramVec};
 use std::collections::HashMap;

@@ -13,7 +13,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::{CertificationScope, StateManager, StateManagerError};
+use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::{debug, fatal, info, warn, ReplicaLogger};
 use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
@@ -40,6 +40,7 @@ use ic_types::{
     crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose},
     malicious_flags::MaliciousFlags,
     registry::RegistryClientError,
+    state_manager::StateManagerError,
     xnet::{StreamHeader, StreamIndex},
     Height, NodeId, NumBytes, PrincipalIdBlobParseError, RegistryVersion, SubnetId, Time,
 };
