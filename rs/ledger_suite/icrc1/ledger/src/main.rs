@@ -4,8 +4,8 @@ mod benches;
 use candid::types::number::Nat;
 use candid::{candid_method, Principal};
 use ic_canister_log::{declare_log_buffer, export, log};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::stable::StableReader;
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 
 use ic_cdk::api::instruction_counter;
 #[cfg(not(feature = "canbench-rs"))]
