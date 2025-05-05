@@ -94,7 +94,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             patch_args = ["-p3"],
             patches = ["@@//bazel:cranelift-srcgen-lib.patch"],
         )],
-	"cranelift-assembler-x64": [crate.annotation(
+        "cranelift-assembler-x64": [crate.annotation(
             # Patch for determinism issues
             patch_args = ["-p3"],
             patches = ["@@//bazel:cranelift-assembler-lib.patch"],
