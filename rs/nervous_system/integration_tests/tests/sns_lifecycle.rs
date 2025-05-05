@@ -1194,25 +1194,30 @@ async fn test_sns_lifecycle(
 
         for neuron in sns::governance::list_neurons(&pocket_ic, sns.governance.canister_id)
             .await
-            .neurons {
+            .neurons
+        {
             let neuron_id = neuron.id.unwrap();
-            let controllers = neuron
+            let sender = neuron
                 .permissions
                 .iter()
-                .map(|sns_pb::NeuronPermission { principal, .. }| principal.unwrap())
-                .collect::<BTreeSet<_>>();
+                .find_map(
+                    |sns_pb::NeuronPermission {
+                         principal,
+                         permission_type,
+                     }| {
+                        let _ = permission_type.iter().find(|permission| {
+                            **permission == sns_pb::NeuronPermissionType::Vote as i32
+                        })?;
 
-            let sender = developer_neuron_controller_principal_ids
-                .iter()
-                .find(|developer_neuron_controller_principal_id| {
-                    controllers.contains(developer_neuron_controller_principal_id)
-                })
+                        Some(principal.unwrap())
+                    },
+                )
                 .unwrap();
 
             sns::governance::set_following(
                 &pocket_ic,
                 sns.governance.canister_id,
-                *sender,
+                sender,
                 neuron_id,
                 set_following.clone(),
             )
