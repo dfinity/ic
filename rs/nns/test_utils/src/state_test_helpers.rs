@@ -674,11 +674,12 @@ fn setup_nns_canister_at_position(
 pub fn setup_registry_with_correct_canister_id(
     machine: &StateMachine,
     init_payload: RegistryCanisterInitPayload,
+    features: &[&str],
 ) {
     setup_nns_canister_at_position(
         machine,
         REGISTRY_CANISTER_INDEX_IN_NNS_SUBNET,
-        build_registry_wasm(),
+        build_registry_wasm(features),
         Encode!(&init_payload).unwrap(),
     );
 }
@@ -786,7 +787,7 @@ pub fn setup_nns_canisters_with_features(
     init_payloads: NnsInitPayloads,
     features: &[&str],
 ) {
-    setup_registry_with_correct_canister_id(machine, init_payloads.registry);
+    setup_registry_with_correct_canister_id(machine, init_payloads.registry, features);
 
     setup_nns_governance_with_correct_canister_id(machine, init_payloads.governance, features);
 

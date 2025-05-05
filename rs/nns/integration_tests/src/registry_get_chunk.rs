@@ -306,7 +306,7 @@ fn test_get_chunk() {
         .install_wasm_in_mode(
             REGISTRY_CANISTER_ID,
             CanisterInstallMode::Upgrade,
-            build_registry_wasm().bytes(),
+            build_registry_wasm(&["test"]).bytes(),
             vec![],
         )
         .unwrap();

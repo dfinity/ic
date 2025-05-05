@@ -188,7 +188,7 @@ rust_ic_test(
     proc_macro_deps = MACRO_DEPENDENCIES + DEV_MACRO_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + DEPENDENCIES + [
         ":build_script",
-        ":canister",
+        ":canister--test_feature",
     ],
 )
 

@@ -308,9 +308,8 @@ pub fn modify_wasm_bytes(wasm_bytes: &[u8], modify_with: u32) -> Vec<u8> {
 // REGISTRY
 
 /// Build Wasm for NNS Registry canister
-pub fn build_registry_wasm() -> Wasm {
-    let features = [];
-    Project::cargo_bin_maybe_from_env("registry-canister", &features)
+pub fn build_registry_wasm(features: &[&str]) -> Wasm {
+    Project::cargo_bin_maybe_from_env("registry-canister", features)
 }
 /// Build mainnet Wasm for NNS Registry canister
 pub fn build_mainnet_registry_wasm() -> Wasm {
