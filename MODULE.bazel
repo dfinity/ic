@@ -577,7 +577,6 @@ http_file(
 
 http_file(
     name = "cycles-ledger.wasm.gz",
-    downloaded_file_path = "cycles-ledger.wasm.gz",
     sha256 = "d2aacbd214f20d752fd1696c2e36d7eceaafe07b932b3ae9e7e5564d1bda0178",
     url = "https://github.com/dfinity/cycles-ledger/releases/download/cycles-ledger-v1.0.3/cycles-ledger.wasm.gz",
 )
