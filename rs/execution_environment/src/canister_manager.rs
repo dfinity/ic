@@ -1541,13 +1541,15 @@ impl CanisterManager {
             Err(err) => return (Err(err), instructions),
         };
 
-        maybe_replace_snapshot(
-            canister,
-            replace_snapshot,
-            state,
-            round_limits,
-            replace_snapshot_size,
-        );
+        if let Some(replace_snapshot) = replace_snapshot {
+            self.replace_snapshot(
+                canister,
+                replace_snapshot,
+                state,
+                round_limits,
+                replace_snapshot_size,
+            );
+        }
 
         self.memory_usage_updates(canister, round_limits, validated_memory_usage);
 
@@ -2150,13 +2152,15 @@ impl CanisterManager {
             Arc::clone(&self.fd_factory),
         );
 
-        maybe_replace_snapshot(
-            canister,
-            args.replace_snapshot(),
-            state,
-            round_limits,
-            replace_snapshot_size,
-        );
+        if let Some(replace_snapshot) = args.replace_snapshot() {
+            self.replace_snapshot(
+                canister,
+                replace_snapshot,
+                state,
+                round_limits,
+                replace_snapshot_size,
+            );
+        }
 
         // TODO: the new_snapshot does not have the correct size yet because of the page-map
         // backed memories. this means we may be underestimating the memory here (new_snapshot.heap_delta).
@@ -2247,17 +2251,16 @@ impl CanisterManager {
 
         todo!()
     }
-}
 
-fn maybe_replace_snapshot(
-    canister: &mut CanisterState,
-    replace_snapshot: Option<SnapshotId>,
-    state: &mut ReplicatedState,
-    round_limits: &mut RoundLimits,
-    replace_snapshot_size: NumBytes,
-) {
-    // Delete old snapshot identified by `replace_snapshot` ID.
-    if let Some(replace_snapshot) = replace_snapshot {
+    fn replace_snapshot(
+        &self,
+        canister: &mut CanisterState,
+        replace_snapshot: SnapshotId,
+        state: &mut ReplicatedState,
+        round_limits: &mut RoundLimits,
+        replace_snapshot_size: NumBytes,
+    ) {
+        // Delete old snapshot identified by `replace_snapshot` ID.
         state.canister_snapshots.remove(replace_snapshot);
         canister.system_state.snapshots_memory_usage = canister
             .system_state
