@@ -56,17 +56,6 @@ impl CanisterId {
         self.0
     }
 
-    /// Converts a valid 10 byte canister_id into a u64.
-    /// If the canister id has the wrong last 2 bytes, it will return an error.
-    /// If somehow the other bytes are unable to translate into a u64, it will return an error.
-    pub fn to_u64(&self) -> Result<u64, CanisterIdError> {
-        // Unwrap is safe, b/c we establish with try_from_principal_id it's at least 10 bytes long,
-        // so you can definitely take the first 8 bytes.
-        let bytes: [u8; 8] = Self::try_from_principal_id(self.0)?.get().to_vec()[0..8]
-            .try_into()
-            .unwrap();
-        Ok(u64::from_be_bytes(bytes))
-    }
     /// Converts WITHOUT any validation.
     ///
     /// If you want validation, use try_from_principal_id. Do NOT use

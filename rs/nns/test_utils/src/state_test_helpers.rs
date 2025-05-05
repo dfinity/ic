@@ -87,7 +87,7 @@ use num_traits::ToPrimitive;
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayload;
 use serde::Serialize;
-use std::time::Duration;
+use std::{convert::TryInto, time::Duration};
 
 /// A `StateMachine` builder setting the IC time to the current time
 /// and using the canister ranges of both the NNS and II subnets.
@@ -537,9 +537,11 @@ pub fn try_call_with_cycles_via_universal_canister(
 
 /// Converts a canisterID to a u64 by relying on an implementation detail.
 fn canister_id_to_u64(canister_id: CanisterId) -> u64 {
-    canister_id
-        .to_u64()
-        .expect("Could not convert canister ID to u64")
+    let bytes: [u8; 8] = canister_id.get().to_vec()[0..8]
+        .try_into()
+        .expect("Could not convert vector to [u8; 8]");
+
+    u64::from_be_bytes(bytes)
 }
 
 /// Check that a canister exists  at 0-indexed position (assuming canisters are created sequentially).

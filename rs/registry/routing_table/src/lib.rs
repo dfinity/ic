@@ -12,9 +12,21 @@ use std::{collections::BTreeMap, convert::TryFrom};
 pub const CANISTER_IDS_PER_SUBNET: u64 = 1 << 20;
 
 pub fn canister_id_into_u64(canister_id: CanisterId) -> u64 {
-    canister_id
-        .to_u64()
-        .expect("Could not convert canister ID to u64")
+    const LENGTH: usize = std::mem::size_of::<u64>();
+    let principal_id = canister_id.get();
+    let bytes = principal_id.as_slice();
+    // the +2 accounts for the two sentinel bytes that are added to the end of
+    // the array
+    assert_eq!(
+        bytes.len(),
+        LENGTH + 2,
+        "canister_id: {}; raw {:?}",
+        canister_id,
+        canister_id
+    );
+    let mut array = [0; LENGTH];
+    array[..LENGTH].copy_from_slice(&bytes[..LENGTH]);
+    u64::from_be_bytes(array)
 }
 
 fn canister_id_into_u128(canister_id: CanisterId) -> u128 {
