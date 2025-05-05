@@ -1290,7 +1290,7 @@ struct GetChunkImpl {
 
 #[async_trait]
 impl GetChunk for GetChunkImpl {
-    async fn get_chunk_no_validation(
+    async fn get_chunk_without_validation(
         &self,
         chunk_content_sha256: &[u8],
     ) -> Result<Vec<u8>, String> {

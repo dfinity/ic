@@ -357,7 +357,7 @@ fn test_honest_chunked() {
     let mut fetch_large_value = MockGetChunk::new();
     for (content, content_sha256) in chunk_contents.iter().zip(chunk_content_sha256s.iter()) {
         fetch_large_value
-            .expect_get_chunk_no_validation()
+            .expect_get_chunk_without_validation()
             .with(mockall::predicate::eq(content_sha256.clone()))
             .times(1)
             .return_const(Ok(content.clone()));
@@ -415,7 +415,7 @@ fn test_evil_chunked() {
 
     let mut fetch_large_value = MockGetChunk::new();
     fetch_large_value
-        .expect_get_chunk_no_validation()
+        .expect_get_chunk_without_validation()
         .with(mockall::predicate::eq(chunk_content_sha256.clone()))
         .times(1)
         .return_const(Ok(b"DO NOT BELIEVE THE LIES OF THIS EVIL NODE".to_vec()));

@@ -25,9 +25,6 @@ pub struct RegistryCanister {
     agent: Vec<Agent>,
 }
 
-/// The only thing this implements in GetChunk is
-/// get_chunk_no_validation. The other methods use the default implementation
-/// from GetChunk.
 struct AgentBasedGetChunk<'a> {
     registry_canister_id: CanisterId,
     agent: &'a Agent,
@@ -36,7 +33,7 @@ struct AgentBasedGetChunk<'a> {
 #[async_trait]
 impl GetChunk for AgentBasedGetChunk<'_> {
     /// Just calls the Registry canister's get_chunk method.
-    async fn get_chunk_no_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String> {
+    async fn get_chunk_without_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String> {
         fn new_err(cause: impl std::fmt::Debug) -> String {
             format!("Unable to fetch large registry record: {:?}", cause,)
         }

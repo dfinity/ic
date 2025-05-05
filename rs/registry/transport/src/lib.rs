@@ -306,10 +306,7 @@ pub fn serialize_get_changes_since_request(version: u64) -> Result<Vec<u8>, Erro
 #[automock]
 #[async_trait]
 pub trait GetChunk {
-    async fn get_chunk_no_validation( // DO NOT MERGE - Rename
-        &self,
-        content_sha256: &[u8],
-    ) -> Result<Vec<u8>, String>;
+    async fn get_chunk_without_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String>;
 }
 
 /// Returns concatenation of chunks.
@@ -333,7 +330,9 @@ async fn get_chunk_with_validation(
     get_chunk: &impl GetChunk,
     content_sha256: &[u8],
 ) -> Result<Vec<u8>, String> {
-    let chunk_content = get_chunk.get_chunk_no_validation(content_sha256).await?;
+    let chunk_content = get_chunk
+        .get_chunk_without_validation(content_sha256)
+        .await?;
 
     // Verify chunk.
     if Sha256::hash(&chunk_content) != content_sha256 {
