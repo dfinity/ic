@@ -305,7 +305,7 @@ pub fn serialize_get_changes_since_request(version: u64) -> Result<Vec<u8>, Erro
 /// This is just a "thin wrapper" around Registry's `get_chunk` method.
 #[automock]
 #[async_trait]
-pub trait GetChunk { // DO NOT MERGE - Rename
+pub trait GetChunk {
     async fn get_chunk_no_validation( // DO NOT MERGE - Rename
         &self,
         content_sha256: &[u8],
