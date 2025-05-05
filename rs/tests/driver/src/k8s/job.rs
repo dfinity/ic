@@ -118,7 +118,13 @@ pub async fn create_job(
         ..Default::default()
     };
 
-    let job = api.create(&PostParams::default(), &job).await?;
+    let job = (|| async { api.create(&PostParams::default(), &job).await })
+        .retry(
+            &ConstantBuilder::default()
+                .with_max_times(2)
+                .with_delay(std::time::Duration::from_secs(1)),
+        )
+        .await?;
     info!("Creating job {} complete", name);
 
     Ok(job)

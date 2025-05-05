@@ -361,13 +361,13 @@ impl TNet {
             }
         );
 
-        // We make reservation for 42 vcpus only if VM uses 64 vcpus because there are
+        // We make reservation for 45 vcpus only if VM uses 64 vcpus because there are
         // already other k8s resources having resource requests that prevents reservation to succeeds.
         // Note that VM still gets 64 vcpus.
-        let vcpus = min(42, vm_req.vcpus.get()).to_string();
+        let vcpus = min(45, vm_req.vcpus.get()).to_string();
         // Same as above, we make reservation for less memory if VM uses more then memory then specified below
         // because there are already other k8s resources with resource requests that prevent this reservation to succeeds.
-        let mem = min(382142680, vm_req.memory_kibibytes.get()).to_string();
+        let mem = min(422142680, vm_req.memory_kibibytes.get()).to_string();
         let node = create_reservation(
             vm_name.clone(),
             vm_name.clone(),
@@ -441,7 +441,7 @@ impl TNet {
             );
             create_job(
                 &vm_name.clone(),
-                "dfinity/util:0.1",
+                "dfinity/util:0.2",
                 vec!["/bin/sh", "-c"],
                 vec![&args],
                 "/srv/tnet".into(),
