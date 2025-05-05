@@ -11,7 +11,7 @@ use crate::pb::v1::{
     registry_mutation::{self, Type},
     HighCapacityRegistryDelta, HighCapacityRegistryGetChangesSinceResponse,
     HighCapacityRegistryValue, LargeValueChunkKeys, Precondition, RegistryDelta, RegistryError,
-    RegistryGetChangesSinceResponse, RegistryMutation, RegistryValue,
+    RegistryMutation, RegistryValue,
 };
 use async_trait::async_trait;
 use ic_crypto_sha2::Sha256;
