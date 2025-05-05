@@ -1,6 +1,5 @@
 use crate::state_machine::{StateMachine, StateMachineImpl};
 use crate::{routing, scheduling};
-use ic_config::embedders::BestEffortResponsesFeature;
 use ic_config::execution_environment::{BitcoinConfig, Config as HypervisorConfig};
 use ic_config::message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES};
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -696,11 +695,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             metrics_registry,
             &metrics,
             time_in_stream_metrics,
-            hypervisor_config
-                .embedders_config
-                .feature_flags
-                .best_effort_responses
-                .clone(),
             log.clone(),
         ));
         let state_machine = Box::new(StateMachineImpl::new(
@@ -1560,7 +1554,6 @@ impl MessageRoutingImpl {
             Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
                 metrics_registry,
             ))),
-            BestEffortResponsesFeature::Enabled,
             log.clone(),
         ));
 
