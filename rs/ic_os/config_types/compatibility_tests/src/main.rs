@@ -17,11 +17,15 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-/// Get the repository root directory by looking for the .git directory
+/// Get the repository root directory using git rev-parse --show-toplevel
 fn get_repo_root() -> Result<PathBuf> {
-    std::env::current_dir()?
-        .ancestors()
-        .find(|dir| dir.join(".git").exists())
-        .context("Could not find .git directory")
-        .map(|p| p.to_path_buf())
+    let output = std::process::Command::new("git")
+        .arg("rev-parse")
+        .arg("--show-toplevel")
+        .output()
+        .context("Failed to execute git rev-parse")?;
+
+    Ok(PathBuf::from(
+        String::from_utf8_lossy(&output.stdout).trim(),
+    ))
 }
