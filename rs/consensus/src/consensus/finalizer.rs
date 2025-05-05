@@ -26,6 +26,7 @@ use ic_consensus_utils::{
 use ic_interfaces::{
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, MessageRoutingError},
+    pool_reader::PoolReader,
     time_source::system_time_now,
 };
 use ic_interfaces_registry::RegistryClient;
@@ -174,7 +175,11 @@ impl Finalizer {
     ///
     /// In this case, the single notarized block is returned. Otherwise,
     /// return `None`
-    fn pick_block_to_finality_sign(&self, pool: &PoolReaderImpl<'_>, h: Height) -> Option<HashedBlock> {
+    fn pick_block_to_finality_sign(
+        &self,
+        pool: &PoolReaderImpl<'_>,
+        h: Height,
+    ) -> Option<HashedBlock> {
         let me = self.replica_config.node_id;
         let previous_beacon = pool.get_random_beacon(h.decrement())?;
         // check whether this replica was a notary at height h
@@ -230,7 +235,11 @@ impl Finalizer {
 
     /// Try to create a finalization share for a notarized block at the given
     /// height
-    fn finalize_height(&self, pool: &PoolReaderImpl<'_>, height: Height) -> Option<FinalizationShare> {
+    fn finalize_height(
+        &self,
+        pool: &PoolReaderImpl<'_>,
+        height: Height,
+    ) -> Option<FinalizationShare> {
         let content = FinalizationContent::new(
             height,
             self.pick_block_to_finality_sign(pool, height)?

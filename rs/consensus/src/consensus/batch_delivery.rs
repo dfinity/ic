@@ -20,6 +20,7 @@ use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl
 use ic_interfaces::{
     batch_payload::IntoMessages,
     messaging::{MessageRouting, MessageRoutingError},
+    pool_reader::PoolReader,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{debug, error, info, warn, ReplicaLogger};

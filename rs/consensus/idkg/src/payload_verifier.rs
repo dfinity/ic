@@ -36,6 +36,7 @@ use crate::{
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReaderImpl};
 use ic_interfaces::{
     crypto::{ThresholdEcdsaSigVerifier, ThresholdSchnorrSigVerifier},
+    pool_reader::PoolReader,
     validation::{ValidationError, ValidationResult},
 };
 use ic_interfaces_registry::RegistryClient;

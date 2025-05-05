@@ -2,6 +2,7 @@ use ic_consensus_utils::pool_reader::PoolReaderImpl;
 use ic_interfaces::{
     consensus_pool::ConsensusPool,
     p2p::consensus::{Bouncer, BouncerValue, BouncerValue::*},
+    pool_reader::PoolReader,
 };
 use ic_types::{artifact::ConsensusMessageId, consensus::ConsensusMessageHash, Height};
 

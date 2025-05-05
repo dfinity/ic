@@ -6,7 +6,10 @@ use crate::consensus::{
     notary::Notary,
 };
 use ic_consensus_utils::pool_reader::PoolReaderImpl;
-use ic_interfaces::consensus_pool::{ChangeAction, HeightRange, Mutations};
+use ic_interfaces::{
+    consensus_pool::{ChangeAction, HeightRange, Mutations},
+    pool_reader::PoolReader,
+};
 use ic_logger::{info, trace, ReplicaLogger};
 use ic_types::{
     consensus::{
@@ -20,7 +23,10 @@ use std::time::Duration;
 
 /// Return a `Mutations` that moves all block proposals in the range to the
 /// validated pool.
-fn maliciously_validate_all_blocks(pool_reader: &PoolReaderImpl, logger: &ReplicaLogger) -> Mutations {
+fn maliciously_validate_all_blocks(
+    pool_reader: &PoolReaderImpl,
+    logger: &ReplicaLogger,
+) -> Mutations {
     trace!(logger, "maliciously_validate_all_blocks");
     let mut change_set = Vec::new();
 

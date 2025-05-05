@@ -1,6 +1,7 @@
 use std::fmt::Display;
 
 use ic_consensus_utils::{lookup_replica_version, pool_reader::PoolReaderImpl};
+use ic_interfaces::pool_reader::PoolReader;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
 use ic_registry_client_helpers::subnet::SubnetRegistry;

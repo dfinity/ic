@@ -413,6 +413,7 @@ mod tests {
     use ic_interfaces::{
         consensus_pool::ConsensusPool,
         p2p::consensus::{MutablePool, UnvalidatedArtifact},
+        pool_reader::PoolReader,
     };
     use ic_interfaces_registry::RegistryClient;
     use ic_management_canister_types_private::{MasterPublicKeyId, VetKdCurve, VetKdKeyId};

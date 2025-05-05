@@ -9,6 +9,7 @@ use ic_crypto::get_master_public_key_from_transcript;
 use ic_interfaces::{
     consensus_pool::ConsensusBlockChain,
     idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool},
+    pool_reader::PoolReader,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};

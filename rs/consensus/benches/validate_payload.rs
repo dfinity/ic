@@ -24,6 +24,7 @@ use ic_interfaces::{
     consensus::{PayloadBuilder, PayloadValidationError},
     consensus_pool::{ChangeAction, ConsensusPool, Mutations, ValidatedConsensusArtifact},
     p2p::consensus::MutablePool,
+    pool_reader::PoolReader,
     time_source::TimeSource,
     validation::ValidationResult,
 };

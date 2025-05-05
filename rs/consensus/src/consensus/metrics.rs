@@ -4,6 +4,7 @@ use ic_consensus_idkg::metrics::{
 };
 use ic_consensus_utils::pool_reader::PoolReaderImpl;
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpBatchStats;
+use ic_interfaces::pool_reader::PoolReader;
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
     MetricsRegistry,

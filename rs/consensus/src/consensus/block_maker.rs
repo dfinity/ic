@@ -11,7 +11,8 @@ use ic_consensus_utils::{
     get_subnet_record, membership::Membership, pool_reader::PoolReaderImpl,
 };
 use ic_interfaces::{
-    consensus::PayloadBuilder, dkg::DkgPool, idkg::IDkgPool, time_source::TimeSource,
+    consensus::PayloadBuilder, dkg::DkgPool, idkg::IDkgPool, pool_reader::PoolReader,
+    time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;

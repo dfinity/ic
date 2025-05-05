@@ -19,6 +19,9 @@ pub trait PoolReader<'a> {
     /// Return a ConsensusBlockCache reference.
     fn as_block_cache(&self) -> &dyn ConsensusBlockCache;
 
+    /// Get the underlying pool.
+    fn pool(&self) -> &dyn ConsensusPool;
+
     /// Return the registry version to be used for the given height.
     /// Note that this can only look up for height that is greater than or equal
     /// to the latest catch-up package height, otherwise an error is returned.
@@ -139,7 +142,9 @@ pub trait PoolReader<'a> {
 
     /// Return the the first instant at which a block with the given hash was inserted
     /// into the consensus pool. Returns None if no timestamp was found.
-    fn get_block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant>;
+    fn get_block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant> {
+        self.pool().block_instant(hash)
+    }
 
     /// Return the finalized block of a given height which is either the genesis
     /// (or CatchUpPackage) block, or the parent of another finalized block,
@@ -269,13 +274,19 @@ pub trait PoolReader<'a> {
     }
 
     /// Get the finalized block with greatest height.
-    fn get_finalized_tip(&self) -> Block;
+    fn get_finalized_tip(&self) -> Block {
+        self.as_cache().finalized_block()
+    }
 
     /// Get the CatchUpPackage with greatest height.
-    fn get_highest_catch_up_package(&self) -> CatchUpPackage;
+    fn get_highest_catch_up_package(&self) -> CatchUpPackage {
+        self.as_cache().catch_up_package()
+    }
 
     /// Get the finalized DKG summary block with greatest height.
-    fn get_highest_finalized_summary_block(&self) -> Block;
+    fn get_highest_finalized_summary_block(&self) -> Block {
+        self.as_cache().summary_block()
+    }
 
     /// Get the height of highest CatchUpPackage.
     fn get_catch_up_height(&self) -> Height {
@@ -454,9 +465,6 @@ pub trait PoolReader<'a> {
             .catch_up_package_share()
             .get_by_height(h)
     }
-
-    /// Get the underlying pool.
-    fn pool(&self) -> &dyn ConsensusPool;
 
     /// Returns the DKG summary block for the given *valid* block (which means
     /// it extends a notarized chain). Returns None if the DKG summary block

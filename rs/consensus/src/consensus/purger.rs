@@ -24,6 +24,7 @@ use ic_consensus_utils::{pool_reader::PoolReaderImpl, MINIMUM_CHAIN_LENGTH};
 use ic_interfaces::{
     consensus_pool::{ChangeAction, HeightRange, Mutations, PurgeableArtifactType},
     messaging::MessageRouting,
+    pool_reader::PoolReader,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
@@ -782,18 +783,21 @@ mod tests {
             );
 
             // Initially, there should be no pending cup heights.
-            purger.purge_replicated_state_by_finalized_certified_height(&PoolReaderImpl::new(&pool));
+            purger
+                .purge_replicated_state_by_finalized_certified_height(&PoolReaderImpl::new(&pool));
 
             // Put some stuff in the pool.
             pool.advance_round_normal_operation_n(10);
             // There should be no pending cup heights.
-            purger.purge_replicated_state_by_finalized_certified_height(&PoolReaderImpl::new(&pool));
+            purger
+                .purge_replicated_state_by_finalized_certified_height(&PoolReaderImpl::new(&pool));
 
             // Put more stuff in the pool above the CUP threshold,
             // without creating a CUP (DKG interval length is 60).
             pool.advance_round_normal_operation_no_cup_n(60);
             // There should still be no pending cup heights
-            purger.purge_replicated_state_by_finalized_certified_height(&PoolReaderImpl::new(&pool));
+            purger
+                .purge_replicated_state_by_finalized_certified_height(&PoolReaderImpl::new(&pool));
 
             // Initialize IDKG payloads starting with the next round
             init_idkg_in_next_round(&mut pool, replica_config.subnet_id);
@@ -802,28 +806,32 @@ mod tests {
             pool.advance_round_normal_operation_no_cup_n(60);
             // There should be one pending CUP height
             *expected_extra_heights.write().unwrap() = BTreeSet::from([Height::from(120)]);
-            purger.purge_replicated_state_by_finalized_certified_height(&PoolReaderImpl::new(&pool));
+            purger
+                .purge_replicated_state_by_finalized_certified_height(&PoolReaderImpl::new(&pool));
 
             // Advance past another two CUP heights, without creating the CUP
             pool.advance_round_normal_operation_no_cup_n(120);
             // There should be three pending CUP heights
             *expected_extra_heights.write().unwrap() =
                 BTreeSet::from([Height::from(120), Height::from(180), Height::from(240)]);
-            purger.purge_replicated_state_by_finalized_certified_height(&PoolReaderImpl::new(&pool));
+            purger
+                .purge_replicated_state_by_finalized_certified_height(&PoolReaderImpl::new(&pool));
 
             // Insert the CUP at height 180
             let cup_180 = pool.make_catch_up_package(Height::from(180));
             pool.insert_validated(cup_180);
             // There should be one pending CUP height
             *expected_extra_heights.write().unwrap() = BTreeSet::from([Height::from(240)]);
-            purger.purge_replicated_state_by_finalized_certified_height(&PoolReaderImpl::new(&pool));
+            purger
+                .purge_replicated_state_by_finalized_certified_height(&PoolReaderImpl::new(&pool));
 
             // Insert the CUP at height 240
             let cup_240 = pool.make_catch_up_package(Height::from(240));
             pool.insert_validated(cup_240);
             // There should be no pending CUP height
             *expected_extra_heights.write().unwrap() = BTreeSet::new();
-            purger.purge_replicated_state_by_finalized_certified_height(&PoolReaderImpl::new(&pool));
+            purger
+                .purge_replicated_state_by_finalized_certified_height(&PoolReaderImpl::new(&pool));
         })
     }
 

@@ -1,5 +1,6 @@
 use crate::PayloadCreationError;
 use ic_consensus_utils::pool_reader::PoolReaderImpl;
+use ic_interfaces::pool_reader::PoolReader;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
 use ic_management_canister_types_private::MasterPublicKeyId;

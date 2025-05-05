@@ -23,6 +23,7 @@ use ic_interfaces::{
     consensus_pool::*,
     dkg::DkgPool,
     messaging::MessageRouting,
+    pool_reader::PoolReader,
     time_source::TimeSource,
     validation::{ValidationError, ValidationResult},
 };
@@ -2286,7 +2287,10 @@ pub mod test {
             // Add a Notarization for `block` and assert it causes the Finalization
             // to be added to validated
             pool.notarize(&block);
-            assert_eq!(validator.on_state_change(&PoolReaderImpl::new(&pool)).len(), 1);
+            assert_eq!(
+                validator.on_state_change(&PoolReaderImpl::new(&pool)).len(),
+                1
+            );
         })
     }
 
@@ -2822,7 +2826,10 @@ pub mod test {
             test_block.content.as_mut().context.registry_version = RegistryVersion::from(2000);
             test_block.update_content();
             pool.insert_unvalidated(test_block);
-            assert_eq!(validator.on_state_change(&PoolReaderImpl::new(&pool)), vec![]);
+            assert_eq!(
+                validator.on_state_change(&PoolReaderImpl::new(&pool)),
+                vec![]
+            );
         })
     }
 
@@ -3422,11 +3429,17 @@ pub mod test {
             pool.insert_unvalidated(block.clone());
 
             // This should be empty because the parent block is not yet validated
-            assert_eq!(validator.on_state_change(&PoolReaderImpl::new(&pool)), vec![]);
+            assert_eq!(
+                validator.on_state_change(&PoolReaderImpl::new(&pool)),
+                vec![]
+            );
             pool.insert_validated(parent_block.clone());
 
             // This should still be empty because the parent is not notarized
-            assert_eq!(validator.on_state_change(&PoolReaderImpl::new(&pool)), vec![]);
+            assert_eq!(
+                validator.on_state_change(&PoolReaderImpl::new(&pool)),
+                vec![]
+            );
             pool.notarize(&parent_block);
 
             let changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));

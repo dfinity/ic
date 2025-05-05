@@ -23,6 +23,7 @@
 //! * A node must not issue new notarization share for any round older than the
 //!   latest round, which would break security if it has already finality-signed
 //!   for that round.
+use super::status;
 use crate::consensus::metrics::NotaryMetrics;
 use ic_consensus_utils::{
     crypto::ConsensusCrypto,
@@ -30,7 +31,7 @@ use ic_consensus_utils::{
     membership::{Membership, MembershipError},
     pool_reader::PoolReaderImpl,
 };
-use ic_interfaces::time_source::TimeSource;
+use ic_interfaces::{pool_reader::PoolReader, time_source::TimeSource};
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{error, trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -45,8 +46,6 @@ use ic_types::{
     Height,
 };
 use std::{sync::Arc, time::Duration};
-
-use super::status;
 
 /// The acceptable gap between the finalized height and the certified height. If
 /// the actual gap is greater than this, consensus starts slowing down the block

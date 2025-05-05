@@ -43,6 +43,7 @@ use ic_interfaces::{
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, XNetPayloadBuilder},
     p2p::consensus::{Bouncer, BouncerFactory, PoolMutationsProducer},
+    pool_reader::PoolReader,
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };

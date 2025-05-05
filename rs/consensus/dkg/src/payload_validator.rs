@@ -2,6 +2,7 @@ use crate::{crypto_validate_dealing, payload_builder, utils, PayloadCreationErro
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReaderImpl};
 use ic_interfaces::{
     dkg::DkgPool,
+    pool_reader::PoolReader,
     validation::{ValidationError, ValidationResult},
 };
 use ic_interfaces_registry::RegistryClient;

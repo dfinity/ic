@@ -12,6 +12,7 @@ use ic_interfaces::{
     crypto::{MultiSigner, ThresholdSigner},
     dkg::DkgPool,
     p2p::consensus::{ArtifactTransmits, MutablePool},
+    pool_reader::PoolReader,
     time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;

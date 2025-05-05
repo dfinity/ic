@@ -17,7 +17,7 @@ use ic_consensus_utils::{
     active_high_threshold_nidkg_id, crypto::ConsensusCrypto,
     get_oldest_idkg_state_registry_version, membership::Membership, pool_reader::PoolReaderImpl,
 };
-use ic_interfaces::messaging::MessageRouting;
+use ic_interfaces::{messaging::MessageRouting, pool_reader::PoolReader};
 use ic_interfaces_state_manager::{
     PermanentStateHashError::*, StateHashError, StateManager, TransientStateHashError::*,
 };
@@ -329,7 +329,9 @@ mod tests {
             );
 
             // 1. Genesis CUP already exists, we won't make a new one
-            assert!(cup_maker.on_state_change(&PoolReaderImpl::new(&pool)).is_none());
+            assert!(cup_maker
+                .on_state_change(&PoolReaderImpl::new(&pool))
+                .is_none());
 
             // Skip the first DKG interval
             pool.advance_round_normal_operation_n(interval_length);
@@ -343,7 +345,9 @@ mod tests {
             pool.finalize(&proposal);
 
             // 4. Beacon does not exist, we can't make a new CUP share
-            assert!(cup_maker.on_state_change(&PoolReaderImpl::new(&pool)).is_none());
+            assert!(cup_maker
+                .on_state_change(&PoolReaderImpl::new(&pool))
+                .is_none());
 
             // 5. Beacon now exists, we can make a new CUP share
             pool.insert_validated(pool.make_next_beacon());
@@ -442,7 +446,9 @@ mod tests {
             );
 
             // Genesis CUP already exists, we won't make a new one
-            assert!(cup_maker.on_state_change(&PoolReaderImpl::new(&pool)).is_none());
+            assert!(cup_maker
+                .on_state_change(&PoolReaderImpl::new(&pool))
+                .is_none());
 
             // Skip the first DKG interval
             pool.advance_round_normal_operation_n(interval_length);
@@ -599,7 +605,9 @@ mod tests {
                 ))));
 
             // Nothing happens, because the state is not committed yet.
-            assert!(cup_maker.on_state_change(&PoolReaderImpl::new(&pool)).is_none());
+            assert!(cup_maker
+                .on_state_change(&PoolReaderImpl::new(&pool))
+                .is_none());
 
             state_manager
                 .get_mut()
@@ -611,7 +619,9 @@ mod tests {
 
             // Still nothing happens, because the state hash is not computed
             // yet.
-            assert!(cup_maker.on_state_change(&PoolReaderImpl::new(&pool)).is_none());
+            assert!(cup_maker
+                .on_state_change(&PoolReaderImpl::new(&pool))
+                .is_none());
 
             // Now make the state manager return a hash which differs from the mocked hash
             // in our fixtures (empty one).

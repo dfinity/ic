@@ -6,6 +6,7 @@ use ic_consensus_utils::{
     membership::{Membership, MembershipError},
     pool_reader::PoolReaderImpl,
 };
+use ic_interfaces::pool_reader::PoolReader;
 use ic_logger::{error, trace, ReplicaLogger};
 use ic_types::{
     consensus::{HasCommittee, RandomBeacon, RandomBeaconContent, RandomBeaconShare},
