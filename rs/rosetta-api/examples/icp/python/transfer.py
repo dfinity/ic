@@ -37,8 +37,10 @@ from rosetta_client import RosettaClient
 import time
 import argparse
 
+
 def parse_balance(balance):
     return int(balance["balances"][0]["value"]) / 10**balance["balances"][0]["currency"]["decimals"]
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -48,9 +50,10 @@ def main():
     parser.add_argument("--recipient-account-id", type=str)
     parser.add_argument("--amount-e8s", type=int)
     parser.add_argument("--fee-e8s", type=int)
-    parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
+    parser.add_argument("--verbose", action="store_true",
+                        help="Enable verbose output")
     args = parser.parse_args()
-    
+
     client1 = RosettaClient(
         args.node_address,
         args.private_key_path,
@@ -60,9 +63,10 @@ def main():
     initial_balance = parse_balance(client1.get_balance())
     print(f"Initial Balance: {initial_balance}")
 
-    recipient_initial_balance = parse_balance(client1.get_balance(args.recipient_account_id))
+    recipient_initial_balance = parse_balance(
+        client1.get_balance(args.recipient_account_id))
     print(f"Recipient Initial Balance: {recipient_initial_balance}")
-    
+
     client1.transfer(
         args.recipient_account_id,
         args.amount_e8s,
@@ -74,10 +78,11 @@ def main():
 
     final_balance = parse_balance(client1.get_balance())
     print(f"Final Balance: {final_balance}")
-    
-    recipient_final_balance = parse_balance(client1.get_balance(args.recipient_account_id))
+
+    recipient_final_balance = parse_balance(
+        client1.get_balance(args.recipient_account_id))
     print(f"Recipient Final Balance: {recipient_final_balance}")
-    
+
 
 if __name__ == "__main__":
     main()

@@ -20,11 +20,12 @@ Examples:
 from rosetta_client import RosettaClient
 import argparse
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--node-address", type=str)
     args = parser.parse_args()
-    
+
     client1 = RosettaClient(args.node_address)
 
     last_block = client1.get_last_block()
@@ -32,9 +33,10 @@ def main():
     print(f"Last block index: {last_block_index}")
 
     print(f"Previous 10 blocks:")
-    for i in range(1,11):
+    for i in range(1, 11):
         block = client1.get_block(last_block_index - i)
         print(block)
+
 
 if __name__ == "__main__":
     main()

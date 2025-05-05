@@ -20,45 +20,54 @@ Examples:
 from rosetta_client import RosettaClient
 import argparse
 
+
 def main():
-    parser = argparse.ArgumentParser(description='Derive account identifiers from public keys')
-    parser.add_argument("--node-address", type=str, required=True, help="Rosetta node address")
-    parser.add_argument("--public-key", type=str, required=True, help="Public key (hex)")
-    parser.add_argument("--curve-type", type=str, required=True, help="Curve type for public key (e.g., edwards25519, secp256k1)")
-    parser.add_argument("--neuron-index", type=int, default=0, help="Neuron index for neuron account ID (default: 0)")
-    parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
-    
+    parser = argparse.ArgumentParser(
+        description='Derive account identifiers from public keys')
+    parser.add_argument("--node-address", type=str,
+                        required=True, help="Rosetta node address")
+    parser.add_argument("--public-key", type=str,
+                        required=True, help="Public key (hex)")
+    parser.add_argument("--curve-type", type=str, required=True,
+                        help="Curve type for public key (e.g., edwards25519, secp256k1)")
+    parser.add_argument("--neuron-index", type=int, default=0,
+                        help="Neuron index for neuron account ID (default: 0)")
+    parser.add_argument("--verbose", action="store_true",
+                        help="Enable verbose output")
+
     args = parser.parse_args()
-    
+
     client = RosettaClient(args.node_address)
-    
+
     # Prepare public key
     public_key = {
         "hex_bytes": args.public_key,
         "curve_type": args.curve_type
     }
-    
+
     # Derive regular account ID
     regular_account_id = client.get_account_identifier(
         public_key=public_key,
         verbose=args.verbose
     )
-    
+
     # Derive neuron account ID
     neuron_account_id = client.get_account_identifier(
         public_key=public_key,
         neuron_index=args.neuron_index,
         verbose=args.verbose
     )
-    
+
     # Print results
     print(f"\nPublic Key Information:")
     print(f"  Public key: {args.public_key}")
     print(f"  Curve type: {args.curve_type}")
-    
+
     print(f"\nDerived Account IDs:")
     print(f"  Regular account ID: {regular_account_id}")
-    print(f"  Neuron account ID (index {args.neuron_index}): {neuron_account_id}")
+    print(
+        f"  Neuron account ID (index {args.neuron_index}): {neuron_account_id}")
+
 
 if __name__ == "__main__":
-    main() 
+    main()

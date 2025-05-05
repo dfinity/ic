@@ -17,6 +17,7 @@ from rosetta_client import RosettaClient
 import argparse
 import json
 
+
 def format_balance(balance):
     """Format balance for display"""
     value = int(balance["balances"][0]["value"])
@@ -24,21 +25,27 @@ def format_balance(balance):
     symbol = balance["balances"][0]["currency"]["symbol"]
     return f"{value / 10**decimals} {symbol} ({value} e8s)"
 
+
 def main():
-    parser = argparse.ArgumentParser(description='Fetch account balances using Rosetta API')
-    parser.add_argument("--node-address", type=str, required=True, help="Rosetta node address")
-    parser.add_argument("--account-id", type=str, required=True, help="Account identifier to check balance for")
-    parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
-    
+    parser = argparse.ArgumentParser(
+        description='Fetch account balances using Rosetta API')
+    parser.add_argument("--node-address", type=str,
+                        required=True, help="Rosetta node address")
+    parser.add_argument("--account-id", type=str, required=True,
+                        help="Account identifier to check balance for")
+    parser.add_argument("--verbose", action="store_true",
+                        help="Enable verbose output")
+
     args = parser.parse_args()
-    
+
     client = RosettaClient(args.node_address)
-    
+
     # Fetch regular account balance
     print(f"\nFetching balance for account: {args.account_id}")
     balance = client.get_balance(args.account_id, verbose=args.verbose)
     print(f"Account Balance: {format_balance(balance)}")
     print(f"Block Height: {balance['block_identifier']['index']}")
 
+
 if __name__ == "__main__":
-    main() 
+    main()
