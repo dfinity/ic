@@ -164,7 +164,9 @@ impl registry_mutation::Type {
     pub fn presence_requirement(self) -> PresenceRequirement {
         match self {
             registry_mutation::Type::Upsert => PresenceRequirement::NoRequirement,
-            registry_mutation::Type::Delete | registry_mutation::Type::Update => PresenceRequirement::MustBePresent,
+            registry_mutation::Type::Delete | registry_mutation::Type::Update => {
+                PresenceRequirement::MustBePresent
+            }
             registry_mutation::Type::Insert => PresenceRequirement::MustBeAbsent,
         }
     }
