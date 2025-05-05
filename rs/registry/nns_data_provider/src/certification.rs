@@ -1,6 +1,4 @@
-// DO NOT MERGE - use async_trait::async_trait;
 use ic_certification::{verify_certified_data, CertificateValidationError};
-// DO NOT MERGE - use ic_crypto_sha2::Sha256;
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces_registry::RegistryTransportRecord;
 use ic_registry_transport::{
@@ -14,7 +12,6 @@ use ic_registry_transport::{
 use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, RegistryVersion, SubnetId, Time,
 };
-// DO NOT MERGE use mockall::automock;
 use prost::Message;
 use serde::Deserialize;
 use std::{collections::BTreeMap, convert::TryFrom, fmt::Debug};
