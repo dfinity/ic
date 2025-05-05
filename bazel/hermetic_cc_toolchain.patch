@@ -3,6 +3,8 @@
 # put additional restrictions on the generated toolchains so that we can
 # restrict which targets pick up the toolchains
 # (https://github.com/uber/hermetic_cc_toolchain/pull/213).
+# Strip debug_info off every target for determinism
+# (https://github.com/ziglang/zig/issues/23821, https://github.com/ziglang/zig/issues/23823).
 diff --git a/MODULE.bazel b/MODULE.bazel
 index 409d626..1265298 100644
 --- a/MODULE.bazel
@@ -211,3 +213,72 @@ index 50cc881..0549c26 100644
          toolchain = "@zig_sdk//:%s_cc" % zigtarget,
          toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
      )
+diff --git a/toolchain/zig-wrapper.zig b/toolchain/zig-wrapper.zig
+index d1d59f9..f7ba2cd 100644
+--- a/toolchain/zig-wrapper.zig
++++ b/toolchain/zig-wrapper.zig
+@@ -132,7 +132,7 @@ pub fn main() u8 {
+             if (builtin.os.tag == .windows)
+                 return spawnWindows(arena, params)
+             else
+-                return execUnix(arena, params);
++                return spawnAndStripUnix(arena, params);
+         },
+     }
+ }
+@@ -161,6 +161,55 @@ fn execUnix(arena: mem.Allocator, params: ExecParams) u8 {
+     return 1;
+ }
+ 
++fn spawnAndStripUnix(arena: mem.Allocator, params: ExecParams) u8 {
++    // Build a strip command
++    const strip_cmd = blk: {
++        var list = ArrayListUnmanaged([]const u8){};
++        list.appendSlice(arena, &[_][]const u8{ "strip", "-S" }) catch |err| {
++            return fatal("error building strip cmd: {s}\n", .{@errorName(err)});
++        };
++
++        // Find any output targets
++        var next = false;
++        for (params.args.items) |param| {
++            if (mem.eql(u8, param, "-o")) {
++                next = true;
++            } else if (next) {
++                list.append(arena, param) catch |err| {
++                    return fatal("error adding output target: {s}\n", .{@errorName(err)});
++                };
++                break;
++            }
++        }
++        break :blk list;
++    };
++
++    // Run the intended zig process
++    var proc = ChildProcess.init(params.args.items, arena);
++    proc.env_map = &params.env;
++
++    const ret = proc.spawnAndWait() catch |err| {
++        return fatal("error spawning {s}: {s}\n", .{ params.args.items[0], @errorName(err) });
++    };
++
++    const code = switch (ret) {
++        .Exited => |code| code,
++        else => |other| return fatal("abnormal exit: {any}\n", .{other}),
++    };
++
++    // Run strip command, ignore output
++    var strip_proc = ChildProcess.init(strip_cmd.items, arena);
++    strip_proc.env_map = &params.env;
++    strip_proc.stdout_behavior = .Ignore;
++    strip_proc.stderr_behavior = .Ignore;
++
++    _ = strip_proc.spawnAndWait() catch |err| {
++        return fatal("running strip: {s}\n", .{@errorName(err)});
++    };
++
++    return code;
++}
++
+ // argv_it is an object that has such method:
+ //     fn next(self: *Self) ?[]const u8
+ // in non-testing code it is *process.ArgIterator.

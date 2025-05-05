@@ -110,6 +110,8 @@ sol_register_toolchains(
 http_archive(
     name = "rules_rust",
     integrity = "sha256-8TBqrAsli3kN8BrZq8arsN8LZUFsdLTvJ/Sqsph4CmQ=",
+    patch_args = ["-p1"],
+    patches = ["//bazel:rules_rust.patch"],
     urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.56.0/rules_rust-0.56.0.tar.gz"],
 )
 
@@ -122,6 +124,11 @@ rust_analyzer_dependencies()
 
 rust_register_toolchains(
     edition = "2021",
+    strip_level = {"x86_64-unknown-linux-gnu": {
+        "dbg": "none",
+        "fastbuild": "none",
+        "opt": "none",
+    }},
     # The nightly version is required to compile fuzz tests from Bazel.
     # The version below is chosen so that it is in sync with the non-nightly version.
     versions = [
