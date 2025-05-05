@@ -7,7 +7,7 @@ use std::path::Path;
 /// Generates fixtures for the current version, enforcing version increment if config_types has been modified
 pub fn generate_fixtures(fixtures_dir: &Path) -> Result<()> {
     let fixture_path = fixtures_dir.join(format!("hostos_v{}.json", CONFIG_VERSION));
-    if config_structure_changed(&fixture_path) {
+    if config_structure_changed(&fixture_path)? {
         bail!("CONFIG_VERSION in lib.rs ({}) already has a fixture, but the config structure has changed. Please increment config_types CONFIG_VERSION before generating a new fixture.", CONFIG_VERSION);
     }
 
@@ -19,24 +19,19 @@ pub fn generate_fixtures(fixtures_dir: &Path) -> Result<()> {
 }
 
 /// Checks if the current config_types structure has changed compared to the existing fixture version
-fn config_structure_changed(existing_hostos_fixture: &Path) -> bool {
+fn config_structure_changed(existing_hostos_fixture: &Path) -> Result<bool> {
     let new_hostos_fixture = generate_default_hostos_config();
 
     // If an existing fixture doesn't exist, this is a new config version
     if !existing_hostos_fixture.exists() {
-        return false;
+        return Ok(false);
     }
 
-    let file = fs::File::open(existing_hostos_fixture).unwrap_or_else(|_| {
-        panic!(
-            "Failed to open existing fixture: {}",
-            existing_hostos_fixture.display()
-        )
-    });
+    let file = fs::File::open(existing_hostos_fixture)?;
 
     match serde_json::from_reader::<_, HostOSConfig>(file) {
-        Ok(existing_config) => existing_config != new_hostos_fixture,
-        Err(_) => true, // If we can't parse the existing fixture, assume structure changed
+        Ok(existing_config) => Ok(existing_config != new_hostos_fixture),
+        Err(_) => Ok(true), // If we can't parse the existing fixture, assume structure changed
     }
 }
 
