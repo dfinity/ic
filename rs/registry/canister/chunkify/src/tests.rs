@@ -1,4 +1,5 @@
 use super::*;
+use ic_nervous_system_chunks::test_data::MEGA_BLOB;
 use ic_registry_transport::pb::v1::{
     high_capacity_registry_mutation, high_capacity_registry_value,
     registry_mutation::{self, Type as MutationType},
@@ -20,19 +21,6 @@ thread_local! {
         let memory: RefMut<MemoryImpl> = memory.borrow_mut();
         RefCell::new(Chunks::init(memory.clone()))
     });
-}
-
-lazy_static! {
-    static ref MEGA_BLOB: Vec<u8> = {
-        let divisor = u8::MAX as u64 + 1;
-
-        (0..5_000_000)
-            .map(|i| {
-                let b = (31 * i + 42) % divisor;
-                b as u8
-            })
-            .collect::<Vec<u8>>()
-    };
 }
 
 #[test]

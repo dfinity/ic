@@ -3,7 +3,7 @@
 //! occurrences of "canister" in that path!).
 
 use candid::{CandidType, Deserialize};
-use ic_nervous_system_chunks::MEGA_BLOB;
+use ic_nervous_system_chunks::test_data::MEGA_BLOB;
 use ic_registry_transport::{delete, pb::v1::RegistryMutation, upsert};
 
 #[derive(CandidType, Deserialize)]
