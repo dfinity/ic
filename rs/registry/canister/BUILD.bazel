@@ -212,6 +212,7 @@ rust_ic_test_suite_with_extra_srcs(
     data = [
         # Keep sorted.
         ":registry-canister",
+        ":registry-canister-test",
         "//rs/nns/cmc:cycles-minting-canister",
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
@@ -220,6 +221,7 @@ rust_ic_test_suite_with_extra_srcs(
         "CARGO_MANIFEST_DIR": "rs/registry/canister",
         "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
         "REGISTRY_CANISTER_WASM_PATH": "$(rootpath :registry-canister)",
+        "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath :registry-canister-test)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
     extra_srcs = glob(["tests/common/*.rs"]),
