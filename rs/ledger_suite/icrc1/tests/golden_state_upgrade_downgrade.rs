@@ -864,7 +864,7 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         ELNAAI_LEDGER_SUITE,
         ESTATEDAO_LEDGER_SUITE,
         FOMOWELL_LEDGER_SUITE,
-        FUEL_EV_LEDGER_SUITE,
+        // FUEL_EV_LEDGER_SUITE, // Skipping FuelEV for now, as the index canister was uninstalled
         GOLDDAO_LEDGER_SUITE,
         ICGHOST_LEDGER_SUITE,
         ICLIGHTHOUSE_LEDGER_SUITE,
