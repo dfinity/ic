@@ -81,8 +81,12 @@ const STATUS_SUCCESS: &str = "success";
 const PHASE_LOAD_STATE: &str = "load_state";
 const PHASE_COMMIT: &str = "commit";
 
+/// Label for message kind: "request" or "response".
 pub(crate) const LABEL_KIND: &str = "kind";
+/// Label for message context" "inbound" (in an input queue) or "outbound" (in
+/// an output queue).
 pub(crate) const LABEL_CONTEXT: &str = "context";
+/// Label for message class: "guaranteed response" or "best-effort".
 pub(crate) const LABEL_CLASS: &str = "class";
 
 const METRIC_RECEIVE_BATCH_LATENCY: &str = "mr_receive_batch_latency_seconds";
