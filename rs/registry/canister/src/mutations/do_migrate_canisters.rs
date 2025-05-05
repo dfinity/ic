@@ -37,7 +37,7 @@ impl Registry {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        let target_subnet_id = SubnetId::new(payload.target_subnet_id);
+        let target_subnet_id = SubnetId::new(target_subnet_id);
         self.get_subnet(target_subnet_id, self.latest_version())?;
 
         Ok((canister_ids, target_subnet_id))
@@ -58,9 +58,8 @@ mod test {
     use super::*;
     use crate::common::test_helpers::{
         invariant_compliant_registry, prepare_registry_with_nodes,
-        registry_add_node_operator_for_node, registry_create_subnet_with_nodes,
+        registry_create_subnet_with_nodes,
     };
-    use crate::mutations::do_create_subnet::CreateSubnetPayload;
     use crate::mutations::routing_table::routing_table_into_registry_mutation;
     use ic_base_types::PrincipalId;
     use ic_base_types::{CanisterId, NodeId};
@@ -68,6 +67,8 @@ mod test {
     use ic_registry_routing_table::RoutingTable;
     use ic_registry_transport::pb::v1::registry_mutation;
 
+    // We only need a basic test, because the rest of the logic for this is tested in the tests
+    // for migrating canister ranges, which is already supported.
     #[test]
     fn test_basic_migrate_canisters() {
         // We create an invariant compliant registry, then we migrate a single canister
@@ -81,39 +82,70 @@ mod test {
         // Add nodes to the registry
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 6);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
-        let node_ids: Vec<NodeId> = node_ids_and_dkg_pks.keys().cloned().collect();
-        let node_operator_id = registry_add_node_operator_for_node(&mut registry, node_ids[0], 0);
         let target_subnet_id =
             registry_create_subnet_with_nodes(&mut registry, &node_ids_and_dkg_pks, &[0, 1, 2, 3]);
 
-        let mut rt = RoutingTable::new();
-        rt.insert(
-            CanisterIdRange {
-                start: CanisterId::from(0),
-                end: CanisterId::from(255),
-            },
-            system_subnet.into(),
-        )
-        .unwrap();
+        let mut initial_routing_table = RoutingTable::new();
+        initial_routing_table
+            .insert(
+                CanisterIdRange {
+                    start: CanisterId::from(0),
+                    end: CanisterId::from(255),
+                },
+                system_subnet.into(),
+            )
+            .unwrap();
 
         registry.apply_mutations_for_test(vec![routing_table_into_registry_mutation(
-            rt,
+            initial_routing_table.clone(),
             registry_mutation::Type::Upsert as i32,
         )]);
+
+        let first_saved_table = registry.get_routing_table_or_panic(registry.latest_version());
+        assert_eq!(first_saved_table, initial_routing_table);
 
         let request = MigrateCanistersPayload {
             canister_ids: vec![PrincipalId::from(CanisterId::from(100))],
             target_subnet_id: target_subnet_id.get(),
         };
 
-        let routing_table = registry.get_routing_table_or_panic(registry.latest_version());
-        println!("Routing table: {:?}", routing_table);
-
         let response = registry.do_migrate_canisters(request);
 
+        // currently just empty response.
         assert_eq!(MigrateCanistersResponse {}, response);
 
-        let routing_table = registry.get_routing_table_or_panic(registry.latest_version());
-        println!("Routing table: {:?}", routing_table);
+        let updated_routing_table = registry.get_routing_table_or_panic(registry.latest_version());
+
+        // We expect the range to be split into 3 ranges, with the middle one being a single-canister-id range
+        // and the others pointing at the system subnet as before.
+        let mut expected_routing_table = RoutingTable::new();
+        expected_routing_table
+            .insert(
+                CanisterIdRange {
+                    start: CanisterId::from_u64(0),
+                    end: CanisterId::from_u64(99),
+                },
+                system_subnet.into(),
+            )
+            .unwrap();
+        expected_routing_table
+            .insert(
+                CanisterIdRange {
+                    start: CanisterId::from_u64(100),
+                    end: CanisterId::from_u64(100),
+                },
+                target_subnet_id,
+            )
+            .unwrap();
+        expected_routing_table
+            .insert(
+                CanisterIdRange {
+                    start: CanisterId::from_u64(101),
+                    end: CanisterId::from_u64(255),
+                },
+                system_subnet.into(),
+            )
+            .unwrap();
+        assert_eq!(updated_routing_table, expected_routing_table);
     }
 }
