@@ -286,7 +286,7 @@ pub(crate) fn into_request(
         on_reject,
         on_cleanup,
         deadline,
-    ))?;
+    ));
 
     let req = Request {
         sender,

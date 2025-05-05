@@ -875,6 +875,7 @@ pub fn load_canister_state(
         canister_state_bits.wasm_memory_threshold,
         canister_state_bits.freeze_threshold,
         canister_state_bits.status,
+        canister_state_bits.call_context_manager,
         canister_state_bits.certified_data,
         canister_metrics,
         canister_state_bits.cycles_balance,

@@ -1028,6 +1028,10 @@ impl CallContextManager {
 
         reject_responses
     }
+
+    pub fn canister_ready_to_stop(&self) -> bool {
+        self.callbacks().is_empty() && self.call_contexts().is_empty()
+    }
 }
 
 impl From<&CanisterCall> for CallOrigin {

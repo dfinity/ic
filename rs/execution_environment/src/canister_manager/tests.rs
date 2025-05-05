@@ -49,7 +49,7 @@ use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
     page_map::TestPageAllocatorFileDescriptorImpl,
     testing::{CanisterQueuesTesting, SystemStateTesting},
-    CallContextManager, CallOrigin, CanisterState, CanisterStatus, NumWasmPages, ReplicatedState,
+    CallOrigin, CanisterState, CanisterStatus, NumWasmPages, ReplicatedState,
 };
 use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig};
 use ic_test_utilities::{
@@ -1204,7 +1204,6 @@ fn stop_a_running_canister() {
                 message_id,
                 call_id: Some(StopCanisterCallId::new(0)),
             }],
-            call_context_manager: CallContextManager::default(),
         }
     );
 

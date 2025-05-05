@@ -806,15 +806,12 @@ fn dts_replicated_execution_resume_fails_due_to_call_context_change() {
 
         // Change the next call context id of the clean canister.
         let time = test.time();
-        test.canister_state_mut(a_id)
-            .system_state
-            .new_call_context(
-                CallOrigin::SystemTask,
-                Cycles::new(0),
-                time,
-                RequestMetadata::for_new_call_tree(time),
-            )
-            .unwrap();
+        test.canister_state_mut(a_id).system_state.new_call_context(
+            CallOrigin::SystemTask,
+            Cycles::new(0),
+            time,
+            RequestMetadata::for_new_call_tree(time),
+        );
 
         test.execute_slice(a_id);
 
@@ -1249,7 +1246,6 @@ fn test_call_context_instructions_executed_is_updated_on_err_update() {
     let call_context_manager = test
         .canister_state(a_id)
         .system_state
-        .call_context_manager()
-        .unwrap();
+        .call_context_manager();
     assert!(call_context_manager.call_contexts().is_empty());
 }

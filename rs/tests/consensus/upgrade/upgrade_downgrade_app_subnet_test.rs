@@ -107,7 +107,7 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
 
     rt.spawn(start_workload(app_subnet, requests, logger));
 
-    let (faulty_node, can_id, msg) = upgrade(
+    let (faulty_node, can_id, stop_can_id, msg) = upgrade(
         &env,
         &nns_node,
         &branch_version,
@@ -127,6 +127,13 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
         &env.logger(),
         &faulty_node.get_public_url(),
         can_id,
+        &msg,
+        /*retries=*/ 3
+    ));
+    assert!(can_read_msg_with_retries(
+        &env.logger(),
+        &faulty_node.get_public_url(),
+        stop_can_id,
         &msg,
         /*retries=*/ 3
     ));

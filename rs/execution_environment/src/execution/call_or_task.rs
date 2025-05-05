@@ -388,15 +388,12 @@ impl CallOrTaskHelper {
             }
         }
 
-        let call_context_id = canister
-            .system_state
-            .new_call_context(
-                original.call_origin.clone(),
-                original.call_or_task.cycles(),
-                original.time,
-                original.request_metadata.clone(),
-            )
-            .unwrap();
+        let call_context_id = canister.system_state.new_call_context(
+            original.call_origin.clone(),
+            original.call_or_task.cycles(),
+            original.time,
+            original.request_metadata.clone(),
+        );
 
         let initial_cycles_balance = canister.system_state.balance();
 
@@ -588,16 +585,12 @@ impl CallOrTaskHelper {
                 .get()
                 .saturating_sub(output.num_instructions_left.get()),
         );
-        let (action, call_context) = self
-            .canister
-            .system_state
-            .on_canister_result(
-                self.call_context_id,
-                None,
-                output.wasm_result.clone(),
-                instructions_used,
-            )
-            .unwrap();
+        let (action, call_context) = self.canister.system_state.on_canister_result(
+            self.call_context_id,
+            None,
+            output.wasm_result.clone(),
+            instructions_used,
+        );
 
         let response = match original.call_or_task {
             CanisterCallOrTask::Update(_) | CanisterCallOrTask::Task(_) => action_to_response(

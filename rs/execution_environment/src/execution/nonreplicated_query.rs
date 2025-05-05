@@ -79,15 +79,12 @@ pub fn execute_non_replicated_query(
                 CallOrigin::CanisterQuery(sender, _) => sender.get(),
                 _ => panic!("Unexpected call origin for execute_non_replicated_query"),
             };
-            let call_context_id = canister
-                .system_state
-                .new_call_context(
-                    call_origin,
-                    Cycles::zero(),
-                    time,
-                    RequestMetadata::for_new_call_tree(time),
-                )
-                .unwrap();
+            let call_context_id = canister.system_state.new_call_context(
+                call_origin,
+                Cycles::zero(),
+                time,
+                RequestMetadata::for_new_call_tree(time),
+            );
             (
                 SystemApiNonReplicatedQueryKind::Stateful {
                     call_context_id,

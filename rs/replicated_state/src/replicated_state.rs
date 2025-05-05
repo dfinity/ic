@@ -11,7 +11,7 @@ use crate::{
         queues::{CanisterInput, CanisterQueuesLoopDetector},
         system_state::{push_input, CanisterOutputQueuesIterator},
     },
-    CanisterQueues,
+    CanisterQueues, CanisterStatus,
 };
 use ic_base_types::{PrincipalId, SnapshotId};
 use ic_btc_replica_types::BitcoinAdapterResponse;
@@ -628,8 +628,7 @@ impl ReplicatedState {
         self.canister_states.values_mut()
     }
 
-    // Loads a fresh version of the canister from the state and ensures that it
-    // has a call context manager i.e. it is not stopped.
+    // Loads a fresh version of the canister from the state and ensures that it is not stopped.
     pub fn get_active_canister(
         &self,
         canister_id: &CanisterId,
@@ -641,13 +640,10 @@ impl ReplicatedState {
             )
         })?;
 
-        if canister.system_state.call_context_manager().is_none() {
+        if let CanisterStatus::Stopped = canister.system_state.get_status() {
             Err(UserError::new(
                 ErrorCode::CanisterStopped,
-                format!(
-                    "Canister {} is stopped and therefore does not have a CallContextManager",
-                    canister.canister_id()
-                ),
+                format!("Canister {} is stopped", canister.canister_id()),
             ))
         } else {
             Ok(canister)
@@ -852,7 +848,8 @@ impl ReplicatedState {
                 canister
                     .system_state
                     .call_context_manager()
-                    .map_or(0, |ccm| ccm.callbacks().len())
+                    .callbacks()
+                    .len()
             })
             .sum()
     }

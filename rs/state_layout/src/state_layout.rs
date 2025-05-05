@@ -16,7 +16,8 @@ use ic_replicated_state::{
     canister_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
         system_state::{
-            wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase, TaskQueue,
+            to_canister_status_pb, wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory,
+            CyclesUseCase, TaskQueue,
         },
     },
     page_map::{Shard, StorageLayout, StorageResult},
@@ -146,7 +147,7 @@ pub struct ExecutionStateBits {
 pub struct CanisterStateBits {
     pub controllers: BTreeSet<PrincipalId>,
     pub last_full_execution_round: ExecutionRound,
-    pub call_context_manager: Option<CallContextManager>,
+    pub call_context_manager: CallContextManager,
     pub compute_allocation: ComputeAllocation,
     pub accumulated_priority: AccumulatedPriority,
     pub priority_credit: AccumulatedPriority,
@@ -2615,7 +2616,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                 .map(|controller| controller.into())
                 .collect(),
             last_full_execution_round: item.last_full_execution_round.get(),
-            call_context_manager: item.call_context_manager.as_ref().map(|v| v.into()),
+            call_context_manager: Some((&item.call_context_manager).into()),
             compute_allocation: item.compute_allocation.as_percent(),
             accumulated_priority: item.accumulated_priority.get(),
             priority_credit: item.priority_credit.get(),
@@ -2631,7 +2632,10 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             cycles_debit: Some(item.cycles_debit.into()),
             reserved_balance: Some(item.reserved_balance.into()),
             reserved_balance_limit: item.reserved_balance_limit.map(|v| v.into()),
-            canister_status: Some((&item.status).into()),
+            canister_status: Some(to_canister_status_pb(
+                &item.status,
+                &item.call_context_manager,
+            )),
             scheduled_as_first: item.scheduled_as_first,
             skipped_round_due_to_no_messages: item.skipped_round_due_to_no_messages,
             executed: item.executed,
@@ -2682,10 +2686,21 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             .execution_state_bits
             .map(|b| b.try_into())
             .transpose()?;
+
+        let status: CanisterStatus =
+            try_from_option_field(value.canister_status, "CanisterStateBits::canister_status")?;
         let call_context_manager = value
             .call_context_manager
-            .map(|c| c.try_into())
-            .transpose()?;
+            .map(|ccm| ccm.try_into())
+            .transpose()?
+            .unwrap_or_else(|| {
+                assert!(
+                    matches!(status, CanisterStatus::Stopped),
+                    "No call context manager found for canister with status {:?}",
+                    status
+                );
+                CallContextManager::default()
+            });
 
         let consumed_cycles =
             try_from_option_field(value.consumed_cycles, "CanisterStateBits::consumed_cycles")
@@ -2758,10 +2773,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             cycles_debit,
             reserved_balance,
             reserved_balance_limit: value.reserved_balance_limit.map(|v| v.into()),
-            status: try_from_option_field(
-                value.canister_status,
-                "CanisterStateBits::canister_status",
-            )?,
+            status,
             scheduled_as_first: value.scheduled_as_first,
             skipped_round_due_to_no_messages: value.skipped_round_due_to_no_messages,
             executed: value.executed,

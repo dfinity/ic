@@ -99,16 +99,12 @@ impl CanisterStateFixture {
     }
 
     fn make_callback_to(&mut self, respondent: CanisterId, deadline: CoarseTime) -> CallbackId {
-        let call_context_id = self
-            .canister_state
-            .system_state
-            .new_call_context(
-                CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1), NO_DEADLINE),
-                Cycles::zero(),
-                Time::from_nanos_since_unix_epoch(0),
-                Default::default(),
-            )
-            .unwrap();
+        let call_context_id = self.canister_state.system_state.new_call_context(
+            CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1), NO_DEADLINE),
+            Cycles::zero(),
+            Time::from_nanos_since_unix_epoch(0),
+            Default::default(),
+        );
         self.canister_state
             .system_state
             .register_callback(Callback::new(
@@ -123,7 +119,6 @@ impl CanisterStateFixture {
                 None,
                 deadline,
             ))
-            .unwrap()
     }
 
     fn push_input(
@@ -1246,7 +1241,6 @@ fn reverts_stopping_status_after_split() {
     canister_state
         .system_state
         .set_status(CanisterStatus::Stopping {
-            call_context_manager: call_context_manager.clone(),
             stop_contexts: vec![StopCanisterContext::Ingress {
                 sender: user_test_id(1),
                 message_id: message_test_id(1),
@@ -1258,9 +1252,7 @@ fn reverts_stopping_status_after_split() {
     let mut expected_state = canister_state.clone();
     expected_state
         .system_state
-        .set_status(CanisterStatus::Running {
-            call_context_manager,
-        });
+        .set_status(CanisterStatus::Running);
 
     canister_state.drop_in_progress_management_calls_after_split();
 

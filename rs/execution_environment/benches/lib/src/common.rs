@@ -121,15 +121,12 @@ where
         CallbackId::new(0),
         NO_DEADLINE,
     );
-    let call_context_id = canister_state
-        .system_state
-        .new_call_context(
-            call_origin.clone(),
-            Cycles::new(10),
-            UNIX_EPOCH,
-            Default::default(),
-        )
-        .unwrap();
+    let call_context_id = canister_state.system_state.new_call_context(
+        call_origin.clone(),
+        Cycles::new(10),
+        UNIX_EPOCH,
+        Default::default(),
+    );
     let callback = Callback::new(
         call_context_id,
         canister_test_id(LOCAL_CANISTER_ID),

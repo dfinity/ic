@@ -1679,11 +1679,7 @@ fn assert_consistent_stop_canister_calls(state: &ReplicatedState, expected_calls
         .canister_states
         .values()
         .filter_map(|canister| {
-            if let CanisterStatus::Stopping {
-                call_context_manager: _,
-                stop_contexts,
-            } = canister.system_state.get_status()
-            {
+            if let CanisterStatus::Stopping { stop_contexts } = canister.system_state.get_status() {
                 Some(stop_contexts.iter().cloned())
             } else {
                 None

@@ -307,23 +307,7 @@ impl<'a> QueryContext<'a> {
         let canister_id = canister.canister_id();
 
         let outgoing_messages: Vec<_> = canister.output_into_iter().collect();
-        let call_context_manager =
-            canister
-                .system_state
-                .call_context_manager()
-                .ok_or_else(|| {
-                    error!(
-                    self.log,
-                    "[EXC-BUG] Canister {} does not have a call context manager. This is a bug @{}",
-                    canister_id,
-                    QUERY_HANDLER_CRITICAL_ERROR,
-                );
-                    self.query_critical_error.inc();
-                    UserError::new(
-                        ErrorCode::QueryCallGraphInternal,
-                        "Composite query: canister does not have a call context manager",
-                    )
-                })?;
+        let call_context_manager = canister.system_state.call_context_manager();
 
         // When we deserialize the canister state from the replicated state, it
         // is possible that it already had some messages in its output queues.
@@ -521,8 +505,6 @@ impl<'a> QueryContext<'a> {
         canister
             .system_state
             .on_canister_result(call_context_id, callback_id, result, instructions_used)
-            // This `unwrap()` cannot fail because of the non-optional `call_context_id`.
-            .unwrap()
             .0
     }
 
