@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-#[cfg(any(test))]
+#[cfg(test)]
 use ic_nervous_system_temporary::Temporary;
 
 thread_local! {
