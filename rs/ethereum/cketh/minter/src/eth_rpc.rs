@@ -5,9 +5,8 @@ use crate::endpoints::CandidBlockTag;
 use crate::numeric::{BlockNumber, LogIndex, Wei, WeiPerGas};
 use candid::CandidType;
 use ethnum;
-use evm_rpc_client::BlockTag as EvmBlockTag;
 use evm_rpc_client::{
-    HttpOutcallError as EvmHttpOutcallError,
+    BlockTag as EvmBlockTag, HttpOutcallError as EvmHttpOutcallError,
     SendRawTransactionStatus as EvmSendRawTransactionStatus,
 };
 use ic_cdk::api::call::RejectionCode;
@@ -201,16 +200,6 @@ pub enum BlockTag {
     Finalized,
 }
 
-impl From<BlockTag> for EvmBlockTag {
-    fn from(block_tag: BlockTag) -> Self {
-        match block_tag {
-            BlockTag::Latest => EvmBlockTag::Latest,
-            BlockTag::Safe => EvmBlockTag::Safe,
-            BlockTag::Finalized => EvmBlockTag::Finalized,
-        }
-    }
-}
-
 impl From<CandidBlockTag> for BlockTag {
     fn from(block_tag: CandidBlockTag) -> BlockTag {
         match block_tag {
@@ -227,6 +216,16 @@ impl From<BlockTag> for CandidBlockTag {
             BlockTag::Latest => CandidBlockTag::Latest,
             BlockTag::Safe => CandidBlockTag::Safe,
             BlockTag::Finalized => CandidBlockTag::Finalized,
+        }
+    }
+}
+
+impl From<BlockTag> for EvmBlockTag {
+    fn from(block_tag: BlockTag) -> Self {
+        match block_tag {
+            BlockTag::Latest => EvmBlockTag::Latest,
+            BlockTag::Safe => EvmBlockTag::Safe,
+            BlockTag::Finalized => EvmBlockTag::Finalized,
         }
     }
 }
