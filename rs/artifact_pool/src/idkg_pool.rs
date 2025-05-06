@@ -22,17 +22,17 @@ use ic_interfaces::p2p::consensus::{
 };
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
-use ic_types::{artifact::IDkgMessageId, consensus::idkg::VetKdKeyShare};
 use ic_types::{
+    artifact::IDkgMessageId,
     consensus::{
         idkg::{
             EcdsaSigShare, IDkgArtifactId, IDkgMessage, IDkgMessageType, IDkgPrefixOf, IDkgStats,
-            SchnorrSigShare, SigShare, SignedIDkgComplaint, SignedIDkgOpening,
+            SchnorrSigShare, SigShare, SignedIDkgComplaint, SignedIDkgOpening, VetKdKeyShare,
         },
         CatchUpPackage,
     },
     crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
+    crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing},
 };
 use prometheus::IntCounter;
 use std::collections::BTreeMap;

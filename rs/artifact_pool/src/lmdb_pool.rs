@@ -13,29 +13,28 @@ use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::v1 as pb;
-use ic_types::consensus::certification::CertificationMessageHash;
-use ic_types::consensus::idkg::{
-    IDkgArtifactIdData, IDkgArtifactIdDataOf, SigShare, SigShareIdData, SigShareIdDataOf,
-    VetKdKeyShare,
-};
-use ic_types::consensus::{DataPayload, HasHash, SummaryPayload};
-use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
 use ic_types::{
     artifact::{CertificationMessageId, ConsensusMessageId, IDkgMessageId},
     batch::BatchPayload,
     consensus::{
-        certification::{Certification, CertificationMessage, CertificationShare},
+        certification::{
+            Certification, CertificationMessage, CertificationMessageHash, CertificationShare,
+        },
         dkg::{self, DkgDataPayload},
         idkg::{
-            EcdsaSigShare, IDkgArtifactId, IDkgMessage, IDkgMessageType, IDkgPrefix, IDkgPrefixOf,
-            SchnorrSigShare, SignedIDkgComplaint, SignedIDkgOpening,
+            EcdsaSigShare, IDkgArtifactId, IDkgArtifactIdData, IDkgArtifactIdDataOf, IDkgMessage,
+            IDkgMessageType, IDkgPrefix, IDkgPrefixOf, SchnorrSigShare, SigShare, SigShareIdData,
+            SigShareIdDataOf, SignedIDkgComplaint, SignedIDkgOpening, VetKdKeyShare,
         },
         BlockPayload, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage,
-        ConsensusMessageHash, ConsensusMessageHashable, EquivocationProof, Finalization,
-        FinalizationShare, HasHeight, Notarization, NotarizationShare, Payload, PayloadType,
-        RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
+        ConsensusMessageHash, ConsensusMessageHashable, DataPayload, EquivocationProof,
+        Finalization, FinalizationShare, HasHash, HasHeight, Notarization, NotarizationShare,
+        Payload, PayloadType, RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
+        SummaryPayload,
     },
-    crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing},
+    crypto::canister_threshold_sig::idkg::{
+        IDkgDealingSupport, IDkgTranscriptId, SignedIDkgDealing,
+    },
     crypto::{CryptoHash, CryptoHashOf, CryptoHashable},
     Height, Time,
 };
