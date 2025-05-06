@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId, RegistryVersion};
-use ic_cdk::call::{Call, CallErrorExt, Response};
+use ic_cdk_next::call::{Call, CallErrorExt, Response};
 use ic_nervous_system_common::NervousSystemError;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_registry_transport::pb::v1::RegistryDelta;
@@ -29,9 +29,9 @@ impl RegistryCanister {
         }
     }
 
-    async fn execute_with_retries(
+    async fn execute_with_retries<'a>(
         &self,
-        call: Call<'_, '_>,
+        call: Call<'a, 'a>,
         max_attempts: u32,
     ) -> Result<Response, NervousSystemError> {
         for _ in 0..max_attempts {
