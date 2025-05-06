@@ -2,7 +2,7 @@ use candid::Encode;
 use ic_base_types::CanisterId;
 use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nns_constants::LIFELINE_CANISTER_INDEX_IN_NNS_SUBNET;
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     manage_neuron_response::{Command, MakeProposalResponse},
     ExecuteNnsFunction, MakeProposalRequest, NnsFunction, ProposalActionRequest,
 };

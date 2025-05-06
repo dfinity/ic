@@ -2,7 +2,7 @@ use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     self as api,
     governance_error::ErrorType,
     manage_neuron_response::{Command, RegisterVoteResponse},
@@ -341,7 +341,7 @@ fn cannot_vote_on_future_proposal() {
 fn neuron_with_followees(
     id: u64,
     followees: HashMap<i32, Followees>,
-) -> ic_nns_governance_api::pb::v1::Neuron {
+) -> ic_nns_governance_api::Neuron {
     const TWELVE_MONTHS_SECONDS: u64 = 30 * 12 * 24 * 60 * 60;
 
     let neuron_id = NeuronId::from_u64(id);
