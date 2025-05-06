@@ -1136,6 +1136,11 @@ impl Neuron {
         self.known_neuron_data = None;
     }
 
+    /// Returns whether this neuron has a maturity disbursement in progress.
+    pub fn has_maturity_disbursement_in_progress(&self) -> bool {
+        !self.maturity_disbursements_in_progress.is_empty()
+    }
+
     /// Adds a maturity disbursement in progress at the end.
     pub fn add_maturity_disbursement_in_progress(
         &mut self,

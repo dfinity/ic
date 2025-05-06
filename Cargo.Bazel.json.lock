@@ -1,5 +1,5 @@
 {
-  "checksum": "2a340bba4555a934a62ace65422507f2ad0475c8d65ff9e413fd42e16e4ceb2e",
+  "checksum": "b37cc67e43796df32e030224f14c8fd721fd91968de56bf1fe91f6b4d8a20784",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -16001,7 +16001,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/cranelift-codegen-meta/0.119.0/download",
-          "sha256": "af2c215e0c9afa8069aafb71d22aa0e0dde1048d9a5c3c72a83cacf9b61fcf4a"
+          "sha256": "af2c215e0c9afa8069aafb71d22aa0e0dde1048d9a5c3c72a83cacf9b61fcf4a",
+          "patch_args": [
+            "-p4"
+          ],
+          "patches": [
+            "@@//bazel:cranelift-codegen-meta-isle.patch"
+          ]
         }
       },
       "targets": [
@@ -16436,13 +16442,7 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/cranelift-srcgen/0.119.0/download",
-          "sha256": "47e1a86340a16e74b4285cc86ac69458fa1c8e7aaff313da4a89d10efd3535ee",
-          "patch_args": [
-            "-p3"
-          ],
-          "patches": [
-            "@@//bazel:cranelift-srcgen-lib.patch"
-          ]
+          "sha256": "47e1a86340a16e74b4285cc86ac69458fa1c8e7aaff313da4a89d10efd3535ee"
         }
       },
       "targets": [
