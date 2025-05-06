@@ -32,7 +32,7 @@ use ic_nns_test_utils::{
         build_mainnet_index_wasm, build_mainnet_ledger_wasm, build_mainnet_lifeline_wasm,
         build_mainnet_registry_wasm, build_mainnet_root_wasm, build_mainnet_sns_wasms_wasm,
         build_registry_wasm, build_root_wasm, build_sns_wasms_wasm, build_test_governance_wasm,
-        NnsInitPayloadsBuilder,
+        build_test_registry_wasm, NnsInitPayloadsBuilder,
     },
     sns_wasm::{
         build_archive_sns_wasm, build_governance_sns_wasm, build_index_ng_sns_wasm,
@@ -392,6 +392,7 @@ pub struct NnsInstaller {
     with_cycles_ledger: bool,
     with_index_canister: bool,
     with_test_governance_canister: bool,
+    with_test_registry_canister: bool,
     neurons: Option<Vec<Neuron>>,
 }
 
@@ -550,7 +551,11 @@ impl NnsInstaller {
                     build_root_wasm(),
                     build_lifeline_wasm(),
                     build_sns_wasms_wasm(),
-                    build_registry_wasm(),
+                    if self.with_test_registry_canister {
+                        build_test_registry_wasm()
+                    } else {
+                        build_registry_wasm()
+                    },
                 )
             };
 

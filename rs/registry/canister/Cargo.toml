@@ -98,3 +98,6 @@ itertools = { workspace = true }
 registry-canister-protobuf-generator = { path = "./protobuf_generator" }
 tempfile = { workspace = true }
 tokio = { workspace = true }
+
+[features]
+test = []
