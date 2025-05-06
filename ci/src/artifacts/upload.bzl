@@ -11,24 +11,6 @@ def _upload_artifact_impl(ctx):
 
     s3_upload = ctx.attr._s3_upload[BuildSettingInfo].value
 
-    out = []
-
-    for f in ctx.files.inputs:
-        filesum = ctx.actions.declare_file(ctx.label.name + "/" + f.basename + ".SHA256SUM")
-        ctx.actions.run_shell(
-            command = "(cd {path} && shasum --algorithm 256 --binary {src}) > {out}".format(path = f.dirname, src = f.basename, out = filesum.path),
-            inputs = [f],
-            outputs = [filesum],
-        )
-        out.append(filesum)
-
-    checksum = ctx.actions.declare_file(ctx.label.name + "/SHA256SUMS")
-    ctx.actions.run_shell(
-        command = "cat " + " ".join([f.path for f in out]) + " | sort -k 2 >" + checksum.path,
-        inputs = out,
-        outputs = [checksum],
-    )
-
     uploader = ctx.file._artifacts_uploader
 
     # If s3 upload is not enabled, then use a noop uploader.
@@ -36,9 +18,10 @@ def _upload_artifact_impl(ctx):
         uploader = ctx.actions.declare_file("dummy_upload.sh")
         ctx.actions.write(uploader, "#!/usr/bin/env bash\necho dummy upload for $1\ntouch $2", is_executable = True)
 
-    allinputs = ctx.files.inputs + [checksum]
+    allinputs = ctx.files.inputs # + [checksum]
+    out = []
     for f in allinputs:
-        filename = ctx.label.name + "_" + f.basename
+        filename = ctx.label.name + "/" + f.basename
         url = ctx.actions.declare_file(filename + ".url")
         ctx.actions.run(
             executable = uploader,

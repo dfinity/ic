@@ -126,7 +126,7 @@ artifact_bundle(
 upload_artifacts(
     name = "upload",
     testonly = True,
-    inputs = [":binaries"],
+    inputs = [":bundle"],
     remote_subdir = "binaries/" + os_info,
 )
 
@@ -136,7 +136,7 @@ upload_artifacts(
 upload_artifacts(
     name = "legacy_upload",
     testonly = True,
-    inputs = [":binaries"],
+    inputs = [":bundle"],
     remote_subdir = "release",
     target_compatible_with = ["@platforms//os:linux"],
     visibility = ["//testnet/tools:__pkg__"],
