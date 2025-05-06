@@ -6,8 +6,9 @@ use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_transport::{
-    deserialize_get_changes_since_response, deserialize_get_latest_version_response,
-    pb::v1::RegistryDelta, serialize_get_changes_since_request, GetChunk,
+    dechunkify_delta, deserialize_get_changes_since_response,
+    deserialize_get_latest_version_response, pb::v1::RegistryDelta,
+    serialize_get_changes_since_request, GetChunk,
 };
 
 #[async_trait]
@@ -80,14 +81,25 @@ impl Registry for RegistryCanister {
                     ))
                 })?;
 
-        let result = deserialize_get_changes_since_response(result, self)
-            .await
-            .map_err(|e| {
+        let (high_capacity_deltas, _version) = deserialize_get_changes_since_response(result)
+            .map_err(|err| {
+                NervousSystemError::new_with_message(format!(
+                    "Unable to deserialize get_changes_since response (from Registry): {}",
+                    err,
+                ))
+            })?;
+
+        // Dechunkify deltas (this may require follow up get_chunk calls to Registry).
+        let mut inlined_deltas = vec![];
+        for delta in high_capacity_deltas {
+            let delta = dechunkify_delta(delta, self).await.map_err(|e| {
                 NervousSystemError::new_with_message(format!("Could not decode response {e:?}"))
             })?;
 
-        let (deltas, _version) = result;
-        Ok(deltas)
+            inlined_deltas.push(delta);
+        }
+
+        Ok(inlined_deltas)
     }
 }
 
