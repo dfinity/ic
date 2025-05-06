@@ -14738,6 +14738,7 @@ dependencies = [
  "ic_consensus_system_test_liveness_test_common",
  "ic_consensus_system_test_utils",
  "k256 0.13.4",
+ "leb128",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "registry-canister",
@@ -14748,6 +14749,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
+ "wabt-tests",
 ]
 
 [[package]]
