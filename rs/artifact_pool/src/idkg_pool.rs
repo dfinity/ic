@@ -239,7 +239,7 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
         transcript_id: &IDkgTranscriptId,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)> + '_> {
         let object_pool = self.get_pool(IDkgMessageType::Dealing);
-        object_pool.iter_by_transcript_id(transcript_id.clone())
+        object_pool.iter_by_transcript_id(*transcript_id)
     }
 
     fn dealing_support(
@@ -262,7 +262,7 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
         transcript_id: &IDkgTranscriptId,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_> {
         let object_pool = self.get_pool(IDkgMessageType::DealingSupport);
-        object_pool.iter_by_transcript_id(transcript_id.clone())
+        object_pool.iter_by_transcript_id(*transcript_id)
     }
 
     fn ecdsa_signature_shares(

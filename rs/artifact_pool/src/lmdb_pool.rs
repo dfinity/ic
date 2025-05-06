@@ -1879,7 +1879,7 @@ impl IDkgMessageDb {
 
         let message_type = self.object_type;
         let log = self.log.clone();
-        let pattern_cl = pattern.as_ref().map(|p| p.clone());
+        let pattern_cl = pattern.clone();
         let deserialize_fn = move |key: &[u8], bytes: &[u8]| {
             // Convert key bytes to IDkgMessageId
             let mut key_bytes = Vec::<u8>::new();
@@ -2074,7 +2074,7 @@ impl IDkgPoolSection for PersistentIDkgPoolSection {
         transcript_id: &IDkgTranscriptId,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::Dealing);
-        message_db.iter_by_transcript_id(transcript_id.clone())
+        message_db.iter_by_transcript_id(*transcript_id)
     }
 
     fn dealing_support(
@@ -2097,7 +2097,7 @@ impl IDkgPoolSection for PersistentIDkgPoolSection {
         transcript_id: &IDkgTranscriptId,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::DealingSupport);
-        message_db.iter_by_transcript_id(transcript_id.clone())
+        message_db.iter_by_transcript_id(*transcript_id)
     }
 
     fn ecdsa_signature_shares(
