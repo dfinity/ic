@@ -646,7 +646,7 @@ mod tests {
     }
 
     // Used by the two following tests to add dealings to the pool
-    fn add_support_dealings<'a>(
+    fn add_dealing_supports<'a>(
         idkg_pool: &'a mut IDkgPoolImpl,
         test_unvalidated: bool,
         supports_to_add: &[(IDkgTranscriptId, NodeId, NodeId, u8)],
@@ -712,7 +712,7 @@ mod tests {
             (transcript_100, NODE_5, NODE_6, 7),
         ];
 
-        let pool_section = add_support_dealings(idkg_pool, test_unvalidated, &supports_to_add);
+        let pool_section = add_dealing_supports(idkg_pool, test_unvalidated, &supports_to_add);
 
         // Verify iteration produces artifacts in increasing order of
         // transcript Id.
@@ -818,7 +818,7 @@ mod tests {
             (transcript_100, NODE_6, NODE_7, 8),
         ];
 
-        let pool_section = add_support_dealings(idkg_pool, test_unvalidated, &supports_to_add);
+        let pool_section = add_dealing_supports(idkg_pool, test_unvalidated, &supports_to_add);
 
         // Verify iteration produces artifacts in increasing order of
         // transcript Id.
