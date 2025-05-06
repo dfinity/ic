@@ -20,21 +20,9 @@ NC='\033[0m' # No Color
 # Virtual environment name
 VENV_NAME=".rosetta_venv"
 
-# Default curve type
-DEFAULT_CURVE_TYPE="edwards25519"
-
 echo -e "${BLUE}======================================================${NC}"
 echo -e "${BLUE}    Internet Computer Rosetta API Test Runner    ${NC}"
 echo -e "${BLUE}======================================================${NC}"
-
-# Parse arguments to check if curve-type is already provided
-HAS_CURVE_TYPE=false
-for arg in "$@"; do
-    if [[ $arg == "--curve-type" ]]; then
-        HAS_CURVE_TYPE=true
-        break
-    fi
-done
 
 # Check if Python is installed
 if ! command -v python3 &>/dev/null; then
@@ -72,20 +60,11 @@ source "$VENV_NAME/bin/activate"
 echo -e "${GREEN}Installing dependencies...${NC}"
 pip install -r requirements.txt
 
-# Run the test script with any provided arguments
+# Run the test script with all provided arguments as-is
 echo -e "${GREEN}Running tests...${NC}"
-
-# Add default curve type if not provided
-if [ "$HAS_CURVE_TYPE" = false ]; then
-    echo -e "${YELLOW}No curve type specified, using default: $DEFAULT_CURVE_TYPE${NC}"
-    TEST_ARGS="--curve-type $DEFAULT_CURVE_TYPE $@"
-else
-    TEST_ARGS="$@"
-fi
-
-echo -e "${YELLOW}Command: python test_all.py $TEST_ARGS${NC}"
+echo -e "${YELLOW}Command: python test_all.py $@${NC}"
 echo -e "${BLUE}------------------------------------------------------${NC}"
-python test_all.py $TEST_ARGS
+python test_all.py "$@"
 TEST_RESULT=$?
 echo -e "${BLUE}------------------------------------------------------${NC}"
 

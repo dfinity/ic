@@ -33,7 +33,7 @@ pip install -r requirements.txt
 2. **Access to a Rosetta node**
 
 You'll need access to a Rosetta API endpoint, either:
-- Local node running at http://localhost:8081
+- Local node running at <NODE_ADDRESS>
 - Public endpoint (if available)
 
 ## Generating Keys
@@ -90,7 +90,12 @@ Note the important differences:
 
 All examples require at minimum the `--node-address` parameter pointing to your Rosetta API endpoint. Most examples also support the `--verbose` flag for detailed output.
 
-For any examples that require a public key, you **must** specify the curve type using the `--curve-type` parameter (either `edwards25519` or `secp256k1`).
+For any examples that use public keys:
+- The `--public-key` parameter and `--curve-type` parameter MUST be provided together
+- Neither parameter can be used without the other
+- Valid curve types are `edwards25519` or `secp256k1`
+
+This requirement applies to all scripts including `test_all.py`, `get_account_id.py`, and `get_neuron_balance.py`.
 
 ## Example Scripts
 
@@ -98,15 +103,9 @@ For any examples that require a public key, you **must** specify the curve type 
 
 **Get Account Identifier**:
 ```sh
-# Using Ed25519 public key
-python get_account_id.py --node-address http://localhost:8081 \
-                        --public-key 93f14fad36957237baab3b7ce8890c766b44c7071bda09830592379f2a2d418f \
-                        --curve-type edwards25519
-
-# Using secp256k1
-python get_account_id.py --node-address http://localhost:8081 \
-                        --public-key 03e4be477eb605d5d0738f643b2f6d8ffea8685855bc60d03f58244a15130a0ef8 \
-                        --curve-type secp256k1
+python get_account_id.py --node-address <NODE_ADDRESS> \
+                        --public-key <YOUR_PUBLIC_KEY> \
+                        --curve-type <CURVE_TYPE>
 ```
 
 This script derives both regular and neuron account identifiers from a public key.
@@ -115,23 +114,16 @@ This script derives both regular and neuron account identifiers from a public ke
 
 **Get Regular Account Balance**:
 ```sh
-python get_account_balance.py --node-address http://localhost:8081 \
-                             --account-id 8b84c3a3529d02a9decb5b1a27e7c8d886e17e07ea0a538269697ef09c2a27b4
+python get_account_balance.py --node-address <NODE_ADDRESS> \
+                             --account-id <YOUR_ACCOUNT_ID>
 ```
 
 **Get Neuron Balance**:
 ```sh
-# Using Ed25519 public key
-python get_neuron_balance.py --node-address http://localhost:8081 \
+python get_neuron_balance.py --node-address <NODE_ADDRESS> \
                             --neuron-index 0 \
-                            --public-key 93f14fad36957237baab3b7ce8890c766b44c7071bda09830592379f2a2d418f \
-                            --curve-type edwards25519
-
-# Using secp256k1 public key
-python get_neuron_balance.py --node-address http://localhost:8081 \
-                            --neuron-index 0 \
-                            --public-key 03e4be477eb605d5d0738f643b2f6d8ffea8685855bc60d03f58244a15130a0ef8 \
-                            --curve-type secp256k1
+                            --public-key <YOUR_PUBLIC_KEY> \
+                            --curve-type <CURVE_TYPE>
 ```
 
 Note: The `--curve-type` parameter is mandatory when providing a public key.
@@ -141,10 +133,10 @@ Note: The `--curve-type` parameter is mandatory when providing a public key.
 Transfer ICP tokens between accounts (requires a private key):
 
 ```sh
-python transfer.py --node-address http://localhost:8081 \
-                  --private-key-path ./my_private_key.pem \
+python transfer.py --node-address <NODE_ADDRESS> \
+                  --private-key-path <YOUR_PRIVATE_KEY_PATH> \
                   --signature-type ecdsa \
-                  --recipient-account-id 47e0ae0de8af04a961c4b3225cd77b9652777286ce142c2a07fab98da5263100 \
+                  --recipient-account-id <RECIPIENT_ACCOUNT_ID> \
                   --amount-e8s 1000000 \
                   --fee-e8s 10000
 ```
@@ -156,7 +148,7 @@ Note: 1 ICP = 100,000,000 e8s, so 1,000,000 e8s = 0.01 ICP
 Fetch and display recent blocks:
 
 ```sh
-python read_blocks.py --node-address http://localhost:8081
+python read_blocks.py --node-address <NODE_ADDRESS>
 ```
 
 This script fetches the most recent block and the 10 previous blocks, displaying their information.
@@ -166,7 +158,7 @@ This script fetches the most recent block and the 10 previous blocks, displaying
 Get comprehensive information about the Internet Computer network:
 
 ```sh
-python get_network_info.py --node-address http://localhost:8081
+python get_network_info.py --node-address <NODE_ADDRESS>
 ```
 
 This script retrieves available networks, network status (current block, genesis block, peers), and network options (supported features, operations, errors).
@@ -175,100 +167,81 @@ This script retrieves available networks, network status (current block, genesis
 
 **List Known Neurons**:
 ```sh
-python list_known_neurons.py --node-address http://localhost:8081
+python list_known_neurons.py --node-address <NODE_ADDRESS>
 ```
 
 Lists all known neurons on the Network Nervous System (NNS) with their names and descriptions.
 
 **List Pending Proposals**:
 ```sh
-python list_pending_proposals.py --node-address http://localhost:8081
+python list_pending_proposals.py --node-address <NODE_ADDRESS>
 ```
 
 Lists all currently pending proposals on the NNS, showing titles, descriptions, proposers, and voting status.
 
 **Get Specific Proposal Details**:
 ```sh
-python get_proposal_info.py --node-address http://localhost:8081 --proposal-id 123456
+python get_proposal_info.py --node-address <NODE_ADDRESS> --proposal-id <PROPOSAL_ID>
 ```
 
 Fetches detailed information about a specific proposal, including its status, voting results, proposer, and execution time.
 
 ## Testing All Examples
 
-### Using the Python Test Script
+The `run_tests.sh` script provides a convenient way to test multiple examples at once. The script creates a clean virtual environment, installs dependencies, and then runs the appropriate tests based on the arguments you provide.
 
-The `test_all.py` script allows you to test all the examples at once:
+What's tested depends on which arguments you provide:
 
+1. **Public Data Access** - Tests network information and block data:
 ```sh
-# Basic test of all non-destructive examples (curve type is required)
-python test_all.py --node-address http://localhost:8081 --curve-type edwards25519
+# Tests only network and public blockchain data
+./run_tests.sh --node-address <NODE_ADDRESS>
 ```
 
-For more comprehensive testing including transfers (which require a funded account):
-
+2. **Account Data Access** - Tests account operations and balances:
 ```sh
-python test_all.py --node-address http://localhost:8081 \
-                  --curve-type edwards25519 \
-                  --funded_private_key_pem ./my_private_key.pem \
-                  --recipient_account 47e0ae0de8af04a961c4b3225cd77b9652777286ce142c2a07fab98da5263100
+# Tests account operations requiring public key
+./run_tests.sh --node-address <NODE_ADDRESS> \
+              --public-key <YOUR_PUBLIC_KEY> \
+              --curve-type <CURVE_TYPE>
 ```
 
-To test neuron balance functionality (requires a public key associated with neurons):
-
+3. **Transfer Functionality** - Tests all operations including ICP transfers:
 ```sh
-python test_all.py --node-address http://localhost:8081 \
-                  --curve-type edwards25519 \
-                  --public_key_with_neurons 93f14fad36957237baab3b7ce8890c766b44c7071bda09830592379f2a2d418f
+# Tests everything including transfers (requires a funded account)
+./run_tests.sh --node-address <NODE_ADDRESS> \
+              --public-key <YOUR_PUBLIC_KEY> \
+              --curve-type <CURVE_TYPE> \
+              --funded-private-key-pem <YOUR_PRIVATE_KEY_PATH> \
+              --recipient-account <RECIPIENT_ACCOUNT_ID>
 ```
 
-### Using the Automated Test Script
+Additional options:
+- `--no-output`: Hide command outputs (show only success/failure)
+- `--verbose`: Show verbose output including API requests and responses
+- `--block-count`: Number of blocks to fetch when testing read_blocks (default: 5)
 
-For convenience, a bash script `run_tests.sh` is provided that:
-1. Checks if virtualenv is installed (and attempts to install it if not)
-2. Creates a new virtual environment 
-3. Installs all dependencies from requirements.txt
-4. Runs the test_all.py script with any arguments you provide
-5. Cleans up the virtual environment afterward
-
-To use it:
-
-```sh
-# Run basic tests (a default curve-type of edwards25519 will be used if not specified)
-./run_tests.sh --node-address http://localhost:8081
-
-# Run with explicit curve type
-./run_tests.sh --node-address http://localhost:8081 --curve-type edwards25519
-
-# Run with additional test options
-./run_tests.sh --node-address http://localhost:8081 \
-              --curve-type edwards25519 \
-              --funded_private_key_pem ./my_private_key.pem \
-              --recipient_account 47e0ae0de8af04a961c4b3225cd77b9652777286ce142c2a07fab98da5263100 \
-              --public_key_with_neurons 93f14fad36957237baab3b7ce8890c766b44c7071bda09830592379f2a2d418f
-```
-
-This script ensures a clean testing environment and makes it easy to run tests without worrying about dependency conflicts.
+The script ensures a clean testing environment and makes it easy to run tests without worrying about dependency conflicts.
 
 ## Understanding Response Formats
 
 Most scripts support a `--raw` flag to show the complete JSON response from the API:
 
 ```sh
-python list_known_neurons.py --node-address http://localhost:8081 --raw
+python list_known_neurons.py --node-address <NODE_ADDRESS> --raw
 ```
 
 For debugging, you can add the `--verbose` flag to see the API requests and responses:
 
 ```sh
-python get_network_info.py --node-address http://localhost:8081 --verbose
+python get_network_info.py --node-address <NODE_ADDRESS> --verbose
 ```
 
 ## Common Issues
 
 1. **Error: Unable to connect to Rosetta node**
    - Ensure your Rosetta node is running
-   - Check the URL format (e.g., http://localhost:8081)
+   - Check the URL format (e.g., <NODE_ADDRESS>)
 
 2. **Error during transaction signing**
    - Verify that your private key file is in PEM format

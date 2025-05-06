@@ -16,6 +16,7 @@ Examples:
 
 import argparse
 import json
+import sys
 
 from rosetta_client import RosettaClient
 
@@ -63,6 +64,25 @@ def main():
             neuron_account_id, neuron_index=args.neuron_index, public_key=public_key, verbose=args.verbose
         )
 
+        # Check if we got an error response
+        if isinstance(neuron_balance, dict) and neuron_balance.get("status") == "error":
+            if neuron_balance.get("error_type") == "neuron_not_found":
+                print("No neuron found for the specified account and neuron index.")
+                print(f"This may indicate that no neuron exists for this account at index {args.neuron_index}.")
+                print("Try a different neuron index or verify that the account has staked neurons.")
+
+                if args.verbose and "details" in neuron_balance:
+                    print("\nError details:")
+                    print(neuron_balance["details"])
+
+                # Exit with a success code since this is an expected condition
+                return 0
+            else:
+                # Some other error type
+                print(f"Error: {neuron_balance.get('message', 'Unknown error')}")
+                return 1
+
+        # We have a valid neuron balance response
         print(f"Neuron Balance: {format_balance(neuron_balance)}")
         print(f"Block Height: {neuron_balance['block_identifier']['index']}")
 
@@ -70,9 +90,16 @@ def main():
         if "metadata" in neuron_balance:
             print("\nNeuron Metadata:")
             print(json.dumps(neuron_balance["metadata"], indent=2))
+
+        return 0
+
     except ValueError as e:
         print(f"Error: {e}")
+        return 1
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

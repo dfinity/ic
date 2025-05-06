@@ -3,7 +3,7 @@ import json
 import requests
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import ec, utils
+from cryptography.hazmat.primitives.asymmetric import ec, ed25519, utils
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
 
@@ -116,18 +116,27 @@ class RosettaClient:
             return
         with open(private_key_path, "rb") as pem_file:
             self.private_key = load_pem_private_key(pem_file.read(), password=None, backend=default_backend())
-        # Derive curve type automatically.
+
+        # Derive curve type and public key based on key type
         if isinstance(self.private_key, ec.EllipticCurvePrivateKey):
             curve = self.private_key.curve
-            # Currently only supporting secp256k1.
+            # Currently supporting secp256k1
             self.curve_type = "secp256k1" if isinstance(curve, ec.SECP256K1) else curve.name
-        else:
-            raise ValueError("Unsupported key type")
 
-        # Compute the compressed public key.
-        public_numbers = self.private_key.public_key().public_numbers()
-        prefix = "02" if public_numbers.y % 2 == 0 else "03"
-        self.compressed_public_key = prefix + format(public_numbers.x, "064x")
+            # Compute the compressed public key for ECDSA keys
+            public_numbers = self.private_key.public_key().public_numbers()
+            prefix = "02" if public_numbers.y % 2 == 0 else "03"
+            self.compressed_public_key = prefix + format(public_numbers.x, "064x")
+
+        elif isinstance(self.private_key, ed25519.Ed25519PrivateKey):
+            self.curve_type = "edwards25519"
+            # For Ed25519, use the raw public key bytes
+            public_key_bytes = self.private_key.public_key().public_bytes_raw()
+            self.compressed_public_key = public_key_bytes.hex()
+            # Ed25519 uses EdDSA signature scheme
+            self.signature_type = "ed25519"
+        else:
+            raise ValueError("Unsupported key type. Supported types: secp256k1, edwards25519")
 
     def _send(self, command, payload, verbose=False):
         """
@@ -151,6 +160,45 @@ class RosettaClient:
         response = requests.post(url, json=payload)
         if response.status_code != 200:
             raise Exception(f"Error: {response.text}")
+        ret = response.json()
+        if verbose:
+            print(f"Received response:\n{json.dumps(ret, indent=2)}")
+        return ret
+
+    def _send_with_neuron_check(self, command, payload, verbose=False):
+        """
+        Send a request to the Rosetta API with special handling for neuron-related errors.
+
+        Args:
+            command (str): The API command/endpoint to call.
+            payload (dict): The request payload.
+            verbose (bool, optional): Whether to print verbose output. Defaults to False.
+
+        Returns:
+            dict: The response from the API or an error message in a structured format.
+
+        """
+        url = f"{self.node_address}/{command}"
+        if verbose:
+            print(f"Sending {command} with payload:\n{json.dumps(payload, indent=2)}")
+
+        response = requests.post(url, json=payload)
+
+        if response.status_code != 200:
+            error_text = response.text
+            # Check if this is a "No neuron found" error
+            if "No neuron found for subaccount" in error_text:
+                if verbose:
+                    print("No neuron found for the specified account")
+                return {
+                    "status": "error",
+                    "error_type": "neuron_not_found",
+                    "message": "No neuron found for the specified account.",
+                    "details": error_text,
+                }
+            else:
+                raise Exception(f"Error: {error_text}")
+
         ret = response.json()
         if verbose:
             print(f"Received response:\n{json.dumps(ret, indent=2)}")
@@ -205,15 +253,10 @@ class RosettaClient:
         payloads_response = self._send("construction/payloads", payloads_payload, verbose=verbose)
         signatures = []
         for payload in payloads_response["payloads"]:
-            # Sign the payload using cryptography and convert DER to raw (r||s)
-            der_sig = self.private_key.sign(bytes.fromhex(payload["hex_bytes"]), ec.ECDSA(hashes.SHA256()))
-            r, s = utils.decode_dss_signature(der_sig)
-            r_bytes = r.to_bytes(32, byteorder="big")
-            s_bytes = s.to_bytes(32, byteorder="big")
-            raw_sig = (r_bytes + s_bytes).hex()
+            signature_hex = self._sign_payload(payload["hex_bytes"])
             signatures.append(
                 {
-                    "hex_bytes": raw_sig,
+                    "hex_bytes": signature_hex,
                     "signing_payload": {
                         "account_identifier": {"address": account_id},
                         "hex_bytes": payload["hex_bytes"],
@@ -234,6 +277,35 @@ class RosettaClient:
             "signed_transaction": combine_response["signed_transaction"],
         }
         return self._send("construction/submit", submit_request, verbose=verbose)
+
+    def _sign_payload(self, hex_bytes):
+        """
+        Sign a payload using the appropriate algorithm for the key type.
+
+        Args:
+            hex_bytes (str): The hex-encoded payload to sign.
+
+        Returns:
+            str: The hex-encoded signature.
+
+        """
+        payload_bytes = bytes.fromhex(hex_bytes)
+
+        if isinstance(self.private_key, ec.EllipticCurvePrivateKey):
+            # ECDSA signing for secp256k1
+            der_sig = self.private_key.sign(payload_bytes, ec.ECDSA(hashes.SHA256()))
+            r, s = utils.decode_dss_signature(der_sig)
+            r_bytes = r.to_bytes(32, byteorder="big")
+            s_bytes = s.to_bytes(32, byteorder="big")
+            return (r_bytes + s_bytes).hex()
+
+        elif isinstance(self.private_key, ed25519.Ed25519PrivateKey):
+            # Ed25519 signing
+            signature = self.private_key.sign(payload_bytes)
+            return signature.hex()
+
+        else:
+            raise ValueError("Unsupported key type for signing")
 
     def get_network_list(self, verbose=False):
         """
@@ -373,7 +445,7 @@ class RosettaClient:
             verbose (bool, optional): Whether to print verbose output. Defaults to False.
 
         Returns:
-            dict: The neuron balance information.
+            dict: The neuron balance information or an error status if no neuron is found.
 
         """
         if public_key is None:
@@ -386,7 +458,7 @@ class RosettaClient:
             "account_identifier": {"address": address},
             "metadata": metadata,
         }
-        return self._send("account/balance", payload, verbose=verbose)
+        return self._send_with_neuron_check("account/balance", payload, verbose=verbose)
 
     def get_block(self, index=None, verbose=False):
         """
