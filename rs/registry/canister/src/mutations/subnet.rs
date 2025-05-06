@@ -180,8 +180,8 @@ impl Registry {
         key_map
     }
 
-    /// Get the initial iDKG dealings via a call to IC00 for a given InitialChainKeyConfig
-    /// and a set of nodes to receive them.
+    /// Get the initial key material (IDKG dealings or DKG transcripts)
+    /// via a call to IC00 for a given InitialChainKeyConfig and a set of nodes to receive them.
     pub(crate) async fn get_all_chain_key_reshares_from_ic00(
         &self,
         initial_chain_key_config: &Option<InitialChainKeyConfigInternal>,
@@ -241,7 +241,7 @@ impl Registry {
             CanisterId::ic_00(),
             "reshare_chain_key",
             bytes,
-            Encode!(&dealing_request).unwrap(),
+            Encode!(&reshare_request).unwrap(),
         )
         .await
         .unwrap();
@@ -260,7 +260,7 @@ impl Registry {
         };
 
         ChainKeyInitialization {
-            key_id: Some((&dealing_request.key_id).into()),
+            key_id: Some((&reshare_request.key_id).into()),
             initialization: Some(initialization),
         }
     }
