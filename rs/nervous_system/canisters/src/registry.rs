@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId, RegistryVersion};
-use ic_cdk_next::call::{Call, CallErrorExt, Response};
+use ic_cdk_next::call::{Call, CallErrorExt, CallFailed, Response};
 use ic_nervous_system_common::NervousSystemError;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_registry_transport::pb::v1::RegistryDelta;
@@ -8,6 +8,7 @@ use ic_registry_transport::{
     deserialize_get_changes_since_response, deserialize_get_latest_version_response,
     serialize_get_changes_since_request,
 };
+use std::future::Future;
 
 #[async_trait]
 pub trait Registry: Send + Sync {
@@ -29,13 +30,17 @@ impl RegistryCanister {
         }
     }
 
-    async fn execute_with_retries<'a>(
+    async fn execute_with_retries<F, Fut, Response>(
         &self,
-        call: Call<'a, 'a>,
-        max_attempts: u32,
-    ) -> Result<Response, NervousSystemError> {
+        max_attempts: u8,
+        call: F,
+    ) -> Result<Response, NervousSystemError>
+    where
+        F: Fn() -> Fut,
+        Fut: Future<Output = Result<Response, CallFailed>>,
+    {
         for _ in 0..max_attempts {
-            match call.clone().await {
+            match call().await {
                 Ok(response) => return Ok(response),
                 Err(e) if e.is_immediately_retryable() => {
                     continue;
@@ -64,17 +69,22 @@ impl Default for RegistryCanister {
 #[async_trait]
 impl Registry for RegistryCanister {
     async fn get_latest_version(&self) -> Result<RegistryVersion, NervousSystemError> {
-        let call = Call::bounded_wait(
-            PrincipalId::from(self.canister_id).into(),
-            "get_latest_version",
-        );
-        let response = self.execute_with_retries(call, 5).await?;
-
-        deserialize_get_latest_version_response(response.into_bytes())
-            .map_err(|e| {
-                NervousSystemError::new_with_message(format!("Could not decode response {e:?}"))
-            })
-            .map(RegistryVersion::new)
+        self.execute_with_retries(5, || async {
+            Call::bounded_wait(
+                PrincipalId::from(self.canister_id).into(),
+                "get_latest_version",
+            )
+            .with_raw_args(&[])
+            .await
+        })
+        .await
+        .and_then(|response| {
+            deserialize_get_latest_version_response(response.into_bytes())
+                .map_err(|e| {
+                    NervousSystemError::new_with_message(format!("Could not decode response {e:?}"))
+                })
+                .map(RegistryVersion::new)
+        })
     }
 
     async fn registry_changes_since(
@@ -88,18 +98,22 @@ impl Registry for RegistryCanister {
             ))
         })?;
 
-        let call = Call::bounded_wait(
-            PrincipalId::from(self.canister_id).into(),
-            "get_changes_since",
-        )
-        .with_raw_args(&bytes);
-
-        let response = self.execute_with_retries(call, 5).await?;
-        deserialize_get_changes_since_response(response.into_bytes())
-            .map_err(|e| {
-                NervousSystemError::new_with_message(format!("Could not decode response {e:?}"))
-            })
-            .map(|(deltas, _)| deltas)
+        self.execute_with_retries(5, || async {
+            Call::bounded_wait(
+                PrincipalId::from(self.canister_id).into(),
+                "get_changes_since",
+            )
+            .with_raw_args(&bytes)
+            .await
+        })
+        .await
+        .and_then(|response| {
+            deserialize_get_changes_since_response(response.into_bytes())
+                .map_err(|e| {
+                    NervousSystemError::new_with_message(format!("Could not decode response {e:?}"))
+                })
+                .map(|(deltas, _)| deltas)
+        })
     }
 }
 
