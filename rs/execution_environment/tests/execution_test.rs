@@ -3121,3 +3121,64 @@ fn test_canister_liquid_cycle_balance() {
     let receiver_balance = env.cycle_balance(callee);
     assert!(receiver_balance > 2 * INITIAL_CYCLES_BALANCE.get() - 100 * B);
 }
+
+#[test]
+fn heap_vs_bulk_vs_stable() {
+    let wat = r#"
+        (module
+            (import "ic0" "msg_reply" (func $ic0_msg_reply))
+            (import "ic0" "stable64_grow" (func $stable_grow (param i64) (result i64)))
+            (import "ic0" "stable64_write"
+                (func $stable_write (param $offset i64) (param $src i64) (param $size i64))
+            )
+
+            (func (export "canister_init")
+                (drop (call $stable_grow (i64.const 1)))
+            )
+
+            (func (export "canister_update heap")
+                (i64.store (i32.const 0) (i64.const 42))
+                (call $ic0_msg_reply)
+            )
+
+            (func (export "canister_update bulk")
+                (memory.fill (i32.const 0) (i32.const 8) (i32.const 42))
+                (call $ic0_msg_reply)
+            )
+
+            (func (export "canister_update stable")
+                (call $stable_write (i64.const 0) (i64.const 0) (i64.const 8))
+                (call $ic0_msg_reply)
+            )
+            (memory i32 1)
+        )
+    "#;
+    let wasm = wat::parse_str(wat).unwrap();
+
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let canister_id = create_canister_with_cycles(&env, wasm, None, INITIAL_CYCLES_BALANCE);
+
+    let initial_balance = env.cycle_balance(canister_id);
+    let res = env.execute_ingress(canister_id, "heap", vec![]).unwrap();
+    let balance = env.cycle_balance(canister_id);
+    let heap_cycles = initial_balance - balance;
+    println!("XXX HEAP   res:{res} cycles:{heap_cycles}");
+
+    let initial_balance = env.cycle_balance(canister_id);
+    let res = env.execute_ingress(canister_id, "bulk", vec![]).unwrap();
+    let balance = env.cycle_balance(canister_id);
+    let bulk_cycles = initial_balance - balance;
+    println!("XXX BULK   res:{res} cycles:{bulk_cycles}");
+
+    let initial_balance = env.cycle_balance(canister_id);
+    let res = env.execute_ingress(canister_id, "stable", vec![]).unwrap();
+    let balance = env.cycle_balance(canister_id);
+    let stable_cycles = initial_balance - balance;
+    println!("XXX STABLE res:{res} cycles:{stable_cycles}");
+
+    assert!(heap_cycles < bulk_cycles);
+    assert!(bulk_cycles < stable_cycles);
+}
