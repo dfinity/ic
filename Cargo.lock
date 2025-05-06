@@ -3329,15 +3329,15 @@ dependencies = [
  "build-info-build",
  "candid",
  "candid_parser",
- "dfn_candid",
- "dfn_core",
- "dfn_http_metrics",
  "dfn_protobuf",
  "futures",
  "ic-base-types",
+ "ic-cdk 0.17.1",
+ "ic-cdk-macros 0.17.1",
  "ic-certified-map",
  "ic-crypto-tree-hash",
  "ic-dummy-getrandom-for-wasm",
+ "ic-http-types",
  "ic-ledger-core",
  "ic-management-canister-types-private",
  "ic-metrics-encoder",
@@ -3345,6 +3345,7 @@ dependencies = [
  "ic-nervous-system-common",
  "ic-nervous-system-common-build-metadata",
  "ic-nervous-system-governance",
+ "ic-nervous-system-time-helpers",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-protobuf",
@@ -9166,6 +9167,7 @@ dependencies = [
  "ic-crypto-utils-threshold-sig-der",
  "ic-error-types 0.1.0",
  "ic-http-endpoints-async-utils",
+ "ic-http-endpoints-test-agent",
  "ic-interfaces",
  "ic-interfaces-mocks",
  "ic-interfaces-registry",
@@ -9220,6 +9222,18 @@ dependencies = [
  "tower-test",
  "tracing-flame",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "ic-http-endpoints-test-agent"
+version = "0.9.0"
+dependencies = [
+ "ic-crypto-tree-hash",
+ "ic-types",
+ "ic-validator",
+ "reqwest 0.12.12",
+ "serde_cbor",
+ "tokio",
 ]
 
 [[package]]
@@ -9524,7 +9538,7 @@ dependencies = [
 
 [[package]]
 name = "ic-icrc-rosetta"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "anyhow",
  "axum 0.8.1",
@@ -10441,6 +10455,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
+ "ic-node-rewards-canister-api",
  "ic-registry-canister-api",
  "ic-sns-governance-api",
  "ic-sns-root",
@@ -11498,7 +11513,9 @@ dependencies = [
  "ic-cdk 0.17.1",
  "ic-cdk-timers",
  "ic-interfaces-registry",
+ "ic-nervous-system-agent",
  "ic-nervous-system-canisters",
+ "ic-nervous-system-integration-tests",
  "ic-nns-constants",
  "ic-nns-test-utils",
  "ic-node-rewards-canister-api",
@@ -11511,8 +11528,10 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-types",
  "maplit",
+ "pocket-ic",
  "prost 0.13.4",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -12462,7 +12481,7 @@ dependencies = [
 
 [[package]]
 name = "ic-rosetta-api"
-version = "2.1.3"
+version = "2.1.4"
 dependencies = [
  "actix-rt",
  "actix-web",
@@ -16877,6 +16896,7 @@ dependencies = [
  "ic-base-types",
  "ic-cdk 0.17.1",
  "ic-crypto-tree-hash",
+ "ic-http-endpoints-test-agent",
  "ic-limits",
  "ic-management-canister-types-private",
  "ic-networking-subnet-update-workload",
@@ -16892,6 +16912,7 @@ dependencies = [
  "ic-types",
  "ic-utils 0.39.3",
  "ic_consensus_system_test_utils",
+ "itertools 0.12.1",
  "leb128",
  "proxy_canister",
  "rand 0.8.5",
@@ -18221,7 +18242,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic"
-version = "8.0.0"
+version = "9.0.0"
 dependencies = [
  "backoff",
  "base64 0.13.1",
@@ -18261,7 +18282,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic-server"
-version = "9.0.0"
+version = "9.0.1"
 dependencies = [
  "aide",
  "askama",

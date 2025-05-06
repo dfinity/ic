@@ -137,6 +137,7 @@ members = [
     "rs/execution_environment/tools",
     "rs/http_endpoints/metrics",
     "rs/http_endpoints/public",
+    "rs/http_endpoints/test_agent",
     "rs/http_endpoints/xnet",
     "rs/http_utils",
     "rs/ic_os/deterministic_ips",

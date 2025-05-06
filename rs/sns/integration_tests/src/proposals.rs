@@ -1683,6 +1683,8 @@ fn test_change_voting_rewards_round_duration() {
         let mut current_voting_rewards_round_duration_seconds =
             original_voting_rewards_round_duration_seconds;
         let initial_voting_period_seconds = original_voting_rewards_round_duration_seconds / 2;
+        let critical_proposal_initial_voting_period_seconds =
+            initial_voting_period_seconds.max(5 * ONE_DAY_SECONDS);
 
         let params = NervousSystemParameters {
             neuron_claimer_permissions: Some(NeuronPermissionList {
@@ -1759,6 +1761,7 @@ fn test_change_voting_rewards_round_duration() {
         sns_canisters
             .vote(&voter.sender, &voter.subaccount, proposal_1_id, true)
             .await;
+
         // Wait for rewards.
         delta_s += current_voting_rewards_round_duration_seconds as i64;
         sns_canisters.set_time_warp(delta_s).await.unwrap();
@@ -1793,8 +1796,9 @@ fn test_change_voting_rewards_round_duration() {
         sns_canisters
             .vote(&voter.sender, &voter.subaccount, proposal_2_id, true)
             .await;
+
         // Wait for rewards.
-        delta_s += current_voting_rewards_round_duration_seconds as i64;
+        delta_s += critical_proposal_initial_voting_period_seconds as i64;
         sns_canisters.set_time_warp(delta_s).await.unwrap();
         let reward_event_2 = sns_canisters
             .await_reward_event_after(reward_event_1.end_timestamp_seconds.unwrap())
@@ -1828,7 +1832,7 @@ fn test_change_voting_rewards_round_duration() {
             .vote(&voter.sender, &voter.subaccount, proposal_3_id, true)
             .await;
         // Wait for rewards.
-        delta_s += current_voting_rewards_round_duration_seconds as i64;
+        delta_s += critical_proposal_initial_voting_period_seconds as i64;
         sns_canisters.set_time_warp(delta_s).await.unwrap();
         let reward_event_3 = sns_canisters
             .await_reward_event_after(reward_event_2.end_timestamp_seconds.unwrap())
@@ -1853,7 +1857,7 @@ fn test_change_voting_rewards_round_duration() {
                 i2d(reward_event_2.end_timestamp_seconds.unwrap() - genesis_timestamp_seconds),
             ));
         let reward_purse_2_e8s = reward_rate_2
-            * reward::Duration::from_secs(i2d(original_voting_rewards_round_duration_seconds / 2))
+            * reward::Duration::from_secs(i2d(critical_proposal_initial_voting_period_seconds))
             * i2d(total_token_supply_e8s);
         let undistributed_reward_purse_2_e8s =
             i2d(reward_event_2.distributed_e8s_equivalent) - reward_purse_2_e8s;
@@ -1882,17 +1886,17 @@ fn test_change_voting_rewards_round_duration() {
             reward_purse_3_e8s,
         );
 
-        // Step 3.3: Assert that round numbers are consecutive, despite changes
-        // in round duration.
+        // Step 3.3: Assert that round numbers are as expected.
+        assert_eq!(reward_event_1.round, 1, "{:#?}", reward_events,);
         assert_eq!(
             reward_event_2.round,
-            reward_event_1.round + 1,
+            1 + (critical_proposal_initial_voting_period_seconds / ONE_DAY_SECONDS),
             "{:#?}",
             reward_events,
         );
         assert_eq!(
             reward_event_3.round,
-            reward_event_2.round + 1,
+            2 + (critical_proposal_initial_voting_period_seconds / ONE_DAY_SECONDS),
             "{:#?}",
             reward_events,
         );
@@ -1902,8 +1906,7 @@ fn test_change_voting_rewards_round_duration() {
         let delay_2_seconds = reward_event_2.end_timestamp_seconds.unwrap()
             - reward_event_1.end_timestamp_seconds.unwrap();
         assert_eq!(
-            delay_2_seconds,
-            original_voting_rewards_round_duration_seconds / 2,
+            delay_2_seconds, critical_proposal_initial_voting_period_seconds,
             "{:#?}",
             reward_events,
         );

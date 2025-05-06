@@ -1,5 +1,5 @@
 {
-  "checksum": "e577a290aa1039ac4588b6eee0122fb98679bb84f37aff9b72c9c2bea660dfe3",
+  "checksum": "ee482aabb6f65a21627acc2d50a194116634bd83478fddead5a652a044409537",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -15998,8 +15998,7 @@
             "-p4"
           ],
           "patches": [
-            "@@//bazel:cranelift-codegen-meta-isle.patch",
-            "@@//bazel:cranelift-codegen-meta.patch"
+            "@@//bazel:cranelift-codegen-meta-isle.patch"
           ]
         }
       },
