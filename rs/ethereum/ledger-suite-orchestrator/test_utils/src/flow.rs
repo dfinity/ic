@@ -9,7 +9,7 @@ use ic_icrc1_ledger::ChangeArchiveOptions;
 use ic_ledger_suite_orchestrator::candid::{AddErc20Arg, ManagedCanisterIds};
 use ic_ledger_suite_orchestrator::state::{IndexWasm, LedgerWasm};
 use ic_management_canister_types::{CanisterInfoResult, CanisterInstallMode, InstallCodeArgs};
-use ic_management_canister_types_private::{CanisterStatusResultV2, Method};
+use ic_management_canister_types_private::CanisterStatusResultV2;
 use ic_metrics_assert::{CanisterHttpQuery, MetricsAssert};
 use ic_state_machine_tests::{StateMachine, UserError};
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
@@ -277,7 +277,7 @@ impl ManagedCanistersAssert {
         let res = self.setup.env.execute_ingress_as(
             self.setup.ledger_suite_orchestrator_id.into(),
             CanisterId::ic_00(),
-            Method::InstallCode,
+            "install_code",
             Encode!(&InstallCodeArgs {
                 mode: CanisterInstallMode::Upgrade(None),
                 canister_id: self.ledger_canister_id().into(),

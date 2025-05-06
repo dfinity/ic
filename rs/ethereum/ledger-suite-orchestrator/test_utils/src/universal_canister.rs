@@ -5,7 +5,6 @@ use ic_management_canister_types::CanisterInfoArgs;
 pub use ic_management_canister_types::{
     CanisterInfoResult, CanisterStatusType, ChangeDetails, CodeDeploymentMode, CodeDeploymentRecord,
 };
-use ic_management_canister_types_private::Method;
 use ic_state_machine_tests::StateMachine;
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
@@ -32,7 +31,7 @@ impl UniversalCanister {
     pub fn canister_info(&self, target: CanisterId) -> CanisterInfoResult {
         let info_request_payload = universal_canister_payload(
             &PrincipalId::default(),
-            &Method::CanisterInfo.to_string(),
+            "canister_info",
             Encode!(&CanisterInfoArgs {
                 canister_id: target.into(),
                 num_requested_changes: Some(u64::MAX),
