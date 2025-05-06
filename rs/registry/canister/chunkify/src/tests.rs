@@ -1,11 +1,76 @@
 use super::*;
+use ic_nervous_system_chunks::test_data::MEGA_BLOB;
 use ic_registry_transport::pb::v1::{
     high_capacity_registry_mutation, high_capacity_registry_value,
     registry_mutation::{self, Type as MutationType},
     HighCapacityRegistryValue, Precondition,
 };
 use prost::Message;
-use std::{cell::RefCell, iter::repeat, rc::Rc};
+use std::{
+    cell::{RefCell, RefMut},
+    iter::repeat,
+    rc::Rc,
+};
+
+type MemoryImpl = Rc<RefCell<Vec<u8>>>;
+
+thread_local! {
+    static MEMORY: RefCell<MemoryImpl> = RefCell::new(Rc::new(RefCell::new(Vec::<u8>::new())));
+    static CHUNKS: RefCell<Chunks<MemoryImpl>> = MEMORY.with(|memory: &RefCell<MemoryImpl>| {
+        let memory: RefMut<MemoryImpl> = memory.borrow_mut();
+        RefCell::new(Chunks::init(memory.clone()))
+    });
+}
+
+#[test]
+fn test_dechunkify_registry_value_inline() {
+    let value = high_capacity_registry_value::Content::Value(vec![42, 43, 44]);
+
+    CHUNKS.with(|chunks| {
+        assert_eq!(
+            dechunkify_registry_value(value, &*chunks.borrow()),
+            Some(vec![42, 43, 44]),
+        );
+    });
+}
+
+#[test]
+fn test_dechunkify_registry_value_delete() {
+    let value = high_capacity_registry_value::Content::DeletionMarker(true);
+    CHUNKS.with(|chunks| {
+        assert_eq!(dechunkify_registry_value(value, &*chunks.borrow()), None,);
+    });
+
+    // This is a value that we would not expect to see in practice, but rustc
+    // does not prevent it, so we handle it anyway by treating it like
+    // Value(vec![]).
+    let value = high_capacity_registry_value::Content::DeletionMarker(false);
+    CHUNKS.with(|chunks| {
+        assert_eq!(
+            dechunkify_registry_value(value, &*chunks.borrow()),
+            Some(vec![]),
+        );
+    });
+}
+
+#[test]
+fn test_dechunkify_registry_value_chunks() {
+    let chunk_content_sha256s = CHUNKS.with(|chunks: &RefCell<Chunks<MemoryImpl>>| {
+        let mut chunks: RefMut<Chunks<MemoryImpl>> = chunks.borrow_mut();
+        chunks.upsert_monolithic_blob(MEGA_BLOB.clone())
+    });
+
+    let value = high_capacity_registry_value::Content::LargeValueChunkKeys(LargeValueChunkKeys {
+        chunk_content_sha256s,
+    });
+
+    CHUNKS.with(|chunks| {
+        assert_eq!(
+            dechunkify_registry_value(value, &*chunks.borrow()),
+            Some(MEGA_BLOB.clone()),
+        );
+    });
+}
 
 #[test]
 fn test_dechunkify_mutation_delete() {

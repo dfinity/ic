@@ -8,6 +8,8 @@ documentation.workspace = true
 
 [dependencies]
 ic-base-types = { path = "../../../types/base_types" }
+ic-nervous-system-chunks = { path = "../../../nervous_system/chunks" }
+ic-registry-transport = { path = "../../transport" }
 ic-utils = { path = "../../../utils" }
 candid = { workspace = true }
 serde = { workspace = true }
