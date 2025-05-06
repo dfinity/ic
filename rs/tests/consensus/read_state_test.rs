@@ -14,8 +14,8 @@ Success::
     . public keys of nodes on the subnet
     . no public keys of nodes on other subnets
 . Malformed status requests are rejected
-. Status requests for non-existant reqeusts contain an absence proof
-. read_state of invalid paths are rejected
+. Status requests for non-existent requests contain an absence proof
+. read_state requests of invalid paths are rejected
 . A canister's public metadata sections can be read by
     . The canister controller
     . The anonymous identity
