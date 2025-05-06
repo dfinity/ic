@@ -81,7 +81,7 @@ pub fn setup(env: TestEnv) {
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(64)),
         memory_kibibytes: Some(AmountOfMemoryKiB::new(450 << 20)),
-        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(9500)),
+        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(950)),
     };
     let mut ic = InternetComputer::new().with_default_vm_resources(vm_resources);
     ic = ic.add_subnet(
