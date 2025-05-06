@@ -3,6 +3,8 @@ pub mod pb;
 
 mod high_capacity;
 
+pub use high_capacity::{dechunkify_delta, GetChunk};
+
 use std::{fmt, str};
 
 use crate::pb::v1::{
@@ -13,9 +15,6 @@ use crate::pb::v1::{
     HighCapacityRegistryValue, LargeValueChunkKeys, Precondition, RegistryDelta, RegistryError,
     RegistryMutation, RegistryValue,
 };
-use async_trait::async_trait;
-use ic_crypto_sha2::Sha256;
-use mockall::automock;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 
@@ -302,60 +301,11 @@ pub fn serialize_get_changes_since_request(version: u64) -> Result<Vec<u8>, Erro
     }
 }
 
-/// This is just a "thin wrapper" around Registry's `get_chunk` method.
-#[automock]
-#[async_trait]
-pub trait GetChunk {
-    async fn get_chunk_without_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String>;
-}
-
-/// Returns concatenation of chunks.
-///
-/// Fetches each chunk using get_chunk_with_validation.
-pub async fn fetch_large_value(
-    get_chunk: &impl GetChunk,
-    keys: &LargeValueChunkKeys,
-) -> Result<Vec<u8>, String> {
-    let mut result = vec![];
-    // Chunks could instead be fetched in parallel.
-    for key in &keys.chunk_content_sha256s {
-        let mut chunk_content = get_chunk_with_validation(get_chunk, key).await?;
-        result.append(&mut chunk_content);
-    }
-    Ok(result)
-}
-
-/// Verification is needed because `get_chunk` is a query.
-async fn get_chunk_with_validation(
-    get_chunk: &impl GetChunk,
-    content_sha256: &[u8],
-) -> Result<Vec<u8>, String> {
-    let chunk_content = get_chunk
-        .get_chunk_without_validation(content_sha256)
-        .await?;
-
-    // Verify chunk.
-    if Sha256::hash(&chunk_content) != content_sha256 {
-        let len = chunk_content.len();
-        let snippet_len = 20.min(len);
-        return Err(format!(
-            "Chunk content hash does not match: len={}, head={:?}, tail={:?} SHA256={:?}",
-            len,
-            &chunk_content[..snippet_len],
-            &chunk_content[len - snippet_len..len],
-            content_sha256,
-        ));
-    }
-
-    Ok(chunk_content)
-}
-
 /// Deserializes the response obtained from the registry canister for a
 /// get_changes_since() call, from protobuf.
-pub async fn deserialize_get_changes_since_response(
+pub fn deserialize_get_changes_since_response(
     response: Vec<u8>,
-    get_chunk: &(impl GetChunk + Sync),
-) -> Result<(Vec<RegistryDelta>, u64), Error> {
+) -> Result<(Vec<HighCapacityRegistryDelta>, u64), Error> {
     let response = match pb::v1::HighCapacityRegistryGetChangesSinceResponse::decode(&response[..])
     {
         Ok(ok) => ok,
@@ -365,71 +315,11 @@ pub async fn deserialize_get_changes_since_response(
     let HighCapacityRegistryGetChangesSinceResponse {
         error,
         version,
-        deltas: high_capacity_deltas,
+        deltas,
     } = response;
 
     if let Some(error) = error {
         return Err(Error::from(error));
-    }
-
-    let mut deltas = vec![];
-    for delta in high_capacity_deltas {
-        // DO NOT MERGE - Spin out loop body.
-
-        let HighCapacityRegistryDelta {
-            key,
-            values: high_capacity_values,
-        } = delta;
-
-        let mut values = vec![];
-        for value in high_capacity_values {
-            // DO NOT MERGE - Spin out loop body.
-
-            let HighCapacityRegistryValue {
-                version,
-                content,
-                // Ignored.
-                timestamp_seconds: _,
-            } = value;
-
-            let value = match content {
-                None => Some(vec![]),
-                Some(high_capacity_registry_value::Content::Value(value)) => Some(value),
-
-                Some(high_capacity_registry_value::Content::DeletionMarker(deletion_marker)) => {
-                    if deletion_marker {
-                        None
-                    } else {
-                        Some(vec![])
-                    }
-                }
-
-                Some(high_capacity_registry_value::Content::LargeValueChunkKeys(keys)) => {
-                    let monolithic_blob =
-                        fetch_large_value(get_chunk, &keys).await.map_err(|err| {
-                            Error::UnknownError(format!(
-                                "Unable to reconstitute chunked/large value: {}",
-                                err,
-                            ))
-                        })?;
-
-                    Some(monolithic_blob)
-                }
-            };
-
-            let (value, deletion_marker) = match value {
-                None => (vec![], true),
-                Some(value) => (value, false),
-            };
-
-            values.push(RegistryValue {
-                value,
-                version,
-                deletion_marker,
-            });
-        }
-
-        deltas.push(RegistryDelta { key, values });
     }
 
     Ok((deltas, version))
@@ -647,9 +537,9 @@ mod tests {
         )
     }
 
-    #[tokio::test]
-    async fn test_deserialize_get_changes_since_response_with_error() {
-        let response = RegistryGetChangesSinceResponse {
+    #[test]
+    fn test_deserialize_get_changes_since_response_with_error() {
+        let response = HighCapacityRegistryGetChangesSinceResponse {
             error: Some(RegistryError {
                 code: Code::Authorization as i32,
                 reason: "You are not welcome here.".to_string(),
@@ -661,7 +551,7 @@ mod tests {
 
         let response = response.encode_to_vec();
 
-        let result = deserialize_get_changes_since_response(response, &MockGetChunk::new()).await;
+        let result = deserialize_get_changes_since_response(response);
 
         assert_eq!(
             result,
