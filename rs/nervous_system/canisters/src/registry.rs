@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId, RegistryVersion};
-use ic_cdk::call::Call;
+use ic_cdk::call::{Call, CallErrorExt, Response};
 use ic_nervous_system_common::NervousSystemError;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_registry_transport::pb::v1::RegistryDelta;
@@ -28,6 +28,30 @@ impl RegistryCanister {
             canister_id: REGISTRY_CANISTER_ID,
         }
     }
+
+    async fn execute_with_retries(
+        &self,
+        call: Call,
+        max_attempts: u32,
+    ) -> Result<Response, NervousSystemError> {
+        for _ in 0..max_attempts {
+            match call.clone().await {
+                Ok(response) => return Ok(response),
+                Err(e) if e.is_immediately_retryable() => {
+                    continue;
+                }
+                Err(e) => {
+                    return Err(NervousSystemError::new_with_message(format!(
+                        "Request failed with error: {e}"
+                    )));
+                }
+            }
+        }
+
+        Err(NervousSystemError::new_with_message(format!(
+            "Request failed after {max_attempts} attempts"
+        )))
+    }
 }
 
 impl Default for RegistryCanister {
@@ -40,25 +64,17 @@ impl Default for RegistryCanister {
 #[async_trait]
 impl Registry for RegistryCanister {
     async fn get_latest_version(&self) -> Result<RegistryVersion, NervousSystemError> {
-        Call::bounded_wait(
+        let call = Call::bounded_wait(
             PrincipalId::from(self.canister_id).into(),
             "get_latest_version",
-        )
-        .with_raw_args(&[])
-        .await
-        .map_err(|err| {
-            NervousSystemError::new_with_message(format!(
-                "Request to get_latest_version failed with error: {}",
-                err
-            ))
-        })
-        .and_then(|r| {
-            deserialize_get_latest_version_response(r.into_bytes())
-                .map_err(|e| {
-                    NervousSystemError::new_with_message(format!("Could not decode response {e:?}"))
-                })
-                .map(RegistryVersion::new)
-        })
+        );
+        let response = self.execute_with_retries(call, 5).await?;
+
+        deserialize_get_latest_version_response(response.into_bytes())
+            .map_err(|e| {
+                NervousSystemError::new_with_message(format!("Could not decode response {e:?}"))
+            })
+            .map(RegistryVersion::new)
     }
 
     async fn registry_changes_since(
@@ -72,25 +88,18 @@ impl Registry for RegistryCanister {
             ))
         })?;
 
-        Call::bounded_wait(
+        let call = Call::bounded_wait(
             PrincipalId::from(self.canister_id).into(),
             "get_changes_since",
         )
-        .with_raw_args(&bytes)
-        .await
-        .map_err(|err| {
-            NervousSystemError::new_with_message(format!(
-                "Request to get_changes_since failed with error: {}",
-                err
-            ))
-        })
-        .and_then(|r| {
-            deserialize_get_changes_since_response(r.into_bytes())
-                .map_err(|e| {
-                    NervousSystemError::new_with_message(format!("Could not decode response {e:?}"))
-                })
-                .map(|(deltas, _)| deltas)
-        })
+        .with_raw_args(&bytes);
+
+        let response = self.execute_with_retries(call, 5).await?;
+        deserialize_get_changes_since_response(response.into_bytes())
+            .map_err(|e| {
+                NervousSystemError::new_with_message(format!("Could not decode response {e:?}"))
+            })
+            .map(|(deltas, _)| deltas)
     }
 }
 
