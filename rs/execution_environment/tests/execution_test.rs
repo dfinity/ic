@@ -3142,11 +3142,11 @@ fn heap_vs_bulk_vs_stable() {
             )
 
             (func (export "canister_update bulk")
-                (memory.fill (i32.const 0) (i32.const 8) (i32.const 42))
+                (memory.fill (i32.const 0) (i32.const 42) (i32.const 8))
                 (call $ic0_msg_reply)
             )
 
-            (func (export "canister_update stable")
+            (func (export "canister_update stab")
                 (call $stable_write (i64.const 0) (i64.const 0) (i64.const 8))
                 (call $ic0_msg_reply)
             )
@@ -3174,11 +3174,11 @@ fn heap_vs_bulk_vs_stable() {
     println!("XXX BULK   res:{res} cycles:{bulk_cycles}");
 
     let initial_balance = env.cycle_balance(canister_id);
-    let res = env.execute_ingress(canister_id, "stable", vec![]).unwrap();
+    let res = env.execute_ingress(canister_id, "stab", vec![]).unwrap();
     let balance = env.cycle_balance(canister_id);
     let stable_cycles = initial_balance - balance;
     println!("XXX STABLE res:{res} cycles:{stable_cycles}");
 
-    assert!(heap_cycles < bulk_cycles);
-    assert!(bulk_cycles < stable_cycles);
+    assert!(heap_cycles < stable_cycles);
+    assert!(stable_cycles < bulk_cycles);
 }
