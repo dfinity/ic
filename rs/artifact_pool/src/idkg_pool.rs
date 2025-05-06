@@ -38,7 +38,6 @@ use prometheus::IntCounter;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::fmt::Debug;
-use std::rc::Rc;
 use strum::IntoEnumIterator;
 
 const POOL_IDKG: &str = "idkg";
@@ -122,7 +121,7 @@ impl IDkgObjectPool {
     fn iter_impl<'a, T: TryFrom<IDkgMessage>, U: Clone + PartialEq + 'a>(
         &'a self,
         group: U,
-        id_to_group: impl Fn(&IDkgMessageId) -> U + 'a,
+        id_to_group: impl Fn(&IDkgMessageId) -> U + Clone + 'a,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, T)> + 'a>
     where
         <T as TryFrom<IDkgMessage>>::Error: Debug,
@@ -132,24 +131,21 @@ impl IDkgObjectPool {
         // indexing for partial matching. Since the in memory map is fairly fast, this should not
         // be a problem, revisit if needed.
 
-        let group = Rc::new(group);
-        let id_to_group = Rc::new(id_to_group);
+        let group_cl = group.clone();
+        let id_to_group_cl = id_to_group.clone();
 
         // Find the first entry that matches the prefix.
-        let first = self.objects.iter().skip_while({
-            let group = Rc::clone(&group);
-            let id_to_group = Rc::clone(&id_to_group);
-            move |(key, _)| (*id_to_group)(key) != *group
-        });
+        let first = self
+            .objects
+            .iter()
+            .skip_while(move |(key, _)| id_to_group_cl(key) != group_cl);
 
         // Keep collecting while the prefix matches.
+        let group_cl = group.clone();
+        let id_to_group_cl = id_to_group.clone();
         Box::new(
             first
-                .take_while({
-                    let group = Rc::clone(&group);
-                    let id_to_group = Rc::clone(&id_to_group);
-                    move |(key, _)| (*id_to_group)(key) == *group
-                })
+                .take_while(move |(key, _)| id_to_group_cl(key) == group_cl)
                 .map(|(key, object)| {
                     let inner = T::try_from(object.clone()).unwrap_or_else(|err| {
                         panic!("Failed to convert IDkgMessage to inner type: {:?}", err)
