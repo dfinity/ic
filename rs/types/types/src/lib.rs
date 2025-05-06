@@ -81,6 +81,7 @@ pub mod registry;
 pub mod replica_config;
 pub mod replica_version;
 pub mod signature;
+pub mod state_manager;
 pub mod state_sync;
 pub mod time;
 pub mod xnet;
