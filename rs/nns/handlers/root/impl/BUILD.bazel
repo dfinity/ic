@@ -35,7 +35,7 @@ BASE_DEPENDENCIES = [
     "//rs/types/management_canister_types",
     "@crate_index//:build-info",
     "@crate_index//:candid",
-    "@crate_index//:ic-cdk",
+    "@crate_index//:ic_cdk_0_17_1",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
@@ -53,7 +53,7 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
-    "@crate_index//:ic-cdk-macros",
+    "@crate_index//:ic_cdk_macros_0_17_1",
 ]
 
 BUILD_DEPENDENCIES = [
