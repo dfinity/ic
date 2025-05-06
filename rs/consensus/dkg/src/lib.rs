@@ -5,7 +5,7 @@
 use ic_consensus_utils::{bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto};
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
-    dkg::{ChangeAction, DkgPool, Mutations},
+    dkg::{ChangeAction, DkgPool, InvalidDkgPayloadReason, Mutations, PayloadValidationError},
     p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer},
     validation::ValidationResult,
 };
@@ -22,7 +22,6 @@ use ic_types::{
     },
     Height, NodeId, ReplicaVersion,
 };
-use payload_validator::PayloadValidationError;
 use prometheus::Histogram;
 use rayon::prelude::*;
 use std::{
@@ -34,19 +33,14 @@ pub mod dkg_key_manager;
 pub mod payload_builder;
 pub mod payload_validator;
 
-pub use crate::{
-    payload_validator::{DkgPayloadValidationFailure, InvalidDkgPayloadReason},
-    utils::get_vetkey_public_keys,
-};
+pub use crate::utils::get_vetkey_public_keys;
 
 #[cfg(test)]
 mod test_utils;
 mod utils;
 
 pub use dkg_key_manager::DkgKeyManager;
-pub use payload_builder::{
-    create_payload, get_dkg_summary_from_cup_contents, PayloadCreationError,
-};
+pub use payload_builder::{create_payload, get_dkg_summary_from_cup_contents};
 
 // The maximal number of DKGs for other subnets we want to run in one interval.
 const MAX_REMOTE_DKGS_PER_INTERVAL: usize = 1;

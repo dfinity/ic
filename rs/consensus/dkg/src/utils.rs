@@ -1,5 +1,5 @@
-use crate::PayloadCreationError;
 use ic_consensus_utils::pool_reader::PoolReader;
+use ic_interfaces::dkg::DkgPayloadCreationError;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
 use ic_management_canister_types_private::MasterPublicKeyId;
@@ -130,10 +130,10 @@ pub(crate) fn vetkd_key_ids_for_subnet(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     registry_version: RegistryVersion,
-) -> Result<Vec<NiDkgMasterPublicKeyId>, PayloadCreationError> {
+) -> Result<Vec<NiDkgMasterPublicKeyId>, DkgPayloadCreationError> {
     let Some(chain_key_config) = registry_client
         .get_chain_key_config(subnet_id, registry_version)
-        .map_err(PayloadCreationError::FailedToGetVetKdKeyList)?
+        .map_err(DkgPayloadCreationError::FailedToGetVetKdKeyList)?
     else {
         return Ok(vec![]);
     };
