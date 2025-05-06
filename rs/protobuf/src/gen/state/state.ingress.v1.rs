@@ -150,6 +150,7 @@ pub enum ErrorCode {
     /// 3xx -- `RejectCode::DestinationInvalid`
     CanisterNotFound = 301,
     CanisterSnapshotNotFound = 305,
+    CanisterSnapshotImmutable = 306,
     /// 4xx -- `RejectCode::CanisterReject`
     InsufficientMemoryAllocation = 402,
     InsufficientCyclesForCreateCanister = 403,
@@ -218,6 +219,7 @@ impl ErrorCode {
             Self::CanisterHeapDeltaRateLimited => "ERROR_CODE_CANISTER_HEAP_DELTA_RATE_LIMITED",
             Self::CanisterNotFound => "ERROR_CODE_CANISTER_NOT_FOUND",
             Self::CanisterSnapshotNotFound => "ERROR_CODE_CANISTER_SNAPSHOT_NOT_FOUND",
+            Self::CanisterSnapshotImmutable => "ERROR_CODE_CANISTER_SNAPSHOT_IMMUTABLE",
             Self::InsufficientMemoryAllocation => "ERROR_CODE_INSUFFICIENT_MEMORY_ALLOCATION",
             Self::InsufficientCyclesForCreateCanister => {
                 "ERROR_CODE_INSUFFICIENT_CYCLES_FOR_CREATE_CANISTER"
@@ -307,6 +309,7 @@ impl ErrorCode {
             }
             "ERROR_CODE_CANISTER_NOT_FOUND" => Some(Self::CanisterNotFound),
             "ERROR_CODE_CANISTER_SNAPSHOT_NOT_FOUND" => Some(Self::CanisterSnapshotNotFound),
+            "ERROR_CODE_CANISTER_SNAPSHOT_IMMUTABLE" => Some(Self::CanisterSnapshotImmutable),
             "ERROR_CODE_INSUFFICIENT_MEMORY_ALLOCATION" => Some(Self::InsufficientMemoryAllocation),
             "ERROR_CODE_INSUFFICIENT_CYCLES_FOR_CREATE_CANISTER" => {
                 Some(Self::InsufficientCyclesForCreateCanister)

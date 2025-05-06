@@ -24,8 +24,9 @@ use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotDataKind,
     CanisterSnapshotDataOffset, CanisterSnapshotResponse, CanisterStatusResultV2,
     CanisterStatusType, ChunkHash, GlobalTimer, Method as Ic00Method,
-    ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataResponse, StoredChunksReply,
-    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkReply,
+    ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataResponse, SnapshotSource,
+    StoredChunksReply, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    UploadChunkReply,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::{
@@ -2180,9 +2181,7 @@ impl CanisterManager {
 
         let snapshot_id =
             SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
-        state
-            .canister_snapshots
-            .push(snapshot_id, Arc::new(new_snapshot));
+        state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
         canister.system_state.snapshots_memory_usage = canister
             .system_state
             .snapshots_memory_usage
@@ -2221,6 +2220,10 @@ impl CanisterManager {
                 canister_id: canister.canister_id(),
                 snapshot_id,
             });
+        }
+        // Ensure the snapshot was created via metadata upload, not from the canister.
+        if snapshot.source() != SnapshotSource::UploadedManually {
+            return Err(CanisterManagerError::CanisterSnapshotImmutable);
         }
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
