@@ -2088,29 +2088,21 @@ impl CanisterManager {
         subnet_size: usize,
         round_limits: &mut RoundLimits,
         resource_saturation: &ResourceSaturation,
-    ) -> (Result<SnapshotId, CanisterManagerError>, NumInstructions) {
+    ) -> Result<(SnapshotId, NumInstructions), CanisterManagerError> {
         // Check sender is a controller.
-        if let Err(err) = validate_controller(canister, &sender) {
-            return (Err(err), NumInstructions::new(0));
-        };
+        validate_controller(canister, &sender)?;
 
         let replace_snapshot_size =
-            match self.replace_snapshot_size(canister, args.replace_snapshot(), state) {
-                Ok(value) => value,
-                Err(value) => return (Err(value), NumInstructions::new(0)),
-            };
+            self.replace_snapshot_size(canister, args.replace_snapshot(), state)?;
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
             && canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit
         {
-            return (
-                Err(CanisterManagerError::CanisterHeapDeltaRateLimited {
-                    canister_id: canister.canister_id(),
-                    value: canister.scheduler_state.heap_delta_debit,
-                    limit: self.config.heap_delta_rate_limit,
-                }),
-                NumInstructions::new(0),
-            );
+            return Err(CanisterManagerError::CanisterHeapDeltaRateLimited {
+                canister_id: canister.canister_id(),
+                value: canister.scheduler_state.heap_delta_debit,
+                limit: self.config.heap_delta_rate_limit,
+            });
         }
 
         let new_snapshot_size = args.snapshot_size_bytes();
@@ -2119,16 +2111,14 @@ impl CanisterManager {
             .memory_usage()
             .saturating_add(&new_snapshot_size)
             .saturating_sub(&replace_snapshot_size);
-        if let Err(err) = self.memory_usage_checks(
+        self.memory_usage_checks(
             subnet_size,
             canister,
             round_limits,
             new_memory_usage,
             old_memory_usage,
             resource_saturation,
-        ) {
-            return (Err(err), NumInstructions::from(0));
-        }
+        )?;
 
         // Charge for taking a snapshot of the canister.
         let instructions = self
@@ -2136,22 +2126,19 @@ impl CanisterManager {
             .canister_snapshot_baseline_instructions
             .saturating_add(&new_snapshot_size.get().into());
 
-        if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
-            &sender,
-            canister,
-            instructions,
-            subnet_size,
-            // For the `create_snapshot_from_metadata` operation, it does not matter if this is a Wasm64 or Wasm32 module
-            // since the number of instructions charged depends on constant set fee and snapshot size
-            // and Wasm64 does not bring any additional overhead for this operation.
-            // The only overhead is during execution time.
-            WasmExecutionMode::Wasm32,
-        ) {
-            return (
-                Err(CanisterManagerError::CanisterSnapshotNotEnoughCycles(err)),
-                0.into(),
-            );
-        };
+        self.cycles_account_manager
+            .consume_cycles_for_instructions(
+                &sender,
+                canister,
+                instructions,
+                subnet_size,
+                // For the `create_snapshot_from_metadata` operation, it does not matter if this is a Wasm64 or Wasm32 module
+                // since the number of instructions charged depends on constant set fee and snapshot size
+                // and Wasm64 does not bring any additional overhead for this operation.
+                // The only overhead is during execution time.
+                WasmExecutionMode::Wasm32,
+            )
+            .map_err(CanisterManagerError::CanisterSnapshotNotEnoughCycles)?;
 
         // Create new snapshot.
         let new_snapshot = CanisterSnapshot::from_metadata(
@@ -2200,7 +2187,7 @@ impl CanisterManager {
             .system_state
             .snapshots_memory_usage
             .saturating_add(&new_snapshot_size);
-        (Ok(snapshot_id), instructions)
+        Ok((snapshot_id, instructions))
     }
 
     /// Writes `args.chunk` to the wasm module, main/stable memory or to the wasm chunk store.
@@ -2307,7 +2294,6 @@ impl CanisterManager {
                 if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
                     canister.scheduler_state.heap_delta_debit += chunk_bytes;
                 }
-
                 round_limits.instructions -= as_round_instructions(instructions);
 
                 // We don't have to return the hash, because the user already knows it.
