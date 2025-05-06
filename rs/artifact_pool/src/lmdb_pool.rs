@@ -1867,19 +1867,19 @@ impl IDkgMessageDb {
 
     fn iter_impl<'a, T: TryFrom<IDkgMessage>, U: Into<IDkgIdKey> + Clone + PartialEq + 'a>(
         &'a self,
-        selector: Option<U>,
-        id_to_selector: impl Fn(&IDkgMessageId) -> U + 'a,
+        pattern: Option<U>,
+        id_to_pattern: impl Fn(&IDkgMessageId) -> U + 'a,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, T)> + 'a>
     where
         <T as TryFrom<IDkgMessage>>::Error: Debug,
     {
-        // Iterator over the database with the given selector, or all entries if not specified.
-        // It is important that the selector must be a prefix of the key as we start at the
-        // first key that matches the selector and stop at the first key that does not.
+        // Iterator over the database with the given pattern, or all entries if not specified.
+        // It is important that the pattern must be a prefix of the key as we start at the
+        // first key that matches the pattern and stop at the first key that does not.
 
         let message_type = self.object_type;
         let log = self.log.clone();
-        let selector_cl = selector.as_ref().map(|s| s.clone());
+        let pattern_cl = pattern.as_ref().map(|s| s.clone());
         let deserialize_fn = move |key: &[u8], bytes: &[u8]| {
             // Convert key bytes to IDkgMessageId
             let mut key_bytes = Vec::<u8>::new();
@@ -1898,9 +1898,9 @@ impl IDkgMessageDb {
                 }
             };
 
-            // Stop iterating if we hit a different selector.
-            if let Some(selector) = &selector_cl {
-                if id_to_selector(&id) != *selector {
+            // Stop iterating if we hit a different pattern.
+            if let Some(pattern) = &pattern_cl {
+                if id_to_pattern(&id) != *pattern {
                     return None;
                 }
             }
@@ -1941,7 +1941,7 @@ impl IDkgMessageDb {
             self.db_env.clone(),
             self.db,
             deserialize_fn,
-            selector.map(|s| s.into()),
+            pattern.map(|s| s.into()),
             self.log.clone(),
         ))
     }

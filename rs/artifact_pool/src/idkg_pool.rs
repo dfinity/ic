@@ -120,32 +120,32 @@ impl IDkgObjectPool {
 
     fn iter_impl<'a, T: TryFrom<IDkgMessage>, U: Clone + PartialEq + 'a>(
         &'a self,
-        selector: U,
-        id_to_selector: impl Fn(&IDkgMessageId) -> U + Clone + 'a,
+        pattern: U,
+        id_to_pattern: impl Fn(&IDkgMessageId) -> U + Clone + 'a,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, T)> + 'a>
     where
         <T as TryFrom<IDkgMessage>>::Error: Debug,
     {
-        // TODO: currently uses a simple O(n) scheme: iterate to the first match for the selector
+        // TODO: currently uses a simple O(n) scheme: iterate to the first match for the pattern
         // and take the following matching items. This avoids any complex two level maps/trie style
         // indexing for partial matching. Since the in memory map is fairly fast, this should not
         // be a problem, revisit if needed.
 
-        let selector_cl = selector.clone();
-        let id_to_selector_cl = id_to_selector.clone();
+        let pattern_cl = pattern.clone();
+        let id_to_pattern_cl = id_to_pattern.clone();
 
         // Find the first entry that matches the prefix.
         let first = self
             .objects
             .iter()
-            .skip_while(move |(key, _)| id_to_selector_cl(key) != selector_cl);
+            .skip_while(move |(key, _)| id_to_pattern_cl(key) != pattern_cl);
 
         // Keep collecting while the prefix matches.
-        let selector_cl = selector.clone();
-        let id_to_selector_cl = id_to_selector.clone();
+        let pattern_cl = pattern.clone();
+        let id_to_pattern_cl = id_to_pattern.clone();
         Box::new(
             first
-                .take_while(move |(key, _)| id_to_selector_cl(key) == selector_cl)
+                .take_while(move |(key, _)| id_to_pattern_cl(key) == pattern_cl)
                 .map(|(key, object)| {
                     let inner = T::try_from(object.clone()).unwrap_or_else(|err| {
                         panic!("Failed to convert IDkgMessage to inner type: {:?}", err)
