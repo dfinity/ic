@@ -14,6 +14,7 @@ filegroup(
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-http-types",
     "//packages/icrc-ledger-client:icrc_ledger_client",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
@@ -36,7 +37,6 @@ DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/rust_canisters/canister_log",
     "//rs/rust_canisters/canister_profiler",
-    "//rs/rust_canisters/http_types",
     "//rs/sns/governance/api",
     "//rs/sns/governance/proposal_criticality",
     "//rs/sns/governance/proposals_amount_total_limit",

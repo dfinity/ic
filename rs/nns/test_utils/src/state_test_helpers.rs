@@ -43,16 +43,17 @@ use ic_nns_governance_api::pb::v1::{
         self,
         claim_or_refresh::{self, MemoAndController},
         configure::Operation,
-        AddHotKey, ClaimOrRefresh, Configure, Disburse, Follow, IncreaseDissolveDelay,
-        JoinCommunityFund, LeaveCommunityFund, RegisterVote, RemoveHotKey, Split, StakeMaturity,
+        AddHotKey, ClaimOrRefresh, Configure, Disburse, DisburseMaturity, Follow,
+        IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund, RegisterVote, RemoveHotKey,
+        Split, StakeMaturity,
     },
     manage_neuron_response::{self, ClaimOrRefreshResponse},
-    Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
-    Governance, GovernanceError, InstallCodeRequest, ListNeurons, ListNeuronsResponse,
-    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfo,
-    ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
-    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction,
-    ProposalActionRequest, ProposalInfo, RewardNodeProviders, Topic, Vote,
+    Account as GovernanceAccount, Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
+    GetNeuronsFundAuditInfoResponse, Governance, GovernanceError, InstallCodeRequest, ListNeurons,
+    ListNeuronsResponse, ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse,
+    ListProposalInfo, ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest,
+    ManageNeuronRequest, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics,
+    NnsFunction, ProposalActionRequest, ProposalInfo, RewardNodeProviders, Vote,
 };
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
@@ -86,7 +87,7 @@ use num_traits::ToPrimitive;
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayload;
 use serde::Serialize;
-use std::{convert::TryInto, env, time::Duration};
+use std::{convert::TryInto, time::Duration};
 
 /// A `StateMachine` builder setting the IC time to the current time
 /// and using the canister ranges of both the NNS and II subnets.
@@ -100,14 +101,6 @@ pub fn state_machine_builder_for_nns_tests() -> StateMachineBuilder {
             CanisterId::from_u64(0x2100000),
             CanisterId::from_u64(0x21FFFFE),
         ))
-}
-
-/// Turn down state machine logging to just errors to reduce noise in tests where this is not relevant
-pub fn reduce_state_machine_logging_unless_env_set() {
-    match env::var("RUST_LOG") {
-        Ok(_) => {}
-        Err(_) => env::set_var("RUST_LOG", "ERROR"),
-    }
 }
 
 pub fn registry_latest_version(state_machine: &StateMachine) -> Result<u64, String> {
@@ -896,13 +889,12 @@ pub fn nns_send_icp_to_claim_or_refresh_neuron(
     .unwrap();
 }
 
-#[must_use]
 fn manage_neuron(
     state_machine: &StateMachine,
     sender: PrincipalId,
     neuron_id: NeuronId,
     command: nns_governance_pb::ManageNeuronCommandRequest,
-) -> ManageNeuronResponse {
+) -> Result<ManageNeuronResponse, String> {
     let result = state_machine
         .execute_ingress_as(
             sender,
@@ -915,14 +907,25 @@ fn manage_neuron(
             })
             .unwrap(),
         )
-        .unwrap();
+        .map_err(|e| e.to_string())?;
 
     let result = match result {
         WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!("Call to manage_neuron failed: {:#?}", s),
+        WasmResult::Reject(s) => return Err(s),
     };
+    let response = Decode!(&result, ManageNeuronResponse).unwrap();
 
-    Decode!(&result, ManageNeuronResponse).unwrap()
+    Ok(response)
+}
+
+#[must_use]
+fn manage_neuron_or_panic(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+    command: nns_governance_pb::ManageNeuronCommandRequest,
+) -> ManageNeuronResponse {
+    manage_neuron(state_machine, sender, neuron_id, command).expect("manage_neuron failed")
 }
 
 trait NnsManageNeuronConfigureOperation {
@@ -955,7 +958,7 @@ fn nns_configure_neuron(
     nns_governance_pb::manage_neuron_response::ConfigureResponse,
     nns_governance_pb::GovernanceError,
 > {
-    let result = manage_neuron(
+    let result = manage_neuron_or_panic(
         state_machine,
         sender,
         neuron_id,
@@ -979,6 +982,7 @@ fn nns_configure_neuron(
 pub fn nns_create_super_powerful_neuron(
     state_machine: &StateMachine,
     controller: PrincipalId,
+    tokens: Tokens,
 ) -> NeuronId {
     let memo = 0xCAFE_F00D;
 
@@ -988,8 +992,7 @@ pub fn nns_create_super_powerful_neuron(
         Some(compute_neuron_staking_subaccount(controller, memo)),
     );
     // "Overwhelmingly" large, but still small enough to avoid addition overflow.
-    let amount = Tokens::from_e8s(u64::MAX / 4);
-    mint_icp(state_machine, destination, amount);
+    mint_icp(state_machine, destination, tokens);
 
     // Create the Neuron.
     let neuron_id = nns_claim_or_refresh_neuron(state_machine, controller, memo);
@@ -1061,7 +1064,7 @@ pub fn nns_disburse_neuron(
     amount_e8s: Option<u64>,
     to_account: Option<AccountIdentifier>,
 ) -> ManageNeuronResponse {
-    manage_neuron(
+    manage_neuron_or_panic(
         state_machine,
         sender,
         neuron_id,
@@ -1109,6 +1112,24 @@ pub fn nns_start_dissolving(
         sender,
         neuron_id,
         Operation::StartDissolving(nns_governance_pb::manage_neuron::StartDissolving {}),
+    )
+}
+
+pub fn nns_disburse_maturity(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+    percentage_to_disburse: u32,
+    to_account: Option<GovernanceAccount>,
+) -> ManageNeuronResponse {
+    manage_neuron_or_panic(
+        state_machine,
+        sender,
+        neuron_id,
+        ManageNeuronCommandRequest::DisburseMaturity(DisburseMaturity {
+            percentage_to_disburse,
+            to_account,
+        }),
     )
 }
 
@@ -1238,13 +1259,23 @@ pub fn nns_cast_vote(
     neuron_id: NeuronId,
     proposal_id: u64,
     vote: Vote,
-) -> ManageNeuronResponse {
+) -> Result<ManageNeuronResponse, String> {
     let command = ManageNeuronCommandRequest::RegisterVote(RegisterVote {
         proposal: Some(ic_nns_common::pb::v1::ProposalId { id: proposal_id }),
         vote: vote as i32,
     });
 
     manage_neuron(state_machine, sender, neuron_id, command)
+}
+
+pub fn nns_cast_vote_or_panic(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+    proposal_id: u64,
+    vote: Vote,
+) -> ManageNeuronResponse {
+    nns_cast_vote(state_machine, sender, neuron_id, proposal_id, vote).expect("Failed to cast vote")
 }
 
 pub fn nns_split_neuron(
@@ -1255,7 +1286,7 @@ pub fn nns_split_neuron(
 ) -> ManageNeuronResponse {
     let command = ManageNeuronCommandRequest::Split(Split { amount_e8s: amount });
 
-    manage_neuron(state_machine, sender, neuron_id, command)
+    manage_neuron_or_panic(state_machine, sender, neuron_id, command)
 }
 
 pub fn get_neuron_ids(state_machine: &StateMachine, sender: PrincipalId) -> Vec<u64> {
@@ -1300,7 +1331,7 @@ pub fn nns_join_community_fund(
         operation: Some(Operation::JoinCommunityFund(JoinCommunityFund {})),
     });
 
-    manage_neuron(state_machine, sender, neuron_id, command)
+    manage_neuron_or_panic(state_machine, sender, neuron_id, command)
 }
 
 pub fn nns_leave_community_fund(
@@ -1312,7 +1343,7 @@ pub fn nns_leave_community_fund(
         operation: Some(Operation::LeaveCommunityFund(LeaveCommunityFund {})),
     });
 
-    manage_neuron(state_machine, sender, neuron_id, command)
+    manage_neuron_or_panic(state_machine, sender, neuron_id, command)
 }
 
 pub fn nns_governance_make_proposal(
@@ -1323,7 +1354,7 @@ pub fn nns_governance_make_proposal(
 ) -> ManageNeuronResponse {
     let command = ManageNeuronCommandRequest::MakeProposal(Box::new(proposal.clone()));
 
-    manage_neuron(state_machine, sender, neuron_id, command)
+    manage_neuron_or_panic(state_machine, sender, neuron_id, command)
 }
 
 pub fn nns_add_hot_key(
@@ -1338,7 +1369,7 @@ pub fn nns_add_hot_key(
         })),
     });
 
-    manage_neuron(state_machine, sender, neuron_id, command)
+    manage_neuron_or_panic(state_machine, sender, neuron_id, command)
 }
 
 pub fn nns_set_followees_for_neuron(
@@ -1356,7 +1387,7 @@ pub fn nns_set_followees_for_neuron(
             .collect(),
     });
 
-    manage_neuron(state_machine, sender, neuron_id, command)
+    manage_neuron_or_panic(state_machine, sender, neuron_id, command)
 }
 
 pub fn nns_remove_hot_key(
@@ -1371,7 +1402,7 @@ pub fn nns_remove_hot_key(
         })),
     });
 
-    manage_neuron(state_machine, sender, neuron_id, command)
+    manage_neuron_or_panic(state_machine, sender, neuron_id, command)
 }
 
 pub fn nns_stake_maturity(
@@ -1384,7 +1415,7 @@ pub fn nns_stake_maturity(
         percentage_to_stake,
     });
 
-    manage_neuron(state_machine, sender, neuron_id, command)
+    manage_neuron_or_panic(state_machine, sender, neuron_id, command)
 }
 
 pub fn nns_list_proposals(
@@ -1405,43 +1436,6 @@ pub fn nns_list_proposals(
     };
 
     Decode!(&result, ListProposalInfoResponse).unwrap()
-}
-
-pub fn get_all_proposal_ids(
-    state_machine: &StateMachine,
-    exclude_topic: Vec<Topic>,
-) -> Vec<ProposalId> {
-    let mut proposal_ids = vec![];
-    let mut before_proposal = None;
-
-    loop {
-        let ListProposalInfoResponse { proposal_info } = nns_list_proposals(
-            state_machine,
-            ListProposalInfo {
-                before_proposal,
-                limit: 100,
-                exclude_topic: exclude_topic
-                    .iter()
-                    .map(|topic| i32::from(*topic))
-                    .collect(),
-                include_reward_status: vec![],
-                include_status: vec![],
-                include_all_manage_neuron_proposals: None,
-                omit_large_fields: Some(true),
-            },
-        );
-        let new_proposal_ids = proposal_info
-            .into_iter()
-            .map(|info| info.id.unwrap())
-            .collect::<Vec<_>>();
-        if new_proposal_ids.is_empty() {
-            break;
-        }
-        before_proposal = Some(new_proposal_ids[new_proposal_ids.len() - 1]);
-        proposal_ids.extend(new_proposal_ids);
-    }
-
-    proposal_ids
 }
 
 /// Return the monthly Node Provider rewards
@@ -2127,7 +2121,20 @@ pub fn cmc_set_default_authorized_subnetworks(
     sender: PrincipalId,
     neuron_id: NeuronId,
 ) {
-    let args = SetAuthorizedSubnetworkListArgs { who: None, subnets };
+    cmc_set_authorized_subnetworks_for_principal(machine, None, subnets, sender, neuron_id);
+}
+
+pub fn cmc_set_authorized_subnetworks_for_principal(
+    machine: &StateMachine,
+    principal: Option<PrincipalId>,
+    subnets: Vec<SubnetId>,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+) {
+    let args = SetAuthorizedSubnetworkListArgs {
+        who: principal,
+        subnets,
+    };
     let proposal = MakeProposalRequest {
         title: Some("set subnetworks".to_string()),
         summary: "setting subnetworks".to_string(),
@@ -2137,6 +2144,31 @@ pub fn cmc_set_default_authorized_subnetworks(
                 nns_function: NnsFunction::SetAuthorizedSubnetworks as i32,
                 payload: Encode!(&args).unwrap(),
             },
+        )),
+    };
+
+    let propose_response = nns_governance_make_proposal(machine, sender, neuron_id, &proposal);
+
+    let proposal_id = match propose_response.command.unwrap() {
+        manage_neuron_response::Command::MakeProposal(response) => response.proposal_id.unwrap(),
+        _ => panic!("Propose didn't return MakeProposal"),
+    };
+
+    nns_wait_for_proposal_execution(machine, proposal_id.id);
+}
+
+pub fn manage_network_economics(
+    machine: &StateMachine,
+    network_economics: NetworkEconomics,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+) {
+    let proposal = MakeProposalRequest {
+        title: Some("manage network economics".to_string()),
+        summary: "manage network economics".to_string(),
+        url: "".to_string(),
+        action: Some(ProposalActionRequest::ManageNetworkEconomics(
+            network_economics,
         )),
     };
 

@@ -92,7 +92,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
         "cranelift-codegen-meta": [crate.annotation(
             patch_args = ["-p4"],
             patches = [
-                "@@//bazel:cranelift-codegen-meta.patch",  # Patch for determinism issues
                 "@@//bazel:cranelift-codegen-meta-isle.patch",  # Patch for issue: https://github.com/bytecodealliance/wasmtime/pull/10334
             ],
         )],
@@ -439,6 +438,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "cvt": crate.spec(
                 version = "^0.1.1",
             ),
+            "darling": crate.spec(
+                version = "^0.20.11",
+            ),
             "dashmap": crate.spec(
                 version = "^5.3.4",
             ),
@@ -645,7 +647,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.1.1",
             ),
             "ic-management-canister-types": crate.spec(
-                version = "0.2.1",
+                version = "0.3.0",
             ),
             "ic_principal": crate.spec(
                 version = "^0.1.1",
@@ -1279,6 +1281,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "fold",
                     "full",
                 ],
+            ),
+            "syn2": crate.spec(
+                package = "syn",
+                version = "^2.0.101",
             ),
             "syscalls": crate.spec(
                 version = "^0.6.18",

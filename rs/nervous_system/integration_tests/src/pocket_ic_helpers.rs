@@ -65,7 +65,6 @@ use icrc_ledger_types::icrc1::{
 use itertools::{EitherOrBoth, Itertools};
 use maplit::btreemap;
 use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder, RejectResponse};
-use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
 use std::{collections::BTreeMap, fmt::Write, path::Path, time::Duration};
 
@@ -577,7 +576,7 @@ impl NnsInstaller {
             pocket_ic,
             "NNS Governance",
             GOVERNANCE_CANISTER_ID,
-            nns_init_payload.governance.encode_to_vec(),
+            Encode!(&nns_init_payload.governance).unwrap(),
             governance_wasm,
             Some(ROOT_CANISTER_ID.get()),
         )
@@ -2010,6 +2009,24 @@ pub mod sns {
                     index
                 );
             }
+        }
+
+        pub async fn set_following(
+            pocket_ic: &PocketIc,
+            sns_governance_canister_id: PrincipalId,
+            sender: PrincipalId,
+            neuron_id: sns_pb::NeuronId,
+            set_following: sns_pb::manage_neuron::SetFollowing,
+        ) -> Result<sns_pb::ManageNeuronResponse, RejectResponse> {
+            let agent = PocketIcAgent::new(pocket_ic, sender);
+            let sns_governance_canister = GovernanceCanister::new(sns_governance_canister_id);
+            sns_governance_canister
+                .set_following(&agent, neuron_id, set_following)
+                .await
+                .map_err(|err| match err {
+                    PocketIcCallError::PocketIc(reject_response) => reject_response,
+                    err => panic!("Unexpected error when setting following: {:#?}", err),
+                })
         }
     }
 

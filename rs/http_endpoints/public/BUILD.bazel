@@ -84,6 +84,7 @@ DEV_DEPENDENCIES = [
     "//rs/certification/test-utils",
     "//rs/crypto/temp_crypto",
     "//rs/crypto/tls_interfaces/mocks",
+    "//rs/http_endpoints/test_agent",
     "//rs/interfaces/mocks",
     "//rs/interfaces/registry/mocks",
     "//rs/interfaces/state_manager/mocks",

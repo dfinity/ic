@@ -93,8 +93,8 @@ fn test_time_warp() {
             _ => panic!("\n\n{:?}\n\n", command),
         };
         assert_eq!(
-            governance_error.error_type(),
-            ErrorType::PreconditionFailed,
+            governance_error.error_type,
+            ErrorType::PreconditionFailed as i32,
             "{:?}",
             governance_error
         );
@@ -133,8 +133,8 @@ fn test_time_warp() {
             _ => panic!("\n\n{:?}\n\n", command),
         };
         assert_eq!(
-            governance_error.error_type(),
-            ErrorType::PreconditionFailed,
+            governance_error.error_type,
+            ErrorType::PreconditionFailed as i32,
             "{:?}",
             governance_error
         );
