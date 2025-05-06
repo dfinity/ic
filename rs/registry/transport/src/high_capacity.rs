@@ -17,7 +17,7 @@
 use crate::{
     pb::v1::{
         high_capacity_registry_get_value_response, high_capacity_registry_mutation,
-        high_capacity_registry_value, HighCapacityRegistryAtomicMutateRequest,
+        high_capacity_registry_value, registry_mutation, HighCapacityRegistryAtomicMutateRequest,
         HighCapacityRegistryDelta, HighCapacityRegistryGetChangesSinceResponse,
         HighCapacityRegistryMutation, HighCapacityRegistryValue, LargeValueChunkKeys,
         RegistryAtomicMutateRequest, RegistryDelta, RegistryGetChangesSinceResponse,

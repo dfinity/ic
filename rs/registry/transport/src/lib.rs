@@ -8,12 +8,10 @@ pub use high_capacity::{dechunkify_delta, dechunkify_mutation_value, GetChunk, M
 use std::{fmt, str};
 
 use crate::pb::v1::{
-    high_capacity_registry_value,
     registry_error::Code,
     registry_mutation::{self, Type},
-    HighCapacityRegistryDelta, HighCapacityRegistryGetChangesSinceResponse,
-    HighCapacityRegistryValue, LargeValueChunkKeys, Precondition, RegistryDelta, RegistryError,
-    RegistryMutation, RegistryValue,
+    HighCapacityRegistryDelta, HighCapacityRegistryGetChangesSinceResponse, Precondition,
+    RegistryError, RegistryMutation,
 };
 use prost::Message;
 use serde::{Deserialize, Serialize};
