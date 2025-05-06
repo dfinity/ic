@@ -112,10 +112,13 @@ impl IDkgObjectPool {
     where
         <T as TryFrom<IDkgMessage>>::Error: Debug,
     {
-        self.iter_impl(
-            u64::to_be_bytes(transcript_id.id()).to_vec(),
-            |message_id| u64::to_be_bytes(message_id.prefix().group_tag()).to_vec(),
-        )
+        self.iter_impl(transcript_id, move |message_id| {
+            IDkgTranscriptId::new(
+                *transcript_id.source_subnet(),
+                message_id.prefix().group_tag(),
+                transcript_id.source_height(),
+            )
+        })
     }
 
     fn iter_impl<'a, T: TryFrom<IDkgMessage>, U: Clone + PartialEq + 'a>(
