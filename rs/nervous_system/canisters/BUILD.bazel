@@ -14,9 +14,9 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_core",
     "//rs/types/base_types",
     "@crate_index//:candid",
+    "@crate_index//:ic_cdk_next",
     "@crate_index//:mockall",
     "@crate_index//:prost",
-    "@crate_index//:ic-cdk-next",
 ]
 
 MACRO_DEPENDENCIES = [
