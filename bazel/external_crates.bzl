@@ -1311,7 +1311,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.8",
             ),
             "thiserror": crate.spec(
-                version = "^2.0.3",
+                version = "^2.0.12",
             ),
             "thousands": crate.spec(
                 version = "^0.2.0",
@@ -1485,7 +1485,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.228.0",
             ),
             "wasmtime": crate.spec(
-                version = "^31.0.0",
+                git = "https://github.com/adambratschikaye/wasmtime",
+                rev = "d48b3856b14cce097314adbef347eb61bce52f36",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1496,7 +1497,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^31.0.0",
+                git = "https://github.com/adambratschikaye/wasmtime",
+                rev = "d48b3856b14cce097314adbef347eb61bce52f36",
             ),
             "wast": crate.spec(
                 version = "^228.0.0",
