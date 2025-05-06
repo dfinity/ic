@@ -7,13 +7,13 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/types/base_types",
     "@crate_index//:candid",
-    "@crate_index//:ic-cdk",
+    "@crate_index//:ic_cdk_next",
     "@crate_index//:serde",
 ]
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
-    "@crate_index//:ic-cdk-macros",
+    "@crate_index//:ic_cdk_macros_next",
 ]
 
 rust_library(
