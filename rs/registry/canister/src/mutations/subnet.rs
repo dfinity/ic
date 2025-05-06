@@ -195,7 +195,7 @@ impl Registry {
                     receiver_nodes,
                 )
                 .into_iter()
-                .map(|dealing_request| self.get_chain_key_resharing_from_ic00(dealing_request))
+                .map(|reshare_request| self.get_chain_key_resharing_from_ic00(reshare_request))
                 .collect::<Vec<_>>()
             })
             .unwrap_or_default();
@@ -235,7 +235,7 @@ impl Registry {
     /// `reshare_chain_key`.
     async fn get_chain_key_resharing_from_ic00(
         &self,
-        dealing_request: ReshareChainKeyArgs,
+        reshare_request: ReshareChainKeyArgs,
     ) -> ChainKeyInitialization {
         let response_bytes = call(
             CanisterId::ic_00(),
