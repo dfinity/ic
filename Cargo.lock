@@ -2000,7 +2000,7 @@ dependencies = [
  "candid",
  "canlog_derive",
  "ic-canister-log 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "ic-cdk 0.18.0",
+ "ic-cdk 0.17.1",
  "proptest 1.6.0",
  "regex",
  "serde",
@@ -14978,6 +14978,7 @@ version = "0.1.2"
 dependencies = [
  "async-trait",
  "candid",
+ "ic-cdk 0.17.1",
  "icrc-ledger-types",
  "serde",
 ]
@@ -14988,7 +14989,7 @@ version = "0.1.2"
 dependencies = [
  "async-trait",
  "candid",
- "ic-cdk 0.18.0",
+ "ic-cdk 0.17.1",
  "icrc-ledger-client",
 ]
 
@@ -15001,6 +15002,7 @@ dependencies = [
  "candid",
  "crc32fast",
  "hex",
+ "ic-cdk 0.17.1",
  "ic-stable-structures",
  "icrc-cbor",
  "itertools 0.12.1",
@@ -18262,7 +18264,7 @@ dependencies = [
  "ed25519-dalek",
  "flate2",
  "hex",
- "ic-cdk 0.18.0",
+ "ic-cdk 0.17.1",
  "ic-certification 3.0.3",
  "ic-error-types 0.1.0",
  "ic-management-canister-types",
@@ -18394,7 +18396,7 @@ name = "pocket-ic-test-canister"
 version = "0.9.0"
 dependencies = [
  "candid",
- "ic-cdk 0.18.0",
+ "ic-cdk 0.17.1",
  "serde",
  "serde_bytes",
 ]
