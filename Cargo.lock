@@ -15925,6 +15925,7 @@ dependencies = [
  "ic-base-types",
  "ic-canister-log 0.2.0",
  "ic-cdk 0.17.1",
+ "ic-cdk-macros 0.17.1",
  "ic-cdk-timers",
  "ic-error-types 0.1.0",
  "ic-http-types",
