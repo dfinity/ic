@@ -606,21 +606,21 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "3.0.3",
             ),
             "ic-cdk": crate.spec(
-                version = "^0.17.0",
+                version = "^0.18.0",
+            ),
+            "ic-cdk-0-17-1": crate.spec(
+                package = "ic-cdk",
+                version = "^0.17.1",
             ),
             "ic-cdk-timers": crate.spec(
                 version = "^0.11.0",
             ),
             "ic-cdk-macros": crate.spec(
-                version = "^0.17.0",
+                version = "^0.18.0",
             ),
-            "ic-cdk-macros-next": crate.spec(
+            "ic-cdk-macros-0-17-1": crate.spec(
                 package = "ic-cdk-macros",
-                version = "^0.18.0",
-            ),
-            "ic-cdk-next": crate.spec(
-                package = "ic-cdk",
-                version = "^0.18.0",
+                version = "^0.17.1",
             ),
             "ic-certified-map": crate.spec(
                 version = "^0.3.1",

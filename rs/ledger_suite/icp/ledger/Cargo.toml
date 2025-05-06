@@ -21,8 +21,7 @@ dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
 hex = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
-ic-cdk = { workspace = true }
-ic-cdk-macros = { workspace = true }
+ic-cdk = "0.17.1"
 ic-cdk-timers = { workspace = true }
 ic-http-types = { path = "../../../../packages/ic-http-types" }
 ic-limits = { path = "../../../limits" }
