@@ -2219,9 +2219,7 @@ impl CanisterManager {
         resource_saturation: &ResourceSaturation,
     ) -> Result<NumInstructions, CanisterManagerError> {
         // Check sender is a controller.
-        if let Err(err) = validate_controller(canister, &sender) {
-            return Err(err);
-        };
+        validate_controller(canister, &sender)?;
         let snapshot_id = args.get_snapshot_id();
         // If not found, the operation fails due to invalid parameters.
         let Some(snapshot) = state.canister_snapshots.get_mut(snapshot_id) else {
@@ -2295,7 +2293,7 @@ impl CanisterManager {
                         // It does not matter if this is a Wasm64 or Wasm32 module.
                         WasmExecutionMode::Wasm32,
                     )
-                    .map_err(|err| CanisterManagerError::CanisterSnapshotNotEnoughCycles(err))?;
+                    .map_err(CanisterManagerError::CanisterSnapshotNotEnoughCycles)?;
                 let validated_memory_usage = self.memory_usage_checks(
                     subnet_size,
                     canister,
