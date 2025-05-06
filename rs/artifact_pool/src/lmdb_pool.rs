@@ -1866,7 +1866,7 @@ impl IDkgMessageDb {
     }
 
     fn iter_impl<'a, T: TryFrom<IDkgMessage>, U: Into<IDkgIdKey> + Clone + PartialEq + 'a>(
-        &'a self,
+        &self,
         pattern: Option<U>,
         id_to_pattern: impl Fn(&IDkgMessageId) -> U + 'a,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, T)> + 'a>
