@@ -57,7 +57,7 @@ rust_canister(
     compile_data = [
         "templates/dashboard.html",
     ],
-    proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
+    proc_macro_deps = ["@crate_index//:ic_cdk_macros_0_17_1"],
     service_file = "btc_checker_canister.did",
     deps = [
         # Keep sorted.
@@ -73,7 +73,7 @@ rust_canister(
         "@crate_index//:hex",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-canister-log",
-        "@crate_index//:ic-cdk",
+        "@crate_index//:ic_cdk_0_17_1",
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic-metrics-encoder",
         "@crate_index//:ic-stable-structures",
@@ -110,7 +110,7 @@ rust_ic_test(
         "//rs/universal_canister/lib",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
-        "@crate_index//:ic-cdk",
+        "@crate_index//:ic_cdk_0_17_1",
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:regex",
     ],
