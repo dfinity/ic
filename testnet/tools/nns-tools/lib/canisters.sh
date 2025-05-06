@@ -207,7 +207,7 @@ wait_for_nns_canister_has_new_code() {
         if [[ "${LATEST_WASM_HASH}" != "${ORIGINAL_WASM_HASH}" ]]; then
             echo
             echo "The WASM hash for ${CANISTER_NAME} has changed to"
-            ECHO "  ${LATEST_WASM_HASH}"
+            echo "  ${LATEST_WASM_HASH}"
             NEW_GIT_COMMIT_ID="$(dfx canister --ic metadata "$(nns_canister_id "${CANISTER_NAME}")" git_commit_id)"
             echo "The canister now (self-reports that it is) running code built from git commit ID"
             echo "  ${NEW_GIT_COMMIT_ID}"
