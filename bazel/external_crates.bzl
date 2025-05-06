@@ -616,13 +616,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-cdk-macros-next": crate.spec(
                 package = "ic-cdk-macros",
-                git = "https://github.com/dfinity/cdk-rs.git",
-                rev = "4e287ce51636b0e70768c193da38d2fc5324ea15",
+                version = "^0.18.0",
             ),
             "ic-cdk-next": crate.spec(
                 package = "ic-cdk",
-                git = "https://github.com/dfinity/cdk-rs.git",
-                rev = "4e287ce51636b0e70768c193da38d2fc5324ea15",
+                version = "^0.18.0",
             ),
             "ic-certified-map": crate.spec(
                 version = "^0.3.1",
