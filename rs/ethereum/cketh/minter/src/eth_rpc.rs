@@ -112,27 +112,6 @@ impl UpperHex for FixedSizeData {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
-pub enum SendRawTransactionResult {
-    Ok,
-    InsufficientFunds,
-    NonceTooLow,
-    NonceTooHigh,
-}
-
-impl From<EvmSendRawTransactionStatus> for SendRawTransactionResult {
-    fn from(value: EvmSendRawTransactionStatus) -> Self {
-        match value {
-            EvmSendRawTransactionStatus::Ok(_) => SendRawTransactionResult::Ok,
-            EvmSendRawTransactionStatus::InsufficientFunds => {
-                SendRawTransactionResult::InsufficientFunds
-            }
-            EvmSendRawTransactionStatus::NonceTooLow => SendRawTransactionResult::NonceTooLow,
-            EvmSendRawTransactionStatus::NonceTooHigh => SendRawTransactionResult::NonceTooHigh,
-        }
-    }
-}
-
 #[derive(
     Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Decode, Deserialize, Encode, Serialize,
 )]
