@@ -134,10 +134,9 @@ impl IDkgObjectPool {
         // indexing for partial matching. Since the in memory map is fairly fast, this should not
         // be a problem, revisit if needed.
 
+        // Find the first entry that matches the prefix.
         let pattern_cl = pattern.clone();
         let id_to_pattern_cl = id_to_pattern.clone();
-
-        // Find the first entry that matches the prefix.
         let first = self
             .objects
             .iter()
