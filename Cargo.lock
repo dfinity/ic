@@ -10489,6 +10489,7 @@ dependencies = [
  "candid",
  "dfn_core",
  "ic-base-types",
+ "ic-cdk 0.18.0",
  "ic-ledger-core",
  "ic-nervous-system-common",
  "ic-nervous-system-runtime",
