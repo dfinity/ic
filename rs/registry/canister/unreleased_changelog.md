@@ -14,6 +14,8 @@ on the process that this file is part of, see
 
 ## Changed
 
+* The `create_subnet` and `recover_subnet` calls are using the `reshare_chain_key` endpoint rather than the old `compute_initial_i_dkg_dealings` endpoint. With this change, recovery of vetkeys is supported.
+
 ## Deprecated
 
 ## Removed

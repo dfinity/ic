@@ -15,10 +15,7 @@ use ic_management_canister_types_private::{
 use ic_protobuf::registry::subnet::v1::chain_key_initialization::Initialization;
 use ic_protobuf::registry::{
     crypto::v1::ChainKeyEnabledSubnetList,
-    subnet::v1::{
-        CatchUpPackageContents, ChainKeyInitialization, SubnetListRecord,
-        SubnetRecord,
-    },
+    subnet::v1::{CatchUpPackageContents, ChainKeyInitialization, SubnetListRecord, SubnetRecord},
 };
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_chain_key_enabled_subnet_list_key,
@@ -183,8 +180,8 @@ impl Registry {
         key_map
     }
 
-    /// Get the initial iDKG dealings via a call to IC00 for a given InitialChainKeyConfig
-    /// and a set of nodes to receive them.
+    /// Get the initial key material (IDKG dealings or DKG transcripts)
+    /// via a call to IC00 for a given InitialChainKeyConfig and a set of nodes to receive them.
     pub(crate) async fn get_all_chain_key_reshares_from_ic00(
         &self,
         initial_chain_key_config: &Option<InitialChainKeyConfigInternal>,
@@ -198,7 +195,7 @@ impl Registry {
                     receiver_nodes,
                 )
                 .into_iter()
-                .map(|dealing_request| self.get_chain_key_resharing_from_ic00(dealing_request))
+                .map(|reshare_request| self.get_chain_key_resharing_from_ic00(reshare_request))
                 .collect::<Vec<_>>()
             })
             .unwrap_or_default();
@@ -238,13 +235,13 @@ impl Registry {
     /// `reshare_chain_key`.
     async fn get_chain_key_resharing_from_ic00(
         &self,
-        dealing_request: ReshareChainKeyArgs,
+        reshare_request: ReshareChainKeyArgs,
     ) -> ChainKeyInitialization {
         let response_bytes = call(
             CanisterId::ic_00(),
             "reshare_chain_key",
             bytes,
-            Encode!(&dealing_request).unwrap(),
+            Encode!(&reshare_request).unwrap(),
         )
         .await
         .unwrap();
@@ -263,7 +260,7 @@ impl Registry {
         };
 
         ChainKeyInitialization {
-            key_id: Some((&dealing_request.key_id).into()),
+            key_id: Some((&reshare_request.key_id).into()),
             initialization: Some(initialization),
         }
     }
