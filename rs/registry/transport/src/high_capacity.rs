@@ -263,7 +263,7 @@ pub async fn dechunkify_mutation_value(
         }
     };
 
-    let monolithic_blob = fetch_large_value(get_chunk, &large_value_chunk_keys)
+    let monolithic_blob = dechunkify(get_chunk, &large_value_chunk_keys)
         .await
         .map_err(Error::UnknownError)?;
 
@@ -332,7 +332,7 @@ async fn dechunkify_value_content(
         }
 
         high_capacity_registry_value::Content::LargeValueChunkKeys(keys) => {
-            let monolithic_blob = fetch_large_value(get_chunk, &keys).await.map_err(|err| {
+            let monolithic_blob = dechunkify(get_chunk, &keys).await.map_err(|err| {
                 Error::UnknownError(format!(
                     "Unable to reconstitute chunked/large value: {}",
                     err,
@@ -347,7 +347,7 @@ async fn dechunkify_value_content(
 /// Returns concatenation of chunks.
 ///
 /// Fetches each chunk using get_chunk_with_validation.
-async fn fetch_large_value( // DO NOT MERGE - Rename to dechunkify.
+async fn dechunkify(
     get_chunk: &(impl GetChunk + Sync),
     keys: &LargeValueChunkKeys,
 ) -> Result<Vec<u8>, String> {
