@@ -48,7 +48,7 @@ const USER_AGENT_ADAPTER: &str = "ic/1.0";
 const MAX_HEADER_LIST_SIZE: u32 = 52 * 1024;
 
 /// The maximum number of times we will try to connect to a SOCKS proxy.
-const MAX_SOCKS_PROXY_RETRIES: usize = 3;
+const MAX_SOCKS_PROXY_RETRIES: usize = 2;
 
 /// TODO(SOCKS_PROXY_ROLLOUT): Make this 100.
 const NEW_SOCKS_PROXY_ROLLOUT: u32 = 1;
