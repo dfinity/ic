@@ -2,11 +2,8 @@ use ic_certification::{verify_certified_data, CertificateValidationError};
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces_registry::RegistryTransportRecord;
 use ic_registry_transport::{
-    fetch_large_value,
-    pb::v1::{
-        high_capacity_registry_mutation, registry_mutation::Type, CertifiedResponse,
-        HighCapacityRegistryAtomicMutateRequest, HighCapacityRegistryMutation,
-    },
+    dechunkify_mutation_value,
+    pb::v1::{CertifiedResponse, HighCapacityRegistryAtomicMutateRequest},
     GetChunk,
 };
 use ic_types::{
@@ -48,6 +45,7 @@ pub enum CertificationError {
         provided_subnet_id: SubnetId,
         delegation_subnet_id: SubnetId,
     },
+    DechunkifyingFailed(ic_registry_transport::Error),
 }
 
 #[derive(Deserialize)]
@@ -122,65 +120,11 @@ fn validate_version_range(
     Ok(p.current_version.0)
 }
 
-/// Returns a blob.
-///
-/// If the mutation was a delete, returns None.
-///
-/// If the content has the blob inline, returns that.
-///
-/// Otherwise, content uses LargeValueChunkKeys. In this case, fetches the
-/// chunks, concatenates them, and returns the resulting monolithic blob.
-///
-/// Possible reasons for returning Err:
-///
-///   1. get_chunk call fail.
-///   2. content does not have value
-async fn get_monolithic_value(
-    mutation: HighCapacityRegistryMutation,
-    get_chunk: &(impl GetChunk + Sync),
-) -> Result<Option<Vec<u8>>, CertificationError> {
-    let mutation_type = Type::try_from(mutation.mutation_type).map_err(|err| {
-        CertificationError::InvalidDeltas(format!(
-            "Unable to determine mutation's type. Cause: {}. mutation: {:#?}",
-            err, mutation,
-        ))
-    })?;
-
-    if mutation_type == Type::Delete {
-        return Ok(None);
-    }
-
-    let HighCapacityRegistryMutation {
-        content,
-        mutation_type: _,
-        key: _,
-    } = mutation;
-
-    let Some(content) = content else {
-        return Ok(Some(vec![]));
-    };
-
-    use high_capacity_registry_mutation::Content as C;
-    let large_value_chunk_keys = match content {
-        C::LargeValueChunkKeys(ok) => ok,
-
-        C::Value(value) => {
-            return Ok(Some(value));
-        }
-    };
-
-    let monolithic_blob = fetch_large_value(get_chunk, &large_value_chunk_keys)
-        .await
-        .map_err(CertificationError::InvalidDeltas)?;
-
-    Ok(Some(monolithic_blob))
-}
-
 /// Decodes registry deltas from their hash tree representation.
 pub async fn decode_hash_tree(
     since_version: u64,
     hash_tree: MixedHashTree,
-    fetch_large_value: &(impl GetChunk + Sync),
+    get_chunk: &(impl GetChunk + Sync),
 ) -> Result<(Vec<RegistryTransportRecord>, RegistryVersion), CertificationError> {
     // Extract structured deltas from their tree representation.
     let labeled_tree = LabeledTree::<Vec<u8>>::try_from(hash_tree).map_err(|err| {
@@ -210,7 +154,9 @@ pub async fn decode_hash_tree(
 
         for mutation in atomic_mutation.0.mutations {
             let key = String::from_utf8_lossy(&mutation.key[..]).to_string();
-            let value: Option<Vec<u8>> = get_monolithic_value(mutation, fetch_large_value).await?;
+            let value: Option<Vec<u8>> = dechunkify_mutation_value(mutation, get_chunk)
+                .await
+                .map_err(CertificationError::DechunkifyingFailed)?;
 
             changes.push(RegistryTransportRecord {
                 key,
@@ -234,7 +180,7 @@ pub(crate) async fn decode_certified_deltas(
     canister_id: &CanisterId,
     nns_pk: &ThresholdSigPublicKey,
     payload: &[u8],
-    fetch_large_value: &(impl GetChunk + Sync),
+    get_chunk: &(impl GetChunk + Sync),
 ) -> Result<(Vec<RegistryTransportRecord>, RegistryVersion, Time), CertificationError> {
     let certified_response = CertifiedResponse::decode(payload).map_err(|err| {
         CertificationError::DeserError(format!(
@@ -267,7 +213,7 @@ pub(crate) async fn decode_certified_deltas(
     .map_err(embed_certificate_error)?;
 
     let (changes, current_version) =
-        decode_hash_tree(since_version, mixed_hash_tree, fetch_large_value).await?;
+        decode_hash_tree(since_version, mixed_hash_tree, get_chunk).await?;
 
     Ok((changes, current_version, time))
 }

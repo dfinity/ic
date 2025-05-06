@@ -10,8 +10,9 @@ use ic_interfaces_registry::RegistryTransportRecord;
 use ic_registry_transport::{
     delete,
     pb::v1::{
-        high_capacity_registry_mutation, registry_mutation, CertifiedResponse, LargeValueChunkKeys,
-        RegistryAtomicMutateRequest, RegistryMutation,
+        high_capacity_registry_mutation, registry_mutation, CertifiedResponse,
+        HighCapacityRegistryMutation, LargeValueChunkKeys, RegistryAtomicMutateRequest,
+        RegistryMutation,
     },
     upsert, MockGetChunk,
 };
@@ -448,7 +449,9 @@ fn test_evil_chunked() {
 
     // Step 3: Verify result(s).
     match result {
-        Err(CertificationError::InvalidDeltas(err)) => {
+        Err(CertificationError::DechunkifyingFailed(
+            ic_registry_transport::Error::UnknownError(err),
+        )) => {
             let message = err.to_lowercase();
             for key_word in ["chunk", "hash", "match"] {
                 assert!(message.contains(key_word), "{} not in {}", key_word, err);

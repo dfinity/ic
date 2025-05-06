@@ -212,14 +212,69 @@ impl HighCapacityRegistryValue {
 #[automock]
 #[async_trait]
 pub trait GetChunk {
-    async fn get_chunk_without_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String>;
+    async fn get_chunk_without_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String>; // DO NOT MERGE - Change Err type to Error?
+}
+
+/// Returns a blob.
+///
+/// If the mutation was a delete, returns None.
+///
+/// If the content has the blob inline, returns that.
+///
+/// Otherwise, content uses LargeValueChunkKeys. In this case, fetches the
+/// chunks, concatenates them, and returns the resulting monolithic blob.
+///
+/// Possible reasons for returning Err:
+///
+///   1. get_chunk call fail.
+///   2. content does not have value
+pub async fn dechunkify_mutation_value(
+    mutation: HighCapacityRegistryMutation,
+    get_chunk: &(impl GetChunk + Sync),
+) -> Result<Option<Vec<u8>>, Error> {
+    let mutation_type =
+        registry_mutation::Type::try_from(mutation.mutation_type).map_err(|err| {
+            Error::MalformedMessage(format!(
+                "Unable to determine mutation's type. Cause: {}. mutation: {:#?}",
+                err, mutation,
+            ))
+        })?;
+
+    if mutation_type == registry_mutation::Type::Delete {
+        return Ok(None);
+    }
+
+    let HighCapacityRegistryMutation {
+        content,
+        mutation_type: _,
+        key: _,
+    } = mutation;
+
+    let Some(content) = content else {
+        return Ok(Some(vec![]));
+    };
+
+    use high_capacity_registry_mutation::Content as C;
+    let large_value_chunk_keys = match content {
+        C::LargeValueChunkKeys(ok) => ok,
+
+        C::Value(value) => {
+            return Ok(Some(value));
+        }
+    };
+
+    let monolithic_blob = fetch_large_value(get_chunk, &large_value_chunk_keys)
+        .await
+        .map_err(Error::UnknownError)?;
+
+    Ok(Some(monolithic_blob))
 }
 
 /// Smartly converts from HighCapacityRegistryDelta to (non-high-capacity)
 /// RegistryDelta.
 pub async fn dechunkify_delta(
     delta: HighCapacityRegistryDelta,
-    get_chunk: &impl GetChunk,
+    get_chunk: &(impl GetChunk + Sync),
 ) -> Result<RegistryDelta, Error> {
     let HighCapacityRegistryDelta {
         key,
@@ -234,27 +289,11 @@ pub async fn dechunkify_delta(
     Ok(RegistryDelta { key, values })
 }
 
-/// Returns concatenation of chunks.
-///
-/// Fetches each chunk using get_chunk_with_validation.
-pub async fn fetch_large_value(
-    get_chunk: &impl GetChunk,
-    keys: &LargeValueChunkKeys,
-) -> Result<Vec<u8>, String> {
-    let mut result = vec![];
-    // Chunks could instead be fetched in parallel.
-    for key in &keys.chunk_content_sha256s {
-        let mut chunk_content = get_chunk_with_validation(get_chunk, key).await?;
-        result.append(&mut chunk_content);
-    }
-    Ok(result)
-}
-
 // Privates
 
 async fn dechunkify_value(
     value: HighCapacityRegistryValue,
-    get_chunk: &impl GetChunk,
+    get_chunk: &(impl GetChunk + Sync),
 ) -> Result<RegistryValue, Error> {
     let HighCapacityRegistryValue {
         version,
@@ -281,7 +320,7 @@ async fn dechunkify_value(
 
 async fn dechunkify_value_content(
     content: high_capacity_registry_value::Content,
-    get_chunk: &impl GetChunk,
+    get_chunk: &(impl GetChunk + Sync),
 ) -> Result<Option<Vec<u8>>, Error> {
     match content {
         high_capacity_registry_value::Content::Value(value) => Ok(Some(value)),
@@ -305,9 +344,25 @@ async fn dechunkify_value_content(
     }
 }
 
+/// Returns concatenation of chunks.
+///
+/// Fetches each chunk using get_chunk_with_validation.
+async fn fetch_large_value( // DO NOT MERGE - Rename to dechunkify.
+    get_chunk: &(impl GetChunk + Sync),
+    keys: &LargeValueChunkKeys,
+) -> Result<Vec<u8>, String> {
+    let mut result = vec![];
+    // Chunks could instead be fetched in parallel.
+    for key in &keys.chunk_content_sha256s {
+        let mut chunk_content = get_chunk_with_validation(get_chunk, key).await?;
+        result.append(&mut chunk_content);
+    }
+    Ok(result)
+}
+
 /// Verification is needed because `get_chunk` is a query.
 async fn get_chunk_with_validation(
-    get_chunk: &impl GetChunk,
+    get_chunk: &(impl GetChunk + Sync),
     content_sha256: &[u8],
 ) -> Result<Vec<u8>, String> {
     let chunk_content = get_chunk

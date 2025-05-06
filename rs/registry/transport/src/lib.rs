@@ -3,7 +3,7 @@ pub mod pb;
 
 mod high_capacity;
 
-pub use high_capacity::{dechunkify_delta, fetch_large_value, GetChunk, MockGetChunk};
+pub use high_capacity::{dechunkify_delta, dechunkify_mutation_value, GetChunk, MockGetChunk};
 
 use std::{fmt, str};
 
