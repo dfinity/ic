@@ -1651,6 +1651,14 @@ impl From<IDkgPrefix> for IDkgIdKey {
     }
 }
 
+impl From<IDkgTranscriptId> for IDkgIdKey {
+    fn from(transcript_id: IDkgTranscriptId) -> IDkgIdKey {
+        let mut bytes = vec![];
+        bytes.extend_from_slice(&u64::to_be_bytes(transcript_id.id()));
+        IDkgIdKey(bytes)
+    }
+}
+
 fn deser_idkg_artifact_id_data(bytes: &[u8]) -> Result<IDkgArtifactIdData, ProxyDecodeError> {
     pb::IDkgArtifactIdData::decode(bytes)
         .map_err(ProxyDecodeError::DecodeError)
@@ -1849,10 +1857,13 @@ impl IDkgMessageDb {
     where
         <T as TryFrom<IDkgMessage>>::Error: Debug,
     {
-        self.iter_impl(
-            Some(IDkgIdKey(u64::to_be_bytes(transcript_id.id()).to_vec())),
-            |message_id| IDkgIdKey(u64::to_be_bytes(message_id.prefix().group_tag()).to_vec()),
-        )
+        self.iter_impl(Some(transcript_id), move |message_id| {
+            IDkgTranscriptId::new(
+                *transcript_id.source_subnet(),
+                message_id.prefix().group_tag(),
+                transcript_id.source_height(),
+            )
+        })
     }
 
     fn iter_impl<'a, T: TryFrom<IDkgMessage>, U: Into<IDkgIdKey> + Clone + PartialEq + 'a>(
