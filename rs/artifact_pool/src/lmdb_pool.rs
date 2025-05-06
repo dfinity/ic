@@ -1857,19 +1857,19 @@ impl IDkgMessageDb {
 
     fn iter_impl<'a, T: TryFrom<IDkgMessage>, U: Into<IDkgIdKey> + Clone + PartialEq + 'a>(
         &'a self,
-        group: Option<U>,
-        id_to_group: impl Fn(&IDkgMessageId) -> U + 'a,
+        selector: Option<U>,
+        id_to_selector: impl Fn(&IDkgMessageId) -> U + 'a,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, T)> + 'a>
     where
         <T as TryFrom<IDkgMessage>>::Error: Debug,
     {
-        // Iterator over the database with the given group, or all entries if not specified.
-        // It is important that the group must be a prefix of the key as we start at the
-        // first key that matches the group and stop at the first key that does not.
+        // Iterator over the database with the given selector, or all entries if not specified.
+        // It is important that the selector must be a prefix of the key as we start at the
+        // first key that matches the selector and stop at the first key that does not.
 
         let message_type = self.object_type;
         let log = self.log.clone();
-        let group_cl = group.as_ref().map(|w| w.clone());
+        let selector_cl = selector.as_ref().map(|s| s.clone());
         let deserialize_fn = move |key: &[u8], bytes: &[u8]| {
             // Convert key bytes to IDkgMessageId
             let mut key_bytes = Vec::<u8>::new();
@@ -1888,9 +1888,9 @@ impl IDkgMessageDb {
                 }
             };
 
-            // Stop iterating if we hit a different group.
-            if let Some(group) = &group_cl {
-                if id_to_group(&id) != *group {
+            // Stop iterating if we hit a different selector.
+            if let Some(selector) = &selector_cl {
+                if id_to_selector(&id) != *selector {
                     return None;
                 }
             }
@@ -1931,7 +1931,7 @@ impl IDkgMessageDb {
             self.db_env.clone(),
             self.db,
             deserialize_fn,
-            group.map(|g| g.into()),
+            selector.map(|s| s.into()),
             self.log.clone(),
         ))
     }
