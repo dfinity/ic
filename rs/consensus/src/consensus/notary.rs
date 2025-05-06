@@ -23,14 +23,15 @@
 //! * A node must not issue new notarization share for any round older than the
 //!   latest round, which would break security if it has already finality-signed
 //!   for that round.
+use super::status;
 use crate::consensus::metrics::NotaryMetrics;
 use ic_consensus_utils::{
     crypto::ConsensusCrypto,
     find_lowest_ranked_non_disqualified_proposals, get_notarization_delay_settings,
     membership::{Membership, MembershipError},
-    pool_reader::PoolReader,
+    pool_reader::PoolReaderImpl,
 };
-use ic_interfaces::time_source::TimeSource;
+use ic_interfaces::{pool_reader::PoolReader, time_source::TimeSource};
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{error, trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -45,8 +46,6 @@ use ic_types::{
     Height,
 };
 use std::{sync::Arc, time::Duration};
-
-use super::status;
 
 /// The acceptable gap between the finalized height and the certified height. If
 /// the actual gap is greater than this, consensus starts slowing down the block
@@ -100,7 +99,7 @@ impl Notary {
     /// If this node is a member of the notary group for the current round,
     /// attempt to find the best blocks that we can notarize, and notarize them.
     /// Else, do nothing.
-    pub fn on_state_change(&self, pool: &PoolReader<'_>) -> Vec<NotarizationShare> {
+    pub fn on_state_change(&self, pool: &PoolReaderImpl<'_>) -> Vec<NotarizationShare> {
         trace!(self.log, "on_state_change");
         let notarized_height = pool.get_notarized_height();
         let mut notarization_shares = Vec::new();
@@ -127,7 +126,7 @@ impl Notary {
     /// notarization delay for the given block rank, or None otherwise.
     fn time_to_notarize(
         &self,
-        pool: &PoolReader<'_>,
+        pool: &PoolReaderImpl<'_>,
         height: Height,
         rank: Rank,
     ) -> Option<Duration> {
@@ -158,7 +157,7 @@ impl Notary {
     /// Return `true` if this node is a member of the notary group for the
     /// current round (given the previous beacon). Return `false` if not or we
     /// failed to determine the committee for this round.
-    fn is_notary(&self, pool: &PoolReader<'_>, previous_beacon: &RandomBeacon) -> bool {
+    fn is_notary(&self, pool: &PoolReaderImpl<'_>, previous_beacon: &RandomBeacon) -> bool {
         match self.membership.node_belongs_to_notarization_committee(
             previous_beacon.height().increment(),
             previous_beacon,
@@ -185,7 +184,7 @@ impl Notary {
     /// Notarize and return a `NotarizationShare` for the given block
     pub(crate) fn notarize_block(
         &self,
-        pool: &PoolReader<'_>,
+        pool: &PoolReaderImpl<'_>,
         block: &HashedBlock,
     ) -> Option<NotarizationShare> {
         let registry_version = pool.registry_version(block.height())?;
@@ -206,7 +205,7 @@ impl Notary {
     /// for the given block proposal. Return false otherwise.
     pub(crate) fn is_proposal_already_notarized_by_me(
         &self,
-        pool: &PoolReader<'_>,
+        pool: &PoolReaderImpl<'_>,
         proposal: &BlockProposal,
     ) -> bool {
         let height = proposal.height();
@@ -244,7 +243,7 @@ enum NotaryDelay {
 /// Use membership and height to determine the notarization settings that should be used.
 fn get_adjusted_notary_delay(
     membership: &Membership,
-    pool: &PoolReader<'_>,
+    pool: &PoolReaderImpl<'_>,
     state_manager: &dyn StateManager<State = ReplicatedState>,
     log: &ReplicaLogger,
     height: Height,
@@ -299,7 +298,7 @@ fn get_adjusted_notary_delay(
 /// height.
 fn get_adjusted_notary_delay_from_settings(
     settings: NotarizationDelaySettings,
-    pool: &PoolReader<'_>,
+    pool: &PoolReaderImpl<'_>,
     state_manager: &dyn StateManager<State = ReplicatedState>,
     membership: &Membership,
     rank: Rank,
@@ -431,7 +430,7 @@ mod tests {
 
             pool.advance_round_normal_operation();
 
-            let h = PoolReader::new(&pool).get_notarized_height();
+            let h = PoolReaderImpl::new(&pool).get_notarized_height();
             assert_eq!(h, Height::from(1));
 
             // 1. insert a new block proposal and check if notarization share is created
@@ -451,7 +450,7 @@ mod tests {
             );
             // Time has not expired for rank 0 initially
             let run_notary = |pool: &dyn ConsensusPool| {
-                let reader = PoolReader::new(pool);
+                let reader = PoolReaderImpl::new(pool);
                 notary.on_state_change(&reader)
             };
             assert!(run_notary(&pool).is_empty());
@@ -462,7 +461,7 @@ mod tests {
                     time_source.get_relative_time()
                         + get_adjusted_notary_delay(
                             membership.as_ref(),
-                            &PoolReader::new(&pool),
+                            &PoolReaderImpl::new(&pool),
                             state_manager.as_ref(),
                             &no_op_logger(),
                             Height::from(1),
@@ -484,7 +483,7 @@ mod tests {
 
             pool.notarize(&block);
             assert_eq!(
-                PoolReader::new(&pool).get_notarized_height(),
+                PoolReaderImpl::new(&pool).get_notarized_height(),
                 Height::from(2)
             );
 
@@ -511,7 +510,7 @@ mod tests {
                     time_source.get_relative_time()
                         + get_adjusted_notary_delay(
                             membership.as_ref(),
-                            &PoolReader::new(&pool),
+                            &PoolReaderImpl::new(&pool),
                             state_manager.as_ref(),
                             &no_op_logger(),
                             Height::from(1),
@@ -528,7 +527,7 @@ mod tests {
                     time_source.get_relative_time()
                         + get_adjusted_notary_delay(
                             membership.as_ref(),
-                            &PoolReader::new(&pool),
+                            &PoolReaderImpl::new(&pool),
                             state_manager.as_ref(),
                             &no_op_logger(),
                             Height::from(1),
@@ -640,7 +639,7 @@ mod tests {
                 no_op_logger(),
             );
             let run_notary = |pool: &dyn ConsensusPool| {
-                let reader = PoolReader::new(pool);
+                let reader = PoolReaderImpl::new(pool);
                 notary.on_state_change(&reader)
             };
 
@@ -661,7 +660,7 @@ mod tests {
             time_source.advance_only_monotonic(
                 get_adjusted_notary_delay(
                     membership.as_ref(),
-                    &PoolReader::new(&pool),
+                    &PoolReaderImpl::new(&pool),
                     state_manager.as_ref(),
                     &no_op_logger(),
                     Height::from(5),
@@ -693,7 +692,7 @@ mod tests {
                 membership,
                 ..
             } = dependencies_with_subnet_params(pool_config, subnet_test_id(0), vec![(1, record)]);
-            let last_cup_dkg_info = PoolReader::new(&pool)
+            let last_cup_dkg_info = PoolReaderImpl::new(&pool)
                 .get_highest_catch_up_package()
                 .content
                 .block
@@ -713,7 +712,7 @@ mod tests {
             pool.advance_round_normal_operation_no_cup_n(ACCEPTABLE_NOTARIZATION_CUP_GAP - 1);
 
             let gap_trigger_height = Height::new(
-                PoolReader::new(&pool).get_notarized_height().get()
+                PoolReaderImpl::new(&pool).get_notarized_height().get()
                     - ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP
                     - 1,
             );
@@ -725,7 +724,7 @@ mod tests {
             assert_matches!(
                 get_adjusted_notary_delay_from_settings(
                     settings.clone(),
-                    &PoolReader::new(&pool),
+                    &PoolReaderImpl::new(&pool),
                     state_manager.as_ref(),
                     membership.as_ref(),
                     Rank(0),
@@ -738,12 +737,12 @@ mod tests {
             state_manager
                 .get_mut()
                 .expect_latest_certified_height()
-                .return_const(PoolReader::new(&pool).get_finalized_height());
+                .return_const(PoolReaderImpl::new(&pool).get_finalized_height());
 
             assert_eq!(
                 get_adjusted_notary_delay_from_settings(
                     settings.clone(),
-                    &PoolReader::new(&pool),
+                    &PoolReaderImpl::new(&pool),
                     state_manager.as_ref(),
                     membership.as_ref(),
                     Rank(0),
@@ -756,14 +755,14 @@ mod tests {
             state_manager
                 .get_mut()
                 .expect_latest_certified_height()
-                .return_const(PoolReader::new(&pool).get_finalized_height());
+                .return_const(PoolReaderImpl::new(&pool).get_finalized_height());
 
             pool.advance_round_normal_operation_no_cup();
 
             assert_matches!(
                 get_adjusted_notary_delay_from_settings(
                     settings,
-                    &PoolReader::new(&pool),
+                    &PoolReaderImpl::new(&pool),
                     state_manager.as_ref(),
                     membership.as_ref(),
                     Rank(0),
@@ -806,7 +805,7 @@ mod tests {
 
             let notary_delay = get_adjusted_notary_delay_from_settings(
                 settings.clone(),
-                &PoolReader::new(&pool),
+                &PoolReaderImpl::new(&pool),
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
@@ -821,7 +820,7 @@ mod tests {
             pool.advance_round_normal_operation_n(ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP);
             let notary_delay = get_adjusted_notary_delay_from_settings(
                 settings.clone(),
-                &PoolReader::new(&pool),
+                &PoolReaderImpl::new(&pool),
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
@@ -836,7 +835,7 @@ mod tests {
             pool.advance_round_normal_operation_n(1);
             let notary_delay = get_adjusted_notary_delay_from_settings(
                 settings.clone(),
-                &PoolReader::new(&pool),
+                &PoolReaderImpl::new(&pool),
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
@@ -852,7 +851,7 @@ mod tests {
             pool.advance_round_normal_operation_n(1);
             let notary_delay = get_adjusted_notary_delay_from_settings(
                 settings.clone(),
-                &PoolReader::new(&pool),
+                &PoolReaderImpl::new(&pool),
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
@@ -870,7 +869,7 @@ mod tests {
                 Height::from(ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP + 2);
             let notary_delay = get_adjusted_notary_delay_from_settings(
                 settings.clone(),
-                &PoolReader::new(&pool),
+                &PoolReaderImpl::new(&pool),
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
@@ -937,7 +936,7 @@ mod tests {
             // Notary delay should be increased
             let notary_delay = get_adjusted_notary_delay_from_settings(
                 settings.clone(),
-                &PoolReader::new(&pool),
+                &PoolReaderImpl::new(&pool),
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
@@ -958,7 +957,7 @@ mod tests {
             // Notary delay should not be increased during pending upgrade
             let notary_delay = get_adjusted_notary_delay_from_settings(
                 settings.clone(),
-                &PoolReader::new(&pool),
+                &PoolReaderImpl::new(&pool),
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),

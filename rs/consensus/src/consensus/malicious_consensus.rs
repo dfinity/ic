@@ -5,8 +5,11 @@ use crate::consensus::{
     add_all_to_validated, block_maker, block_maker::BlockMaker, finalizer::Finalizer,
     notary::Notary,
 };
-use ic_consensus_utils::pool_reader::PoolReader;
-use ic_interfaces::consensus_pool::{ChangeAction, HeightRange, Mutations};
+use ic_consensus_utils::pool_reader::PoolReaderImpl;
+use ic_interfaces::{
+    consensus_pool::{ChangeAction, HeightRange, Mutations},
+    pool_reader::PoolReader,
+};
 use ic_logger::{info, trace, ReplicaLogger};
 use ic_types::{
     consensus::{
@@ -20,7 +23,10 @@ use std::time::Duration;
 
 /// Return a `Mutations` that moves all block proposals in the range to the
 /// validated pool.
-fn maliciously_validate_all_blocks(pool_reader: &PoolReader, logger: &ReplicaLogger) -> Mutations {
+fn maliciously_validate_all_blocks(
+    pool_reader: &PoolReaderImpl,
+    logger: &ReplicaLogger,
+) -> Mutations {
     trace!(logger, "maliciously_validate_all_blocks");
     let mut change_set = Vec::new();
 
@@ -55,7 +61,7 @@ fn maliciously_validate_all_blocks(pool_reader: &PoolReader, logger: &ReplicaLog
 /// multiple blocks at once.
 fn maliciously_propose_blocks(
     block_maker: &BlockMaker,
-    pool: &PoolReader<'_>,
+    pool: &PoolReaderImpl<'_>,
     maliciously_propose_empty_blocks: bool,
     maliciously_equivocation_blockmaker: bool,
 ) -> Vec<BlockProposal> {
@@ -162,7 +168,7 @@ fn maliciously_propose_blocks(
 /// batch payload.
 fn maliciously_propose_empty_block(
     block_maker: &BlockMaker,
-    pool: &PoolReader<'_>,
+    pool: &PoolReaderImpl<'_>,
     rank: Rank,
     parent: HashedBlock,
 ) -> Option<BlockProposal> {
@@ -194,7 +200,7 @@ fn maliciously_propose_empty_block(
 }
 
 /// Maliciously notarize all unnotarized proposals for the current height.
-fn maliciously_notarize_all(notary: &Notary, pool: &PoolReader<'_>) -> Vec<NotarizationShare> {
+fn maliciously_notarize_all(notary: &Notary, pool: &PoolReaderImpl<'_>) -> Vec<NotarizationShare> {
     use ic_protobuf::log::malicious_behaviour_log_entry::v1::{
         MaliciousBehaviour, MaliciousBehaviourLogEntry,
     };
@@ -235,7 +241,7 @@ fn maliciously_notarize_all(notary: &Notary, pool: &PoolReader<'_>) -> Vec<Notar
 /// pool.
 fn maliciously_finalize_all(
     finalizer: &Finalizer,
-    pool: &PoolReader<'_>,
+    pool: &PoolReaderImpl<'_>,
 ) -> Vec<FinalizationShare> {
     use ic_protobuf::log::malicious_behaviour_log_entry::v1::{
         MaliciousBehaviour, MaliciousBehaviourLogEntry,
@@ -289,7 +295,7 @@ fn maliciously_finalize_all(
 /// Try to create a finalization share for a given block.
 fn maliciously_finalize_block(
     finalizer: &Finalizer,
-    pool: &PoolReader<'_>,
+    pool: &PoolReaderImpl<'_>,
     block: &Block,
 ) -> Option<FinalizationShare> {
     let content = FinalizationContent::new(block.height, ic_types::crypto::crypto_hash(block));
@@ -307,7 +313,7 @@ fn maliciously_finalize_block(
 /// Simulate malicious consensus behavior by modifying changeset.
 #[allow(unused, clippy::too_many_arguments)]
 pub fn maliciously_alter_changeset(
-    pool: &PoolReader,
+    pool: &PoolReaderImpl,
     honest_changeset: Mutations,
     malicious_flags: &MaliciousFlags,
     block_maker: &BlockMaker,

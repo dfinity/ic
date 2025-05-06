@@ -15,7 +15,7 @@ use ic_consensus_certification::{CertificationCrypto, CertifierBouncer, Certifie
 use ic_consensus_dkg::DkgBouncer;
 use ic_consensus_idkg::{IDkgBouncer, IDkgStatsImpl};
 use ic_consensus_manager::{AbortableBroadcastChannel, AbortableBroadcastChannelBuilder};
-use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
+use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReaderImpl};
 use ic_consensus_vetkd::VetKdPayloadBuilderImpl;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tls_interfaces::TlsConfig;
@@ -551,7 +551,7 @@ fn start_consensus(
         metrics_registry.clone(),
         Arc::clone(&consensus_crypto),
         log.clone(),
-        &PoolReader::new(&*consensus_pool.read().unwrap()),
+        &PoolReaderImpl::new(&*consensus_pool.read().unwrap()),
     )));
 
     let mut join_handles = vec![];

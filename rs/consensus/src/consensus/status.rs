@@ -1,6 +1,7 @@
 use std::fmt::Display;
 
-use ic_consensus_utils::{lookup_replica_version, pool_reader::PoolReader};
+use ic_consensus_utils::{lookup_replica_version, pool_reader::PoolReaderImpl};
+use ic_interfaces::pool_reader::PoolReader;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -31,7 +32,7 @@ pub fn get_status(
     height: Height,
     registry_client: &(impl RegistryClient + ?Sized),
     subnet_id: SubnetId,
-    pool: &PoolReader<'_>,
+    pool: &PoolReaderImpl<'_>,
     logger: &ReplicaLogger,
 ) -> Option<Status> {
     if should_halt(height, registry_client, subnet_id, pool, logger)
@@ -56,7 +57,7 @@ pub fn should_halt(
     height: Height,
     registry_client: &(impl RegistryClient + ?Sized),
     subnet_id: SubnetId,
-    pool: &PoolReader<'_>,
+    pool: &PoolReaderImpl<'_>,
     logger: &ReplicaLogger,
 ) -> Option<bool> {
     let registry_version = pool.registry_version(height).warn_if_none(
@@ -178,7 +179,7 @@ mod tests {
                     current_height,
                     registry_client.as_ref(),
                     subnet_id,
-                    &PoolReader::new(&pool),
+                    &PoolReaderImpl::new(&pool),
                     &logger,
                 );
 

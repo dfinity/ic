@@ -12,7 +12,7 @@ use ic_consensus_idkg::utils::{
     get_pre_signature_ids_to_deliver,
 };
 use ic_consensus_utils::{
-    crypto_hashable_to_seed, membership::Membership, pool_reader::PoolReader,
+    crypto_hashable_to_seed, membership::Membership, pool_reader::PoolReaderImpl,
 };
 use ic_consensus_vetkd::VetKdPayloadBuilderImpl;
 use ic_error_types::RejectCode;
@@ -20,6 +20,7 @@ use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl
 use ic_interfaces::{
     batch_payload::IntoMessages,
     messaging::{MessageRouting, MessageRoutingError},
+    pool_reader::PoolReader,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{debug, error, info, warn, ReplicaLogger};
@@ -50,7 +51,7 @@ use std::collections::BTreeMap;
 pub fn deliver_batches(
     message_routing: &dyn MessageRouting,
     membership: &Membership,
-    pool: &PoolReader<'_>,
+    pool: &PoolReaderImpl<'_>,
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
     log: &ReplicaLogger,

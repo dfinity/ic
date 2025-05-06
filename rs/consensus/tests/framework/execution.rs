@@ -1,6 +1,6 @@
 use super::types::*;
 use ic_consensus::consensus::bounds::validated_pool_within_bounds;
-use ic_consensus_utils::pool_reader::PoolReader;
+use ic_consensus_utils::pool_reader::PoolReaderImpl;
 use ic_interfaces::p2p::consensus::{BouncerValue, MutablePool, UnvalidatedArtifact};
 use ic_logger::{trace, ReplicaLogger};
 use ic_test_utilities_types::ids::node_test_id;
@@ -110,7 +110,7 @@ fn execute_instance(
 
         // Assert that instance has not crossed their validated pool bounds.
         let pool = instance.deps.consensus_pool.read().unwrap();
-        let pool_reader = PoolReader::new(&*pool);
+        let pool_reader = PoolReaderImpl::new(&*pool);
         let cfg = &instance.deps.replica_config;
         let registry_client = instance.deps.registry_client.as_ref();
         if let Some(excess) = validated_pool_within_bounds(&pool_reader, registry_client, cfg) {

@@ -8,10 +8,11 @@ use ic_consensus_dkg::payload_builder::create_payload as create_dkg_payload;
 use ic_consensus_idkg::{self as idkg, metrics::IDkgPayloadMetrics};
 use ic_consensus_utils::{
     find_lowest_ranked_non_disqualified_proposals, get_notarization_delay_settings,
-    get_subnet_record, membership::Membership, pool_reader::PoolReader,
+    get_subnet_record, membership::Membership, pool_reader::PoolReaderImpl,
 };
 use ic_interfaces::{
-    consensus::PayloadBuilder, dkg::DkgPool, idkg::IDkgPool, time_source::TimeSource,
+    consensus::PayloadBuilder, dkg::DkgPool, idkg::IDkgPool, pool_reader::PoolReader,
+    time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
@@ -114,7 +115,7 @@ impl BlockMaker {
     }
 
     /// If a block should be proposed, propose it.
-    pub fn on_state_change(&self, pool: &PoolReader<'_>) -> Option<BlockProposal> {
+    pub fn on_state_change(&self, pool: &PoolReaderImpl<'_>) -> Option<BlockProposal> {
         trace!(self.log, "on_state_change");
         let my_node_id = self.replica_config.node_id;
         let (beacon, parent) = get_dependencies(pool)?;
@@ -163,7 +164,7 @@ impl BlockMaker {
     /// disqualified) block proposal than the given rank, for the given height.
     fn is_better_block_proposal_available(
         &self,
-        pool: &PoolReader<'_>,
+        pool: &PoolReaderImpl<'_>,
         height: Height,
         rank: Rank,
     ) -> bool {
@@ -176,7 +177,7 @@ impl BlockMaker {
     /// Construct a block proposal
     pub(crate) fn propose_block(
         &self,
-        pool: &PoolReader<'_>,
+        pool: &PoolReaderImpl<'_>,
         rank: Rank,
         parent: HashedBlock,
     ) -> Option<BlockProposal> {
@@ -281,7 +282,7 @@ impl BlockMaker {
     /// adding a DKG payload and signs the block to obtain a block proposal.
     pub(crate) fn construct_block_proposal(
         &self,
-        pool: &PoolReader<'_>,
+        pool: &PoolReaderImpl<'_>,
         context: ValidationContext,
         parent: HashedBlock,
         height: Height,
@@ -413,7 +414,7 @@ impl BlockMaker {
 
     fn build_batch_payload(
         &self,
-        pool: &PoolReader<'_>,
+        pool: &PoolReaderImpl<'_>,
         height: Height,
         context: &ValidationContext,
         parent: &Block,
@@ -483,7 +484,7 @@ impl BlockMaker {
 /// Return the parent random beacon and block of the latest round for which
 /// this node might propose a block.
 /// Return None otherwise.
-pub(crate) fn get_dependencies(pool: &PoolReader<'_>) -> Option<(RandomBeacon, HashedBlock)> {
+pub(crate) fn get_dependencies(pool: &PoolReaderImpl<'_>) -> Option<(RandomBeacon, HashedBlock)> {
     let notarized_height = pool.get_notarized_height();
     let beacon = pool.get_random_beacon(notarized_height)?;
     let parent = pool
@@ -493,7 +494,7 @@ pub(crate) fn get_dependencies(pool: &PoolReader<'_>) -> Option<(RandomBeacon, H
 }
 
 /// Return true if this node has already made a proposal at the given height.
-pub(crate) fn already_proposed(pool: &PoolReader<'_>, h: Height, this_node: NodeId) -> bool {
+pub(crate) fn already_proposed(pool: &PoolReaderImpl<'_>, h: Height, this_node: NodeId) -> bool {
     pool.pool()
         .validated()
         .block_proposal()
@@ -521,7 +522,7 @@ pub(crate) fn already_proposed(pool: &PoolReader<'_>, h: Height, this_node: Node
 const DYNAMIC_DELAY_LOOK_BACK_DISTANCE: Height = Height::new(29);
 const DYNAMIC_DELAY_MAX_NON_RANK_0_BLOCKS: usize = 10;
 
-fn count_non_rank_0_blocks(pool: &PoolReader, block: Block) -> usize {
+fn count_non_rank_0_blocks(pool: &PoolReaderImpl, block: Block) -> usize {
     let max_height = block.height();
     let min_height = max_height.saturating_sub(&DYNAMIC_DELAY_LOOK_BACK_DISTANCE);
     pool.get_range(block, min_height, max_height)
@@ -535,7 +536,7 @@ pub(super) fn get_block_maker_delay(
     log: &ReplicaLogger,
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
-    pool: &PoolReader<'_>,
+    pool: &PoolReaderImpl<'_>,
     parent: Block,
     registry_version: RegistryVersion,
     rank: Rank,
@@ -565,7 +566,7 @@ pub(super) fn is_time_to_make_block(
     log: &ReplicaLogger,
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
-    pool: &PoolReader<'_>,
+    pool: &PoolReaderImpl<'_>,
     parent: Block,
     height: Height,
     rank: Rank,
@@ -678,7 +679,7 @@ mod tests {
 
             // Check first block is created immediately because rank 1 has to wait.
             let run_block_maker = || {
-                let reader = PoolReader::new(&pool);
+                let reader = PoolReaderImpl::new(&pool);
                 block_maker.on_state_change(&reader)
             };
             assert!(run_block_maker().is_none());
@@ -690,11 +691,11 @@ mod tests {
             let start = pool.validated().block_proposal().get_highest().unwrap();
             let next_height = start.height().increment();
             let start_hash = start.content.get_hash();
-            let expected_payloads = PoolReader::new(&pool)
+            let expected_payloads = PoolReaderImpl::new(&pool)
                 .get_payloads_from_height(certified_height.increment(), start.as_ref().clone());
             let returned_payload =
                 dkg::Payload::Data(dkg::DkgDataPayload::new_empty(Height::from(0)));
-            let pool_reader = PoolReader::new(&pool);
+            let pool_reader = PoolReaderImpl::new(&pool);
             let expected_time = expected_payloads[0].1
                 + get_block_maker_delay(
                     &no_op_logger(),
@@ -728,7 +729,7 @@ mod tests {
                 })
                 .return_const(BatchPayload::default());
 
-            let pool_reader = PoolReader::new(&pool);
+            let pool_reader = PoolReaderImpl::new(&pool);
             let replica_config = ReplicaConfig {
                 node_id: (0..13)
                     .map(node_test_id)
@@ -757,7 +758,7 @@ mod tests {
                 no_op_logger(),
             );
             let run_block_maker = || {
-                let reader = PoolReader::new(&pool);
+                let reader = PoolReaderImpl::new(&pool);
                 block_maker.on_state_change(&reader)
             };
 
@@ -778,7 +779,7 @@ mod tests {
             pool.insert_validated(pool.make_next_block());
 
             let run_block_maker = || {
-                let reader = PoolReader::new(&pool);
+                let reader = PoolReaderImpl::new(&pool);
                 block_maker.on_state_change(&reader)
             };
 
@@ -891,7 +892,7 @@ mod tests {
             // Skip the first DKG interval
             pool.advance_round_normal_operation_n(dkg_interval_length);
 
-            let proposal = block_maker.on_state_change(&PoolReader::new(&pool));
+            let proposal = block_maker.on_state_change(&PoolReaderImpl::new(&pool));
             assert!(proposal.is_some());
             let mut proposal = proposal.unwrap();
             let block = proposal.content.as_mut();
@@ -902,7 +903,7 @@ mod tests {
             // Skip the second DKG interval
             pool.advance_round_normal_operation_n(dkg_interval_length);
             assert_eq!(
-                PoolReader::new(&pool).registry_version(Height::from(dkg_interval_length * 2)),
+                PoolReaderImpl::new(&pool).registry_version(Height::from(dkg_interval_length * 2)),
                 Some(RegistryVersion::from(1))
             );
 
@@ -928,7 +929,7 @@ mod tests {
             );
 
             // Check CUP block is made.
-            let proposal = block_maker.on_state_change(&PoolReader::new(&pool));
+            let proposal = block_maker.on_state_change(&PoolReaderImpl::new(&pool));
             assert!(proposal.is_some());
             let cup_proposal = proposal.unwrap();
             let block = cup_proposal.content.as_ref();
@@ -941,7 +942,7 @@ mod tests {
             pool.notarize(&cup_proposal);
 
             // 3. Make one more block, payload builder should not have been called.
-            let proposal = block_maker.on_state_change(&PoolReader::new(&pool));
+            let proposal = block_maker.on_state_change(&PoolReaderImpl::new(&pool));
             assert!(proposal.is_some());
             let proposal = proposal.unwrap();
             let block = proposal.content.as_ref();
@@ -949,7 +950,7 @@ mod tests {
             assert_eq!(block.version(), &ReplicaVersion::default());
             // registry version 10 becomes effective.
             assert_eq!(
-                PoolReader::new(&pool).registry_version(proposal.height()),
+                PoolReaderImpl::new(&pool).registry_version(proposal.height()),
                 Some(RegistryVersion::from(10))
             );
         })
@@ -1144,7 +1145,7 @@ mod tests {
 
             let parent = pool.latest_notarized_blocks().next().unwrap();
 
-            let pool_reader = PoolReader::new(&pool);
+            let pool_reader = PoolReaderImpl::new(&pool);
 
             get_block_maker_delay(
                 &no_op_logger(),

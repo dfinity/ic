@@ -4,11 +4,12 @@ use crate::{
     complaints::{IDkgTranscriptLoader, TranscriptLoadStatus},
     metrics::IDkgPayloadMetrics,
 };
-use ic_consensus_utils::pool_reader::PoolReader;
+use ic_consensus_utils::pool_reader::PoolReaderImpl;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_interfaces::{
     consensus_pool::ConsensusBlockChain,
     idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool},
+    pool_reader::PoolReader,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
@@ -185,7 +186,7 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
 }
 
 pub(super) fn block_chain_reader(
-    pool_reader: &PoolReader<'_>,
+    pool_reader: &PoolReaderImpl<'_>,
     summary_block: &Block,
     parent_block: &Block,
     idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
@@ -209,7 +210,7 @@ pub(super) fn block_chain_reader(
 
 /// Wrapper to build the chain cache and perform sanity checks on the returned chain
 pub(super) fn block_chain_cache(
-    pool_reader: &PoolReader<'_>,
+    pool_reader: &PoolReaderImpl<'_>,
     start: &Block,
     end: &Block,
 ) -> Result<Arc<dyn ConsensusBlockChain>, InvalidChainCacheError> {
@@ -568,7 +569,7 @@ pub fn generate_responses_to_signature_request_contexts(
 pub fn get_idkg_subnet_public_keys(
     current_block: &Block,
     last_dkg_summary_block: &Block,
-    pool: &PoolReader<'_>,
+    pool: &PoolReaderImpl<'_>,
     log: &ReplicaLogger,
 ) -> BTreeMap<MasterPublicKeyId, MasterPublicKey> {
     let Some(idkg_payload) = current_block.payload.as_ref().as_idkg() else {

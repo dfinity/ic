@@ -24,9 +24,9 @@ use ic_consensus_utils::{
     active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
     membership::{Membership, MembershipError},
-    pool_reader::PoolReader,
+    pool_reader::PoolReaderImpl,
 };
-use ic_interfaces::messaging::MessageRouting;
+use ic_interfaces::{messaging::MessageRouting, pool_reader::PoolReader};
 use ic_logger::{error, trace, ReplicaLogger};
 use ic_types::{
     consensus::{HasCommittee, RandomTape, RandomTapeContent, RandomTapeShare},
@@ -73,7 +73,7 @@ impl RandomTapeMaker {
     }
 
     /// Determine if a random tape share should be created for height h
-    fn should_create_share(&self, pool: &PoolReader<'_>, height: Height) -> bool {
+    fn should_create_share(&self, pool: &PoolReaderImpl<'_>, height: Height) -> bool {
         match self.membership.node_belongs_to_threshold_committee(
             self.replica_config.node_id,
             height,
@@ -128,7 +128,7 @@ impl RandomTapeMaker {
     fn create_random_tape_share(
         &self,
         height: Height,
-        pool: &PoolReader<'_>,
+        pool: &PoolReaderImpl<'_>,
     ) -> Option<RandomTapeShare> {
         let content = RandomTapeContent::new(height);
 
@@ -152,7 +152,7 @@ impl RandomTapeMaker {
         }
     }
 
-    pub fn on_state_change(&self, pool: &PoolReader<'_>) -> Vec<RandomTapeShare> {
+    pub fn on_state_change(&self, pool: &PoolReaderImpl<'_>) -> Vec<RandomTapeShare> {
         trace!(self.log, "on_state_change");
 
         // Determine for which heights we want to create random tape shares. We
@@ -226,7 +226,7 @@ mod tests {
             // With a pool with just one block (with finalized height 1) and the next
             // expected batch height 2, we should add one random tape share (for
             // height 2).
-            let shares = random_tape_maker.on_state_change(&PoolReader::new(&pool));
+            let shares = random_tape_maker.on_state_change(&PoolReaderImpl::new(&pool));
 
             assert_eq!(shares.len(), 1);
             assert_eq!(heights_of_added_shares(&shares), vec![Height::from(2)]);
@@ -237,7 +237,7 @@ mod tests {
                 time_source.get_relative_time(),
                 shares,
             ));
-            let shares = random_tape_maker.on_state_change(&PoolReader::new(&pool));
+            let shares = random_tape_maker.on_state_change(&PoolReaderImpl::new(&pool));
             assert_eq!(shares.len(), 0);
 
             // when the finalized chain grows by 3 blocks (to reach finalized height 4), the
@@ -248,7 +248,7 @@ mod tests {
             round.advance();
             round.advance();
             round.advance();
-            let shares = random_tape_maker.on_state_change(&PoolReader::new(&pool));
+            let shares = random_tape_maker.on_state_change(&PoolReaderImpl::new(&pool));
             assert_eq!(shares.len(), 3);
             assert_eq!(
                 heights_of_added_shares(&shares),
@@ -269,7 +269,7 @@ mod tests {
                 RandomTapeContent::new(Height::from(7)),
             )));
 
-            let shares = random_tape_maker.on_state_change(&PoolReader::new(&pool));
+            let shares = random_tape_maker.on_state_change(&PoolReaderImpl::new(&pool));
             assert_eq!(shares.len(), 2);
             assert_eq!(
                 heights_of_added_shares(&shares),
@@ -291,7 +291,7 @@ mod tests {
             round.advance();
             *message_routing.next_batch_height.write().unwrap() = Height::from(10);
 
-            let shares = random_tape_maker.on_state_change(&PoolReader::new(&pool));
+            let shares = random_tape_maker.on_state_change(&PoolReaderImpl::new(&pool));
             assert_eq!(shares.len(), 1);
             assert_eq!(heights_of_added_shares(&shares), vec![Height::from(10)]);
         })

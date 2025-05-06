@@ -5,10 +5,10 @@
 use crate::consensus::random_tape_maker::RANDOM_TAPE_CHECK_MAX_HEIGHT_RANGE;
 use ic_consensus_utils::{
     active_high_threshold_nidkg_id, active_low_threshold_nidkg_id, aggregate,
-    crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
+    crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReaderImpl,
     registry_version_at_height,
 };
-use ic_interfaces::messaging::MessageRouting;
+use ic_interfaces::{messaging::MessageRouting, pool_reader::PoolReader};
 use ic_logger::ReplicaLogger;
 use ic_types::{
     consensus::{
@@ -46,7 +46,7 @@ impl ShareAggregator {
 
     /// Attempt to construct artifacts from artifact shares in the artifact
     /// pool
-    pub fn on_state_change(&self, pool: &PoolReader<'_>) -> Vec<ConsensusMessage> {
+    pub fn on_state_change(&self, pool: &PoolReaderImpl<'_>) -> Vec<ConsensusMessage> {
         let mut messages = Vec::new();
         messages.append(&mut self.aggregate_random_beacon_shares(pool));
         messages.append(&mut self.aggregate_random_tape_shares(pool));
@@ -57,7 +57,7 @@ impl ShareAggregator {
     }
 
     /// Attempt to construct the next round's `RandomBeacon`
-    fn aggregate_random_beacon_shares(&self, pool: &PoolReader<'_>) -> Vec<ConsensusMessage> {
+    fn aggregate_random_beacon_shares(&self, pool: &PoolReaderImpl<'_>) -> Vec<ConsensusMessage> {
         let height = pool.get_random_beacon_height().increment();
         let shares = pool.get_random_beacon_shares(height);
         let state_reader = pool.as_cache();
@@ -73,7 +73,7 @@ impl ShareAggregator {
 
     /// Attempt to construct random tapes for rounds greater than or equal to
     /// expected_batch_height.
-    fn aggregate_random_tape_shares(&self, pool: &PoolReader<'_>) -> Vec<ConsensusMessage> {
+    fn aggregate_random_tape_shares(&self, pool: &PoolReaderImpl<'_>) -> Vec<ConsensusMessage> {
         let expected_height = self.message_routing.expected_batch_height();
         let finalized_height = pool.get_finalized_height();
         let max_height = min(
@@ -97,7 +97,7 @@ impl ShareAggregator {
     }
 
     /// Attempt to construct `Notarization`s at `notarized_height + 1`
-    fn aggregate_notarization_shares(&self, pool: &PoolReader<'_>) -> Vec<ConsensusMessage> {
+    fn aggregate_notarization_shares(&self, pool: &PoolReaderImpl<'_>) -> Vec<ConsensusMessage> {
         let height = pool.get_notarized_height().increment();
         let shares = pool.get_notarization_shares(height);
         let state_reader = pool.as_cache();
@@ -112,7 +112,7 @@ impl ShareAggregator {
     }
 
     /// Attempt to construct `Finalization`s
-    fn aggregate_finalization_shares(&self, pool: &PoolReader<'_>) -> Vec<ConsensusMessage> {
+    fn aggregate_finalization_shares(&self, pool: &PoolReaderImpl<'_>) -> Vec<ConsensusMessage> {
         let shares = pool.get_finalization_shares(
             pool.get_finalized_height().increment(),
             pool.get_notarized_height(),
@@ -130,7 +130,10 @@ impl ShareAggregator {
     }
 
     /// Attempt to construct `CatchUpPackage`s.
-    fn aggregate_catch_up_package_shares(&self, pool: &PoolReader<'_>) -> Vec<ConsensusMessage> {
+    fn aggregate_catch_up_package_shares(
+        &self,
+        pool: &PoolReaderImpl<'_>,
+    ) -> Vec<ConsensusMessage> {
         let mut start_block = pool.get_highest_finalized_summary_block();
         let current_cup_height = pool.get_catch_up_height();
 
@@ -239,7 +242,7 @@ mod tests {
 
             let aggregator =
                 ShareAggregator::new(membership, message_routing, crypto, no_op_logger());
-            let messages = aggregator.on_state_change(&PoolReader::new(&pool));
+            let messages = aggregator.on_state_change(&PoolReaderImpl::new(&pool));
 
             let beacon_was_created = messages.iter().any(|x| match x {
                 ConsensusMessage::RandomBeacon(random_beacon) => {
@@ -264,7 +267,7 @@ mod tests {
             let finalization_share = FinalizationShare::fake(block.as_ref(), signer);
             pool.insert_validated(finalization_share);
 
-            let messages = aggregator.on_state_change(&PoolReader::new(&pool));
+            let messages = aggregator.on_state_change(&PoolReaderImpl::new(&pool));
             let finalization_was_created = messages
                 .iter()
                 .any(|x| matches!(x, ConsensusMessage::Finalization(_)));
@@ -379,7 +382,7 @@ mod tests {
             pool.insert_validated(share2);
 
             // Check if CUP is made from the shares
-            let mut messages = aggregator.on_state_change(&PoolReader::new(&pool));
+            let mut messages = aggregator.on_state_change(&PoolReaderImpl::new(&pool));
             assert!(messages.len() == 1);
             let cup = match messages.pop() {
                 Some(ConsensusMessage::CatchUpPackage(x)) => x,

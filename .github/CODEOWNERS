@@ -158,6 +158,7 @@ go_deps.bzl               @dfinity/idx
 /rs/interfaces/src/messaging.rs                         @dfinity/ic-message-routing-owners
 /rs/interfaces/src/p2p.rs                               @dfinity/consensus
 /rs/interfaces/src/p2p/                                 @dfinity/consensus
+/rs/interfaces/src/pool_reader.rs                             @dfinity/consensus
 /rs/interfaces/src/vetkd.rs                             @dfinity/consensus
 /rs/interfaces/state_manager/                           @dfinity/ic-message-routing-owners
 /rs/ledger_suite/                                       @dfinity/finint

@@ -15,9 +15,9 @@
 
 use ic_consensus_utils::{
     active_high_threshold_nidkg_id, crypto::ConsensusCrypto,
-    get_oldest_idkg_state_registry_version, membership::Membership, pool_reader::PoolReader,
+    get_oldest_idkg_state_registry_version, membership::Membership, pool_reader::PoolReaderImpl,
 };
-use ic_interfaces::messaging::MessageRouting;
+use ic_interfaces::{messaging::MessageRouting, pool_reader::PoolReader};
 use ic_interfaces_state_manager::{
     PermanentStateHashError::*, StateHashError, StateManager, TransientStateHashError::*,
 };
@@ -65,7 +65,7 @@ impl CatchUpPackageMaker {
     /// Invoke state sync if required. This will call fetch_state repeatedly
     /// as needed, because state sync (or matching against existing state hash
     /// during recovery) happens asynchronously.
-    fn invoke_state_sync(&self, pool: &PoolReader<'_>) {
+    fn invoke_state_sync(&self, pool: &PoolReaderImpl<'_>) {
         let catch_up_package = pool.get_highest_catch_up_package();
         let catch_up_height = catch_up_package.height();
         if self.message_routing.expected_batch_height() < catch_up_height {
@@ -93,7 +93,7 @@ impl CatchUpPackageMaker {
     /// Checks if the state hash referenced from the latest CUP matches the one
     /// returned from our local state manager. Report the divergence if it
     /// does not.
-    fn report_state_divergence_if_required(&self, pool: &PoolReader<'_>) {
+    fn report_state_divergence_if_required(&self, pool: &PoolReaderImpl<'_>) {
         let catch_up_package = pool.get_highest_catch_up_package();
         if let Ok(hash) = self
             .state_manager
@@ -110,7 +110,7 @@ impl CatchUpPackageMaker {
     }
 
     /// If a CatchUpPackageShare should be proposed, propose it.
-    pub fn on_state_change(&self, pool: &PoolReader<'_>) -> Option<CatchUpPackageShare> {
+    pub fn on_state_change(&self, pool: &PoolReaderImpl<'_>) -> Option<CatchUpPackageShare> {
         trace!(self.log, "on_state_change");
 
         // Invoke state sync if required
@@ -145,7 +145,7 @@ impl CatchUpPackageMaker {
     /// Consider the provided block for the creation of a catch up package.
     fn consider_block(
         &self,
-        pool: &PoolReader<'_>,
+        pool: &PoolReaderImpl<'_>,
         start_block: Block,
     ) -> Option<CatchUpPackageShare> {
         let height = start_block.height();
@@ -329,7 +329,9 @@ mod tests {
             );
 
             // 1. Genesis CUP already exists, we won't make a new one
-            assert!(cup_maker.on_state_change(&PoolReader::new(&pool)).is_none());
+            assert!(cup_maker
+                .on_state_change(&PoolReaderImpl::new(&pool))
+                .is_none());
 
             // Skip the first DKG interval
             pool.advance_round_normal_operation_n(interval_length);
@@ -343,12 +345,14 @@ mod tests {
             pool.finalize(&proposal);
 
             // 4. Beacon does not exist, we can't make a new CUP share
-            assert!(cup_maker.on_state_change(&PoolReader::new(&pool)).is_none());
+            assert!(cup_maker
+                .on_state_change(&PoolReaderImpl::new(&pool))
+                .is_none());
 
             // 5. Beacon now exists, we can make a new CUP share
             pool.insert_validated(pool.make_next_beacon());
             let share = cup_maker
-                .on_state_change(&PoolReader::new(&pool))
+                .on_state_change(&PoolReaderImpl::new(&pool))
                 .expect("Expecting CatchUpPackageShare");
 
             assert_eq!(&share.content.block, proposal.content.get_hash());
@@ -442,7 +446,9 @@ mod tests {
             );
 
             // Genesis CUP already exists, we won't make a new one
-            assert!(cup_maker.on_state_change(&PoolReader::new(&pool)).is_none());
+            assert!(cup_maker
+                .on_state_change(&PoolReaderImpl::new(&pool))
+                .is_none());
 
             // Skip the first DKG interval
             pool.advance_round_normal_operation_n(interval_length);
@@ -470,7 +476,7 @@ mod tests {
             pool.advance_round_with_block(&proposal);
 
             let share = cup_maker
-                .on_state_change(&PoolReader::new(&pool))
+                .on_state_change(&PoolReaderImpl::new(&pool))
                 .expect("Expecting CatchUpPackageShare");
 
             assert_eq!(&share.content.block, proposal.content.get_hash());
@@ -513,7 +519,7 @@ mod tests {
             );
 
             pool.advance_round_normal_operation_n(5);
-            let cup_height = PoolReader::new(&pool).get_catch_up_height();
+            let cup_height = PoolReaderImpl::new(&pool).get_catch_up_height();
             assert_eq!(cup_height, Height::from(4));
 
             state_manager
@@ -543,7 +549,7 @@ mod tests {
             );
 
             // Check if fetch state is correctly triggered
-            cup_maker.on_state_change(&PoolReader::new(&pool));
+            cup_maker.on_state_change(&PoolReaderImpl::new(&pool));
             assert_eq!(*fetch_height.read().unwrap(), cup_height);
         })
     }
@@ -587,7 +593,7 @@ mod tests {
             );
 
             pool.advance_round_normal_operation_n(5);
-            let cup_height = PoolReader::new(&pool).get_catch_up_height();
+            let cup_height = PoolReaderImpl::new(&pool).get_catch_up_height();
             assert_eq!(cup_height, Height::from(4));
 
             state_manager
@@ -599,7 +605,9 @@ mod tests {
                 ))));
 
             // Nothing happens, because the state is not committed yet.
-            assert!(cup_maker.on_state_change(&PoolReader::new(&pool)).is_none());
+            assert!(cup_maker
+                .on_state_change(&PoolReaderImpl::new(&pool))
+                .is_none());
 
             state_manager
                 .get_mut()
@@ -611,7 +619,9 @@ mod tests {
 
             // Still nothing happens, because the state hash is not computed
             // yet.
-            assert!(cup_maker.on_state_change(&PoolReader::new(&pool)).is_none());
+            assert!(cup_maker
+                .on_state_change(&PoolReaderImpl::new(&pool))
+                .is_none());
 
             // Now make the state manager return a hash which differs from the mocked hash
             // in our fixtures (empty one).
@@ -625,7 +635,7 @@ mod tests {
                 .expect_report_diverged_checkpoint()
                 .times(1)
                 .return_const(());
-            cup_maker.on_state_change(&PoolReader::new(&pool));
+            cup_maker.on_state_change(&PoolReaderImpl::new(&pool));
         })
     }
 }

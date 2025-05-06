@@ -4,8 +4,9 @@ use ic_consensus_utils::{
     active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
     membership::{Membership, MembershipError},
-    pool_reader::PoolReader,
+    pool_reader::PoolReaderImpl,
 };
+use ic_interfaces::pool_reader::PoolReader;
 use ic_logger::{error, trace, ReplicaLogger};
 use ic_types::{
     consensus::{HasCommittee, RandomBeacon, RandomBeaconContent, RandomBeaconShare},
@@ -38,7 +39,7 @@ impl RandomBeaconMaker {
     }
 
     /// If a beacon share should be proposed, propose it.
-    pub fn on_state_change(&self, pool: &PoolReader<'_>) -> Option<RandomBeaconShare> {
+    pub fn on_state_change(&self, pool: &PoolReaderImpl<'_>) -> Option<RandomBeaconShare> {
         trace!(self.log, "on_state_change");
         let my_node_id = self.replica_config.node_id;
         let height = pool.get_notarized_height();
@@ -125,19 +126,19 @@ mod tests {
 
             // 1. Make the next beacon share
             let beacon_share = beacon_maker
-                .on_state_change(&PoolReader::new(&pool))
+                .on_state_change(&PoolReaderImpl::new(&pool))
                 .expect("Expecting RandomBeaconShare");
 
             // 2. Skip making another share
             pool.insert_validated(beacon_share);
             assert!(beacon_maker
-                .on_state_change(&PoolReader::new(&pool))
+                .on_state_change(&PoolReaderImpl::new(&pool))
                 .is_none());
 
             // 3. Next next beacon can't be made due to missing notarized block
             pool.insert_validated(pool.make_next_beacon());
             assert!(beacon_maker
-                .on_state_change(&PoolReader::new(&pool))
+                .on_state_change(&PoolReaderImpl::new(&pool))
                 .is_none());
 
             // 4. Next next beacon can be made once we have another block
@@ -146,7 +147,7 @@ mod tests {
             pool.insert_validated(next_block.clone());
             pool.notarize(&next_block);
             let beacon_share = beacon_maker
-                .on_state_change(&PoolReader::new(&pool))
+                .on_state_change(&PoolReaderImpl::new(&pool))
                 .expect("Expecting RandomBeaconShare");
             assert!(beacon_share.content.parent == ic_types::crypto::crypto_hash(&beacon));
         })

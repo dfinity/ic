@@ -3,7 +3,7 @@
 use super::ComponentModifier;
 use ic_consensus::consensus::ConsensusImpl;
 use ic_consensus_idkg::{malicious_pre_signer, IDkgImpl};
-use ic_consensus_utils::pool_reader::PoolReader;
+use ic_consensus_utils::pool_reader::PoolReaderImpl;
 use ic_interfaces::{
     consensus_pool::{ChangeAction::*, ConsensusPool, Mutations, ValidatedConsensusArtifact},
     idkg::{IDkgChangeSet, IDkgPool},
@@ -101,7 +101,7 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusWithMaliciousFlags 
     type Mutations = Mutations;
     fn on_state_change(&self, pool: &T) -> Mutations {
         let changeset = self.consensus.on_state_change(pool);
-        let pool_reader = PoolReader::new(pool);
+        let pool_reader = PoolReaderImpl::new(pool);
         if self.malicious_flags.is_consensus_malicious() {
             ic_consensus::consensus::malicious_consensus::maliciously_alter_changeset(
                 &pool_reader,

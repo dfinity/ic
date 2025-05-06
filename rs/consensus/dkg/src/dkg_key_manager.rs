@@ -3,8 +3,11 @@
 //! there is something to do. On high-level, it's responsible of spawning
 //! threads triggering long-running CSP operation and book-keeping of
 //! thread-handles.
-use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
-use ic_interfaces::crypto::{ErrorReproducibility, LoadTranscriptResult, NiDkgAlgorithm};
+use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReaderImpl};
+use ic_interfaces::{
+    crypto::{ErrorReproducibility, LoadTranscriptResult, NiDkgAlgorithm},
+    pool_reader::PoolReader,
+};
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_types::{
@@ -102,7 +105,7 @@ impl DkgKeyManager {
         metrics_registry: MetricsRegistry,
         crypto: Arc<dyn ConsensusCrypto>,
         logger: ReplicaLogger,
-        pool_reader: &PoolReader<'_>,
+        pool_reader: &PoolReaderImpl<'_>,
     ) -> Self {
         let mut manager = Self {
             crypto,
@@ -122,7 +125,7 @@ impl DkgKeyManager {
     }
 
     /// Check and load new transcripts from the latest finalized DKG summary or from a CUP.
-    pub fn on_state_change(&mut self, pool_reader: &PoolReader<'_>) {
+    pub fn on_state_change(&mut self, pool_reader: &PoolReaderImpl<'_>) {
         // Check and load new transcripts from the latest finalized DKG summary or from
         // a CUP. Note, we keep track of transcripts being loaded and do not
         // load them more than once.
@@ -193,7 +196,7 @@ impl DkgKeyManager {
     /// Inspects the latest CUP height and the height of the latest finalized DKG
     /// summary block. If they are newer than what we have seen, triggers the
     /// loading of transcripts from corresponding summaries.
-    fn load_transcripts_if_necessary(&mut self, pool_reader: &PoolReader<'_>) {
+    fn load_transcripts_if_necessary(&mut self, pool_reader: &PoolReaderImpl<'_>) {
         let _timer = self
             .metrics
             .dkg_ops_duration
@@ -241,7 +244,7 @@ impl DkgKeyManager {
     /// pending transcript load if we hit its deadline. If yes, we join on the
     /// thread handle by enforcing its execution if it didn't happen yet or by
     /// closing the thread otherwise.
-    fn enforce_transcript_loading(&mut self, pool_reader: &PoolReader<'_>) {
+    fn enforce_transcript_loading(&mut self, pool_reader: &PoolReaderImpl<'_>) {
         let _timer = self
             .metrics
             .dkg_ops_duration
@@ -415,7 +418,7 @@ impl DkgKeyManager {
 
     /// Ask the CSP to drop DKG key material related to transcripts that are no
     /// longer relevant
-    fn delete_inactive_keys(&mut self, pool_reader: &PoolReader<'_>) {
+    fn delete_inactive_keys(&mut self, pool_reader: &PoolReaderImpl<'_>) {
         if let Some(handle) = self.pending_key_removal.take() {
             // To make sure we delete all keys sequentially, we check if another key removal
             // is ongoing and if yes, we block until this thread is done. This
@@ -585,7 +588,7 @@ mod tests {
                     MetricsRegistry::new(),
                     csp.clone(),
                     logger,
-                    &PoolReader::new(&pool),
+                    &PoolReaderImpl::new(&pool),
                 );
 
                 // Emulate the first invocation of the dkg key manager and make sure all
@@ -593,7 +596,7 @@ mod tests {
                 let block = pool.get_cache().finalized_block();
                 let dkg_summary = &block.payload.as_ref().as_summary().dkg;
                 assert_eq!(dkg_summary.height, Height::from(0));
-                key_manager.on_state_change(&PoolReader::new(&pool));
+                key_manager.on_state_change(&PoolReaderImpl::new(&pool));
                 key_manager.sync();
                 let summary_0_transcripts = dkg_summary
                     .current_transcripts()
@@ -636,7 +639,7 @@ mod tests {
                     .collect::<HashSet<_>>();
                 // For the 3rd summary we expect 2 current and 2 next transcripts.
                 assert_eq!(summary_2_transcripts.len(), 4);
-                key_manager.on_state_change(&PoolReader::new(&pool));
+                key_manager.on_state_change(&PoolReaderImpl::new(&pool));
                 key_manager.sync();
                 summary_2_transcripts.iter().for_each(|id| {
                     assert!(csp.loaded_transcripts.read().unwrap().contains(id));
@@ -666,7 +669,7 @@ mod tests {
                     .collect::<HashSet<_>>();
                 // For the 3rd summary we expect 2 current and 2 next transcripts.
                 assert_eq!(summary_3_transcripts.len(), 4);
-                key_manager.on_state_change(&PoolReader::new(&pool));
+                key_manager.on_state_change(&PoolReaderImpl::new(&pool));
                 key_manager.sync();
                 summary_3_transcripts.iter().for_each(|id| {
                     assert!(csp.loaded_transcripts.read().unwrap().contains(id));

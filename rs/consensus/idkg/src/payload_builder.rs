@@ -7,9 +7,9 @@ use crate::{
 };
 pub(super) use errors::IDkgPayloadError;
 use errors::MembershipError;
-use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
+use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReaderImpl};
 use ic_crypto::retrieve_mega_public_key_from_registry;
-use ic_interfaces::idkg::IDkgPool;
+use ic_interfaces::{idkg::IDkgPool, pool_reader::PoolReader};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{error, info, warn, ReplicaLogger};
@@ -164,7 +164,7 @@ pub fn make_bootstrap_summary_with_initial_dealings(
 pub fn create_summary_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
-    pool_reader: &PoolReader<'_>,
+    pool_reader: &PoolReaderImpl<'_>,
     context: &ValidationContext,
     parent_block: &Block,
     idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
@@ -453,7 +453,7 @@ pub fn create_data_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     crypto: &dyn ConsensusCrypto,
-    pool_reader: &PoolReader<'_>,
+    pool_reader: &PoolReaderImpl<'_>,
     idkg_pool: Arc<RwLock<dyn IDkgPool>>,
     state_manager: &dyn StateManager<State = ReplicatedState>,
     context: &ValidationContext,
@@ -1377,7 +1377,7 @@ mod tests {
                 parent_block_height.get() - payload_height_1.get(),
                 &mut pool,
             );
-            let pool_reader = PoolReader::new(&pool);
+            let pool_reader = PoolReaderImpl::new(&pool);
 
             // Add a summary block after the payload block
             let new_summary_height = parent_block_height.increment();
@@ -1646,7 +1646,7 @@ mod tests {
             );
             assert_proposal_conversion(parent_block.clone());
 
-            let pool_reader = PoolReader::new(&pool);
+            let pool_reader = PoolReaderImpl::new(&pool);
 
             // Add a summary block after the payload block and update the refs
             let mut summary = idkg_payload.clone();

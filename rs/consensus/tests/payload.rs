@@ -5,7 +5,7 @@ use crate::framework::ConsensusDriver;
 use ic_artifact_pool::{consensus_pool, dkg_pool, idkg_pool};
 use ic_consensus_certification::CertifierImpl;
 use ic_consensus_dkg::{get_dkg_summary_from_cup_contents, DkgKeyManager};
-use ic_consensus_utils::pool_reader::PoolReader;
+use ic_consensus_utils::pool_reader::PoolReaderImpl;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::Labeled;
@@ -146,7 +146,7 @@ fn consensus_produces_expected_batches() {
             metrics_registry.clone(),
             Arc::clone(&fake_crypto) as Arc<_>,
             no_op_logger(),
-            &PoolReader::new(&*consensus_pool.read().unwrap()),
+            &PoolReaderImpl::new(&*consensus_pool.read().unwrap()),
         )));
 
         let (dummy_watcher, _) = watch::channel(Height::from(0));

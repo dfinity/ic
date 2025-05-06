@@ -1,8 +1,9 @@
 //! Consensus utility functions
-use crate::{crypto::Aggregate, membership::Membership, pool_reader::PoolReader};
+use crate::{crypto::Aggregate, membership::Membership, pool_reader::PoolReaderImpl};
 use ic_interfaces::{
     consensus::{PayloadValidationError, PayloadValidationFailure},
     consensus_pool::ConsensusPoolCache,
+    pool_reader::PoolReader,
     validation::ValidationError,
 };
 use ic_interfaces_registry::RegistryClient;
@@ -71,7 +72,7 @@ pub fn crypto_hashable_to_seed<T: CryptoHashable>(hashable: &T) -> [u8; 32] {
 /// Return the validated block proposals with the lowest rank at height `h` that
 /// have not been disqualified, if there are any. Else, return an empty Vec.
 pub fn find_lowest_ranked_non_disqualified_proposals(
-    pool: &PoolReader<'_>,
+    pool: &PoolReaderImpl<'_>,
     h: Height,
 ) -> Vec<BlockProposal> {
     let disqualified: BTreeSet<NodeId> = pool
@@ -794,14 +795,14 @@ mod tests {
             }
 
             assert_matches!(
-                &find_lowest_ranked_non_disqualified_proposals(&PoolReader::new(&pool), height)[..],
+                &find_lowest_ranked_non_disqualified_proposals(&PoolReaderImpl::new(&pool), height)[..],
                 [b] if b.content.as_ref().rank == Rank(0)
             );
             for i in 0..f {
                 pool.insert_validated(pool.make_equivocation_proof(Rank(i), height));
                 // We disqualify rank i, so lowest ranked proposal must be i + 1
                 match &find_lowest_ranked_non_disqualified_proposals(
-                    &PoolReader::new(&pool),
+                    &PoolReaderImpl::new(&pool),
                     height,
                 )[..]
                 {

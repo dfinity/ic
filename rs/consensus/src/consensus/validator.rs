@@ -14,7 +14,7 @@ use ic_consensus_utils::{
     crypto::ConsensusCrypto,
     get_oldest_idkg_state_registry_version,
     membership::{Membership, MembershipError},
-    pool_reader::PoolReader,
+    pool_reader::PoolReaderImpl,
     RoundRobin,
 };
 use ic_interfaces::{
@@ -23,6 +23,7 @@ use ic_interfaces::{
     consensus_pool::*,
     dkg::DkgPool,
     messaging::MessageRouting,
+    pool_reader::PoolReader,
     time_source::TimeSource,
     validation::{ValidationError, ValidationResult},
 };
@@ -161,7 +162,7 @@ trait SignatureVerify: HasHeight {
         &self,
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
-        pool: &PoolReader<'_>,
+        pool: &PoolReaderImpl<'_>,
         cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError>;
 }
@@ -171,7 +172,7 @@ impl SignatureVerify for BlockProposal {
         &self,
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
-        pool: &PoolReader<'_>,
+        pool: &PoolReaderImpl<'_>,
         cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
@@ -196,7 +197,7 @@ impl SignatureVerify for RandomTape {
         &self,
         _membership: &Membership,
         crypto: &dyn ConsensusCrypto,
-        pool: &PoolReader<'_>,
+        pool: &PoolReaderImpl<'_>,
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let dkg_id = active_low_threshold_nidkg_id(pool.as_cache(), self.height())
@@ -215,7 +216,7 @@ impl SignatureVerify for RandomTapeShare {
         &self,
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
-        pool: &PoolReader<'_>,
+        pool: &PoolReaderImpl<'_>,
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
@@ -237,7 +238,7 @@ impl SignatureVerify for RandomBeacon {
         &self,
         _membership: &Membership,
         crypto: &dyn ConsensusCrypto,
-        pool: &PoolReader<'_>,
+        pool: &PoolReaderImpl<'_>,
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let dkg_id = active_low_threshold_nidkg_id(pool.as_cache(), self.height())
@@ -256,7 +257,7 @@ impl SignatureVerify for RandomBeaconShare {
         &self,
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
-        pool: &PoolReader<'_>,
+        pool: &PoolReaderImpl<'_>,
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
@@ -279,7 +280,7 @@ impl SignatureVerify for Signed<CatchUpContent, ThresholdSignatureShare<CatchUpC
         &self,
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
-        pool: &PoolReader<'_>,
+        pool: &PoolReaderImpl<'_>,
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
@@ -301,7 +302,7 @@ impl SignatureVerify for CatchUpPackage {
         &self,
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
-        _pool: &PoolReader<'_>,
+        _pool: &PoolReaderImpl<'_>,
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         crypto
@@ -325,7 +326,7 @@ impl SignatureVerify for EquivocationProof {
         &self,
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
-        pool: &PoolReader<'_>,
+        pool: &PoolReaderImpl<'_>,
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
@@ -369,8 +370,8 @@ trait NotaryIssued: Sized + HasHeight + std::fmt::Debug {
         signed_message: &Signed<Self, MultiSignatureShare<Self>>,
         registry_version: RegistryVersion,
     ) -> ValidationResult<CryptoError>;
-    fn is_duplicate(&self, pool: &PoolReader) -> bool;
-    fn dependencies_validated(&self, pool: &PoolReader) -> Result<(), &str>;
+    fn is_duplicate(&self, pool: &PoolReaderImpl) -> bool;
+    fn dependencies_validated(&self, pool: &PoolReaderImpl) -> Result<(), &str>;
 }
 
 impl NotaryIssued for NotarizationContent {
@@ -390,7 +391,7 @@ impl NotaryIssued for NotarizationContent {
         crypto.verify(signed_message, registry_version)
     }
 
-    fn is_duplicate(&self, pool: &PoolReader) -> bool {
+    fn is_duplicate(&self, pool: &PoolReaderImpl) -> bool {
         pool.pool()
             .validated()
             .notarization()
@@ -400,7 +401,7 @@ impl NotaryIssued for NotarizationContent {
 
     /// Checks that there is a validated block with the given hash and the
     /// previous beacon is available to compute the notarization committee.
-    fn dependencies_validated(&self, pool: &PoolReader) -> Result<(), &str> {
+    fn dependencies_validated(&self, pool: &PoolReaderImpl) -> Result<(), &str> {
         if self.height == Height::from(0) {
             return Err("Cannot validate height 0 notarization: ");
         }
@@ -431,7 +432,7 @@ impl NotaryIssued for FinalizationContent {
         crypto.verify(signed_message, registry_version)
     }
 
-    fn is_duplicate(&self, pool: &PoolReader) -> bool {
+    fn is_duplicate(&self, pool: &PoolReaderImpl) -> bool {
         pool.pool()
             .validated()
             .finalization()
@@ -441,7 +442,7 @@ impl NotaryIssued for FinalizationContent {
 
     /// Checks that there is a *notarized* block with the given hash and the
     /// previous beacon is available to compute the notarization committee.
-    fn dependencies_validated(&self, pool: &PoolReader) -> Result<(), &str> {
+    fn dependencies_validated(&self, pool: &PoolReaderImpl) -> Result<(), &str> {
         if self.height == Height::from(0) {
             return Err("Cannot validate height 0 finalization: ");
         }
@@ -466,7 +467,7 @@ impl<T: NotaryIssued> SignatureVerify for Signed<T, MultiSignature<T>> {
         &self,
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
-        pool: &PoolReader<'_>,
+        pool: &PoolReaderImpl<'_>,
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
@@ -492,7 +493,7 @@ impl<T: NotaryIssued> SignatureVerify for Signed<T, MultiSignatureShare<T>> {
         &self,
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
-        pool: &PoolReader<'_>,
+        pool: &PoolReaderImpl<'_>,
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
@@ -505,7 +506,7 @@ impl<T: NotaryIssued> SignatureVerify for Signed<T, MultiSignatureShare<T>> {
 }
 
 fn get_previous_beacon(
-    pool: &PoolReader<'_>,
+    pool: &PoolReaderImpl<'_>,
     height: Height,
 ) -> Result<RandomBeacon, ValidatorError> {
     let previous_height = height.decrement();
@@ -518,7 +519,7 @@ fn get_previous_beacon(
 }
 
 fn get_registry_version(
-    pool: &PoolReader<'_>,
+    pool: &PoolReaderImpl<'_>,
     height: Height,
 ) -> Result<RegistryVersion, ValidatorError> {
     match pool.registry_version(height) {
@@ -584,7 +585,7 @@ fn verify_threshold_committee(
 }
 
 fn get_notarized_parent(
-    pool: &PoolReader<'_>,
+    pool: &PoolReaderImpl<'_>,
     proposal: &BlockProposal,
 ) -> Result<Block, ValidatorError> {
     let parent = &proposal.as_ref().parent;
@@ -598,7 +599,7 @@ fn get_notarized_parent(
 /// considered disqualified at height h, if there exists an equivocation
 /// proof for it at that height.
 fn get_disqualified_ranks(
-    pool: &PoolReader<'_>,
+    pool: &PoolReaderImpl<'_>,
     membership: &Membership,
     cfg: ReplicaConfig,
     range: HeightRange,
@@ -724,7 +725,7 @@ impl Validator {
     /// Return the first non-empty [Mutations] as returned by a function.
     /// Otherwise return an empty [Mutations] if all functions return
     /// empty.
-    pub fn on_state_change(&self, pool_reader: &PoolReader<'_>) -> Mutations {
+    pub fn on_state_change(&self, pool_reader: &PoolReaderImpl<'_>) -> Mutations {
         trace!(self.log, "on_state_change");
         let validate_finalization = || self.validate_finalizations(pool_reader);
         let validate_notarization = || self.validate_notarizations(pool_reader);
@@ -772,7 +773,7 @@ impl Validator {
     /// `SignatureVerify` and `HasVersion` traits.
     fn verify_artifact<S: SignatureVerify + HasVersion>(
         &self,
-        pool_reader: &PoolReader<'_>,
+        pool_reader: &PoolReaderImpl<'_>,
         artifact: &S,
     ) -> ValidationResult<ValidatorError> {
         check_protocol_version(artifact.version())
@@ -787,7 +788,7 @@ impl Validator {
 
     /// Return a `Mutations` of `Finalization`s. See `validate_notary_issued`
     /// for details about exactly what is checked.
-    fn validate_finalizations(&self, pool_reader: &PoolReader<'_>) -> Mutations {
+    fn validate_finalizations(&self, pool_reader: &PoolReaderImpl<'_>) -> Mutations {
         let max_height = match pool_reader.pool().unvalidated().finalization().max_height() {
             Some(height) => height,
             None => return Mutations::new(),
@@ -808,7 +809,7 @@ impl Validator {
 
     /// Return a `Mutations` of `FinalizationShare`s. See
     /// `validate_notary_issued` for details about exactly what is checked.
-    fn validate_finalization_shares(&self, pool_reader: &PoolReader<'_>) -> Mutations {
+    fn validate_finalization_shares(&self, pool_reader: &PoolReaderImpl<'_>) -> Mutations {
         let max_height = match pool_reader
             .pool()
             .unvalidated()
@@ -833,7 +834,7 @@ impl Validator {
 
     /// Return a `Mutations` of `Notarization`s. See
     /// `validate_notary_issued` for details about exactly what is checked.
-    fn validate_notarizations(&self, pool_reader: &PoolReader<'_>) -> Mutations {
+    fn validate_notarizations(&self, pool_reader: &PoolReaderImpl<'_>) -> Mutations {
         let max_height = match pool_reader.pool().unvalidated().notarization().max_height() {
             Some(height) => height,
             None => return Mutations::new(),
@@ -854,7 +855,7 @@ impl Validator {
 
     /// Return a `Mutations` of `NotarizationShare`s. See
     /// `validate_notary_issued` for details about exactly what is checked.
-    fn validate_notarization_shares(&self, pool_reader: &PoolReader<'_>) -> Mutations {
+    fn validate_notarization_shares(&self, pool_reader: &PoolReaderImpl<'_>) -> Mutations {
         let max_height = match pool_reader
             .pool()
             .unvalidated()
@@ -886,7 +887,7 @@ impl Validator {
     /// check_block_validity.
     fn validate_notary_issued<T, S>(
         &self,
-        pool_reader: &PoolReader<'_>,
+        pool_reader: &PoolReaderImpl<'_>,
         notary_issued: Signed<T, S>,
     ) -> Option<ChangeAction>
     where
@@ -929,7 +930,7 @@ impl Validator {
     /// Return a `Mutations` containing status updates concerning any currently
     /// unvalidated blocks that can now be marked valid or invalid. See
     /// `check_block_validity`.
-    fn validate_blocks(&self, pool_reader: &PoolReader<'_>) -> Mutations {
+    fn validate_blocks(&self, pool_reader: &PoolReaderImpl<'_>) -> Mutations {
         let mut change_set = Vec::new();
 
         let notarization_height = pool_reader.get_notarized_height();
@@ -1168,7 +1169,7 @@ impl Validator {
     ///   monotonic increase between blocks.
     fn check_block_validity(
         &self,
-        pool_reader: &PoolReader<'_>,
+        pool_reader: &PoolReaderImpl<'_>,
         proposal: &BlockProposal,
     ) -> ValidationResult<ValidatorError> {
         if proposal.height() == Height::from(0) {
@@ -1331,7 +1332,7 @@ impl Validator {
     /// * points to the random beacon tip as its parent,
     /// * is signed by member(s) of the threshold group,
     /// * has a valid signature.
-    fn validate_beacons(&self, pool_reader: &PoolReader<'_>) -> Mutations {
+    fn validate_beacons(&self, pool_reader: &PoolReaderImpl<'_>) -> Mutations {
         let last_beacon = pool_reader.get_random_beacon_tip();
         let last_hash: CryptoHashOf<RandomBeacon> = ic_types::crypto::crypto_hash(&last_beacon);
         // Only a single height is validated, per round.
@@ -1364,7 +1365,7 @@ impl Validator {
     /// * not more than threshold shares have already been validated for each height
     /// * is signed by member(s) of the threshold group,
     /// * has a valid signature.
-    fn validate_beacon_shares(&self, pool_reader: &PoolReader<'_>) -> Mutations {
+    fn validate_beacon_shares(&self, pool_reader: &PoolReaderImpl<'_>) -> Mutations {
         let last_beacon = pool_reader.get_random_beacon_tip();
         let last_hash: CryptoHashOf<RandomBeacon> = ic_types::crypto::crypto_hash(&last_beacon);
         let next_height = last_beacon.content.height().increment();
@@ -1406,7 +1407,7 @@ impl Validator {
     /// * has non-zero height,
     /// * is signed by member(s) of the threshold group,
     /// * has a valid signature.
-    fn validate_tapes(&self, pool_reader: &PoolReader<'_>) -> Mutations {
+    fn validate_tapes(&self, pool_reader: &PoolReaderImpl<'_>) -> Mutations {
         let max_height = match pool_reader.pool().unvalidated().random_tape().max_height() {
             Some(height) => height,
             None => return Mutations::new(),
@@ -1453,7 +1454,7 @@ impl Validator {
     /// * not more than threshold shares have already been validated for each height
     /// * is signed by member(s) of the threshold group,
     /// * has a valid signature.
-    fn validate_tape_shares(&self, pool_reader: &PoolReader<'_>) -> Mutations {
+    fn validate_tape_shares(&self, pool_reader: &PoolReaderImpl<'_>) -> Mutations {
         let max_height = match pool_reader
             .pool()
             .unvalidated()
@@ -1510,7 +1511,7 @@ impl Validator {
     /// Return a `Mutations` of `CatchUpPackage` artifacts.
     /// The validity of a CatchUpPackage only depends on its signature
     /// and signer, which must match a known threshold key.
-    fn validate_catch_up_packages(&self, pool_reader: &PoolReader<'_>) -> Mutations {
+    fn validate_catch_up_packages(&self, pool_reader: &PoolReaderImpl<'_>) -> Mutations {
         let catch_up_height = pool_reader.get_catch_up_height();
         let max_height = match pool_reader
             .pool()
@@ -1555,7 +1556,7 @@ impl Validator {
     /// Return a `Mutations` of `CatchUpPackageShare` artifacts.  This consists
     /// of checking whether each share is signed by member(s) of the threshold
     /// group, and has a valid signature.
-    fn validate_catch_up_package_shares(&self, pool_reader: &PoolReader<'_>) -> Mutations {
+    fn validate_catch_up_package_shares(&self, pool_reader: &PoolReaderImpl<'_>) -> Mutations {
         let catch_up_height = pool_reader.get_catch_up_height();
         let max_height = match pool_reader
             .pool()
@@ -1631,7 +1632,7 @@ impl Validator {
     /// by the subnet.
     fn validate_catch_up_share_content(
         &self,
-        pool_reader: &PoolReader<'_>,
+        pool_reader: &PoolReaderImpl<'_>,
         share_content: &CatchUpShareContent,
     ) -> Result<Block, ValidatorError> {
         let height = share_content.height();
@@ -1694,7 +1695,7 @@ impl Validator {
     /// of checking that both signatures are valid signatures of the two
     /// derived block metadata instances, that the subnet is identical to
     /// our current subnet, and that the signer was a blockmaker at that height.
-    fn validate_equivocation_proofs(&self, pool_reader: &PoolReader<'_>) -> Mutations {
+    fn validate_equivocation_proofs(&self, pool_reader: &PoolReaderImpl<'_>) -> Mutations {
         let finalized_height = pool_reader.get_finalized_height();
         let range = match pool_reader
             .pool()
@@ -1775,7 +1776,7 @@ impl Validator {
 
     fn compute_action_from_artifact_verification(
         &self,
-        pool_reader: &PoolReader<'_>,
+        pool_reader: &PoolReaderImpl<'_>,
         result: ValidationResult<ValidatorError>,
         message: ConsensusMessage,
     ) -> Option<ChangeAction> {
@@ -1787,7 +1788,7 @@ impl Validator {
 
     fn compute_action_from_validation_error(
         &self,
-        pool_reader: &PoolReader<'_>,
+        pool_reader: &PoolReaderImpl<'_>,
         error: ValidatorError,
         message: ConsensusMessage,
     ) -> Option<ChangeAction> {
@@ -1812,7 +1813,7 @@ impl Validator {
 
     fn unvalidated_for_too_long(
         &self,
-        pool_reader: &PoolReader<'_>,
+        pool_reader: &PoolReaderImpl<'_>,
         id: &ConsensusMessageId,
     ) -> bool {
         match pool_reader.pool().unvalidated().get_timestamp(id) {
@@ -1831,7 +1832,7 @@ impl Validator {
     fn maybe_hold_back_cup(
         &self,
         catch_up_package: &CatchUpPackage,
-        pool_reader: &PoolReader<'_>,
+        pool_reader: &PoolReaderImpl<'_>,
     ) -> Result<(), ValidationError<InvalidArtifactReason, ValidationFailure>> {
         let cup_height = catch_up_package.height();
 
@@ -2104,7 +2105,7 @@ pub mod test {
                 Some(RegistryVersion::from(1));
             pool.insert_unvalidated(cup_with_registry_version.clone());
 
-            let pool_reader = PoolReader::new(&pool);
+            let pool_reader = PoolReaderImpl::new(&pool);
             let change_set = validator.validate_catch_up_package_shares(&pool_reader);
 
             // Check that the change set contains exactly the one `CatchUpPackageShare` we
@@ -2244,7 +2245,7 @@ pub mod test {
                 make_next_cup_share(proposal, beacon, Some(RegistryVersion::from(2)));
             pool.insert_unvalidated(cup_share_valid.clone());
 
-            let pool_reader = PoolReader::new(&pool);
+            let pool_reader = PoolReaderImpl::new(&pool);
             let change_set = validator.validate_catch_up_package_shares(&pool_reader);
 
             // Check that the change set contains exactly the one `CatchUpPackageShare` we
@@ -2281,13 +2282,16 @@ pub mod test {
             // With no existing Notarization for `block`, the Finalization in the
             // unvalidated pool should not be added to validated
             assert!(validator
-                .on_state_change(&PoolReader::new(&pool))
+                .on_state_change(&PoolReaderImpl::new(&pool))
                 .is_empty());
 
             // Add a Notarization for `block` and assert it causes the Finalization
             // to be added to validated
             pool.notarize(&block);
-            assert_eq!(validator.on_state_change(&PoolReader::new(&pool)).len(), 1);
+            assert_eq!(
+                validator.on_state_change(&PoolReaderImpl::new(&pool)).len(),
+                1
+            );
         })
     }
 
@@ -2347,7 +2351,7 @@ pub mod test {
             pool.advance_round_normal_operation();
 
             // Put a random tape share in the unvalidated pool
-            let pool_reader = PoolReader::new(&pool);
+            let pool_reader = PoolReaderImpl::new(&pool);
             let beacon_1 = pool_reader.get_random_beacon(Height::from(1)).unwrap();
             let beacon_2 = RandomBeacon::from_parent(&beacon_1);
             let share_3 = RandomBeaconShare::fake(&beacon_2, replica_config.node_id);
@@ -2361,12 +2365,12 @@ pub mod test {
             pool.insert_unvalidated(share_with_old_version.clone());
 
             // share_3 cannot validate due to missing parent
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            let changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_eq!(changeset.len(), 0);
 
             // beacon_2 validates
             pool.insert_unvalidated(beacon_2.clone());
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            let changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_eq!(changeset.len(), 1);
             assert_eq!(
                 changeset[0],
@@ -2375,7 +2379,7 @@ pub mod test {
             pool.apply(changeset);
 
             // share_3 now validates
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            let changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_eq!(changeset.len(), 2);
             assert_eq!(
                 changeset[0],
@@ -2423,7 +2427,7 @@ pub mod test {
             let share_1 = RandomTapeShare::fake(Height::from(1), replica_config.node_id);
             pool.insert_unvalidated(share_1.clone());
 
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            let changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_eq!(changeset.len(), 1);
             assert_eq!(
                 changeset[0],
@@ -2433,7 +2437,7 @@ pub mod test {
             // Put another random tape share in the unvalidated pool
             let share_2 = RandomTapeShare::fake(Height::from(2), replica_config.node_id);
             pool.insert_unvalidated(share_2.clone());
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            let changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_eq!(changeset.len(), 2);
             assert!(changeset.iter().all(|action| matches!(
                 action,
@@ -2450,7 +2454,7 @@ pub mod test {
                 ReplicaVersion::try_from("old_version").unwrap();
             pool.insert_unvalidated(old_replica_version_share.clone());
 
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            let changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_eq!(changeset.len(), 3);
             assert_eq!(
                 changeset[1],
@@ -2475,7 +2479,7 @@ pub mod test {
             let signature = ThresholdSignature::fake();
             let tape_4 = RandomTape { content, signature };
             pool.insert_unvalidated(tape_4.clone());
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            let changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_eq!(changeset.len(), 0);
 
             // Make finalized block at height 4, check if tape_4 is now accepted
@@ -2483,7 +2487,7 @@ pub mod test {
                 .dont_add_catch_up_package()
                 .dont_add_random_tape()
                 .advance();
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            let changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_eq!(changeset.len(), 1);
             assert_eq!(
                 changeset[0],
@@ -2499,7 +2503,7 @@ pub mod test {
             let tape_3 = RandomTape { content, signature };
             pool.insert_unvalidated(tape_3);
             *expected_batch_height.write().unwrap() = Height::from(4);
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            let changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_eq!(changeset.len(), 0);
         })
     }
@@ -2571,7 +2575,7 @@ pub mod test {
             // Ensure that the validator initially does not validate anything, as it is not
             // time for rank 1 yet
             assert!(validator
-                .on_state_change(&PoolReader::new(&pool))
+                .on_state_change(&PoolReaderImpl::new(&pool))
                 .is_empty(),);
 
             // Time between blocks increases by at least initial_notary_delay + 1ns
@@ -2585,7 +2589,7 @@ pub mod test {
                 .initial_notary_delay
                 + Duration::from_nanos(1);
 
-            let pool_reader = PoolReader::new(&pool);
+            let pool_reader = PoolReaderImpl::new(&pool);
             // After sufficiently advancing the time, ensure that the validator validates
             // the block
             let delay = monotonic_block_increment
@@ -2601,7 +2605,7 @@ pub mod test {
                 );
 
             time_source.set_time(parent.context.time + delay).unwrap();
-            let valid_results = validator.on_state_change(&PoolReader::new(&pool));
+            let valid_results = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_block_valid(&valid_results, &block_proposal);
         });
     }
@@ -2670,7 +2674,7 @@ pub mod test {
             pool.finalize(&block_chain[1]);
             pool.finalize(&block_chain[2]);
 
-            let results = validator.on_state_change(&PoolReader::new(&pool));
+            let results = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_eq!(results.len(), 1);
             assert_matches!(&results[0], ChangeAction::RemoveFromUnvalidated(ConsensusMessage::BlockProposal(b))
                 if b == &block_proposal
@@ -2735,7 +2739,7 @@ pub mod test {
             time_source
                 .set_time(test_block.content.as_mut().context.time)
                 .unwrap();
-            let valid_results = validator.on_state_change(&PoolReader::new(&pool));
+            let valid_results = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_block_valid(&valid_results, &test_block);
             pool.apply(valid_results);
 
@@ -2751,10 +2755,10 @@ pub mod test {
             time_source
                 .set_time(next_block.content.as_mut().context.time)
                 .unwrap();
-            let results = validator.on_state_change(&PoolReader::new(&pool));
+            let results = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert!(results.is_empty());
             pool.notarize(&test_block);
-            let results = validator.on_state_change(&PoolReader::new(&pool));
+            let results = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_block_valid(&results, &next_block);
         });
     }
@@ -2813,7 +2817,7 @@ pub mod test {
             test_block.update_content();
 
             pool.insert_unvalidated(test_block.clone());
-            let results = validator.on_state_change(&PoolReader::new(&pool));
+            let results = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_block_invalid(&results, &test_block);
             pool.apply(results);
 
@@ -2823,7 +2827,10 @@ pub mod test {
             test_block.content.as_mut().context.registry_version = RegistryVersion::from(2000);
             test_block.update_content();
             pool.insert_unvalidated(test_block);
-            assert_eq!(validator.on_state_change(&PoolReader::new(&pool)), vec![]);
+            assert_eq!(
+                validator.on_state_change(&PoolReaderImpl::new(&pool)),
+                vec![]
+            );
         })
     }
 
@@ -2879,7 +2886,7 @@ pub mod test {
             test_block.content.as_mut().context.certified_height = Height::from(1);
             test_block.update_content();
             pool.insert_unvalidated(test_block.clone());
-            let results = validator.on_state_change(&PoolReader::new(&pool));
+            let results = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_eq!(results, Mutations::new());
 
             // Try validate again, it should succeed, because certified_height has caught up
@@ -2887,7 +2894,7 @@ pub mod test {
             time_source
                 .set_time(test_block.content.as_mut().context.time)
                 .unwrap();
-            let results = validator.on_state_change(&PoolReader::new(&pool));
+            let results = validator.on_state_change(&PoolReaderImpl::new(&pool));
             match results.first() {
                 Some(ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(proposal))) => {
                     assert_eq!(proposal, &test_block);
@@ -2932,12 +2939,12 @@ pub mod test {
             let block_time = test_block.content.as_mut().context.time;
             test_block.update_content();
             pool.insert_unvalidated(test_block.clone());
-            let results = validator.on_state_change(&PoolReader::new(&pool));
+            let results = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_eq!(results, Mutations::new());
 
             // when we advance the time, it should be validated
             time_source.set_time(block_time).unwrap();
-            let results = validator.on_state_change(&PoolReader::new(&pool));
+            let results = validator.on_state_change(&PoolReaderImpl::new(&pool));
             match results.first() {
                 Some(ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(proposal))) => {
                     assert_eq!(proposal, &test_block);
@@ -2957,7 +2964,7 @@ pub mod test {
                 block_time.checked_sub(Duration::from_nanos(1)).unwrap();
             test_block.update_content();
             pool.insert_unvalidated(test_block.clone());
-            let results = validator.on_state_change(&PoolReader::new(&pool));
+            let results = validator.on_state_change(&PoolReaderImpl::new(&pool));
             match results.first() {
                 Some(ChangeAction::HandleInvalid(ConsensusMessage::BlockProposal(proposal), _)) => {
                     assert_eq!(proposal, &test_block);
@@ -2985,7 +2992,7 @@ pub mod test {
             pool.insert_unvalidated(notarization.clone());
 
             // The notarization should be marked invalid
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            let changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_changeset_matches_pattern!(
                 changeset,
                 ChangeAction::HandleInvalid(ConsensusMessage::Notarization(_), _)
@@ -2997,7 +3004,7 @@ pub mod test {
             notarization.signature.signers =
                 vec![node_test_id(1), node_test_id(1), node_test_id(1)];
             pool.insert_unvalidated(notarization.clone());
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            let changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_changeset_matches_pattern!(
                 changeset,
                 ChangeAction::HandleInvalid(ConsensusMessage::Notarization(_), _)
@@ -3009,7 +3016,7 @@ pub mod test {
                 vec![node_test_id(1), node_test_id(2), node_test_id(3)];
             pool.insert_unvalidated(notarization);
 
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            let changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_changeset_matches_pattern!(
                 changeset,
                 ChangeAction::MoveToValidated(ConsensusMessage::Notarization(_))
@@ -3047,7 +3054,7 @@ pub mod test {
             pool.insert_unvalidated(notarization_1);
 
             // Only one notarization is emitted in the Mutations.
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            let changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_eq!(changeset.len(), 1);
             assert_matches!(
                 changeset[0],
@@ -3055,7 +3062,7 @@ pub mod test {
             );
             pool.apply(changeset);
 
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            let changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_eq!(changeset.len(), 1);
             assert_matches!(
                 changeset[0],
@@ -3065,7 +3072,7 @@ pub mod test {
 
             // Finally, changeset should be empty.
             assert!(validator
-                .on_state_change(&PoolReader::new(&pool))
+                .on_state_change(&PoolReaderImpl::new(&pool))
                 .is_empty());
         })
     }
@@ -3101,7 +3108,7 @@ pub mod test {
             pool.insert_unvalidated(finalization_1);
 
             // Only one finalization is emitted in the Mutations.
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            let changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_matches!(
                 changeset[0],
                 ChangeAction::MoveToValidated(ConsensusMessage::Finalization(_))
@@ -3110,7 +3117,7 @@ pub mod test {
             pool.apply(changeset);
 
             // Next run does not consider the extra Finalization.
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            let changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_eq!(changeset.len(), 0);
         })
     }
@@ -3187,7 +3194,7 @@ pub mod test {
 
             time_source.advance_time(held_back_duration);
 
-            let mut changeset = validator.on_state_change(&PoolReader::new(&pool));
+            let mut changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));
             if expected_to_validate {
                 assert_eq!(changeset.len(), 1);
                 assert_eq!(
@@ -3231,7 +3238,7 @@ pub mod test {
                 .expect_latest_state_height()
                 .return_const(Height::new(1));
 
-            let mut changeset = validator.on_state_change(&PoolReader::new(&pool));
+            let mut changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_eq!(changeset.len(), 1);
 
             assert_eq!(
@@ -3290,7 +3297,7 @@ pub mod test {
             let parent = pool.latest_notarized_blocks().next().unwrap();
             let mut test_block = make_next_block(&pool);
             let rank = Rank(1);
-            let pool_reader = PoolReader::new(&pool);
+            let pool_reader = PoolReaderImpl::new(&pool);
             let delay = get_block_maker_delay(
                 &no_op_logger(),
                 registry_client.as_ref(),
@@ -3312,7 +3319,7 @@ pub mod test {
             assert!(proposal_time > parent_time);
 
             // Our local time has not changed. We can't validate.
-            let results = validator.on_state_change(&PoolReader::new(&pool));
+            let results = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert!(results.is_empty());
 
             // Now, assume our node goes out of sync. The clock stalls. We can only
@@ -3326,7 +3333,7 @@ pub mod test {
             // Sanity check: our local time is still unchanged.
             assert_eq!(parent_time, time_source.get_relative_time());
 
-            let results = validator.on_state_change(&PoolReader::new(&pool));
+            let results = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_eq!(
                 results.first(),
                 Some(&ChangeAction::MoveToValidated(
@@ -3342,7 +3349,7 @@ pub mod test {
             // Continue stalling the clock, and validate a rank > 0 block.
             let mut test_block = make_next_block(&pool);
             let rank = Rank(1);
-            let pool_reader = PoolReader::new(&pool);
+            let pool_reader = PoolReaderImpl::new(&pool);
             let delay = get_block_maker_delay(
                 &no_op_logger(),
                 registry_client.as_ref(),
@@ -3366,7 +3373,7 @@ pub mod test {
             // Sanity check: our local time is still unchanged.
             assert_eq!(parent_time, time_source.get_relative_time());
 
-            let results = validator.on_state_change(&PoolReader::new(&pool));
+            let results = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_eq!(
                 results.first(),
                 Some(&ChangeAction::MoveToValidated(
@@ -3423,14 +3430,20 @@ pub mod test {
             pool.insert_unvalidated(block.clone());
 
             // This should be empty because the parent block is not yet validated
-            assert_eq!(validator.on_state_change(&PoolReader::new(&pool)), vec![]);
+            assert_eq!(
+                validator.on_state_change(&PoolReaderImpl::new(&pool)),
+                vec![]
+            );
             pool.insert_validated(parent_block.clone());
 
             // This should still be empty because the parent is not notarized
-            assert_eq!(validator.on_state_change(&PoolReader::new(&pool)), vec![]);
+            assert_eq!(
+                validator.on_state_change(&PoolReaderImpl::new(&pool)),
+                vec![]
+            );
             pool.notarize(&parent_block);
 
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            let changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));
 
             assert_eq!(
                 changeset,
@@ -3520,7 +3533,7 @@ pub mod test {
             proof.hash2 = proof.hash1.clone();
             pool.insert_unvalidated(proof.clone());
             assert_matches!(
-                &validator.on_state_change(&PoolReader::new(&pool))[..],
+                &validator.on_state_change(&PoolReaderImpl::new(&pool))[..],
                 [ChangeAction::HandleInvalid(
                     ConsensusMessage::EquivocationProof(_),
                     reason
@@ -3537,7 +3550,7 @@ pub mod test {
             proof.subnet_id = subnet_test_id(1337);
             pool.insert_unvalidated(proof.clone());
             assert_matches!(
-                &validator.on_state_change(&PoolReader::new(&pool))[..],
+                &validator.on_state_change(&PoolReaderImpl::new(&pool))[..],
                 [ChangeAction::HandleInvalid(
                     ConsensusMessage::EquivocationProof(_),
                     reason
@@ -3554,7 +3567,7 @@ pub mod test {
             proof.signer = node_test_id(10);
             pool.insert_unvalidated(proof.clone());
             assert_matches!(
-                &validator.on_state_change(&PoolReader::new(&pool))[..],
+                &validator.on_state_change(&PoolReaderImpl::new(&pool))[..],
                 [ChangeAction::HandleInvalid(
                     ConsensusMessage::EquivocationProof(_),
                     reason
@@ -3574,7 +3587,7 @@ pub mod test {
             proof.signer = non_blockmaker_node;
             pool.insert_unvalidated(proof.clone());
             assert_matches!(
-                &validator.on_state_change(&PoolReader::new(&pool))[..],
+                &validator.on_state_change(&PoolReaderImpl::new(&pool))[..],
                 [ChangeAction::HandleInvalid(
                     ConsensusMessage::EquivocationProof(_),
                     reason
@@ -3590,7 +3603,7 @@ pub mod test {
             // Validate a well-formed equivocation proof, with the correct subnet ID
             pool.insert_unvalidated(proof.clone());
             assert_matches!(
-                validator.on_state_change(&PoolReader::new(&pool))[..],
+                validator.on_state_change(&PoolReaderImpl::new(&pool))[..],
                 [ChangeAction::MoveToValidated(
                     ConsensusMessage::EquivocationProof(_)
                 )]
@@ -3606,7 +3619,7 @@ pub mod test {
             pool.insert_validated(block.clone());
             pool.notarize(&block);
             pool.finalize(&block);
-            assert!(validator.on_state_change(&PoolReader::new(&pool))[..].is_empty());
+            assert!(validator.on_state_change(&PoolReaderImpl::new(&pool))[..].is_empty());
         });
     }
 
@@ -3623,7 +3636,7 @@ pub mod test {
 
             // We should validate only a single equivocation proof, the other
             // one is expected to be removed from the unvalidated pool.
-            let change_set = validator.on_state_change(&PoolReader::new(&pool));
+            let change_set = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_matches!(
                 change_set[..],
                 [
@@ -3666,7 +3679,7 @@ pub mod test {
 
             // Incorrect block proposals should not get validated
             assert_matches!(
-                validator.on_state_change(&PoolReader::new(&pool))[..],
+                validator.on_state_change(&PoolReaderImpl::new(&pool))[..],
                 [ChangeAction::HandleInvalid(
                     ConsensusMessage::BlockProposal(_),
                     _
@@ -3706,7 +3719,7 @@ pub mod test {
                 .set_time(block.content.as_ref().context.time)
                 .ok();
 
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            let changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_matches!(
                 changeset[..],
                 [ChangeAction::MoveToValidated(
@@ -3721,7 +3734,7 @@ pub mod test {
             assert_ne!(block.content.get_hash(), second_block.content.get_hash());
             pool.insert_unvalidated(second_block.clone());
 
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            let changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_matches!(
                 changeset[..],
                 [ChangeAction::AddToValidated(ValidatedArtifact {
@@ -3733,7 +3746,7 @@ pub mod test {
 
             // Make sure we create exactly one equivocation proof for a
             // combination of height and rank.
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            let changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_eq!(&changeset, &[]);
         });
     }
@@ -3760,7 +3773,7 @@ pub mod test {
             pool.insert_validated(block.clone());
             pool.insert_unvalidated(block_with_malicious_signer.clone());
 
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            let changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_matches!(
                 changeset[..],
                 [ChangeAction::HandleInvalid(
@@ -3822,7 +3835,7 @@ pub mod test {
             // Block proposals with replica version mismatches are simply removed
             // No equivocation proof is generated.
             pool.insert_unvalidated(block_with_new_version);
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            let changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_matches!(
                 changeset[..],
                 [ChangeAction::RemoveFromUnvalidated(
@@ -3869,7 +3882,7 @@ pub mod test {
             pool.insert_unvalidated(second_block.clone());
             pool.insert_unvalidated(third_block.clone());
 
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            let changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_matches!(
                 changeset[..],
                 [ChangeAction::AddToValidated(ValidatedArtifact {
@@ -3887,7 +3900,7 @@ pub mod test {
                 .set_time(block.content.as_ref().context.time)
                 .unwrap();
 
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            let changeset = validator.on_state_change(&PoolReaderImpl::new(&pool));
             assert_matches!(
                 changeset[..],
                 [ChangeAction::MoveToValidated(

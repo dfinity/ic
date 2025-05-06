@@ -21,11 +21,12 @@ use crate::consensus::{
     metrics::{BatchStats, BlockStats, FinalizerMetrics},
 };
 use ic_consensus_utils::{
-    crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
+    crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReaderImpl,
 };
 use ic_interfaces::{
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, MessageRoutingError},
+    pool_reader::PoolReader,
     time_source::system_time_now,
 };
 use ic_interfaces_registry::RegistryClient;
@@ -80,7 +81,7 @@ impl Finalizer {
     /// Attempt to:
     /// * deliver finalized blocks (as `Batch`s) via `Messaging`
     /// * publish finalization shares for relevant rounds
-    pub fn on_state_change(&self, pool: &PoolReader<'_>) -> Vec<FinalizationShare> {
+    pub fn on_state_change(&self, pool: &PoolReaderImpl<'_>) -> Vec<FinalizationShare> {
         trace!(self.log, "on_state_change");
         let notarized_height = pool.get_notarized_height();
         let finalized_height = pool.get_finalized_height();
@@ -174,7 +175,11 @@ impl Finalizer {
     ///
     /// In this case, the single notarized block is returned. Otherwise,
     /// return `None`
-    fn pick_block_to_finality_sign(&self, pool: &PoolReader<'_>, h: Height) -> Option<HashedBlock> {
+    fn pick_block_to_finality_sign(
+        &self,
+        pool: &PoolReaderImpl<'_>,
+        h: Height,
+    ) -> Option<HashedBlock> {
         let me = self.replica_config.node_id;
         let previous_beacon = pool.get_random_beacon(h.decrement())?;
         // check whether this replica was a notary at height h
@@ -230,7 +235,11 @@ impl Finalizer {
 
     /// Try to create a finalization share for a notarized block at the given
     /// height
-    fn finalize_height(&self, pool: &PoolReader<'_>, height: Height) -> Option<FinalizationShare> {
+    fn finalize_height(
+        &self,
+        pool: &PoolReaderImpl<'_>,
+        height: Height,
+    ) -> Option<FinalizationShare> {
         let content = FinalizationContent::new(
             height,
             self.pick_block_to_finality_sign(pool, height)?
@@ -299,7 +308,7 @@ mod tests {
                 no_op_logger(),
                 MetricsRegistry::new(),
             );
-            let shares = finalizer.on_state_change(&PoolReader::new(&pool));
+            let shares = finalizer.on_state_change(&PoolReaderImpl::new(&pool));
             let b = message_routing.batches.read().unwrap().clone();
             *message_routing.batches.write().unwrap() = Vec::new();
             assert!(b.is_empty());
@@ -307,7 +316,7 @@ mod tests {
 
             // 2. When notarized_height = finalized_height = expected_height
             *message_routing.next_batch_height.write().unwrap() = Height::from(1);
-            let shares = finalizer.on_state_change(&PoolReader::new(&pool));
+            let shares = finalizer.on_state_change(&PoolReaderImpl::new(&pool));
             let b = message_routing.batches.read().unwrap().clone();
             *message_routing.batches.write().unwrap() = Vec::new();
             assert!(!b.is_empty());
@@ -321,7 +330,7 @@ mod tests {
             pool.notarize(&block);
 
             *message_routing.next_batch_height.write().unwrap() = Height::from(2);
-            let shares = finalizer.on_state_change(&PoolReader::new(&pool));
+            let shares = finalizer.on_state_change(&PoolReaderImpl::new(&pool));
             let b = message_routing.batches.read().unwrap().clone();
             *message_routing.batches.write().unwrap() = Vec::new();
             assert!(b.is_empty());
@@ -333,7 +342,7 @@ mod tests {
             let finalization_share = &shares[0];
             pool.insert_validated(finalization_share.clone());
             *message_routing.next_batch_height.write().unwrap() = Height::from(2);
-            let shares = finalizer.on_state_change(&PoolReader::new(&pool));
+            let shares = finalizer.on_state_change(&PoolReaderImpl::new(&pool));
             let b = message_routing.batches.read().unwrap().clone();
             *message_routing.batches.write().unwrap() = Vec::new();
             assert!(b.is_empty());
@@ -393,7 +402,7 @@ mod tests {
             // 1. Make progress until a CUP block
             pool.advance_round_normal_operation_n(dkg_interval_length);
             assert_eq!(
-                PoolReader::new(&pool).registry_version(Height::from(3)),
+                PoolReaderImpl::new(&pool).registry_version(Height::from(3)),
                 Some(RegistryVersion::from(1))
             );
 
@@ -419,7 +428,7 @@ mod tests {
             // 3. continue to make next CUP, expect block summary version to become 10
             pool.advance_round_normal_operation_n(3);
             assert_eq!(
-                PoolReader::new(&pool).registry_version(Height::from(7)),
+                PoolReaderImpl::new(&pool).registry_version(Height::from(7)),
                 Some(RegistryVersion::from(1))
             );
             let block_proposal = pool.make_next_block();
@@ -440,7 +449,7 @@ mod tests {
             // expect batch to be still delivered for block at CUP height
             *message_routing.next_batch_height.write().unwrap() = block_proposal.height();
             pool.insert_validated(pool.make_next_tape());
-            let _ = finalizer.on_state_change(&PoolReader::new(&pool));
+            let _ = finalizer.on_state_change(&PoolReaderImpl::new(&pool));
             assert_eq!(
                 *message_routing.next_batch_height.write().unwrap(),
                 block_proposal.height().increment(),
@@ -450,14 +459,14 @@ mod tests {
             pool.advance_round_normal_operation();
             pool.insert_validated(pool.make_next_tape());
             assert_eq!(
-                PoolReader::new(&pool).registry_version(Height::from(9)),
+                PoolReaderImpl::new(&pool).registry_version(Height::from(9)),
                 Some(RegistryVersion::from(10))
             );
             assert_eq!(
-                PoolReader::new(&pool).registry_version(Height::from(10)),
+                PoolReaderImpl::new(&pool).registry_version(Height::from(10)),
                 Some(RegistryVersion::from(10))
             );
-            let _ = finalizer.on_state_change(&PoolReader::new(&pool));
+            let _ = finalizer.on_state_change(&PoolReaderImpl::new(&pool));
             assert_eq!(
                 *message_routing.next_batch_height.write().unwrap(),
                 block_proposal.height().increment(),

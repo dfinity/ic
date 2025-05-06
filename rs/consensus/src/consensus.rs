@@ -31,7 +31,7 @@ use crate::consensus::{
 use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::{
     bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto, get_notarization_delay_settings,
-    membership::Membership, pool_reader::PoolReader, RoundRobin,
+    membership::Membership, pool_reader::PoolReaderImpl, RoundRobin,
 };
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
@@ -43,6 +43,7 @@ use ic_interfaces::{
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, XNetPayloadBuilder},
     p2p::consensus::{Bouncer, BouncerFactory, PoolMutationsProducer},
+    pool_reader::PoolReader,
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };
@@ -344,7 +345,7 @@ impl ConsensusImpl {
     }
 
     /// Checks, whether DKG transcripts for this replica are available
-    fn dkgs_available(&self, pool_reader: &PoolReader) -> bool {
+    fn dkgs_available(&self, pool_reader: &PoolReaderImpl) -> bool {
         // Get last summary
         let summary_block = pool_reader.get_highest_finalized_summary_block();
         let block_payload = summary_block.payload.as_ref().as_summary();
@@ -395,7 +396,7 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusImpl {
     ///    The order of the rest subcomponents decides whom is given
     ///    a priority, but it should not affect liveness or correctness.
     fn on_state_change(&self, pool: &T) -> Mutations {
-        let pool_reader = PoolReader::new(pool);
+        let pool_reader = PoolReaderImpl::new(pool);
         trace!(self.log, "on_state_change");
 
         // Load new transcripts, remove outdated keys.
@@ -687,7 +688,7 @@ mod tests {
                 metrics_registry.clone(),
                 crypto,
                 no_op_logger(),
-                &PoolReader::new(&pool),
+                &PoolReaderImpl::new(&pool),
             ))),
             Arc::new(FakeMessageRouting::new()),
             state_manager,
