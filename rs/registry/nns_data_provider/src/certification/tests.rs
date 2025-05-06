@@ -355,9 +355,9 @@ fn test_honest_chunked() {
         .map(|chunk_content| Sha256::hash(chunk_content).to_vec())
         .collect::<Vec<Vec<u8>>>();
 
-    let mut fetch_large_value = MockGetChunk::new();
+    let mut get_chunk = MockGetChunk::new();
     for (content, content_sha256) in chunk_contents.iter().zip(chunk_content_sha256s.iter()) {
-        fetch_large_value
+        get_chunk
             .expect_get_chunk_without_validation()
             .with(mockall::predicate::eq(content_sha256.clone()))
             .times(1)
@@ -385,7 +385,7 @@ fn test_honest_chunked() {
     );
 
     // Step 2: Call the code under test.
-    let result = decode_certified_deltas(0, &cid, &pk, &payload[..], &fetch_large_value)
+    let result = decode_certified_deltas(0, &cid, &pk, &payload[..], &get_chunk)
         .now_or_never()
         .unwrap()
         .unwrap();
@@ -414,8 +414,8 @@ fn test_evil_chunked() {
 
     let chunk_content_sha256 = Sha256::hash(&chunk_content).to_vec();
 
-    let mut fetch_large_value = MockGetChunk::new();
-    fetch_large_value
+    let mut get_chunk = MockGetChunk::new();
+    get_chunk
         .expect_get_chunk_without_validation()
         .with(mockall::predicate::eq(chunk_content_sha256.clone()))
         .times(1)
@@ -443,7 +443,7 @@ fn test_evil_chunked() {
     );
 
     // Step 2: Call the code under test.
-    let result = decode_certified_deltas(0, &cid, &pk, &payload[..], &fetch_large_value)
+    let result = decode_certified_deltas(0, &cid, &pk, &payload[..], &get_chunk)
         .now_or_never()
         .unwrap();
 
