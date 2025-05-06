@@ -230,8 +230,10 @@ mod tests {
     use crate::common::test_helpers::invariant_compliant_registry;
 
     use super::*;
+    use crate::mutations::node_management::common::get_key_family_iter;
     use assert_matches::assert_matches;
     use ic_base_types::CanisterId;
+    use ic_registry_keys::CANISTER_RANGES_PREFIX;
     use ic_registry_routing_table::CanisterIdRange;
 
     #[test]
@@ -278,5 +280,32 @@ mod tests {
         );
 
         // GetSubnetForCanisterError::CanisterIdConversion currently not reachable - CanisterId::try_from() always succeeds
+    }
+
+    #[test]
+    fn test_routing_table_saves_as_canister_range_records_correctly() {
+        let mut registry = invariant_compliant_registry(0);
+        let system_subnet =
+            PrincipalId::try_from(registry.get_subnet_list_record().subnets.first().unwrap())
+                .unwrap();
+
+        let mut rt = RoutingTable::new();
+        rt.insert(
+            CanisterIdRange {
+                start: CanisterId::from(0),
+                end: CanisterId::from(255),
+            },
+            system_subnet.into(),
+        )
+        .unwrap();
+        let mutation =
+            routing_table_into_registry_mutation(rt, registry_mutation::Type::Update as i32);
+        registry.maybe_apply_mutation_internal(vec![mutation]);
+
+        let routing_table = registry.get_routing_table_or_panic(0);
+
+        let ranges = get_key_family_iter(&registry, CANISTER_RANGES_PREFIX)
+            .map(|(_, v)| v)
+            .collect::<Vec<CanisterIdRange>>();
     }
 }
