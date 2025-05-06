@@ -11,3 +11,5 @@ pub enum StateManagerError {
     #[error("state at height {0} is not committed yet")]
     StateNotCommittedYet(Height),
 }
+
+pub type StateManagerResult<T> = Result<T, StateManagerError>;

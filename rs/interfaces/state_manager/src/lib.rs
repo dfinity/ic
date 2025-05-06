@@ -1,17 +1,14 @@
 //! The state manager public interface.
 
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
-use ic_types::state_manager::StateManagerError;
 use ic_types::{
-    batch::BatchSummary, consensus::certification::Certification, CryptoHashOfPartialState,
-    CryptoHashOfState, Height,
+    batch::BatchSummary, consensus::certification::Certification,
+    state_manager::StateManagerResult, CryptoHashOfPartialState, CryptoHashOfState, Height,
 };
 use phantom_newtype::BitMask;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 use thiserror::Error;
-
-pub type StateManagerResult<T> = Result<T, StateManagerError>;
 
 /// Errors for functions returning state hashes that are permanent (i.e. no
 /// point in retrying)

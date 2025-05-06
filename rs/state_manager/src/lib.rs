@@ -34,7 +34,7 @@ use ic_interfaces_certified_stream_store::{
 };
 use ic_interfaces_state_manager::{
     CertificationScope, CertifiedStateSnapshot, Labeled, PermanentStateHashError::*,
-    StateHashError, StateManager, StateManagerResult, StateReader, TransientStateHashError::*,
+    StateHashError, StateManager, StateReader, TransientStateHashError::*,
 };
 use ic_logger::{debug, error, fatal, info, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
@@ -53,7 +53,7 @@ use ic_types::{
     consensus::certification::Certification,
     crypto::CryptoHash,
     malicious_flags::MaliciousFlags,
-    state_manager::StateManagerError,
+    state_manager::{StateManagerError, StateManagerResult},
     state_sync::CURRENT_STATE_SYNC_VERSION,
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
     CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
