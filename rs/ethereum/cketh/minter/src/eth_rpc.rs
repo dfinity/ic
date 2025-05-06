@@ -2,7 +2,7 @@
 //! interface.
 
 use crate::endpoints::CandidBlockTag;
-use crate::numeric::{BlockNumber, LogIndex, Wei, WeiPerGas};
+use crate::numeric::{BlockNumber, LogIndex, Wei};
 use candid::CandidType;
 use ethnum;
 use evm_rpc_client::{
@@ -375,20 +375,6 @@ impl From<FeeHistoryParams> for (Quantity, BlockSpec, Vec<u8>) {
             value.reward_percentiles,
         )
     }
-}
-
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct FeeHistory {
-    /// Lowest number block of the returned range.
-    pub oldest_block: BlockNumber,
-    /// An array of block base fees per gas.
-    /// This includes the next block after the newest of the returned range,
-    /// because this value can be derived from the newest block.
-    /// Zeroes are returned for pre-EIP-1559 blocks.
-    pub base_fee_per_gas: Vec<WeiPerGas>,
-    /// A two-dimensional array of effective priority fees per gas at the requested block percentiles.
-    pub reward: Vec<Vec<WeiPerGas>>,
 }
 
 impl From<BlockNumber> for BlockSpec {
