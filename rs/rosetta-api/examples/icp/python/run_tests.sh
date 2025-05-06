@@ -8,7 +8,7 @@
 # 4. Runs test_all.py with any provided arguments
 # 5. Deactivates and cleans up the virtual environment
 
-set -e  # Exit immediately if a command exits with a non-zero status
+set -e # Exit immediately if a command exits with a non-zero status
 
 # Terminal colors
 RED='\033[0;31m'
@@ -37,18 +37,18 @@ for arg in "$@"; do
 done
 
 # Check if Python is installed
-if ! command -v python3 &> /dev/null; then
+if ! command -v python3 &>/dev/null; then
     echo -e "${RED}Error: Python 3 is not installed. Please install Python 3 and try again.${NC}"
     exit 1
 fi
 
 # Check if virtualenv is installed
-if ! command -v virtualenv &> /dev/null; then
+if ! command -v virtualenv &>/dev/null; then
     echo -e "${YELLOW}virtualenv is not installed. Trying to install it...${NC}"
     pip3 install virtualenv
-    
+
     # Check again if virtualenv is installed
-    if ! command -v virtualenv &> /dev/null; then
+    if ! command -v virtualenv &>/dev/null; then
         echo -e "${RED}Failed to install virtualenv. Please install it manually:${NC}"
         echo -e "${YELLOW}pip3 install virtualenv${NC}"
         exit 1
@@ -105,4 +105,4 @@ else
 fi
 
 echo -e "${BLUE}======================================================${NC}"
-exit $TEST_RESULT 
+exit $TEST_RESULT
