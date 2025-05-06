@@ -670,3 +670,52 @@ fn allowance_serialization() {
         );
     })
 }
+
+#[cfg(not(feature = "u256-tokens"))]
+#[test]
+fn test_max_encoded_block_size() {
+    assert_eq!(max_size_encoded_block().size_bytes(), 353);
+}
+
+#[cfg(feature = "u256-tokens")]
+#[test]
+fn test_max_encoded_block_size() {
+    assert_eq!(max_size_encoded_block().size_bytes(), 405);
+}
+
+fn max_size_encoded_block() -> ic_ledger_core::block::EncodedBlock {
+    use ic_ledger_core::block::BlockType;
+    use icrc_ledger_types::icrc1::transfer::Memo;
+
+    let block = <Ledger as ic_ledger_canister_core::ledger::LedgerData>::Block::from_transaction(
+        Some(ic_ledger_hash_of::HashOf::new([42u8; 32])),
+        Transaction {
+            operation: Operation::Transfer {
+                from: Account {
+                    owner: candid::Principal::from(PrincipalId::new_user_test_id(1)),
+                    subaccount: Some([11u8; 32]),
+                },
+                to: Account {
+                    owner: candid::Principal::from(PrincipalId::new_user_test_id(2)),
+                    subaccount: Some([22u8; 32]),
+                },
+                spender: Some(Account {
+                    owner: candid::Principal::from(PrincipalId::new_user_test_id(3)),
+                    subaccount: Some([33u8; 32]),
+                }),
+                amount: Tokens::MAX,
+                fee: Some(Tokens::MAX),
+            },
+            created_at_time: Some(u64::MAX),
+            memo: Some(Memo::from(vec![88u8; 32])),
+        },
+        TimeStamp::from_nanos_since_unix_epoch(u64::MAX),
+        Tokens::MAX,
+        Some(ic_ledger_core::block::FeeCollector::from(Account {
+            owner: candid::Principal::from(PrincipalId::new_user_test_id(77)),
+            subaccount: Some([77u8; 32]),
+        })),
+    );
+
+    block.encode()
+}
