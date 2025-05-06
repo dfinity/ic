@@ -241,7 +241,7 @@ async fn set_custom_sns_topics_test() {
     assert_eq!(
         custom_proposal_topics,
         vec![
-            ("DAO community settings".to_string(), Some(vec![]), false),
+            ("DAO community settings".to_string(), Some(vec![]), true),
             ("SNS framework management".to_string(), Some(vec![]), false),
             ("Dapp canister management".to_string(), Some(vec![]), false),
             (
@@ -343,7 +343,7 @@ async fn set_custom_sns_topics_test() {
     assert_eq!(
         custom_proposal_topics,
         vec![
-            ("DAO community settings".to_string(), Some(vec![]), false),
+            ("DAO community settings".to_string(), Some(vec![]), true),
             ("SNS framework management".to_string(), Some(vec![]), false),
             ("Dapp canister management".to_string(), Some(vec![]), false),
             (
