@@ -31,7 +31,7 @@ impl RegistryCanister {
 
     async fn execute_with_retries(
         &self,
-        call: Call,
+        call: Call<'_, '_>,
         max_attempts: u32,
     ) -> Result<Response, NervousSystemError> {
         for _ in 0..max_attempts {
