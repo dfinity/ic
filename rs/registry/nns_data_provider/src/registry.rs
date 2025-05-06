@@ -9,7 +9,7 @@ use ic_canister_client::{Agent, Sender};
 use ic_interfaces_registry::RegistryTransportRecord;
 use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_transport::{
-    deserialize_atomic_mutate_response, deserialize_get_changes_since_response,
+    dechunkify_delta, deserialize_atomic_mutate_response, deserialize_get_changes_since_response,
     deserialize_get_value_response,
     pb::v1::{Precondition, RegistryDelta, RegistryGetLatestVersionResponse, RegistryMutation},
     serialize_atomic_mutate_request, serialize_get_changes_since_request,
@@ -120,14 +120,24 @@ impl RegistryCanister {
         {
             Ok(result) => match result {
                 Some(response) => {
-                    deserialize_get_changes_since_response(
-                        response,
-                        &AgentBasedGetChunk {
-                            registry_canister_id: self.canister_id,
-                            agent: self.choose_random_agent(),
-                        },
-                    )
-                    .await
+                    let (high_capacity_deltas, version) =
+                        deserialize_get_changes_since_response(response)?;
+
+                    let mut inlined_deltas = vec![];
+                    for delta in high_capacity_deltas {
+                        inlined_deltas.push(
+                            dechunkify_delta(
+                                delta,
+                                &AgentBasedGetChunk {
+                                    registry_canister_id: self.canister_id,
+                                    agent: self.choose_random_agent(),
+                                },
+                            )
+                            .await?,
+                        )
+                    }
+
+                    Ok((inlined_deltas, version))
                 }
 
                 None => Err(ic_registry_transport::Error::UnknownError(
