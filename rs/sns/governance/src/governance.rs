@@ -3397,6 +3397,18 @@ impl Governance {
             .get_topic_and_criticality_for_action(action)
             .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidProposal, err))?;
 
+        let Some(proposal_topic) = proposal_topic else {
+            let message = format!(
+                "Proposal type with action {:?} must be assigned a topic before such proposals can \
+                 be submitted. Please submit `SetTopicsForCustomProposals` to do this.",
+                proposal.action
+            );
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                message,
+            ));
+        };
+
         // Voting duration parameters.
         let voting_duration_parameters =
             action.voting_duration_parameters(nervous_system_parameters, proposal_criticality);
@@ -3496,7 +3508,7 @@ impl Governance {
             // TODO(NNS1-2731): Delete this.
             is_eligible_for_rewards: true,
             action_auxiliary,
-            topic: proposal_topic.map(i32::from),
+            topic: Some(i32::from(proposal_topic)),
         };
 
         proposal_data.wait_for_quiet_state = Some(WaitForQuietState {
@@ -3528,7 +3540,7 @@ impl Governance {
             &self.proto.neurons,
             now_seconds,
             &mut proposal_data.ballots,
-            proposal_topic.unwrap_or_default(),
+            proposal_topic,
         );
 
         // Finally, add this proposal as an open proposal.
@@ -3984,8 +3996,8 @@ impl Governance {
         }
 
         // Lastly, remove legacy catch-all following if either this command specifies following for
-        // all topics, or if this neuron follows on all topics (which can happen by executing
-        // multiple set-following commands).
+        // all non-critical topics, or if this neuron follows on all non-critical topics (which can
+        // happen by executing multiple set-following commands).
         let this_neurons_topics = neuron
             .topic_followees
             .iter()

@@ -7,15 +7,36 @@ use std::time::Duration;
 
 pub type NumUtxoPages = u32;
 
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub enum MetricsResult {
+    Ok,
+    Err,
+}
+
+impl MetricsResult {
+    pub fn as_str(&self) -> &str {
+        match self {
+            MetricsResult::Ok => "success",
+            MetricsResult::Err => "failure",
+        }
+    }
+}
+
 thread_local! {
     pub static GET_UTXOS_CLIENT_CALLS: Cell<u64> = Cell::default();
     pub static GET_UTXOS_MINTER_CALLS: Cell<u64> = Cell::default();
     pub static UPDATE_CALL_LATENCY: RefCell<BTreeMap<NumUtxoPages,LatencyHistogram>> = RefCell::default();
     pub static GET_UTXOS_CALL_LATENCY: RefCell<BTreeMap<(NumUtxoPages, CallSource),LatencyHistogram>> = RefCell::default();
     pub static GET_UTXOS_RESULT_SIZE: RefCell<BTreeMap<CallSource,NumUtxosHistogram>> = RefCell::default();
+    pub static GET_UTXOS_CACHE_HITS : Cell<u64> = Cell::default();
+    pub static GET_UTXOS_CACHE_MISSES: Cell<u64> = Cell::default();
+    pub static SIGN_WITH_ECDSA_LATENCY: RefCell<BTreeMap<MetricsResult, LatencyHistogram>> = RefCell::default();
 }
 
-pub const BUCKETS_MS: [u64; 8] = [500, 1_000, 2_000, 4_000, 8_000, 16_000, 32_000, u64::MAX];
+pub const BUCKETS_DEFAULT_MS: [u64; 8] =
+    [500, 1_000, 2_000, 4_000, 8_000, 16_000, 32_000, u64::MAX];
+pub const BUCKETS_SIGN_WITH_ECDSA_MS: [u64; 8] =
+    [1_000, 2_000, 4_000, 6_000, 8_000, 12_000, 20_000, u64::MAX];
 pub const BUCKETS_UTXOS: [u64; 8] = [1, 4, 16, 64, 256, 1024, 4096, u64::MAX];
 
 pub struct NumUtxosHistogram(pub Histogram<8>);
@@ -30,7 +51,7 @@ pub struct LatencyHistogram(pub Histogram<8>);
 
 impl Default for LatencyHistogram {
     fn default() -> Self {
-        Self(Histogram::new(&BUCKETS_MS))
+        Self(Histogram::new(&BUCKETS_DEFAULT_MS))
     }
 }
 
@@ -124,6 +145,21 @@ pub fn observe_update_call_latency(num_new_utxos: usize, start_ns: u64, end_ns: 
         metrics
             .entry(num_new_utxos as NumUtxoPages)
             .or_default()
+            .observe_latency(start_ns, end_ns);
+    });
+}
+
+pub fn observe_sign_with_ecdsa_latency<T, E>(result: &Result<T, E>, start_ns: u64, end_ns: u64) {
+    let metric_result = match result {
+        Ok(_) => MetricsResult::Ok,
+        Err(_) => MetricsResult::Err,
+    };
+    SIGN_WITH_ECDSA_LATENCY.with_borrow_mut(|metrics| {
+        metrics
+            .entry(metric_result)
+            .or_insert(LatencyHistogram(Histogram::new(
+                &BUCKETS_SIGN_WITH_ECDSA_MS,
+            )))
             .observe_latency(start_ns, end_ns);
     });
 }
@@ -269,6 +305,18 @@ pub fn encode_metrics(
         .value(&[("source", "client")], GET_UTXOS_CLIENT_CALLS.get() as f64)?
         .value(&[("source", "minter")], GET_UTXOS_MINTER_CALLS.get() as f64)?;
 
+    metrics.encode_counter(
+        "ckbtc_minter_get_utxos_cache_hits",
+        GET_UTXOS_CACHE_HITS.get() as f64,
+        "Number of cache hits for get_utxos calls.",
+    )?;
+
+    metrics.encode_counter(
+        "ckbtc_minter_get_utxos_cache_misses",
+        GET_UTXOS_CACHE_MISSES.get() as f64,
+        "Number of cache misses for get_utxos calls.",
+    )?;
+
     metrics.encode_gauge(
         "ckbtc_minter_btc_balance",
         state::read_state(|s| s.get_total_btc_managed()) as f64,
@@ -385,6 +433,22 @@ pub fn encode_metrics(
         for (call_source, histogram) in histograms {
             histogram_vec = histogram_vec.histogram(
                 &[("call_source", &call_source.to_string())],
+                histogram.0.iter(),
+                histogram.0.sum() as f64,
+            )?;
+        }
+        Ok(())
+    })?;
+
+    let mut histogram_vec = metrics.histogram_vec(
+        "ckbtc_minter_sign_with_ecdsa_latency",
+        "The latency of ckBTC minter `sign_with_ecdsa` calls in milliseconds.",
+    )?;
+
+    SIGN_WITH_ECDSA_LATENCY.with_borrow(|histograms| -> Result<(), Error> {
+        for (result, histogram) in histograms {
+            histogram_vec = histogram_vec.histogram(
+                &[("result", result.as_str())],
                 histogram.0.iter(),
                 histogram.0.sum() as f64,
             )?;

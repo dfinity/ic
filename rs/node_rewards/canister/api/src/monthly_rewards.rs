@@ -1,7 +1,7 @@
 use candid::{CandidType, Deserialize, Principal};
 use std::collections::BTreeMap;
 
-#[derive(CandidType, Deserialize)]
+#[derive(CandidType, Clone, Deserialize)]
 pub struct GetNodeProvidersMonthlyXdrRewardsRequest {
     pub registry_version: Option<u64>,
 }

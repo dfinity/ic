@@ -67,9 +67,24 @@ fn insert_and_truncate<Value: Storable>(
 impl VotingPowerSnapshots {
     pub fn new(maps_memory: DefaultMemory, totals_memory: DefaultMemory) -> Self {
         Self {
-            neuron_id_to_voting_power_maps: StableBTreeMap::new(maps_memory),
-            voting_power_totals: StableBTreeMap::new(totals_memory),
+            neuron_id_to_voting_power_maps: StableBTreeMap::init(maps_memory),
+            voting_power_totals: StableBTreeMap::init(totals_memory),
         }
+    }
+
+    /// Returns whether the latest snapshot is a voting power spike.
+    pub fn is_latest_snapshot_a_spike(&self, now_seconds: TimestampSeconds) -> bool {
+        // If there are no snapshots, then there is no spike.
+        let Some((_, latest_totals)) = self.voting_power_totals.last_key_value() else {
+            return false;
+        };
+
+        // If the latest snapshot is already considered a spike,
+        self.totals_entry_with_minimum_total_potential_voting_power_if_voting_power_spiked(
+            now_seconds,
+            latest_totals.total_potential_voting_power,
+        )
+        .is_some()
     }
 
     /// Records a voting power snapshot at the given timestamp. Oldest snapshots are removed
@@ -93,24 +108,58 @@ impl VotingPowerSnapshots {
         );
     }
 
+    /// Given a total potential voting power, checks if there is a voting power spike. If a spike is
+    /// detected, it returns the timestamp and totals of the snapshot with the minimum total
+    /// potential voting power. If no spike is detected, it returns None.
+    fn totals_entry_with_minimum_total_potential_voting_power_if_voting_power_spiked(
+        &self,
+        now_seconds: TimestampSeconds,
+        current_total_potential_voting_power: u64,
+    ) -> Option<(TimestampSeconds, VotingPowerTotal)> {
+        let (
+            timestamp_with_minimum_total_potential_voting_power,
+            totals_with_minimum_total_potential_voting_power,
+        ) = self
+            .voting_power_totals
+            .iter()
+            .filter(|(created_at, _)| {
+                let age = now_seconds - created_at;
+                age <= MAXIMUM_STALENESS_SECONDS
+            })
+            .min_by_key(|(_, snapshot)| snapshot.total_potential_voting_power)?;
+
+        let voting_power_spike_detected = (current_total_potential_voting_power as f64)
+            > (totals_with_minimum_total_potential_voting_power.total_potential_voting_power
+                as f64)
+                * MULTIPLIER_THRESHOLD_FOR_VOTING_POWER_SPIKE;
+        if voting_power_spike_detected {
+            Some((
+                timestamp_with_minimum_total_potential_voting_power,
+                totals_with_minimum_total_potential_voting_power,
+            ))
+        } else {
+            None
+        }
+    }
+
     /// Given a total potential voting power, checks if there is a voting power spike and returns
     /// the previous voting power map if a spike is detected along with the snapshot timestamp. If
-    /// no spike is detected, it returns None.
+    /// no spike is detected, it returns None. The definition of a spike is based on the constant
+    /// `MULTIPLIER_THRESHOLD_FOR_VOTING_POWER_SPIKE`.
     pub(crate) fn previous_ballots_if_voting_power_spike_detected(
         &self,
         total_potential_voting_power: u64,
         now_seconds: TimestampSeconds,
     ) -> Option<(TimestampSeconds, VotingPowerSnapshot)> {
-        // Step 1: find the timestamp with the minimum potential voting power. Exit if there are no
-        // snapshots yet.
+        // Step 1: find the voting power totals entry with the minimum total potential voting power,
+        // if a spike is detected.
         let Some((
             timestamp_with_minimum_total_potential_voting_power,
             totals_with_minimum_total_potential_voting_power,
-        )) = self
-            .voting_power_totals
-            .iter()
-            .filter(|(timestamp, _)| *timestamp + MAXIMUM_STALENESS_SECONDS > now_seconds)
-            .min_by_key(|(_, snapshot)| snapshot.total_potential_voting_power)
+        )) = self.totals_entry_with_minimum_total_potential_voting_power_if_voting_power_spiked(
+            now_seconds,
+            total_potential_voting_power,
+        )
         else {
             ic_cdk::eprintln!(
                 "{}Voting power totals are empty. No voting power spike detected.",
@@ -119,16 +168,7 @@ impl VotingPowerSnapshots {
             return None;
         };
 
-        // Step 2: determine whether there is a voting power spike. Exit if a spike is not detected.
-        let voting_power_spike_detected = (total_potential_voting_power as f64)
-            > (totals_with_minimum_total_potential_voting_power.total_potential_voting_power
-                as f64)
-                * MULTIPLIER_THRESHOLD_FOR_VOTING_POWER_SPIKE;
-        if !voting_power_spike_detected {
-            return None;
-        }
-
-        // Step 3: find the voting power map for the timestamp with the minimum potential voting power.
+        // Step 2: find the voting power map for the timestamp with the minimum potential voting power.
         let Some(voting_power_map) = self
             .neuron_id_to_voting_power_maps
             .get(&timestamp_with_minimum_total_potential_voting_power)
@@ -142,7 +182,7 @@ impl VotingPowerSnapshots {
             return None;
         };
 
-        // Step 4: returns the previous voting power map since a voting power spike is detected.
+        // Step 3: returns the previous voting power map since a voting power spike is detected.
         let previous_voting_power_snapshot = VotingPowerSnapshot::from((
             voting_power_map,
             totals_with_minimum_total_potential_voting_power,

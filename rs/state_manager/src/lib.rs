@@ -59,6 +59,7 @@ use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
 };
 use ic_utils_thread::{deallocator_thread::DeallocatorThread, JoinOnDrop};
+use ic_wasm_types::ModuleLoadingStatus;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use prost::Message;
 use std::convert::{From, TryFrom};
@@ -191,6 +192,7 @@ pub struct CheckpointMetrics {
     replicated_state_altered_after_checkpoint: IntCounter,
     tip_handler_request_duration: HistogramVec,
     num_page_maps_by_load_status: IntGaugeVec,
+    num_loaded_wasm_files_by_source: IntGaugeVec,
     log: ReplicaLogger,
 }
 
@@ -238,6 +240,12 @@ impl CheckpointMetrics {
             "How many PageMaps are loaded or not at the end of checkpoint interval.",
             &["status"],
         );
+
+        let num_loaded_wasm_files_by_source = metrics_registry.int_gauge_vec(
+            "state_manager_num_loaded_wasm_files_by_source",
+            "How many WasmFiles of canisters or snapshots are loaded at the end of checkpoint interval.",
+            &["source"],
+        );
         Self {
             make_checkpoint_step_duration,
             load_checkpoint_step_duration,
@@ -246,6 +254,7 @@ impl CheckpointMetrics {
             replicated_state_altered_after_checkpoint,
             tip_handler_request_duration,
             num_page_maps_by_load_status,
+            num_loaded_wasm_files_by_source,
             log: replica_logger,
         }
     }
@@ -1124,13 +1133,15 @@ fn switch_to_checkpoint(
                 Arc::clone(fd_factory),
             )?);
 
-        let wasm_binary = snapshot_layout.wasm().deserialize(Some(
-            new_snapshot
-                .execution_snapshot()
-                .wasm_binary
-                .module_hash()
-                .into(),
-        ))?;
+        let new_snapshot_wasm_binary = &new_snapshot.execution_snapshot().wasm_binary;
+        let wasm_binary = snapshot_layout.wasm().lazy_load_with_module_hash(
+            new_snapshot_wasm_binary.module_hash().into(),
+            Some(new_snapshot_wasm_binary.len()),
+        )?;
+        debug_assert_eq!(
+            wasm_binary.module_loading_status(),
+            ModuleLoadingStatus::FileNotLoaded
+        );
         new_snapshot.execution_snapshot_mut().wasm_binary = wasm_binary;
     }
 
@@ -1141,13 +1152,29 @@ fn switch_to_checkpoint(
             // We can reuse the cache because the Wasm binary has the same
             // contents, only the storage of that binary changed.
             let embedder_cache = Arc::clone(&tip_state.wasm_binary.embedder_cache);
-            let wasm_binary = canister_layout
-                .wasm()
-                .deserialize(Some(tip_state.wasm_binary.binary.module_hash().into()))?;
+            let tip_state_wasm_binary = &tip_state.wasm_binary.binary;
+            let wasm_binary = canister_layout.wasm().lazy_load_with_module_hash(
+                tip_state_wasm_binary.module_hash().into(),
+                Some(tip_state_wasm_binary.len()),
+            )?;
+
             debug_assert_eq!(
                 tip_state.wasm_binary.binary.as_slice(),
-                wasm_binary.as_slice()
+                canister_layout
+                    .wasm()
+                    .lazy_load_with_module_hash(
+                        tip_state.wasm_binary.binary.module_hash().into(),
+                        Some(tip_state_wasm_binary.len())
+                    )
+                    .unwrap()
+                    .as_slice()
             );
+
+            debug_assert_eq!(
+                wasm_binary.module_loading_status(),
+                ModuleLoadingStatus::FileNotLoaded
+            );
+
             tip_state.wasm_binary = Arc::new(
                 ic_replicated_state::canister_state::execution_state::WasmBinary {
                     binary: wasm_binary,
@@ -1590,6 +1617,43 @@ impl StateManagerImpl {
             .num_page_maps_by_load_status
             .with_label_values(&["not_loaded"])
             .set(not_loaded);
+    }
+
+    /// Populate `num_loaded_wasm_files_by_source` in the metrics with their actual
+    /// values in provided state.
+    fn observe_num_loaded_wasm_files(&self, state: &ReplicatedState) {
+        let num_loaded_canister_wasm = state
+            .canister_states
+            .iter()
+            .filter_map(|(_, canister)| canister.execution_state.as_ref())
+            .filter(|execution_state| {
+                execution_state.wasm_binary.binary.module_loading_status()
+                    == ModuleLoadingStatus::FileLoaded
+            })
+            .count();
+
+        let num_loaded_snapshot_wasm = state
+            .canister_snapshots
+            .iter()
+            .filter(|(_, snapshot)| {
+                snapshot
+                    .execution_snapshot()
+                    .wasm_binary
+                    .module_loading_status()
+                    == ModuleLoadingStatus::FileLoaded
+            })
+            .count();
+
+        self.metrics
+            .checkpoint_metrics
+            .num_loaded_wasm_files_by_source
+            .with_label_values(&["canister"])
+            .set(num_loaded_canister_wasm as i64);
+        self.metrics
+            .checkpoint_metrics
+            .num_loaded_wasm_files_by_source
+            .with_label_values(&["snapshot"])
+            .set(num_loaded_snapshot_wasm as i64);
     }
 
     /// Reads states metadata file, returning an empty one if any errors occurs.
@@ -2312,6 +2376,7 @@ impl StateManagerImpl {
         height: Height,
     ) -> CreateCheckpointResult {
         self.observe_num_loaded_pagemaps(&state);
+        self.observe_num_loaded_wasm_files(&state);
         struct PreviousCheckpointInfo {
             base_manifest: Manifest,
             base_height: Height,

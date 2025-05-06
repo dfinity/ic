@@ -92,7 +92,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
         "cranelift-codegen-meta": [crate.annotation(
             patch_args = ["-p4"],
             patches = [
-                "@@//bazel:cranelift-codegen-meta.patch",  # Patch for determinism issues
                 "@@//bazel:cranelift-codegen-meta-isle.patch",  # Patch for issue: https://github.com/bytecodealliance/wasmtime/pull/10334
             ],
         )],
@@ -439,6 +438,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "cvt": crate.spec(
                 version = "^0.1.1",
             ),
+            "darling": crate.spec(
+                version = "^0.20.11",
+            ),
             "dashmap": crate.spec(
                 version = "^5.3.4",
             ),
@@ -645,7 +647,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.1.1",
             ),
             "ic-management-canister-types": crate.spec(
-                version = "0.2.1",
+                version = "0.3.0",
             ),
             "ic_principal": crate.spec(
                 version = "^0.1.1",
@@ -1280,6 +1282,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "full",
                 ],
             ),
+            "syn2": crate.spec(
+                package = "syn",
+                version = "^2.0.101",
+            ),
             "syscalls": crate.spec(
                 version = "^0.6.18",
             ),
@@ -1460,26 +1466,26 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2",
             ),
             "wasm-encoder": crate.spec(
-                version = "^0.224.0",
+                version = "^0.228.0",
                 features = [
                     "wasmparser",
                 ],
             ),
             "wasm-smith": crate.spec(
-                version = "^0.224.0",
+                version = "^0.228.0",
                 default_features = False,
                 features = [
                     "wasmparser",
                 ],
             ),
             "wasmparser": crate.spec(
-                version = "^0.224.0",
+                version = "^0.228.0",
             ),
             "wasmprinter": crate.spec(
-                version = "^0.224.0",
+                version = "^0.228.0",
             ),
             "wasmtime": crate.spec(
-                version = "^30.0.2",
+                version = "^31.0.0",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1490,13 +1496,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^30.0.2",
+                version = "^31.0.0",
             ),
             "wast": crate.spec(
-                version = "^224.0.0",
+                version = "^228.0.0",
             ),
             "wat": crate.spec(
-                version = "^1.224.0",
+                version = "^1.228.0",
             ),
             "wee_alloc": crate.spec(
                 version = "^0.4.3",
