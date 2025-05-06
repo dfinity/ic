@@ -83,6 +83,7 @@ impl From<ErrorCode> for RejectCode {
             // Invalid destination errors.
             CanisterNotFound => DestinationInvalid,
             CanisterSnapshotNotFound => DestinationInvalid,
+            CanisterSnapshotImmutable => DestinationInvalid,
             // Explicit reject errors.
             InsufficientCyclesForCreateCanister => CanisterReject,
             InsufficientMemoryAllocation => CanisterReject,
@@ -160,6 +161,7 @@ pub enum ErrorCode {
     // 3xx -- `RejectCode::DestinationInvalid`
     CanisterNotFound = 301,
     CanisterSnapshotNotFound = 305,
+    CanisterSnapshotImmutable = 306,
     // 4xx -- `RejectCode::CanisterReject`
     // 401
     InsufficientMemoryAllocation = 402,
@@ -324,6 +326,7 @@ impl UserError {
             | ErrorCode::ReservedCyclesLimitIsTooLow
             | ErrorCode::InsufficientCyclesInMessageMemoryGrow
             | ErrorCode::CanisterSnapshotNotFound
+            | ErrorCode::CanisterSnapshotImmutable
             | ErrorCode::CanisterHeapDeltaRateLimited
             | ErrorCode::CanisterWasmMemoryLimitExceeded
             | ErrorCode::DeadlineExpired
