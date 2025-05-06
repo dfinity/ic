@@ -75,9 +75,9 @@ use std::{io::Write, path::Path};
 use url::Url;
 
 const DKG_INTERVAL: u64 = 9;
-const NNS_NODES: usize = 4;
-const APP_NODES: usize = 4;
-const UNASSIGNED_NODES: usize = 4;
+const NNS_NODES: usize = 3;
+const APP_NODES: usize = 3;
+const UNASSIGNED_NODES: usize = 3;
 
 const DKG_INTERVAL_LARGE: u64 = 99;
 const NNS_NODES_LARGE: usize = 40;
@@ -94,6 +94,7 @@ pub fn setup(
     dkg_interval: u64,
     env: TestEnv,
 ) {
+    let nns_nodes = nns_nodes.unwrap_or(NNS_NODES);
     let mut nns = Subnet::new(SubnetType::System)
         .with_dkg_interval_length(Height::from(dkg_interval))
         .add_nodes(nns_nodes);
