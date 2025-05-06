@@ -553,7 +553,7 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_consensus::{fake::*, IDkgStatsNoOp};
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6};
+    use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6, NODE_7};
     use ic_types::artifact::IdentifiableArtifact;
     use ic_types::consensus::idkg::IDkgComplaintContent;
     use ic_types::consensus::idkg::{dealing_support_prefix, IDkgObject};
@@ -643,30 +643,13 @@ mod tests {
         }
     }
 
-    // Verifies the prefix based search
-    fn check_search_by_prefix(idkg_pool: &mut IDkgPoolImpl, test_unvalidated: bool) {
-        let transcript_10 = dummy_idkg_transcript_id_for_tests(10);
-        let transcript_100 = dummy_idkg_transcript_id_for_tests(100);
-        let transcript_1000 = dummy_idkg_transcript_id_for_tests(1000);
-        let transcript_50 = dummy_idkg_transcript_id_for_tests(50);
-        let transcript_2000 = dummy_idkg_transcript_id_for_tests(2000);
-
-        // (transcript Id, dealer_id, signer_id, crypto hash pattern)
-        let supports_to_add = [
-            // Prefix 1
-            (transcript_1000, NODE_1, NODE_2, 1),
-            (transcript_1000, NODE_1, NODE_2, 2),
-            (transcript_1000, NODE_1, NODE_2, 3),
-            // Prefix 2
-            (transcript_1000, NODE_2, NODE_3, 4),
-            // Prefix 3
-            (transcript_10, NODE_3, NODE_4, 5),
-            // Prefix 4
-            (transcript_100, NODE_5, NODE_6, 6),
-            (transcript_100, NODE_5, NODE_6, 7),
-        ];
-
-        for (transcript_id, dealer_id, signer_id, hash) in &supports_to_add {
+    // Used by the two following tests to add dealings to the pool
+    fn add_support_dealings<'a>(
+        idkg_pool: &'a mut IDkgPoolImpl,
+        test_unvalidated: bool,
+        supports_to_add: &[(IDkgTranscriptId, NodeId, NodeId, u8)],
+    ) -> &'a dyn IDkgPoolSection {
+        for (transcript_id, dealer_id, signer_id, hash) in supports_to_add {
             let support = IDkgDealingSupport {
                 transcript_id: *transcript_id,
                 dealer_id: *dealer_id,
@@ -700,6 +683,34 @@ mod tests {
         } else {
             idkg_pool.validated()
         };
+
+        pool_section
+    }
+
+    // Verifies the prefix based search
+    fn check_search_by_prefix(idkg_pool: &mut IDkgPoolImpl, test_unvalidated: bool) {
+        let transcript_10 = dummy_idkg_transcript_id_for_tests(10);
+        let transcript_100 = dummy_idkg_transcript_id_for_tests(100);
+        let transcript_1000 = dummy_idkg_transcript_id_for_tests(1000);
+        let transcript_50 = dummy_idkg_transcript_id_for_tests(50);
+        let transcript_2000 = dummy_idkg_transcript_id_for_tests(2000);
+
+        // (transcript Id, dealer_id, signer_id, crypto hash pattern)
+        let supports_to_add = [
+            // Prefix 1
+            (transcript_1000, NODE_1, NODE_2, 1),
+            (transcript_1000, NODE_1, NODE_2, 2),
+            (transcript_1000, NODE_1, NODE_2, 3),
+            // Prefix 2
+            (transcript_1000, NODE_2, NODE_3, 4),
+            // Prefix 3
+            (transcript_10, NODE_3, NODE_4, 5),
+            // Prefix 4
+            (transcript_100, NODE_5, NODE_6, 6),
+            (transcript_100, NODE_5, NODE_6, 7),
+        ];
+
+        let pool_section = add_support_dealings(idkg_pool, test_unvalidated, &supports_to_add);
 
         // Verify iteration produces artifacts in increasing order of
         // transcript Id.
@@ -775,6 +786,116 @@ mod tests {
 
         assert!(pool_section
             .dealing_support_by_prefix(dealing_support_prefix(&transcript_2000, &NODE_1, &NODE_2))
+            .next()
+            .is_none());
+    }
+
+    // Verifies the transcript based search
+    fn check_search_by_transcript_id(idkg_pool: &mut IDkgPoolImpl, test_unvalidated: bool) {
+        let transcript_10 = dummy_idkg_transcript_id_for_tests(10);
+        let transcript_100 = dummy_idkg_transcript_id_for_tests(100);
+        let transcript_1000 = dummy_idkg_transcript_id_for_tests(1000);
+        let transcript_10000 = dummy_idkg_transcript_id_for_tests(10000);
+        let transcript_50 = dummy_idkg_transcript_id_for_tests(50);
+        let transcript_2000 = dummy_idkg_transcript_id_for_tests(2000);
+
+        // (transcript Id, dealer_id, signer_id, crypto hash pattern)
+        let supports_to_add = [
+            // Transcript 1
+            (transcript_1000, NODE_1, NODE_2, 1),
+            (transcript_1000, NODE_1, NODE_3, 3),
+            (transcript_1000, NODE_2, NODE_3, 4),
+            (transcript_1000, NODE_1, NODE_2, 2),
+            (transcript_1000, NODE_4, NODE_5, 5),
+            // Transcript 2
+            (transcript_10, NODE_4, NODE_5, 6),
+            // Transcript 3
+            (transcript_10000, NODE_4, NODE_5, 6),
+            // Transcript 4
+            (transcript_100, NODE_6, NODE_7, 7),
+            (transcript_100, NODE_6, NODE_7, 8),
+        ];
+
+        let pool_section = add_support_dealings(idkg_pool, test_unvalidated, &supports_to_add);
+
+        // Verify iteration produces artifacts in increasing order of
+        // transcript Id.
+        let ret: Vec<IDkgTranscriptId> = pool_section
+            .dealing_support()
+            .map(|(_, support)| support.transcript_id)
+            .collect();
+        let expected = vec![
+            transcript_10,
+            transcript_100,
+            transcript_100,
+            transcript_1000,
+            transcript_1000,
+            transcript_1000,
+            transcript_1000,
+            transcript_1000,
+            transcript_10000,
+        ];
+        assert_eq!(ret, expected);
+
+        // Verify by transcripts
+        type RetType = (IDkgTranscriptId, NodeId, NodeId, u8);
+        let ret_fn = |support: &IDkgDealingSupport| -> RetType {
+            (
+                support.transcript_id,
+                support.dealer_id,
+                support.sig_share.signer,
+                support.dealing_hash.as_ref().0[0],
+            )
+        };
+
+        let mut ret: Vec<RetType> = pool_section
+            .dealing_support_by_transcript_id(&transcript_1000)
+            .map(|(_, support)| (ret_fn)(&support))
+            .collect();
+        ret.sort();
+        assert_eq!(
+            ret,
+            vec![
+                (transcript_1000, NODE_1, NODE_2, 1),
+                (transcript_1000, NODE_1, NODE_2, 2),
+                (transcript_1000, NODE_1, NODE_3, 3),
+                (transcript_1000, NODE_2, NODE_3, 4),
+                (transcript_1000, NODE_4, NODE_5, 5),
+            ]
+        );
+
+        let ret: Vec<RetType> = pool_section
+            .dealing_support_by_transcript_id(&transcript_10)
+            .map(|(_, support)| (ret_fn)(&support))
+            .collect();
+        assert_eq!(ret, vec![(transcript_10, NODE_4, NODE_5, 6)]);
+
+        let ret: Vec<RetType> = pool_section
+            .dealing_support_by_transcript_id(&transcript_10000)
+            .map(|(_, support)| (ret_fn)(&support))
+            .collect();
+        assert_eq!(ret, vec![(transcript_10000, NODE_4, NODE_5, 6)]);
+
+        let mut ret: Vec<RetType> = pool_section
+            .dealing_support_by_transcript_id(&transcript_100)
+            .map(|(_, support)| (ret_fn)(&support))
+            .collect();
+        ret.sort();
+        assert_eq!(
+            ret,
+            vec![
+                (transcript_100, NODE_6, NODE_7, 7),
+                (transcript_100, NODE_6, NODE_7, 8),
+            ]
+        );
+
+        assert!(pool_section
+            .dealing_support_by_transcript_id(&transcript_50)
+            .next()
+            .is_none());
+
+        assert!(pool_section
+            .dealing_support_by_transcript_id(&transcript_2000)
             .next()
             .is_none());
     }
@@ -1144,6 +1265,26 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let mut idkg_pool = create_idkg_pool(pool_config, logger);
                 check_search_by_prefix(&mut idkg_pool, false);
+            })
+        })
+    }
+
+    #[test]
+    fn test_idkg_transcript_id_search_unvalidated() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let mut idkg_pool = create_idkg_pool(pool_config, logger);
+                check_search_by_transcript_id(&mut idkg_pool, true);
+            })
+        })
+    }
+
+    #[test]
+    fn test_idkg_transcript_id_search_validated() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let mut idkg_pool = create_idkg_pool(pool_config, logger);
+                check_search_by_transcript_id(&mut idkg_pool, false);
             })
         })
     }
