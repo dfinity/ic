@@ -2546,25 +2546,22 @@ impl ExecutionEnvironment {
         args: UploadCanisterSnapshotMetadataArgs,
         subnet_size: usize,
         round_limits: &mut RoundLimits,
-    ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
+    ) -> Result<(Vec<u8>, NumInstructions), UserError> {
         let canister_id = args.get_canister_id();
         // Take canister out.
         let mut canister = match state.take_canister_state(&canister_id) {
             None => {
-                return (
-                    Err(UserError::new(
-                        ErrorCode::CanisterNotFound,
-                        format!("Canister {} not found.", &canister_id),
-                    )),
-                    NumInstructions::new(0),
-                )
+                return Err(UserError::new(
+                    ErrorCode::CanisterNotFound,
+                    format!("Canister {} not found.", &canister_id),
+                ))
             }
             Some(canister) => canister,
         };
 
         let resource_saturation =
             self.subnet_memory_saturation(&round_limits.subnet_available_memory);
-        let (result, instructions_used) = self.canister_manager.create_snapshot_from_metadata(
+        let result = self.canister_manager.create_snapshot_from_metadata(
             sender,
             &mut canister,
             args,
@@ -2576,16 +2573,17 @@ impl ExecutionEnvironment {
         // Put canister back.
         state.put_canister_state(canister);
 
-        match result {
-            Ok(snapshot_id) => (
-                Ok(Encode!(&UploadCanisterSnapshotMetadataResponse {
-                    snapshot_id: snapshot_id.to_vec()
-                })
-                .unwrap()),
-                instructions_used,
-            ),
-            Err(err) => (Err(err.into()), instructions_used),
-        }
+        result
+            .map(|(snapshot_id, instructions)| {
+                (
+                    Encode!(&UploadCanisterSnapshotMetadataResponse {
+                        snapshot_id: snapshot_id.to_vec()
+                    })
+                    .unwrap(),
+                    instructions,
+                )
+            })
+            .map_err(UserError::from)
     }
 
     fn write_snapshot_data(
