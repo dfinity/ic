@@ -40,7 +40,7 @@ use ic_system_test_driver::{
     },
     nns::{
         get_governance_canister, set_authorized_subnetwork_list,
-        submit_external_proposal_with_test_id, update_xdr_per_icp,
+        submit_external_proposal_with_test_id,
     },
     util::{block_on, runtime_from_url},
 };
@@ -123,12 +123,6 @@ pub fn test(env: TestEnv) {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-
-        // Set the XDR-to-cycles conversion rate.
-        info!(logger, "setting CYCLES_PER_XDR");
-        update_xdr_per_icp(&nns, timestamp, xdr_permyriad_per_icp)
-            .await
-            .unwrap();
 
         // Set the XDR-to-cycles conversion rate, but expect it to fail
         info!(logger, "setting conversion rate to 0, failure expected");

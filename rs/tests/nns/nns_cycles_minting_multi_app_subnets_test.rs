@@ -20,7 +20,7 @@ use ic_system_test_driver::{
     nns::{
         change_subnet_type_assignment, change_subnet_type_assignment_with_failure,
         set_authorized_subnetwork_list, set_authorized_subnetwork_list_with_failure,
-        update_subnet_type, update_xdr_per_icp,
+        update_subnet_type,
     },
     util::{block_on, runtime_from_url},
 };
@@ -84,12 +84,6 @@ pub fn create_canister_on_specific_subnet_type(env: TestEnv) {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-
-        // Set the XDR-to-cycles conversion rate.
-        info!(logger, "setting CYCLES_PER_XDR");
-        update_xdr_per_icp(&nns, timestamp, xdr_permyriad_per_icp)
-            .await
-            .unwrap();
 
         // The first attempt to create a canister should fail because we
         // haven't registered any subnets with the cycles minting canister.
