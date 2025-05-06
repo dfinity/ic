@@ -18,6 +18,7 @@ use ic_interfaces::{
     consensus_pool::{ChangeAction, ConsensusPool, ConsensusPoolCache, HeightIndexedPool},
     messaging::MessageRouting,
     p2p::consensus::{MutablePool, UnvalidatedArtifact},
+    pool_reader::PoolReader,
     time_source::{SysTimeSource, TimeSource},
 };
 use ic_interfaces_registry::RegistryClient;

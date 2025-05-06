@@ -1,10 +1,12 @@
 //! Wrapper to read the consensus pool
 
 use crate::registry_version_at_height;
-use ic_interfaces::batch_payload::PastPayload;
-use ic_interfaces::consensus_pool::*;
-use ic_interfaces::pool_reader::PoolReader;
-use ic_types::{consensus::*, Height, RegistryVersion, Time};
+use ic_interfaces::{
+    batch_payload::PastPayload,
+    consensus_pool::{ConsensusBlockCache, ConsensusPool, ConsensusPoolCache},
+    pool_reader::PoolReader,
+};
+use ic_types::{consensus::Payload, Height, RegistryVersion, Time};
 
 /// A struct and corresponding impl with helper methods to obtain particular
 /// artifacts/messages from the artifact pool.

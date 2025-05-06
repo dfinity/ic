@@ -10,6 +10,7 @@ use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_interfaces::{
     consensus_pool::{ChangeAction, Mutations, ValidatedConsensusArtifact},
     p2p::consensus::{MutablePool, UnvalidatedArtifact},
+    pool_reader::PoolReader,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};

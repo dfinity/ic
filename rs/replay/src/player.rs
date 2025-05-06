@@ -22,6 +22,7 @@ use ic_interfaces::{
     certification::CertificationPool,
     execution_environment::{IngressHistoryReader, QueryExecutionError, QueryExecutionService},
     messaging::{MessageRouting, MessageRoutingError},
+    pool_reader::PoolReader,
     time_source::SysTimeSource,
 };
 use ic_interfaces_registry::{RegistryClient, RegistryTransportRecord};
@@ -237,7 +238,10 @@ impl Player {
 
         let replica_version = if let Some(pool) = &consensus_pool {
             // Use the replica version from the finalized tip in the pool.
-            PoolReaderImpl::new(pool).get_finalized_tip().version().clone()
+            PoolReaderImpl::new(pool)
+                .get_finalized_tip()
+                .version()
+                .clone()
         } else {
             Default::default()
         };
