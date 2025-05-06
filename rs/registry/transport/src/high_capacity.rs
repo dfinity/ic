@@ -212,7 +212,7 @@ impl HighCapacityRegistryValue {
 #[automock]
 #[async_trait]
 pub trait GetChunk {
-    async fn get_chunk_without_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String>; // DO NOT MERGE - Change Err type to Error?
+    async fn get_chunk_without_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String>;
 }
 
 /// Returns a blob.
