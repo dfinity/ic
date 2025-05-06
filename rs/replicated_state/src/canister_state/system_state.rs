@@ -402,6 +402,12 @@ pub struct SystemState {
 /// A wrapper around the different canister statuses.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CanisterStatus {
+    Running(Running),
+    Stopping(Stopping),
+    Stopped(Stopped),
+}
+
+/*
     Running {
         call_context_manager: CallContextManager,
     },
@@ -414,6 +420,24 @@ pub enum CanisterStatus {
         stop_contexts: Vec<StopCanisterContext>,
     },
     Stopped,
+}
+*/
+
+pub struct Running {
+    call_context_manager: CallContextManager,
+}
+
+pub struct Stopping {
+    call_context_manager: CallContextManager,
+    /// Info about the messages that requested the canister to stop.
+    /// The reason this is a vec is because it's possible to receive
+    /// multiple requests to stop the canister while it is stopping. All
+    /// of them would be tracked here so that they can all get a response.
+    stop_contexts: Vec<StopCanisterContext>,
+}
+
+pub struct Stopped {
+    call_context_manager: CallContextManager,
 }
 
 impl CanisterStatus {
