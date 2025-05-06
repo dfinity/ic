@@ -77,9 +77,11 @@ where
 pub mod test {
     use super::*;
     use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
+    use ic_interfaces::consensus_pool::HeightRange;
     use ic_interfaces_registry::RegistryClient;
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_types::consensus::HasHeight;
 
     #[test]
     fn test_get_dkg_summary_block() {
