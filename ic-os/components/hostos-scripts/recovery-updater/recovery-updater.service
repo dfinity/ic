@@ -1,0 +1,12 @@
+[Unit]
+Description=Recovery Updater Service
+ConditionKernelCommandLine=recovery=1
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ic/bin/recovery-updater.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

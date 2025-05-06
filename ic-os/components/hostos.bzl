@@ -29,6 +29,8 @@ component_files = {
     Label("hostos-scripts/verbose-logging/verbose-logging.sh"): "/opt/ic/bin/verbose-logging.sh",
     Label("hostos-scripts/verbose-logging/verbose-logging.service"): "/etc/systemd/system/verbose-logging.service",
     Label("hostos-scripts/verbose-logging/logrotate.d/verbose-logging"): "/etc/logrotate.d/verbose-logging",
+    Label("hostos-scripts/recovery-updater/recovery-updater.service"): "/etc/systemd/system/recovery-updater.service",
+    Label("hostos-scripts/recovery-updater/recovery-updater.sh"): "/opt/ic/bin/recovery-updater.sh",
 
     # early-boot
     Label("early-boot/relabel-machine-id/relabel-machine-id.sh"): "/opt/ic/bin/relabel-machine-id.sh",
