@@ -1709,16 +1709,28 @@ impl ExecutionEnvironment {
                         },
                         FlagStatus::Enabled => {
                             let canister_id = args.get_canister_id();
-                            let (result, instructions_used) = self.create_snapshot_from_metadata(
-                                *msg.sender(),
-                                &mut state,
-                                args,
-                                registry_settings.subnet_size,
-                                round_limits,
-                            );
-                            let msg_result = ExecuteSubnetMessageResult::Finished {
-                                response: result.map(|res| (res, Some(canister_id))),
-                                refund: msg.take_cycles(),
+                            let (msg_result, instructions_used) = match self
+                                .create_snapshot_from_metadata(
+                                    *msg.sender(),
+                                    &mut state,
+                                    args,
+                                    registry_settings.subnet_size,
+                                    round_limits,
+                                ) {
+                                Ok((result, instructions_used)) => (
+                                    ExecuteSubnetMessageResult::Finished {
+                                        response: Ok((result, Some(canister_id))),
+                                        refund: msg.take_cycles(),
+                                    },
+                                    instructions_used,
+                                ),
+                                Err(e) => (
+                                    ExecuteSubnetMessageResult::Finished {
+                                        response: Err(e),
+                                        refund: msg.take_cycles(),
+                                    },
+                                    NumInstructions::new(0),
+                                ),
                             };
                             let state =
                                 self.finish_subnet_message_execution(state, msg, msg_result, since);
