@@ -84,25 +84,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 },
             ),
         )],
-        "cranelift-isle": [crate.annotation(
-            # Patch for determinism issues
-            patch_args = ["-p4"],
-            patches = ["@@//bazel:cranelift-isle.patch"],
-        )],
-        "cranelift-codegen-meta": [crate.annotation(
-            patch_args = ["-p4"],
-            patches = [
-                "@@//bazel:cranelift-codegen-meta-isle.patch",  # Patch for issue: https://github.com/bytecodealliance/wasmtime/pull/10334
-            ],
-        )],
-        "cranelift-assembler-x64": [crate.annotation(
-            # Patch for issue: https://github.com/bytecodealliance/wasmtime/pull/10334
-            patch_args = ["-p3"],
-            patches = [
-                "@@//bazel:cranelift-assembler-lib.patch",
-                "@@//bazel:cranelift-assembler-main.patch",
-            ],
-        )],
         "secp256k1-sys": [crate.annotation(
             # This specific version is used by ic-btc-kyt canister, which
             # requires an extra cfg flag to avoid linking issues.
@@ -1486,7 +1467,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "wasmtime": crate.spec(
                 git = "https://github.com/adambratschikaye/wasmtime",
-                rev = "d48b3856b14cce097314adbef347eb61bce52f36",
+                rev = "3002f5f84dac3d63875808927572c1f855118928",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1498,7 +1479,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "wasmtime-environ": crate.spec(
                 git = "https://github.com/adambratschikaye/wasmtime",
-                rev = "d48b3856b14cce097314adbef347eb61bce52f36",
+                rev = "3002f5f84dac3d63875808927572c1f855118928",
             ),
             "wast": crate.spec(
                 version = "^228.0.0",

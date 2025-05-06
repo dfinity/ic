@@ -1,5 +1,5 @@
 {
-  "checksum": "2547a191018ed09a6ea678f92ff15d181f9014bcac4ffbd88b9b6a1f8231b729",
+  "checksum": "810e5f18201cb044ac29bf5bc82ab2e12c10aa32eadc4f8ab3f70fe7a20b0269",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -15613,16 +15613,9 @@
         "Git": {
           "remote": "https://github.com/adambratschikaye/wasmtime",
           "commitish": {
-            "Rev": "d48b3856b14cce097314adbef347eb61bce52f36"
+            "Rev": "3002f5f84dac3d63875808927572c1f855118928"
           },
-          "strip_prefix": "cranelift/assembler-x64",
-          "patch_args": [
-            "-p3"
-          ],
-          "patches": [
-            "@@//bazel:cranelift-assembler-lib.patch",
-            "@@//bazel:cranelift-assembler-main.patch"
-          ]
+          "strip_prefix": "cranelift/assembler-x64"
         }
       },
       "targets": [
@@ -15699,7 +15692,7 @@
         "Git": {
           "remote": "https://github.com/adambratschikaye/wasmtime",
           "commitish": {
-            "Rev": "d48b3856b14cce097314adbef347eb61bce52f36"
+            "Rev": "3002f5f84dac3d63875808927572c1f855118928"
           },
           "strip_prefix": "cranelift/assembler-x64/meta"
         }
@@ -15749,7 +15742,7 @@
         "Git": {
           "remote": "https://github.com/adambratschikaye/wasmtime",
           "commitish": {
-            "Rev": "d48b3856b14cce097314adbef347eb61bce52f36"
+            "Rev": "3002f5f84dac3d63875808927572c1f855118928"
           },
           "strip_prefix": "cranelift/bforest"
         }
@@ -15799,7 +15792,7 @@
         "Git": {
           "remote": "https://github.com/adambratschikaye/wasmtime",
           "commitish": {
-            "Rev": "d48b3856b14cce097314adbef347eb61bce52f36"
+            "Rev": "3002f5f84dac3d63875808927572c1f855118928"
           },
           "strip_prefix": "cranelift/bitset"
         }
@@ -15864,7 +15857,7 @@
         "Git": {
           "remote": "https://github.com/adambratschikaye/wasmtime",
           "commitish": {
-            "Rev": "d48b3856b14cce097314adbef347eb61bce52f36"
+            "Rev": "3002f5f84dac3d63875808927572c1f855118928"
           },
           "strip_prefix": "cranelift/codegen"
         }
@@ -16018,15 +16011,9 @@
         "Git": {
           "remote": "https://github.com/adambratschikaye/wasmtime",
           "commitish": {
-            "Rev": "d48b3856b14cce097314adbef347eb61bce52f36"
+            "Rev": "3002f5f84dac3d63875808927572c1f855118928"
           },
-          "strip_prefix": "cranelift/codegen/meta",
-          "patch_args": [
-            "-p4"
-          ],
-          "patches": [
-            "@@//bazel:cranelift-codegen-meta-isle.patch"
-          ]
+          "strip_prefix": "cranelift/codegen/meta"
         }
       },
       "targets": [
@@ -16092,7 +16079,7 @@
         "Git": {
           "remote": "https://github.com/adambratschikaye/wasmtime",
           "commitish": {
-            "Rev": "d48b3856b14cce097314adbef347eb61bce52f36"
+            "Rev": "3002f5f84dac3d63875808927572c1f855118928"
           },
           "strip_prefix": "cranelift/codegen/shared"
         }
@@ -16133,7 +16120,7 @@
         "Git": {
           "remote": "https://github.com/adambratschikaye/wasmtime",
           "commitish": {
-            "Rev": "d48b3856b14cce097314adbef347eb61bce52f36"
+            "Rev": "3002f5f84dac3d63875808927572c1f855118928"
           },
           "strip_prefix": "cranelift/control"
         }
@@ -16190,7 +16177,7 @@
         "Git": {
           "remote": "https://github.com/adambratschikaye/wasmtime",
           "commitish": {
-            "Rev": "d48b3856b14cce097314adbef347eb61bce52f36"
+            "Rev": "3002f5f84dac3d63875808927572c1f855118928"
           },
           "strip_prefix": "cranelift/entity"
         }
@@ -16261,7 +16248,7 @@
         "Git": {
           "remote": "https://github.com/adambratschikaye/wasmtime",
           "commitish": {
-            "Rev": "d48b3856b14cce097314adbef347eb61bce52f36"
+            "Rev": "3002f5f84dac3d63875808927572c1f855118928"
           },
           "strip_prefix": "cranelift/frontend"
         }
@@ -16330,15 +16317,9 @@
         "Git": {
           "remote": "https://github.com/adambratschikaye/wasmtime",
           "commitish": {
-            "Rev": "d48b3856b14cce097314adbef347eb61bce52f36"
+            "Rev": "3002f5f84dac3d63875808927572c1f855118928"
           },
-          "strip_prefix": "cranelift/isle/isle",
-          "patch_args": [
-            "-p4"
-          ],
-          "patches": [
-            "@@//bazel:cranelift-isle.patch"
-          ]
+          "strip_prefix": "cranelift/isle/isle"
         }
       },
       "targets": [
@@ -16412,7 +16393,7 @@
         "Git": {
           "remote": "https://github.com/adambratschikaye/wasmtime",
           "commitish": {
-            "Rev": "d48b3856b14cce097314adbef347eb61bce52f36"
+            "Rev": "3002f5f84dac3d63875808927572c1f855118928"
           },
           "strip_prefix": "cranelift/native"
         }
@@ -16480,7 +16461,7 @@
         "Git": {
           "remote": "https://github.com/adambratschikaye/wasmtime",
           "commitish": {
-            "Rev": "d48b3856b14cce097314adbef347eb61bce52f36"
+            "Rev": "3002f5f84dac3d63875808927572c1f855118928"
           },
           "strip_prefix": "cranelift/srcgen"
         }
@@ -57920,7 +57901,7 @@
         "Git": {
           "remote": "https://github.com/adambratschikaye/wasmtime",
           "commitish": {
-            "Rev": "d48b3856b14cce097314adbef347eb61bce52f36"
+            "Rev": "3002f5f84dac3d63875808927572c1f855118928"
           },
           "strip_prefix": "pulley"
         }
@@ -87196,7 +87177,7 @@
         "Git": {
           "remote": "https://github.com/adambratschikaye/wasmtime",
           "commitish": {
-            "Rev": "d48b3856b14cce097314adbef347eb61bce52f36"
+            "Rev": "3002f5f84dac3d63875808927572c1f855118928"
           },
           "strip_prefix": "crates/wasmtime"
         }
@@ -87632,7 +87613,7 @@
         "Git": {
           "remote": "https://github.com/adambratschikaye/wasmtime",
           "commitish": {
-            "Rev": "d48b3856b14cce097314adbef347eb61bce52f36"
+            "Rev": "3002f5f84dac3d63875808927572c1f855118928"
           },
           "strip_prefix": "crates/asm-macros"
         }
@@ -87682,7 +87663,7 @@
         "Git": {
           "remote": "https://github.com/adambratschikaye/wasmtime",
           "commitish": {
-            "Rev": "d48b3856b14cce097314adbef347eb61bce52f36"
+            "Rev": "3002f5f84dac3d63875808927572c1f855118928"
           },
           "strip_prefix": "crates/cranelift"
         }
@@ -87813,7 +87794,7 @@
         "Git": {
           "remote": "https://github.com/adambratschikaye/wasmtime",
           "commitish": {
-            "Rev": "d48b3856b14cce097314adbef347eb61bce52f36"
+            "Rev": "3002f5f84dac3d63875808927572c1f855118928"
           },
           "strip_prefix": "crates/environ"
         }
@@ -87933,7 +87914,7 @@
         "Git": {
           "remote": "https://github.com/adambratschikaye/wasmtime",
           "commitish": {
-            "Rev": "d48b3856b14cce097314adbef347eb61bce52f36"
+            "Rev": "3002f5f84dac3d63875808927572c1f855118928"
           },
           "strip_prefix": "crates/fiber"
         }
@@ -88055,7 +88036,7 @@
         "Git": {
           "remote": "https://github.com/adambratschikaye/wasmtime",
           "commitish": {
-            "Rev": "d48b3856b14cce097314adbef347eb61bce52f36"
+            "Rev": "3002f5f84dac3d63875808927572c1f855118928"
           },
           "strip_prefix": "crates/jit-icache-coherence"
         }
@@ -88122,7 +88103,7 @@
         "Git": {
           "remote": "https://github.com/adambratschikaye/wasmtime",
           "commitish": {
-            "Rev": "d48b3856b14cce097314adbef347eb61bce52f36"
+            "Rev": "3002f5f84dac3d63875808927572c1f855118928"
           },
           "strip_prefix": "crates/math"
         }
@@ -88178,7 +88159,7 @@
         "Git": {
           "remote": "https://github.com/adambratschikaye/wasmtime",
           "commitish": {
-            "Rev": "d48b3856b14cce097314adbef347eb61bce52f36"
+            "Rev": "3002f5f84dac3d63875808927572c1f855118928"
           },
           "strip_prefix": "crates/slab"
         }
@@ -88219,7 +88200,7 @@
         "Git": {
           "remote": "https://github.com/adambratschikaye/wasmtime",
           "commitish": {
-            "Rev": "d48b3856b14cce097314adbef347eb61bce52f36"
+            "Rev": "3002f5f84dac3d63875808927572c1f855118928"
           },
           "strip_prefix": "crates/versioned-export-macros"
         }
@@ -88277,7 +88258,7 @@
         "Git": {
           "remote": "https://github.com/adambratschikaye/wasmtime",
           "commitish": {
-            "Rev": "d48b3856b14cce097314adbef347eb61bce52f36"
+            "Rev": "3002f5f84dac3d63875808927572c1f855118928"
           },
           "strip_prefix": "crates/winch"
         }
@@ -89395,7 +89376,7 @@
         "Git": {
           "remote": "https://github.com/adambratschikaye/wasmtime",
           "commitish": {
-            "Rev": "d48b3856b14cce097314adbef347eb61bce52f36"
+            "Rev": "3002f5f84dac3d63875808927572c1f855118928"
           },
           "strip_prefix": "winch/codegen"
         }

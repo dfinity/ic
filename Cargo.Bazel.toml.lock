@@ -2607,7 +2607,7 @@ dependencies = [
 [[package]]
 name = "cranelift-assembler-x64"
 version = "0.120.0"
-source = "git+https://github.com/adambratschikaye/wasmtime?rev=d48b3856b14cce097314adbef347eb61bce52f36#d48b3856b14cce097314adbef347eb61bce52f36"
+source = "git+https://github.com/adambratschikaye/wasmtime?rev=3002f5f84dac3d63875808927572c1f855118928#3002f5f84dac3d63875808927572c1f855118928"
 dependencies = [
  "cranelift-assembler-x64-meta",
 ]
@@ -2615,7 +2615,7 @@ dependencies = [
 [[package]]
 name = "cranelift-assembler-x64-meta"
 version = "0.120.0"
-source = "git+https://github.com/adambratschikaye/wasmtime?rev=d48b3856b14cce097314adbef347eb61bce52f36#d48b3856b14cce097314adbef347eb61bce52f36"
+source = "git+https://github.com/adambratschikaye/wasmtime?rev=3002f5f84dac3d63875808927572c1f855118928#3002f5f84dac3d63875808927572c1f855118928"
 dependencies = [
  "cranelift-srcgen",
 ]
@@ -2623,7 +2623,7 @@ dependencies = [
 [[package]]
 name = "cranelift-bforest"
 version = "0.120.0"
-source = "git+https://github.com/adambratschikaye/wasmtime?rev=d48b3856b14cce097314adbef347eb61bce52f36#d48b3856b14cce097314adbef347eb61bce52f36"
+source = "git+https://github.com/adambratschikaye/wasmtime?rev=3002f5f84dac3d63875808927572c1f855118928#3002f5f84dac3d63875808927572c1f855118928"
 dependencies = [
  "cranelift-entity",
 ]
@@ -2631,7 +2631,7 @@ dependencies = [
 [[package]]
 name = "cranelift-bitset"
 version = "0.120.0"
-source = "git+https://github.com/adambratschikaye/wasmtime?rev=d48b3856b14cce097314adbef347eb61bce52f36#d48b3856b14cce097314adbef347eb61bce52f36"
+source = "git+https://github.com/adambratschikaye/wasmtime?rev=3002f5f84dac3d63875808927572c1f855118928#3002f5f84dac3d63875808927572c1f855118928"
 dependencies = [
  "serde",
  "serde_derive",
@@ -2640,7 +2640,7 @@ dependencies = [
 [[package]]
 name = "cranelift-codegen"
 version = "0.120.0"
-source = "git+https://github.com/adambratschikaye/wasmtime?rev=d48b3856b14cce097314adbef347eb61bce52f36#d48b3856b14cce097314adbef347eb61bce52f36"
+source = "git+https://github.com/adambratschikaye/wasmtime?rev=3002f5f84dac3d63875808927572c1f855118928#3002f5f84dac3d63875808927572c1f855118928"
 dependencies = [
  "bumpalo",
  "cranelift-assembler-x64",
@@ -2665,7 +2665,7 @@ dependencies = [
 [[package]]
 name = "cranelift-codegen-meta"
 version = "0.120.0"
-source = "git+https://github.com/adambratschikaye/wasmtime?rev=d48b3856b14cce097314adbef347eb61bce52f36#d48b3856b14cce097314adbef347eb61bce52f36"
+source = "git+https://github.com/adambratschikaye/wasmtime?rev=3002f5f84dac3d63875808927572c1f855118928#3002f5f84dac3d63875808927572c1f855118928"
 dependencies = [
  "cranelift-assembler-x64-meta",
  "cranelift-codegen-shared",
@@ -2676,12 +2676,12 @@ dependencies = [
 [[package]]
 name = "cranelift-codegen-shared"
 version = "0.120.0"
-source = "git+https://github.com/adambratschikaye/wasmtime?rev=d48b3856b14cce097314adbef347eb61bce52f36#d48b3856b14cce097314adbef347eb61bce52f36"
+source = "git+https://github.com/adambratschikaye/wasmtime?rev=3002f5f84dac3d63875808927572c1f855118928#3002f5f84dac3d63875808927572c1f855118928"
 
 [[package]]
 name = "cranelift-control"
 version = "0.120.0"
-source = "git+https://github.com/adambratschikaye/wasmtime?rev=d48b3856b14cce097314adbef347eb61bce52f36#d48b3856b14cce097314adbef347eb61bce52f36"
+source = "git+https://github.com/adambratschikaye/wasmtime?rev=3002f5f84dac3d63875808927572c1f855118928#3002f5f84dac3d63875808927572c1f855118928"
 dependencies = [
  "arbitrary",
 ]
@@ -2689,7 +2689,7 @@ dependencies = [
 [[package]]
 name = "cranelift-entity"
 version = "0.120.0"
-source = "git+https://github.com/adambratschikaye/wasmtime?rev=d48b3856b14cce097314adbef347eb61bce52f36#d48b3856b14cce097314adbef347eb61bce52f36"
+source = "git+https://github.com/adambratschikaye/wasmtime?rev=3002f5f84dac3d63875808927572c1f855118928#3002f5f84dac3d63875808927572c1f855118928"
 dependencies = [
  "cranelift-bitset",
  "serde",
@@ -2699,7 +2699,7 @@ dependencies = [
 [[package]]
 name = "cranelift-frontend"
 version = "0.120.0"
-source = "git+https://github.com/adambratschikaye/wasmtime?rev=d48b3856b14cce097314adbef347eb61bce52f36#d48b3856b14cce097314adbef347eb61bce52f36"
+source = "git+https://github.com/adambratschikaye/wasmtime?rev=3002f5f84dac3d63875808927572c1f855118928#3002f5f84dac3d63875808927572c1f855118928"
 dependencies = [
  "cranelift-codegen",
  "log",
@@ -2710,12 +2710,12 @@ dependencies = [
 [[package]]
 name = "cranelift-isle"
 version = "0.120.0"
-source = "git+https://github.com/adambratschikaye/wasmtime?rev=d48b3856b14cce097314adbef347eb61bce52f36#d48b3856b14cce097314adbef347eb61bce52f36"
+source = "git+https://github.com/adambratschikaye/wasmtime?rev=3002f5f84dac3d63875808927572c1f855118928#3002f5f84dac3d63875808927572c1f855118928"
 
 [[package]]
 name = "cranelift-native"
 version = "0.120.0"
-source = "git+https://github.com/adambratschikaye/wasmtime?rev=d48b3856b14cce097314adbef347eb61bce52f36#d48b3856b14cce097314adbef347eb61bce52f36"
+source = "git+https://github.com/adambratschikaye/wasmtime?rev=3002f5f84dac3d63875808927572c1f855118928#3002f5f84dac3d63875808927572c1f855118928"
 dependencies = [
  "cranelift-codegen",
  "libc",
@@ -2725,7 +2725,7 @@ dependencies = [
 [[package]]
 name = "cranelift-srcgen"
 version = "0.120.0"
-source = "git+https://github.com/adambratschikaye/wasmtime?rev=d48b3856b14cce097314adbef347eb61bce52f36#d48b3856b14cce097314adbef347eb61bce52f36"
+source = "git+https://github.com/adambratschikaye/wasmtime?rev=3002f5f84dac3d63875808927572c1f855118928#3002f5f84dac3d63875808927572c1f855118928"
 
 [[package]]
 name = "crc32fast"
@@ -9623,7 +9623,7 @@ dependencies = [
 [[package]]
 name = "pulley-interpreter"
 version = "33.0.0"
-source = "git+https://github.com/adambratschikaye/wasmtime?rev=d48b3856b14cce097314adbef347eb61bce52f36#d48b3856b14cce097314adbef347eb61bce52f36"
+source = "git+https://github.com/adambratschikaye/wasmtime?rev=3002f5f84dac3d63875808927572c1f855118928#3002f5f84dac3d63875808927572c1f855118928"
 dependencies = [
  "cranelift-bitset",
  "log",
@@ -13711,7 +13711,7 @@ dependencies = [
 [[package]]
 name = "wasmtime"
 version = "33.0.0"
-source = "git+https://github.com/adambratschikaye/wasmtime?rev=d48b3856b14cce097314adbef347eb61bce52f36#d48b3856b14cce097314adbef347eb61bce52f36"
+source = "git+https://github.com/adambratschikaye/wasmtime?rev=3002f5f84dac3d63875808927572c1f855118928#3002f5f84dac3d63875808927572c1f855118928"
 dependencies = [
  "addr2line 0.24.2",
  "anyhow",
@@ -13753,7 +13753,7 @@ dependencies = [
 [[package]]
 name = "wasmtime-asm-macros"
 version = "33.0.0"
-source = "git+https://github.com/adambratschikaye/wasmtime?rev=d48b3856b14cce097314adbef347eb61bce52f36#d48b3856b14cce097314adbef347eb61bce52f36"
+source = "git+https://github.com/adambratschikaye/wasmtime?rev=3002f5f84dac3d63875808927572c1f855118928#3002f5f84dac3d63875808927572c1f855118928"
 dependencies = [
  "cfg-if 1.0.0",
 ]
@@ -13761,7 +13761,7 @@ dependencies = [
 [[package]]
 name = "wasmtime-cranelift"
 version = "33.0.0"
-source = "git+https://github.com/adambratschikaye/wasmtime?rev=d48b3856b14cce097314adbef347eb61bce52f36#d48b3856b14cce097314adbef347eb61bce52f36"
+source = "git+https://github.com/adambratschikaye/wasmtime?rev=3002f5f84dac3d63875808927572c1f855118928#3002f5f84dac3d63875808927572c1f855118928"
 dependencies = [
  "anyhow",
  "cfg-if 1.0.0",
@@ -13786,7 +13786,7 @@ dependencies = [
 [[package]]
 name = "wasmtime-environ"
 version = "33.0.0"
-source = "git+https://github.com/adambratschikaye/wasmtime?rev=d48b3856b14cce097314adbef347eb61bce52f36#d48b3856b14cce097314adbef347eb61bce52f36"
+source = "git+https://github.com/adambratschikaye/wasmtime?rev=3002f5f84dac3d63875808927572c1f855118928#3002f5f84dac3d63875808927572c1f855118928"
 dependencies = [
  "anyhow",
  "cranelift-bitset",
@@ -13808,7 +13808,7 @@ dependencies = [
 [[package]]
 name = "wasmtime-fiber"
 version = "33.0.0"
-source = "git+https://github.com/adambratschikaye/wasmtime?rev=d48b3856b14cce097314adbef347eb61bce52f36#d48b3856b14cce097314adbef347eb61bce52f36"
+source = "git+https://github.com/adambratschikaye/wasmtime?rev=3002f5f84dac3d63875808927572c1f855118928#3002f5f84dac3d63875808927572c1f855118928"
 dependencies = [
  "anyhow",
  "cc",
@@ -13822,7 +13822,7 @@ dependencies = [
 [[package]]
 name = "wasmtime-jit-icache-coherence"
 version = "33.0.0"
-source = "git+https://github.com/adambratschikaye/wasmtime?rev=d48b3856b14cce097314adbef347eb61bce52f36#d48b3856b14cce097314adbef347eb61bce52f36"
+source = "git+https://github.com/adambratschikaye/wasmtime?rev=3002f5f84dac3d63875808927572c1f855118928#3002f5f84dac3d63875808927572c1f855118928"
 dependencies = [
  "anyhow",
  "cfg-if 1.0.0",
@@ -13833,7 +13833,7 @@ dependencies = [
 [[package]]
 name = "wasmtime-math"
 version = "33.0.0"
-source = "git+https://github.com/adambratschikaye/wasmtime?rev=d48b3856b14cce097314adbef347eb61bce52f36#d48b3856b14cce097314adbef347eb61bce52f36"
+source = "git+https://github.com/adambratschikaye/wasmtime?rev=3002f5f84dac3d63875808927572c1f855118928#3002f5f84dac3d63875808927572c1f855118928"
 dependencies = [
  "libm",
 ]
@@ -13841,12 +13841,12 @@ dependencies = [
 [[package]]
 name = "wasmtime-slab"
 version = "33.0.0"
-source = "git+https://github.com/adambratschikaye/wasmtime?rev=d48b3856b14cce097314adbef347eb61bce52f36#d48b3856b14cce097314adbef347eb61bce52f36"
+source = "git+https://github.com/adambratschikaye/wasmtime?rev=3002f5f84dac3d63875808927572c1f855118928#3002f5f84dac3d63875808927572c1f855118928"
 
 [[package]]
 name = "wasmtime-versioned-export-macros"
 version = "33.0.0"
-source = "git+https://github.com/adambratschikaye/wasmtime?rev=d48b3856b14cce097314adbef347eb61bce52f36#d48b3856b14cce097314adbef347eb61bce52f36"
+source = "git+https://github.com/adambratschikaye/wasmtime?rev=3002f5f84dac3d63875808927572c1f855118928#3002f5f84dac3d63875808927572c1f855118928"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -13856,7 +13856,7 @@ dependencies = [
 [[package]]
 name = "wasmtime-winch"
 version = "33.0.0"
-source = "git+https://github.com/adambratschikaye/wasmtime?rev=d48b3856b14cce097314adbef347eb61bce52f36#d48b3856b14cce097314adbef347eb61bce52f36"
+source = "git+https://github.com/adambratschikaye/wasmtime?rev=3002f5f84dac3d63875808927572c1f855118928#3002f5f84dac3d63875808927572c1f855118928"
 dependencies = [
  "anyhow",
  "cranelift-codegen",
@@ -14017,7 +14017,7 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 [[package]]
 name = "winch-codegen"
 version = "33.0.0"
-source = "git+https://github.com/adambratschikaye/wasmtime?rev=d48b3856b14cce097314adbef347eb61bce52f36#d48b3856b14cce097314adbef347eb61bce52f36"
+source = "git+https://github.com/adambratschikaye/wasmtime?rev=3002f5f84dac3d63875808927572c1f855118928#3002f5f84dac3d63875808927572c1f855118928"
 dependencies = [
  "anyhow",
  "cranelift-codegen",
