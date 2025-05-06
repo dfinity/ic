@@ -1,5 +1,5 @@
 {
-  "checksum": "3d83dc631e7792eea7c984230db7389dbdf77b0feffad4fd5fdc1f76ce60b4cc",
+  "checksum": "e577a290aa1039ac4588b6eee0122fb98679bb84f37aff9b72c9c2bea660dfe3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -34665,61 +34665,6 @@
         "Apache-2.0"
       ],
       "license_file": null
-    },
-    "ic-management-canister-types 0.3.0": {
-      "name": "ic-management-canister-types",
-      "version": "0.3.0",
-      "package_url": "https://github.com/dfinity/cdk-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-management-canister-types/0.3.0/download",
-          "sha256": "90253c6ac92f9a0b548a53a02c2d29dfa0f04a6c1ae919b86a6f54d4767d78b9"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ic_management_canister_types",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ic_management_canister_types",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "candid 0.10.13",
-              "target": "candid"
-            },
-            {
-              "id": "serde 1.0.217",
-              "target": "serde"
-            },
-            {
-              "id": "serde_bytes 0.11.15",
-              "target": "serde_bytes"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.3.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
     },
     "ic-management-canister-types 0.3.0": {
       "name": "ic-management-canister-types",
