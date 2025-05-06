@@ -48,9 +48,9 @@ use ic_registry_local_store::{
 use ic_registry_nns_data_provider::registry::registry_deltas_to_registry_transport_records;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{
-    deserialize_get_changes_since_response, deserialize_get_latest_version_response,
-    deserialize_get_value_response, serialize_get_changes_since_request,
-    serialize_get_value_request, GetChunk,
+    dechunkify_delta, deserialize_get_changes_since_response,
+    deserialize_get_latest_version_response, deserialize_get_value_response,
+    serialize_get_changes_since_request, serialize_get_value_request, GetChunk,
 };
 use ic_state_manager::StateManagerImpl;
 use ic_types::{
@@ -975,20 +975,31 @@ impl Player {
             .unwrap()
         {
             Ok((Ok(wasm_result), _)) => match wasm_result {
-                WasmResult::Reply(v) => self.runtime.block_on(async {
-                    let query_handler = Arc::new(Mutex::new(self.query_handler.clone()));
-                    let get_chunk = GetChunkImpl {
-                        query_handler,
-                        ingress_expiry,
-                    };
+                WasmResult::Reply(v) => {
+                    let (high_capacity_deltas, _version) =
+                        deserialize_get_changes_since_response(v)
+                            .map_err(|err| format!("{:?}", err))?;
 
-                    deserialize_get_changes_since_response(v, &get_chunk)
-                        .await
-                        .and_then(|(deltas, _)| {
-                            registry_deltas_to_registry_transport_records(deltas)
-                        })
+                    // Dechunkify deltas.
+                    let mut inlined_deltas = vec![];
+                    for delta in high_capacity_deltas {
+                        let query_handler = Arc::new(Mutex::new(self.query_handler.clone()));
+                        let get_chunk = GetChunkImpl {
+                            query_handler,
+                            ingress_expiry,
+                        };
+
+                        let delta = self
+                            .runtime
+                            .block_on(dechunkify_delta(delta, &get_chunk))
+                            .map_err(|err| format!("{:?}", err))?;
+
+                        inlined_deltas.push(delta);
+                    }
+
+                    registry_deltas_to_registry_transport_records(inlined_deltas)
                         .map_err(|err| format!("{:?}", err))
-                }),
+                }
 
                 WasmResult::Reject(e) => Err(format!("Query rejected: {}", e)),
             },
