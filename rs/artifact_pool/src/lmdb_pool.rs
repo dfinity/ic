@@ -1879,7 +1879,7 @@ impl IDkgMessageDb {
 
         let message_type = self.object_type;
         let log = self.log.clone();
-        let pattern_cl = pattern.as_ref().map(|s| s.clone());
+        let pattern_cl = pattern.as_ref().map(|p| p.clone());
         let deserialize_fn = move |key: &[u8], bytes: &[u8]| {
             // Convert key bytes to IDkgMessageId
             let mut key_bytes = Vec::<u8>::new();
@@ -1941,7 +1941,7 @@ impl IDkgMessageDb {
             self.db_env.clone(),
             self.db,
             deserialize_fn,
-            pattern.map(|s| s.into()),
+            pattern.map(|p| p.into()),
             self.log.clone(),
         ))
     }
