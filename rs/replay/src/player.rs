@@ -1309,10 +1309,12 @@ impl GetChunk for GetChunkImpl {
         let request = GetChunkRequest {
             content_sha256: Some(chunk_content_sha256.to_vec()),
         };
-        let request = Encode!(&request)
-            .map_err(|err| {
-                todo!(); "".to_string() // DO NOT MERGE
-            })?;
+        let request = Encode!(&request).map_err(|err| {
+            format!(
+                "Unable to call get_chunk, because unable to encode request: {}",
+                err
+            )
+        })?;
         let request = Query {
             source: QuerySource::User {
                 user_id: UserId::from(PrincipalId::new_anonymous()),
@@ -1352,17 +1354,19 @@ impl GetChunk for GetChunkImpl {
         };
 
         // Handle reply.
-        let result = Decode!(&result, Result<Chunk, String>)
-            .map_err(|err| {
-                todo!(); "".to_string() // DO NOT MERGE
-            })?;
+        let result = Decode!(&result, Result<Chunk, String>).map_err(|err| {
+            format!(
+                "Unable to decode get_chunk response from the Registry canister: {}",
+                err
+            )
+        })?;
         let chunk = result
-            .map_err(|err| {
-                todo!(); "".to_string() // DO NOT MERGE
-            })?;
+            .map_err(|err| format!("The Registry canister replied, but with an Err: {}", err))?;
         let Chunk { content } = chunk;
         let Some(content) = content else {
-            todo!(); // DO NOT MERGE
+            return Err(
+                "The Registry canister replied Ok, but did not include chunk content.".to_string(),
+            );
         };
 
         // Nice reply!
