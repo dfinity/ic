@@ -27,7 +27,7 @@ def remove_image(container_cmd: str, image_tag: str):
 
 
 def purge_podman(container_cmd: str):
-    log.info("Cleaning up...")
+    log.info("Cleaning up podman...")
     cmd = f"{container_cmd} system prune --all --volumes --force"
     invoke.run(cmd)
 
