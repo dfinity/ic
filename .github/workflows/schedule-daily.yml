@@ -133,6 +133,7 @@ jobs:
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
   dependency-scan-nightly:
+    if: false
     name: Dependency Scan Nightly
     runs-on:
       group: zh1

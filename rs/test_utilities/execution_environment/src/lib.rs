@@ -1,5 +1,5 @@
 use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
-use ic_config::embedders::{BestEffortResponsesFeature, MeteringType, StableMemoryPageLimit};
+use ic_config::embedders::{MeteringType, StableMemoryPageLimit};
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_config::{
     embedders::{Config as EmbeddersConfig, WASM_MAX_SIZE},
@@ -2155,14 +2155,6 @@ impl ExecutionTestBuilder {
 
     pub fn with_metering_type(mut self, metering_type: MeteringType) -> Self {
         self.execution_config.embedders_config.metering_type = metering_type;
-        self
-    }
-
-    pub fn with_best_effort_responses(mut self, stage: BestEffortResponsesFeature) -> Self {
-        self.execution_config
-            .embedders_config
-            .feature_flags
-            .best_effort_responses = stage;
         self
     }
 

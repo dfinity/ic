@@ -218,8 +218,8 @@ pub fn test(env: TestEnv) {
             .await
             .expect("cannot obtain full_neuron?");
         assert_eq!(
-            authz_fail.err().unwrap().error_type(),
-            ErrorType::NotAuthorized
+            authz_fail.err().unwrap().error_type,
+            ErrorType::NotAuthorized as i32
         );
 
         let n1 = governance

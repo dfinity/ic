@@ -143,3 +143,6 @@ common --noexperimental_inmemory_dotd_files
 # convention would also benefit. If the test does not support this, this "almost
 # certainly" does no harm.
 test --test_env=CLICOLOR_FORCE=true
+
+# Give canceled actions some more time to cleanup
+common --local_termination_grace_seconds=90

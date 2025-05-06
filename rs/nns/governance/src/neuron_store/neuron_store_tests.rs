@@ -711,24 +711,31 @@ fn test_get_non_empty_neuron_ids_readable_by_caller() {
     let neuron_with_staked_maturity = neuron_builder(5)
         .with_staked_maturity_e8s_equivalent(1)
         .build();
+    let neuron_with_maturity_disbursement = neuron_builder(6)
+        .with_maturity_disbursements_in_progress(vec![MaturityDisbursement {
+            finalize_disbursement_timestamp_seconds: 1,
+            ..Default::default()
+        }])
+        .build();
     let neuron_store = NeuronStore::new(btreemap! {
         1 => neuron_empty,
         2 => neuron_empty_with_fees,
         3 => neuron_with_stake,
         4 => neuron_with_maturity,
         5 => neuron_with_staked_maturity,
+        6 => neuron_with_maturity_disbursement,
     });
 
     assert_eq!(
         neuron_store.get_non_empty_neuron_ids_readable_by_caller(controller),
-        btreeset! { 3, 4, 5 }
+        btreeset! { 3, 4, 5, 6 }
             .into_iter()
             .map(NeuronId::from_u64)
             .collect()
     );
     assert_eq!(
         neuron_store.get_non_empty_neuron_ids_readable_by_caller(hot_key),
-        btreeset! { 3, 4, 5 }
+        btreeset! { 3, 4, 5, 6 }
             .into_iter()
             .map(NeuronId::from_u64)
             .collect()

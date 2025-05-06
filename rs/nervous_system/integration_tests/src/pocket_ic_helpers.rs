@@ -2010,6 +2010,24 @@ pub mod sns {
                 );
             }
         }
+
+        pub async fn set_following(
+            pocket_ic: &PocketIc,
+            sns_governance_canister_id: PrincipalId,
+            sender: PrincipalId,
+            neuron_id: sns_pb::NeuronId,
+            set_following: sns_pb::manage_neuron::SetFollowing,
+        ) -> Result<sns_pb::ManageNeuronResponse, RejectResponse> {
+            let agent = PocketIcAgent::new(pocket_ic, sender);
+            let sns_governance_canister = GovernanceCanister::new(sns_governance_canister_id);
+            sns_governance_canister
+                .set_following(&agent, neuron_id, set_following)
+                .await
+                .map_err(|err| match err {
+                    PocketIcCallError::PocketIc(reject_response) => reject_response,
+                    err => panic!("Unexpected error when setting following: {:#?}", err),
+                })
+        }
     }
 
     pub mod index_ng {

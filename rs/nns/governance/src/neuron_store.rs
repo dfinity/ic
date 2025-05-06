@@ -1029,8 +1029,15 @@ impl NeuronStore {
         caller: PrincipalId,
     ) -> BTreeSet<NeuronId> {
         let is_non_empty = |neuron_id: &NeuronId| {
-            self.with_neuron_sections(neuron_id, NeuronSections::NONE, |neuron| neuron.is_funded())
-                .unwrap_or(false)
+            self.with_neuron_sections(
+                neuron_id,
+                NeuronSections {
+                    maturity_disbursements: true,
+                    ..NeuronSections::NONE
+                },
+                |neuron| neuron.is_funded() || neuron.has_maturity_disbursement_in_progress(),
+            )
+            .unwrap_or(false)
         };
 
         self.get_neuron_ids_readable_by_caller(caller)

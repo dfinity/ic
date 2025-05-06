@@ -254,7 +254,8 @@ impl DeployTestflightArgs {
                     .swap_parameters
                     .as_ref()
                     .unwrap()
-                    .neurons_fund_participation()
+                    .neurons_fund_participation
+                    .unwrap_or_default()
                 {
                     println!("Neuron's fund participation was enabled in {}, but is not supported by SNS testflight. Proceeding as if it was disabled.", init_config_file.display());
                     create_service_nervous_system

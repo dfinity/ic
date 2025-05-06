@@ -78,6 +78,7 @@ go_deps.bzl               @dfinity/idx
 /.github/workflows/rosetta-release.yml                                   @dfinity/finint @dfinity/idx
 /.github/CODEOWNERS                                                      @dfinity/ic-owners-owners
 /ci/                                                                     @dfinity/idx
+/ci/actions/dependencies/                                                @dfinity/product-security
 /ci/src/dependencies/                                                    @dfinity/product-security
 /ci/src/dependencies/resources/container_scanner_finding_failover_ignore_list_guestos.txt @dfinity/node
 /ci/tools/repro-check                                                    @dfinity/dre
