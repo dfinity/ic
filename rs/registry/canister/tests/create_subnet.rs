@@ -11,7 +11,8 @@ use ic_base_types::{PrincipalId, SubnetId};
 use ic_config::Config;
 use ic_interfaces_registry::RegistryClient;
 use ic_management_canister_types_private::{
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
+    VetKdKeyId,
 };
 use ic_nns_test_utils::itest_helpers::try_call_via_universal_canister;
 use ic_nns_test_utils::{
@@ -297,7 +298,11 @@ fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: Mas
                 key_configs: vec![KeyConfigRequest {
                     key_config: Some(KeyConfig {
                         key_id: Some(key_id.clone()),
-                        pre_signatures_to_create_in_advance: Some(101),
+                        pre_signatures_to_create_in_advance: if key_id.is_idkg_key() {
+                            Some(101)
+                        } else {
+                            Some(0)
+                        },
                         max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                     }),
                     subnet_id: Some(*system_subnet_principal),
@@ -345,8 +350,8 @@ fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: Mas
         assert_eq!(
             chain_key_config.key_configs,
             vec![KeyConfigInternal {
-                key_id,
-                pre_signatures_to_create_in_advance: 101,
+                key_id: key_id.clone(),
+                pre_signatures_to_create_in_advance: if key_id.is_idkg_key() { 101 } else { 0 },
                 max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
             }],
         );
@@ -366,6 +371,15 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet() {
 fn test_accepted_proposal_with_schnorr_gets_keys_from_other_subnet() {
     let key_id = MasterPublicKeyId::Schnorr(SchnorrKeyId {
         algorithm: SchnorrAlgorithm::Bip340Secp256k1,
+        name: "foo-bar".to_string(),
+    });
+    test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id);
+}
+
+#[test]
+fn test_accepted_proposal_with_vetkd_gets_keys_from_other_subnet() {
+    let key_id = MasterPublicKeyId::VetKd(VetKdKeyId {
+        curve: VetKdCurve::Bls12_381_G2,
         name: "foo-bar".to_string(),
     });
     test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id);
