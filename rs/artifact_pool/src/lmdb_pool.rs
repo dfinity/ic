@@ -1589,7 +1589,7 @@ impl crate::certification_pool::MutablePoolSection
 ///    issued a support for a <transcript Id, dealer Id>, we could iterate through all the entries
 ///    in the support pool looking for a matching artifact. Instead, this implementation allows
 ///    us to issue a single prefix query for prefix = <transcript Id, dealer Id + support signer Id>.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug)]
 pub(crate) struct IDkgIdKey(Vec<u8>);
 
 impl AsRef<[u8]> for IDkgIdKey {
