@@ -57,7 +57,7 @@ use ic_nns_governance_api::pb::v1::{
 };
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
-use ic_registry_canister_api::{mutate_daniel_wong_for_test, GetChunkRequest};
+use ic_registry_canister_api::{mutate_test_high_capacity_records, GetChunkRequest};
 use ic_registry_transport::{
     deserialize_get_latest_version_response,
     pb::v1::{
@@ -106,16 +106,16 @@ pub fn state_machine_builder_for_nns_tests() -> StateMachineBuilder {
         ))
 }
 
-pub fn registry_mutate_daniel_wong_for_test(
+pub fn registry_mutate_test_high_capacity_records(
     state_machine: &StateMachine,
-    request: mutate_daniel_wong_for_test::Request,
+    request: mutate_test_high_capacity_records::Request,
 ) -> u64 {
     let sender = PrincipalId::from(GOVERNANCE_CANISTER_ID);
     let result = state_machine
         .execute_ingress_as(
             sender,
             REGISTRY_CANISTER_ID,
-            "mutate_daniel_wong_for_test",
+            "mutate_test_high_capacity_records",
             Encode!(&request).unwrap(),
         )
         .unwrap();

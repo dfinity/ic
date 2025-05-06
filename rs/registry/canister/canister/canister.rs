@@ -450,34 +450,21 @@ fn get_chunk_(request: GetChunkRequest) -> Result<Chunk, String> {
 ///
 /// Used in integration test(s) for large records.
 ///
-/// At the same time, it is not harmful for this to be in release builds,
-/// because
-///
-///     1. Only Governance canister is allowed to call this.
-///     2. This does not appear in registry.did.
+/// This is not in release builds.
 ///
 /// There are a couple of pieces of functionality here that cannot otherwise
 /// easily be accomplished:
 ///
 ///     1. Produce large record(s).
 ///     2. Chunking is ALWAYS enabled.
-///
-/// Again, since this can only be called by the Governance canister, production
-/// is protected from prematurely (i.e. before clients are ready) doing those
-/// things.
 #[cfg(feature = "test")]
-#[export_name = "canister_update mutate_daniel_wong_for_test"]
-fn mutate_daniel_wong_for_test() {
+#[export_name = "canister_update mutate_test_high_capacity_records"]
+fn mutate_test_high_capacity_records() {
     // Since these should only be used in tests, we do not put these at the top of the file.
-    use ic_registry_canister_api::mutate_daniel_wong_for_test::Request;
-    #[cfg(feature = "test")]
-    use registry_canister::flags::temporarily_enable_chunkifying_large_values;
+    use ic_registry_canister_api::mutate_test_high_capacity_records::Request;
 
     over(candid_one, |request: Request| -> /* version */ u64 {
-        check_caller_is_governance_and_log("mutate_daniel_wong_for_test");
-
-        let _restore_on_drop = temporarily_enable_chunkifying_large_values();
-
+        check_caller_is_governance_and_log("mutate_test_high_capacity_records");
         let registry = registry_mut();
         registry.maybe_apply_mutation_internal(vec![request.into_mutation()]);
         registry.latest_version()

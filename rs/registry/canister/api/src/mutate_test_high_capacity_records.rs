@@ -1,4 +1,4 @@
-//! See comments for `fn mutate_daniel_wong_for_test` in
+//! See comments for `fn mutate_test_high_capacity_records` in
 //! `rs/registry/canister/canister/canister.rs` (yes, there are three
 //! occurrences of "canister" in that path!).
 

@@ -9,11 +9,11 @@ use ic_nns_test_utils::{
     common::{build_test_registry_wasm, NnsInitPayloadsBuilder},
     state_test_helpers::{
         registry_get_chunk, registry_get_value, registry_high_capacity_get_changes_since,
-        registry_latest_version, registry_mutate_daniel_wong_for_test, setup_nns_canisters,
+        registry_latest_version, registry_mutate_test_high_capacity_records, setup_nns_canisters,
         state_machine_builder_for_nns_tests,
     },
 };
-use ic_registry_canister_api::{mutate_daniel_wong_for_test, Chunk};
+use ic_registry_canister_api::{mutate_test_high_capacity_records, Chunk};
 use ic_registry_transport::pb::v1::{
     high_capacity_registry_get_value_response, high_capacity_registry_value, registry_error,
     HighCapacityRegistryDelta, HighCapacityRegistryGetChangesSinceResponse,
@@ -39,11 +39,11 @@ fn test_large_records() {
 
     // Step 2: Run the code that is under test.
 
-    let new_version = registry_mutate_daniel_wong_for_test(
+    let new_version = registry_mutate_test_high_capacity_records(
         &state_machine,
-        mutate_daniel_wong_for_test::Request {
+        mutate_test_high_capacity_records::Request {
             id: 42,
-            operation: mutate_daniel_wong_for_test::Operation::UpsertLarge,
+            operation: mutate_test_high_capacity_records::Operation::UpsertLarge,
         },
     );
 
@@ -98,7 +98,7 @@ fn test_large_records() {
 }
 
 #[test]
-fn test_mutate_daniel_wong_for_test() {
+fn test_mutate_test_high_capacity_records() {
     // Step 1: Prepare the world.
     let state_machine = state_machine_builder_for_nns_tests().build();
 
@@ -114,43 +114,43 @@ fn test_mutate_daniel_wong_for_test() {
 
     const RED_HERRING_ID: u64 = 999;
 
-    let prior_small_version = registry_mutate_daniel_wong_for_test(
+    let prior_small_version = registry_mutate_test_high_capacity_records(
         &state_machine,
-        mutate_daniel_wong_for_test::Request {
+        mutate_test_high_capacity_records::Request {
             id: 42,
-            operation: mutate_daniel_wong_for_test::Operation::UpsertLarge,
+            operation: mutate_test_high_capacity_records::Operation::UpsertLarge,
         },
     );
 
-    let small_version = registry_mutate_daniel_wong_for_test(
+    let small_version = registry_mutate_test_high_capacity_records(
         &state_machine,
-        mutate_daniel_wong_for_test::Request {
+        mutate_test_high_capacity_records::Request {
             id: 42,
-            operation: mutate_daniel_wong_for_test::Operation::UpsertSmall,
+            operation: mutate_test_high_capacity_records::Operation::UpsertSmall,
         },
     );
-    let prior_red_herring_version = registry_mutate_daniel_wong_for_test(
+    let prior_red_herring_version = registry_mutate_test_high_capacity_records(
         &state_machine,
-        mutate_daniel_wong_for_test::Request {
+        mutate_test_high_capacity_records::Request {
             id: RED_HERRING_ID,
-            operation: mutate_daniel_wong_for_test::Operation::UpsertLarge,
+            operation: mutate_test_high_capacity_records::Operation::UpsertLarge,
         },
     );
 
     let small_get_value_response = registry_get_value(&state_machine, b"daniel_wong_42");
 
-    let final_red_herring_version = registry_mutate_daniel_wong_for_test(
+    let final_red_herring_version = registry_mutate_test_high_capacity_records(
         &state_machine,
-        mutate_daniel_wong_for_test::Request {
+        mutate_test_high_capacity_records::Request {
             id: RED_HERRING_ID,
-            operation: mutate_daniel_wong_for_test::Operation::UpsertSmall,
+            operation: mutate_test_high_capacity_records::Operation::UpsertSmall,
         },
     );
-    let delete_version = registry_mutate_daniel_wong_for_test(
+    let delete_version = registry_mutate_test_high_capacity_records(
         &state_machine,
-        mutate_daniel_wong_for_test::Request {
+        mutate_test_high_capacity_records::Request {
             id: 42,
-            operation: mutate_daniel_wong_for_test::Operation::Delete,
+            operation: mutate_test_high_capacity_records::Operation::Delete,
         },
     );
     let last_version = delete_version;
