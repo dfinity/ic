@@ -2746,6 +2746,8 @@ dependencies = [
  "anyhow",
  "canister-test",
  "futures",
+ "ic-config",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-management-canister-types-private",
  "ic-nns-constants",
  "ic-registry-subnet-type",
@@ -2754,6 +2756,7 @@ dependencies = [
  "ic-vetkd-utils",
  "ic_consensus_system_test_utils",
  "ic_consensus_threshold_sig_system_test_utils",
+ "rand 0.8.5",
  "slog",
  "tokio",
 ]
@@ -12465,7 +12468,7 @@ dependencies = [
 
 [[package]]
 name = "ic-rosetta-api"
-version = "2.1.3"
+version = "2.1.4"
 dependencies = [
  "actix-rt",
  "actix-web",

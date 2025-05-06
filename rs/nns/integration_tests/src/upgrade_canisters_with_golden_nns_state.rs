@@ -11,12 +11,16 @@ use ic_nns_constants::{
     REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance_api::pb::v1::{MonthlyNodeProviderRewards, Vote};
+use ic_nns_governance_api::pb::v1::{NetworkEconomics, VotingPowerEconomics};
+use ic_nns_test_utils::state_test_helpers::{
+    nns_get_most_recent_monthly_node_provider_rewards, scrape_metrics,
+};
 use ic_nns_test_utils::{
     common::modify_wasm_bytes,
     state_test_helpers::{
-        get_canister_status, nns_cast_vote, nns_create_super_powerful_neuron,
-        nns_get_most_recent_monthly_node_provider_rewards, nns_propose_upgrade_nns_canister,
-        scrape_metrics, wait_for_canister_upgrade_to_succeed,
+        get_canister_status, manage_network_economics, nns_cast_vote,
+        nns_create_super_powerful_neuron, nns_propose_upgrade_nns_canister,
+        wait_for_canister_upgrade_to_succeed,
     },
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
@@ -303,6 +307,23 @@ fn test_upgrade_canisters_with_golden_nns_state() {
 
             repetition_number += 1;
         };
+
+    // TODO[NNS1-3790]: Remove this once the mainnet NNS has initialized the
+    // TODO[NNS1-3790]: `neuron_minimum_dissolve_delay_to_vote_seconds` field.
+    manage_network_economics(
+        &state_machine,
+        NetworkEconomics {
+            voting_power_economics: Some(VotingPowerEconomics {
+                neuron_minimum_dissolve_delay_to_vote_seconds: Some(
+                    VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
+                ),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+        neuron_controller,
+        neuron_id,
+    );
 
     perform_sequence_of_upgrades(&nns_canister_upgrade_sequence);
 
