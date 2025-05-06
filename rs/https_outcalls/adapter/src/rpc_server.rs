@@ -51,7 +51,7 @@ const MAX_HEADER_LIST_SIZE: u32 = 52 * 1024;
 const MAX_SOCKS_PROXY_RETRIES: usize = 2;
 
 /// TODO(SOCKS_PROXY_ROLLOUT): Make this 100.
-const NEW_SOCKS_PROXY_ROLLOUT: u32 = 1;
+const NEW_SOCKS_PROXY_ROLLOUT: u32 = 0;
 
 type OutboundRequestBody = Full<Bytes>;
 
@@ -67,6 +67,7 @@ pub struct CanisterHttp {
     http_connect_timeout_secs: u64,
 }
 
+#[allow(clippy::absurd_extreme_comparisons)]
 fn should_only_use_new_socks_proxy() -> bool {
     // This is a temporary feature flag to allow us to test the new socks proxy implementation
     // without affecting the existing implementation.
