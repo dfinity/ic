@@ -17,7 +17,7 @@ To use this script, you need:
 Examples:
     # Basic transfer of 0.01 ICP with standard fee
     python3 transfer.py --node-address http://localhost:8081 \\
-                       --private-key-path ./my_private_key.pem \\
+                       --funded-private-key-pem ./my_private_key.pem \\
                        --signature-type ecdsa \\
                        --recipient-account-id 47e0ae0de8af04a961c4b3225cd77b9652777286ce142c2a07fab98da5263100 \\
                        --amount-e8s 1000000 \\
@@ -25,7 +25,7 @@ Examples:
 
     # With verbose output for debugging
     python3 transfer.py --node-address http://localhost:8081 \\
-                       --private-key-path ./my_private_key.pem \\
+                       --funded-private-key-pem ./my_private_key.pem \\
                        --signature-type ecdsa \\
                        --recipient-account-id 47e0ae0de8af04a961c4b3225cd77b9652777286ce142c2a07fab98da5263100 \\
                        --amount-e8s 1000000 \\
@@ -47,7 +47,7 @@ def parse_balance(balance):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--node-address", type=str)
-    parser.add_argument("--private-key-path", type=str)
+    parser.add_argument("--funded-private-key-pem", type=str)
     parser.add_argument("--signature-type", type=str)
     parser.add_argument("--recipient-account-id", type=str)
     parser.add_argument("--amount-e8s", type=int)
@@ -57,7 +57,7 @@ def main():
 
     client1 = RosettaClient(
         args.node_address,
-        args.private_key_path,
+        args.funded_private_key_pem,
         args.signature_type,
     )
 

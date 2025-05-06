@@ -234,7 +234,7 @@ def main():
                 ["./transfer.py"]
                 + base_args
                 + [
-                    "--private-key-path",
+                    "--funded-private-key-pem",
                     args.funded_private_key_pem,
                     "--signature-type",
                     "ecdsa",
