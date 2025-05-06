@@ -432,13 +432,14 @@ impl HttpsOutcallsService for CanisterHttp {
                                 // We compare the results of the deprecated socks proxy implementation with the new one.
                                 self.compare_results(&result, &dark_launch_result);
                                 if result.is_err() && dark_launch_result.is_ok() {
-                                    // Id dl found something, return that.
+                                    // If dl found something, return that.
                                     dark_launch_result
                                 } else {
                                     result
                                 }
                             }
                             None => {
+                                // Eventually only this branch should be active. 
                                 dark_launch_result
                             }
                         }
@@ -450,11 +451,11 @@ impl HttpsOutcallsService for CanisterHttp {
                         // TODO: consider using the already stored socks clients.
                         match deprecated_result {
                             Some(resp) => {
-                                warn!(self.logger, "SOCKS_PROXY_DL: No socks proxy addresses provided, falling back to direct connect");
+                                warn!(self.logger, "SOCKS_PROXY_DL: No socks proxy addresses provided, falling back to old socks client");
                                 resp
                             }
                             None => {
-                                warn!(self.logger, "SOCKS_PROXY_DL: No socks proxy addresses provided, direct connect not available");
+                                warn!(self.logger, "SOCKS_PROXY_DL: No socks proxy addresses provided, old socks client not available");
                                 Err("No socks proxy addresses provided".to_string())
                             }
                         }
