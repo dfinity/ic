@@ -11,9 +11,10 @@ on the process that this file is part of, see
 
 ## Changed
 
-## Deprecated
+The DAO community settings topic is promoted to being critical. For context, please refer to
+the [forum thread](https://forum.dfinity.org/t/make-sns-topic-dao-community-settings-critical/46689).
 
-* Custom proposals that were not yet assigned to a topic are no longer allowed to be submitted.
+## Deprecated
 
 ## Removed
 

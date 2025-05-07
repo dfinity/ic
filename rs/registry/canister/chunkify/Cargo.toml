@@ -12,3 +12,6 @@ ic-nervous-system-chunks = { path = "../../../nervous_system/chunks" }
 ic-registry-transport = { path = "../../transport" }
 ic-stable-structures = { workspace = true }
 prost = { workspace = true }
+
+[dev-dependencies]
+lazy_static = { workspace = true }

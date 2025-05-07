@@ -13,6 +13,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "@crate_index//:lazy_static",
 ]
 
 LIB_SRCS = glob(

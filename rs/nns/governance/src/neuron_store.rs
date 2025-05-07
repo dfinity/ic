@@ -706,14 +706,6 @@ impl NeuronStore {
         self.heap_neurons.range(range).map(|(_, neuron)| neuron)
     }
 
-    // TODO remove this after we no longer need to validate neurons in heap.
-    /// Returns an iterator over all neurons in the heap. There is no guarantee that the active
-    /// neurons are all in the heap as they are being migrated to stable memory, so the caller
-    /// should be aware of different storage locations.
-    pub fn heap_neurons_iter(&self) -> impl Iterator<Item = &Neuron> {
-        self.heap_neurons.values()
-    }
-
     fn is_active_neurons_fund_neuron(neuron: &Neuron, now: u64) -> bool {
         !neuron.is_inactive(now) && neuron.is_a_neurons_fund_member()
     }
@@ -1029,8 +1021,15 @@ impl NeuronStore {
         caller: PrincipalId,
     ) -> BTreeSet<NeuronId> {
         let is_non_empty = |neuron_id: &NeuronId| {
-            self.with_neuron_sections(neuron_id, NeuronSections::NONE, |neuron| neuron.is_funded())
-                .unwrap_or(false)
+            self.with_neuron_sections(
+                neuron_id,
+                NeuronSections {
+                    maturity_disbursements: true,
+                    ..NeuronSections::NONE
+                },
+                |neuron| neuron.is_funded() || neuron.has_maturity_disbursement_in_progress(),
+            )
+            .unwrap_or(false)
         };
 
         self.get_neuron_ids_readable_by_caller(caller)

@@ -48,6 +48,35 @@ pub fn chunkify_composite_mutation<M: Memory>(
     }
 }
 
+/// Returns the content (associated with the key), as a monolithic blob (i.e. no
+/// LargeValueChunkKeys).
+///
+/// (If the key has no value associated with it (i.e. the most recent mutation
+/// was a delete), None is returned; otherwise, Some is returned, of course.)
+///
+/// Panics if mutation is invalid. In particular, if the mutation_type field has
+/// some value that cannot be converted from i32 to registry_mutation::Type.
+pub fn dechunkify_registry_value<M: Memory>(
+    content: high_capacity_registry_value::Content,
+    chunks: &Chunks<M>,
+) -> Option<Vec<u8>> {
+    match content {
+        high_capacity_registry_value::Content::Value(value) => Some(value),
+
+        high_capacity_registry_value::Content::DeletionMarker(deletion_marker) => {
+            if deletion_marker {
+                None
+            } else {
+                Some(vec![])
+            }
+        }
+
+        high_capacity_registry_value::Content::LargeValueChunkKeys(large_value_chunk_keys) => {
+            Some(dechunkify(&large_value_chunk_keys, chunks))
+        }
+    }
+}
+
 /// Returns the new content (associated with the key), as set by the mutation.
 ///
 /// (If the mutation clears the key, None is returned; otherwise, Some is
@@ -68,18 +97,7 @@ pub fn dechunkify_prime_mutation_value<M: Memory>(
     let mutation_type = registry_mutation::Type::try_from(mutation_type).unwrap_or_else(|err| {
         panic!("Invalid mutation_type ({}): {}", mutation_type, err);
     });
-    // Do not simply do mutation_type == Delete, because this assumes the reader
-    // knows that all other mutation types are not some other flavor of
-    // deletion. Whereas, match forces us to prove in writing that we really
-    // considered all mutation types.
-    let is_delete = match mutation_type {
-        registry_mutation::Type::Delete => true,
-
-        registry_mutation::Type::Insert
-        | registry_mutation::Type::Update
-        | registry_mutation::Type::Upsert => false,
-    };
-    if is_delete {
+    if mutation_type.is_delete() {
         return None;
     }
 
