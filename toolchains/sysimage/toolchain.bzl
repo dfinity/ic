@@ -52,9 +52,6 @@ def _build_container_base_image_impl(ctx):
     inputs.append(ctx.file.dockerfile)
     args.extend(["--dockerfile", ctx.file.dockerfile.path])
 
-    # Dir mounts prepared in `ci/container/container-run.sh`
-    args.extend(["--tmpfs_container_sys_dir"])
-
     if ctx.attr.build_args:
         args.extend(["--build_args"])
         for build_arg in ctx.attr.build_args:
@@ -130,8 +127,6 @@ def _build_container_filesystem_impl(ctx):
         args.extend(["--base-image-tar-file", ctx.file.base_image_tar_file.path])
         args.extend(["--base-image-tar-file-tag", ctx.attr.base_image_tar_file_tag])
 
-    # Dir mounts prepared in `ci/container/container-run.sh`
-    args.extend(["--tmpfs-container-sys-dir"])
     args.extend(["--no-cache"])
 
     tool = ctx.attr._tool
@@ -387,74 +382,6 @@ ext4_image = _icos_build_rule(
         "_diroid": attr.label(
             allow_files = True,
             default = "//rs/ic_os/build_tools/diroid",
-        ),
-        "_dflate": attr.label(
-            allow_files = True,
-            default = "//rs/ic_os/build_tools/dflate",
-        ),
-    },
-)
-
-def _inject_files_impl(ctx):
-    tool = ctx.files._inject_files[0]
-    dflate = ctx.files._dflate[0]
-
-    out = ctx.actions.declare_file(ctx.label.name)
-
-    inputs = [ctx.files.base[0]]
-
-    args = [
-        "--input",
-        ctx.files.base[0].path,
-        "--output",
-        out.path,
-        "--dflate",
-        dflate.path,
-    ]
-
-    if len(ctx.files.file_contexts) > 0:
-        args += ["--file-contexts", ctx.files.file_contexts[0].path]
-        inputs += ctx.files.file_contexts
-
-    if ctx.attr.prefix:
-        args += ["--prefix", ctx.attr.prefix]
-
-    for input_target, install_target in ctx.attr.extra_files.items():
-        args.append(input_target.files.to_list()[0].path + ":" + install_target)
-        inputs += input_target.files.to_list()
-
-    _run_with_icos_wrapper(
-        ctx,
-        executable = tool.path,
-        arguments = args,
-        inputs = inputs,
-        outputs = [out],
-        tools = [tool, dflate],
-    )
-
-    return [DefaultInfo(files = depset([out]))]
-
-inject_files = _icos_build_rule(
-    implementation = _inject_files_impl,
-    attrs = {
-        "base": attr.label(
-            allow_files = True,
-            mandatory = True,
-        ),
-        "extra_files": attr.label_keyed_string_dict(
-            allow_files = True,
-            mandatory = True,
-        ),
-        "file_contexts": attr.label(
-            allow_files = True,
-            mandatory = False,
-        ),
-        "prefix": attr.string(
-            mandatory = False,
-        ),
-        "_inject_files": attr.label(
-            allow_files = True,
-            default = "//rs/ic_os/build_tools/inject_files:inject-files",
         ),
         "_dflate": attr.label(
             allow_files = True,

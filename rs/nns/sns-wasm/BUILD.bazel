@@ -13,6 +13,7 @@ filegroup(
 # See rs/nervous_system/feature_test.md
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-http-types",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
     "//rs/nervous_system/clients",
@@ -21,7 +22,6 @@ DEPENDENCIES = [
     "//rs/nervous_system/runtime",
     "//rs/nns/constants",
     "//rs/nns/handlers/root/interface",
-    "//rs/rust_canisters/http_types",
     "//rs/sns/governance",
     "//rs/sns/init",
     "//rs/sns/root",
