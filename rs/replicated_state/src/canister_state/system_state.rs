@@ -489,30 +489,6 @@ impl Stopped {
     }
 }
 
-/// Transitions the canister into `Running` state. Returns the pending stop
-/// contexts if the canister was previously in `Stopping` state.
-pub fn start_canister(&mut self) -> Vec<StopCanisterContext> {
-    match &mut self.status {
-        CanisterStatus::Running { .. } => Vec::new(),
-
-        CanisterStatus::Stopping {
-            call_context_manager,
-            stop_contexts,
-        } => {
-            let stop_contexts = std::mem::take(stop_contexts);
-            self.status = CanisterStatus::Running {
-                call_context_manager: std::mem::take(call_context_manager),
-            };
-            stop_contexts
-        }
-
-        CanisterStatus::Stopped => {
-            self.status = CanisterStatus::new_running();
-            Vec::new()
-        }
-    }
-}
-
 /*
 /// A wrapper around the different canister statuses.
 #[derive(Clone, Eq, PartialEq, Debug)]
