@@ -14978,6 +14978,7 @@ version = "0.1.2"
 dependencies = [
  "async-trait",
  "candid",
+ "ic-cdk 0.17.1",
  "icrc-ledger-types",
  "serde",
 ]
@@ -15001,6 +15002,7 @@ dependencies = [
  "candid",
  "crc32fast",
  "hex",
+ "ic-cdk 0.17.1",
  "ic-stable-structures",
  "icrc-cbor",
  "itertools 0.12.1",

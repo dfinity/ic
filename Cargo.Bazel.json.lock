@@ -1,5 +1,5 @@
 {
-  "checksum": "ee482aabb6f65a21627acc2d50a194116634bd83478fddead5a652a044409537",
+  "checksum": "6557be6468429b3ab64a9361eca12712b13963ce3229cc13a28c46b6c973a11d",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -20767,12 +20767,12 @@
             },
             {
               "id": "ic-cdk 0.17.1",
-              "target": "ic_cdk"
+              "target": "ic_cdk",
+              "alias": "ic_cdk_0_17_1"
             },
             {
               "id": "ic-cdk 0.18.0",
-              "target": "ic_cdk",
-              "alias": "ic_cdk_next"
+              "target": "ic_cdk"
             },
             {
               "id": "ic-cdk-timers 0.11.0",
@@ -21684,12 +21684,12 @@
             },
             {
               "id": "ic-cdk-macros 0.17.1",
-              "target": "ic_cdk_macros"
+              "target": "ic_cdk_macros",
+              "alias": "ic_cdk_macros_0_17_1"
             },
             {
               "id": "ic-cdk-macros 0.18.0",
-              "target": "ic_cdk_macros",
-              "alias": "ic_cdk_macros_next"
+              "target": "ic_cdk_macros"
             },
             {
               "id": "indoc 1.0.9",

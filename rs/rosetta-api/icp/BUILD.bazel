@@ -84,7 +84,6 @@ DEV_DEPENDENCIES = [
     "//rs/rosetta-api/icp/test_utils",
     "//rs/types/base_types",
     "@crate_index//:futures",
-    "@crate_index//:ic-cdk",
     "@crate_index//:num-traits",
     "@crate_index//:proptest",
     "@crate_index//:prost",
