@@ -51,7 +51,7 @@ const MAX_HEADER_LIST_SIZE: u32 = 52 * 1024;
 const MAX_SOCKS_PROXY_RETRIES: usize = 2;
 
 /// TODO(SOCKS_PROXY_ROLLOUT): Make this 100.
-const NEW_SOCKS_PROXY_ROLLOUT: u32 = 0;
+const NEW_SOCKS_PROXY_ROLLOUT: u32 = 50;
 
 type OutboundRequestBody = Full<Bytes>;
 
