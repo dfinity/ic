@@ -548,7 +548,7 @@ mod tests {
            }
 
           #[test]
-          fn test_deriving_gaps_from_storage(blockchain in valid_blockchain_with_gaps_strategy::<U256>(1000)){
+          fn test_deriving_gaps_from_storage(blockchain in valid_blockchain_with_gaps_strategy::<U256>(1000).no_shrink()){
               let storage_client_memory = StorageClient::new_in_memory().unwrap();
               let mut rosetta_blocks = vec![];
               for i in 0..blockchain.0.len() {

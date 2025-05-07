@@ -244,19 +244,44 @@ pub fn valid_blockchain_strategy<Tokens: TokensType>(
 pub fn valid_blockchain_with_gaps_strategy<Tokens: TokensType>(
     size: usize,
 ) -> impl Strategy<Value = (Vec<Block<Tokens>>, Vec<usize>)> {
-    let blockchain_strategy = valid_blockchain_strategy(size);
+    let blockchain_strategy = valid_blockchain_strategy(size).prop_filter(
+        "There must be at least two blocks for there to be a gap",
+        |blocks| blocks.len() > 1,
+    );
     let gaps = prop::collection::vec(0..5usize, size);
-    (blockchain_strategy, gaps).prop_map(|(blockchain, gaps)| {
-        let block_indices = gaps
-            .into_iter()
-            .enumerate()
-            .scan(0, |acc, (index, gap)| {
-                *acc += gap;
-                Some(index + *acc)
-            })
-            .collect();
-        (blockchain, block_indices)
-    })
+    (blockchain_strategy, gaps)
+        .prop_map(|(blockchain, gaps)| {
+            let block_indices: Vec<usize> = gaps
+                .into_iter()
+                .enumerate()
+                .scan(0, |acc, (index, gap)| {
+                    *acc += gap;
+                    Some(index + *acc)
+                })
+                .collect();
+            (blockchain, block_indices)
+        })
+        .prop_filter(
+            "There must be at least one gap before the last block",
+            |(blockchain, block_indexes)| {
+                let mut index_iter = block_indexes.iter();
+                let mut previous_index = -1;
+                loop {
+                    let Some(current_index) = index_iter.next() else {
+                        // no more indexes but also no gaps
+                        return false;
+                    };
+                    let current_index = (*current_index) as i32;
+                    if previous_index + 1 == current_index {
+                        // no gap
+                        previous_index = current_index;
+                    } else {
+                        // gap - make sure it is before the last block of the blockchain
+                        return current_index < blockchain.len() as i32;
+                    }
+                }
+            },
+        )
 }
 
 pub fn transfer_arg(sender: Account) -> impl Strategy<Value = TransferArg> {
