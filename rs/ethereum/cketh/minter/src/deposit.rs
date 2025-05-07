@@ -246,10 +246,7 @@ where
             to_block: Some(BlockTag::Number(Nat256::from_be_bytes(
                 to_block.to_be_bytes(),
             ))),
-            addresses: vec![contract_address]
-                .into_iter()
-                .map(|a| Hex20::from(a.into_bytes()))
-                .collect(),
+            addresses: vec![Hex20::from(contract_address.into_bytes())],
             topics: Some(into_evm_topic(topics.clone())),
         };
 
