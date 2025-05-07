@@ -350,33 +350,6 @@ pub struct LogEntry {
     pub removed: bool,
 }
 
-/// Parameters of the [`eth_feeHistory`](https://ethereum.github.io/execution-apis/api-documentation/) call.
-#[derive(Clone, Debug, Serialize)]
-#[serde(into = "(Quantity, BlockSpec, Vec<u8>)")]
-pub struct FeeHistoryParams {
-    /// Number of blocks in the requested range.
-    /// Typically providers request this to be between 1 and 1024.
-    pub block_count: Quantity,
-    /// Highest block of the requested range.
-    /// Integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
-    pub highest_block: BlockSpec,
-    /// A monotonically increasing list of percentile values between 0 and 100.
-    /// For each block in the requested range, the transactions will be sorted in ascending order
-    /// by effective tip per gas and the corresponding effective tip for the percentile
-    /// will be determined, accounting for gas consumed.
-    pub reward_percentiles: Vec<u8>,
-}
-
-impl From<FeeHistoryParams> for (Quantity, BlockSpec, Vec<u8>) {
-    fn from(value: FeeHistoryParams) -> Self {
-        (
-            value.block_count,
-            value.highest_block,
-            value.reward_percentiles,
-        )
-    }
-}
-
 impl From<BlockNumber> for BlockSpec {
     fn from(value: BlockNumber) -> Self {
         BlockSpec::Number(value)

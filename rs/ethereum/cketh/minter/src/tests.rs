@@ -570,18 +570,3 @@ mod eth_get_block_by_number {
         assert_eq!(nat.to_string(), "20_272_779_213")
     }
 }
-
-mod eth_fee_history {
-    use crate::eth_rpc::{BlockSpec, BlockTag, FeeHistoryParams, Quantity};
-
-    #[test]
-    fn should_serialize_fee_history_params_as_tuple() {
-        let params = FeeHistoryParams {
-            block_count: Quantity::from(5_u8),
-            highest_block: BlockSpec::Tag(BlockTag::Finalized),
-            reward_percentiles: vec![10, 20, 30],
-        };
-        let serialized_params = serde_json::to_string(&params).unwrap();
-        assert_eq!(serialized_params, r#"["0x5","finalized",[10,20,30]]"#);
-    }
-}

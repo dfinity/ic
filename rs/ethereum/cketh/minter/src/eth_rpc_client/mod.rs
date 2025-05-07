@@ -1,6 +1,6 @@
 use crate::eth_rpc::{
-    Block, BlockSpec, BlockTag, Data, FeeHistoryParams, FixedSizeData, GetLogsParam, Hash,
-    HttpOutcallError, LogEntry, Quantity, SendRawTransactionResult, Topic, HEADER_SIZE_LIMIT,
+    Block, BlockSpec, BlockTag, Data, FixedSizeData, GetLogsParam, Hash, HttpOutcallError,
+    LogEntry, Quantity, SendRawTransactionResult, Topic, HEADER_SIZE_LIMIT,
 };
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;
@@ -10,7 +10,7 @@ use crate::state::State;
 use candid::Nat;
 use evm_rpc_client::{
     Block as EvmBlock, BlockTag as EvmBlockTag, ConsensusStrategy, EthSepoliaService, EvmRpcClient,
-    FeeHistory, FeeHistoryArgs as EvmFeeHistoryArgs, GetLogsArgs as EvmGetLogsArgs,
+    FeeHistory, FeeHistoryArgs, GetLogsArgs as EvmGetLogsArgs,
     GetTransactionCountArgs as EvmGetTransactionCountArgs, Hex20, Hex32, IcRuntime,
     LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256, OverrideRpcConfig,
     RpcConfig as EvmRpcConfig, RpcError as EvmRpcError, RpcResult as EvmRpcResult,
@@ -137,14 +137,10 @@ impl EthRpcClient {
 
     pub async fn eth_fee_history(
         &self,
-        params: FeeHistoryParams,
+        params: FeeHistoryArgs,
     ) -> Result<FeeHistory, MultiCallError<FeeHistory>> {
         self.evm_rpc_client
-            .eth_fee_history(EvmFeeHistoryArgs {
-                block_count: Nat256::from_be_bytes(params.block_count.to_be_bytes()),
-                newest_block: into_evm_block_tag(params.highest_block),
-                reward_percentiles: Some(params.reward_percentiles),
-            })
+            .eth_fee_history(params)
             .await
             .reduce()
             .into()
