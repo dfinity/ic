@@ -43,10 +43,6 @@ name = "ic-systest-bn-integration"
 path = "api_bn_integration_test.rs"
 
 [[bin]]
-name = "ic-systest-bn-integration-on-playnet"
-path = "bn_integration_on_playnet_test.rs"
-
-[[bin]]
 name = "ic-systest-certificate-orchestrator"
 path = "certificate_orchestrator_test.rs"
 
