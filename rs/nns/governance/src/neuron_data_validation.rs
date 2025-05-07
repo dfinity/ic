@@ -376,8 +376,7 @@ impl<Validator: CardinalityAndRangeValidator + Send + Sync> ValidationTask
 }
 
 struct NeuronRangeValidationTask<Validator: CardinalityAndRangeValidator> {
-    heap_next_neuron_id: Option<NeuronId>,
-    stable_next_neuron_id: Option<NeuronId>,
+    next_neuron_id: Option<NeuronId>,
     // PhantomData is needed so that NeuronRangeValidationTask can be associated with a Validator
     // type without containing such a member.
     _phantom: PhantomData<Validator>,
@@ -387,8 +386,7 @@ impl<Validator: CardinalityAndRangeValidator> NeuronRangeValidationTask<Validato
     fn new() -> Self {
         Self {
             // NeuronId cannot be 0.
-            heap_next_neuron_id: Some(NeuronId { id: 1 }),
-            stable_next_neuron_id: Some(NeuronId { id: 1 }),
+            next_neuron_id: Some(NeuronId { id: 1 }),
             _phantom: PhantomData,
         }
     }
@@ -398,10 +396,10 @@ impl<Validator: CardinalityAndRangeValidator + Send + Sync> ValidationTask
     for NeuronRangeValidationTask<Validator>
 {
     fn is_done(&self) -> bool {
-        self.heap_next_neuron_id.is_none() && self.stable_next_neuron_id.is_none()
+        self.next_neuron_id.is_none()
     }
 
-    fn validate_next_chunk(&mut self, neuron_store: &NeuronStore) -> Vec<ValidationIssue> {
+    fn validate_next_chunk(&mut self, _neuron_store: &NeuronStore) -> Vec<ValidationIssue> {
         // Set a limit on the number of instructions used by this function.
         #[cfg(target_arch = "wasm32")]
         let instruction_limit = ic_cdk::api::instruction_counter() + 100_000_000;
@@ -411,22 +409,13 @@ impl<Validator: CardinalityAndRangeValidator + Send + Sync> ValidationTask
         #[cfg(not(target_arch = "wasm32"))]
         let keep_going = || true;
 
-        let issues = if let Some(next_neuron_id) = self.heap_next_neuron_id.take() {
-            neuron_store
-                .heap_neurons_range(next_neuron_id..)
-                .take_while(|_| keep_going())
-                .flat_map(|neuron| {
-                    self.heap_next_neuron_id = neuron.id().next();
-                    Validator::validate_primary_neuron_has_corresponding_index_entries(neuron)
-                })
-                .collect()
-        } else if let Some(next_neuron_id) = self.stable_next_neuron_id.take() {
+        if let Some(next_neuron_id) = self.next_neuron_id.take() {
             with_stable_neuron_store(|stable_neuron_store| {
                 stable_neuron_store
                     .range_neurons_sections(next_neuron_id.., Validator::NEURON_SECTIONS)
                     .take_while(|_| keep_going())
                     .flat_map(|neuron| {
-                        self.stable_next_neuron_id = neuron.id().next();
+                        self.next_neuron_id = neuron.id().next();
                         Validator::validate_primary_neuron_has_corresponding_index_entries(&neuron)
                     })
                     .collect()
@@ -434,8 +423,7 @@ impl<Validator: CardinalityAndRangeValidator + Send + Sync> ValidationTask
         } else {
             println!("validate_next_chunk should not be called when is_done() is true");
             vec![]
-        };
-        issues
+        }
     }
 }
 
@@ -485,15 +473,10 @@ impl CardinalityAndRangeValidator for PrincipalIndexValidator {
         ..NeuronSections::NONE
     };
 
-    fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue> {
-        let cardinality_primary_heap: u64 = neuron_store
-            .heap_neurons_iter()
-            .map(|neuron| neuron.principal_ids_with_special_permissions().len() as u64)
-            .sum();
-        let cardinality_primary_stable = with_stable_neuron_store(|stable_neuron_store|
+    fn validate_cardinalities(_neuron_store: &NeuronStore) -> Option<ValidationIssue> {
+        let cardinality_primary = with_stable_neuron_store(|stable_neuron_store|
                     // `stable_neuron_store.len()` is for the controllers.
                     stable_neuron_store.lens().hot_keys + stable_neuron_store.len() as u64);
-        let cardinality_primary = cardinality_primary_heap + cardinality_primary_stable;
         let cardinality_index =
             with_stable_neuron_indexes(|indexes| indexes.principal().num_entries()) as u64;
         // Because hot keys can also be controllers, the primary data might have larger cardinality
@@ -543,14 +526,9 @@ impl CardinalityAndRangeValidator for FollowingIndexValidator {
         ..NeuronSections::NONE
     };
 
-    fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue> {
-        let cardinality_primary_heap: u64 = neuron_store
-            .heap_neurons_iter()
-            .map(|neuron| neuron.topic_followee_pairs().len() as u64)
-            .sum();
-        let cardinality_primary_stable =
+    fn validate_cardinalities(_neuron_store: &NeuronStore) -> Option<ValidationIssue> {
+        let cardinality_primary =
             with_stable_neuron_store(|stable_neuron_store| stable_neuron_store.lens().followees);
-        let cardinality_primary = cardinality_primary_heap + cardinality_primary_stable;
         let cardinality_index =
             with_stable_neuron_indexes(|indexes| indexes.following().num_entries()) as u64;
         // Because followees can have duplicates, the primary data might have larger cardinality
@@ -599,15 +577,10 @@ impl CardinalityAndRangeValidator for KnownNeuronIndexValidator {
         known_neuron_data: true,
         ..NeuronSections::NONE
     };
-    fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue> {
-        let cardinality_primary_heap = neuron_store
-            .heap_neurons_iter()
-            .filter(|neuron| neuron.known_neuron_data().is_some())
-            .count() as u64;
-        let cardinality_primary_stable = with_stable_neuron_store(|stable_neuron_store| {
+    fn validate_cardinalities(_neuron_store: &NeuronStore) -> Option<ValidationIssue> {
+        let cardinality_primary = with_stable_neuron_store(|stable_neuron_store| {
             stable_neuron_store.lens().known_neuron_data
         });
-        let cardinality_primary = cardinality_primary_heap + cardinality_primary_stable;
         let cardinality_index =
             with_stable_neuron_indexes(|indexes| indexes.known_neuron().num_entries()) as u64;
         if cardinality_primary != cardinality_index {
