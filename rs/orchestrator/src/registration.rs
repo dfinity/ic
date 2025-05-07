@@ -2,11 +2,11 @@
 use crate::{
     error::{OrchestratorError, OrchestratorResult},
     metrics::{KeyRotationStatus, OrchestratorMetrics},
-    signer::{Hsm, NodeProviderSigner, Signer},
+    signer::{Hsm, NodeIdentity, NodeProviderSigner, Signer},
     utils::http_endpoint_to_url,
 };
 use candid::Encode;
-use ic_canister_client::{Agent, Sender};
+use ic_agent::{agent::AgentBuilder, NonceGenerator};
 use ic_config::{
     http_handler::Config as HttpConfig,
     initial_ipv4_config::IPv4Config as InitialIPv4Config,
@@ -149,16 +149,18 @@ impl NodeRegistration {
                     let nns_url = self
                         .get_random_nns_url_from_config()
                         .expect("no NNS urls available");
-                    let agent = Agent::new(nns_url, signer);
+                    let agent = Agent::builder()
+                        .with_url(nns_url)
+                        .with_identity(signer)
+                        .build()
+                        .expect("Failed to create IC agent");
+                    let add_node_encoded = Encode!(&add_node_payload)
+                        .expect("Could not encode payload for the registration request");
+
                     if let Err(e) = agent
-                        .execute_update(
-                            &REGISTRY_CANISTER_ID,
-                            &REGISTRY_CANISTER_ID,
-                            "add_node",
-                            Encode!(&add_node_payload)
-                                .expect("Could not encode payload for the registration request"),
-                            generate_nonce(),
-                        )
+                        .update(&REGISTRY_CANISTER_ID.get_ref().0, "add_node")
+                        .with_arg(add_node_encoded)
+                        .call_and_wait()
                         .await
                     {
                         warn!(self.log, "Registration request failed: {}", e);
@@ -440,26 +442,22 @@ impl NodeRegistration {
             })
         };
 
-        let sender = Sender::Node {
-            pub_key: node_pub_key.key_value,
-            sign: Arc::new(sign_cmd),
-        };
-
-        let agent = Agent::new(nns_url.clone(), sender);
+        let signer = NodeIdentity::new(node_pub_key.key_value, Arc::new(sign_cmd));
+        let agent = Agent::builder()
+            .with_url(nns_url)
+            .with_identity(signer)
+            .build()
+            .expect("Failed to create IC agent");
         let update_node_payload = UpdateNodeDirectlyPayload {
             idkg_dealing_encryption_pk: Some(protobuf_to_vec(idkg_pk)),
         };
-
-        let arguments =
+        let update_node_encoded =
             Encode!(&update_node_payload).expect("Could not encode payload for update_node-call.");
+
         agent
-            .execute_update(
-                &REGISTRY_CANISTER_ID,
-                &REGISTRY_CANISTER_ID,
-                "update_node_directly",
-                arguments,
-                generate_nonce(),
-            )
+            .update(&REGISTRY_CANISTER_ID.get_ref().0, "update_node_directly")
+            .with_arg(update_node_encoded)
+            .call_and_wait()
             .await
             .map_err(|e| format!("Error when sending register additional key request: {e}"))?;
 
@@ -689,13 +687,29 @@ fn process_domain_name(log: &ReplicaLogger, domain: &str) -> OrchestratorResult<
 
 /// Create a nonce to be included with the ingress message sent to the node
 /// handler.
-fn generate_nonce() -> Vec<u8> {
-    SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos()
-        .to_le_bytes()
-        .to_vec()
+struct NonceGeneratorImpl;
+impl NonceGenerator for NonceGeneratorImpl {
+    fn generate(&self) -> Option<Vec<u8>> {
+        Some(
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+                .to_le_bytes()
+                .to_vec(),
+        )
+    }
+}
+
+/// Simple wrapper around ic_agent::agent::AgentBuilder to include a custom
+/// ingress expiry and nonce generator.
+struct Agent;
+impl Agent {
+    fn builder() -> AgentBuilder {
+        <AgentBuilder as Default>::default()
+            .with_ingress_expiry(Duration::from_secs(6 * 60))
+            .with_nonce_generator(NonceGeneratorImpl)
+    }
 }
 
 fn protobuf_to_vec<M: Message>(entry: M) -> Vec<u8> {

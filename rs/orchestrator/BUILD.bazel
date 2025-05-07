@@ -18,8 +18,6 @@ rust_library(
     version = "0.9.0",
     deps = [
         # Keep sorted.
-        "//rs/canister_client",
-        "//rs/canister_client/sender",
         "//rs/config",
         "//rs/consensus",
         "//rs/consensus/dkg",
@@ -56,6 +54,7 @@ rust_library(
         "@crate_index//:hyper",
         "@crate_index//:hyper-rustls",
         "@crate_index//:hyper-util",
+        "@crate_index//:ic-agent",
         "@crate_index//:idna",
         "@crate_index//:nix",
         "@crate_index//:prometheus",
