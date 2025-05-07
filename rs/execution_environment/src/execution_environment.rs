@@ -2599,10 +2599,13 @@ impl ExecutionEnvironment {
         // Take canister out.
         let mut canister = match state.take_canister_state(&canister_id) {
             None => {
-                return Err(UserError::new(
-                    ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
-                ))
+                return (
+                    Err(UserError::new(
+                        ErrorCode::CanisterNotFound,
+                        format!("Canister {} not found.", &canister_id),
+                    )),
+                    NumInstructions::new(0),
+                )
             }
             Some(canister) => canister,
         };
@@ -2612,26 +2615,19 @@ impl ExecutionEnvironment {
         let result = self.canister_manager.write_snapshot_data(
             sender,
             &mut canister,
-            args,
+            &args,
             state,
-            subnet_size,
             round_limits,
+            subnet_size,
             &resource_saturation,
         );
         // Put canister back.
         state.put_canister_state(canister);
 
-        result
-            .map(|(snapshot_id, instructions)| {
-                (
-                    Encode!(&UploadCanisterSnapshotMetadataResponse {
-                        snapshot_id: snapshot_id.to_vec()
-                    })
-                    .unwrap(),
-                    instructions,
-                )
-            })
-            .map_err(UserError::from)
+        match result {
+            Ok(instructions_used) => (Ok(Encode!(&()).unwrap()), instructions_used),
+            Err(e) => (Err(UserError::from(e)), NumInstructions::new(0)),
+        }
     }
 
     fn node_metrics_history(
