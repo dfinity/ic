@@ -1,16 +1,10 @@
 use anyhow::Result;
 use ic_boundary_nodes_performance_test_common::{query_calls_test, setup, update_calls_test};
-use ic_boundary_nodes_system_test_utils::helpers::BoundaryNodeHttpsConfig;
 use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use std::time::Duration;
 
 fn main() -> Result<()> {
-    let setup_with_config = |env| {
-        setup(
-            BoundaryNodeHttpsConfig::AcceptInvalidCertsAndResolveClientSide,
-            env,
-        )
-    };
+    let setup_with_config = |env| setup(env);
     SystemTestGroup::new()
         .with_setup(setup_with_config)
         .add_test(systest!(update_calls_test))

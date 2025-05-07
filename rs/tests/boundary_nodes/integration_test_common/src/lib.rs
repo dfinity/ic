@@ -96,7 +96,7 @@ fn setup_client(env: TestEnv) -> Result<(reqwest::Client, String), Error> {
     let api_bn_addr = SocketAddr::new(api_boundary_node.get_ip_addr(), 0);
     let client_builder = client_builder
         .danger_accept_invalid_certs(true)
-        .resolve(host.as_str(), api_bn_addr.into());
+        .resolve(host.as_str(), api_bn_addr);
     let client = client_builder.build().unwrap();
 
     Ok((client, host))

@@ -51,8 +51,8 @@ name = "ic-systest-api-bn-decentralization"
 path = "api_bn_decentralization_test.rs"
 
 [[bin]]
-name = "ic-systest-bn-performance"
-path = "bn_performance_test.rs"
+name = "ic-systest-api-bn-performance"
+path = "api_bn_performance_test.rs"
 
 [[bin]]
 name = "ic-systest-mainnet-bn-performance"
