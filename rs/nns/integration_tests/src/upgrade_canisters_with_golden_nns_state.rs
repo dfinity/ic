@@ -13,7 +13,8 @@ use ic_nns_constants::{
 use ic_nns_governance_api::pb::v1::{MonthlyNodeProviderRewards, Vote};
 use ic_nns_governance_api::pb::v1::{NetworkEconomics, VotingPowerEconomics};
 use ic_nns_test_utils::state_test_helpers::{
-    nns_get_most_recent_monthly_node_provider_rewards, scrape_metrics,
+    nns_get_most_recent_monthly_node_provider_rewards, nns_get_network_economics_parameters,
+    scrape_metrics,
 };
 use ic_nns_test_utils::{
     common::modify_wasm_bytes,
@@ -217,7 +218,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     let neuron_id = nns_create_super_powerful_neuron(
         &state_machine,
         neuron_controller,
-        Tokens::from_tokens(100_000_000).unwrap(),
+        Tokens::from_tokens(300_000_000).unwrap(),
     );
     println!("Done creating super powerful Neuron.");
 
@@ -310,20 +311,42 @@ fn test_upgrade_canisters_with_golden_nns_state() {
 
     // TODO[NNS1-3790]: Remove this once the mainnet NNS has initialized the
     // TODO[NNS1-3790]: `neuron_minimum_dissolve_delay_to_vote_seconds` field.
-    manage_network_economics(
-        &state_machine,
-        NetworkEconomics {
-            voting_power_economics: Some(VotingPowerEconomics {
-                neuron_minimum_dissolve_delay_to_vote_seconds: Some(
-                    VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
-                ),
+    {
+        let network_economics = nns_get_network_economics_parameters(&state_machine);
+        let voting_power_economics = network_economics.voting_power_economics.clone().unwrap();
+        assert_eq!(
+            voting_power_economics.neuron_minimum_dissolve_delay_to_vote_seconds,
+            None
+        );
+
+        manage_network_economics(
+            &state_machine,
+            NetworkEconomics {
+                voting_power_economics: Some(VotingPowerEconomics {
+                    neuron_minimum_dissolve_delay_to_vote_seconds: Some(
+                        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
+                    ),
+                    ..Default::default()
+                }),
                 ..Default::default()
-            }),
-            ..Default::default()
-        },
-        neuron_controller,
-        neuron_id,
-    );
+            },
+            neuron_controller,
+            neuron_id,
+        );
+
+        assert_eq!(
+            nns_get_network_economics_parameters(&state_machine),
+            NetworkEconomics {
+                voting_power_economics: Some(VotingPowerEconomics {
+                    neuron_minimum_dissolve_delay_to_vote_seconds: Some(
+                        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
+                    ),
+                    ..voting_power_economics
+                }),
+                ..network_economics
+            }
+        );
+    }
 
     perform_sequence_of_upgrades(&nns_canister_upgrade_sequence);
 
