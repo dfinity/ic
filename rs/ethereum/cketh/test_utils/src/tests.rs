@@ -34,46 +34,46 @@ fn should_use_meaningful_constants() {
     );
 }
 
-fn convert_fee_history(fee_history: ethers_core::types::FeeHistory) -> FeeHistory {
-    let mut bytes = [0u8; 32];
-    fee_history.oldest_block.to_big_endian(&mut bytes);
-    let oldest_block: Nat256 = Nat256::from_be_bytes(bytes);
-
-    let base_fee_per_gas = fee_history
-        .base_fee_per_gas
-        .into_iter()
-        .map(|val| {
-            let mut bytes = [0u8; 32];
-            val.to_big_endian(&mut bytes);
-            Nat256::from_be_bytes(bytes)
-        })
-        .collect();
-
-    let reward = fee_history
-        .reward
-        .into_iter()
-        .map(|inner_vec| {
-            inner_vec
-                .into_iter()
-                .map(|val| {
-                    let mut bytes = [0u8; 32];
-                    val.to_big_endian(&mut bytes);
-                    Nat256::from_be_bytes(bytes)
-                })
-                .collect()
-        })
-        .collect();
-
-    FeeHistory {
-        oldest_block,
-        base_fee_per_gas,
-        gas_used_ratio: fee_history.gas_used_ratio,
-        reward,
-    }
-}
-
 #[test]
 fn should_have_meaningful_ckerc20_withdrawal_transaction_fee() {
+    fn convert_fee_history(fee_history: ethers_core::types::FeeHistory) -> FeeHistory {
+        let mut bytes = [0u8; 32];
+        fee_history.oldest_block.to_big_endian(&mut bytes);
+        let oldest_block: Nat256 = Nat256::from_be_bytes(bytes);
+
+        let base_fee_per_gas = fee_history
+            .base_fee_per_gas
+            .into_iter()
+            .map(|val| {
+                let mut bytes = [0u8; 32];
+                val.to_big_endian(&mut bytes);
+                Nat256::from_be_bytes(bytes)
+            })
+            .collect();
+
+        let reward = fee_history
+            .reward
+            .into_iter()
+            .map(|inner_vec| {
+                inner_vec
+                    .into_iter()
+                    .map(|val| {
+                        let mut bytes = [0u8; 32];
+                        val.to_big_endian(&mut bytes);
+                        Nat256::from_be_bytes(bytes)
+                    })
+                    .collect()
+            })
+            .collect();
+
+        FeeHistory {
+            oldest_block,
+            base_fee_per_gas,
+            gas_used_ratio: fee_history.gas_used_ratio,
+            reward,
+        }
+    }
+
     let fee_history_core: ethers_core::types::FeeHistory =
         serde_json::from_value(fee_history_json_value()).unwrap();
     let fee_history = convert_fee_history(fee_history_core);
