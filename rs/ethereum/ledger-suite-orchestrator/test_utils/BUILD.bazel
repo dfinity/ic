@@ -30,6 +30,7 @@ rust_library(
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-management-canister-types",
         "@crate_index//:proptest",
     ],
 )

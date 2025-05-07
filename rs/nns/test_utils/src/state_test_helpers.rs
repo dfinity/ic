@@ -1,7 +1,7 @@
 use crate::common::{
     build_cmc_wasm, build_genesis_token_wasm, build_governance_wasm_with_features,
-    build_ledger_wasm, build_lifeline_wasm, build_node_rewards_wasm, build_registry_wasm,
-    build_root_wasm, build_sns_wasms_wasm, NnsInitPayloads,
+    build_ledger_wasm, build_lifeline_wasm, build_node_rewards_wasm,
+    build_registry_wasm_with_features, build_root_wasm, build_sns_wasms_wasm, NnsInitPayloads,
 };
 use candid::{CandidType, Decode, Encode, Nat};
 use canister_test::Wasm;
@@ -57,10 +57,13 @@ use ic_nns_governance_api::pb::v1::{
 };
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
-use ic_registry_canister_api::GetChunkRequest;
-use ic_registry_transport::deserialize_get_latest_version_response;
-use ic_registry_transport::pb::v1::{
-    RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
+use ic_registry_canister_api::{mutate_test_high_capacity_records, GetChunkRequest};
+use ic_registry_transport::{
+    deserialize_get_latest_version_response,
+    pb::v1::{
+        HighCapacityRegistryGetChangesSinceResponse, HighCapacityRegistryGetValueResponse,
+        RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse, RegistryGetValueRequest,
+    },
 };
 use ic_sns_governance::pb::v1::{
     self as sns_pb, manage_neuron_response::Command as SnsCommandResponse, GetModeResponse,
@@ -103,6 +106,33 @@ pub fn state_machine_builder_for_nns_tests() -> StateMachineBuilder {
         ))
 }
 
+pub fn registry_mutate_test_high_capacity_records(
+    state_machine: &StateMachine,
+    request: mutate_test_high_capacity_records::Request,
+) -> u64 {
+    let sender = PrincipalId::from(GOVERNANCE_CANISTER_ID);
+    let result = state_machine
+        .execute_ingress_as(
+            sender,
+            REGISTRY_CANISTER_ID,
+            "mutate_test_high_capacity_records",
+            Encode!(&request).unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(reject) => {
+            panic!(
+                "get_changes_since was rejected by the NNS registry canister: {:#?}",
+                reject
+            )
+        }
+    };
+
+    Decode!(&result, u64).unwrap()
+}
+
 pub fn registry_latest_version(state_machine: &StateMachine) -> Result<u64, String> {
     let response = update(
         state_machine,
@@ -114,11 +144,22 @@ pub fn registry_latest_version(state_machine: &StateMachine) -> Result<u64, Stri
         .map_err(|e| format!("Could not decode response {e:?}"))
 }
 
+// TODO(NNS1-3679): Replace with high-capacity version.
 pub fn registry_get_changes_since(
     state_machine: &StateMachine,
     sender: PrincipalId,
     version: u64,
 ) -> RegistryGetChangesSinceResponse {
+    let result = registry_high_capacity_get_changes_since(state_machine, sender, version);
+
+    RegistryGetChangesSinceResponse::try_from(result).unwrap()
+}
+
+pub fn registry_high_capacity_get_changes_since(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    version: u64,
+) -> HighCapacityRegistryGetChangesSinceResponse {
     let mut request = vec![];
     RegistryGetChangesSinceRequest { version }
         .encode(&mut request)
@@ -138,7 +179,34 @@ pub fn registry_get_changes_since(
         }
     };
 
-    RegistryGetChangesSinceResponse::decode(&result[..]).unwrap()
+    HighCapacityRegistryGetChangesSinceResponse::decode(&result[..]).unwrap()
+}
+
+pub fn registry_get_value(
+    state_machine: &StateMachine,
+    key: &[u8],
+) -> HighCapacityRegistryGetValueResponse {
+    let request = RegistryGetValueRequest {
+        key: key.to_vec(),
+        version: None,
+    }
+    .encode_to_vec();
+
+    let result = state_machine
+        .execute_ingress(REGISTRY_CANISTER_ID, "get_value", request)
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(reject) => {
+            panic!(
+                "get_changes_since was rejected by the NNS registry canister: {:#?}",
+                reject
+            )
+        }
+    };
+
+    HighCapacityRegistryGetValueResponse::decode(&result[..]).unwrap()
 }
 
 pub fn registry_get_chunk(
@@ -606,11 +674,12 @@ fn setup_nns_canister_at_position(
 pub fn setup_registry_with_correct_canister_id(
     machine: &StateMachine,
     init_payload: RegistryCanisterInitPayload,
+    features: &[&str],
 ) {
     setup_nns_canister_at_position(
         machine,
         REGISTRY_CANISTER_INDEX_IN_NNS_SUBNET,
-        build_registry_wasm(),
+        build_registry_wasm_with_features(features),
         Encode!(&init_payload).unwrap(),
     );
 }
@@ -718,7 +787,7 @@ pub fn setup_nns_canisters_with_features(
     init_payloads: NnsInitPayloads,
     features: &[&str],
 ) {
-    setup_registry_with_correct_canister_id(machine, init_payloads.registry);
+    setup_registry_with_correct_canister_id(machine, init_payloads.registry, features);
 
     setup_nns_governance_with_correct_canister_id(machine, init_payloads.governance, features);
 
@@ -2144,6 +2213,31 @@ pub fn cmc_set_authorized_subnetworks_for_principal(
                 nns_function: NnsFunction::SetAuthorizedSubnetworks as i32,
                 payload: Encode!(&args).unwrap(),
             },
+        )),
+    };
+
+    let propose_response = nns_governance_make_proposal(machine, sender, neuron_id, &proposal);
+
+    let proposal_id = match propose_response.command.unwrap() {
+        manage_neuron_response::Command::MakeProposal(response) => response.proposal_id.unwrap(),
+        _ => panic!("Propose didn't return MakeProposal"),
+    };
+
+    nns_wait_for_proposal_execution(machine, proposal_id.id);
+}
+
+pub fn manage_network_economics(
+    machine: &StateMachine,
+    network_economics: NetworkEconomics,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+) {
+    let proposal = MakeProposalRequest {
+        title: Some("manage network economics".to_string()),
+        summary: "manage network economics".to_string(),
+        url: "".to_string(),
+        action: Some(ProposalActionRequest::ManageNetworkEconomics(
+            network_economics,
         )),
     };
 

@@ -17,8 +17,9 @@ import invoke
 from loguru import logger as log
 from simple_parsing import ArgumentParser, field
 
-from toolchains.sysimage.container_utils import (
+from toolchains.sysimage.utils import (
     path_owned_by_root,
+    purge_podman,
     remove_image,
     take_ownership_of_file,
 )
@@ -57,11 +58,6 @@ def build_image(container_cmd: str, image_tag: str, dockerfile: str, context_dir
     cmd = f"{container_cmd} build --squash-all --no-cache --tag {image_tag} {build_arg_strings_joined} --file {dockerfile} {context_dir}"
     invoke.run(cmd)
     log.info("Image built successfully")
-
-
-def purge_podman(container_cmd: str):
-    cmd = f"{container_cmd} system prune --all --volumes --force"
-    invoke.run(cmd)
 
 
 def save_image(container_cmd: str, image_tag: str, output_file: str):

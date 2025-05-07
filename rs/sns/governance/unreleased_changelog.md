@@ -11,6 +11,9 @@ on the process that this file is part of, see
 
 ## Changed
 
+The DAO community settings topic is promoted to being critical. For context, please refer to
+the [forum thread](https://forum.dfinity.org/t/make-sns-topic-dao-community-settings-critical/46689).
+
 ## Deprecated
 
 ## Removed
