@@ -11,12 +11,14 @@ import signal
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, TypeVar
+from typing import List, Optional
 
 import invoke
+from loguru import logger as log
 
-from toolchains.sysimage.container_utils import (
+from toolchains.sysimage.utils import (
     path_owned_by_root,
+    purge_podman,
     remove_image,
     take_ownership_of_file,
 )
@@ -31,9 +33,6 @@ class BaseImageOverride:
         assert self.image_tag is not None
         assert self.image_file is not None
         assert self.image_file.exists()
-
-
-ReturnType = TypeVar("ReturnType")  # https://docs.python.org/3/library/typing.html#generics
 
 
 def load_base_image_tar_file(container_cmd: str, tar_file: Path):
@@ -116,11 +115,6 @@ def export_container_filesystem(container_cmd: str, image_tag: str, destination_
         destination_tar_path
     ), f"'{destination_tar_path}' not owned by root. Remove this and the next line."
     take_ownership_of_file(destination_tar_path)
-
-
-def purge_podman(container_cmd: str):
-    cmd = f"{container_cmd} system prune --all --volumes --force"
-    invoke.run(cmd)
 
 
 def resolve_file_args(context_dir: str, file_build_args: List[str]) -> List[str]:
@@ -284,6 +278,7 @@ def main():
     if "TMPFS_TMPDIR" in os.environ:
         tmpdir = os.environ.get("TMPFS_TMPDIR")
     else:
+        log.info("TMPFS_TMPDIR env variable not available, this may be slower than expected")
         tmpdir = os.environ.get("TMPDIR")
 
     root = tempfile.mkdtemp(dir=tmpdir)
