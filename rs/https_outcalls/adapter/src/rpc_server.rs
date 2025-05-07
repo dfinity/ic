@@ -421,7 +421,7 @@ impl HttpsOutcallsService for CanisterHttp {
                                     direct_err, socks_err
                                 )
                             }))
-                        };;
+                        };
 
                     //TODO(NET-1765): Remove the compare_results once we are confident in the SOCKS proxy implementation.
                     if !req.socks_proxy_addrs.is_empty() {
