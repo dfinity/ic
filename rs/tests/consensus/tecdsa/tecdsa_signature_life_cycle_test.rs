@@ -184,7 +184,6 @@ fn test(env: TestEnv) {
             disabling signing on old app subnet, \
             and then verifying signing no longer works."
         );
-        let key_ids = all_key_ids.iter().cloned().collect::<Vec<_>>();
 
         let registry_client = RegistryCanister::new_with_query_timeout(
             vec![nns_node.get_public_url()],
@@ -205,7 +204,7 @@ fn test(env: TestEnv) {
         create_new_subnet_with_keys(
             &governance,
             unassigned_node_ids,
-            key_ids
+            all_key_ids
                 .iter()
                 .map(|key_id| (key_id.clone(), app_subnet.subnet_id.get()))
                 .collect(),
@@ -224,7 +223,7 @@ fn test(env: TestEnv) {
 
         let disable_signing_payload = UpdateSubnetPayload {
             subnet_id: app_subnet.subnet_id,
-            chain_key_signing_disable: Some(key_ids.clone()),
+            chain_key_signing_disable: Some(all_key_ids.clone()),
             ..empty_subnet_update()
         };
         execute_update_subnet_proposal(
@@ -238,7 +237,7 @@ fn test(env: TestEnv) {
         // Try several times because signing won't fail until new registry data
         // is picked up.
         let mut sig_result;
-        for key_id in &key_ids {
+        for key_id in &all_key_ids {
             for _ in 0..20 {
                 sig_result = get_signature_with_logger(
                     message_hash.clone(),
@@ -278,7 +277,7 @@ fn test(env: TestEnv) {
 
         let proposal_payload = UpdateSubnetPayload {
             subnet_id: new_subnet_id,
-            chain_key_signing_enable: Some(key_ids.clone()),
+            chain_key_signing_enable: Some(all_key_ids.clone()),
             ..empty_subnet_update()
         };
         execute_update_subnet_proposal(
