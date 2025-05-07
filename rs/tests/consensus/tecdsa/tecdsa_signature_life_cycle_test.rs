@@ -256,8 +256,8 @@ fn test(env: TestEnv) {
                             reject_message: format!(
                                 "Unable to route management canister request {}: \
                                 ChainKeyError(\"Requested unknown or disabled threshold key: {}, \
-                                existing enabled keys: [{}, {}]\")",
-                                method_name, key_id, key_id4, key_id5,
+                                existing enabled keys: []\")",
+                                method_name, key_id,
                             ),
                             error_code: Some("IC0406".to_string())
                         })
