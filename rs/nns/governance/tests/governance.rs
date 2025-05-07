@@ -102,15 +102,12 @@ use ic_nns_governance::{
     DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
 };
 use ic_nns_governance_api::{
-    pb::v1::{
-        self as api,
-        manage_neuron_response::{self, Command as CommandResponse, ConfigureResponse},
-        proposal::Action as ApiAction,
-        Ballot as ApiBallot, CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
-        ListNeurons, ListNeuronsResponse, ListProposalInfoResponse, ManageNeuronResponse,
-        NeuronState,
-    },
+    self as api,
+    manage_neuron_response::{self, Command as CommandResponse, ConfigureResponse},
+    proposal::Action as ApiAction,
     proposal_validation::validate_proposal_title,
+    Ballot as ApiBallot, CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons,
+    ListNeuronsResponse, ListProposalInfoResponse, ManageNeuronResponse, NeuronState,
 };
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_sns_init::pb::v1::SnsInitPayload;

@@ -110,19 +110,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             patch_args = ["-p4"],
             patches = ["@@//bazel:cranelift-isle.patch"],
         )],
-        "cranelift-codegen-meta": [crate.annotation(
-            patch_args = ["-p4"],
-            patches = [
-                "@@//bazel:cranelift-codegen-meta-isle.patch",  # Patch for issue: https://github.com/bytecodealliance/wasmtime/pull/10334
-            ],
-        )],
         "cranelift-assembler-x64": [crate.annotation(
-            # Patch for issue: https://github.com/bytecodealliance/wasmtime/pull/10334
+            # Patch for determinism issues
             patch_args = ["-p3"],
-            patches = [
-                "@@//bazel:cranelift-assembler-lib.patch",
-                "@@//bazel:cranelift-assembler-main.patch",
-            ],
+            patches = ["@@//bazel:cranelift-assembler-lib.patch"],
         )],
         "secp256k1-sys": [crate.annotation(
             # This specific version is used by ic-btc-kyt canister, which
@@ -627,21 +618,21 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "3.0.3",
             ),
             "ic-cdk": crate.spec(
-                version = "^0.17.0",
+                version = "^0.18.0",
+            ),
+            "ic-cdk-0-17-1": crate.spec(
+                package = "ic-cdk",
+                version = "^0.17.1",
             ),
             "ic-cdk-timers": crate.spec(
                 version = "^0.11.0",
             ),
             "ic-cdk-macros": crate.spec(
-                version = "^0.17.0",
+                version = "^0.18.0",
             ),
-            "ic-cdk-macros-next": crate.spec(
+            "ic-cdk-macros-0-17-1": crate.spec(
                 package = "ic-cdk-macros",
-                version = "^0.18.0",
-            ),
-            "ic-cdk-next": crate.spec(
-                package = "ic-cdk",
-                version = "^0.18.0",
+                version = "^0.17.1",
             ),
             "ic-certified-map": crate.spec(
                 version = "^0.3.1",
@@ -1504,7 +1495,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.228.0",
             ),
             "wasmtime": crate.spec(
-                version = "^31.0.0",
+                version = "^32.0.0",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1515,7 +1506,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^31.0.0",
+                version = "^32.0.0",
             ),
             "wast": crate.spec(
                 version = "^228.0.0",
