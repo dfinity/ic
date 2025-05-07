@@ -606,7 +606,6 @@ mod evm_rpc_conversion {
         RpcService as EvmRpcService, SendRawTransactionStatus as EvmSendRawTransactionStatus,
         TransactionReceipt as EvmTransactionReceipt,
     };
-    use proptest::collection::vec;
     use proptest::{option, prelude::Strategy, prop_assert_eq, proptest};
     use std::collections::BTreeSet;
     use std::fmt::Debug;
@@ -753,20 +752,6 @@ mod evm_rpc_conversion {
         ) {
             let (minter_block, evm_rpc_block) = blocks;
             test_consistency_between_minter_and_evm_rpc(minter_block, evm_rpc_block, first_error, second_error, third_error)?;
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn should_have_consistent_log_entries_between_minter_and_evm_rpc
-        (
-            minter_logs in vec(arb_log_entry(), 1..=100),
-            first_error in arb_evm_rpc_error(),
-            second_error in arb_evm_rpc_error(),
-            third_error in arb_evm_rpc_error(),
-        ) {
-            let evm_rpc_logs: Vec<_> = minter_logs.clone().into_iter().map(evm_rpc_log_entry).collect();
-            test_consistency_between_minter_and_evm_rpc(minter_logs, evm_rpc_logs, first_error, second_error, third_error)?;
         }
     }
 

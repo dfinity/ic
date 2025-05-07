@@ -499,14 +499,6 @@ impl Reduce for EvmMultiRpcResult<Vec<EvmLogEntry>> {
     }
 }
 
-impl Reduce for MultiCallResults<Vec<LogEntry>> {
-    type Item = Vec<LogEntry>;
-
-    fn reduce(self) -> ReducedResult<Self::Item> {
-        self.reduce_with_equality().into()
-    }
-}
-
 impl Reduce for EvmMultiRpcResult<Option<EvmFeeHistory>> {
     type Item = FeeHistory;
 
