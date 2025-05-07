@@ -22,6 +22,7 @@ use prost::Message;
 use std::{
     collections::{BTreeMap, VecDeque},
     fmt,
+    time::SystemTime,
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -321,8 +322,8 @@ impl Registry {
             mutations,
             preconditions: vec![],
         };
-        let mutations = chunkify_composite_mutation_if_too_large(mutations);
-        // TODO(Nikola.Milosavljevic@dfinity.org): Populate mutations.timestamp_seconds field.
+        let mut mutations = chunkify_composite_mutation_if_too_large(mutations);
+        mutations.timestamp_seconds = Self::get_current_timestamp_seconds();
 
         self.increment_version();
         self.apply_mutations_as_version(mutations, self.version);
@@ -508,6 +509,19 @@ impl Registry {
                      like it could not possibly be needed in practice anymore."
                 );
             }
+        }
+    }
+
+    fn get_current_timestamp_seconds() -> u64 {
+        if cfg!(target_arch = "wasm32") {
+            ic_cdk::api::time()
+        } else {
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .expect("Failed to get time since epoch")
+                .as_nanos()
+                .try_into()
+                .expect("Failed to convert time to u64")
         }
     }
 }
@@ -1325,7 +1339,7 @@ Average length of the values: {} (desired: {})",
         // Start off with an oversized delta.
         let too_large_delta_size = delta_size(version, key, MAX_REGISTRY_DELTAS_SIZE);
 
-        // Compoute the value size that will give us a delta of exactly
+        // Compute the value size that will give us a delta of exactly
         // MAX_REGISTRY_DELTAS_SIZE.
         let max_value_size = 2 * MAX_REGISTRY_DELTAS_SIZE - too_large_delta_size;
 
@@ -1358,7 +1372,9 @@ Average length of the values: {} (desired: {})",
             value: original_value.clone(),
         };
         let mut original_registry = Registry::new();
+        let timestamp_before_applying_mutation = Registry::get_current_timestamp_seconds();
         apply_mutations_skip_invariant_checks(&mut original_registry, vec![mutation]);
+        let timestamp_after_applying_mutation = Registry::get_current_timestamp_seconds();
 
         // Step 1.2: Verify contents of original Registry.
 
@@ -1394,8 +1410,15 @@ Average length of the values: {} (desired: {})",
                     large_value_chunk_keys,
                 )),
                 version: 1,
-                timestamp_seconds: 0,
+                // This part is tested later since its hard to get the exact
+                // timestamp before the actual function call.
+                timestamp_seconds: registry_value.timestamp_seconds,
             },
+        );
+
+        assert!(
+            timestamp_before_applying_mutation < registry_value.timestamp_seconds
+                && registry_value.timestamp_seconds < timestamp_after_applying_mutation
         );
 
         // Step 1.2.2: Verify original_registry.changelog.
@@ -1439,7 +1462,9 @@ Average length of the values: {} (desired: {})",
             composite_mutation,
             HighCapacityRegistryAtomicMutateRequest {
                 preconditions: vec![],
-                timestamp_seconds: 0,
+                // This part is tested later since its hard to get the exact
+                // timestamp before the actual function call.
+                timestamp_seconds: composite_mutation.timestamp_seconds,
                 mutations: vec![HighCapacityRegistryMutation {
                     key: b"this is key".to_vec(),
                     mutation_type: Type::Upsert as i32,
@@ -1450,6 +1475,10 @@ Average length of the values: {} (desired: {})",
                     ),
                 }],
             },
+        );
+        assert!(
+            timestamp_before_applying_mutation < composite_mutation.timestamp_seconds
+                && composite_mutation.timestamp_seconds < timestamp_after_applying_mutation
         );
 
         // Step 2: Call code under test. Simulate (Registry) canister upgrade.
