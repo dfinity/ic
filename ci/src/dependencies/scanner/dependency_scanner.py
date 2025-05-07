@@ -42,15 +42,22 @@ class DependencyScanner:
         self.root = PROJECT_ROOT
 
     @staticmethod
-    def __clone_repository_from_url(url: str, path: pathlib.Path):
+    def __clone_repository_from_url(url: str, path: pathlib.Path, github_checkout_token: typing.Optional[str]):
         environment = {}
         cwd = path
-        command = f"git clone --depth=1 {url}"
+
+        if github_checkout_token is not None and url.startswith("https://github.com"):
+            checkout_url = f'https://x-access-token:{github_checkout_token}@{url.replace("https://","")}'
+        else:
+            checkout_url = url
+        command = f"git clone --depth=1 {checkout_url}"
         logging.info(f"Performing git clone {url}")
         _ = ProcessExecutor.execute_command(command, cwd.resolve(), environment)
         return
 
-    def do_periodic_scan(self, repositories: typing.List[Repository]):
+    def do_periodic_scan(
+        self, repositories: typing.List[Repository], github_checkout_token: typing.Optional[str] = None
+    ):
         current_repo_name = ""
         try:
             for repository in repositories:
@@ -62,7 +69,7 @@ class DependencyScanner:
                     if top_level_path.is_dir():
                         # git clone fails if the directory already exists
                         shutil.rmtree(top_level_path)
-                    self.__clone_repository_from_url(repository.url, self.root.parent)
+                    self.__clone_repository_from_url(repository.url, self.root.parent, github_checkout_token)
 
                 for project in repository.projects:
                     path = self.root.parent / project.path
