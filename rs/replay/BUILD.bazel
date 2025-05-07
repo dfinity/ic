@@ -2,6 +2,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-error-types",
     "//rs/artifact_pool",
     "//rs/canister_client",
     "//rs/canister_sandbox:backend_lib",
@@ -12,6 +13,7 @@ DEPENDENCIES = [
     "//rs/consensus/utils",
     "//rs/crypto",
     "//rs/crypto/for_verification_only",
+    "//rs/crypto/sha2",
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
     "//rs/interfaces",
@@ -40,6 +42,7 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:clap",
     "@crate_index//:hex",
+    "@crate_index//:mockall",
     "@crate_index//:prost",
     "@crate_index//:rand",
     "@crate_index//:serde",
@@ -57,6 +60,7 @@ DEV_DEPENDENCIES = [
     "//rs/interfaces/state_manager/mocks",
     "//rs/test_utilities/consensus",
     "//rs/test_utilities/types",
+    "@crate_index//:pretty_assertions",
 ]
 
 MACRO_DEPENDENCIES = [
