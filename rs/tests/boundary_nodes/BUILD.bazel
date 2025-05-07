@@ -14,19 +14,13 @@ TEST_CANISTERS_RUNTIME_DEPS = [
 ]
 
 system_test_nns(
-    name = "bn_integration_test",
-    env = {
-        "KV_STORE_WASM_PATH": "$(rootpath //rs/tests/test_canisters/kv_store)",
-        "HTTP_COUNTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/http_counter)",
-        "ASSET_CANISTER_WASM_PATH": "$(rootpath @asset_canister//file)",
-        "LONG_ASSET_CANISTER_WASM_PATH": "$(rootpath @long_asset_canister//file)",
-    },
+    name = "api_bn_integration_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + TEST_CANISTERS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/tests/boundary_nodes/integration_test_common",

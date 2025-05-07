@@ -32,6 +32,7 @@ pub fn setup_ic_with_bn(bn_name: &str, bn_https_config: BoundaryNodeHttpsConfig,
         InternetComputer::new()
             .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
             .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
+            .with_api_boundary_nodes(1)
             .setup_and_start(&cloned_env)
             .expect("failed to setup IC under test");
     });
@@ -93,7 +94,7 @@ pub fn setup_ic_with_bn(bn_name: &str, bn_https_config: BoundaryNodeHttpsConfig,
     );
 }
 
-pub fn setup_ic(env: TestEnv) {
+pub fn setup_ic(env: TestEnv, num_api_bns: usize) {
     let log = env.logger();
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
@@ -101,6 +102,7 @@ pub fn setup_ic(env: TestEnv) {
         .with_node_operator(PrincipalId::from_str(TEST_PRINCIPAL).unwrap())
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
         .with_unassigned_nodes(4)
+        .with_api_boundary_nodes(num_api_bns)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
     let nns_node = env

@@ -574,8 +574,9 @@ async fn _assert_routing_via_domains(
 }
 
 fn main() -> Result<()> {
+    let setup = |env| setup_ic(env, 0);
     SystemTestGroup::new()
-        .with_setup(setup_ic)
+        .with_setup(setup)
         .add_test(systest!(decentralization_test))
         .execute_from_args()?;
     Ok(())

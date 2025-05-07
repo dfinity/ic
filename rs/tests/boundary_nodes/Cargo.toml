@@ -40,7 +40,7 @@ wat = { workspace = true }
 
 [[bin]]
 name = "ic-systest-bn-integration"
-path = "bn_integration_test.rs"
+path = "api_bn_integration_test.rs"
 
 [[bin]]
 name = "ic-systest-bn-integration-on-playnet"
