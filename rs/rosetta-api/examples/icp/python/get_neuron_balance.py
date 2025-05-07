@@ -7,10 +7,10 @@ The script requires only the public key and neuron index, and automatically deri
 
 Examples:
     # Get balance for a neuron (requires only public key and neuron index)
-    python3 get_neuron_balance.py --node-address http://localhost:8081 --neuron-index 0 --public-key 022ac5b9bd21fa735e66bdd24c23e938daef472b95165a11bad4a43b2c95627ef3 --curve-type edwards25519
+    python3 get_neuron_balance.py --node-address http://localhost:8081 --neuron-index 0 --public-key 022ac5b9bd21fa735e66bdd24c23e938daef472b95165a11bad4a43b2c95627ef3 --curve-type secp256k1
 
     # With verbose output
-    python3 get_neuron_balance.py --node-address http://localhost:8081 --public-key 022ac5b9bd21fa735e66bdd24c23e938daef472b95165a11bad4a43b2c95627ef3 --curve-type edwards25519 --verbose
+    python3 get_neuron_balance.py --node-address http://localhost:8081 --public-key 022ac5b9bd21fa735e66bdd24c23e938daef472b95165a11bad4a43b2c95627ef3 --curve-type secp256k1 --verbose
 
 """
 

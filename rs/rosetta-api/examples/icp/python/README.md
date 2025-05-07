@@ -119,6 +119,11 @@ python get_account_balance.py --node-address <NODE_ADDRESS> \
 ```
 
 **Get Neuron Balance**:
+
+The following operation will fail if a public key that doesn't own a neuron is provided.
+At the time of writing, the public key `022ac5b9bd21fa735e66bdd24c23e938daef472b95165a11bad4a43b2c95627ef3 (secp256k1)` has a neuron and can be used with this example.
+If you want to create your own neurons, follow the [these instructions](https://support.dfinity.org/hc/en-us/articles/4404283954836-How-do-I-create-a-voting-neuron)
+
 ```sh
 python get_neuron_balance.py --node-address <NODE_ADDRESS> \
                             --neuron-index 0 \
