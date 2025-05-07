@@ -28,6 +28,7 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/test_keys",
     "//rs/registry/keys",
+    "@crate_index//:lazy_static",
     "@crate_index//:pretty_assertions",
     "@crate_index//:tokio",
 ]
