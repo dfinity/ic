@@ -32,9 +32,9 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "bn_update_workload_test",
+    name = "api_bn_update_workload_test",
     tags = [
-        "manual",  # TODO(BOUN-1039): remove "manual" and add back "long_test" when the test is not flaky anymore
+        "long_test",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",

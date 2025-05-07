@@ -39,7 +39,7 @@ tokio = { workspace = true }
 wat = { workspace = true }
 
 [[bin]]
-name = "ic-systest-bn-integration"
+name = "ic-systest-api-bn-integration"
 path = "api_bn_integration_test.rs"
 
 [[bin]]
@@ -59,8 +59,8 @@ name = "ic-systest-mainnet-bn-performance"
 path = "mainnet_bn_performance_test.rs"
 
 [[bin]]
-name = "ic-systest-bn-update-workload"
-path = "bn_update_workload_test.rs"
+name = "ic-systest-api-bn-update-workload"
+path = "api_bn_update_workload_test.rs"
 
 [[bin]]
 name = "ic-systest-rate-limit-canister"

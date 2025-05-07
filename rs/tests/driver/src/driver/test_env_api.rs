@@ -150,7 +150,7 @@ use crate::{
         virtualmachine::{destroy_vm, restart_vm, start_vm},
     },
     retry_with_msg, retry_with_msg_async,
-    util::{block_on, create_agent},
+    util::{block_on, create_agent_mapping},
 };
 use anyhow::{anyhow, bail, Result};
 use async_trait::async_trait;
@@ -1558,6 +1558,7 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     fn status(&self) -> Result<HttpStatusResponse> {
         let url = self.get_public_url();
         let addr = self.get_public_addr();
+
         let client = reqwest::blocking::Client::builder()
             .danger_accept_invalid_certs(self.uses_snake_oil_certs())
             .timeout(READY_RESPONSE_TIMEOUT);
@@ -1742,7 +1743,15 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
 impl HasPublicApiUrl for IcNodeSnapshot {
     fn get_public_url(&self) -> Url {
         let node_record = self.raw_node_record();
-        IcNodeSnapshot::http_endpoint_to_url(&node_record.http.expect("Node doesn't have URL"))
+
+        node_record
+            .domain
+            .map(|d| Url::parse(&format!("https://{}", d)).expect("Failed to parse URL"))
+            .unwrap_or_else(|| {
+                IcNodeSnapshot::http_endpoint_to_url(
+                    &node_record.http.expect("Node doesn't have URL"),
+                )
+            })
     }
 
     fn get_public_addr(&self) -> SocketAddr {
@@ -1750,13 +1759,20 @@ impl HasPublicApiUrl for IcNodeSnapshot {
         let connection_endpoint = node_record.http.expect("Node doesn't have URL");
         SocketAddr::new(
             IpAddr::from_str(&connection_endpoint.ip_addr).expect("Missing IP address in the node"),
-            connection_endpoint.port as u16,
+            0,
         )
+    }
+
+    fn uses_snake_oil_certs(&self) -> bool {
+        let node_record = self.raw_node_record();
+        node_record.domain.is_some()
     }
 
     async fn try_build_default_agent_async(&self) -> Result<Agent, AgentError> {
         let url = self.get_public_url().to_string();
-        create_agent(&url).await
+        let ip_addr = self.get_public_addr().ip();
+
+        create_agent_mapping(&url, ip_addr).await
     }
 }
 
