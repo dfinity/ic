@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId, RegistryVersion};
-use ic_cdk_next::call::{Call, CallErrorExt, CallFailed};
+use ic_cdk::call::{Call, CallErrorExt, CallFailed};
 use ic_nervous_system_common::NervousSystemError;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_registry_transport::pb::v1::RegistryDelta;
