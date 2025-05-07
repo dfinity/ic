@@ -642,6 +642,16 @@ mod chain_key_enabled_subnet_lists {
                     pre_signatures_to_create_in_advance: Some(456),
                     max_queue_size: Some(100),
                 },
+                KeyConfigPb {
+                    key_id: Some(MasterPublicKeyIdPb {
+                        key_id: Some(master_public_key_id::KeyId::Vetkd(pb::VetKdKeyId {
+                            curve: 1,
+                            name: "vetkd_key".to_string(),
+                        })),
+                    }),
+                    pre_signatures_to_create_in_advance: Some(0),
+                    max_queue_size: Some(100),
+                },
             ],
             signature_request_timeout_ns: Some(10_000),
             idkg_key_rotation_period_ms: Some(20_000),
@@ -680,7 +690,7 @@ mod chain_key_enabled_subnet_lists {
 
     #[test]
     #[should_panic(
-        expected = "`pre_signatures_to_create_in_advance` of subnet ya35z-hhham-aaaaa-aaaap-yai cannot be zero."
+        expected = "`pre_signatures_to_create_in_advance` for key ecdsa:Secp256k1:ecdsa_key of subnet ya35z-hhham-aaaaa-aaaap-yai cannot be zero."
     )]
     fn should_fail_if_pre_signatures_is_zero() {
         let mut config = invariant_compliant_chain_key_config();
@@ -731,6 +741,19 @@ mod chain_key_enabled_subnet_lists {
     }
 
     #[test]
+    #[should_panic(expected = "Unable to convert 2 to a VetKdCurve")]
+    fn should_fail_if_unkown_vetkd_curve() {
+        let mut config = invariant_compliant_chain_key_config();
+        config.key_configs[1].key_id = Some(MasterPublicKeyIdPb {
+            key_id: Some(master_public_key_id::KeyId::Vetkd(pb::VetKdKeyId {
+                curve: 2,
+                name: "vetkd_key".to_string(),
+            })),
+        });
+        check_chain_key_config_invariant(config);
+    }
+
+    #[test]
     #[should_panic(expected = "Unable to convert Unspecified to an EcdsaCurve")]
     fn should_fail_if_unspecified_ecdsa_curve() {
         let mut config = invariant_compliant_chain_key_config();
@@ -751,6 +774,19 @@ mod chain_key_enabled_subnet_lists {
             key_id: Some(master_public_key_id::KeyId::Schnorr(pb::SchnorrKeyId {
                 algorithm: 0,
                 name: "schnorr_key".to_string(),
+            })),
+        });
+        check_chain_key_config_invariant(config);
+    }
+
+    #[test]
+    #[should_panic(expected = "Unable to convert Unspecified to a VetKdCurve")]
+    fn should_fail_if_unspecified_vetkd_curve() {
+        let mut config = invariant_compliant_chain_key_config();
+        config.key_configs[1].key_id = Some(MasterPublicKeyIdPb {
+            key_id: Some(master_public_key_id::KeyId::Vetkd(pb::VetKdKeyId {
+                curve: 0,
+                name: "vetkd_key".to_string(),
             })),
         });
         check_chain_key_config_invariant(config);

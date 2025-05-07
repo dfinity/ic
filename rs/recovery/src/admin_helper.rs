@@ -337,7 +337,8 @@ mod tests {
 
     use ic_base_types::PrincipalId;
     use ic_management_canister_types_private::{
-        EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+        EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
+        VetKdKeyId,
     };
     use ic_registry_subnet_features::KeyConfig;
     use std::{str::FromStr, time::Duration};
@@ -467,6 +468,14 @@ mod tests {
                     pre_signatures_to_create_in_advance: 12,
                     max_queue_size: 32,
                 },
+                KeyConfig {
+                    key_id: MasterPublicKeyId::VetKd(VetKdKeyId {
+                        curve: VetKdCurve::Bls12_381_G2,
+                        name: "test_key_3".to_string(),
+                    }),
+                    pre_signatures_to_create_in_advance: 0,
+                    max_queue_size: 32,
+                },
             ],
             signature_request_timeout_ns: Some(123_456),
             idkg_key_rotation_period_ms: Some(321_654),
@@ -501,7 +510,8 @@ mod tests {
             --state-hash fake_state_hash \
             --initial-chain-key-configs-to-request '[\
                 {\"subnet_id\":\"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\",\"key_id\":\"ecdsa:Secp256k1:test_key_1\",\"pre_signatures_to_create_in_advance\":\"77\",\"max_queue_size\":\"30\"},\
-                {\"subnet_id\":\"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\",\"key_id\":\"schnorr:Bip340Secp256k1:test_key_2\",\"pre_signatures_to_create_in_advance\":\"12\",\"max_queue_size\":\"32\"}]' \
+                {\"subnet_id\":\"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\",\"key_id\":\"schnorr:Bip340Secp256k1:test_key_2\",\"pre_signatures_to_create_in_advance\":\"12\",\"max_queue_size\":\"32\"},\
+                {\"subnet_id\":\"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\",\"key_id\":\"vetkd:Bls12_381_G2:test_key_3\",\"pre_signatures_to_create_in_advance\":\"0\",\"max_queue_size\":\"32\"}]' \
             --idkg-key-rotation-period-ms 321654 \
             --signature-request-timeout-ns 123456 \
             --replacement-nodes \"nqpqw-cp42a-rmdsx-fpui3-ncne5-kzq6o-m67an-w25cx-zu636-lcf2v-fqe\" \
