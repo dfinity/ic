@@ -86,9 +86,17 @@ system_test_nns(
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
+        "//rs/registry/subnet_features",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/nns/constants",
+        "//rs/types/base_types",
+        "@crate_index//:slog",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/types/types",
         "@crate_index//:anyhow",
+        "//rs/types/management_canister_types",
+        "//rs/rust_canisters/canister_test",
     ],
 )
 
