@@ -26,7 +26,7 @@ EOF
 }
 
 MAINNET=false
-while getopts "b:mo:s:" OPT; do
+while getopts "mo:" OPT; do
     case "${OPT}" in
         o)
             OUT_FILE="${OPTARG}"

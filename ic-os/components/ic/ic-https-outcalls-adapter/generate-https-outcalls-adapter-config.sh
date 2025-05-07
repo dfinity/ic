@@ -17,7 +17,7 @@ function read_config_variables() {
     config_socks_proxy=$(get_config_value '.guestos_settings.guestos_dev_settings.socks_proxy')
 }
 
-while getopts "o:s:" OPT; do
+while getopts "o:" OPT; do
     case "${OPT}" in
         o)
             OUT_FILE="${OPTARG}"

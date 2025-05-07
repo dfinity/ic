@@ -22,7 +22,7 @@ function read_config_variables() {
     elasticsearch_tags=$(get_config_value '.icos_settings.logging.elasticsearch_tags')
 }
 
-while getopts "i:j:k:o:" OPT; do
+while getopts "i:o:" OPT; do
     case "${OPT}" in
         i)
             IN_FILE="${OPTARG}"
