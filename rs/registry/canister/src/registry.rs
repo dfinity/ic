@@ -887,7 +887,10 @@ mod tests {
         );
 
         assert_eq!(
-            registry.count_fitting_deltas(1, MAX_REGISTRY_DELTAS_SIZE - 1),
+            // Apart subtracting 1 to not allow the mutation2 to fit into the fitting deltas
+            // we have to subtract 1 more that is required to remove the tag for `timestamp_seconds`
+            // that is present in HighCapacity structs
+            registry.count_fitting_deltas(1, MAX_REGISTRY_DELTAS_SIZE - 1 - 1),
             0
         );
         assert_eq!(
@@ -1130,11 +1133,14 @@ mod tests {
         let key = b"key";
 
         let too_large_value = vec![0; max_mutation_value_size(version, key) + 1];
-        let mutations = vec![upsert(key, too_large_value)];
-        let req = HighCapacityRegistryAtomicMutateRequest::from(RegistryAtomicMutateRequest {
+        let mutations = vec![upsert(key, too_large_value).into()];
+        let req = HighCapacityRegistryAtomicMutateRequest {
             mutations,
             preconditions: vec![],
-        });
+            // Since the `too_large_value` is built with serializing maximum timestamp length to 10 bytes
+            // the tipping point of `+ 1` will be there only if we account the timestamp of full serialized 10 bytes.
+            timestamp_seconds: u64::MAX,
+        };
 
         registry.changelog_insert(1, req);
     }
@@ -1170,7 +1176,9 @@ mod tests {
         let version = 1;
         let key = b"key";
 
-        let too_large_value = vec![0; max_mutation_value_size(version, key) + 1];
+        // In the `RegistryMutation` the tag is missing so we have to add that tag alongside
+        // with the 1 byte to overflow the `MAX_REGISTRY_DELTAS_SIZE`
+        let too_large_value = vec![0; max_mutation_value_size(version, key) + 1 + 1];
         let mutations = vec![upsert(key, too_large_value)];
 
         apply_mutations_skip_invariant_checks(&mut registry, mutations);
@@ -1188,11 +1196,12 @@ mod tests {
         let key = b"key";
 
         let value = vec![0; max_mutation_value_size(version, key) + bytes_above_max_size];
-        let mutation = upsert(key, value);
+        let mutation: HighCapacityRegistryMutation = upsert(key, value).into();
         let mutations = vec![mutation.clone()];
-        let req = RegistryAtomicMutateRequest {
+        let req = HighCapacityRegistryAtomicMutateRequest {
             mutations,
             preconditions: vec![],
+            timestamp_seconds: u64::MAX,
         };
         // Circumvent `changelog_insert()` to insert potentially oversized mutations.
         registry
@@ -1201,12 +1210,22 @@ mod tests {
 
         (*registry.store.entry(mutation.key).or_default()).push_back(HighCapacityRegistryValue {
             version,
-            content: Some(if mutation.mutation_type != Type::Delete as i32 {
-                high_capacity_registry_value::Content::Value(mutation.value)
-            } else {
-                DELETION_MARKER.unwrap()
-            }),
-            timestamp_seconds: 0,
+            content: mutation
+                .content
+                .map(|c| match c {
+                    high_capacity_registry_mutation::Content::Value(vec) => {
+                        high_capacity_registry_value::Content::Value(vec)
+                    }
+                    high_capacity_registry_mutation::Content::LargeValueChunkKeys(
+                        large_value_chunk_keys,
+                    ) => high_capacity_registry_value::Content::LargeValueChunkKeys(
+                        large_value_chunk_keys,
+                    ),
+                })
+                .or(Some(high_capacity_registry_value::Content::DeletionMarker(
+                    true,
+                ))),
+            timestamp_seconds: req.timestamp_seconds,
         });
         registry.version = version;
 
@@ -1325,9 +1344,10 @@ Average length of the values: {} (desired: {})",
     /// result in a delta of exactly `MAX_REGISTRY_DELTAS_SIZE` bytes.
     fn max_mutation_value_size(version: u64, key: &[u8]) -> usize {
         fn delta_size(version: u64, key: &[u8], value_size: usize) -> usize {
-            let req = RegistryAtomicMutateRequest {
-                mutations: vec![upsert(key, vec![0; value_size])],
+            let req = HighCapacityRegistryAtomicMutateRequest {
+                mutations: vec![upsert(key, vec![0; value_size]).into()],
                 preconditions: vec![],
+                timestamp_seconds: u64::MAX,
             };
 
             let version = EncodedVersion::from(version);
