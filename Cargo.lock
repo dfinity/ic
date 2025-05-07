@@ -10516,6 +10516,7 @@ version = "0.9.0"
 dependencies = [
  "ic-crypto-sha2",
  "ic-stable-structures",
+ "lazy_static",
 ]
 
 [[package]]
@@ -11874,6 +11875,8 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ic-base-types",
+ "ic-nervous-system-chunks",
+ "ic-registry-transport",
  "ic-utils 0.9.0",
  "serde",
  "thiserror 2.0.12",
@@ -11887,6 +11890,7 @@ dependencies = [
  "ic-nervous-system-chunks",
  "ic-registry-transport",
  "ic-stable-structures",
+ "lazy_static",
  "prost 0.13.4",
 ]
 
@@ -14984,6 +14988,7 @@ version = "0.1.2"
 dependencies = [
  "async-trait",
  "candid",
+ "ic-cdk 0.17.1",
  "icrc-ledger-types",
  "serde",
 ]
@@ -15007,6 +15012,7 @@ dependencies = [
  "candid",
  "crc32fast",
  "hex",
+ "ic-cdk 0.17.1",
  "ic-stable-structures",
  "icrc-cbor",
  "itertools 0.12.1",
