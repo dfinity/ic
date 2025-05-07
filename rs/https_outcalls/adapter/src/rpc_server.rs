@@ -408,9 +408,10 @@ impl HttpsOutcallsService for CanisterHttp {
                 Err(direct_err) => {
                     self.metrics.requests_socks.inc();
 
-                    let mut deprecated_result = None;
-                    if !should_only_use_new_socks_proxy() {
-                        deprecated_result = Some(self
+                    let deprecated_result =  if should_only_use_new_socks_proxy() {
+                        None
+                    } else {
+                        Some(self
                             .socks_client
                             .request(http_req_clone.clone())
                             .await
@@ -419,8 +420,8 @@ impl HttpsOutcallsService for CanisterHttp {
                                     "Request failed direct connect {:?} and connect through socks {:?}",
                                     direct_err, socks_err
                                 )
-                            }));
-                        }
+                            }))
+                        };
 
                     //TODO(NET-1765): Remove the compare_results once we are confident in the SOCKS proxy implementation.
                     if !req.socks_proxy_addrs.is_empty() {
@@ -428,14 +429,14 @@ impl HttpsOutcallsService for CanisterHttp {
                             .do_https_outcall_socks_proxy(req.socks_proxy_addrs, http_req_clone)
                             .await;
                         match deprecated_result {
-                            Some(result) => {
+                            Some(deprecated_result) => {
                                 // We compare the results of the deprecated socks proxy implementation with the new one.
-                                self.compare_results(&result, &dark_launch_result);
-                                if result.is_err() && dark_launch_result.is_ok() {
+                                self.compare_results(&deprecated_result, &dark_launch_result);
+                                if deprecated_result.is_err() && dark_launch_result.is_ok() {
                                     // If dl found something, return that.
                                     dark_launch_result
                                 } else {
-                                    result
+                                    deprecated_result
                                 }
                             }
                             None => {
