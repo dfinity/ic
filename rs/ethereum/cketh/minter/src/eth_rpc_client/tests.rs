@@ -603,7 +603,6 @@ mod evm_rpc_conversion {
         Hex, Hex20, Hex32, HttpOutcallError as EvmHttpOutcallError, LogEntry as EvmLogEntry,
         MultiRpcResult as EvmMultiRpcResult, Nat256, RpcApi as EvmRpcApi, RpcError as EvmRpcError,
         RpcResult as EvmRpcResult, RpcService as EvmRpcService,
-        SendRawTransactionStatus as EvmSendRawTransactionStatus,
         TransactionReceipt as EvmTransactionReceipt,
     };
     use proptest::collection::vec;

@@ -5,10 +5,7 @@ use crate::endpoints::CandidBlockTag;
 use crate::numeric::{BlockNumber, LogIndex, Wei, WeiPerGas};
 use candid::CandidType;
 use ethnum;
-use evm_rpc_client::{
-    HttpOutcallError as EvmHttpOutcallError,
-    SendRawTransactionStatus as EvmSendRawTransactionStatus,
-};
+use evm_rpc_client::HttpOutcallError as EvmHttpOutcallError;
 use ic_cdk::api::call::RejectionCode;
 use ic_ethereum_types::Address;
 pub use metrics::encode as encode_metrics;
