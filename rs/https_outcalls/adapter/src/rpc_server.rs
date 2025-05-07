@@ -48,9 +48,9 @@ const USER_AGENT_ADAPTER: &str = "ic/1.0";
 const MAX_HEADER_LIST_SIZE: u32 = 52 * 1024;
 
 /// The maximum number of times we will try to connect to a SOCKS proxy.
-const MAX_SOCKS_PROXY_RETRIES: usize = 2;
+const MAX_SOCKS_PROXY_TRIES: usize = 2;
 
-/// TODO(SOCKS_PROXY_ROLLOUT): Make this 100.
+/// TODO(NET-1765): Make this 100.
 const NEW_SOCKS_PROXY_ROLLOUT: u32 = 50;
 
 type OutboundRequestBody = Full<Bytes>;
@@ -67,7 +67,6 @@ pub struct CanisterHttp {
     http_connect_timeout_secs: u64,
 }
 
-#[allow(clippy::absurd_extreme_comparisons)]
 fn should_only_use_new_socks_proxy() -> bool {
     // This is a temporary feature flag to allow us to test the new socks proxy implementation
     // without affecting the existing implementation.
@@ -264,7 +263,7 @@ impl CanisterHttp {
             };
 
             tries += 1;
-            if tries > MAX_SOCKS_PROXY_RETRIES {
+            if tries > MAX_SOCKS_PROXY_TRIES {
                 break;
             }
 
@@ -423,7 +422,7 @@ impl HttpsOutcallsService for CanisterHttp {
                             }));
                         }
 
-                    //TODO(SOCKS_PROXY_DL): Remove the compare_results once we are confident in the SOCKS proxy implementation.
+                    //TODO(NET-1765): Remove the compare_results once we are confident in the SOCKS proxy implementation.
                     if !req.socks_proxy_addrs.is_empty() {
                         let dark_launch_result = self
                             .do_https_outcall_socks_proxy(req.socks_proxy_addrs, http_req_clone)
