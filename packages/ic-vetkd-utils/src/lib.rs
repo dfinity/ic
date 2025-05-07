@@ -369,7 +369,13 @@ impl IBEDomainSep {
         match self {
             Self::HashToMask => "ic-vetkd-bls12-381-ibe-hash-to-mask".to_owned(),
             Self::MaskSeed => "ic-vetkd-bls12-381-ibe-mask-seed".to_owned(),
-            Self::MaskMsg(len) => format!("ic-vetkd-bls12-381-ibe-mask-msg-{}", len),
+            // Zero prefix the length up to 20 digits, which is sufficient to be fixed
+            // length for any 64-bit length. This ensures all of the MaskMsg domain
+            // separators are of equal length. With how we use the domain separators, this
+            // padding isn't required - we only need uniquness - but having variable
+            // length domain separators is generally not considered a good practice and is
+            // easily avoidable here.
+            Self::MaskMsg(len) => format!("ic-vetkd-bls12-381-ibe-mask-msg-{:020}", len),
         }
     }
 }
