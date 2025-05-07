@@ -6,7 +6,7 @@ use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_management_canister_types_private::{
     DerivationPath, ECDSAPublicKeyArgs, EcdsaKeyId, MasterPublicKeyId, Method as Ic00Method,
-    SchnorrKeyId, SchnorrPublicKeyArgs,
+    SchnorrKeyId, SchnorrPublicKeyArgs, VetKdKeyId, VetKdPublicKeyArgs,
 };
 use ic_nns_test_utils::itest_helpers::{
     set_up_registry_canister, set_up_universal_canister, try_call_via_universal_canister,
@@ -307,6 +307,40 @@ async fn wait_for_schnorr_setup(
     public_key_result.unwrap().unwrap();
 }
 
+/// Requests a Vetkey public key several times until it succeeds.
+async fn wait_for_vetkd_setup(
+    runtime: &Runtime,
+    calling_canister: &Canister<'_>,
+    key_id: &VetKdKeyId,
+) {
+    let public_key_request = VetKdPublicKeyArgs {
+        canister_id: None,
+        context: vec![],
+        key_id: key_id.clone(),
+    };
+    let mut public_key_result = None;
+    for i in 0..100 {
+        public_key_result = Some(
+            try_call_via_universal_canister(
+                calling_canister,
+                &runtime.get_management_canister_with_effective_canister_id(
+                    calling_canister.canister_id().into(),
+                ),
+                &Ic00Method::VetKdPublicKey.to_string(),
+                Encode!(&public_key_request).unwrap(),
+            )
+            .await,
+        );
+        println!("Response: {:?}", public_key_result);
+        if public_key_result.as_ref().unwrap().is_ok() {
+            break;
+        }
+        println!("Waiting for public key... {}", i);
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    public_key_result.unwrap().unwrap();
+}
+
 pub async fn wait_for_chain_key_setup(
     runtime: &Runtime,
     calling_canister: &Canister<'_>,
@@ -320,7 +354,7 @@ pub async fn wait_for_chain_key_setup(
             wait_for_schnorr_setup(runtime, calling_canister, key_id).await;
         }
         MasterPublicKeyId::VetKd(_key_id) => {
-            todo!("CRP-2632 Extend registry canister tests")
+            wait_for_vetkd_setup(runtime, calling_canister, key_id).await;
         }
     }
 }
