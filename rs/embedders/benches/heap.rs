@@ -54,10 +54,10 @@ enum Step {
     Page = PAGE_SIZE as isize,
     #[strum(serialize = "step_8k")]
     TwoPages = 2 * PAGE_SIZE as isize,
-    #[strum(serialize = "step_64k")]
-    WasmPage = WASM_PAGE_SIZE_IN_BYTES as isize,
-    #[strum(serialize = "step_128k")]
-    TwoWasmPages = 2 * WASM_PAGE_SIZE_IN_BYTES as isize,
+    // #[strum(serialize = "step_64k")]
+    // WasmPage = WASM_PAGE_SIZE_IN_BYTES as isize,
+    // #[strum(serialize = "step_128k")]
+    // TwoWasmPages = 2 * WASM_PAGE_SIZE_IN_BYTES as isize,
     #[strum(serialize = "step_2m")]
     HugePage = HUGE_PAGE_SIZE as isize,
     #[strum(serialize = "step_4m")]
