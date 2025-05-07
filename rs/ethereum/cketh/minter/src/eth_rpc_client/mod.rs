@@ -9,11 +9,11 @@ use crate::numeric::{BlockNumber, GasAmount, LogIndex, TransactionCount, Wei, We
 use crate::state::State;
 use evm_rpc_client::{
     Block as EvmBlock, BlockTag as EvmBlockTag, ConsensusStrategy, EthSepoliaService, EvmRpcClient,
-    FeeHistory as EvmFeeHistory, FeeHistoryArgs as EvmFeeHistoryArgs,
-    GetLogsArgs as EvmGetLogsArgs, GetTransactionCountArgs as EvmGetTransactionCountArgs, Hex20,
-    Hex32, IcRuntime, LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256,
-    OverrideRpcConfig, RpcConfig as EvmRpcConfig, RpcError as EvmRpcError,
-    RpcResult as EvmRpcResult, RpcService as EvmRpcService, RpcServices as EvmRpcServices,
+    FeeHistory as EvmFeeHistory, FeeHistoryArgs as EvmFeeHistoryArgs, GetLogsArgs,
+    GetTransactionCountArgs as EvmGetTransactionCountArgs, Hex20, Hex32, IcRuntime,
+    LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256, OverrideRpcConfig,
+    RpcConfig as EvmRpcConfig, RpcError as EvmRpcError, RpcResult as EvmRpcResult,
+    RpcService as EvmRpcService, RpcServices as EvmRpcServices,
     SendRawTransactionStatus as EvmSendRawTransactionStatus,
     TransactionReceipt as EvmTransactionReceipt,
 };
@@ -626,14 +626,6 @@ trait ReduceWithStrategy<S> {
 pub enum Equality {}
 pub enum MinByKey {}
 
-impl ReduceWithStrategy<Equality> for MultiCallResults<TransactionCount> {
-    type Item = TransactionCount;
-
-    fn reduce(self) -> ReducedResult<Self::Item> {
-        self.reduce_with_equality().into()
-    }
-}
-
 impl ReduceWithStrategy<Equality> for EvmMultiRpcResult<Nat256> {
     type Item = TransactionCount;
 
@@ -644,15 +636,6 @@ impl ReduceWithStrategy<Equality> for EvmMultiRpcResult<Nat256> {
             },
             MultiCallResults::reduce_with_equality,
         )
-    }
-}
-
-impl ReduceWithStrategy<MinByKey> for MultiCallResults<TransactionCount> {
-    type Item = TransactionCount;
-
-    fn reduce(self) -> ReducedResult<Self::Item> {
-        self.reduce_with_min_by_key(|transaction_count| *transaction_count)
-            .into()
     }
 }
 
