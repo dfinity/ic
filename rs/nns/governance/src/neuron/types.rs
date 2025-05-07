@@ -22,7 +22,7 @@ use ic_base_types::PrincipalId;
 use ic_cdk::println;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
-use ic_nns_governance_api::pb::v1::{self as api, NeuronInfo};
+use ic_nns_governance_api::{self as api, NeuronInfo};
 use icp_ledger::Subaccount;
 use rust_decimal::{Decimal, RoundingStrategy};
 use std::{

@@ -39,34 +39,32 @@ use ic_nervous_system_root::change_canister::{
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::{
+    add_or_remove_node_provider::Change,
     bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
-    pb::v1::{
-        add_or_remove_node_provider::Change,
-        create_service_nervous_system::{
-            governance_parameters::VotingRewardParameters,
-            initial_token_distribution::{
-                developer_distribution::NeuronDistribution, DeveloperDistribution,
-                SwapDistribution, TreasuryDistribution,
-            },
-            swap_parameters, GovernanceParameters, InitialTokenDistribution, LedgerParameters,
-            SwapParameters,
+    create_service_nervous_system::{
+        governance_parameters::VotingRewardParameters,
+        initial_token_distribution::{
+            developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
+            TreasuryDistribution,
         },
-        install_code::CanisterInstallMode as GovernanceInstallMode,
-        proposal::Action,
-        stop_or_start_canister::CanisterAction as GovernanceCanisterAction,
-        update_canister_settings::{
-            CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
-        },
-        AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, InstallCodeRequest,
-        MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest, NnsFunction,
-        NodeProvider, ProposalActionRequest, RewardNodeProviders, StopOrStartCanister,
-        UpdateCanisterSettings,
+        swap_parameters, GovernanceParameters, InitialTokenDistribution, LedgerParameters,
+        SwapParameters,
     },
+    install_code::CanisterInstallMode as GovernanceInstallMode,
+    proposal::Action,
     proposal_submission_helpers::{
         create_external_update_proposal_candid, create_make_proposal_payload,
         decode_make_proposal_response,
     },
+    stop_or_start_canister::CanisterAction as GovernanceCanisterAction,
     subnet_rental::{RentalConditionId, SubnetRentalRequest},
+    update_canister_settings::{
+        CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
+    },
+    AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, InstallCodeRequest,
+    MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest, NnsFunction,
+    NodeProvider, ProposalActionRequest, RewardNodeProviders, StopOrStartCanister,
+    UpdateCanisterSettings,
 };
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_init::make_hsm_sender;

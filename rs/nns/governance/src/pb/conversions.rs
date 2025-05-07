@@ -1,6 +1,6 @@
 use crate::pb::v1 as pb;
 use ic_crypto_sha2::Sha256;
-use ic_nns_governance_api::pb::v1 as pb_api;
+use ic_nns_governance_api as pb_api;
 
 use crate::pb::proposal_conversions::convert_proposal;
 

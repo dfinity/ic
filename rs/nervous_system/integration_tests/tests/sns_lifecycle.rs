@@ -23,7 +23,7 @@ use ic_nervous_system_integration_tests::{
 use ic_nervous_system_proto::pb::v1::{Duration as DurationPb, Tokens as TokensPb};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys;
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution,
     get_neurons_fund_audit_info_response, neurons_fund_snapshot::NeuronsFundNeuronPortion,
     CreateServiceNervousSystem, Neuron as NnsNeuron,
