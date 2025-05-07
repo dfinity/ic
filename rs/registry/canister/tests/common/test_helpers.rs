@@ -353,7 +353,7 @@ pub async fn wait_for_chain_key_setup(
         MasterPublicKeyId::Schnorr(key_id) => {
             wait_for_schnorr_setup(runtime, calling_canister, key_id).await;
         }
-        MasterPublicKeyId::VetKd(_key_id) => {
+        MasterPublicKeyId::VetKd(key_id) => {
             wait_for_vetkd_setup(runtime, calling_canister, key_id).await;
         }
     }
