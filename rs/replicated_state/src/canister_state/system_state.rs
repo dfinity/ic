@@ -402,12 +402,6 @@ pub struct SystemState {
 /// A wrapper around the different canister statuses.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CanisterStatus {
-    Running(Running),
-    Stopping(Stopping),
-    Stopped(Stopped),
-}
-
-/*
     Running {
         call_context_manager: CallContextManager,
     },
@@ -421,10 +415,18 @@ pub enum CanisterStatus {
     },
     Stopped,
 }
-*/
 
 pub struct Running {
     call_context_manager: CallContextManager,
+}
+
+impl Running {
+    pub fn to_stopping(self, stop_context: StopCanisterContext) -> Stopping {
+        Stopping {
+            call_context_manager: self.call_context_manager,
+            stop_contexts: vec![stop_context],
+        }
+    }
 }
 
 pub struct Stopping {
@@ -436,9 +438,90 @@ pub struct Stopping {
     stop_contexts: Vec<StopCanisterContext>,
 }
 
-pub struct Stopped {
-    call_context_manager: CallContextManager,
+impl Stopping {
+    pub fn to_running(self) -> (Running, Vec<StopCanisterContext>) {
+        (
+            Running {
+                call_context_manager: self.call_context_manager,
+            },
+            self.stop_contexts,
+        )
+    }
+
+    pub fn try_to_stopped(
+        mut self,
+        is_expired: impl Fn(&StopCanisterContext) -> bool,
+    ) -> Result<(Stopped, Vec<StopCanisterContext>), (Stopping, Vec<StopCanisterContext>)> {
+        if self.is_ready_to_stop() {
+            Ok((Stopped {}, self.stop_contexts))
+        } else {
+            // Return any stop contexts that have timed out.
+            let mut expired_stop_contexts = Vec::new();
+            self.stop_contexts.retain(|stop_context| {
+                if is_expired(stop_context) {
+                    expired_stop_contexts.push(stop_context.clone());
+                    false
+                } else {
+                    true
+                }
+            });
+            Err((self, expired_stop_contexts))
+        }
+    }
+
+    pub fn is_ready_to_stop(&self) -> bool {
+        self.call_context_manager.callbacks().is_empty()
+            && self.call_context_manager.call_contexts().is_empty()
+    }
+
+    pub fn append_stop_context(&mut self, stop_context: StopCanisterContext) {
+        self.stop_contexts.push(stop_context);
+    }
 }
+
+pub struct Stopped;
+
+impl Stopped {
+    pub fn to_running(self) -> Running {
+        Running {
+            call_context_manager: CallContextManager::default(),
+        }
+    }
+}
+
+/// Transitions the canister into `Running` state. Returns the pending stop
+/// contexts if the canister was previously in `Stopping` state.
+pub fn start_canister(&mut self) -> Vec<StopCanisterContext> {
+    match &mut self.status {
+        CanisterStatus::Running { .. } => Vec::new(),
+
+        CanisterStatus::Stopping {
+            call_context_manager,
+            stop_contexts,
+        } => {
+            let stop_contexts = std::mem::take(stop_contexts);
+            self.status = CanisterStatus::Running {
+                call_context_manager: std::mem::take(call_context_manager),
+            };
+            stop_contexts
+        }
+
+        CanisterStatus::Stopped => {
+            self.status = CanisterStatus::new_running();
+            Vec::new()
+        }
+    }
+}
+
+/*
+/// A wrapper around the different canister statuses.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum CanisterStatus {
+    Running(Running),
+    Stopping(Stopping),
+    Stopped(Stopped),
+}
+*/
 
 impl CanisterStatus {
     pub fn new_running() -> Self {
