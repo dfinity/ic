@@ -1,6 +1,8 @@
 use ic_crypto_sha2::Sha256;
 use ic_stable_structures::{Memory, StableBTreeMap};
 
+pub mod test_data;
+
 const CHUNK_SIZE_BYTES: usize = 1_800_000;
 
 /// Splits "monolithic" blobs into chunks, and stores the chunks. Chunks are

@@ -1,4 +1,4 @@
-use crate::eth_rpc::{Hash, HttpResponsePayload, ResponseTransform};
+use crate::eth_rpc::Hash;
 use crate::numeric::{BlockNumber, GasAmount, Wei, WeiPerGas};
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
@@ -37,12 +37,6 @@ impl TransactionReceipt {
         self.effective_gas_price
             .transaction_cost(self.gas_used)
             .expect("ERROR: overflow during transaction fee calculation")
-    }
-}
-
-impl HttpResponsePayload for TransactionReceipt {
-    fn response_transform() -> Option<ResponseTransform> {
-        Some(ResponseTransform::TransactionReceipt)
     }
 }
 
