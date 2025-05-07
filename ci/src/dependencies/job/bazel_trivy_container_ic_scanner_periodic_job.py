@@ -43,7 +43,7 @@ def main():
         BazelTrivyContainer(app_owner_msg_subscriber=notifier),
         JiraFindingDataSource(finding_data_source_subscribers, app_owner_msg_subscriber=notifier),
         scanner_subscribers,
-        SlackFindingsFailoverDataStore(projects=REPOS_TO_SCAN[0].projects),
+        SlackFindingsFailoverDataStore(projects=REPOS_TO_SCAN[0].projects if len(REPOS_TO_SCAN) > 0 else []),
     )
     scanner_job.do_periodic_scan(REPOS_TO_SCAN)
 

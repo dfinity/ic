@@ -97,7 +97,7 @@ class GithubApi:
             raise RuntimeError(f"Failed to get installation id, received status code: {http_response.getCode()}")
         installs = json.loads(http_response.read())
         if len(installs) != 1:
-            raise Exception(f"Failed to get installation id, received {len(installs)} installs")
+            raise RuntimeError(f"Failed to get installation id, received {len(installs)} installs")
         install_id = installs[0]["id"]
 
         # generate install token
