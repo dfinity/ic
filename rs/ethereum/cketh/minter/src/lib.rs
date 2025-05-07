@@ -8,7 +8,6 @@ pub mod erc20;
 pub mod eth_logs;
 pub mod eth_rpc;
 pub mod eth_rpc_client;
-pub mod eth_rpc_error;
 pub mod guard;
 pub mod ledger_client;
 pub mod lifecycle;
