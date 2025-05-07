@@ -19,8 +19,10 @@ ic-consensus = { path = "../consensus" }
 ic-consensus-certification = { path = "../consensus/certification" }
 ic-consensus-dkg = { path = "../consensus/dkg" }
 ic-consensus-utils = { path = "../consensus/utils" }
+ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-for-verification-only = { path = "../crypto/for_verification_only" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
+ic-error-types = { path = "../../packages/ic-error-types" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
@@ -45,6 +47,7 @@ ic-replicated-state = { path = "../replicated_state" }
 ic-state-manager = { path = "../state_manager" }
 ic-types = { path = "../types/types" }
 icp-ledger = { path = "../ledger_suite/icp" }
+mockall = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
@@ -60,6 +63,7 @@ url = { workspace = true }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
+pretty_assertions = { workspace = true }
 
 [[bin]]
 name = "ic-replay"

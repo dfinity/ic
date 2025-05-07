@@ -19,6 +19,7 @@ use ic_consensus_utils::{
 };
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_cycles_account_manager::CyclesAccountManager;
+use ic_error_types::UserError;
 use ic_execution_environment::ExecutionServices;
 use ic_interfaces::{
     certification::CertificationPool,
@@ -71,10 +72,12 @@ use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, PrincipalId, Randomness,
     RegistryVersion, ReplicaVersion, SubnetId, Time, UserId,
 };
+use mockall::automock;
 use serde::{Deserialize, Serialize};
 use slog_async::AsyncGuard;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
+    convert::Infallible,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::Duration,
@@ -957,57 +960,15 @@ impl Player {
         version: u64,
         ingress_expiry: Time,
     ) -> Result<Vec<RegistryTransportRecord>, String> {
-        let payload = serialize_get_changes_since_request(version).unwrap();
-        let query = Query {
-            source: QuerySource::User {
-                user_id: UserId::from(PrincipalId::new_anonymous()),
-                ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
-                nonce: None,
-            },
-            receiver: REGISTRY_CANISTER_ID,
-            method_name: "get_changes_since".to_string(),
-            method_payload: payload,
-        };
         self.certify_state_with_dummy_certification();
-        match self
-            .runtime
-            .block_on(self.query_handler.clone().oneshot((query, None)))
-            .unwrap()
-        {
-            Ok((Ok(wasm_result), _)) => match wasm_result {
-                WasmResult::Reply(v) => {
-                    let (high_capacity_deltas, _version) =
-                        deserialize_get_changes_since_response(v)
-                            .map_err(|err| format!("{:?}", err))?;
 
-                    // Dechunkify deltas.
-                    let mut inlined_deltas = vec![];
-                    for delta in high_capacity_deltas {
-                        let query_handler = Arc::new(Mutex::new(self.query_handler.clone()));
-                        let get_chunk = GetChunkImpl {
-                            query_handler,
-                            ingress_expiry,
-                        };
-
-                        let delta = self
-                            .runtime
-                            .block_on(dechunkify_delta(delta, &get_chunk))
-                            .map_err(|err| format!("{:?}", err))?;
-
-                        inlined_deltas.push(delta);
-                    }
-
-                    registry_deltas_to_registry_transport_records(inlined_deltas)
-                        .map_err(|err| format!("{:?}", err))
-                }
-
-                WasmResult::Reject(e) => Err(format!("Query rejected: {}", e)),
-            },
-            Ok((Err(err), _)) => Err(format!("Query failed: {:?}", err)),
-            Err(QueryExecutionError::CertifiedStateUnavailable) => {
-                panic!("Certified state unavailable for query call.")
-            }
-        }
+        let query_execution_service = Arc::new(Mutex::new(self.query_handler.clone()));
+        get_changes_since(
+            version,
+            ingress_expiry,
+            &self.runtime,
+            &query_execution_service,
+        )
     }
 
     /// Return the SubnetRecord of this subnet at the latest registry version.
@@ -1294,13 +1255,89 @@ impl Player {
     }
 }
 
-struct GetChunkImpl {
-    query_handler: Arc<Mutex<QueryExecutionService>>,
+// This is just to avoid clippy complaints about complicated return type.
+type PerformQueryResult = Result<(Result<WasmResult, UserError>, Time), QueryExecutionError>;
+
+#[automock]
+#[async_trait]
+trait PerformQuery {
+    async fn perform_query(&self, query: Query) -> Result<PerformQueryResult, Infallible>;
+}
+
+#[async_trait]
+impl PerformQuery for Arc<Mutex<QueryExecutionService>> {
+    async fn perform_query(&self, query: Query) -> Result<PerformQueryResult, Infallible> {
+        let query_execution_service = self
+            .lock()
+            // In case of Mutex poisoning (as per usual).
+            .unwrap()
+            .clone();
+
+        query_execution_service.oneshot((query, None)).await
+    }
+}
+
+fn get_changes_since(
+    version: u64,
+    ingress_expiry: Time,
+    runtime: &Runtime,
+    perform_query: &(impl PerformQuery + Sync),
+) -> Result<Vec<RegistryTransportRecord>, String> {
+    let payload = serialize_get_changes_since_request(version).unwrap();
+    let query = Query {
+        source: QuerySource::User {
+            user_id: UserId::from(PrincipalId::new_anonymous()),
+            ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
+            nonce: None,
+        },
+        receiver: REGISTRY_CANISTER_ID,
+        method_name: "get_changes_since".to_string(),
+        method_payload: payload,
+    };
+    match runtime
+        .block_on(perform_query.perform_query(query))
+        .unwrap()
+    {
+        Ok((Ok(wasm_result), _time)) => match wasm_result {
+            WasmResult::Reply(v) => {
+                let (high_capacity_deltas, _version) = deserialize_get_changes_since_response(v)
+                    .map_err(|err| format!("{:?}", err))?;
+
+                // Dechunkify deltas.
+                let mut inlined_deltas = vec![];
+                for delta in high_capacity_deltas {
+                    let get_chunk = GetChunkImpl {
+                        perform_query,
+                        ingress_expiry,
+                    };
+
+                    let delta = runtime
+                        .block_on(dechunkify_delta(delta, &get_chunk))
+                        .map_err(|err| format!("{:?}", err))?;
+
+                    inlined_deltas.push(delta);
+                }
+
+                registry_deltas_to_registry_transport_records(inlined_deltas)
+                    .map_err(|err| format!("{:?}", err))
+            }
+
+            WasmResult::Reject(e) => Err(format!("Query rejected: {}", e)),
+        },
+        Ok((Err(err), _)) => Err(format!("Query failed: {:?}", err)),
+        Err(QueryExecutionError::CertifiedStateUnavailable) => {
+            panic!("Certified state unavailable for query call.")
+        }
+    }
+}
+
+struct GetChunkImpl<'a, PerformQueryImpl: PerformQuery + Sync> {
+    perform_query: &'a PerformQueryImpl,
     ingress_expiry: Time,
 }
 
 #[async_trait]
-impl GetChunk for GetChunkImpl {
+impl<PerformQueryImpl: PerformQuery + Sync> GetChunk for GetChunkImpl<'_, PerformQueryImpl> {
     async fn get_chunk_without_validation(
         &self,
         chunk_content_sha256: &[u8],
@@ -1327,12 +1364,7 @@ impl GetChunk for GetChunkImpl {
         };
 
         // Send request.
-        let result = {
-            let query_handler = self.query_handler.lock().unwrap().clone();
-            // Release hold.
-
-            query_handler.oneshot((request, None)).await.unwrap()
-        };
+        let result = self.perform_query.perform_query(request).await.unwrap();
 
         // Handle problems with sending.
         let result = match result {
@@ -1590,9 +1622,16 @@ fn get_state_hash<T>(
 
 #[cfg(test)]
 mod tests {
+    use ic_crypto_sha2::Sha256;
     use ic_interfaces_state_manager::TransientStateHashError;
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_logger::replica_logger::no_op_logger;
+    use ic_registry_canister_api::{Chunk, GetChunkRequest};
+    use ic_registry_transport::pb::v1::{
+        high_capacity_registry_value, HighCapacityRegistryDelta,
+        HighCapacityRegistryGetChangesSinceResponse, HighCapacityRegistryValue,
+        LargeValueChunkKeys,
+    };
     use ic_test_utilities_consensus::fake::FakeSigner;
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
@@ -1601,7 +1640,10 @@ mod tests {
         },
         crypto::{CryptoHash, Signed},
         signature::ThresholdSignatureShare,
+        time::GENESIS,
     };
+    use pretty_assertions::assert_eq;
+    use prost::Message;
 
     use super::*;
 
@@ -1770,5 +1812,187 @@ mod tests {
 
     fn fake_state_hash() -> CryptoHashOfState {
         CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]))
+    }
+
+    // This test is maybe a bit of a mockery. Realistic testing is hard...
+    #[test]
+    fn test_get_changes_since() {
+        // Step 1: Prepare the world.
+        //
+        // This almost entirely consists of expecting that various Registry
+        // canister methods are called. More precisely, the following calls are
+        // supposed to be made by the code under test:
+        //
+        //     1. get_changes_since - This is the main thing, ofc.
+        //
+        //     2. A couple of get_chunk calls. These are to fetch the content of
+        //        larger records received during the first call.
+        const VERSION: u64 = 42;
+        let ingress_expiry = GENESIS + Duration::from_secs(123_456_789);
+
+        type ExpectedCall = (
+            /* method_name: */ &'static str,
+            /* request: */ Vec<u8>,
+            /* reply: */ Vec<u8>,
+        );
+        let expected_registry_canister_method_calls: [ExpectedCall; 3] = [
+            (
+                "get_changes_since",
+                serialize_get_changes_since_request(VERSION).unwrap(),
+                HighCapacityRegistryGetChangesSinceResponse {
+                    version: VERSION,
+                    deltas: vec![
+                        HighCapacityRegistryDelta {
+                            key: b"at one point had a large value".to_vec(),
+                            values: vec![
+                                HighCapacityRegistryValue {
+                                    version: 43,
+                                    content: Some(high_capacity_registry_value::Content::Value(
+                                        b"inline".to_vec(),
+                                    )),
+                                    timestamp_seconds: 0,
+                                },
+                                HighCapacityRegistryValue {
+                                    version: 44,
+                                    content: Some(
+                                        high_capacity_registry_value::Content::LargeValueChunkKeys(
+                                            LargeValueChunkKeys {
+                                                chunk_content_sha256s: vec![
+                                                    Sha256::hash(b"first".as_ref()).to_vec(),
+                                                    Sha256::hash(b"second".as_ref()).to_vec(),
+                                                ],
+                                            },
+                                        ),
+                                    ),
+                                    timestamp_seconds: 0,
+                                },
+                                HighCapacityRegistryValue {
+                                    version: 45,
+                                    content: Some(
+                                        high_capacity_registry_value::Content::DeletionMarker(true),
+                                    ),
+                                    timestamp_seconds: 0,
+                                },
+                            ],
+                        },
+                        HighCapacityRegistryDelta {
+                            key: b"boring".to_vec(),
+                            values: vec![
+                                HighCapacityRegistryValue {
+                                    version: 43,
+                                    content: Some(high_capacity_registry_value::Content::Value(
+                                        b"herp".to_vec(),
+                                    )),
+                                    timestamp_seconds: 0,
+                                },
+                                HighCapacityRegistryValue {
+                                    version: 50,
+                                    content: Some(high_capacity_registry_value::Content::Value(
+                                        b"derp".to_vec(),
+                                    )),
+                                    timestamp_seconds: 0,
+                                },
+                            ],
+                        },
+                    ],
+                    error: None,
+                }
+                .encode_to_vec(),
+            ),
+            (
+                "get_chunk",
+                Encode!(&GetChunkRequest {
+                    content_sha256: Some(Sha256::hash(b"first".as_ref()).to_vec()),
+                })
+                .unwrap(),
+                {
+                    let result: Result<Chunk, String> = Ok(Chunk {
+                        content: Some(b"first".to_vec()),
+                    });
+                    Encode!(&result).unwrap()
+                },
+            ),
+            (
+                "get_chunk",
+                Encode!(&GetChunkRequest {
+                    content_sha256: Some(Sha256::hash(b"second".as_ref()).to_vec()),
+                })
+                .unwrap(),
+                {
+                    let result: Result<Chunk, String> = Ok(Chunk {
+                        content: Some(b"second".to_vec()),
+                    });
+                    Encode!(&result).unwrap()
+                },
+            ),
+        ];
+
+        let mut perform_query = MockPerformQuery::new();
+        for (method_name, request, reply) in expected_registry_canister_method_calls {
+            let query = Query {
+                source: QuerySource::User {
+                    user_id: UserId::from(PrincipalId::new_anonymous()),
+                    ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
+                    nonce: None,
+                },
+                receiver: REGISTRY_CANISTER_ID,
+                method_name: method_name.to_string(),
+                method_payload: request,
+            };
+            let reply_time = GENESIS + Duration::from_secs(123_000_000);
+
+            perform_query
+                .expect_perform_query()
+                .with(mockall::predicate::eq(query))
+                .times(1)
+                .returning(move |_query| {
+                    // Yo, dawg. I heard you like Results.
+                    Ok(Ok((Ok(WasmResult::Reply(reply.clone())), reply_time)))
+                });
+        }
+
+        // Step 2: Run code under test (finally!).
+
+        let result = get_changes_since(
+            VERSION,
+            ingress_expiry,
+            &Runtime::new().unwrap(),
+            &perform_query,
+        );
+
+        // Step 3: Verify result(s).
+
+        assert_eq!(
+            result,
+            Ok(vec![
+                RegistryTransportRecord {
+                    key: "at one point had a large value".to_string(),
+                    value: Some(b"inline".to_vec()),
+                    version: RegistryVersion::from(43),
+                },
+                RegistryTransportRecord {
+                    key: "boring".to_string(),
+                    value: Some(b"herp".to_vec()),
+                    version: RegistryVersion::from(43),
+                },
+                // This is the most interesting one. This shows that monolithic
+                // blob reconstitution worked the way it's supposed to.
+                RegistryTransportRecord {
+                    key: "at one point had a large value".to_string(),
+                    value: Some(b"firstsecond".to_vec()),
+                    version: RegistryVersion::from(44),
+                },
+                RegistryTransportRecord {
+                    key: "at one point had a large value".to_string(),
+                    value: None,
+                    version: RegistryVersion::from(45),
+                },
+                RegistryTransportRecord {
+                    key: "boring".to_string(),
+                    value: Some(b"derp".to_vec()),
+                    version: RegistryVersion::from(50),
+                },
+            ]),
+        );
     }
 }
