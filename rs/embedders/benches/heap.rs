@@ -9,7 +9,7 @@
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use embedders_bench::SetupAction;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
-use ic_sys::{HUGE_PAGE_SIZE, PAGE_SIZE};
+use ic_sys::PAGE_SIZE;
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter};
 
@@ -51,17 +51,17 @@ enum Size {
 #[derive(Copy, Clone, Display, EnumIter)]
 enum Step {
     #[strum(serialize = "step_4k")]
-    Page = PAGE_SIZE as isize,
+    Page = 4096,
     #[strum(serialize = "step_8k")]
-    TwoPages = 2 * PAGE_SIZE as isize,
+    TwoPages = 2 * 4096,
     #[strum(serialize = "step_64k")]
-    WasmPage = WASM_PAGE_SIZE_IN_BYTES as isize,
+    WasmPage = 65536,
     #[strum(serialize = "step_128k")]
-    TwoWasmPages = 2 * WASM_PAGE_SIZE_IN_BYTES as isize,
+    TwoWasmPages = 2 * 65536,
     #[strum(serialize = "step_2m")]
-    HugePage = HUGE_PAGE_SIZE as isize,
+    HugePage = 2 * 1024 * 1024,
     #[strum(serialize = "step_4m")]
-    TwoHugePages = 2 * HUGE_PAGE_SIZE as isize,
+    TwoHugePages = 2 * 2 * 1024 * 1024,
 }
 
 #[derive(Copy, Clone, Display, EnumIter)]
