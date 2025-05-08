@@ -11,11 +11,11 @@ impl Registry {
         let (canister_ids, target_subnet_id) =
             self.validate_payload(payload).expect("Invalid payload");
 
-        self.maybe_apply_mutation_internal(vec![self.migrate_canisters_to_subnet(
+        self.maybe_apply_mutation_internal(self.migrate_canisters_to_subnet(
             self.latest_version(),
             canister_ids,
             target_subnet_id,
-        )]);
+        ));
 
         MigrateCanistersResponse {}
     }
@@ -96,10 +96,10 @@ mod test {
             )
             .unwrap();
 
-        registry.apply_mutations_for_test(vec![routing_table_into_registry_mutation(
+        registry.apply_mutations_for_test(routing_table_into_registry_mutation(
             initial_routing_table.clone(),
             registry_mutation::Type::Upsert as i32,
-        )]);
+        ));
 
         let first_saved_table = registry.get_routing_table_or_panic(registry.latest_version());
         assert_eq!(first_saved_table, initial_routing_table);

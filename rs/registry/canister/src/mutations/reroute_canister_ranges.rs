@@ -73,11 +73,11 @@ impl Registry {
             ));
         }
 
-        self.maybe_apply_mutation_internal(vec![self.reroute_canister_ranges_mutation(
+        self.maybe_apply_mutation_internal(self.reroute_canister_ranges_mutation(
             version,
             reassigned_canister_ranges,
             destination,
-        )]);
+        ));
 
         Ok(())
     }
