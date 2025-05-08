@@ -102,3 +102,6 @@ echo "Upgrade installation complete"
 
 guestos_upgrade_cleanup
 echo "Recovery updater completed successfully"
+
+echo "Rebooting guestos..."
+systemctl restart guestos
