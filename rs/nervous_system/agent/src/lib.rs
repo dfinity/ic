@@ -13,6 +13,7 @@ pub mod nns;
 mod null_request;
 pub mod pocketic_impl;
 mod registry;
+mod fetch_large_record_test_canister;
 pub mod sns;
 #[cfg(feature = "test")]
 pub mod state_machine_impl;

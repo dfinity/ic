@@ -72,11 +72,14 @@ url = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+canister-test = { path = "../../rust_canisters/canister_test" }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-nervous-system-agent = { path = "../../nervous_system/agent" }
 ic-nervous-system-chunks = { path = "../../nervous_system/chunks" }
 ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
-pocket-ic = { path = "../../../packages/pocket-ic" }
 ic-registry-canister-api = { path = "../canister/api" }
+ic-registry-fetch-large-record-test-canister = { path = "../fetch_large_record_test_canister" }
+pocket-ic = { path = "../../../packages/pocket-ic" }
 
 [[bin]]
 name = "ic-admin"
