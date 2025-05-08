@@ -81,7 +81,7 @@ jobs:
         uses: ./.github/actions/bazel-test-all/
         with:
           BAZEL_COMMAND: test --config=ci --local_test_jobs=${{ env.JOBS }} --test_tag_filters=k8s,-manual,-colocated,-long_test,-system_test_hourly,-system_test_nightly --k8s
-          BAZEL_TARGETS: '//rs/tests/nns:node_removal_from_registry_test'
+          BAZEL_TARGETS: //rs/tests/nns:node_removal_from_registry_test
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
 
