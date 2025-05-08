@@ -218,7 +218,17 @@ if [[ "$1" == "upgrade-install" && "$#" -ge 6 ]]; then
     echo "Root image written successfully"
 
     echo "Updating grubenv to prepare for next boot..."
+    # Update boot_alternative to point to the new slot
+    if [[ "${BOOT_DEV}" == *"p7" ]]; then
+        boot_alternative="B"
+    elif [[ "${BOOT_DEV}" == *"p4" ]]; then
+        boot_alternative="A"
+    else
+        echo "ERROR: Invalid boot device partition number"
+        exit 1
+    fi
     boot_cycle=first_boot
+    echo "Setting boot_alternative to ${boot_alternative} and boot_cycle to ${boot_cycle}"
     write_grubenv "${GRUBENV_FILE}"
     echo "Grubenv updated successfully"
     echo "Recovery updater mode completed"
