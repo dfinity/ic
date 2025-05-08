@@ -1,6 +1,8 @@
 use candid::{Encode, Principal};
 use ic_admin::initialize_registry_local_store;
-use ic_base_types::RegistryVersion;
+use canister_test::Project;
+use ic_base_types::{CanisterId, RegistryVersion};
+use ic_crypto_sha2::Sha256;
 use ic_nervous_system_agent::{pocketic_impl::PocketIcAgent, CallCanisters};
 use ic_nervous_system_chunks::test_data::MEGA_BLOB;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
@@ -8,6 +10,7 @@ use ic_nervous_system_integration_tests::pocket_ic_helpers::{install_canister, N
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_nns_test_utils::common::{build_test_registry_wasm, NnsInitPayloadsBuilder};
 use ic_registry_canister_api::mutate_test_high_capacity_records;
+use ic_registry_fetch_large_record_test_canister::{CallRegistryGetChangesSinceRequest, ContentSummary};
 use ic_registry_local_store::{KeyMutation, LocalStoreImpl, LocalStoreReader};
 use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
 use std::{env, io::Write, process::Command};
@@ -152,4 +155,79 @@ async fn test_update_registry_local_store_handles_chunked_records() {
                 }
             ]
     );
+
+    // Side quest: Fetch large record FROM A CANISTER. This requires the same
+    // "Prepare the world", so piggy pack.
+    let fetch_large_record_test_canister_id = CanisterId::from(670_767_024);
+    install_canister(
+        &pocket_ic,
+        "fetch_large_record_test_canister_id",
+        fetch_large_record_test_canister_id,
+        vec![], // arg
+        Project::cargo_bin_maybe_from_env("fetch_large_record_test_canister", &[]),
+        Some(fetch_large_record_test_canister_id.get()), // controller
+    )
+    .await;
+
+    let content_summary = pocket_ic
+        .call(
+            fetch_large_record_test_canister_id,
+            CallRegistryGetChangesSinceRequest {},
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        content_summary,
+        ContentSummary {
+            len: MEGA_BLOB.len() as u64,
+            sha256: Sha256::hash(&MEGA_BLOB).to_vec(),
+        },
+    );
+
+    PocketIcAgent::new(&pocket_ic, GOVERNANCE_CANISTER_ID)
+        .call(
+            REGISTRY_CANISTER_ID,
+            mutate_test_high_capacity_records::Request {
+                id: 42,
+                operation: mutate_test_high_capacity_records::Operation::UpsertSmall,
+            },
+        )
+        .await
+        .unwrap();
+
+    let content_summary = pocket_ic
+        .call(
+            fetch_large_record_test_canister_id,
+            CallRegistryGetChangesSinceRequest {},
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        content_summary,
+        ContentSummary {
+            len: "small value".len() as u64,
+            sha256: Sha256::hash(b"small value").to_vec(),
+        },
+    );
+
+    PocketIcAgent::new(&pocket_ic, GOVERNANCE_CANISTER_ID)
+        .call(
+            REGISTRY_CANISTER_ID,
+            mutate_test_high_capacity_records::Request {
+                id: 42,
+                operation: mutate_test_high_capacity_records::Operation::Delete,
+            },
+        )
+        .await
+        .unwrap();
+    let reply = pocket_ic
+        .call(
+            fetch_large_record_test_canister_id,
+            CallRegistryGetChangesSinceRequest {},
+        )
+        .await
+        .unwrap();
+    assert_eq!(reply, None);
 }

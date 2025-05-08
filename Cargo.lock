@@ -5807,6 +5807,7 @@ dependencies = [
  "async-trait",
  "base64 0.13.1",
  "candid",
+ "canister-test",
  "chrono",
  "clap 4.5.27",
  "cycles-minting-canister",
@@ -5819,6 +5820,7 @@ dependencies = [
  "ic-canister-client-sender",
  "ic-config",
  "ic-crypto-internal-types",
+ "ic-crypto-sha2",
  "ic-crypto-utils-threshold-sig-der",
  "ic-http-utils",
  "ic-interfaces-registry",
@@ -10450,6 +10452,7 @@ dependencies = [
  "ic-nns-governance-api",
  "ic-node-rewards-canister-api",
  "ic-registry-canister-api",
+ "ic-registry-fetch-large-record-test-canister",
  "ic-sns-governance-api",
  "ic-sns-root",
  "ic-sns-swap",
@@ -11957,6 +11960,19 @@ version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
  "prost-build 0.13.4",
+]
+
+[[package]]
+name = "ic-registry-fetch-large-record-test-canister"
+version = "0.0.1"
+dependencies = [
+ "candid",
+ "ic-cdk 0.17.1",
+ "ic-crypto-sha2",
+ "ic-nervous-system-canisters",
+ "ic-registry-transport",
+ "ic-types",
+ "serde",
 ]
 
 [[package]]
