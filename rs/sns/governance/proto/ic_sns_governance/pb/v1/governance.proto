@@ -349,7 +349,7 @@ message ChunkedCanisterWasm {
 }
 
 // A proposal function that upgrades a canister that is controlled by the
-// SNS governance canister.
+// SNS Governance canister.
 message UpgradeSnsControlledCanister {
   // The id of the canister that is upgraded.
   ic_base_types.pb.v1.PrincipalId canister_id = 1;
@@ -561,7 +561,7 @@ message Proposal {
     // Id = 2.
     NervousSystemParameters manage_nervous_system_parameters = 6;
 
-    // Upgrade a canister that is controlled by the SNS governance canister.
+    // Upgrade a canister that is controlled by the SNS Governance canister.
     //
     // Id = 3.
     UpgradeSnsControlledCanister upgrade_sns_controlled_canister = 7;
@@ -1045,8 +1045,7 @@ message NervousSystemParameters {
   // extended by somewhat less than this parameter.
   // The maximum total voting period extension is 2 * wait_for_quiet_deadline_increase_seconds.
   // For more information, see the wiki page on the wait-for-quiet algorithm:
-  // Shah-TODO link doesn't exist
-  // https://wiki.internetcomputer.org/wiki/Network_Nervous_System#Proposal_decision_and_wait-for-quiet
+  // https://internetcomputer.org/how-it-works/network-nervous-system-nns/#voting-rules
   optional uint64 wait_for_quiet_deadline_increase_seconds = 18;
 
   // TODO NNS1-2169: This field currently has no effect.
@@ -1205,7 +1204,7 @@ message NeuronPermissionList {
 // This has diverged from NNS: this uses the same tag for different fields.
 // Therefore, we cannot simply move one of the definitions to a shared library.
 //
-// To make it a little easier to eventually deduplicate NNS and SNS governance
+// To make it a little easier to eventually deduplicate NNS and SNS Governance
 // code, tags should be chosen so that it is new to BOTH this and the NNS
 // RewardEvent. (This also applies to other message definitions.)
 message RewardEvent {
@@ -1497,7 +1496,7 @@ message Governance {
 
   // The initialization parameters used to spawn an SNS
   string sns_initialization_parameters = 22;
-  // (Q: WASM hashes??)
+
   // A version of the SNS defined by the WASM hashes of its canisters.
   message Version {
     // The hash of the Root canister WASM.
@@ -1702,7 +1701,6 @@ message ManageNeuron {
       uint64 e8s = 1;
     }
 
-    // (Q: where is the optional?)
     // The (optional) amount to disburse out of the neuron. If not specified the cached
     // stake is used.
     Amount amount = 1;
@@ -1727,7 +1725,7 @@ message ManageNeuron {
 
     // The nonce that is used to compute the child neuron's
     // subaccount which also serves as the child neuron's ID. This nonce
-    // is also used as the memo field in the ledger transfer that transfers (Q: ledger transfer?)
+    // is also used as the memo field in the ledger transfer that transfers
     // the stake from the parent to the child neuron.
     uint64 memo = 2;
   }
@@ -2172,7 +2170,7 @@ message ClaimSwapNeuronsRequest {
 
 // An enum for representing the various statuses a Neuron being claimed by the
 // `claim_swap_neurons` API may have. The status is reported back to callers of
-// the API (mainly the SNS decentralization swap canister) to indicate the success of the
+// the API (mainly the SNS Swap canister) to indicate the success of the
 // operation.
 enum ClaimedSwapNeuronStatus {
   // Unspecified represents the default value for unknown enum values when deserializing.
@@ -2249,7 +2247,7 @@ message ClaimSwapNeuronsResponse {
   message SwapNeuron {
     NeuronId id = 1;
 
-    // The status of claiming of a requested decentralization swap neuron.
+    // The status of claiming of a requested swap neuron.
     ClaimedSwapNeuronStatus status = 2;
   }
 }
@@ -2268,7 +2266,7 @@ message AddMaturityRequest {
 }
 
 // The response to a request to add maturity to a neuron. The associated endpoint is only
-// available when SNS governance is compiled with the `test` feature enabled.
+// available when SNS Governance is compiled with the `test` feature enabled.
 message AddMaturityResponse {
   optional uint64 new_maturity_e8s = 1;
 }
@@ -2359,7 +2357,7 @@ message GetUpgradeJournalRequest {
   optional uint64 limit = 1;
 
   // The starting index from which to return entries, counting from the oldest entry (0).
-  // If not specified, return the most recent entries. (Q: replace with entry?)
+  // If not specified, return the most recent entries.
   optional uint64 offset = 2;
 }
 
@@ -2377,7 +2375,7 @@ message GetUpgradeJournalResponse {
 }
 
 // A request to mint tokens for a particular principal. The associated endpoint
-// is only available on SNS governance, and only then when SNS governance is
+// is only available on SNS Governance, and only then when SNS Governance is
 // compiled with the `test` feature enabled.
 message MintTokensRequest {
   optional Account recipient = 1;
@@ -2385,8 +2383,8 @@ message MintTokensRequest {
 }
 
 // The response to a request to mint tokens for a particular principal. The
-// associated endpoint is only available on SNS governance, and only then when
-// SNS governance is compiled with the `test` feature enabled.
+// associated endpoint is only available on SNS Governance, and only then when
+// SNS Governance is compiled with the `test` feature enabled.
 message MintTokensResponse {}
 
 // A Ledger subaccount.
