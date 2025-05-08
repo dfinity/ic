@@ -126,7 +126,7 @@ async fn test_update_registry_local_store_handles_chunked_records() {
     let output = Command::new(ic_admin_path)
         .args([
             "--nns-urls",
-            &endpoint.to_string(),
+            endpoint.as_ref(),
             "update-registry-local-store",
             registry_local_store.path().to_str().unwrap(),
         ])
