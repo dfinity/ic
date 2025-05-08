@@ -162,9 +162,7 @@ impl Farm {
         path: P,
         filename: &str,
     ) -> FarmResult<FileId> {
-        let size = std::fs::metadata(&path)
-            .map_err(|e| FarmError::IoError(e))?
-            .len();
+        let size = std::fs::metadata(&path).map_err(FarmError::IoError)?.len();
         info!(
             self.logger,
             "Uploading file: {} of size {} bytes ...", filename, size
