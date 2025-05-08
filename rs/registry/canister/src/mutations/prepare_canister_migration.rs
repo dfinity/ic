@@ -321,9 +321,9 @@ mod tests {
         )
         .unwrap();
 
-        let mutation =
+        let mutations =
             routing_table_into_registry_mutation(rt, registry_mutation::Type::Update as i32);
-        registry.maybe_apply_mutation_internal(vec![mutation]);
+        registry.maybe_apply_mutation_internal(mutations);
 
         registry
     }
