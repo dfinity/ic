@@ -7,7 +7,7 @@
 set -euo pipefail
 
 if [ "${USE_TMPFS:-}" = "true" ]; then
-    while [ "$(ls /tmp/tmpfs | wc -l)" -gt 4 ]; do
+    while [ "$(ls /tmp/tmpfs | wc -l)" -gt 3 ]; do
         echo "Waiting..."
         sleep 1
     done
