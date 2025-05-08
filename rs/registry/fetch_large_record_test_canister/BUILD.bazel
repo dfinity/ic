@@ -42,7 +42,7 @@ rust_canister(
     name = "canister",
     testonly = True,
     srcs = ["src/main.rs"],
-    service_file = "interface.did",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = "interface.did",
     deps = DEPENDENCIES + [":fetch_large_record_test_canister"],
 )
