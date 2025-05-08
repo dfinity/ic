@@ -5,8 +5,7 @@ use serde::Deserialize;
 // this is just a super simple canister and it's only for test, this is ok.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, CandidType, Deserialize)]
-pub struct CallRegistryGetChangesSinceRequest {
-}
+pub struct CallRegistryGetChangesSinceRequest {}
 
 #[derive(Clone, Debug, PartialEq, Eq, CandidType, Deserialize)]
 pub struct ContentSummary {

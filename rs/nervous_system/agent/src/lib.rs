@@ -5,6 +5,7 @@ use std::time::Duration;
 use std::{fmt::Display, future::Future};
 
 pub mod agent_impl;
+mod fetch_large_record_test_canister;
 pub mod helpers;
 pub mod ledger;
 pub mod management_canister;
@@ -13,7 +14,6 @@ pub mod nns;
 mod null_request;
 pub mod pocketic_impl;
 mod registry;
-mod fetch_large_record_test_canister;
 pub mod sns;
 #[cfg(feature = "test")]
 pub mod state_machine_impl;
