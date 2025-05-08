@@ -110,7 +110,7 @@ impl GetSuccessorsHandler {
     /// Handles a request for get successors. The response will contain the blocks that the adapter
     /// currently contains in its cache as well as the headers for the next blocks.
     /// If the channels are full, PruneOldBlocks and EnqueueNewBlocksToDownload will not be executed.
-    pub async fn get_successors(
+    pub fn get_successors(
         &self,
         request: GetSuccessorsRequest,
     ) -> Result<GetSuccessorsResponse, Status> {
@@ -382,7 +382,7 @@ mod test {
                 .expect("invalid block");
         }
 
-        let response = handler.get_successors(request).await.unwrap();
+        let response = handler.get_successors(request).unwrap();
 
         // Check that blocks contain block 1.
         assert_eq!(response.blocks.len(), 1);
@@ -465,7 +465,7 @@ mod test {
             anchor: genesis_hash,
             processed_block_hashes: vec![],
         };
-        let response = handler.get_successors(request).await.unwrap();
+        let response = handler.get_successors(request).unwrap();
 
         // Response should be contain the blocks and next headers since the regtest network does not have checkpoints.
         assert_eq!(response.blocks.len(), 2);
@@ -532,7 +532,7 @@ mod test {
             anchor: genesis_hash,
             processed_block_hashes: vec![],
         };
-        let response = handler.get_successors(request).await.unwrap();
+        let response = handler.get_successors(request).unwrap();
         assert_eq!(response.blocks.len(), 3);
         assert!(
             matches!(response.blocks.first(), Some(block) if decode_block(block).block_hash() == main_block_1.block_hash())
@@ -577,7 +577,7 @@ mod test {
             anchor: genesis_hash,
             processed_block_hashes: vec![],
         };
-        let response = handler.get_successors(request).await.unwrap();
+        let response = handler.get_successors(request).unwrap();
         assert_eq!(response.blocks.len(), MAX_BLOCKS_LENGTH);
     }
 
@@ -647,7 +647,7 @@ mod test {
             anchor: genesis_hash,
             processed_block_hashes: vec![],
         };
-        let response = handler.get_successors(request).await.unwrap();
+        let response = handler.get_successors(request).unwrap();
         assert_eq!(
             response.blocks.len(),
             1,
@@ -725,7 +725,7 @@ mod test {
             anchor: genesis_hash,
             processed_block_hashes: vec![],
         };
-        let response = handler.get_successors(request).await.unwrap();
+        let response = handler.get_successors(request).unwrap();
         // There are 2 blocks in the chain: {large, small}.
         // Only the large block should be returned in this response.
         assert_eq!(response.blocks.len(), 1);
@@ -782,7 +782,7 @@ mod test {
             anchor: genesis_hash,
             processed_block_hashes: vec![],
         };
-        let response = handler.get_successors(request).await.unwrap();
+        let response = handler.get_successors(request).unwrap();
 
         // Six blocks in the chain. First 5 are small blocks and the last block is large.
         // Should return the first 5 blocks as the total size is below the cap.
