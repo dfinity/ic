@@ -1,5 +1,5 @@
 {
-  "checksum": "7b9bdc00e460dc4fdc5a4b7b9b56ffa17383599a71f63df278b7621689f6f049",
+  "checksum": "b908b96e4913cfc202890880cec00b55f6fda2f3a2a3f1440da7df3bd665ee24",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11729,7 +11729,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/cc/1.1.37/download",
-          "sha256": "40545c26d092346d8a8dab71ee48e7685a7a9cba76e634790c215b41a4a7b4cf"
+          "sha256": "40545c26d092346d8a8dab71ee48e7685a7a9cba76e634790c215b41a4a7b4cf",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:cc_rs.patch"
+          ]
         }
       },
       "targets": [
@@ -42780,6 +42786,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "data": {
+          "common": [
+            "@openssl//:gen_dir"
+          ],
+          "selects": {}
+        },
         "data_glob": [
           "**"
         ],
@@ -42963,7 +42975,8 @@
         ],
         "crate_features": {
           "common": [
-            "libc"
+            "libc",
+            "static"
           ],
           "selects": {}
         },
@@ -50089,6 +50102,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "data": {
+          "common": [
+            "@openssl//:gen_dir"
+          ],
+          "selects": {}
+        },
         "data_glob": [
           "**"
         ],
@@ -50107,6 +50126,15 @@
               "target": "vcpkg"
             }
           ],
+          "selects": {}
+        },
+        "build_script_env": {
+          "common": {
+            "OPENSSL_INCLUDE_DIR": "$(location @openssl//:gen_dir)/include",
+            "OPENSSL_LIB_DIR": "$(location @openssl//:gen_dir)/lib64",
+            "OPENSSL_NO_VENDOR": "1",
+            "OPENSSL_STATIC": "1"
+          },
           "selects": {}
         },
         "links": "openssl"
