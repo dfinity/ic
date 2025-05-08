@@ -2,14 +2,14 @@
 
 set -e
 
-# Check if required arguments are provided
-if [ "$#" -ne 2 ]; then
-    echo "Usage: $0 <URL> <HASH>"
-    exit 1
-fi
+# Function to extract a value from /proc/cmdline
+get_cmdline_var() {
+    local var="$1"
+    grep -oP "${var}=[^ ]*" /proc/cmdline | head -n1 | cut -d= -f2-
+}
 
-URL="$1"
-TARGET_HASH="$2"
+URL="$(get_cmdline_var url)"
+TARGET_HASH="$(get_cmdline_var hash)"
 
 echo "=== Recovery Updater Started ==="
 echo "URL: $URL"
@@ -20,14 +20,12 @@ TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
 echo "Downloading upgrade from $URL..."
-
-# Download the file
 if ! curl -L -o "$TMPDIR/upgrade.tar.zst" "$URL"; then
     echo "Failed to download upgrade file"
     exit 1
 fi
 
-# Verify hash
+echo "Verifying upgrade image hash..."
 ACTUAL_HASH=$(sha256sum "$TMPDIR/upgrade.tar.zst" | cut -d' ' -f1)
 if [ "$ACTUAL_HASH" != "$TARGET_HASH" ]; then
     echo "Hash verification failed"
