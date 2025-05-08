@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -80,8 +80,8 @@ DEV_DEPENDENCIES = [
     "//rs/nervous_system/chunks",
     "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
     "//rs/pocket_ic_server:pocket-ic-server",
-    "//rs/registry/canister/api",
     "//rs/registry/admin:ic-admin",
+    "//rs/registry/canister/api",
 ]
 
 DEV_DATA = [
@@ -123,7 +123,10 @@ BINARY_SRCS = [
 
 LIBRARY_SRCS = glob(
     ["src/**/*.rs"],
-    exclude = BINARY_SRCS + ["**/*tests*/**", "**/*tests.rs"],
+    exclude = BINARY_SRCS + [
+        "**/*tests*/**",
+        "**/*tests.rs",
+    ],
 )
 
 rust_library(
