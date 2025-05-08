@@ -22,10 +22,6 @@ component_files = {
     Label("//ic-os/components/setupos-scripts:config.service"): "/etc/systemd/system/config.service",
     Label("//ic-os/components/setupos-scripts:setupos.service"): "/etc/systemd/system/setupos.service",
 
-    # TODO: delete
-    Label("hostos-scripts/recovery-updater/recovery-updater.service"): "/etc/systemd/system/recovery-updater.service",
-    Label("hostos-scripts/recovery-updater/recovery-updater.sh"): "/opt/ic/bin/recovery-updater.sh",
-
     # early-boot
     Label("early-boot/setup-hostname/hostname-setupos"): "/etc/hostname",
     Label("early-boot/fstab/fstab-setupos"): "/etc/fstab",
