@@ -3,7 +3,7 @@ use crate::{
     canister_manager::{
         uninstall_canister, AddCanisterChangeToHistory, CanisterManager, CanisterManagerError,
         CanisterMgrConfig, DtsInstallCodeResult, InstallCodeContext, StopCanisterResult,
-        WasmSource,
+        WasmSource, MAX_SLICE_SIZE_BYTES,
     },
     canister_settings::CanisterSettings,
     execution_environment::{as_round_instructions, CompilationCostHandling, RoundCounters},
@@ -12,7 +12,7 @@ use crate::{
     IngressHistoryWriterImpl, RoundLimits,
 };
 use assert_matches::assert_matches;
-use candid::Decode;
+use candid::{CandidType, Decode, Encode};
 use ic_base_types::{NumSeconds, PrincipalId};
 use ic_config::{
     execution_environment::{
@@ -23,8 +23,10 @@ use ic_config::{
     subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
-use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
-use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
+use ic_embedders::{
+    wasm_utils::instrumentation::{instruction_to_cost, WasmMemoryType},
+    wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits},
+};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, SubnetAvailableMemory};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
@@ -50,7 +52,6 @@ use ic_replicated_state::{
     CallContextManager, CallOrigin, CanisterState, CanisterStatus, NumWasmPages, ReplicatedState,
 };
 use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig};
-use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     state_manager::FakeStateManager,
@@ -80,7 +81,8 @@ use ic_types::{
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset};
-use more_asserts::{assert_ge, assert_lt};
+use more_asserts::{assert_ge, assert_le, assert_lt};
+use serde::Deserialize;
 use std::{collections::BTreeSet, convert::TryFrom, mem::size_of, path::Path, sync::Arc};
 
 use super::InstallCodeResult;
@@ -101,6 +103,20 @@ const MINIMAL_WASM: [u8; 8] = [
 ];
 
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
+
+// Ensure the slice, with extra room for Candid encoding, fits within 2 MiB.
+#[test]
+fn test_slice() {
+    let slice = vec![42; MAX_SLICE_SIZE_BYTES as usize];
+    #[derive(Deserialize, CandidType)]
+    struct S {
+        #[serde(with = "serde_bytes")]
+        x: Vec<u8>,
+    }
+    let x = S { x: slice };
+    let encoded = Encode!(&x).unwrap();
+    assert_le!(encoded.len(), 2 * 1024 * 1024);
+}
 
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory = SubnetAvailableMemory::new(
@@ -296,6 +312,7 @@ fn canister_manager_config(
         SchedulerConfig::application_subnet().upload_wasm_chunk_instructions,
         ic_config::embedders::Config::default().wasm_max_size,
         SchedulerConfig::application_subnet().canister_snapshot_baseline_instructions,
+        SchedulerConfig::application_subnet().canister_snapshot_data_baseline_instructions,
         DEFAULT_WASM_MEMORY_LIMIT,
         MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
     )
@@ -4073,6 +4090,8 @@ fn cycles_correct_if_upgrade_succeeds() {
 
     let cycles_before = test.canister_state(id).system_state.balance();
     let execution_cost_before = test.canister_execution_cost(id);
+    // Clear `expected_compiled_wasms` so that the full execution cost is applied
+    test.state_mut().metadata.expected_compiled_wasms.clear();
     test.upgrade_canister(id, wasm.clone()).unwrap();
     let execution_cost = test.canister_execution_cost(id) - execution_cost_before;
     assert_eq!(
@@ -6172,7 +6191,7 @@ fn upload_chunk_fails_when_freeze_threshold_triggered() {
         .subnet_message("upload_chunk", upload_args.encode())
         .unwrap_err();
 
-    assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
+    assert_eq!(error.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
     assert!(
         error
             .description()

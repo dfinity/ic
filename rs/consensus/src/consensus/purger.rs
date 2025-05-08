@@ -476,8 +476,6 @@ fn get_pending_idkg_cup_heights(pool: &PoolReader<'_>) -> BTreeSet<Height> {
 
 #[cfg(test)]
 mod tests {
-    use crate::idkg::test_utils::empty_idkg_payload;
-
     use super::*;
     use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_interfaces::p2p::consensus::MutablePool;
@@ -486,7 +484,7 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::message_routing::FakeMessageRouting;
-    use ic_test_utilities_consensus::fake::FakeContentUpdate;
+    use ic_test_utilities_consensus::{fake::FakeContentUpdate, idkg::empty_idkg_payload};
     use ic_types::{
         consensus::{BlockPayload, BlockProposal, Payload, Rank},
         crypto::CryptoHash,

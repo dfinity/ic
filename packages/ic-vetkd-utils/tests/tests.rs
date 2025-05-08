@@ -50,7 +50,7 @@ fn protocol_flow_with_emulated_server_side() {
     let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(seed);
 
     let derivation_path = DerivationContext::new(b"canister-id", b"context");
-    let input = rng.gen::<[u8; 32]>();
+    let identity = rng.gen::<[u8; 32]>();
 
     let tsk_seed = rng.gen::<[u8; 32]>().to_vec();
     let tsk = TransportSecretKey::from_seed(tsk_seed).unwrap();
@@ -75,7 +75,7 @@ fn protocol_flow_with_emulated_server_side() {
         &master_sk,
         &tpk,
         &derivation_path,
-        &input,
+        &identity,
     );
 
     let ek = EncryptedVetKey::deserialize(&ek_bytes).unwrap();
@@ -84,11 +84,11 @@ fn protocol_flow_with_emulated_server_side() {
 
     let dpk = DerivedPublicKey::deserialize(&dpk_bytes).unwrap();
 
-    let vetkey = ek.decrypt_and_verify(&tsk, &dpk, &input).unwrap();
+    let vetkey = ek.decrypt_and_verify(&tsk, &dpk, &identity).unwrap();
 
     let msg = rng.gen::<[u8; 32]>().to_vec();
     let seed = rng.gen::<[u8; 32]>().to_vec();
-    let ctext = IBECiphertext::encrypt(&dpk, &input, &msg, &seed).unwrap();
+    let ctext = IBECiphertext::encrypt(&dpk, &identity, &msg, &seed).unwrap();
 
     let ptext = ctext.decrypt(&vetkey).expect("IBE decryption failed");
     assert_eq!(ptext, msg);
@@ -134,26 +134,26 @@ fn protocol_flow_with_fixed_rng_has_expected_outputs() {
 
     let ek = EncryptedVetKey::deserialize(&hex::decode("b1a13757eaae15a3c8884fc1a3453f8a29b88984418e65f1bd21042ce1d6809b2f8a49f7326c1327f2a3921e8ff1d6c3adde2a801f1f88de98ccb40c62e366a279e7aec5875a0ce2f2a9f3e109d9cb193f0197eadb2c5f5568ee4d6a87e115910662e01e604087246be8b081fc6b8a06b4b0100ed1935d8c8d18d9f70d61718c5dba23a641487e72b3b25884eeede8feb3c71599bfbcebe60d29408795c85b4bdf19588c034d898e7fc513be8dbd04cac702a1672f5625f5833d063b05df7503").unwrap()).unwrap();
 
-    let input = hex::decode("6d657373616765").unwrap();
-
-    let vetkey = ek.decrypt_and_verify(&tsk, &dpk, &input).unwrap();
-
-    assert_eq!(hex::encode(vetkey.signature_bytes()),
-               "987db5406ce297e729c8564a106dc896943b00216a095fe9c5d32a16a330c02eb80e6f468ede83cde5462b5145b58f65");
+    let identity = hex::decode("6d657373616765").unwrap();
 
     let msg = hex::decode("f00f11").unwrap();
     let seed: [u8; 32] = [0u8; 32];
-    let ctext = IBECiphertext::encrypt(&dpk, &input, &msg, &seed).unwrap();
+    let ctext = IBECiphertext::encrypt(&dpk, &identity, &msg, &seed).unwrap();
 
     let ctext_bytes = ctext.serialize();
 
     assert_eq!(hex::encode(&ctext_bytes),
-               "4943204942450001a9937528bda5826cf5c7da77a5f5e46719a9748f4ea0aa491c8fba92081e5d55457ab36ec4f6335954c6d87987d0b28301bd8da166493bb537c842d20396da5a68cc9e9672fadedf1e311e0057fc906dfd37d1077ca027954c45336405e66e5e4b346b0f24bfd358a09de701654c1e0791741e4826396588440eee021df9b2398f143c");
+               "4943204942450001a9937528bda5826cf5c7da77a5f5e46719a9748f4ea0aa491c8fba92081e5d55457ab36ec4f6335954c6d87987d0b28301bd8da166493bb537c842d20396da5a68cc9e9672fadedf1e311e0057fc906dfd37d1077ca027954c45336405e66e5e4b346b0f24bfd358a09de701654c1e0791741e4826396588440eee021df9b2399f7f98");
 
     assert_eq!(
         ctext,
         IBECiphertext::deserialize(&ctext_bytes).expect("Deserializing IBECiphertext failed")
     );
+
+    let vetkey = ek.decrypt_and_verify(&tsk, &dpk, &identity).unwrap();
+
+    assert_eq!(hex::encode(vetkey.signature_bytes()),
+               "987db5406ce297e729c8564a106dc896943b00216a095fe9c5d32a16a330c02eb80e6f468ede83cde5462b5145b58f65");
 
     let ptext = ctext.decrypt(&vetkey).expect("IBE decryption failed");
     assert_eq!(ptext, msg);

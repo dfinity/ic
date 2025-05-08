@@ -17,7 +17,7 @@ fn vetkd_bench(c: &mut Criterion) {
     let context = DerivationContext::new(&[1, 2, 3, 4], &[1, 2, 3]);
     let input = rng.gen::<[u8; 32]>();
 
-    for threshold in [9, 19] {
+    for threshold in [9, 23] {
         let nodes = threshold + threshold / 2;
 
         let poly = Polynomial::random(threshold, rng);

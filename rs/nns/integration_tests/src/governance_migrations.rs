@@ -1,9 +1,9 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_base_types::PrincipalId;
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use ic_http_types::{HttpRequest, HttpResponse};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance_api::pb::v1::manage_neuron_response::Command;
+use ic_nns_governance_api::manage_neuron_response::Command;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{

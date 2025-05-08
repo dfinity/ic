@@ -23,7 +23,7 @@ use icp_ledger::{
 };
 use maplit::hashmap;
 use pocket_ic::{PocketIc, PocketIcBuilder};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 const ARCHIVE_NUM_BLOCKS_TO_ARCHIVE: usize = 5;
 /// Trigger archiving after 20 blocks.
@@ -106,6 +106,7 @@ impl Setup {
     fn execute_icp_transfer(&mut self) -> BlockIndex {
         self.pocket_ic.advance_time(Duration::from_secs(1));
         self.pocket_ic.tick();
+        let time: SystemTime = self.pocket_ic.get_time().try_into().unwrap();
         let amount = 1_000_000u64;
         let transfer_args = TransferArgs {
             memo: Memo(121u64),
@@ -113,7 +114,7 @@ impl Setup {
             fee: DEFAULT_TRANSFER_FEE,
             from_subaccount: Some(self.user1.subaccount),
             to: self.user2.account_identifier().to_address(),
-            created_at_time: Some(TimeStamp::from(self.pocket_ic.get_time())),
+            created_at_time: Some(TimeStamp::from(time)),
         };
         self.ledger_blocks_created += 1;
         transfer(&self.pocket_ic, self.user1.principal, transfer_args).unwrap()
@@ -177,14 +178,12 @@ impl Setup {
         );
     }
 
-    fn upgrade_archive_canisters(
-        &self,
-        upgrade_to_version: UpgradeToVersion,
-        should_succeed: bool,
-    ) {
-        let archive_wasm_bytes = match upgrade_to_version {
-            UpgradeToVersion::MainNet => build_mainnet_ledger_archive_wasm().bytes(),
-            UpgradeToVersion::Latest => build_ledger_archive_wasm().bytes(),
+    fn upgrade_archive_canisters(&self, upgrade_to_version: UpgradeToVersion) {
+        let (archive_wasm_bytes, upgrade_arg) = match upgrade_to_version {
+            UpgradeToVersion::MainNet => (build_mainnet_ledger_archive_wasm().bytes(), vec![]),
+            UpgradeToVersion::Latest => {
+                (build_ledger_archive_wasm().bytes(), Encode!(&()).unwrap())
+            }
         };
         let mainnet_archive_module_hash = mainnet_archive_canister_sha256sum();
         let ledger_archives = archives(&self.pocket_ic);
@@ -192,30 +191,19 @@ impl Setup {
             .iter()
             .map(|archive| candid::Principal::from(archive.canister_id))
         {
-            match self.pocket_ic.upgrade_canister(
-                archive_canister_id,
-                archive_wasm_bytes.clone(),
-                vec![],
-                None,
-            ) {
-                Ok(_) => {
-                    if !should_succeed {
-                        panic!("Upgrade should fail!");
-                    }
-                }
-                Err(e) => {
-                    if should_succeed {
-                        panic!("Upgrade should succeed!");
-                    } else {
-                        assert!(e.reject_message.contains("Decoding stable memory failed"));
-                    }
-                }
-            };
+            self.pocket_ic
+                .upgrade_canister(
+                    archive_canister_id,
+                    archive_wasm_bytes.clone(),
+                    upgrade_arg.clone(),
+                    None,
+                )
+                .expect("failed to upgrade the archive canister");
 
             self.assert_canister_module_hash(
                 archive_canister_id,
                 &mainnet_archive_module_hash,
-                upgrade_to_version == UpgradeToVersion::MainNet && should_succeed,
+                upgrade_to_version == UpgradeToVersion::MainNet,
             );
         }
     }
@@ -352,10 +340,9 @@ fn should_set_up_initial_state_with_mainnet_canisters() {
     // The query operations do not cause PocketIc time to move forward.
     // The steps between t0 and t1, and t1 and t2, each take 2 nanoseconds.
     const MINT_TIME_OFFSET_NANOS: u64 = 2;
+    let system_time: SystemTime = setup.pocket_ic.get_time().try_into().unwrap();
     let expected_mint_timestamp = TimeStamp::from(
-        setup
-            .pocket_ic
-            .get_time()
+        system_time
             .checked_sub(Duration::from_nanos(MINT_TIME_OFFSET_NANOS))
             .unwrap(),
     );
@@ -457,13 +444,13 @@ fn should_upgrade_and_downgrade_canister_suite() {
 
     setup.upgrade_index_canister(UpgradeToVersion::Latest);
     setup.upgrade_ledger_canister(UpgradeToVersion::Latest, true);
-    setup.upgrade_archive_canisters(UpgradeToVersion::Latest, true);
+    setup.upgrade_archive_canisters(UpgradeToVersion::Latest);
 
     setup.assert_index_ledger_parity(true);
 
     setup.upgrade_index_canister(UpgradeToVersion::MainNet);
-    setup.upgrade_ledger_canister(UpgradeToVersion::MainNet, false);
-    setup.upgrade_archive_canisters(UpgradeToVersion::MainNet, false);
+    setup.upgrade_ledger_canister(UpgradeToVersion::MainNet, true);
+    setup.upgrade_archive_canisters(UpgradeToVersion::MainNet);
 
     setup.assert_index_ledger_parity(true);
 }

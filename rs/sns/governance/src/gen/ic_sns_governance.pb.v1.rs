@@ -102,7 +102,7 @@ pub struct Neuron {
     #[prost(message, repeated, tag = "2")]
     pub permissions: ::prost::alloc::vec::Vec<NeuronPermission>,
     /// The cached record of the neuron's staked governance tokens, measured in
-    /// fractions of 10E-8 of a governance token.
+    /// fractions of 10e-8 of a governance token.
     ///
     /// There is a minimum cached state, NervousSystemParameters::neuron_minimum_stake_e8s,
     /// that can be set by each SNS. Neurons that are created by claiming a neuron, spawning a neuron,
@@ -139,7 +139,7 @@ pub struct Neuron {
     #[prost(message, optional, tag = "19")]
     pub topic_followees: ::core::option::Option<neuron::TopicFollowees>,
     /// The accumulated unstaked maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
-    /// 10E-8 of a governance token.
+    /// 10e-8 of a governance token.
     ///
     /// The unit is "equivalent" to insist that, while this quantity is on the
     /// same scale as the governance token, maturity is not directly convertible to
@@ -245,8 +245,8 @@ pub mod neuron {
         ::prost::Message,
     )]
     pub struct TopicFollowees {
-        #[prost(btree_map = "uint64, message", tag = "1")]
-        pub topic_id_to_followees: ::prost::alloc::collections::BTreeMap<u64, FolloweesForTopic>,
+        #[prost(btree_map = "int32, message", tag = "1")]
+        pub topic_id_to_followees: ::prost::alloc::collections::BTreeMap<i32, FolloweesForTopic>,
     }
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,
     /// non-dissolving, or dissolved.
@@ -383,7 +383,7 @@ pub mod nervous_system_function {
     }
 }
 /// A proposal function defining a generic proposal, i.e., a proposal
-/// that is not build into the standard SNS and calls a canister outside
+/// that is not built into the standard SNS and calls a canister outside
 /// the SNS for execution.
 /// The canister and method to call are derived from the `function_id`.
 #[derive(
@@ -408,7 +408,7 @@ pub struct ExecuteGenericNervousSystemFunction {
     pub payload: ::prost::alloc::vec::Vec<u8>,
 }
 /// A proposal function that should guide the future strategy of the SNS's
-/// ecosystem but does not have immediate effect in the sense that a method is executed.
+/// ecosystem but does not have immediate effect in the sense that no method is executed.
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
 #[self_describing]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -439,7 +439,7 @@ pub struct ChunkedCanisterWasm {
     pub chunk_hashes_list: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
 /// A proposal function that upgrades a canister that is controlled by the
-/// SNS governance canister.
+/// SNS Governance canister.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -468,7 +468,7 @@ pub struct UpgradeSnsControlledCanister {
     )]
     pub mode: ::core::option::Option<i32>,
     /// If the entire WASM does not fit into the 2 MiB ingress limit, then `new_canister_wasm` should be
-    /// an empty, and this field should be set instead.
+    /// empty, and this field should be set instead.
     #[prost(message, optional, tag = "5")]
     pub chunked_canister_wasm: ::core::option::Option<ChunkedCanisterWasm>,
 }
@@ -579,7 +579,7 @@ pub struct MintSnsTokens {
     /// The amount to transfer, in e8s.
     #[prost(uint64, optional, tag = "1")]
     pub amount_e8s: ::core::option::Option<u64>,
-    /// An optional memo to use for the transfer.
+    /// An optional memo to be used for the transfer.
     #[prost(uint64, optional, tag = "2")]
     pub memo: ::core::option::Option<u64>,
     /// The principal to transfer the funds to.
@@ -613,8 +613,8 @@ pub struct ManageSnsMetadata {
     #[prost(string, optional, tag = "4")]
     pub description: ::core::option::Option<::prost::alloc::string::String>,
 }
-/// A proposal function to upgrade the SNS to the next version.  The versions are such that only
-/// one kind of canister will update at the same time.
+/// A proposal function to upgrade the SNS to the next version. The versions are such that only
+/// one kind of canister will get updated at the same time.
 /// This returns an error if the canister cannot be upgraded or no upgrades are available.
 #[derive(
     candid::CandidType,
@@ -692,7 +692,7 @@ pub struct ManageDappCanisterSettings {
     pub wasm_memory_threshold: ::core::option::Option<u64>,
 }
 /// Unlike `Governance.Version`, this message has optional fields and is the recommended one
-/// to use in APIs that can evolve. For example, the SNS Governance could eventually support
+/// to be used in APIs that can evolve. For example, the SNS Governance could eventually support
 /// a shorthand notation for SNS versions, enabling clients to specify SNS versions without having
 /// to set each individual SNS framework canister's WASM hash.
 #[derive(
@@ -822,12 +822,12 @@ pub mod proposal {
         /// Id = 2.
         #[prost(message, tag = "6")]
         ManageNervousSystemParameters(super::NervousSystemParameters),
-        /// Upgrade a canister that is controlled by the SNS governance canister.
+        /// Upgrade a canister that is controlled by the SNS Governance canister.
         ///
         /// Id = 3.
         #[prost(message, tag = "7")]
         UpgradeSnsControlledCanister(super::UpgradeSnsControlledCanister),
-        /// Add a new NervousSystemFunction, of generic type,  to be executable by proposal.
+        /// Add a new NervousSystemFunction, of generic type, to be executable by proposal.
         ///
         /// Id = 4.
         #[prost(message, tag = "8")]
@@ -964,7 +964,7 @@ pub mod governance_error {
         InvalidNeuronId = 16,
         /// This indicates that we have a bug. It should be impossible for users to provoke this.
         ///
-        /// For example, supposed you put some auxiliary data into a ProposalData during proposal
+        /// For example, suppose you put some auxiliary data into a ProposalData during proposal
         /// submission. That data is supposed to be used during execution of the proposal. But during
         /// execution, the auxiliary data is invalid (e.g. absent).
         InconsistentInternalData = 17,
@@ -1053,6 +1053,19 @@ pub struct Ballot {
     /// ballot is created.
     #[prost(uint64, tag = "3")]
     pub cast_timestamp_seconds: u64,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct TopicSelector {
+    #[prost(enumeration = "Topic", optional, tag = "1")]
+    pub topic: ::core::option::Option<i32>,
 }
 /// A tally of votes associated with a proposal.
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
@@ -1229,7 +1242,7 @@ pub struct ProposalData {
     #[prost(uint64, tag = "18")]
     pub wait_for_quiet_deadline_increase_seconds: u64,
     /// If populated, then the proposal is considered "settled" in terms of voting
-    /// rewards. Prior to distribution of rewards, but after votes are no longer
+    /// rewards. Prior to the distribution of rewards, but after votes are no longer
     /// accepted, it is considered "ready to settle".
     #[prost(uint64, optional, tag = "19")]
     pub reward_event_end_timestamp_seconds: ::core::option::Option<u64>,
@@ -1396,7 +1409,7 @@ pub mod valuation {
 /// by each nervous system community.
 /// For some of the values there are specified minimum values (floor) or maximum values
 /// (ceiling). The motivation for this is a) to prevent that the nervous system accidentally
-/// chooses parameters that result in an un-upgradable (and thus stuck) governance canister
+/// chooses parameters that result in an non-upgradable (and thus stuck) governance canister
 /// and b) to prevent the canister from growing too big (which could harm the other canisters
 /// on the subnet).
 ///
@@ -1410,11 +1423,11 @@ pub mod valuation {
     ::prost::Message,
 )]
 pub struct NervousSystemParameters {
-    /// The number of e8s (10E-8 of a token) that a rejected
+    /// The number of e8s (10e-8 of a token) that a rejected
     /// proposal costs the proposer.
     #[prost(uint64, optional, tag = "1")]
     pub reject_cost_e8s: ::core::option::Option<u64>,
-    /// The minimum number of e8s (10E-8 of a token) that can be staked in a neuron.
+    /// The minimum number of e8s (10e-8 of a token) that can be staked in a neuron.
     ///
     /// To ensure that staking and disbursing of the neuron work, the chosen value
     /// must be larger than the transaction_fee_e8s.
@@ -1448,11 +1461,11 @@ pub struct NervousSystemParameters {
     /// This parameter determines the maximum time period that the voting period
     /// may be extended after a flip. If there is a flip at the very end of the
     /// original proposal deadline, the remaining time will be set to this parameter.
-    /// If there is a flip before or after the original deadline, the deadline will
+    /// If there is a flip before or after the original deadline, the deadline will be
     /// extended by somewhat less than this parameter.
     /// The maximum total voting period extension is 2 * wait_for_quiet_deadline_increase_seconds.
     /// For more information, see the wiki page on the wait-for-quiet algorithm:
-    /// <https://wiki.internetcomputer.org/wiki/Network_Nervous_System#Proposal_decision_and_wait-for-quiet>
+    /// <https://internetcomputer.org/how-it-works/network-nervous-system-nns/#voting-rules>
     #[prost(uint64, optional, tag = "18")]
     pub wait_for_quiet_deadline_increase_seconds: ::core::option::Option<u64>,
     /// TODO NNS1-2169: This field currently has no effect.
@@ -1629,7 +1642,7 @@ pub struct NeuronPermissionList {
 /// This has diverged from NNS: this uses the same tag for different fields.
 /// Therefore, we cannot simply move one of the definitions to a shared library.
 ///
-/// To make it a little easier to eventually deduplicate NNS and SNS governance
+/// To make it a little easier to eventually deduplicate NNS and SNS Governance
 /// code, tags should be chosen so that it is new to BOTH this and the NNS
 /// RewardEvent. (This also applies to other message definitions.)
 #[derive(
@@ -1743,7 +1756,7 @@ pub struct Governance {
     #[prost(message, optional, tag = "8")]
     pub parameters: ::core::option::Option<NervousSystemParameters>,
     /// TODO IC-1168: update when rewards are introduced
-    ///   The latest reward event.
+    /// The latest reward event
     #[prost(message, optional, tag = "9")]
     pub latest_reward_event: ::core::option::Option<RewardEvent>,
     /// The in-flight neuron ledger commands as a map from neuron IDs
@@ -1805,7 +1818,7 @@ pub struct Governance {
     /// Current version that this SNS is running.
     #[prost(message, optional, tag = "23")]
     pub deployed_version: ::core::option::Option<governance::Version>,
-    /// Version SNS is in process of upgrading to.
+    /// Version the SNS is in process of upgrading to.
     #[prost(message, optional, tag = "24")]
     pub pending_version: ::core::option::Option<governance::PendingVersion>,
     #[prost(message, optional, tag = "30")]
@@ -1852,7 +1865,7 @@ pub mod governance {
         /// never left holding a sync command (as it either succeeds to
         /// acquire the lock and releases it in the same call, or never
         /// acquires it in the first place), but it still must be acquired
-        /// to prevent interleaving with another async command. Thus there's
+        /// to prevent interleaving with another async command. Thus, there's
         /// no value in actually storing the command itself, and this placeholder
         /// can generally be used in all sync cases.
         #[derive(
@@ -1968,7 +1981,7 @@ pub mod governance {
         #[prost(uint64, tag = "12")]
         pub neurons_with_invalid_stake_count: u64,
         /// The total amount of governance tokens that are staked in neurons,
-        /// measured in fractions of 10E-8 of a governance token.
+        /// measured in fractions of 10e-8 of a governance token.
         #[prost(uint64, tag = "13")]
         pub total_staked_e8s: u64,
         /// TODO: rather than taking six months, it would be more interesting to take the respective SNS's eligibility boarder here.
@@ -1999,7 +2012,7 @@ pub mod governance {
         /// Name of the SNS project. This may differ from the name of the associated token.
         #[prost(string, optional, tag = "3")]
         pub name: ::core::option::Option<::prost::alloc::string::String>,
-        /// Description of the SNS project.
+        /// Description of the SNS project
         #[prost(string, optional, tag = "4")]
         pub description: ::core::option::Option<::prost::alloc::string::String>,
     }
@@ -2064,13 +2077,13 @@ pub mod governance {
         ::prost::Message,
     )]
     pub struct PendingVersion {
-        /// Version to  be upgraded to
+        /// Version to be upgraded to
         #[prost(message, optional, tag = "1")]
         pub target_version: ::core::option::Option<Version>,
         /// Seconds since UNIX epoch to mark this as a failed version if not in sync with current version
         #[prost(uint64, tag = "2")]
         pub mark_failed_at_seconds: u64,
-        /// Lock to avoid checking over and over again.  Also, it is a counter for how many times we have attempted to check,
+        /// Lock to avoid checking over and over again. Also, it is a counter for how many times we have attempted to check,
         /// allowing us to fail in case we otherwise have gotten stuck.
         #[prost(uint64, tag = "3")]
         pub checking_upgrade_lock: u64,
@@ -2242,7 +2255,7 @@ pub struct GetSnsInitializationParametersResponse {
 pub struct GetRunningSnsVersionRequest {}
 /// Response with the SNS's currently running version and any upgrades
 /// that are in progress.
-/// GetUpgradeJournal is a superior API to this one that should
+/// GetUpgradeJournal is a superior API to this one that should be used instead.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -2272,13 +2285,13 @@ pub mod get_running_sns_version_response {
         ::prost::Message,
     )]
     pub struct UpgradeInProgress {
-        /// Version to  be upgraded to
+        /// Version to be upgraded to
         #[prost(message, optional, tag = "1")]
         pub target_version: ::core::option::Option<super::governance::Version>,
         /// Seconds since UNIX epoch to mark this as a failed version if not in sync with current version
         #[prost(uint64, tag = "2")]
         pub mark_failed_at_seconds: u64,
-        /// Lock to avoid checking over and over again.  Also, it is a counter for how many times we have attempted to check,
+        /// Lock to avoid checking over and over again. Also, it is a counter for how many times we have attempted to check,
         /// allowing us to fail in case we otherwise have gotten stuck.
         #[prost(uint64, tag = "3")]
         pub checking_upgrade_lock: u64,
@@ -2290,7 +2303,7 @@ pub mod get_running_sns_version_response {
 /// Request to fail an upgrade proposal that is Adopted but not Executed or
 /// Failed if it is past the time when it should have been marked as failed.
 /// This is useful in the case where the asynchronous process may have failed to
-/// complete
+/// complete.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -2312,7 +2325,7 @@ pub struct FailStuckUpgradeInProgressRequest {}
     ::prost::Message,
 )]
 pub struct FailStuckUpgradeInProgressResponse {}
-/// Empty message to use in oneof fields that represent empty
+/// Empty message to be used in oneof fields that represent empty
 /// enums.
 #[derive(
     candid::CandidType,
@@ -2466,7 +2479,7 @@ pub mod manage_neuron {
     /// neuron's tokens (if no argument is provided) to a given ledger account.
     /// Thereby, the neuron's accumulated fees are burned and (if relevant in
     /// the given nervous system) the token equivalent of the neuron's accumulated
-    /// maturity are minted and also transferred to the specified account.
+    /// maturity is minted and also transferred to the specified account.
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -2508,7 +2521,7 @@ pub mod manage_neuron {
     /// the permissions (i.e., principals that can change the neuron), the age, the followees, and
     /// the dissolve state. The parent neuron's fees and maturity (if applicable in the given
     /// nervous system) remain in the parent neuron and the child neuron's fees and maturity
-    /// are initialized to be zero.
+    /// are initialized to zero.
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -2519,7 +2532,7 @@ pub mod manage_neuron {
         ::prost::Message,
     )]
     pub struct Split {
-        /// The amount of governance tokens (in measured in fractions of 10E-8 of
+        /// The amount of governance tokens (measured in fractions of 10e-8 of
         /// a governance token) to be split to the child neuron.
         #[prost(uint64, tag = "1")]
         pub amount_e8s: u64,
@@ -2547,7 +2560,7 @@ pub mod manage_neuron {
         pub percentage_to_merge: u32,
     }
     /// Stake the maturity of a neuron.
-    /// The caller can choose a percentage of of the current maturity to stake.
+    /// The caller can choose a percentage of the current maturity to stake.
     /// If 'percentage_to_stake' is not provided, all of the neuron's current
     /// maturity will be staked.
     #[derive(
@@ -2717,8 +2730,8 @@ pub mod manage_neuron {
             /// The memo and principal used to define the neuron to be claimed
             /// or refreshed. Specifically, the memo (nonce) and the given principal
             /// (called 'controller' or 'claimer') are used to compute the ledger
-            /// subaccount to which the staked tokens to be used for claiming or
-            /// refreshing a neuron were transferred to.
+            /// subaccount to which the staked tokens were transferred to, to be used
+            /// for claiming or refreshing a neuron.
             /// If 'controller' is omitted, the id of the principal who calls this
             /// operation will be used.
             #[prost(message, tag = "2")]
@@ -2730,7 +2743,7 @@ pub mod manage_neuron {
             NeuronId(super::super::Empty),
         }
     }
-    /// Add a set of permissions to the Neuron for the given PrincipalId. These
+    /// Add a set of permissions to the Neuron for a given PrincipalId. These
     /// permissions must be a subset of `NervousSystemParameters::neuron_grantable_permissions`.
     /// If the PrincipalId doesn't have existing permissions, a new entry will be added for it
     /// with the provided permissions. If a principalId already has permissions for the neuron,
@@ -2751,10 +2764,10 @@ pub mod manage_neuron {
         #[prost(message, optional, tag = "2")]
         pub permissions_to_add: ::core::option::Option<super::NeuronPermissionList>,
     }
-    /// Remove a set of permissions from the Neuron for the given PrincipalId. If a PrincipalId has all of
+    /// Remove a set of permissions from the Neuron for a given PrincipalId. If the PrincipalId has all of
     /// its permissions removed, it will be removed from the neuron's permissions list. This is a dangerous
-    /// operation as its possible to remove all permissions for a neuron and no longer be able to modify
-    /// it's state, i.e. disbursing the neuron back into the governance token.
+    /// operation as it's possible to remove all permissions for a neuron and no longer be able to modify
+    /// its state, i.e. disbursing the neuron back into the governance token.
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -2863,11 +2876,11 @@ pub mod manage_neuron_response {
     )]
     pub struct MergeMaturityResponse {
         /// The maturity that was merged in fractions of
-        /// 10E-8 of a governance token.
+        /// 10e-8 of a governance token.
         #[prost(uint64, tag = "1")]
         pub merged_maturity_e8s: u64,
         /// The resulting cached stake of the modified neuron
-        /// in fractions of 10E-8 of a governance token.
+        /// in fractions of 10e-8 of a governance token.
         #[prost(uint64, tag = "2")]
         pub new_stake_e8s: u64,
     }
@@ -3149,7 +3162,7 @@ pub mod get_proposal_response {
     ::prost::Message,
 )]
 pub struct ListProposals {
-    /// Limit the number of Proposals returned in each page, from 1 to 100.
+    /// Limits the number of Proposals returned in each page, from 1 to 100.
     /// If a value outside of this range is provided, 100 will be used.
     #[prost(uint32, tag = "1")]
     pub limit: u32,
@@ -3166,7 +3179,7 @@ pub struct ListProposals {
     #[prost(uint64, repeated, tag = "3")]
     pub exclude_type: ::prost::alloc::vec::Vec<u64>,
     /// A list of proposal reward statuses, specifying that only proposals that
-    /// that have one of the define reward statuses should be included
+    /// that have one of the defined reward statuses should be included
     /// in the list.
     /// If this list is empty, no restriction is applied.
     ///
@@ -3176,11 +3189,15 @@ pub struct ListProposals {
     #[prost(enumeration = "ProposalRewardStatus", repeated, tag = "4")]
     pub include_reward_status: ::prost::alloc::vec::Vec<i32>,
     /// A list of proposal decision statuses, specifying that only proposals that
-    /// that have one of the define decision statuses should be included
+    /// that have one of the defined decision statuses should be included
     /// in the list.
     /// If this list is empty, no restriction is applied.
     #[prost(enumeration = "ProposalDecisionStatus", repeated, tag = "5")]
     pub include_status: ::prost::alloc::vec::Vec<i32>,
+    /// A list of topics that should be included. If empty, all topics will be included.
+    /// The list may contain the None, expressing selection of proposals without topics.
+    #[prost(message, repeated, tag = "6")]
+    pub include_topics: ::prost::alloc::vec::Vec<TopicSelector>,
 }
 /// A response to the ListProposals command.
 #[derive(
@@ -3198,6 +3215,9 @@ pub struct ListProposalsResponse {
     /// Whether ballots cast by the caller are included in the returned proposals.
     #[prost(bool, optional, tag = "2")]
     pub include_ballots_by_caller: ::core::option::Option<bool>,
+    /// Whether topic-based filtering has been taken into account.
+    #[prost(bool, optional, tag = "3")]
+    pub include_topic_filtering: ::core::option::Option<bool>,
 }
 /// An operation that lists all neurons tracked in the Governance state in a
 /// paginated fashion.
@@ -3230,7 +3250,7 @@ pub struct ListNeurons {
     #[prost(message, optional, tag = "3")]
     pub of_principal: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
-/// A response to the ListNeurons command.
+/// The response to a ListNeurons command.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -3254,11 +3274,11 @@ pub struct ListNeuronsResponse {
     ::prost::Message,
 )]
 pub struct ListNervousSystemFunctionsResponse {
-    /// Current set of nervous system function, both native and user-defined,
+    /// Current set of nervous system functions, both native and user-defined,
     /// that can be executed by proposal.
     #[prost(message, repeated, tag = "1")]
     pub functions: ::prost::alloc::vec::Vec<NervousSystemFunction>,
-    /// Set of nervous system function ids that are reserved and cannot be
+    /// Set of nervous system function-ids that are reserved and cannot be
     /// used to add new NervousSystemFunctions.
     #[prost(uint64, repeated, tag = "2")]
     pub reserved_ids: ::prost::alloc::vec::Vec<u64>,
@@ -3342,7 +3362,7 @@ pub mod claim_swap_neurons_request {
         /// The ID of the SNS neuron
         #[prost(message, optional, tag = "2")]
         pub neuron_id: ::core::option::Option<super::NeuronId>,
-        /// The SNS neuron's stake in e8s (10E-8 of a token)
+        /// The SNS neuron's stake in e8s (10e-8 of a token)
         #[prost(uint64, optional, tag = "3")]
         pub stake_e8s: ::core::option::Option<u64>,
         /// The duration in seconds that the neuron's dissolve delay will be set to.
@@ -3377,7 +3397,7 @@ pub mod claim_swap_neurons_request {
             pub nns_neuron_hotkeys:
                 ::core::option::Option<::ic_nervous_system_proto::pb::v1::Principals>,
         }
-        /// The info that for a direct participant
+        /// Additional data associated with a direct (as opposed to Neurons' Fund) participant.
         #[derive(
             candid::CandidType,
             candid::Deserialize,
@@ -3470,7 +3490,7 @@ pub mod claim_swap_neurons_response {
     pub struct SwapNeuron {
         #[prost(message, optional, tag = "1")]
         pub id: ::core::option::Option<super::NeuronId>,
-        /// The status of claiming of a requested Sale neuron.
+        /// The status of claiming of a requested swap neuron.
         #[prost(enumeration = "super::ClaimedSwapNeuronStatus", tag = "2")]
         pub status: i32,
     }
@@ -3532,7 +3552,7 @@ pub struct AddMaturityRequest {
     pub amount_e8s: ::core::option::Option<u64>,
 }
 /// The response to a request to add maturity to a neuron. The associated endpoint is only
-/// available when governance is compiled with the `test` feature enabled.
+/// available when SNS Governance is compiled with the `test` feature enabled.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -3783,7 +3803,6 @@ pub mod upgrade_journal_entry {
         UpgradeOutcome(UpgradeOutcome),
     }
 }
-/// Needed to cause prost to generate a type isomorphic to Option<Vec<UpgradeJournalEntry>>.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -3798,8 +3817,8 @@ pub struct UpgradeJournal {
     #[prost(message, repeated, tag = "1")]
     pub entries: ::prost::alloc::vec::Vec<UpgradeJournalEntry>,
 }
-/// The upgrade journal contains all the information neede to audit previous SNS upgrades and understand its current state.
-/// It is being implemented as part of the "effortless SNS upgrade" feature.
+/// The upgrade journal contains all the information needed to audit previous SNS upgrades and understand its current state.
+/// It is being implemented as a part of the "effortless SNS upgrade" feature.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -3834,7 +3853,7 @@ pub struct GetUpgradeJournalResponse {
     pub response_timestamp_seconds: ::core::option::Option<u64>,
     /// The target version that the SNS will be upgraded to.
     /// Currently, this field is always None, but in the "effortless SNS upgrade"
-    /// feature, it reflect the version of the SNS that the community has decided to upgrade to.
+    /// feature, it reflects the version of the SNS that the community has decided to upgrade to.
     #[prost(message, optional, tag = "3")]
     pub target_version: ::core::option::Option<governance::Version>,
     #[prost(message, optional, tag = "5")]
@@ -3845,7 +3864,7 @@ pub struct GetUpgradeJournalResponse {
     pub upgrade_journal_entry_count: ::core::option::Option<u64>,
 }
 /// A request to mint tokens for a particular principal. The associated endpoint
-/// is only available on SNS governance, and only then when SNS governance is
+/// is only available on SNS Governance, and only then when SNS Governance is
 /// compiled with the `test` feature enabled.
 #[derive(
     candid::CandidType,
@@ -3862,8 +3881,8 @@ pub struct MintTokensRequest {
     pub amount_e8s: ::core::option::Option<u64>,
 }
 /// The response to a request to mint tokens for a particular principal. The
-/// associated endpoint is only available on SNS governance, and only then when
-/// SNS governance is compiled with the `test` feature enabled.
+/// associated endpoint is only available on SNS Governance, and only then when
+/// SNS Governance is compiled with the `test` feature enabled.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -3933,7 +3952,7 @@ pub enum NeuronPermissionType {
     /// The principal has permission to configure the neuron's dissolve state. This includes
     /// start dissolving, stop dissolving, and increasing the dissolve delay for the neuron.
     ConfigureDissolveState = 1,
-    /// The principal has permission to add additional principals to modify the neuron.
+    /// The principal has permission to add other principals to modify the neuron.
     /// The nervous system parameter `NervousSystemParameters::neuron_grantable_permissions`
     /// determines the maximum set of privileges that a principal can grant to another principal in
     /// the given SNS.
@@ -4169,7 +4188,7 @@ pub enum ProposalRewardStatus {
     /// voting rewards. This implies nothing on the
     /// ProposalDecisionStatus, i.e., a proposal can be decided
     /// due to an absolute majority being in favor or against it,
-    /// but other neuron holders can still cast their vote to get rewards.
+    /// but other neuron holders can still cast their votes to get rewards.
     AcceptVotes = 1,
     /// The proposal no longer accepts votes. It is due to settle
     /// rewards at the next reward event.
@@ -4204,7 +4223,7 @@ impl ProposalRewardStatus {
 }
 /// An enum for representing the various statuses a Neuron being claimed by the
 /// `claim_swap_neurons` API may have. The status is reported back to callers of
-/// the API (mainly the SNS Sale canister) to indicate the success of the
+/// the API (mainly the SNS Swap canister) to indicate the success of the
 /// operation.
 #[derive(
     candid::CandidType,
@@ -4234,7 +4253,7 @@ pub enum ClaimedSwapNeuronStatus {
     /// above the required minimum neuron stake. Additional retries will
     /// result in the same status.
     Invalid = 2,
-    /// The Neuron could not be created because it already existed
+    /// The neuron could not be created because it already exists
     /// within SNS Governance. Additional retries will result in
     /// the same status.
     AlreadyExists = 3,
@@ -4323,6 +4342,7 @@ impl ClaimSwapNeuronsError {
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
+    strum_macros::EnumIter,
     Clone,
     Copy,
     Debug,

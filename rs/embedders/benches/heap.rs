@@ -1,437 +1,244 @@
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use embedders_bench::SetupAction;
+use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
+use ic_sys::PAGE_SIZE;
+use strum::IntoEnumIterator;
+use strum_macros::{Display, EnumIter};
 
-const HEAP_WAT: &[u8] = include_bytes!("test-data/heap.wat");
+#[derive(Copy, Clone, Display, EnumIter)]
+enum Mem {
+    #[strum(serialize = "32")]
+    Wasm32,
+    #[strum(serialize = "64")]
+    Wasm64,
+}
 
-#[derive(Copy, Clone)]
-enum Source {
+#[derive(Copy, Clone, Display, EnumIter)]
+#[strum(serialize_all = "snake_case")]
+enum Call {
+    Query,
+    Update,
+}
+
+#[derive(Copy, Clone, Display, EnumIter)]
+#[strum(serialize_all = "snake_case")]
+enum Op {
+    Read,
+    Write,
+}
+
+#[derive(Copy, Clone, Display, EnumIter)]
+enum Dir {
+    #[strum(serialize = "fwd")]
+    Forward,
+    #[strum(serialize = "bwd")]
+    Backward,
+}
+
+#[derive(Copy, Clone, Display, EnumIter)]
+enum Size {
+    #[strum(serialize = "1gb")]
+    Gigabyte = 1024 * 1024 * 1024,
+}
+
+#[derive(Copy, Clone, Display, EnumIter)]
+enum Step {
+    #[strum(serialize = "step_8")]
+    Small = 8,
+    #[strum(serialize = "step_4kb")]
+    Page = 4096,
+    #[strum(serialize = "step_16kb")]
+    FourPages = 16384,
+}
+
+#[derive(Copy, Clone, Display, EnumIter)]
+#[strum(serialize_all = "snake_case")]
+enum Src {
     Checkpoint,
     PageDelta,
+    NewAllocation,
 }
 
 // Returns the number of accessed pages for throughput computation.
-fn accessed_pages(step: usize) -> Option<Throughput> {
-    // The methods of `heap.wat` iterate over a 1GB memory region.
-    let pages_in_step = (step + 4095) / 4096;
+fn throughput(size: Size, step: Step) -> Option<Throughput> {
+    let size = size as usize;
+    let step = step as usize;
+    let pages_in_step = step.div_ceil(PAGE_SIZE);
     Some(Throughput::Elements(
-        ((1 << 30) / 4096 / pages_in_step) as u64,
+        (size / PAGE_SIZE / pages_in_step) as u64,
     ))
 }
 
-fn bench_name(memory_type: &str, method: &str, source: Source) -> String {
-    match source {
-        Source::Checkpoint => {
-            format!("{}_{}_checkpoint", memory_type, method)
-        }
-        Source::PageDelta => {
-            format!("{}_{}_page_delta", memory_type, method)
+fn setup_action(src: Src) -> SetupAction {
+    match src {
+        Src::Checkpoint => SetupAction::PerformCheckpoint,
+        Src::PageDelta | Src::NewAllocation => SetupAction::None,
+    }
+}
+
+fn heap_op(op: Op) -> String {
+    match op {
+        Op::Read => "(drop (i64.load (local.get $address)))".into(),
+        Op::Write => "(i64.store (local.get $address) (global.get $counter))".into(),
+    }
+}
+
+fn heap_func_init_body(mem: Mem, size: Size, src: Src) -> String {
+    let wasm_pages = (size as usize).div_ceil(WASM_PAGE_SIZE_IN_BYTES);
+    match src {
+        Src::Checkpoint | Src::PageDelta => String::new(),
+        Src::NewAllocation => format!("(drop (memory.grow (i{mem}.const {wasm_pages})))"),
+    }
+}
+
+fn loop_body(op: &str, mem: Mem, dir: Dir, size: Size, step: Step) -> String {
+    let size = size as usize;
+    let step = step as usize;
+    match dir {
+        Dir::Forward => format!(
+            r#"
+                (local.set $address (i{mem}.const 0))
+                (loop $loop
+                    {op}
+                    (local.set $address (i{mem}.add (local.get $address) (i{mem}.const {step})))
+                    (br_if $loop (i{mem}.lt_u (local.get $address) (i{mem}.const {size})))
+                )
+            "#
+        ),
+        Dir::Backward => format!(
+            r#"
+                (local.set $address (i{mem}.const {size}))
+                (loop $loop
+                    (local.set $address (i{mem}.sub (local.get $address) (i{mem}.const {step})))
+                    {op}
+                    (br_if $loop (i{mem}.gt_s (local.get $address) (i{mem}.const 0)))
+                )
+            "#
+        ),
+    }
+}
+
+fn heap_canister_init_body(mem: Mem, size: Size, src: Src) -> String {
+    let op = "(i64.store (local.get $address) (i64.const 1))";
+    let loop_body = loop_body(op, mem, Dir::Forward, size, Step::Page);
+    match src {
+        Src::Checkpoint | Src::PageDelta => format!(
+            r#"
+                {loop_body}
+            "#
+        ),
+        Src::NewAllocation => String::new(),
+    }
+}
+
+fn heap_memory_body(mem: Mem, size: Size, src: Src) -> String {
+    let wasm_pages = (size as usize).div_ceil(WASM_PAGE_SIZE_IN_BYTES);
+    match src {
+        Src::Checkpoint | Src::PageDelta => format!("i{mem} {wasm_pages}"),
+        Src::NewAllocation => format!("i{mem} 0"),
+    }
+}
+
+type C = Criterion;
+
+fn bench(c: &mut C, mem: Mem, call: Call, op: Op, dir: Dir, size: Size, step: Step, src: Src) {
+    let name = format!("wasm{mem}_{call}_{op}_{dir}_{size}_{step}_{src}");
+    let throughput = throughput(size, step);
+    let setup_action = setup_action(src);
+
+    let op = heap_op(op);
+    let func_init_body = heap_func_init_body(mem, size, src);
+    let loop_body = loop_body(&op, mem, dir, size, step);
+    let canister_init_body = heap_canister_init_body(mem, size, src);
+    let memory_body = heap_memory_body(mem, size, src);
+    let wat = format!(
+        r#"
+        (module
+            (import "ic0" "msg_reply" (func $ic0_msg_reply))
+            (global $counter (mut i64) (i64.const 42))
+            (func (export "canister_update update_empty")
+                (call $ic0_msg_reply)
+            )
+            (func (export "canister_{call} {name}")
+                (local $address i{mem})
+                (global.set $counter (i64.add (global.get $counter) (i64.const 1)))
+                {func_init_body}
+                {loop_body}
+                (call $ic0_msg_reply)
+            )
+            (func (export "canister_init")
+                (local $address i{mem})
+                {canister_init_body}
+            )
+            (memory {memory_body})
+        )"#
+    );
+    let wasm = wat::parse_str(&wat).unwrap_or_else(|_| panic!("Error parsing WAT: {wat}"));
+    match call {
+        Call::Query => embedders_bench::query_bench(
+            c,
+            "embedders:heap/query",
+            &name,
+            &wasm,
+            &[],
+            &name,
+            &[],
+            throughput.clone(),
+            setup_action,
+        ),
+        Call::Update => match src {
+            // Running checkpoint benchmarks once or multiple times yields the same results.
+            Src::Checkpoint => embedders_bench::update_bench(
+                c,
+                "embedders:heap/update",
+                &name,
+                &wasm,
+                &[],
+                &name,
+                &[],
+                throughput.clone(),
+                setup_action,
+            ),
+            // Executing page delta benchmarks only once yields more consistent results,
+            // as they depend on the page delta size.
+            // New allocation benchmarks are only meaningful when run once.
+            Src::PageDelta | Src::NewAllocation => embedders_bench::update_bench_once(
+                c,
+                "embedders:heap/update",
+                &name,
+                &wasm,
+                &[],
+                &name,
+                &[],
+                throughput.clone(),
+                setup_action,
+            ),
+        },
+    }
+}
+
+fn all(c: &mut Criterion) {
+    for op in Op::iter() {
+        for call in Call::iter() {
+            for dir in Dir::iter() {
+                for size in Size::iter() {
+                    for step in Step::iter() {
+                        for src in Src::iter() {
+                            for mem in Mem::iter() {
+                                bench(c, mem, call, op, dir, size, step, src);
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
 
-fn load_wat_and_prepare(is_wasm64: bool) -> Vec<u8> {
-    let wat_str = if is_wasm64 {
-        let wat_str = std::str::from_utf8(HEAP_WAT).unwrap();
-        // Replace all i32 with i64. This is sufficient to execute the canister in Wasm64 mode.
-        let wat_str = wat_str.replace("i32", "i64");
-        // Replace memory with memory 64 to enable Wasm64 mode.
-        wat_str.replace(
-            "(memory (export \"memory\") 16384)",
-            "(memory (export \"memory\") i64 16384)",
-        )
-    } else {
-        std::str::from_utf8(HEAP_WAT).unwrap().to_string()
-    };
-    wat::parse_str(wat_str).unwrap()
-}
-
-fn query_bench(c: &mut Criterion, method: &str, step: usize, source: Source) {
-    let wasm32 = load_wat_and_prepare(false);
-    let wasm64 = load_wat_and_prepare(true);
-    let throughput = accessed_pages(step);
-    let action = match source {
-        Source::Checkpoint => SetupAction::PerformCheckpoint,
-        Source::PageDelta => SetupAction::None,
-    };
-    let name_wasm32 = bench_name("wasm32", method, source);
-    let name_wasm64 = bench_name("wasm64", method, source);
-    embedders_bench::query_bench(
-        c,
-        &name_wasm32,
-        &wasm32,
-        &[],
-        method,
-        &[],
-        throughput.clone(),
-        action,
-    );
-    embedders_bench::query_bench(
-        c,
-        &name_wasm64,
-        &wasm64,
-        &[],
-        method,
-        &[],
-        throughput,
-        action,
-    );
-}
-
-fn update_bench(c: &mut Criterion, method: &str, step: usize, source: Source) {
-    let wasm32 = load_wat_and_prepare(false);
-    let wasm64 = load_wat_and_prepare(true);
-    let throughput = accessed_pages(step);
-    let action = match source {
-        Source::Checkpoint => SetupAction::PerformCheckpoint,
-        Source::PageDelta => SetupAction::None,
-    };
-    let name_wasm32 = bench_name("wasm32", method, source);
-    let name_wasm64 = bench_name("wasm64", method, source);
-    embedders_bench::update_bench(
-        c,
-        &name_wasm32,
-        &wasm32,
-        &[],
-        method,
-        &[],
-        throughput.clone(),
-        action,
-    );
-    embedders_bench::update_bench(
-        c,
-        &name_wasm64,
-        &wasm64,
-        &[],
-        method,
-        &[],
-        throughput,
-        action,
-    );
-}
-
-////////////////////////////////////////////////////////////////////////
-// Query forward reads
-////////////////////////////////////////////////////////////////////////
-
-fn query_read_fwd_1gb_checkpoint(c: &mut Criterion) {
-    query_bench(c, "query_read_fwd_1gb", 8, Source::Checkpoint);
-}
-
-fn query_read_fwd_1gb_page_delta(c: &mut Criterion) {
-    query_bench(c, "query_read_fwd_1gb", 8, Source::PageDelta);
-}
-
-fn query_read_fwd_1gb_step_4kb_checkpoint(c: &mut Criterion) {
-    query_bench(c, "query_read_fwd_1gb_step_4kb", 4096, Source::Checkpoint);
-}
-
-fn query_read_fwd_1gb_step_4kb_page_delta(c: &mut Criterion) {
-    query_bench(c, "query_read_fwd_1gb_step_4kb", 4096, Source::PageDelta);
-}
-
-fn query_read_fwd_1gb_step_16kb_checkpoint(c: &mut Criterion) {
-    query_bench(c, "query_read_fwd_1gb_step_16kb", 16384, Source::Checkpoint);
-}
-
-fn query_read_fwd_1gb_step_16kb_page_delta(c: &mut Criterion) {
-    query_bench(c, "query_read_fwd_1gb_step_16kb", 16384, Source::PageDelta);
-}
-
-////////////////////////////////////////////////////////////////////////
-// Query backward reads
-////////////////////////////////////////////////////////////////////////
-
-fn query_read_bwd_1gb_checkpoint(c: &mut Criterion) {
-    query_bench(c, "query_read_bwd_1gb", 8, Source::Checkpoint);
-}
-
-fn query_read_bwd_1gb_page_delta(c: &mut Criterion) {
-    query_bench(c, "query_read_bwd_1gb", 8, Source::PageDelta);
-}
-
-fn query_read_bwd_1gb_step_4kb_checkpoint(c: &mut Criterion) {
-    query_bench(c, "query_read_bwd_1gb_step_4kb", 4096, Source::Checkpoint);
-}
-
-fn query_read_bwd_1gb_step_4kb_page_delta(c: &mut Criterion) {
-    query_bench(c, "query_read_bwd_1gb_step_4kb", 4096, Source::PageDelta);
-}
-
-fn query_read_bwd_1gb_step_16kb_checkpoint(c: &mut Criterion) {
-    query_bench(c, "query_read_bwd_1gb_step_16kb", 16384, Source::Checkpoint);
-}
-
-fn query_read_bwd_1gb_step_16kb_page_delta(c: &mut Criterion) {
-    query_bench(c, "query_read_bwd_1gb_step_16kb", 16384, Source::PageDelta);
-}
-
-////////////////////////////////////////////////////////////////////////
-// Update forward reads
-////////////////////////////////////////////////////////////////////////
-
-fn update_read_fwd_1gb_checkpoint(c: &mut Criterion) {
-    update_bench(c, "update_read_fwd_1gb", 8, Source::Checkpoint);
-}
-
-fn update_read_fwd_1gb_page_delta(c: &mut Criterion) {
-    update_bench(c, "update_read_fwd_1gb", 8, Source::PageDelta);
-}
-
-fn update_read_fwd_1gb_step_4kb_checkpoint(c: &mut Criterion) {
-    update_bench(c, "update_read_fwd_1gb_step_4kb", 4096, Source::Checkpoint);
-}
-
-fn update_read_fwd_1gb_step_4kb_page_delta(c: &mut Criterion) {
-    update_bench(c, "update_read_fwd_1gb_step_4kb", 4096, Source::PageDelta);
-}
-
-fn update_read_fwd_1gb_step_16kb_checkpoint(c: &mut Criterion) {
-    update_bench(
-        c,
-        "update_read_fwd_1gb_step_16kb",
-        16384,
-        Source::Checkpoint,
-    );
-}
-
-fn update_read_fwd_1gb_step_16kb_page_delta(c: &mut Criterion) {
-    update_bench(c, "update_read_fwd_1gb_step_16kb", 16384, Source::PageDelta);
-}
-
-////////////////////////////////////////////////////////////////////////
-// Update backward reads
-////////////////////////////////////////////////////////////////////////
-
-fn update_read_bwd_1gb_checkpoint(c: &mut Criterion) {
-    update_bench(c, "update_read_bwd_1gb", 8, Source::Checkpoint);
-}
-
-fn update_read_bwd_1gb_page_delta(c: &mut Criterion) {
-    update_bench(c, "update_read_bwd_1gb", 8, Source::PageDelta);
-}
-
-fn update_read_bwd_1gb_step_4kb_checkpoint(c: &mut Criterion) {
-    update_bench(c, "update_read_bwd_1gb_step_4kb", 4096, Source::Checkpoint);
-}
-
-fn update_read_bwd_1gb_step_4kb_page_delta(c: &mut Criterion) {
-    update_bench(c, "update_read_bwd_1gb_step_4kb", 4096, Source::PageDelta);
-}
-
-fn update_read_bwd_1gb_step_16kb_checkpoint(c: &mut Criterion) {
-    update_bench(
-        c,
-        "update_read_bwd_1gb_step_16kb",
-        16384,
-        Source::Checkpoint,
-    );
-}
-
-fn update_read_bwd_1gb_step_16kb_page_delta(c: &mut Criterion) {
-    update_bench(c, "update_read_bwd_1gb_step_16kb", 16384, Source::PageDelta);
-}
-
-////////////////////////////////////////////////////////////////////////
-// Query forward writes
-////////////////////////////////////////////////////////////////////////
-
-fn query_write_fwd_1gb_checkpoint(c: &mut Criterion) {
-    query_bench(c, "query_write_fwd_1gb", 8, Source::Checkpoint);
-}
-
-fn query_write_fwd_1gb_page_delta(c: &mut Criterion) {
-    query_bench(c, "query_write_fwd_1gb", 8, Source::PageDelta);
-}
-
-fn query_write_fwd_1gb_step_4kb_checkpoint(c: &mut Criterion) {
-    query_bench(c, "query_write_fwd_1gb_step_4kb", 4096, Source::Checkpoint);
-}
-
-fn query_write_fwd_1gb_step_4kb_page_delta(c: &mut Criterion) {
-    query_bench(c, "query_write_fwd_1gb_step_4kb", 4096, Source::PageDelta);
-}
-
-fn query_write_fwd_1gb_step_16kb_checkpoint(c: &mut Criterion) {
-    query_bench(
-        c,
-        "query_write_fwd_1gb_step_16kb",
-        16384,
-        Source::Checkpoint,
-    );
-}
-
-fn query_write_fwd_1gb_step_16kb_page_delta(c: &mut Criterion) {
-    query_bench(c, "query_write_fwd_1gb_step_16kb", 16384, Source::PageDelta);
-}
-
-////////////////////////////////////////////////////////////////////////
-// Query backward writes
-////////////////////////////////////////////////////////////////////////
-
-fn query_write_bwd_1gb_checkpoint(c: &mut Criterion) {
-    query_bench(c, "query_write_bwd_1gb", 8, Source::Checkpoint);
-}
-
-fn query_write_bwd_1gb_page_delta(c: &mut Criterion) {
-    query_bench(c, "query_write_bwd_1gb", 8, Source::PageDelta);
-}
-
-fn query_write_bwd_1gb_step_4kb_checkpoint(c: &mut Criterion) {
-    query_bench(c, "query_write_bwd_1gb_step_4kb", 4096, Source::Checkpoint);
-}
-
-fn query_write_bwd_1gb_step_4kb_page_delta(c: &mut Criterion) {
-    query_bench(c, "query_write_bwd_1gb_step_4kb", 4096, Source::PageDelta);
-}
-
-fn query_write_bwd_1gb_step_16kb_checkpoint(c: &mut Criterion) {
-    query_bench(
-        c,
-        "query_write_bwd_1gb_step_16kb",
-        16384,
-        Source::Checkpoint,
-    );
-}
-
-fn query_write_bwd_1gb_step_16kb_page_delta(c: &mut Criterion) {
-    query_bench(c, "query_write_bwd_1gb_step_16kb", 16384, Source::PageDelta);
-}
-
-////////////////////////////////////////////////////////////////////////
-// Update forward writes
-////////////////////////////////////////////////////////////////////////
-
-fn update_write_fwd_1gb_checkpoint(c: &mut Criterion) {
-    update_bench(c, "update_write_fwd_1gb", 8, Source::Checkpoint);
-}
-
-fn update_write_fwd_1gb_page_delta(c: &mut Criterion) {
-    update_bench(c, "update_write_fwd_1gb", 8, Source::PageDelta);
-}
-
-fn update_write_fwd_1gb_step_4kb_checkpoint(c: &mut Criterion) {
-    update_bench(c, "update_write_fwd_1gb_step_4kb", 4096, Source::Checkpoint);
-}
-
-fn update_write_fwd_1gb_step_4kb_page_delta(c: &mut Criterion) {
-    update_bench(c, "update_write_fwd_1gb_step_4kb", 4096, Source::PageDelta);
-}
-
-fn update_write_fwd_1gb_step_16kb_checkpoint(c: &mut Criterion) {
-    update_bench(
-        c,
-        "update_write_fwd_1gb_step_16kb",
-        16384,
-        Source::Checkpoint,
-    );
-}
-
-fn update_write_fwd_1gb_step_16kb_page_delta(c: &mut Criterion) {
-    update_bench(
-        c,
-        "update_write_fwd_1gb_step_16kb",
-        16384,
-        Source::PageDelta,
-    );
-}
-
-////////////////////////////////////////////////////////////////////////
-// Update backward writes
-////////////////////////////////////////////////////////////////////////
-
-fn update_write_bwd_1gb_checkpoint(c: &mut Criterion) {
-    update_bench(c, "update_write_bwd_1gb", 8, Source::Checkpoint);
-}
-
-fn update_write_bwd_1gb_page_delta(c: &mut Criterion) {
-    update_bench(c, "update_write_bwd_1gb", 8, Source::PageDelta);
-}
-
-fn update_write_bwd_1gb_step_4kb_checkpoint(c: &mut Criterion) {
-    update_bench(c, "update_write_bwd_1gb_step_4kb", 4096, Source::Checkpoint);
-}
-
-fn update_write_bwd_1gb_step_4kb_page_delta(c: &mut Criterion) {
-    update_bench(c, "update_write_bwd_1gb_step_4kb", 4096, Source::PageDelta);
-}
-
-fn update_write_bwd_1gb_step_16kb_checkpoint(c: &mut Criterion) {
-    update_bench(
-        c,
-        "update_write_bwd_1gb_step_16kb",
-        16384,
-        Source::Checkpoint,
-    );
-}
-
-fn update_write_bwd_1gb_step_16kb_page_delta(c: &mut Criterion) {
-    update_bench(
-        c,
-        "update_write_bwd_1gb_step_16kb",
-        16384,
-        Source::PageDelta,
-    );
-}
-
-////////////////////////////////////////////////////////////////////////
-// Main
-////////////////////////////////////////////////////////////////////////
-
 criterion_group!(
     name = heap_benches;
     config = Criterion::default().sample_size(10);
-    targets =
-        query_read_fwd_1gb_checkpoint,
-        query_read_fwd_1gb_page_delta,
-        query_read_fwd_1gb_step_4kb_checkpoint,
-        query_read_fwd_1gb_step_4kb_page_delta,
-        query_read_fwd_1gb_step_16kb_checkpoint,
-        query_read_fwd_1gb_step_16kb_page_delta,
-        query_read_bwd_1gb_checkpoint,
-        query_read_bwd_1gb_page_delta,
-        query_read_bwd_1gb_step_4kb_checkpoint,
-        query_read_bwd_1gb_step_4kb_page_delta,
-        query_read_bwd_1gb_step_16kb_checkpoint,
-        query_read_bwd_1gb_step_16kb_page_delta,
-
-        update_read_fwd_1gb_checkpoint,
-        update_read_fwd_1gb_page_delta,
-        update_read_fwd_1gb_step_4kb_checkpoint,
-        update_read_fwd_1gb_step_4kb_page_delta,
-        update_read_fwd_1gb_step_16kb_checkpoint,
-        update_read_fwd_1gb_step_16kb_page_delta,
-        update_read_bwd_1gb_checkpoint,
-        update_read_bwd_1gb_page_delta,
-        update_read_bwd_1gb_step_4kb_checkpoint,
-        update_read_bwd_1gb_step_4kb_page_delta,
-        update_read_bwd_1gb_step_16kb_checkpoint,
-        update_read_bwd_1gb_step_16kb_page_delta,
-
-        query_write_fwd_1gb_checkpoint,
-        query_write_fwd_1gb_page_delta,
-        query_write_fwd_1gb_step_4kb_checkpoint,
-        query_write_fwd_1gb_step_4kb_page_delta,
-        query_write_fwd_1gb_step_16kb_checkpoint,
-        query_write_fwd_1gb_step_16kb_page_delta,
-        query_write_bwd_1gb_checkpoint,
-        query_write_bwd_1gb_page_delta,
-        query_write_bwd_1gb_step_4kb_checkpoint,
-        query_write_bwd_1gb_step_4kb_page_delta,
-        query_write_bwd_1gb_step_16kb_checkpoint,
-        query_write_bwd_1gb_step_16kb_page_delta,
-
-        update_write_fwd_1gb_checkpoint,
-        update_write_fwd_1gb_page_delta,
-        update_write_fwd_1gb_step_4kb_checkpoint,
-        update_write_fwd_1gb_step_4kb_page_delta,
-        update_write_fwd_1gb_step_16kb_checkpoint,
-        update_write_fwd_1gb_step_16kb_page_delta,
-        update_write_bwd_1gb_checkpoint,
-        update_write_bwd_1gb_page_delta,
-        update_write_bwd_1gb_step_4kb_checkpoint,
-        update_write_bwd_1gb_step_4kb_page_delta,
-        update_write_bwd_1gb_step_16kb_checkpoint,
-        update_write_bwd_1gb_step_16kb_page_delta,
+    targets = all
 );
 
 criterion_main!(heap_benches);

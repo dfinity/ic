@@ -467,8 +467,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                 v.start_polling(cli.registry.registry_nns_urls, nns_pub_key)
                     .await
                     .context("failed to start registry replicator")?
-                    .await
-                    .context("registry replicator failed")?;
+                    .await;
 
                 Ok::<(), Error>(())
             });

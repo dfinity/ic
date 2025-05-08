@@ -6,6 +6,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [1.2.1] - 2025-05-10
+### Added
+- Token-specific metrics for multi-token instances - metrics now include token labels to help distinguish between different tokens ([#4790](https://github.com/dfinity/ic/pull/4790)).
+
+### Changed
+- Increased the sync thread watchdog timeout from 10 to 60 seconds to better handle IC instability cases ([#4863](https://github.com/dfinity/ic/pull/4863)).
+- Added more resources for icrc_multitoken_rosetta_system tests to address flakiness ([#4741](https://github.com/dfinity/ic/pull/4741)).
+- Always return ICRC-3 compliant certificate for consistency ([#4504](https://github.com/dfinity/ic/pull/4504)).
+
+## [1.2.0] - 2025-04-04
+### Added
+- Support for multiple tokens within a single instance.
+
+## Fixed
+- Removed unnecessary recurrent block table scans to identify gaps -> sharp drop in I/O operations.
+
+
 ## [1.1.2] - 2024-11-21
 ### Fixed
 - Support for icrc3 certificates

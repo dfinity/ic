@@ -3,10 +3,10 @@ use candid::Encode;
 use canister_test::CanisterInstallMode;
 use ic_base_types::PrincipalId;
 use ic_config::{
-    embedders::BestEffortResponsesFeature,
     execution_environment::{Config as HypervisorConfig, DEFAULT_WASM_MEMORY_LIMIT},
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
+use ic_embedders::wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     CreateCanisterArgs, DerivationPath, EcdsaKeyId, EmptyBlob, LoadCanisterSnapshotArgs,
@@ -18,7 +18,6 @@ use ic_replicated_state::NumWasmPages;
 use ic_state_machine_tests::{
     ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, UserError,
 };
-use ic_system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_test_utilities_metrics::{fetch_gauge, fetch_int_counter};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::MessageId;
@@ -2264,17 +2263,12 @@ fn helper_best_effort_responses(
     expected_deadline_seconds: u32,
 ) {
     let subnet_config = SubnetConfig::new(SubnetType::Application);
-    let mut embedders_config = ic_config::embedders::Config::default();
-    embedders_config.feature_flags.best_effort_responses = BestEffortResponsesFeature::Enabled;
 
     let env = StateMachineBuilder::new()
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
         .with_config(Some(StateMachineConfig::new(
             subnet_config,
-            HypervisorConfig {
-                embedders_config,
-                ..Default::default()
-            },
+            HypervisorConfig::default(),
         )))
         .build();
 
@@ -3092,12 +3086,7 @@ fn test_canister_liquid_cycle_balance() {
                     callee,
                     "update",
                     call_args()
-                        .other_side(
-                            wasm()
-                                .accept_cycles(u128::MAX.into())
-                                .append_and_reply()
-                                .build(),
-                        )
+                        .other_side(wasm().accept_cycles(u128::MAX).append_and_reply().build())
                         .on_reject(wasm().reject_message().trap())
                         .on_reply(wasm().message_payload().append_and_reply()),
                 )

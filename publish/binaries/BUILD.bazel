@@ -1,6 +1,7 @@
+load("@os_info//:defs.bzl", "os_info")
 load("//bazel:defs.bzl", "gzip_compress")
 load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
-load("//publish:defs.bzl", "checksum_rule", "release_nostrip_binary", "release_strip_binary", "release_strip_binary_test")
+load("//publish:defs.bzl", "artifact_bundle", "release_nostrip_binary", "release_strip_binary", "release_strip_binary_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -117,8 +118,8 @@ filegroup(
     srcs = [name + ".gz" for name in ALL_BINARIES],
 )
 
-checksum_rule(
-    name = "compute_checksums",
+artifact_bundle(
+    name = "bundle",
     inputs = [":binaries"],
 )
 
@@ -126,15 +127,7 @@ upload_artifacts(
     name = "upload",
     testonly = True,
     inputs = [":binaries"],
-    remote_subdir = "binaries/" + select({
-        "@platforms//cpu:x86_64": "x86_64",
-        "@platforms//cpu:arm64": "arm64",
-        "//conditions:default": "unknown",
-    }) + "-" + select({
-        "@platforms//os:linux": "linux",
-        "@platforms//os:osx": "darwin",
-        "//conditions:default": "unknown",
-    }),
+    remote_subdir = "binaries/" + os_info,
 )
 
 # https://dfinity.atlassian.net/browse/IDX-2599

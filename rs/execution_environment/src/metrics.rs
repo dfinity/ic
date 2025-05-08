@@ -1,10 +1,10 @@
+use ic_embedders::wasmtime_embedder::system_api::sandbox_safe_system_state::RequestMetadataStats;
 use ic_error_types::UserError;
 use ic_management_canister_types_private::QueryMethod;
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero},
     MetricsRegistry,
 };
-use ic_system_api::sandbox_safe_system_state::RequestMetadataStats;
 use ic_types::{
     NumInstructions, NumMessages, NumSlices, Time, MAX_STABLE_MEMORY_IN_BYTES,
     MAX_WASM_MEMORY_IN_BYTES,
@@ -19,8 +19,8 @@ pub(crate) const SYSTEM_API_CANISTER_CYCLE_BALANCE128: &str = "canister_cycle_ba
 pub(crate) const SYSTEM_API_TIME: &str = "time";
 
 const LABEL_CLASS: &str = "class";
-const LABEL_VALUE_BEST_EFFORT: &str = "best_effort";
-const LABEL_VALUE_GUARANTEED_RESPONSE: &str = "guaranteed_response";
+const LABEL_VALUE_BEST_EFFORT: &str = "best-effort";
+const LABEL_VALUE_GUARANTEED_RESPONSE: &str = "guaranteed response";
 
 pub const SUCCESS_STATUS_LABEL: &str = "success";
 
@@ -177,7 +177,6 @@ impl CallTreeMetrics for CallTreeMetricsImpl {
 pub(crate) struct QueryHandlerMetrics {
     pub query: ScopedMetrics,
     pub query_initial_call: ScopedMetrics,
-    pub query_retry_call: ScopedMetrics,
     pub query_spawned_calls: ScopedMetrics,
     pub query_critical_error: IntCounter,
     /// The total number of tracked System API calls invoked during the query execution.
@@ -237,31 +236,6 @@ impl QueryHandlerMetrics {
                 messages: messages_histogram(
                     "execution_query_initial_call_messages",
                     "The number of messages executed in the initial call in \
-                    query handling",
-                    metrics_registry,
-                ),
-            },
-            query_retry_call: ScopedMetrics {
-                duration: duration_histogram(
-                    "execution_query_retry_call_duration_seconds",
-                    "The duration of the retry call in query handling",
-                    metrics_registry,
-                ),
-                instructions: instructions_histogram(
-                    "execution_query_retry_call_instructions",
-                    "The number of instructions executed in the retry call \
-                    in query handling",
-                    metrics_registry,
-                ),
-                slices: slices_histogram(
-                    "execution_query_retry_call_slices",
-                    "The number of slices executed in the retry call in \
-                    query handling",
-                    metrics_registry,
-                ),
-                messages: messages_histogram(
-                    "execution_query_retry_call_messages",
-                    "The number of messages executed in the retry call in \
                     query handling",
                     metrics_registry,
                 ),

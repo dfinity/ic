@@ -7,8 +7,11 @@ use ic_base_types::CanisterId;
 use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 
-use ic_embedders::wasm_executor::{
-    wasm_execution_error, CanisterStateChanges, PausedWasmExecution, WasmExecutionResult,
+use ic_embedders::{
+    wasm_executor::{
+        wasm_execution_error, CanisterStateChanges, PausedWasmExecution, WasmExecutionResult,
+    },
+    wasmtime_embedder::system_api::{ApiType, ExecutionParameters},
 };
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
@@ -16,7 +19,6 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{error, info, ReplicaLogger};
 use ic_replicated_state::{CallContext, CallOrigin, CanisterState};
 use ic_sys::PAGE_SIZE;
-use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterMessage, CanisterMessageOrTask, Payload, RequestMetadata,

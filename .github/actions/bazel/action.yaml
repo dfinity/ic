@@ -6,12 +6,12 @@ inputs:
     required: true
     description: |
       The commands to run. Will be evaluated with bash.
-  BUILDBUDDY_LINKS:
+  execlogs-artifact-name:
     required: false
-    description: Extra build metadata for buildbuddy
+    description: "When provided, the execlogs will be uploaded as an artifact with the specified name."
   GPG_PASSPHRASE:
-    required: false
-    description: "GPG key to encrypt build events. If the key is not set, events won't be uploaded."
+    required: true
+    description: "GPG key to encrypt build events. Upload can be disabled by explicitly setting the input to an empty string."
 
 runs:
   using: "composite"
@@ -28,6 +28,9 @@ runs:
     # Run the specified commands
     - name: Run bazel commands
       shell: bash
+      env:
+        # Used by the bazel wrapper
+        BUILDBUDDY_LINKS: '[CI Job](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})'
       run: |
         set -euo pipefail
 
@@ -39,8 +42,7 @@ runs:
         PATH="$PWD/.github/actions/bazel/bin:$BAZEL_ACTION_OLDPATH"
         hash -r
 
-        # Some exports used by the bazel wrapper
-        export BUILDBUDDY_LINKS='${{ inputs.BUILDBUDDY_LINKS }}'
+        # Used by the bazel wrapper
         export BAZEL_ACTION_METRICS_OUT='${{ steps.metrics-tmpdir.outputs.dir }}'
 
         ${{ inputs.run }}
@@ -63,13 +65,35 @@ runs:
       if: success() || failure()
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ github.job }}-bep-${{ strategy.job-index }}
+        name: ${{ github.job }}-bep
         retention-days: 14
         if-no-files-found: ignore
         compression-level: 9
         path: |
           ${{ steps.metrics-tmpdir.outputs.dir }}/bazel-bep-*.pb.gpg
           ${{ steps.metrics-tmpdir.outputs.dir }}/profile-*.json
+
+    - name: Convert execlogs to CSV
+      shell: bash
+      if: (success() || failure()) && inputs.execlogs-artifact-name != ''
+      run: |
+        execlog="$(mktemp)"
+        trap "rm -f $execlog" INT TERM EXIT
+        for execlog_zst in $(find '${{ steps.metrics-tmpdir.outputs.dir }}' -name 'execlog-*.zst'); do
+          zstd -f -d "$execlog_zst" -o "$execlog"
+          bazel run //bazel:execution_log_compact_to_csv \
+            $([[ "$(uname)" == "Linux" ]] && echo '--repository_cache=/cache/bazel') -- \
+            --input_execlog="$execlog" \
+            --whitelist_pat='^//'
+        done > '${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv'
+
+    - name: Upload execution log
+      if: (success() || failure()) && inputs.execlogs-artifact-name != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.execlogs-artifact-name }}
+        path: |
+          ${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv
 
     - name: Cleanup
       shell: bash

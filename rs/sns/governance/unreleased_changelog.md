@@ -9,9 +9,10 @@ on the process that this file is part of, see
 
 ## Added
 
-* Added the (currently disabled) `SetFollowing` neuron command.
-
 ## Changed
+
+The DAO community settings topic is promoted to being critical. For context, please refer to
+the [forum thread](https://forum.dfinity.org/t/make-sns-topic-dao-community-settings-critical/46689).
 
 ## Deprecated
 

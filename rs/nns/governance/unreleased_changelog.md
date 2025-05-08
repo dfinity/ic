@@ -11,8 +11,6 @@ on the process that this file is part of, see
 
 ## Changed
 
-* Increased the probability of failure from 70% to 90% for the deprecated _pb methods.
-
 ## Deprecated
 
 ## Removed

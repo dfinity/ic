@@ -130,21 +130,6 @@ pub struct SubnetForCanister {
     #[prost(message, optional, tag = "1")]
     pub subnet_id: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
-pub struct GetChunkRequest {
-    #[prost(bytes = "vec", optional, tag = "1")]
-    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
-    pub content_sha256: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
-}
-/// When an entry is too large to fit into a "normal" response, the response
-/// references multiple chunks, which need to be fetched in follow-up get_chunk
-/// requests. (This is the main part of `get_chunk` responses.)
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
-pub struct Chunk {
-    #[prost(bytes = "vec", optional, tag = "1")]
-    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
-    pub content: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
-}
 /// API boundary nodes IDs request payload.
 #[derive(candid::CandidType, candid::Deserialize, Clone, Copy, PartialEq, ::prost::Message)]
 pub struct GetApiBoundaryNodeIdsRequest {}

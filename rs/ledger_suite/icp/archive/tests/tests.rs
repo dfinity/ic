@@ -1,6 +1,6 @@
 use candid::{Decode, Encode, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icp_archive::ArchiveUpgradeArgument;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
 use ic_ledger_core::timestamp::TimeStamp;
@@ -79,11 +79,7 @@ impl Setup {
     }
 
     fn upgrade(&self, upgrade_arg: Option<ArchiveUpgradeArgument>, expected_error: Option<String>) {
-        let upgrade_arg = if let Some(upgrade_arg) = upgrade_arg {
-            Encode!(&upgrade_arg).expect("should encode archive upgrade args")
-        } else {
-            vec![]
-        };
+        let upgrade_arg = Encode!(&upgrade_arg).expect("should encode archive upgrade args");
         match self.pocket_ic.upgrade_canister(
             Principal::from(self.canister_id),
             self.archive_wasm.clone(),

@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//rs/tests:common.bzl", "MAINNET_ENV")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -36,4 +37,15 @@ rust_test(
     name = "http_utils_test",
     crate = ":http_utils",
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "resuming_download_test",
+    srcs = glob(["tests/**/*.rs"]),
+    env = MAINNET_ENV,
+    tags = [
+        "long_test",  # this test doesn't necessarily take long but it downloads a big image from download proxy so, to save bandwidth, we don't want to do that for every update to every PR and only run this on pushes to master.
+        "requires-network",
+    ],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":http_utils"],
 )

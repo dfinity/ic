@@ -9,6 +9,7 @@ documentation.workspace = true
 [dependencies]
 ic-config = { path = "../config" }
 ic-consensus-certification = { path = "./certification" }
+ic-consensus-idkg = { path = "./idkg" }
 ic-consensus-dkg = { path = "./dkg" }
 ic-consensus-utils = { path = "./utils" }
 ic-consensus-vetkd = { path = "./vetkd" }
@@ -89,5 +90,5 @@ harness = false
 
 [features]
 default = []
-malicious_code = []
+malicious_code = ["ic-consensus-idkg/malicious_code"]
 proptest = []
