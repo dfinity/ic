@@ -4,8 +4,6 @@
 # To require no rustfmt issues, pass --config=fmt.
 # To require no clippy issues, pass --config=clippy. Without this, warnings will still be generated.
 # To enable both of the above, pass --config=lint.
-# --config=ci implies --config=lint
-build:ci --config=lint
 # --config=lint implies both --config=fmt and --config=clippy.
 build:lint --config=fmt
 build:lint --config=clippy
@@ -60,7 +58,6 @@ test --test_tag_filters="-system_test,-fuzz_test"
 test:alltests --test_tag_filters=""
 test:paritytests --test_tag_filters="-system_test"
 build:ci --build_tag_filters="-system_test,-fuzz_test"
-build:ci --verbose_failures
 
 test --test_output=errors
 test --test_env=RUST_BACKTRACE=full
@@ -76,14 +73,13 @@ test:testnet --test_output=streamed --test_tag_filters=
 # TODO(IDX-2374): enable alltests in CI when we will have actual system tests.
 #test:ci --config=alltests
 
-# See the following for the exact semantics of --flaky_test_attempts:
-# https://bazel.build/reference/command-line-reference#flag--flaky_test_attempts
-# Locally we want a flaky test to fail explicitly on the first failure and not be retried.
-test    --flaky_test_attempts=1
-# On CI run tests marked as flaky up to 3 times.
-test:ci --flaky_test_attempts=default
-# On CI run all system-tests up to 3 times since they're known to be the most flaky since they require non-deterministic resources like the Internet.
-test:ci --flaky_test_attempts=//rs/tests/.*@3
+# Set all tests (including those marked as flaky) to fail explicitly on the
+# first try (can be overriden). This is useful when developing locally to
+# spot flakiness.
+#
+# see also:
+#   https://bazel.build/reference/command-line-reference#flag--flaky_test_attempts
+test --flaky_test_attempts=1
 
 # So that developers can build in debug mode.
 build:dev --compilation_mode=fastbuild
@@ -124,7 +120,7 @@ build:afl --config=fuzzing
 # For more context see: https://github.com/dfinity/ic/pull/3508
 build:afl --hermetic_cc=false
 build:afl --build_tag_filters=afl
-run:afl --run_under="//bin:afl_wrapper"
+run:afl --run_under="//bin/fuzzing:afl_wrapper"
 
 # Fuzzing w/ Canister Sandbox configuration
 # NOTE: This is only for --config=fuzzing
@@ -149,7 +145,16 @@ common --noexperimental_inmemory_dotd_files
 # certainly" does no harm.
 test --test_env=CLICOLOR_FORCE=true
 
+# Give canceled actions some more time to cleanup
+common --local_termination_grace_seconds=90
+
 # Speed up compilation with zig cc
-# Currently this is disabled as it breaks pocket-ic tests as the port files
-# collide across tests.
-# build --sandbox_add_mount_pair=/tmp
+# zig cc compiles the standard library on demand, so a shared cache makes a big
+# difference by cutting out duplicated work.
+
+# Set the cache path for all environments
+build --repo_env=HERMETIC_CC_TOOLCHAIN_CACHE_PREFIX=/tmp/zig-cache
+# Share /tmp/zig-cache across targets
+build --sandbox_add_mount_pair=/tmp/zig-cache
+# Allow writes to the shared cache
+build --sandbox_writable_path=/tmp/zig-cache

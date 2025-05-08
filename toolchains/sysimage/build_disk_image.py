@@ -14,6 +14,7 @@ import os
 import subprocess
 import sys
 import tarfile
+import tempfile
 
 
 def read_partition_description(data):
@@ -96,9 +97,7 @@ def _copyfile(source, target, size):
 
 
 def write_partition_image_from_tzst(gpt_entry, image_file, partition_tzst):
-    tmpdir = os.getenv("ICOS_TMPDIR")
-    if not tmpdir:
-        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
+    tmpdir = tempfile.mkdtemp()
 
     partition_tf = os.path.join(tmpdir, "partition.tar")
     subprocess.run(["zstd", "-q", "--threads=0", "-f", "-d", partition_tzst, "-o", partition_tf], check=True)
@@ -156,9 +155,7 @@ def main():
         gpt_entries = read_partition_description(f.read())
     validate_partition_table(gpt_entries)
 
-    tmpdir = os.getenv("ICOS_TMPDIR")
-    if not tmpdir:
-        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
+    tmpdir = tempfile.mkdtemp()
 
     if args.dflate:
         disk_image = os.path.join(tmpdir, "disk.img")
@@ -207,6 +204,8 @@ def main():
             ],
             check=True,
         )
+
+    # tempfile cleanup is handled by proc_wrapper.sh
 
 
 if __name__ == "__main__":

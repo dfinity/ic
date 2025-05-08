@@ -1454,6 +1454,14 @@ impl ManageNeuronResponse {
         }
     }
 
+    pub fn set_following_response() -> Self {
+        ManageNeuronResponse {
+            command: Some(manage_neuron_response::Command::SetFollowing(
+                manage_neuron_response::SetFollowingResponse {},
+            )),
+        }
+    }
+
     pub fn make_proposal_response(proposal_id: ProposalId) -> Self {
         let proposal_id = Some(proposal_id);
         ManageNeuronResponse {

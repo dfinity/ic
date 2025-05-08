@@ -13,7 +13,7 @@ use ic_nns_constants::{
     ALL_NNS_CANISTER_IDS, CYCLES_LEDGER_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID,
     ROOT_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::{Governance, NetworkEconomics, Neuron};
+use ic_nns_governance_api::{Governance, NetworkEconomics, Neuron};
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_gtc_accounts::{ECT_ACCOUNTS, SEED_ROUND_ACCOUNTS};
@@ -225,14 +225,6 @@ impl NnsInitPayloadsBuilder {
         self
     }
 
-    pub fn with_sns_wasm_allowed_principals(
-        &mut self,
-        allowed_principals: Vec<PrincipalId>,
-    ) -> &mut Self {
-        self.sns_wasms.with_allowed_principals(allowed_principals);
-        self
-    }
-
     pub fn with_exchange_rate_canister(
         &mut self,
         exchange_rate_canister_id: CanisterId,
@@ -316,10 +308,20 @@ pub fn modify_wasm_bytes(wasm_bytes: &[u8], modify_with: u32) -> Vec<u8> {
 // REGISTRY
 
 /// Build Wasm for NNS Registry canister
-pub fn build_registry_wasm() -> Wasm {
-    let features = [];
-    Project::cargo_bin_maybe_from_env("registry-canister", &features)
+pub fn build_registry_wasm_with_features(features: &[&str]) -> Wasm {
+    Project::cargo_bin_maybe_from_env("registry-canister", features)
 }
+
+/// Build Wasm for NNS Registry canister
+pub fn build_registry_wasm() -> Wasm {
+    build_registry_wasm_with_features(&[])
+}
+
+/// Build Wasm for NNS Registry canister
+pub fn build_test_registry_wasm() -> Wasm {
+    build_registry_wasm_with_features(&["test"])
+}
+
 /// Build mainnet Wasm for NNS Registry canister
 pub fn build_mainnet_registry_wasm() -> Wasm {
     let features = [];

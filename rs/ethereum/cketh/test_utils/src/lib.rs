@@ -6,7 +6,6 @@ use crate::mock::JsonRpcMethod;
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, GetEventsResult};
 use ic_cketh_minter::endpoints::{
     AddCkErc20Token, Eip1559TransactionPriceArg, MinterInfo, RetrieveEthStatus, WithdrawalArg,
@@ -19,6 +18,7 @@ use ic_cketh_minter::{
     lifecycle::{init::InitArg as MinterInitArgs, EthereumNetwork, MinterArg},
 };
 use ic_ethereum_types::Address;
+use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, CanisterStatusType};
 use ic_state_machine_tests::{
@@ -36,18 +36,12 @@ use std::time::Duration;
 
 pub mod ckerc20;
 pub mod events;
-#[cfg(feature = "evm-rpc")]
 mod evm_rpc_provider;
 pub mod flow;
 pub mod mock;
-#[cfg(not(feature = "evm-rpc"))]
-mod provider;
 pub mod response;
 
-#[cfg(feature = "evm-rpc")]
 pub use evm_rpc_provider::JsonRpcProvider;
-#[cfg(not(feature = "evm-rpc"))]
-pub use provider::JsonRpcProvider;
 
 #[cfg(test)]
 mod tests;

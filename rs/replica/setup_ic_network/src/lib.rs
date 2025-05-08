@@ -10,12 +10,10 @@ use ic_artifact_pool::{
     ingress_pool::IngressPoolImpl,
 };
 use ic_config::{artifact_pool::ArtifactPoolConfig, transport::TransportConfig};
-use ic_consensus::{
-    consensus::{ConsensusBouncer, ConsensusImpl},
-    idkg,
-};
+use ic_consensus::consensus::{ConsensusBouncer, ConsensusImpl};
 use ic_consensus_certification::{CertificationCrypto, CertifierBouncer, CertifierImpl};
 use ic_consensus_dkg::DkgBouncer;
+use ic_consensus_idkg::{IDkgBouncer, IDkgStatsImpl};
 use ic_consensus_manager::{AbortableBroadcastChannel, AbortableBroadcastChannelBuilder};
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_consensus_vetkd::VetKdPayloadBuilderImpl;
@@ -108,7 +106,7 @@ impl ArtifactPools {
             config.clone(),
             log.clone(),
             metrics_registry.clone(),
-            Box::new(idkg::IDkgStatsImpl::new(metrics_registry.clone())),
+            Box::new(IDkgStatsImpl::new(metrics_registry.clone())),
         );
         idkg_pool.add_initial_dealings(catch_up_package);
         let idkg_pool = Arc::new(RwLock::new(idkg_pool));
@@ -142,7 +140,7 @@ struct Bouncers {
     consensus: Arc<ConsensusBouncer>,
     certifier: Arc<CertifierBouncer>,
     dkg: Arc<DkgBouncer>,
-    idkg: Arc<idkg::IDkgBouncer>,
+    idkg: Arc<IDkgBouncer>,
     https_outcalls: Arc<CanisterHttpGossipImpl>,
 }
 
@@ -164,7 +162,7 @@ impl Bouncers {
             metrics_registry,
             consensus_pool_cache.clone(),
         ));
-        let idkg = Arc::new(idkg::IDkgBouncer::new(
+        let idkg = Arc::new(IDkgBouncer::new(
             metrics_registry,
             subnet_id,
             consensus_block_cache,
@@ -647,7 +645,7 @@ fn start_consensus(
     );
     join_handles.push(create_artifact_handler(
         abortable_broadcast_channels.idkg,
-        idkg::IDkgImpl::new(
+        ic_consensus_idkg::IDkgImpl::new(
             node_id,
             consensus_pool.read().unwrap().get_block_cache(),
             Arc::clone(&consensus_crypto),

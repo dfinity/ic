@@ -1,10 +1,12 @@
-use crate::CallCanisters;
+use crate::{CallCanisters, CallCanistersWithStoppedCanisterError, ProgressNetwork};
 use crate::{CanisterInfo, Request};
 use candid::Principal;
-use ic_agent::Agent;
+use ic_agent::agent::{RejectCode, RejectResponse};
+use ic_agent::{Agent, AgentError};
 use itertools::{Either, Itertools};
 use serde_cbor::Value;
 use std::collections::BTreeSet;
+use std::time::Duration;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -138,5 +140,31 @@ impl CallCanisters for Agent {
 
     fn caller(&self) -> Result<Principal, Self::Error> {
         self.get_principal().map_err(Self::Error::Identity)
+    }
+}
+
+impl CallCanistersWithStoppedCanisterError for Agent {
+    fn is_canister_stopped_error(&self, err: &Self::Error) -> bool {
+        match err {
+            AgentCallError::Agent(AgentError::CertifiedReject(RejectResponse {
+                reject_code: RejectCode::CanisterError,
+                error_code: Some(error_code),
+                ..
+            })) => {
+                // CanisterStopped or CanisterStopping
+                ["IC0508".to_string(), "IC0509".to_string()].contains(error_code)
+            }
+            _ => false,
+        }
+    }
+}
+
+impl ProgressNetwork for Agent {
+    async fn progress(&self, duration: Duration) {
+        if duration > Duration::from_secs(5) {
+            eprintln!("Warning: waiting for {:?}, this may take a while", duration);
+            eprintln!("Consider using shorter duration in 'progress' method calls");
+        }
+        tokio::time::sleep(duration).await;
     }
 }

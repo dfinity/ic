@@ -3602,11 +3602,13 @@ impl DeleteCanisterSnapshotArgs {
         CanisterId::unchecked_from_principal(self.canister_id)
     }
 
+    // TODO: EXC-1997.
     pub fn get_snapshot_id(&self) -> SnapshotId {
         SnapshotId::try_from(&self.snapshot_id).unwrap()
     }
 }
 
+// TODO: EXC-1997.
 impl<'a> Payload<'a> for DeleteCanisterSnapshotArgs {
     fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
         let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
@@ -3748,21 +3750,39 @@ pub struct ReadCanisterSnapshotMetadataArgs {
 }
 
 impl ReadCanisterSnapshotMetadataArgs {
-    pub fn new(canister_id: CanisterId, snapshot_id: Vec<u8>) -> Self {
+    pub fn new(canister_id: CanisterId, snapshot_id: SnapshotId) -> Self {
         Self {
             canister_id: canister_id.get(),
-            snapshot_id,
+            snapshot_id: snapshot_id.to_vec(),
         }
     }
     pub fn get_canister_id(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(self.canister_id)
     }
+    // TODO: EXC-1997.
+    pub fn get_snapshot_id(&self) -> SnapshotId {
+        SnapshotId::try_from(&self.snapshot_id).unwrap()
+    }
 }
 
-impl Payload<'_> for ReadCanisterSnapshotMetadataArgs {}
+// TODO: EXC-1997.
+impl<'a> Payload<'a> for ReadCanisterSnapshotMetadataArgs {
+    fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
+        let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
+        // Verify that snapshot ID has the correct format.
+        if let Err(err) = SnapshotId::try_from(&args.snapshot_id) {
+            return Err(UserError::new(
+                ErrorCode::InvalidManagementPayload,
+                format!("Payload deserialization error: {err:?}"),
+            ));
+        }
+        Ok(args)
+    }
+}
 
-#[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Deserialize, EnumIter)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Default, Deserialize, EnumIter)]
 pub enum SnapshotSource {
+    #[default]
     TakenFromCanister,
     UploadedManually,
 }
@@ -3788,10 +3808,7 @@ impl TryFrom<pb_canister_snapshot_bits::SnapshotSource> for SnapshotSource {
             pb_canister_snapshot_bits::SnapshotSource::Unspecified => {
                 Err(ProxyDecodeError::ValueOutOfRange {
                     typ: "SnapshotSource",
-                    err: format!(
-                        "Unexpected value of status of on low wasm memory hook: {:?}",
-                        value
-                    ),
+                    err: format!("Unexpected value of SnapshotSource: {:?}", value),
                 })
             }
             pb_canister_snapshot_bits::SnapshotSource::TakenFromCanister => {
@@ -3849,8 +3866,8 @@ pub struct ReadCanisterSnapshotMetadataResponse {
     pub canister_version: u64,
     #[serde(with = "serde_bytes")]
     pub certified_data: Vec<u8>,
-    pub global_timer: GlobalTimer,
-    pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+    pub global_timer: Option<GlobalTimer>,
+    pub on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
 }
 
 /// An inner type of [`ReadCanisterSnapshotMetadataResponse`].
@@ -3967,18 +3984,23 @@ impl Payload<'_> for ReadCanisterSnapshotDataArgs {}
 impl ReadCanisterSnapshotDataArgs {
     pub fn new(
         canister_id: CanisterId,
-        snapshot_id: Vec<u8>,
+        snapshot_id: SnapshotId,
         kind: CanisterSnapshotDataKind,
     ) -> Self {
         Self {
             canister_id: canister_id.get(),
-            snapshot_id,
+            snapshot_id: snapshot_id.to_vec(),
             kind,
         }
     }
 
     pub fn get_canister_id(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(self.canister_id)
+    }
+
+    // TODO: EXC-1997 strengthen types
+    pub fn get_snapshot_id(&self) -> SnapshotId {
+        SnapshotId::try_from(&self.snapshot_id).unwrap()
     }
 }
 
@@ -4009,6 +4031,12 @@ pub enum CanisterSnapshotDataKind {
 pub struct ReadCanisterSnapshotDataResponse {
     #[serde(with = "serde_bytes")]
     pub chunk: Vec<u8>,
+}
+
+impl ReadCanisterSnapshotDataResponse {
+    pub fn new(chunk: Vec<u8>) -> Self {
+        Self { chunk }
+    }
 }
 
 /// Struct to encode/decode

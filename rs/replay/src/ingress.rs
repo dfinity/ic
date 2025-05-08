@@ -7,7 +7,7 @@ use ic_canister_client::{prepare_update, Agent, Sender};
 use ic_nervous_system_common::ledger;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     manage_neuron::{
         claim_or_refresh::{By, MemoAndController},
         configure::Operation,
@@ -266,7 +266,7 @@ pub fn cmd_add_ledger_account(
 
 /// Creates signed ingress messages to add a new blessed replica version and
 /// potentially updates the subnet record with this replica version.
-pub fn cmd_add_and_bless_replica_version(
+pub(crate) fn cmd_add_and_bless_replica_version(
     agent: &Agent,
     player: &crate::player::Player,
     cmd: &AddAndBlessReplicaVersionCmd,
@@ -370,7 +370,7 @@ pub fn cmd_add_registry_content(
 }
 
 /// Creates an ingress for removing of all nodes from a subnet.
-pub fn cmd_remove_subnet(
+pub(crate) fn cmd_remove_subnet(
     agent: &Agent,
     player: &crate::player::Player,
     context_time: Time,
@@ -426,7 +426,7 @@ pub fn atomic_mutate(
 }
 
 /// Bless a new replica version by mutating the registry canister.
-pub fn bless_replica_version(
+pub(crate) fn bless_replica_version(
     agent: &Agent,
     player: &crate::player::Player,
     replica_version_id: String,

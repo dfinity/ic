@@ -33,7 +33,7 @@ use ic_management_canister_types_private::{CanisterStatusResultV2, EmptyBlob, Pa
 use ic_message::ForwardParams;
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     create_service_nervous_system::{
         swap_parameters::NeuronBasketConstructionParameters as GovApiNeuronBasketConstructionParameters,
         SwapParameters,
@@ -44,6 +44,7 @@ use ic_nns_test_utils::governance::upgrade_nns_canister_with_args_by_proposal;
 use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_api::convert::to_arg;
 use ic_sns_swap::pb::v1::{NeuronBasketConstructionParameters, Params};
+use ic_test_identity::TEST_IDENTITY_KEYPAIR;
 use ic_types::{
     messages::{HttpCallContent, HttpQueryContent},
     CanisterId, Cycles, PrincipalId,
@@ -80,7 +81,6 @@ pub const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_00
 pub const CYCLES_LIMIT_PER_CANISTER: Cycles = Cycles::new(100_000_000_000_000);
 pub const AGENT_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 pub const CANISTER_CREATE_TIMEOUT: Duration = Duration::from_secs(30);
-pub const IDENTITY_PEM:&str = "-----BEGIN PRIVATE KEY-----\nMFMCAQEwBQYDK2VwBCIEILhMGpmYuJ0JEhDwocj6pxxOmIpGAXZd40AjkNhuae6q\noSMDIQBeXC6ae2dkJ8QC50bBjlyLqsFQFsMsIThWB21H6t6JRA==\n-----END PRIVATE KEY-----";
 /// A short wasm module that is a legal canister binary.
 pub const _EMPTY_WASM: &[u8] = &[0, 97, 115, 109, 1, 0, 0, 0];
 /// The following definition is a temporary work-around. Please do not copy!
@@ -95,8 +95,10 @@ pub const MAX_CONCURRENT_REQUESTS: usize = 10_000;
 pub const MAX_TCP_ERROR_RETRIES: usize = 5;
 
 pub fn get_identity() -> ic_agent::identity::BasicIdentity {
-    ic_agent::identity::BasicIdentity::from_pem(IDENTITY_PEM.as_bytes())
-        .expect("Invalid secret key.")
+    ic_agent::identity::BasicIdentity::from_pem(std::io::Cursor::new(
+        TEST_IDENTITY_KEYPAIR.to_pem(),
+    ))
+    .expect("Invalid secret key.")
 }
 
 /// Initializes a testing [Runtime] from a node's url. You should really

@@ -1,8 +1,8 @@
 name: PR Title Validation
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, edited]
+  pull_request_target:
+    types: [opened, reopened, edited]
 
 # Copied & adapted (job name, version label) from
 # https://github.com/ytanikin/pr-conventional-commits?tab=readme-ov-file#usage-with-labeling-where-label-is-just-a-task-type

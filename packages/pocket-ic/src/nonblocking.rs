@@ -7,8 +7,13 @@ use crate::common::rest::{
     RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
     RawTime, RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
 };
+#[cfg(windows)]
+use crate::wsl_path;
 pub use crate::DefaultEffectiveCanisterIdError;
-use crate::{start_or_reuse_server, IngressStatusResult, PocketIcBuilder, RejectResponse};
+use crate::{
+    copy_dir, start_or_reuse_server, IngressStatusResult, PocketIcBuilder, PocketIcState,
+    RejectResponse, Time,
+};
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use candid::{
@@ -33,11 +38,11 @@ use reqwest::{StatusCode, Url};
 use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};
 use slog::Level;
-use std::fs::File;
+use std::fs::{read_dir, File};
 use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 use tracing::{debug, instrument, warn};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
@@ -83,6 +88,7 @@ pub struct PocketIc {
     reqwest_client: reqwest::Client,
     // the instance should only be deleted when dropping this handle if this handle owns the instance
     owns_instance: bool,
+    state_dir: Option<PocketIcState>,
     _log_guard: Option<WorkerGuard>,
 }
 
@@ -118,6 +124,7 @@ impl PocketIc {
             server_url,
             reqwest_client,
             owns_instance: false,
+            state_dir: None,
             _log_guard: log_guard,
         }
     }
@@ -127,7 +134,8 @@ impl PocketIc {
         server_url: Option<Url>,
         server_binary: Option<PathBuf>,
         max_request_time_ms: Option<u64>,
-        state_dir: Option<PathBuf>,
+        read_only_state_dir: Option<PathBuf>,
+        mut state_dir: Option<PocketIcState>,
         nonmainnet_features: bool,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
@@ -139,14 +147,51 @@ impl PocketIc {
         };
 
         let subnet_config_set = subnet_config_set.into();
-        if state_dir.is_none()
-            || File::open(state_dir.clone().unwrap().join("topology.json")).is_err()
-        {
+
+        // copy the read-only state dir to the state dir
+        // (creating an empty temp dir to serve as the state dir if no state dir is provided)
+        if let Some(read_only_state_dir) = read_only_state_dir {
+            if let Some(ref state_dir) = state_dir {
+                let mut state_dir_contents = read_dir(state_dir.state_dir()).unwrap();
+                if state_dir_contents.next().is_some() {
+                    panic!(
+                        "PocketIC instance state must be empty if a read-only state is mounted."
+                    );
+                }
+            } else {
+                state_dir = Some(PocketIcState::new());
+            };
+            copy_dir(
+                read_only_state_dir,
+                state_dir
+                    .as_ref()
+                    .map(|state_dir| state_dir.state_dir())
+                    .unwrap(),
+            )
+            .expect("Failed to copy state directory");
+        };
+
+        // now that we initialized the state dir, we check if it contains a topology file
+        let has_topology = state_dir
+            .as_ref()
+            .map(|state_dir| File::open(state_dir.state_dir().join("topology.json")).is_ok())
+            .unwrap_or_default();
+
+        // if there is no topology to fetch from the state dir,
+        // the topology will be derived from the provided subnet config set
+        // that we need to validate
+        if !has_topology {
             subnet_config_set.validate().unwrap();
         }
+
         let instance_config = InstanceConfig {
             subnet_config_set,
-            state_dir,
+            #[cfg(not(windows))]
+            state_dir: state_dir.as_ref().map(|state_dir| state_dir.state_dir()),
+            #[cfg(windows)]
+            state_dir: state_dir
+                .as_ref()
+                .map(|state_dir| wsl_path(&state_dir.state_dir(), "state directory").into()),
             nonmainnet_features,
             log_level: log_level.map(|l| l.to_string()),
             bitcoind_addr,
@@ -178,8 +223,18 @@ impl PocketIc {
             server_url,
             reqwest_client,
             owns_instance: true,
+            state_dir,
             _log_guard: log_guard,
         }
+    }
+
+    pub async fn drop_and_take_state(mut self) -> Option<PocketIcState> {
+        self.do_drop().await;
+        self.state_dir.take()
+    }
+
+    pub(crate) fn take_state_internal(&mut self) -> Option<PocketIcState> {
+        self.state_dir.take()
     }
 
     /// Returns the URL of the PocketIC server on which this PocketIC instance is running.
@@ -317,7 +372,7 @@ impl PocketIc {
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn auto_progress(&self) -> Url {
         let now = std::time::SystemTime::now();
-        self.set_certified_time(now).await;
+        self.set_certified_time(now.into()).await;
         let endpoint = "auto_progress";
         let auto_progress_config = AutoProgressConfig {
             artificial_delay_ms: None,
@@ -496,23 +551,20 @@ impl PocketIc {
 
     /// Get the current time of the IC.
     #[instrument(ret, skip(self), fields(instance_id=self.instance_id))]
-    pub async fn get_time(&self) -> SystemTime {
+    pub async fn get_time(&self) -> Time {
         let endpoint = "read/get_time";
         let result: RawTime = self.get(endpoint).await;
-        SystemTime::UNIX_EPOCH + Duration::from_nanos(result.nanos_since_epoch)
+        Time::from_nanos_since_unix_epoch(result.nanos_since_epoch)
     }
 
     /// Set the current time of the IC, on all subnets.
     #[instrument(skip(self), fields(instance_id=self.instance_id, time = ?time))]
-    pub async fn set_time(&self, time: SystemTime) {
+    pub async fn set_time(&self, time: Time) {
         let endpoint = "update/set_time";
         self.post::<(), _>(
             endpoint,
             RawTime {
-                nanos_since_epoch: time
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .expect("Time went backwards")
-                    .as_nanos() as u64,
+                nanos_since_epoch: time.as_nanos_since_unix_epoch(),
             },
         )
         .await;
@@ -520,15 +572,12 @@ impl PocketIc {
 
     /// Set the current certified time of the IC, on all subnets.
     #[instrument(skip(self), fields(instance_id=self.instance_id, time = ?time))]
-    pub async fn set_certified_time(&self, time: SystemTime) {
+    pub async fn set_certified_time(&self, time: Time) {
         let endpoint = "update/set_certified_time";
         self.post::<(), _>(
             endpoint,
             RawTime {
-                nanos_since_epoch: time
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .expect("Time went backwards")
-                    .as_nanos() as u64,
+                nanos_since_epoch: time.as_nanos_since_unix_epoch(),
             },
         )
         .await;
@@ -1368,13 +1417,7 @@ impl PocketIc {
         ];
         let paths = vec![path.clone()];
         let content = ReadState {
-            ingress_expiry: self
-                .get_time()
-                .await
-                .duration_since(std::time::SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos() as u64
-                + 240_000_000_000,
+            ingress_expiry: self.get_time().await.as_nanos_since_unix_epoch() + 240_000_000_000,
             sender: Principal::anonymous(),
             paths,
         };

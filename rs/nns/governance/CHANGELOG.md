@@ -10,6 +10,84 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 
 INSERT NEW RELEASES HERE
 
+
+# 2025-05-02: Proposal 136427
+
+http://dashboard.internetcomputer.org/proposal/136427
+
+## Changed
+
+* The Governance canister will fetch rewards from the new Node Rewards Canister instead of from Registry.
+
+## Removed
+
+* All the `_pb` methods are removed as they already always panic, as well as decoding the init arg
+  as protobuf.
+
+
+# 2025-04-25: Proposal 136370
+
+http://dashboard.internetcomputer.org/proposal/136370
+
+## Fixed
+
+* Use `StableBTreeMap::init` instead of `::new` for voting power snapshots.
+
+
+# 2025-04-15: Proposal 136285
+
+http://dashboard.internetcomputer.org/proposal/136285
+
+## Added
+
+* A timer task is added to take daily snapshots of voting power for standard proposals.
+
+## Fixed
+
+* Turned off `DisburseMaturity` that was incorrectly turned on before.
+
+
+# 2025-04-11: Proposal 136224
+
+http://dashboard.internetcomputer.org/proposal/136224
+
+## Added
+
+* Governance now gets node provider rewards from the Node Reward Canister in test builds.
+
+## Changed
+
+* The `_pb` methods now always panic.
+
+
+# 2025-04-05: Proposal 136071
+
+http://dashboard.internetcomputer.org/proposal/136071
+
+## Changed
+
+* Disable Neuron's Funds for ongoing SNSs, as approved in
+  proposal [135970](https://dashboard.internetcomputer.org/proposal/135970).
+
+## Removed
+
+* The `topic_followee_index` in the heap is removed, along with the flag
+  `USE_STABLE_MEMORY_FOLLOWING_INDEX` that was set to true in the proposal 135063.
+
+# 2025-03-28: Proposal 136006
+
+http://dashboard.internetcomputer.org/proposal/136006
+
+## Added
+
+* The `init` method now supports candid decoding in addition to protobuf. Protobuf decoding will be
+  removed in the future, giving clients time to migrate.
+
+## Changed
+
+* Increased the probability of failure from 70% to 90% for the deprecated _pb methods.
+* Increase the neurons limit to 500K now that neurons are stored in stable memory.
+
 # 2025-03-25: Proposal 135955
 
 https://dashboard.internetcomputer.org/proposal/135955

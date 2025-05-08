@@ -335,23 +335,20 @@ impl HttpRequestContent for Query {
     }
 
     fn sender(&self) -> UserId {
-        match self.source {
-            QuerySource::User { user_id, .. } => user_id,
-            QuerySource::Anonymous => UserId::from(PrincipalId::default()),
-        }
+        self.source.user_id()
     }
 
     fn ingress_expiry(&self) -> u64 {
         match self.source {
             QuerySource::User { ingress_expiry, .. } => ingress_expiry,
-            QuerySource::Anonymous => 0,
+            QuerySource::System => 0,
         }
     }
 
     fn nonce(&self) -> Option<Vec<u8>> {
         match &self.source {
             QuerySource::User { nonce, .. } => nonce.clone(),
-            QuerySource::Anonymous => None,
+            QuerySource::System => None,
         }
     }
 }

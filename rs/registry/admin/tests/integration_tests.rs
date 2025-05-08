@@ -1,6 +1,6 @@
 use candid::Principal;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
-use ic_nervous_system_integration_tests::pocket_ic_helpers::install_nns_canisters;
+use ic_nervous_system_integration_tests::pocket_ic_helpers::NnsInstaller;
 use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
 use std::{env, io::Write, process::Command};
 use tempfile::NamedTempFile;
@@ -13,7 +13,10 @@ async fn setup() -> (PocketIc, Url) {
         .build_async()
         .await;
 
-    let _ = install_nns_canisters(&pocket_ic, vec![], false, None, vec![]).await;
+    let mut nns_installer = NnsInstaller::default();
+    nns_installer.with_current_nns_canister_versions();
+    nns_installer.install(&pocket_ic).await;
+
     let endpoint = pocket_ic.make_live(None).await;
     (pocket_ic, endpoint)
 }

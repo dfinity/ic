@@ -298,7 +298,7 @@ where
         let data_provider = Arc::new(data_provider);
         let fake_registry_client = Arc::new(FakeRegistryClient::new(data_provider.clone()));
         fake_registry_client.update_to_latest_version();
-        let registry = fake_registry_client.clone() as Arc<dyn RegistryClient + Send + Sync>;
+        let registry = fake_registry_client.clone();
         let crypto = setup_crypto_provider(
             &config.crypto,
             rt.handle().clone(),

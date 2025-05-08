@@ -106,6 +106,14 @@ impl TransportSecretKey {
     }
 }
 
+/// Return true iff the argument is a valid encoding of a transport public key
+pub fn is_valid_transport_public_key_encoding(bytes: &[u8]) -> bool {
+    match bytes.try_into() {
+        Ok(bytes) => option_from_ctoption(G1Affine::from_compressed(&bytes)).is_some(),
+        Err(_) => false,
+    }
+}
+
 #[cfg_attr(feature = "js", wasm_bindgen)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 /// A derived public key
@@ -267,7 +275,7 @@ impl EncryptedVetKey {
         &self,
         tsk: &TransportSecretKey,
         derived_public_key: &DerivedPublicKey,
-        context: &[u8],
+        input: &[u8],
     ) -> Result<VetKey, String> {
         // Check that c1 and c2 have the same discrete logarithm
 
@@ -286,7 +294,7 @@ impl EncryptedVetKey {
         let k = G1Affine::from(G1Projective::from(&self.c3) - self.c1 * tsk.secret_key);
 
         // Check that the VetKey is a valid BLS signature
-        let msg = augmented_hash_to_g1(&derived_public_key.point, context);
+        let msg = augmented_hash_to_g1(&derived_public_key.point, input);
         let dpk_prep = G2Prepared::from(derived_public_key.point);
 
         use pairing::group::Group;
@@ -464,9 +472,13 @@ impl IBECiphertext {
     /// The seed must be exactly 256 bits (32 bytes) long and should be
     /// generated with a cryptographically secure random number generator. Do
     /// not reuse the seed for encrypting another message or any other purpose.
+    ///
+    /// To decrypt this message requires using the VetKey associated with the
+    /// provided derived public key (ie the same master key and context string),
+    /// and with an `input` equal to the provided `identity` parameter.
     pub fn encrypt(
         dpk: &DerivedPublicKey,
-        context: &[u8],
+        identity: &[u8],
         msg: &[u8],
         seed: &[u8],
     ) -> Result<IBECiphertext, String> {
@@ -478,7 +490,7 @@ impl IBECiphertext {
 
         let t = Self::hash_to_mask(&header, seed, msg);
 
-        let pt = augmented_hash_to_g1(&dpk.point, context);
+        let pt = augmented_hash_to_g1(&dpk.point, identity);
 
         let tsig = ic_bls12_381::pairing(&pt, &dpk.point) * t;
 
@@ -492,8 +504,8 @@ impl IBECiphertext {
     /// Decrypt an IBE ciphertext
     ///
     /// The VetKey provided must be the VetKey produced by a request to the IC
-    /// for a given `input`,`context` pair where both `input` and `context` match
-    /// the value used during encryption.
+    /// for a given `identity` (aka `input`) and `context` both matching the
+    /// values used during encryption.
     ///
     /// Returns the plaintext, or Err if decryption failed
     pub fn decrypt(&self, vetkey: &VetKey) -> Result<Vec<u8>, String> {

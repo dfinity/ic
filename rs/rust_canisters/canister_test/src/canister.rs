@@ -13,10 +13,10 @@ use ic_management_canister_types::{
 // public version of the crate above. For now, they're kept as
 // changing them would propagate to changes to state machine tests
 // which would be a bit more involved.
-use ic_management_canister_types_private::CanisterSettingsArgsBuilder;
 pub use ic_management_canister_types_private::{
     self as ic00, CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, IC_00,
 };
+use ic_management_canister_types_private::{CanisterSettingsArgsBuilder, CanisterStatusResultV2};
 use ic_registry_transport::pb::v1::RegistryMutation;
 use ic_replica_tests::{canister_test_async, LocalTestRuntime};
 pub use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
@@ -752,6 +752,23 @@ impl<'a> Canister<'a> {
         self.set_controllers(vec![new_controller]).await
     }
 
+    /// Get the controllers of the canister
+    pub async fn get_controllers(&self) -> Result<Vec<PrincipalId>, String> {
+        let status: CanisterStatusResultV2 = self
+            .runtime
+            .get_management_canister_with_effective_canister_id(self.canister_id().into())
+            .update_(
+                ic00::Method::CanisterStatus.to_string(),
+                candid_one,
+                CanisterStatusArgs {
+                    canister_id: Principal::from(self.canister_id()),
+                },
+            )
+            .await?;
+
+        Ok(status.controllers())
+    }
+
     pub async fn set_controllers(&self, new_controllers: Vec<PrincipalId>) -> Result<(), String> {
         self.runtime
             .get_management_canister_with_effective_canister_id(self.canister_id().into())
@@ -770,6 +787,7 @@ impl<'a> Canister<'a> {
                         reserved_cycles_limit: None,
                         log_visibility: None,
                         wasm_memory_limit: None,
+                        wasm_memory_threshold: None,
                     },
                     sender_canister_version: None,
                 },),

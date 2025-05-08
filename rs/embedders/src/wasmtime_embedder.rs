@@ -1,10 +1,3 @@
-pub mod host_memory;
-mod signal_stack;
-/// pub for usage in fuzzing
-#[doc(hidden)]
-pub mod system_api;
-pub mod system_api_complexity;
-
 use std::{
     cell::Ref,
     collections::HashMap,
@@ -16,7 +9,6 @@ use std::{
 };
 
 use ic_management_canister_types_private::Global;
-use ic_system_api::{ModificationTracking, SystemApiImpl};
 use wasmtime::{
     unix::StoreExt, Engine, Instance, InstancePre, Linker, Memory, Module, Mutability, Store,
     StoreLimits, StoreLimitsBuilder, Val, ValType,
@@ -53,6 +45,16 @@ use super::InstanceRunResult;
 
 use self::host_memory::{MemoryPageSize, MemoryStart};
 
+pub mod host_memory;
+/// pub for usage in fuzzing
+#[doc(hidden)]
+pub mod linker;
+mod signal_stack;
+pub mod system_api;
+pub mod system_api_complexity;
+
+use system_api::{ModificationTracking, SystemApiImpl};
+
 #[cfg(test)]
 mod wasmtime_embedder_tests;
 
@@ -73,19 +75,27 @@ fn demangle(func_name: &str) -> String {
     }
 }
 
-fn convert_backtrace(wasm: &wasmtime::WasmBacktrace) -> CanisterBacktrace {
+/// Convert a backtrace to our internal representation. Returns `None` if we
+/// can't get function names for any of the frames. This likely indicates that
+/// the `name` section is not present and the user won't want an error
+/// cluttered with a useless backtrace anyway.
+fn convert_backtrace(wasm: &wasmtime::WasmBacktrace) -> Option<CanisterBacktrace> {
     let funcs: Vec<_> = wasm
         .frames()
         .iter()
         .map(|f| (f.func_index(), f.func_name().map(demangle)))
         .collect();
-    CanisterBacktrace(funcs)
+    if funcs.iter().all(|(_, name)| name.is_none()) {
+        None
+    } else {
+        Some(CanisterBacktrace(funcs))
+    }
 }
 
 fn wasmtime_error_to_hypervisor_error(err: anyhow::Error) -> HypervisorError {
     let backtrace = err
         .downcast_ref::<wasmtime::WasmBacktrace>()
-        .map(convert_backtrace);
+        .and_then(convert_backtrace);
     match err.downcast::<wasmtime::Trap>() {
         Ok(trap) => trap_code_to_hypervisor_error(trap, backtrace),
         Err(err) => {
@@ -259,18 +269,18 @@ impl WasmtimeEmbedder {
 
         match main_memory_type {
             WasmMemoryType::Wasm32 => {
-                system_api::syscalls::<u32>(
+                linker::syscalls::<u32>(
                     &mut linker,
-                    self.config.feature_flags.clone(),
+                    self.config.feature_flags,
                     self.config.stable_memory_dirty_page_limit,
                     self.config.stable_memory_accessed_page_limit,
                     main_memory_type,
                 );
             }
             WasmMemoryType::Wasm64 => {
-                system_api::syscalls::<u64>(
+                linker::syscalls::<u64>(
                     &mut linker,
-                    self.config.feature_flags.clone(),
+                    self.config.feature_flags,
                     self.config.stable_memory_dirty_page_limit,
                     self.config.stable_memory_accessed_page_limit,
                     main_memory_type,

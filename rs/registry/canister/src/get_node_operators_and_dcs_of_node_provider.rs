@@ -1,8 +1,10 @@
-use crate::registry::Registry;
+use crate::{registry::Registry, storage::with_chunks};
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
+use ic_registry_canister_chunkify::decode_high_capacity_registry_value;
 use ic_registry_keys::make_data_center_record_key;
 use ic_registry_keys::NODE_OPERATOR_RECORD_KEY_PREFIX;
+use ic_registry_transport::pb::v1::HighCapacityRegistryValue;
 use ic_types::PrincipalId;
 use prost::Message;
 use std::convert::TryFrom;
@@ -20,11 +22,16 @@ impl Registry {
         )> = vec![];
         for (key, values) in self.store.iter() {
             if key.starts_with(NODE_OPERATOR_RECORD_KEY_PREFIX.as_bytes()) {
-                let value = values.back().unwrap();
-                if value.deletion_marker {
+                let value: &HighCapacityRegistryValue = values.back().as_ref().unwrap();
+
+                let node_operator = with_chunks(|chunks| {
+                    decode_high_capacity_registry_value::<NodeOperatorRecord, _>(value, chunks)
+                });
+
+                let Some(node_operator) = node_operator else {
                     continue;
-                }
-                let node_operator = NodeOperatorRecord::decode(value.value.as_slice()).unwrap();
+                };
+
                 let node_provider_id = PrincipalId::try_from(
                     &node_operator.node_provider_principal_id,
                 )

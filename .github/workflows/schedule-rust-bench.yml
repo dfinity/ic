@@ -1,5 +1,10 @@
 name: Schedule Rust Benchmarks
 
+# This workflow is designed to execute a list of Rust benchmarks.
+# It runs on a dedicated runner machine labeled 'rust-benchmarks'.
+# Since there's only one machine available, the CI jobs will run one after the other.
+# The dedicated machine is identified as fr1-spm15.
+
 on:
   schedule:
     - cron: "0 1 * * *"
@@ -20,7 +25,7 @@ jobs:
       # see linux-x86-64 runner group
       labels: rust-benchmarks
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:45535cf9304320f8b3b995fd8eec6eeac77ec314deb6d560cfa7d34e2d755683
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       # running on bare metal machine using ubuntu user
       options: --user ubuntu -v /cache:/cache
     timeout-minutes: 720 # 12 hours
@@ -34,7 +39,13 @@ jobs:
           - "//rs/artifact_pool/..."
           - "//rs/consensus/..."
           - "//rs/ingress_manager/..."
+          - "//rs/embedders:compilation_bench"
           - "//rs/embedders:heap_bench"
+          - "//rs/embedders:stable_memory_bench"
+          - "//rs/execution_environment:execute_inspect_message_bench"
+          - "//rs/execution_environment:execute_query_bench"
+          - "//rs/execution_environment:execute_update_bench"
+          - "//rs/execution_environment:wasm_instructions_bench"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,8 +55,9 @@ jobs:
         env:
           RUST_BACKTRACE: "full"
         with:
-          BUILDBUDDY_LINKS: "[CI Job](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
           run: |
+            echo -e "\e[34mRunning rust benchmarks on dedicated machine fr1-spm15!\e[0m"
+
             while IFS= read -r tgt; do
                 bazel run --config=ci "$tgt"
             done < <(bazel query "attr(tags, 'rust_bench', ${{ matrix.target }})")
@@ -69,3 +81,5 @@ jobs:
                 curl --fail --retry 2 -sS -o /dev/null -X POST -H 'Content-Type: application/json' --data @report.json \
                     "https://elasticsearch.ch1-obsdev1.dfinity.network/ci-performance-test/_doc"
             done < <(find -L ./bazel-out -type d -path '*/new')
+
+            echo -e "\e[34mRust benchmarks on dedicated machine fr1-spm15 finished.\e[0m"

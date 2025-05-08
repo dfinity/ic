@@ -9,12 +9,7 @@ on the process that this file is part of, see
 
 ## Added
 
-* The `init` method now supports candid decoding in addition to protobuf. Protobuf decoding will be
-  removed in the future, giving clients time to migrate.
-
 ## Changed
-
-* Increased the probability of failure from 70% to 90% for the deprecated _pb methods.
 
 ## Deprecated
 

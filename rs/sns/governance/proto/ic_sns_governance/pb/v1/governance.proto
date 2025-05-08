@@ -179,7 +179,7 @@ message Neuron {
 
   // A collection of a neuron's followees (per topic).
   message TopicFollowees {
-    map<uint64, FolloweesForTopic> topic_id_to_followees = 1;
+    map<int32, FolloweesForTopic> topic_id_to_followees = 1;
   }
 
   // The neuron's legacy followees (per proposal type), specified as a map of proposal functions IDs
@@ -751,6 +751,10 @@ enum ProposalDecisionStatus {
 
   // The proposal was adopted, but execution failed.
   PROPOSAL_DECISION_STATUS_FAILED = 5;
+}
+
+message TopicSelector {
+  optional Topic topic = 1;
 }
 
 // A proposal's status, with respect to reward distribution.
@@ -2044,6 +2048,10 @@ message ListProposals {
   // in the list.
   // If this list is empty, no restriction is applied.
   repeated ProposalDecisionStatus include_status = 5;
+
+  // A list of topics that should be included. If empty, all topics will be included.
+  // The list may contain the None, expressing selection of proposals without topics.
+  repeated TopicSelector include_topics = 6;
 }
 
 // A response to the ListProposals command.
@@ -2052,6 +2060,8 @@ message ListProposalsResponse {
   repeated ProposalData proposals = 1;
   // Whether ballots cast by the caller are included in the returned proposals.
   optional bool include_ballots_by_caller = 2;
+  // Whether topic-based filtering has been taken into account.
+  optional bool include_topic_filtering = 3;
 }
 
 // An operation that lists all neurons tracked in the Governance state in a

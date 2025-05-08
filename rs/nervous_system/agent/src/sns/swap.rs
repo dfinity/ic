@@ -1,8 +1,13 @@
 use crate::CallCanisters;
 use ic_base_types::PrincipalId;
 use ic_sns_swap::pb::v1::{
-    GetDerivedStateRequest, GetDerivedStateResponse, GetInitRequest, GetInitResponse,
-    ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse, SnsNeuronRecipe,
+    ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest, FinalizeSwapResponse,
+    GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse, GetBuyerStateRequest,
+    GetBuyerStateResponse, GetDerivedStateRequest, GetDerivedStateResponse, GetInitRequest,
+    GetInitResponse, GetLifecycleRequest, GetLifecycleResponse, GetOpenTicketRequest,
+    GetOpenTicketResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
+    NewSaleTicketRequest, NewSaleTicketResponse, RefreshBuyerTokensRequest,
+    RefreshBuyerTokensResponse, SnsNeuronRecipe,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -79,5 +84,99 @@ impl SwapCanister {
         Err(ListAllSnsNeuronRecipesError::TooManyRecipes(
             batch_size * num_calls,
         ))
+    }
+
+    pub async fn new_sale_ticket<C: CallCanisters>(
+        &self,
+        agent: &C,
+        amount_icp_e8s: u64,
+        subaccount: Option<Vec<u8>>,
+    ) -> Result<NewSaleTicketResponse, C::Error> {
+        agent
+            .call(
+                self.canister_id,
+                NewSaleTicketRequest {
+                    amount_icp_e8s,
+                    subaccount,
+                },
+            )
+            .await
+    }
+
+    pub async fn refresh_buyer_tokens<C: CallCanisters>(
+        &self,
+        agent: &C,
+        buyer: PrincipalId,
+        confirmation_text: Option<String>,
+    ) -> Result<RefreshBuyerTokensResponse, C::Error> {
+        agent
+            .call(
+                self.canister_id,
+                RefreshBuyerTokensRequest {
+                    buyer: buyer.to_string(),
+                    confirmation_text,
+                },
+            )
+            .await
+    }
+
+    pub async fn get_buyer_state<C: CallCanisters>(
+        &self,
+        agent: &C,
+        principal_id: PrincipalId,
+    ) -> Result<GetBuyerStateResponse, C::Error> {
+        agent
+            .call(
+                self.canister_id,
+                GetBuyerStateRequest {
+                    principal_id: Some(principal_id),
+                },
+            )
+            .await
+    }
+
+    pub async fn get_open_ticket<C: CallCanisters>(
+        &self,
+        agent: &C,
+    ) -> Result<GetOpenTicketResponse, C::Error> {
+        agent.call(self.canister_id, GetOpenTicketRequest {}).await
+    }
+
+    pub async fn error_refund_icp<C: CallCanisters>(
+        &self,
+        agent: &C,
+        source_principal_id: PrincipalId,
+    ) -> Result<ErrorRefundIcpResponse, C::Error> {
+        agent
+            .call(
+                self.canister_id,
+                ErrorRefundIcpRequest {
+                    source_principal_id: Some(source_principal_id),
+                },
+            )
+            .await
+    }
+
+    pub async fn get_lifecycle<C: CallCanisters>(
+        &self,
+        agent: &C,
+    ) -> Result<GetLifecycleResponse, C::Error> {
+        agent.call(self.canister_id, GetLifecycleRequest {}).await
+    }
+
+    pub async fn finalize_swap<C: CallCanisters>(
+        &self,
+        agent: &C,
+    ) -> Result<FinalizeSwapResponse, C::Error> {
+        agent.call(self.canister_id, FinalizeSwapRequest {}).await
+    }
+
+    pub async fn get_auto_finalization_status<C: CallCanisters>(
+        &self,
+        agent: &C,
+    ) -> Result<GetAutoFinalizationStatusResponse, C::Error> {
+        agent
+            .call(self.canister_id, GetAutoFinalizationStatusRequest {})
+            .await
     }
 }

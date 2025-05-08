@@ -3,12 +3,10 @@ use candid::Encode;
 use canister_test::CanisterInstallMode;
 use ic_base_types::PrincipalId;
 use ic_config::{
-    embedders::BestEffortResponsesFeature,
-    execution_environment::{
-        Config as HypervisorConfig, DEFAULT_WASM_MEMORY_LIMIT, MINIMUM_FREEZING_THRESHOLD,
-    },
+    execution_environment::{Config as HypervisorConfig, DEFAULT_WASM_MEMORY_LIMIT},
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
+use ic_embedders::wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     CreateCanisterArgs, DerivationPath, EcdsaKeyId, EmptyBlob, LoadCanisterSnapshotArgs,
@@ -20,7 +18,6 @@ use ic_replicated_state::NumWasmPages;
 use ic_state_machine_tests::{
     ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, UserError,
 };
-use ic_system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_test_utilities_metrics::{fetch_gauge, fetch_int_counter};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::MessageId;
@@ -1271,9 +1268,10 @@ fn canister_with_memory_allocation_does_not_fail_when_growing_wasm_memory() {
         Some(
             CanisterSettingsArgsBuilder::new()
                 .with_memory_allocation(50_000_000)
+                .with_freezing_threshold(0)
                 .build(),
         ),
-        Cycles::new(u128::MAX),
+        INITIAL_CYCLES_BALANCE,
     );
     let _b_id = create_canister_with_cycles(
         &env,
@@ -1281,9 +1279,10 @@ fn canister_with_memory_allocation_does_not_fail_when_growing_wasm_memory() {
         Some(
             CanisterSettingsArgsBuilder::new()
                 .with_memory_allocation(45_000_000)
+                .with_freezing_threshold(0)
                 .build(),
         ),
-        Cycles::new(u128::MAX),
+        INITIAL_CYCLES_BALANCE,
     );
 
     let res = env.execute_ingress(a_id, "update", vec![]);
@@ -1367,9 +1366,10 @@ fn canister_with_memory_allocation_cannot_grow_wasm_memory_above_allocation() {
         Some(
             CanisterSettingsArgsBuilder::new()
                 .with_memory_allocation(300 * 64 * 1024)
+                .with_freezing_threshold(0)
                 .build(),
         ),
-        Cycles::new(u128::MAX),
+        INITIAL_CYCLES_BALANCE,
     );
 
     let err = env.execute_ingress(a_id, "update", vec![]).unwrap_err();
@@ -1414,9 +1414,10 @@ fn canister_with_memory_allocation_cannot_grow_wasm_memory_above_allocation_wasm
         Some(
             CanisterSettingsArgsBuilder::new()
                 .with_memory_allocation(300 * 64 * 1024)
+                .with_freezing_threshold(0)
                 .build(),
         ),
-        Cycles::new(u128::MAX),
+        INITIAL_CYCLES_BALANCE,
     );
 
     let err = env.execute_ingress(a_id, "update", vec![]).unwrap_err();
@@ -1550,18 +1551,13 @@ fn canister_with_reserved_balance_is_not_uninstalled_too_early() {
         HypervisorConfig::default(),
     ));
 
-    let memory_allocation = 100_000_000;
-    // Give the canister enough cycles to be able to be installed and then pay
-    // for its resources for the freezing period.
-    let initial_cycles =
-        Cycles::new(301 * B) + Cycles::from(MINIMUM_FREEZING_THRESHOLD * memory_allocation);
+    let initial_cycles = Cycles::new(301 * B);
     let canister_a = create_universal_canister_with_cycles(
         &env,
         Some(
             CanisterSettingsArgsBuilder::new()
-                .with_memory_allocation(memory_allocation)
-                .with_freezing_threshold(MINIMUM_FREEZING_THRESHOLD)
-                .with_reserved_cycles_limit(70 * T)
+                .with_memory_allocation(100_000_000)
+                .with_freezing_threshold(0)
                 .build(),
         ),
         initial_cycles,
@@ -1570,9 +1566,8 @@ fn canister_with_reserved_balance_is_not_uninstalled_too_early() {
         &env,
         Some(
             CanisterSettingsArgsBuilder::new()
-                .with_memory_allocation(memory_allocation)
-                .with_freezing_threshold(MINIMUM_FREEZING_THRESHOLD)
-                .with_reserved_cycles_limit(70 * T)
+                .with_memory_allocation(100_000_000)
+                .with_freezing_threshold(0)
                 .build(),
         ),
         initial_cycles,
@@ -2268,17 +2263,12 @@ fn helper_best_effort_responses(
     expected_deadline_seconds: u32,
 ) {
     let subnet_config = SubnetConfig::new(SubnetType::Application);
-    let mut embedders_config = ic_config::embedders::Config::default();
-    embedders_config.feature_flags.best_effort_responses = BestEffortResponsesFeature::Enabled;
 
     let env = StateMachineBuilder::new()
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
         .with_config(Some(StateMachineConfig::new(
             subnet_config,
-            HypervisorConfig {
-                embedders_config,
-                ..Default::default()
-            },
+            HypervisorConfig::default(),
         )))
         .build();
 
@@ -3096,12 +3086,7 @@ fn test_canister_liquid_cycle_balance() {
                     callee,
                     "update",
                     call_args()
-                        .other_side(
-                            wasm()
-                                .accept_cycles(u128::MAX.into())
-                                .append_and_reply()
-                                .build(),
-                        )
+                        .other_side(wasm().accept_cycles(u128::MAX).append_and_reply().build())
                         .on_reject(wasm().reject_message().trap())
                         .on_reply(wasm().message_payload().append_and_reply()),
                 )

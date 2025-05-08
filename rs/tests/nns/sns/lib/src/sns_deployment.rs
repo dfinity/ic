@@ -12,7 +12,7 @@ use ic_icrc1_test_utils::KeyPairGenerator;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1::Canister;
-use ic_nns_governance_api::pb::v1::CreateServiceNervousSystem;
+use ic_nns_governance_api::CreateServiceNervousSystem;
 use ic_rosetta_test_utils::EdKeypair;
 use ic_system_test_driver::{
     canister_agent::{CanisterAgent, HasCanisterAgentCapability},
@@ -1327,7 +1327,7 @@ impl<'a> DappCanister<'a> {
         let dapp_canister = original_controller_canister
             .update(
                 wasm().call(
-                    management::create_canister(Cycles::from(2_000_000_000_000u64).into_parts())
+                    management::create_canister(Cycles::from(2_000_000_000_000u64))
                         .with_controllers(controllers.clone()),
                 ),
             )
