@@ -1534,7 +1534,7 @@ message Governance {
     optional uint64 proposal_id = 4;
   }
 
-  // Version SNS is in process of being upgraded to.
+  // Version the SNS is in process of upgrading to.
   PendingVersion pending_version = 24;
   Version target_version = 30;
 
