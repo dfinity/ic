@@ -2133,7 +2133,7 @@ message ClaimSwapNeuronsRequest {
       optional ic_nervous_system.pb.v1.Principals nns_neuron_hotkeys = 3;
     }
 
-    // The info that for a direct participant (Q: not a complete sentence)
+    // Additional data associated with a direct (as opposed to Neurons' Fund) participant.
     message Direct {}
 
     // The principal that should be the controller of the SNS neuron
