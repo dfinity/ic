@@ -14,6 +14,8 @@ import sys
 import tarfile
 import tempfile
 
+from toolchains.sysimage.utils import parse_size
+
 
 def untar_to_fat32(tf, fs_basedir, out_file, path_transform):
     """
@@ -78,17 +80,6 @@ def install_extra_files(out_file, extra_files, path_transform):
             ],
             check=True,
         )
-
-
-def parse_size(s):
-    if s[-1] == "k" or s[-1] == "K":
-        return 1024 * int(s[:-1])
-    elif s[-1] == "m" or s[-1] == "M":
-        return 1024 * 1024 * int(s[:-1])
-    elif s[-1] == "g" or s[-1] == "G":
-        return 1024 * 1024 * 1024 * int(s[:-1])
-    else:
-        return int(s)
 
 
 def main():

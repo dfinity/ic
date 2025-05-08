@@ -1,4 +1,4 @@
-use ic_nns_governance_api::pb::v1::Vote;
+use ic_nns_governance_api::Vote;
 
 use super::{NeuronStore, NeuronStoreError};
 

@@ -3,7 +3,7 @@ use crate::{
     ledger_client::{neuron_response::NeuronResponse, OperationOutput},
     models,
 };
-use ic_nns_governance_api::pb::v1::{GovernanceError, Neuron, NeuronState};
+use ic_nns_governance_api::{GovernanceError, Neuron, NeuronState};
 use std::{
     collections::HashMap,
     time::{SystemTime, UNIX_EPOCH},
