@@ -180,7 +180,7 @@ while getopts ":f:" OPT; do
 done
 shift $((OPTIND - 1))
 
-# New: Direct device mode for upgrade-install
+# Recovery-updater mode (GuestOS upgrade from HostOS)
 if [[ "$1" == "upgrade-install" && "$#" -ge 6 ]]; then
     ACTION="$1"
     GRUBENV_FILE="$2"
