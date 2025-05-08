@@ -1,6 +1,6 @@
 use candid::{Encode, Principal};
-use ic_admin::initialize_registry_local_store;
 use canister_test::Project;
+use ic_admin::initialize_registry_local_store;
 use ic_base_types::{CanisterId, RegistryVersion};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_agent::{pocketic_impl::PocketIcAgent, CallCanisters};
