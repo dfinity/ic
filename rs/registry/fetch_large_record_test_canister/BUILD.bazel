@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")  # DO NOT MERGE
+load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = [
