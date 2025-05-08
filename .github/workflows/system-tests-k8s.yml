@@ -47,7 +47,7 @@ jobs:
   system-tests-k8s:
     name: System Tests K8s
     runs-on:
-      group: ln1
+      group: dm1
       labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
@@ -111,7 +111,7 @@ jobs:
   system-tests-k8s-hourly:
     name: System Tests K8s Hourly
     runs-on:
-      group: ln1
+      group: dm1
       labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
