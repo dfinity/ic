@@ -86,6 +86,7 @@ impl BtcService for BtcServiceImpl {
             .start_timer();
         let _ = self.last_received_tx.send(Some(Instant::now()));
         let inner = request.into_inner();
+        println!("rpc server received GetSuccessorsRequest");
         debug!(self.logger, "Received GetSuccessorsRequest: {:?}", inner);
         let request = inner.try_into()?;
 

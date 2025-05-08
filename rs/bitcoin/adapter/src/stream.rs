@@ -288,7 +288,9 @@ impl Stream {
             self.write_message(network_message).await?;
         }
 
-        let raw_message = self.read_message()?;
+        let raw_message = self.read_message();
+        println!("raw_message = {:?}", raw_message);
+        let raw_message = raw_message?;
         let result = self
             .network_message_sender
             .send((self.address, raw_message.payload().clone()))
