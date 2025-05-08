@@ -2,6 +2,44 @@
 
 set -e
 
+# Upgrade and boot into the alternative boot partition (help: reverse this?)
+function prepare_guestos_upgrade() {
+    lodev="$(losetup -Pfr --show /dev/hostlvm/guestos)"
+    workdir="$(mktemp -d)"
+    grubdir="${workdir}/grub"
+    bootdir="${workdir}/boot"
+    rootdir="${workdir}/root"
+    mkdir "${grubdir}" "${bootdir}" "${rootdir}"
+
+    mount -o rw,sync "${lodev}p2" "${grubdir}"
+
+    # Get the boot alternative
+    boot_alternative="$(grep -oP '^boot_alternative=\K[a-zA-Z]+' "${grubdir}/grubenv")"
+
+    # Swap the boot alternative to the inactive boot partition
+    if [ "$boot_alternative" = "A" ]; then
+        boot_alternative="B"
+        boot_target="${lodev}p7"
+        root_target="${lodev}p8"
+    else
+        boot_alternative="A"
+        boot_target="${lodev}p4"
+        root_target="${lodev}p5"
+    fi
+
+    mount -o rw,sync "${boot_target}" "${bootdir}"
+    mount -o rw,sync "${root_target}" "${rootdir}"
+}
+
+function guestos_upgrade_cleanup() {
+    umount "${grubdir}"
+    umount "${bootdir}"
+    umount "${rootdir}"
+    rm -rf "${workdir}"
+}
+
+prepare_guestos_upgrade
+
 # Function to extract a value from /proc/cmdline
 get_cmdline_var() {
     local var="$1"
@@ -43,4 +81,8 @@ tar -xf "$TMPDIR/upgrade.tar" -C "$TMPDIR"
 # Install the upgrade using manageboot
 /opt/ic/bin/manageboot.sh guestos upgrade-install "$TMPDIR/boot.img" "$TMPDIR/root.img"
 
+# help: need to pass manageboot.sh boot_dir and root_dir? and grub_dir to update grub?
+
 echo "Upgrade installation complete"
+
+guestos_upgrade_cleanup
