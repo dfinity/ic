@@ -80,6 +80,7 @@ runs:
 
             BAZEL_TARGETS='${{ inputs.BAZEL_TARGETS }}'
 
+            set -x
             bazel_targets=( )
             for tgt in $BAZEL_TARGETS; do
               bazel_targets+=( "$tgt" )
@@ -121,7 +122,7 @@ runs:
             echo "Bazel version: $(bazel version)"
 
             if [[ $release_build == "true" ]]; then
-              bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}" --config=release
+              echo bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}" --config=release
             else
-              bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}"
+              echo bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}"
             fi
