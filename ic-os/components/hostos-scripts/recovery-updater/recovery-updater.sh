@@ -7,7 +7,7 @@ function prepare_guestos_upgrade() {
     echo "Starting guestos upgrade preparation"
     lodev="$(losetup -Pf --show /dev/hostlvm/guestos)"
     echo "Set up loop device: $lodev"
-    
+
     workdir="$(mktemp -d)"
     grubdir="${workdir}/grub"
     bootdir="${workdir}/boot"
