@@ -1,4 +1,5 @@
 use candid::{Encode, Principal};
+use ic_admin::initialize_registry_local_store;
 use ic_base_types::RegistryVersion;
 use ic_nervous_system_agent::{pocketic_impl::PocketIcAgent, CallCanisters};
 use ic_nervous_system_chunks::test_data::MEGA_BLOB;
@@ -6,7 +7,6 @@ use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_K
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{install_canister, NnsInstaller};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_nns_test_utils::common::{build_test_registry_wasm, NnsInitPayloadsBuilder};
-use ic_registry_admin::initialize_registry_local_store;
 use ic_registry_canister_api::mutate_test_high_capacity_records;
 use ic_registry_local_store::{KeyMutation, LocalStoreImpl, LocalStoreReader};
 use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
