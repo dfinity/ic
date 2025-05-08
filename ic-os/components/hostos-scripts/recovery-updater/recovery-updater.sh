@@ -5,7 +5,7 @@ set -e
 # Upgrade and boot into the alternative boot partition (help: reverse this?)
 function prepare_guestos_upgrade() {
     echo "Starting guestos upgrade preparation"
-    lodev="$(losetup -Pfr --show /dev/hostlvm/guestos)"
+    lodev="$(losetup -Pf --show /dev/hostlvm/guestos)"
     echo "Set up loop device: $lodev"
     
     workdir="$(mktemp -d)"
