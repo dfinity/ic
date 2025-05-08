@@ -11,3 +11,4 @@ pyyaml==6.0
 PyGithub==2.3.0
 cryptography==39.0.2
 pyjwt==2.6.0
+requests==2.26.0

@@ -380,7 +380,7 @@ def test_get_findings_external_dir(shutil, clone_repo, jira_lib_mock):
         scanner_job.do_periodic_scan([repo])
 
         shutil.assert_called_once()
-        clone_repo.assert_called_once_with("https://github.com/dfinity/cycles-wallet", scanner_job.root.parent, None)
+        clone_repo.assert_called_once_with("https://github.com/dfinity/cycles-wallet", scanner_job.root.parent)
         fake_bazel.get_findings.assert_called_once_with("cycles-wallet", project, repo.engine_version)
 
 

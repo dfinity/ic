@@ -11,6 +11,7 @@ from data_source.commit_type import CommitType
 from data_source.finding_data_source import FindingDataSource
 from data_source.findings_failover_data_store import FindingsFailoverDataStore
 from integration.github.github_api import GithubApi
+from integration.github.github_app import GithubApp
 from model.finding import Finding
 from model.repository import Repository
 from model.security_risk import SecurityRisk
@@ -33,21 +34,22 @@ class DependencyScanner:
         finding_data_source: FindingDataSource,
         scanner_subscribers: typing.List[ScannerSubscriber],
         failover_data_store: typing.Optional[FindingsFailoverDataStore] = None,
+        github_app: GithubApp = None,
     ):
         self.subscribers = scanner_subscribers
         self.dependency_manager = dependency_manager
         self.finding_data_source = finding_data_source
         self.failover_data_store = failover_data_store
+        self.github_app = github_app
         self.job_id = os.environ.get("CI_PIPELINE_ID", "CI_PIPELINE_ID")
         self.root = PROJECT_ROOT
 
-    @staticmethod
-    def __clone_repository_from_url(url: str, path: pathlib.Path, github_checkout_token: typing.Optional[str]):
+    def __clone_repository_from_url(self, url: str, path: pathlib.Path):
         environment = {}
         cwd = path
 
-        if github_checkout_token is not None and url.startswith("https://github.com"):
-            checkout_url = f'https://x-access-token:{github_checkout_token}@{url.replace("https://","")}'
+        if self.github_app:
+            checkout_url = self.github_app.get_checkout_url(url)
         else:
             checkout_url = url
         command = f"git clone --depth=1 {checkout_url}"
@@ -55,9 +57,7 @@ class DependencyScanner:
         _ = ProcessExecutor.execute_command(command, cwd.resolve(), environment)
         return
 
-    def do_periodic_scan(
-        self, repositories: typing.List[Repository], github_checkout_token: typing.Optional[str] = None
-    ):
+    def do_periodic_scan(self, repositories: typing.List[Repository]):
         current_repo_name = ""
         try:
             for repository in repositories:
@@ -69,7 +69,7 @@ class DependencyScanner:
                     if top_level_path.is_dir():
                         # git clone fails if the directory already exists
                         shutil.rmtree(top_level_path)
-                    self.__clone_repository_from_url(repository.url, self.root.parent, github_checkout_token)
+                    self.__clone_repository_from_url(repository.url, self.root.parent)
 
                 for project in repository.projects:
                     path = self.root.parent / project.path

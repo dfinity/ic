@@ -2,7 +2,7 @@ import logging
 
 from config.bazel_rust_periodic import REPOS_TO_SCAN
 from data_source.jira_finding_data_source import JiraFindingDataSource
-from integration.github.github_api import GithubApi
+from integration.github.github_app import GithubApp
 from model.ic import (
     get_ic_repo_ci_pipeline_base_url,
     get_ic_repo_merge_request_base_url,
@@ -43,8 +43,9 @@ def main():
         BazelRustDependencyManager(),
         JiraFindingDataSource(finding_data_source_subscribers, app_owner_msg_subscriber=notifier),
         scanner_subscribers,
+        github_app=GithubApp(REPOS_TO_SCAN),
     )
-    scanner_job.do_periodic_scan(REPOS_TO_SCAN, GithubApi.generate_install_token())
+    scanner_job.do_periodic_scan(REPOS_TO_SCAN)
 
 
 if __name__ == "__main__":

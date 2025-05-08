@@ -1,12 +1,8 @@
-import json
 import logging
 import os
-import time
 import traceback
 import typing
-import urllib.request
 
-import jwt
 from github import Github
 from github.GithubException import GithubException
 from integration.github.github_workflow_config import GithubWorklow
@@ -20,11 +16,6 @@ if GITHUB_TOKEN == TOKEN_NOT_SET:
 
 GITHUB_REPOSITORY = os.environ.get("CI_PROJECT_PATH", "dfinity/ic")
 DELTA_HEADER = "*Vulnerable dependency information*"
-
-GITHUB_APP_CLIENT_ID = os.environ.get("GITHUB_APP_CLIENT_ID")
-GITHUB_APP_SIGNING_KEY = os.environ.get("GITHUB_APP_SIGNING_KEY")
-if GITHUB_APP_CLIENT_ID is None or GITHUB_APP_SIGNING_KEY is None:
-    logging.warning("GITHUB_APP_CLIENT_ID or GITHUB_APP_SIGNING_KEY is not set, can not clone private repos")
 
 
 class GithubApi:
@@ -74,42 +65,3 @@ class GithubApi:
             logging.error(f"Could not run workflow {workflow}.")
             logging.debug(f"Could not run workflow {workflow}.\nReason: {traceback.format_exc()}")
             return False
-
-    @staticmethod
-    def generate_install_token() -> str:
-        if GITHUB_APP_CLIENT_ID is None or GITHUB_APP_SIGNING_KEY is None:
-            raise RuntimeError("GITHUB_APP_CLIENT_ID or GITHUB_APP_SIGNING_KEY environment variable is not set")
-
-        # see https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-json-web-token-jwt-for-a-github-app#example-using-python-to-generate-a-jwt
-        payload = {
-            "iat": int(time.time()),
-            "exp": int(time.time()) + 60,
-            "iss": GITHUB_APP_CLIENT_ID,
-        }
-        encoded_jwt = jwt.encode(payload, GITHUB_APP_SIGNING_KEY, algorithm="RS256")
-
-        # get install id
-        req = urllib.request.Request(
-            url="https://api.github.com/app/installations", headers={"Authorization": f"Bearer {encoded_jwt}"}
-        )
-        http_response = urllib.request.urlopen(req, timeout=30)
-        if http_response.code != 200:
-            raise RuntimeError(f"Failed to get installation id, received status code: {http_response.getCode()}")
-        installs = json.loads(http_response.read())
-        if len(installs) != 1:
-            raise RuntimeError(f"Failed to get installation id, received {len(installs)} installs")
-        install_id = installs[0]["id"]
-
-        # generate install token
-        req = urllib.request.Request(
-            method="POST",
-            url=f"https://api.github.com/app/installations/{install_id}/access_tokens",
-            headers={"Authorization": f"Bearer {encoded_jwt}"},
-        )
-        http_response = urllib.request.urlopen(req, timeout=30)
-        if http_response.code != 201:
-            raise RuntimeError(
-                f"Failed to generate installation token, received status code: {http_response.getCode()}"
-            )
-        token_data = json.loads(http_response.read())
-        return token_data["token"]
