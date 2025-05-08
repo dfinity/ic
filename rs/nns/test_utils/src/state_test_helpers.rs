@@ -2231,7 +2231,7 @@ pub fn manage_network_economics(
     network_economics: NetworkEconomics,
     sender: PrincipalId,
     neuron_id: NeuronId,
-) {
+) -> ProposalId {
     let proposal = MakeProposalRequest {
         title: Some("manage network economics".to_string()),
         summary: "manage network economics".to_string(),
@@ -2243,12 +2243,10 @@ pub fn manage_network_economics(
 
     let propose_response = nns_governance_make_proposal(machine, sender, neuron_id, &proposal);
 
-    let proposal_id = match propose_response.command.unwrap() {
+    match propose_response.command.unwrap() {
         manage_neuron_response::Command::MakeProposal(response) => response.proposal_id.unwrap(),
         _ => panic!("Propose didn't return MakeProposal"),
-    };
-
-    nns_wait_for_proposal_execution(machine, proposal_id.id);
+    }
 }
 
 pub fn setup_cycles_ledger(state_machine: &StateMachine) {
