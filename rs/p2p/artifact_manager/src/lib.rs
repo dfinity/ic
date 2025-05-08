@@ -31,6 +31,7 @@ use tokio_stream::StreamExt;
 use tracing::instrument;
 
 /// Metrics for a client artifact processor.
+/// Just triggering a rebuild.
 struct ArtifactProcessorMetrics {
     /// The processing time histogram.
     processing_time: Histogram,

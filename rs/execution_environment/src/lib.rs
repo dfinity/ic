@@ -50,6 +50,7 @@ use tokio::sync::mpsc::Sender;
 /// running in an replicated or non-replicated context. This information is
 /// needed for various purposes and in particular to support the CoW memory
 /// work.
+/// Just triggering a rebuild.
 #[doc(hidden)]
 pub enum QueryExecutionType {
     /// The execution is happening in a replicated context (i.e. consensus was

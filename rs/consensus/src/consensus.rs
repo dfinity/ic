@@ -81,6 +81,7 @@ enum ConsensusSubcomponent {
 }
 
 /// Describe expected version and artifact version when there is a mismatch.
+/// Just triggering a rebuild.
 #[derive(Debug)]
 pub(crate) struct ReplicaVersionMismatch {}
 
