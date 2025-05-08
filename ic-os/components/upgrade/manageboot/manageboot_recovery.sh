@@ -181,18 +181,20 @@ done
 shift $((OPTIND - 1))
 
 # Recovery-updater mode (GuestOS upgrade from HostOS)
-if [[ "$1" == "upgrade-install" && "$#" -ge 6 ]]; then
+if [[ "$1" == "upgrade-install" && "$#" -ge 7 ]]; then
     ACTION="$1"
     GRUBENV_FILE="$2"
     BOOT_DEV="$3"
     ROOT_DEV="$4"
-    BOOT_IMG="$5"
-    ROOT_IMG="$6"
+    VAR_DEV="$5"
+    BOOT_IMG="$6"
+    ROOT_IMG="$7"
 
     echo "=== Recovery Updater Mode ==="
     echo "Grubenv file: ${GRUBENV_FILE}"
     echo "Boot device: ${BOOT_DEV}"
     echo "Root device: ${ROOT_DEV}"
+    echo "Var device: ${VAR_DEV}"
     echo "Boot image: ${BOOT_IMG}"
     echo "Root image: ${ROOT_IMG}"
 
@@ -216,6 +218,14 @@ if [[ "$1" == "upgrade-install" && "$#" -ge 6 ]]; then
         exit 1
     fi
     echo "Root image written successfully"
+
+    echo "Wiping var partition header on ${VAR_DEV}..."
+    dd if=/dev/zero of="${VAR_DEV}" bs=1M count=16 status=progress
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Failed to wipe var partition header"
+        exit 1
+    fi
+    echo "Var partition header wiped successfully"
 
     echo "Updating grubenv to prepare for next boot..."
     # Update boot_alternative to point to the new slot

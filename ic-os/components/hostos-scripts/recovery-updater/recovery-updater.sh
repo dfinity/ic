@@ -26,12 +26,15 @@ function prepare_guestos_upgrade() {
     if [ "$boot_alternative" = "A" ]; then
         boot_target="${lodev}p7"
         root_target="${lodev}p8"
+        var_target="${lodev}p9"
     else
         boot_target="${lodev}p4"
         root_target="${lodev}p5"
+        var_target="${lodev}p6"
     fi
     echo "Target boot partition: $boot_target"
     echo "Target root partition: $root_target"
+    echo "Target var partition: $var_target"
 }
 
 function guestos_upgrade_cleanup() {
@@ -89,6 +92,7 @@ echo "Installing upgrade using manageboot..."
     "${grubdir}/grubenv" \
     "${boot_target}" \
     "${root_target}" \
+    "${var_target}" \
     "$TMPDIR/boot.img" \
     "$TMPDIR/root.img"
 
