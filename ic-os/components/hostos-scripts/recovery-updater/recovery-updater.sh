@@ -26,15 +26,10 @@ function prepare_guestos_upgrade() {
         boot_target="${lodev}p4"
         root_target="${lodev}p5"
     fi
-
-    mount -o rw,sync "${boot_target}" "${bootdir}"
-    mount -o rw,sync "${root_target}" "${rootdir}"
 }
 
 function guestos_upgrade_cleanup() {
     umount "${grubdir}"
-    umount "${bootdir}"
-    umount "${rootdir}"
     rm -rf "${workdir}"
 }
 
