@@ -454,7 +454,7 @@ def _disk_image_no_tar_impl(ctx):
     outputs.append(output_file)
 
     args.extend(["-p", ctx.files.layout[0].path])
-    inputs.append(ctx.files.layout)
+    inputs.extend(ctx.files.layout)
 
     if ctx.attr.expanded_size:
         args.extend(["-s", ctx.attr.expanded_size])
