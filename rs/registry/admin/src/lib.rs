@@ -1,11 +1,11 @@
+use ic_base_types::{PrincipalId, SubnetId};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_protobuf::types::v1 as pb;
-use ic_registry_local_store::{LocalStoreImpl, LocalStoreWriter, KeyMutation};
-use ic_base_types::{PrincipalId, SubnetId};
+use ic_registry_local_store::{KeyMutation, LocalStoreImpl, LocalStoreWriter};
 use ic_types::RegistryVersion;
 use prost::Message;
-use std::str::FromStr;
 use std::path::Path;
+use std::str::FromStr;
 
 pub fn initialize_registry_local_store(path: &Path, root_public_key: Vec<u8>) {
     let local_store = LocalStoreImpl::new(path);
@@ -32,10 +32,12 @@ pub fn initialize_registry_local_store(path: &Path, root_public_key: Vec<u8>) {
             ),
         },
         KeyMutation {
-            key: format!("crypto_threshold_signing_public_key_{}", SubnetId::from(nns_subnet_id)),
+            key: format!(
+                "crypto_threshold_signing_public_key_{}",
+                SubnetId::from(nns_subnet_id)
+            ),
             value: Some(
-                ic_protobuf::registry::crypto::v1::PublicKey::from(root_public_key)
-                .encode_to_vec(),
+                ic_protobuf::registry::crypto::v1::PublicKey::from(root_public_key).encode_to_vec(),
             ),
         },
     ];
