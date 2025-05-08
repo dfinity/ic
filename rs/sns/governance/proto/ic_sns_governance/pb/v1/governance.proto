@@ -2190,7 +2190,7 @@ enum ClaimedSwapNeuronStatus {
   // result in the same status.
   CLAIMED_SWAP_NEURON_STATUS_INVALID = 2;
 
-  // The Neuron could not be created because it already exists
+  // The neuron could not be created because it already exists
   // within SNS Governance. Additional retries will result in
   // the same status.
   CLAIMED_SWAP_NEURON_STATUS_ALREADY_EXISTS = 3;
