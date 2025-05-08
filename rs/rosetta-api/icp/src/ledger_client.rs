@@ -25,7 +25,7 @@ use candid::{Decode, Encode};
 use core::ops::Deref;
 use ic_agent::agent::{RejectCode, RejectResponse, RequestStatusResponse};
 use ic_agent::{Agent, RequestId};
-use ic_nns_governance_api::pb::v1::{KnownNeuron, ListKnownNeuronsResponse, ProposalInfo};
+use ic_nns_governance_api::{KnownNeuron, ListKnownNeuronsResponse, ProposalInfo};
 use std::{
     convert::TryFrom,
     sync::{atomic::AtomicBool, Arc},
@@ -44,9 +44,7 @@ use ic_ledger_canister_blocks_synchronizer::{
     certification::VerificationInfo,
     ledger_blocks_sync::LedgerBlocksSynchronizer,
 };
-use ic_nns_governance_api::pb::v1::{
-    manage_neuron::NeuronIdOrSubaccount, GovernanceError, NeuronInfo,
-};
+use ic_nns_governance_api::{manage_neuron::NeuronIdOrSubaccount, GovernanceError, NeuronInfo};
 use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey,
     messages::{HttpCallContent, MessageId, SignedRequestBytes},
