@@ -135,7 +135,7 @@ rust_library(
     # things in DEPENDENCIES.
     testonly = True,
     srcs = LIBRARY_SRCS,
-    crate_name = "ic_registry_admin",
+    crate_name = "ic_admin",
     version = "0.0.1",
     deps = DEPENDENCIES,
 )
