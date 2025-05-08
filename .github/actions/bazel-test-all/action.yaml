@@ -116,6 +116,7 @@ runs:
                 bazel_args+=( --target_pattern_file="$target_pattern_file" )
             else
                 bazel_args+=( "${bazel_targets[@]}" )
+                echo "TARGETS: ${bazel_targets[@]}"
             fi
 
             echo "Building as user: $(whoami)"
