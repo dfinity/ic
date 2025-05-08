@@ -85,18 +85,18 @@ system_test_nns(
     runtime_deps = GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
-        "//rs/registry/subnet_type",
+        "//rs/nns/constants",
         "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/tecdsa/utils",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
-        "//rs/nns/constants",
         "//rs/types/base_types",
-        "@crate_index//:slog",
-        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:anyhow",
-        "//rs/types/management_canister_types",
-        "//rs/rust_canisters/canister_test",
+        "@crate_index//:slog",
     ],
 )
 

@@ -180,7 +180,7 @@ pub fn setup(env: TestEnv) {
         &logger,
     ));
 
-    let snapshot =
+    let _snapshot =
         block_on(snapshot.block_for_min_registry_version(registry_version.increment())).unwrap();
 
     env.sync_with_prometheus_by_name("", env.get_playnet_url(BOUNDARY_NODE_NAME));
