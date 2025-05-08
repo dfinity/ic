@@ -48,10 +48,10 @@ fi
 
 if [ $# -eq 0 ]; then
     # Runs the benchmark without updating the results file.
-    ${CANBENCH_BIN} --no-runtime-integrity-check --runtime-path ${POCKET_IC_BIN}
+    ${CANBENCH_BIN}
 elif [ "$1" = "--update" ]; then
     # Runs the benchmark while updating the results file.
-    ${CANBENCH_BIN} --no-runtime-integrity-check --runtime-path ${POCKET_IC_BIN} --persist
+    ${CANBENCH_BIN} --persist
 
     # Since we cannot specify an empty results file for the first time, we need to copy the default
     # results file to the desired location.
@@ -61,7 +61,7 @@ elif [ "$1" = "--update" ]; then
 else
     NOISE_THRESHOLD_ARG="${NOISE_THRESHOLD:+--noise-threshold ${NOISE_THRESHOLD}}"
     # Runs the benchmark test that fails if the diffs are new or above the threshold.
-    ${CANBENCH_BIN} --no-runtime-integrity-check --runtime-path ${POCKET_IC_BIN} ${NOISE_THRESHOLD_ARG} >$CANBENCH_OUTPUT
+    ${CANBENCH_BIN} ${NOISE_THRESHOLD_ARG} >$CANBENCH_OUTPUT
     if grep -q "(regress\|(improved by \|(new)" "$CANBENCH_OUTPUT"; then
         cat "$CANBENCH_OUTPUT"
         echo "**\`$REPO_RESULTS_PATH\` is not up to date ❌**
