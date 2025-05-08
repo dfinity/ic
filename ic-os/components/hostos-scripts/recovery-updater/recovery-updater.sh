@@ -79,7 +79,12 @@ zstd -d "$TMPDIR/upgrade.tar.zst" -o "$TMPDIR/upgrade.tar"
 tar -xf "$TMPDIR/upgrade.tar" -C "$TMPDIR"
 
 # Install the upgrade using manageboot
-/opt/ic/bin/manageboot.sh guestos upgrade-install "$TMPDIR/boot.img" "$TMPDIR/root.img"
+/opt/ic/bin/manageboot_recovery.sh upgrade-install \
+    "${grubdir}/grubenv" \
+    "${boot_target}" \
+    "${root_target}" \
+    "$TMPDIR/boot.img" \
+    "$TMPDIR/root.img"
 
 # help: need to pass manageboot.sh boot_dir and root_dir? and grub_dir to update grub?
 

@@ -180,6 +180,27 @@ while getopts ":f:" OPT; do
 done
 shift $((OPTIND - 1))
 
+# New: Direct device mode for upgrade-install
+if [[ "$1" == "upgrade-install" && "$#" -ge 6 ]]; then
+    ACTION="$1"
+    GRUBENV_FILE="$2"
+    BOOT_DEV="$3"
+    ROOT_DEV="$4"
+    BOOT_IMG="$5"
+    ROOT_IMG="$6"
+
+    read_grubenv "${GRUBENV_FILE}"
+
+    # Optionally check IS_STABLE here if needed
+    dd if="${BOOT_IMG}" of="${BOOT_DEV}" bs=1M status=progress
+    dd if="${ROOT_IMG}" of="${ROOT_DEV}" bs=1M status=progress
+
+    # Update grubenv to switch to the new slot
+    boot_cycle=first_boot
+    write_grubenv "${GRUBENV_FILE}"
+    exit 0
+fi
+
 SYSTEM_TYPE="$1"
 ACTION="$2"
 shift 2
