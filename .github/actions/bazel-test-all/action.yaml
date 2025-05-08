@@ -115,14 +115,15 @@ runs:
                 # complaining about the argument list being too long.
                 bazel_args+=( --target_pattern_file="$target_pattern_file" )
             else
-                bazel_args+=( "${bazel_targets[@]}" )
+                #bazel_args+=( "${bazel_targets[@]}" )
+                bazel_args+=( "//rs/tests/nns:node_removal_from_registry_test" )
             fi
 
             echo "Building as user: $(whoami)"
             echo "Bazel version: $(bazel version)"
 
             if [[ $release_build == "true" ]]; then
-              echo bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}" --config=release
+              bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}" --config=release
             else
-              echo bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}"
+              bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}"
             fi
