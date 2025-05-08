@@ -4,33 +4,42 @@ set -e
 
 # Upgrade and boot into the alternative boot partition (help: reverse this?)
 function prepare_guestos_upgrade() {
+    echo "Starting guestos upgrade preparation"
     lodev="$(losetup -Pfr --show /dev/hostlvm/guestos)"
+    echo "Set up loop device: $lodev"
+    
     workdir="$(mktemp -d)"
     grubdir="${workdir}/grub"
     bootdir="${workdir}/boot"
     rootdir="${workdir}/root"
     mkdir "${grubdir}" "${bootdir}" "${rootdir}"
+    echo "Created temporary directories in $workdir"
 
     mount -o rw,sync "${lodev}p2" "${grubdir}"
+    echo "Mounted grub partition at ${grubdir}"
 
     # Get the boot alternative
     boot_alternative="$(grep -oP '^boot_alternative=\K[a-zA-Z]+' "${grubdir}/grubenv")"
+    echo "Current boot alternative: $boot_alternative"
 
-    # Swap the boot alternative to the inactive boot partition
+    # Choose the targets of the inactive partitions
     if [ "$boot_alternative" = "A" ]; then
-        boot_alternative="B"
         boot_target="${lodev}p7"
         root_target="${lodev}p8"
     else
-        boot_alternative="A"
         boot_target="${lodev}p4"
         root_target="${lodev}p5"
     fi
+    echo "Target boot partition: $boot_target"
+    echo "Target root partition: $root_target"
 }
 
 function guestos_upgrade_cleanup() {
+    echo "Starting cleanup"
     umount "${grubdir}"
+    echo "Unmounted ${grubdir}"
     rm -rf "${workdir}"
+    echo "Removed temporary directory ${workdir}"
 }
 
 prepare_guestos_upgrade
@@ -51,29 +60,31 @@ echo "==============================="
 
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
+echo "Created temporary directory: $TMPDIR"
 
 echo "Downloading upgrade from $URL..."
 if ! curl -L -o "$TMPDIR/upgrade.tar.zst" "$URL"; then
-    echo "Failed to download upgrade file"
+    echo "ERROR: Failed to download upgrade file"
     exit 1
 fi
+echo "Download completed successfully"
 
 echo "Verifying upgrade image hash..."
 ACTUAL_HASH=$(sha256sum "$TMPDIR/upgrade.tar.zst" | cut -d' ' -f1)
 if [ "$ACTUAL_HASH" != "$TARGET_HASH" ]; then
-    echo "Hash verification failed"
+    echo "ERROR: Hash verification failed"
     echo "Expected: $TARGET_HASH"
     echo "Got: $ACTUAL_HASH"
     exit 1
 fi
-
 echo "Hash verification successful"
 
-# Extract the upgrade file
+echo "Extracting upgrade file..."
 zstd -d "$TMPDIR/upgrade.tar.zst" -o "$TMPDIR/upgrade.tar"
 tar -xf "$TMPDIR/upgrade.tar" -C "$TMPDIR"
+echo "Extraction completed"
 
-# Install the upgrade using manageboot
+echo "Installing upgrade using manageboot..."
 /opt/ic/bin/manageboot_recovery.sh upgrade-install \
     "${grubdir}/grubenv" \
     "${boot_target}" \
@@ -86,3 +97,4 @@ tar -xf "$TMPDIR/upgrade.tar" -C "$TMPDIR"
 echo "Upgrade installation complete"
 
 guestos_upgrade_cleanup
+echo "Recovery updater completed successfully"
