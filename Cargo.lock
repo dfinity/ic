@@ -5824,6 +5824,7 @@ dependencies = [
  "ic-interfaces-registry",
  "ic-management-canister-types-private",
  "ic-nervous-system-agent",
+ "ic-nervous-system-chunks",
  "ic-nervous-system-clients",
  "ic-nervous-system-common",
  "ic-nervous-system-common-test-keys",
