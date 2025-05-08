@@ -6,7 +6,9 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("//bazel:mainnet-canisters.bzl", "canisters")
 load("//bazel:mainnet-icos-images.bzl", "mainnet_icos_images")
 load("//third_party/jemalloc:repository.bzl", "jemalloc_repository")
+load("//third_party/libfuzzer:repository.bzl", "libfuzzer_repository")
 load("//third_party/lmdb:repository.bzl", "lmdb_repository")
+load("//third_party/openssl:repository.bzl", "openssl_repository")
 
 # We cannot derive the Bazel repository names (e.g. @mainnet_nns_registry_canister) directly
 # from the canister names because we use inconsistent repo names. Same goes for filenames.
@@ -18,9 +20,6 @@ canisters(
         "registry": "registry-canister.wasm.gz",
         "governance": "governance-canister.wasm.gz",
         "ledger": "ledger-canister_notify-method.wasm.gz",
-        "ledger_v1": "ledger-canister_notify-method.wasm.gz",
-        "ledger_v2": "ledger-canister_notify-method.wasm.gz",
-        "ledger_v3": "ledger-canister_notify-method.wasm.gz",
         "archive": "ledger-archive-node-canister.wasm.gz",
         "index": "ic-icp-index-canister.wasm.gz",
         "root": "root-canister.wasm.gz",
@@ -56,9 +55,6 @@ canisters(
         "registry": "mainnet_nns_registry_canister",
         "governance": "mainnet_nns_governance_canister",
         "ledger": "mainnet_icp_ledger_canister",
-        "ledger_v1": "mainnet_icp_ledger_canister-v1",
-        "ledger_v2": "mainnet_icp_ledger_canister-v2",
-        "ledger_v3": "mainnet_icp_ledger_canister-v3",
         "archive": "mainnet_icp_ledger-archive-node-canister",
         "index": "mainnet_icp_index_canister",
         "root": "mainnet_nns_root-canister",
@@ -114,6 +110,8 @@ sol_register_toolchains(
 http_archive(
     name = "rules_rust",
     integrity = "sha256-CeF7R8AVBGVjGqMZ8nQnYKQ+3tqy6cAS+R0K4u/wImg=",
+    patch_args = ["-p1"],
+    patches = ["//bazel:rules_rust.patch"],
     urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.59.2/rules_rust-0.59.2.tar.gz"],
 )
 
@@ -129,6 +127,11 @@ crate_universe_dependencies()
 
 rust_register_toolchains(
     edition = "2021",
+    strip_level = {"x86_64-unknown-linux-gnu": {
+        "dbg": "none",
+        "fastbuild": "none",
+        "opt": "none",
+    }},
     # The nightly version is required to compile fuzz tests from Bazel.
     # The version below is chosen so that it is in sync with the non-nightly version.
     versions = [
@@ -174,6 +177,10 @@ rules_motoko_dependencies()
 lmdb_repository()
 
 jemalloc_repository()
+
+openssl_repository()
+
+libfuzzer_repository()
 
 http_archive(
     name = "buildifier_prebuilt",
@@ -271,3 +278,33 @@ load("//bazel:idl2json.bzl", "idl_to_json")
 idl_to_json(name = "idl2json")
 
 mainnet_icos_images()
+
+load("//bazel:spawn_proto_library.bzl", "spawn_proto_library")
+
+spawn_proto_library(name = "spawn_proto_library")
+
+# Use libsystemd from the host environment
+# Ideally this is pulled hermetically, but as this is only used by infogetty
+# within IC images, we have less compatibility to worry about, and packaging it
+# this way is easier.
+new_local_repository(
+    name = "libsystemd",
+    build_file_content = """
+cc_import(
+    name = "libsystemd-internal",
+    hdrs = glob(["include/systemd/*.h"]),
+    interface_library = "lib/x86_64-linux-gnu/libsystemd.so",
+    system_provided = True,
+    visibility = ["//visibility:private"],
+)
+
+# Use an extra cc_library to hide the depth of the include folder
+cc_library(
+    name = "libsystemd",
+    includes = ["include"],
+    deps = ["libsystemd-internal"],
+    visibility = ["//visibility:public"],
+)
+""",
+    path = "/usr",
+)

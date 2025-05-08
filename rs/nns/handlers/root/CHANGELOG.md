@@ -11,6 +11,12 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-05-02: Proposal 136429
+
+No behavior change.
+
+Code for new behavior is inactive (behind a flag).
+
 # 2025-02-14: Proposal 135313
 
 http://dashboard.internetcomputer.org/proposal/135313

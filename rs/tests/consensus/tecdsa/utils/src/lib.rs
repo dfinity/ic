@@ -16,7 +16,7 @@ use ic_management_canister_types_private::{
 use ic_message::ForwardParams;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
-use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
+use ic_nns_governance_api::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
 use ic_registry_subnet_type::SubnetType;
@@ -34,7 +34,7 @@ use ic_system_test_driver::{
 };
 use ic_types::{Height, PrincipalId, ReplicaVersion};
 use ic_types_test_utils::ids::subnet_test_id;
-use ic_vetkd_utils::{DerivedPublicKey, EncryptedVetKey, IBECiphertext, TransportSecretKey};
+use ic_vetkd_utils::{DerivedPublicKey, EncryptedVetKey, TransportSecretKey};
 use k256::ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey};
 use registry_canister::mutations::{
     do_create_subnet::{
@@ -53,8 +53,8 @@ pub const DKG_INTERVAL: u64 = 19;
 
 pub const NUMBER_OF_NODES: usize = 4;
 
-const MSG: &str = "Secret message that is totally important";
-const SEED: [u8; 32] = [13; 32];
+const VETKD_TRANSPORT_SECRET_KEY_SEED: [u8; 32] = [13; 32];
+const GET_SIGNATURE_RETRIES: i32 = 10;
 
 pub fn make_key(name: &str) -> EcdsaKeyId {
     EcdsaKeyId {
@@ -229,6 +229,10 @@ pub fn empty_subnet_update() -> UpdateSubnetPayload {
 pub fn scale_cycles(cycles: Cycles) -> Cycles {
     // Subnet is constructed with `NUMBER_OF_NODES`, see `config()` and `config_without_ecdsa_on_nns()`.
     (cycles * NUMBER_OF_NODES) / SMALL_APP_SUBNET_MAX_SIZE
+}
+
+pub fn scale_cycles_to(number_of_nodes: usize, cycles: Cycles) -> Cycles {
+    (cycles * number_of_nodes) / SMALL_APP_SUBNET_MAX_SIZE
 }
 
 /// The signature test consists of getting the given canister's Chain key, comparing it to the existing key
@@ -582,7 +586,7 @@ pub async fn get_signature_with_logger(
             get_schnorr_signature_with_logger(message, cycles, key_id, msg_can, logger).await
         }
         MasterPublicKeyId::VetKd(key_id) => {
-            get_vetkd_with_logger(message, cycles, key_id, msg_can, logger).await
+            get_vetkd_with_logger(message, vec![], cycles, key_id, msg_can, logger).await
         }
     }
 }
@@ -624,7 +628,7 @@ pub async fn get_ecdsa_signature_with_logger(
             }
             Err(err) => {
                 count += 1;
-                if count < 5 {
+                if count < GET_SIGNATURE_RETRIES {
                     debug!(
                         logger,
                         "sign_with_ecdsa returns `{}`. Trying again in 2 seconds...", err
@@ -681,7 +685,7 @@ pub async fn get_schnorr_signature_with_logger(
             }
             Err(err) => {
                 count += 1;
-                if count < 5 {
+                if count < GET_SIGNATURE_RETRIES {
                     debug!(
                         logger,
                         "sign_with_schnorr returns `{}`. Trying again in 2 seconds...", err
@@ -700,12 +704,13 @@ pub async fn get_schnorr_signature_with_logger(
 
 pub async fn get_vetkd_with_logger(
     input: Vec<u8>,
+    context: Vec<u8>,
     cycles: Cycles,
     key_id: &VetKdKeyId,
     msg_can: &MessageCanister<'_>,
     logger: &Logger,
 ) -> Result<Vec<u8>, AgentError> {
-    let transport_key = TransportSecretKey::from_seed(SEED.to_vec())
+    let transport_key = TransportSecretKey::from_seed(VETKD_TRANSPORT_SECRET_KEY_SEED.to_vec())
         .expect("Failed to generate transport secret key");
     let transport_public_key = transport_key.public_key().try_into().unwrap();
 
@@ -713,7 +718,7 @@ pub async fn get_vetkd_with_logger(
         logger,
         "Sending a {} request of size: {}",
         key_id,
-        input.len(),
+        input.len() + context.len(),
     );
 
     let mut count = 0;
@@ -722,6 +727,7 @@ pub async fn get_vetkd_with_logger(
             transport_public_key,
             key_id.clone(),
             input.clone(),
+            context.clone(),
             msg_can,
             cycles,
         )
@@ -732,7 +738,7 @@ pub async fn get_vetkd_with_logger(
             }
             Err(err) => {
                 count += 1;
-                if count < 5 {
+                if count < GET_SIGNATURE_RETRIES {
                     debug!(
                         logger,
                         "vetkd_derive_key returns `{}`. Trying again in 2 seconds...", err
@@ -928,26 +934,18 @@ pub fn verify_ecdsa_signature(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
     pk.verify_prehash(msg, &signature).is_ok()
 }
 
-pub fn verify_vetkd(public_key: &[u8], encrypted_key: &[u8], input: &[u8]) -> bool {
+pub fn verify_vetkey(public_key: &[u8], encrypted_key: &[u8], input: &[u8]) -> bool {
     let dpk = DerivedPublicKey::deserialize(public_key).expect("Failed to deserialize public key");
-    let enc_msg = IBECiphertext::encrypt(&dpk, input, MSG.as_bytes(), &SEED)
-        .expect("Failed to encrypt message");
 
-    let transport_key = TransportSecretKey::from_seed(SEED.to_vec())
+    let transport_key = TransportSecretKey::from_seed(VETKD_TRANSPORT_SECRET_KEY_SEED.to_vec())
         .expect("Failed to generate transport secret key");
 
     let enc_key =
         EncryptedVetKey::deserialize(encrypted_key).expect("Failed to deserialize encrypted key");
 
-    let priv_key = enc_key
+    enc_key
         .decrypt_and_verify(&transport_key, &dpk, input)
-        .expect("Failed to decrypt derived key");
-
-    let msg = enc_msg
-        .decrypt(&priv_key)
-        .expect("Failed to decrypt the message");
-
-    msg == MSG.as_bytes()
+        .is_ok()
 }
 
 pub fn verify_signature(key_id: &MasterPublicKeyId, msg: &[u8], pk: &[u8], sig: &[u8]) {
@@ -960,7 +958,7 @@ pub fn verify_signature(key_id: &MasterPublicKeyId, msg: &[u8], pk: &[u8], sig: 
             SchnorrAlgorithm::Ed25519 => verify_ed25519_signature(pk, sig, msg),
         },
         MasterPublicKeyId::VetKd(key_id) => match key_id.curve {
-            VetKdCurve::Bls12_381_G2 => verify_vetkd(pk, sig, msg),
+            VetKdCurve::Bls12_381_G2 => verify_vetkey(pk, sig, msg),
         },
     };
     assert!(res);
@@ -1083,11 +1081,12 @@ pub async fn vetkd_derive_key(
     transport_public_key: [u8; 48],
     key_id: VetKdKeyId,
     input: Vec<u8>,
+    context: Vec<u8>,
     msg_can: &MessageCanister<'_>,
     cycles: Cycles,
 ) -> Result<Vec<u8>, AgentError> {
     let args = VetKdDeriveKeyArgs {
-        context: vec![],
+        context,
         input,
         key_id,
         transport_public_key,

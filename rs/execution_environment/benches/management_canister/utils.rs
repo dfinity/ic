@@ -22,6 +22,8 @@ pub fn env() -> StateMachine {
     StateMachineBuilder::new()
         .with_checkpoints_enabled(false)
         .with_subnet_type(SubnetType::Application)
+        .with_snapshot_download_enabled(true)
+        .with_snapshot_upload_enabled(true)
         .build()
 }
 

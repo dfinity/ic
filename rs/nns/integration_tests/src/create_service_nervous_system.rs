@@ -8,7 +8,7 @@ use ic_nervous_system_common_test_keys::{
 use ic_nns_common::pb::v1::{self as nns_common_pb, ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_governance::governance::test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING;
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     governance_error::ErrorType,
     manage_neuron::{self, RegisterVote},
     manage_neuron_response,
@@ -105,8 +105,8 @@ fn test_several_proposals() {
     match response_2.command {
         Some(manage_neuron_response::Command::Error(err)) => {
             assert_eq!(
-                ErrorType::try_from(err.error_type).ok(),
-                Some(ErrorType::PreconditionFailed),
+                err.error_type,
+                ErrorType::PreconditionFailed as i32,
                 "{:#?}",
                 err,
             );
@@ -166,14 +166,14 @@ fn test_several_proposals() {
     let proposal_3 = final_proposals.get(&proposal_id_3).unwrap();
 
     assert_eq!(
-        ProposalStatus::try_from(proposal_1.status).unwrap(),
-        ProposalStatus::Executed,
+        proposal_1.status,
+        ProposalStatus::Executed as i32,
         "{:#?}",
         proposal_1,
     );
     assert_eq!(
-        ProposalStatus::try_from(proposal_3.status).unwrap(),
-        ProposalStatus::Open,
+        proposal_3.status,
+        ProposalStatus::Open as i32,
         "{:#?}",
         proposal_1,
     );

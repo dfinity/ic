@@ -16,8 +16,9 @@ use ic_nns_governance::{
         ManageNeuron, NetworkEconomics,
     },
 };
-use ic_nns_governance_api::pb::v1::manage_neuron_response::{
-    Command as CommandResponse, MergeResponse,
+use ic_nns_governance_api::{
+    self as api,
+    manage_neuron_response::{Command as CommandResponse, MergeResponse},
 };
 use proptest::prelude::{proptest, TestCaseError};
 

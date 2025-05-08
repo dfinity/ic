@@ -46,6 +46,8 @@ bazel_args=( "$@" )
 # stored here again for easy access
 bazel_command="$1"
 
+# Setup zig-cache
+mkdir -p /tmp/zig-cache
 
 # Unless explicitly provided, we set a default --repository_cache to a volume mounted inside our runners
 # Only for Linux builds since there `/cache` is mounted to host local storage.
@@ -58,6 +60,10 @@ fi
 if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
     command_timestamp=$(date +%s)
     bazel_args+=(
+
+        # write execlog, mostly for build reproducibility checks
+        --execution_log_compact_file="$BAZEL_ACTION_METRICS_OUT/execlog-$command_timestamp.zst"
+
         --verbose_failures=true
 
         # enables BES upload (see config)

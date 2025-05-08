@@ -25,7 +25,7 @@ use ic_system_test_driver::{
 };
 use ic_tests_ckbtc::{
     activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_btc_checker,
-    install_ledger, install_minter, setup, subnet_sys, upgrade_btc_checker,
+    install_ledger, install_minter, setup, subnet_app, subnet_sys, upgrade_btc_checker,
     utils::{
         assert_mint_transaction, assert_no_new_utxo, assert_no_transaction,
         assert_temporarily_unavailable, ensure_wallet, generate_blocks, get_btc_address,
@@ -47,7 +47,9 @@ use slog::{debug, info};
 pub fn test_update_balance(env: TestEnv) {
     let logger = env.logger();
     let subnet_sys = subnet_sys(&env);
+    let subnet_app = subnet_app(&env);
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
+    let app_node = subnet_app.nodes().next().expect("No node in app subnet.");
 
     // Get access to btc replica.
     let btc_rpc = get_btc_client(&env);
@@ -69,15 +71,17 @@ pub fn test_update_balance(env: TestEnv) {
         .unwrap();
 
     block_on(async {
-        let runtime = runtime_from_url(sys_node.get_public_url(), sys_node.effective_canister_id());
-        install_bitcoin_canister(&runtime, &logger).await;
+        let sys_runtime =
+            runtime_from_url(sys_node.get_public_url(), sys_node.effective_canister_id());
+        let runtime = runtime_from_url(app_node.get_public_url(), app_node.effective_canister_id());
+        install_bitcoin_canister(&sys_runtime, &logger).await;
 
         let mut ledger_canister = create_canister(&runtime).await;
         let mut minter_canister = create_canister(&runtime).await;
         let mut btc_checker_canister = create_canister(&runtime).await;
 
         let minting_user = minter_canister.canister_id().get();
-        let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
+        let agent = assert_create_agent(app_node.get_public_url().as_str()).await;
         let btc_checker_id = install_btc_checker(&mut btc_checker_canister, &env).await;
         let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
         let minter_id =
@@ -86,7 +90,7 @@ pub fn test_update_balance(env: TestEnv) {
 
         let ledger = Principal::from(ledger_id.get());
         let universal_canister =
-            UniversalCanister::new_with_retries(&agent, sys_node.effective_canister_id(), &logger)
+            UniversalCanister::new_with_retries(&agent, app_node.effective_canister_id(), &logger)
                 .await;
         activate_ecdsa_signature(
             sys_node.clone(),
@@ -276,8 +280,7 @@ pub fn test_update_balance(env: TestEnv) {
 
         // We create a new agent with a different identity
         // to have caller != new_caller
-        let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
-        let mut mutable_agent = agent;
+        let mut mutable_agent = assert_create_agent(app_node.get_public_url().as_str()).await;
         let mut rng = ChaChaRng::from_rng(OsRng).unwrap();
         let identity = Secp256k1Identity::from_private_key(SecretKey::random(&mut rng));
         mutable_agent.set_identity(identity);
