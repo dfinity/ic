@@ -35,14 +35,18 @@ pub(crate) fn routing_table_into_registry_mutation(
     routing_table: RoutingTable,
     mutation_type: i32,
 ) -> RegistryMutation {
+) -> Vec<RegistryMutation> {
+    let mut mutations = vec![];
     let routing_table = pb::RoutingTable::from(routing_table);
     let mut buf = vec![];
     routing_table.encode(&mut buf).unwrap();
-    RegistryMutation {
+    mutations.push(RegistryMutation {
         mutation_type,
         key: make_routing_table_record_key().as_bytes().to_vec(),
         value: buf,
-    }
+    });
+
+    mutations
 }
 
 /// Returns the given `CanisterMigrations` as a registry mutation of the given type.
@@ -80,7 +84,7 @@ impl Registry {
         &self,
         version: u64,
         f: impl FnOnce(&mut RoutingTable),
-    ) -> RegistryMutation {
+    ) -> Vec<RegistryMutation> {
         let mut routing_table = self.get_routing_table_or_panic(version);
         f(&mut routing_table);
         routing_table_into_registry_mutation(routing_table, registry_mutation::Type::Update as i32)
@@ -91,7 +95,7 @@ impl Registry {
         version: u64,
         canister_ids: Vec<CanisterId>,
         subnet_id: SubnetId,
-    ) -> RegistryMutation {
+    ) -> Vec<RegistryMutation> {
         self.modify_routing_table(version, |routing_table| {
             for canister_id in canister_ids {
                 routing_table.assign_canister(canister_id, subnet_id);
@@ -105,7 +109,7 @@ impl Registry {
         &self,
         version: u64,
         subnet_id_to_add: SubnetId,
-    ) -> RegistryMutation {
+    ) -> Vec<RegistryMutation> {
         self.modify_routing_table(version, |routing_table| {
             routing_table_insert_subnet(routing_table, subnet_id_to_add).unwrap();
         })
@@ -116,7 +120,7 @@ impl Registry {
         &self,
         version: u64,
         subnet_id_to_remove: SubnetId,
-    ) -> RegistryMutation {
+    ) -> Vec<RegistryMutation> {
         self.modify_routing_table(version, |routing_table| {
             routing_table.remove_subnet(subnet_id_to_remove);
         })
@@ -129,7 +133,7 @@ impl Registry {
         version: u64,
         canister_id_ranges: CanisterIdRanges,
         destination: SubnetId,
-    ) -> RegistryMutation {
+    ) -> Vec<RegistryMutation> {
         self.modify_routing_table(version, |routing_table| {
             routing_table
                 .assign_ranges(canister_id_ranges, destination)
@@ -233,7 +237,7 @@ mod tests {
     use crate::mutations::node_management::common::get_key_family_iter;
     use assert_matches::assert_matches;
     use ic_base_types::CanisterId;
-    use ic_registry_keys::CANISTER_RANGES_PREFIX;
+    use ic_registry_keys::CANISTER_RANGE_PREFIX;
     use ic_registry_routing_table::CanisterIdRange;
 
     #[test]
@@ -252,9 +256,9 @@ mod tests {
             system_subnet.into(),
         )
         .unwrap();
-        let mutation =
+        let mutations =
             routing_table_into_registry_mutation(rt, registry_mutation::Type::Update as i32);
-        registry.maybe_apply_mutation_internal(vec![mutation]);
+        registry.maybe_apply_mutation_internal(mutations);
 
         assert_eq!(
             registry
@@ -298,14 +302,24 @@ mod tests {
             system_subnet.into(),
         )
         .unwrap();
-        let mutation =
+        let mutations =
             routing_table_into_registry_mutation(rt, registry_mutation::Type::Update as i32);
-        registry.maybe_apply_mutation_internal(vec![mutation]);
+        registry.maybe_apply_mutation_internal(mutations);
 
         let routing_table = registry.get_routing_table_or_panic(0);
 
-        let ranges = get_key_family_iter(&registry, CANISTER_RANGES_PREFIX)
-            .map(|(_, v)| v)
-            .collect::<Vec<CanisterIdRange>>();
+        let entries = get_key_family_iter(&registry, CANISTER_RANGE_PREFIX)
+            .map(|(k, v)| {
+                let subnet_id = PrincipalId::try_from(k).ok().map(|p| SubnetId::new(p));
+                pb::routing_table::Entry {
+                    range: Some(v),
+                    subnet_id: subnet_id.into(),
+                }
+            })
+            .collect::<Vec<pb::routing_table::Entry>>();
+
+        let recovered = RoutingTable::try_from(pb::RoutingTable { entries }).unwrap();
+
+        assert_eq!(recovered, rt);
     }
 }
