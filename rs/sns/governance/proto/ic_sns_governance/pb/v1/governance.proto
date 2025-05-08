@@ -1608,7 +1608,7 @@ message GetRunningSnsVersionRequest {}
 
 // Response with the SNS's currently running version and any upgrades
 // that are in progress.
-// GetUpgradeJournal is a superior API to this one that should (Q: incomplete sentence)
+// GetUpgradeJournal is a superior API to this one that should be used instead.
 message GetRunningSnsVersionResponse {
   // The currently deployed version of the SNS.
   Governance.Version deployed_version = 1;
