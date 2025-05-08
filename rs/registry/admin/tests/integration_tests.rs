@@ -10,7 +10,9 @@ use ic_nervous_system_integration_tests::pocket_ic_helpers::{install_canister, N
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_nns_test_utils::common::{build_test_registry_wasm, NnsInitPayloadsBuilder};
 use ic_registry_canister_api::mutate_test_high_capacity_records;
-use ic_registry_fetch_large_record_test_canister::{CallRegistryGetChangesSinceRequest, ContentSummary};
+use ic_registry_fetch_large_record_test_canister::{
+    CallRegistryGetChangesSinceRequest, ContentSummary,
+};
 use ic_registry_local_store::{KeyMutation, LocalStoreImpl, LocalStoreReader};
 use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
 use std::{env, io::Write, process::Command};

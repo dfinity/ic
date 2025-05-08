@@ -1,6 +1,8 @@
 use super::Request;
 use candid::Encode;
-use ic_registry_fetch_large_record_test_canister::{CallRegistryGetChangesSinceRequest, ContentSummary};
+use ic_registry_fetch_large_record_test_canister::{
+    CallRegistryGetChangesSinceRequest, ContentSummary,
+};
 
 impl Request for CallRegistryGetChangesSinceRequest {
     fn method(&self) -> &'static str {
