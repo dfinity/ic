@@ -16,7 +16,7 @@ if GITHUB_APP_CLIENT_ID is None or GITHUB_APP_SIGNING_KEY is None:
 
 class GithubApp:
     def __init__(self, repos: typing.List[Repository]):
-        self.install_token_by_repo_url = {}
+        self.install_token_by_repo_url: typing.Dict[str, typing.Optional[str]] = {}
         for repo in repos:
             if repo.is_private and repo.url.startswith("https://github.com"):
                 self.install_token_by_repo_url[repo.url] = None
@@ -44,7 +44,7 @@ class GithubApp:
         )
         if resp.status_code != 200:
             raise RuntimeError(
-                f"Failed to get installation id for repo with owner {owner} and name {name}, received status code: {resp.status_code}"
+                f"Failed to get installation id for repo {owner}/{name}, received status code: {resp.status_code}"
             )
         installation = resp.json()
         return installation["id"]
@@ -64,13 +64,14 @@ class GithubApp:
         encoded_jwt = self.__gen_jwt()
         token_by_install_id = {}
         for repo_url in self.install_token_by_repo_url.keys():
-            match = re.search("https://github\\.com/(?P<owner>[^/]+)/(?P<name>[^/]+)/", repo_url)
+            match = re.search("^https://github\\.com/(?P<owner>[^/]+)/(?P<name>[^/]+)", repo_url)
             if match:
                 install_id = self.__get_installation_id_by_repo(encoded_jwt, match.group("owner"), match.group("name"))
                 if install_id in token_by_install_id:
                     install_token = token_by_install_id[install_id]
                 else:
                     install_token = self.__get_install_token(encoded_jwt, install_id)
+                    token_by_install_id[install_id] = install_token
                 self.install_token_by_repo_url[repo_url] = install_token
             else:
                 raise RuntimeError(f"Could not extract owner and repo name from repo url {repo_url}")
