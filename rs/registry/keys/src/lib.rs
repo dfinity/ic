@@ -34,7 +34,7 @@ pub const CRYPTO_THRESHOLD_SIGNING_KEY_PREFIX: &str = "crypto_threshold_signing_
 pub const DATA_CENTER_KEY_PREFIX: &str = "data_center_record_";
 pub const ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX: &str = "key_id_";
 pub const CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX: &str = "master_public_key_id_";
-pub const CANISTER_RANGES_PREFIX: &str = "canister_ranges_";
+pub const CANISTER_RANGE_PREFIX: &str = "canister_range_";
 
 pub fn get_ecdsa_key_id_from_signing_subnet_list_key(
     signing_subnet_list_key: &str,
@@ -370,24 +370,18 @@ pub fn make_nns_canister_records_key() -> String {
     "nns_canister_records".to_string()
 }
 
-/// Converts first 8 bits of canisterID to u64.  This is used to create a key for
-/// canister ranges.
-fn canister_id_to_u64(canister_id: CanisterId) -> u64 {
-    let bytes: [u8; 8] = canister_id.get().to_vec()[0..8]
-        .try_into()
-        .expect("Could not convert vector to [u8; 8]");
-
-    u64::from_be_bytes(bytes)
-}
-
+/// Returns a key for the CanisterRange registry entry
 pub fn make_canister_ranges_key(range_start: CanisterId, subnet_id: SubnetId) -> String {
     if CanisterId::try_from_principal_id(range_start.get()).is_err() {
+        // try_from_principal_id ensures the CanisterId is plausibly represeting a u64
+        // which is currently an implied requirement for our routing table
         panic!("Non-routable CanisterId being used as a key");
     }
-    let range_start_u64 = canister_id_to_u64(range_start);
+
+    let encoded_range_start = hex::encode(range_start.get().to_vec());
     format!(
-        "{}{}_{:016X}",
-        CANISTER_RANGES_PREFIX, subnet_id, range_start_u64
+        "{}{}_{}",
+        CANISTER_RANGE_PREFIX, subnet_id, encoded_range_start
     )
 }
 
