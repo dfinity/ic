@@ -467,6 +467,7 @@ fn mutate_test_high_capacity_records() {
         check_caller_is_governance_and_log("mutate_test_high_capacity_records");
         let registry = registry_mut();
         registry.maybe_apply_mutation_internal(vec![request.into_mutation()]);
+        recertify_registry();
         registry.latest_version()
     });
 }
