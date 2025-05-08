@@ -116,7 +116,7 @@ runs:
                 bazel_args+=( --target_pattern_file="$target_pattern_file" )
             else
                 #bazel_args+=( "${bazel_targets[@]}" )
-                bazel_args+=( "//rs/tests/nns:node_removal_from_registry_test" )
+                bazel_args+=( "//rs/tests/nns/..." )
             fi
 
             echo "Building as user: $(whoami)"
