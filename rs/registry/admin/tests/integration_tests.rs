@@ -127,7 +127,6 @@ async fn test_update_registry_local_store_handles_chunked_records() {
     let registry_local_store: TempDir = tempdir().unwrap();
     initialize_registry_local_store(registry_local_store.path(), root_key);
 
-
     // Step 2: Call code under test: `ic-admin update-registry-local-store`.
     let endpoint = pocket_ic.make_live(None).await; // Make PocketIc callable by ic-admin.
     let ic_admin_path = env::var("IC_ADMIN_BIN").expect("IC_ADMIN_BIN not set");
