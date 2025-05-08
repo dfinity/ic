@@ -408,26 +408,28 @@ def icos_build(
     if malicious:
         upload_suffix += "-malicious"
 
-    if upload_prefix != None:
+    if upload_prefix == None:
+        fail("icos_build expects an upload prefix")
+
+    upload_artifacts(
+        name = "upload_disk-img",
+        inputs = [
+            ":disk-img.tar.zst",
+        ],
+        remote_subdir = upload_prefix + "/disk-img" + upload_suffix,
+        visibility = visibility,
+    )
+
+    if upgrades:
         upload_artifacts(
-            name = "upload_disk-img",
+            name = "upload_update-img",
             inputs = [
-                ":disk-img.tar.zst",
+                ":update-img.tar.zst",
+                ":update-img-test.tar.zst",
             ],
-            remote_subdir = upload_prefix + "/disk-img" + upload_suffix,
+            remote_subdir = upload_prefix + "/update-img" + upload_suffix,
             visibility = visibility,
         )
-
-        if upgrades:
-            upload_artifacts(
-                name = "upload_update-img",
-                inputs = [
-                    ":update-img.tar.zst",
-                    ":update-img-test.tar.zst",
-                ],
-                remote_subdir = upload_prefix + "/update-img" + upload_suffix,
-                visibility = visibility,
-            )
 
     # end if upload_prefix != None
 
