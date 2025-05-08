@@ -16,7 +16,7 @@ Previous ckBTC minter proposal: https://dashboard.internetcomputer.org/proposal/
 
 ## Motivation
 
-Update the ckBTC minter to include the latest code changes, notably:
+Upgrade the ckBTC minter to include the latest code changes, notably:
 
 * Improve `update_balance` latency by caching `get_utxos` results.
 * Increase concurrent BTC withdrawal request limit from 1,000 to 5,000.
