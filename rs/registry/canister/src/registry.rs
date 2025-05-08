@@ -887,9 +887,8 @@ mod tests {
         );
 
         assert_eq!(
-            // Apart subtracting 1 to not allow the mutation2 to fit into the fitting deltas
-            // we have to subtract 1 more that is required to remove the tag for `timestamp_seconds`
-            // that is present in HighCapacity structs
+            // Subtract 1 to prevent `mutation2` from fitting into the fitting deltas,
+            // and another 1 to account for the `timestamp_seconds` tag in HighCapacity structs.
             registry.count_fitting_deltas(1, MAX_REGISTRY_DELTAS_SIZE - 1 - 1),
             0
         );
