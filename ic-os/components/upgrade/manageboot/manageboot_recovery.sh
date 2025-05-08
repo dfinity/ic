@@ -189,15 +189,39 @@ if [[ "$1" == "upgrade-install" && "$#" -ge 6 ]]; then
     BOOT_IMG="$5"
     ROOT_IMG="$6"
 
+    echo "=== Recovery Updater Mode ==="
+    echo "Grubenv file: ${GRUBENV_FILE}"
+    echo "Boot device: ${BOOT_DEV}"
+    echo "Root device: ${ROOT_DEV}"
+    echo "Boot image: ${BOOT_IMG}"
+    echo "Root image: ${ROOT_IMG}"
+
+    echo "Reading grubenv configuration..."
     read_grubenv "${GRUBENV_FILE}"
+    echo "Current boot alternative: ${boot_alternative}"
+    echo "Current boot cycle: ${boot_cycle}"
 
-    # Optionally check IS_STABLE here if needed
+    echo "Writing boot image to ${BOOT_DEV}..."
     dd if="${BOOT_IMG}" of="${BOOT_DEV}" bs=1M status=progress
-    dd if="${ROOT_IMG}" of="${ROOT_DEV}" bs=1M status=progress
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Failed to write boot image"
+        exit 1
+    fi
+    echo "Boot image written successfully"
 
-    # Update grubenv to switch to the new slot
+    echo "Writing root image to ${ROOT_DEV}..."
+    dd if="${ROOT_IMG}" of="${ROOT_DEV}" bs=1M status=progress
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Failed to write root image"
+        exit 1
+    fi
+    echo "Root image written successfully"
+
+    echo "Updating grubenv to prepare for next boot..."
     boot_cycle=first_boot
     write_grubenv "${GRUBENV_FILE}"
+    echo "Grubenv updated successfully"
+    echo "Recovery updater mode completed"
     exit 0
 fi
 
