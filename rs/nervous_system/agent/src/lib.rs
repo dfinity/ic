@@ -12,6 +12,7 @@ pub mod mock;
 pub mod nns;
 mod null_request;
 pub mod pocketic_impl;
+mod registry;
 pub mod sns;
 #[cfg(feature = "test")]
 pub mod state_machine_impl;
