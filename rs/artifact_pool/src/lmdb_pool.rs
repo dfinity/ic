@@ -13,28 +13,28 @@ use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::v1 as pb;
-use ic_types::consensus::certification::CertificationMessageHash;
-use ic_types::consensus::idkg::{
-    IDkgArtifactIdData, IDkgArtifactIdDataOf, SigShare, SigShareIdData, SigShareIdDataOf,
-    VetKdKeyShare,
-};
-use ic_types::consensus::{DataPayload, HasHash, SummaryPayload};
 use ic_types::{
     artifact::{CertificationMessageId, ConsensusMessageId, IDkgMessageId},
     batch::BatchPayload,
     consensus::{
-        certification::{Certification, CertificationMessage, CertificationShare},
+        certification::{
+            Certification, CertificationMessage, CertificationMessageHash, CertificationShare,
+        },
         dkg::{self, DkgDataPayload},
         idkg::{
-            EcdsaSigShare, IDkgArtifactId, IDkgMessage, IDkgMessageType, IDkgPrefix, IDkgPrefixOf,
-            SchnorrSigShare, SignedIDkgComplaint, SignedIDkgOpening,
+            EcdsaSigShare, IDkgArtifactId, IDkgArtifactIdData, IDkgArtifactIdDataOf, IDkgMessage,
+            IDkgMessageType, IDkgPrefix, IDkgPrefixOf, SchnorrSigShare, SigShare, SigShareIdData,
+            SigShareIdDataOf, SignedIDkgComplaint, SignedIDkgOpening, VetKdKeyShare,
         },
         BlockPayload, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage,
-        ConsensusMessageHash, ConsensusMessageHashable, EquivocationProof, Finalization,
-        FinalizationShare, HasHeight, Notarization, NotarizationShare, Payload, PayloadType,
-        RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
+        ConsensusMessageHash, ConsensusMessageHashable, DataPayload, EquivocationProof,
+        Finalization, FinalizationShare, HasHash, HasHeight, Notarization, NotarizationShare,
+        Payload, PayloadType, RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
+        SummaryPayload,
     },
-    crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing},
+    crypto::canister_threshold_sig::idkg::{
+        IDkgDealingSupport, IDkgTranscriptId, SignedIDkgDealing,
+    },
     crypto::{CryptoHash, CryptoHashOf, CryptoHashable},
     Height, Time,
 };
@@ -1650,6 +1650,14 @@ impl From<IDkgPrefix> for IDkgIdKey {
     }
 }
 
+impl From<IDkgTranscriptId> for IDkgIdKey {
+    fn from(transcript_id: IDkgTranscriptId) -> IDkgIdKey {
+        let mut bytes = vec![];
+        bytes.extend_from_slice(&u64::to_be_bytes(transcript_id.id()));
+        IDkgIdKey(bytes)
+    }
+}
+
 fn deser_idkg_artifact_id_data(bytes: &[u8]) -> Result<IDkgArtifactIdData, ProxyDecodeError> {
     pb::IDkgArtifactIdData::decode(bytes)
         .map_err(ProxyDecodeError::DecodeError)
@@ -1824,16 +1832,54 @@ impl IDkgMessageDb {
         true
     }
 
-    fn iter<T: TryFrom<IDkgMessage>>(
+    fn iter<T: TryFrom<IDkgMessage>>(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, T)> + '_>
+    where
+        <T as TryFrom<IDkgMessage>>::Error: Debug,
+    {
+        self.iter_impl(None::<IDkgMessageId>, |message_id| message_id.clone())
+    }
+
+    fn iter_by_prefix<T: TryFrom<IDkgMessage>>(
         &self,
-        prefix: Option<IDkgPrefixOf<T>>,
+        prefix: IDkgPrefixOf<T>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, T)> + '_>
     where
         <T as TryFrom<IDkgMessage>>::Error: Debug,
     {
+        self.iter_impl(Some(prefix.get()), |message_id| message_id.prefix())
+    }
+
+    fn iter_by_transcript_id<T: TryFrom<IDkgMessage>>(
+        &self,
+        transcript_id: IDkgTranscriptId,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, T)> + '_>
+    where
+        <T as TryFrom<IDkgMessage>>::Error: Debug,
+    {
+        self.iter_impl(Some(transcript_id), move |message_id| {
+            IDkgTranscriptId::new(
+                *transcript_id.source_subnet(),
+                message_id.prefix().group_tag(),
+                transcript_id.source_height(),
+            )
+        })
+    }
+
+    fn iter_impl<'a, T: TryFrom<IDkgMessage>, U: Into<IDkgIdKey> + Clone + PartialEq + 'a>(
+        &self,
+        pattern: Option<U>,
+        id_to_pattern: impl Fn(&IDkgMessageId) -> U + 'a,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, T)> + 'a>
+    where
+        <T as TryFrom<IDkgMessage>>::Error: Debug,
+    {
+        // Iterator over the database with the given pattern, or all entries if not specified.
+        // It is important that the pattern must be a prefix of the key as we start at the
+        // first key that matches the pattern and stop at the first key that does not.
+
         let message_type = self.object_type;
         let log = self.log.clone();
-        let prefix_cl = prefix.as_ref().map(|p| p.as_ref().clone());
+        let pattern_cl = pattern.clone();
         let deserialize_fn = move |key: &[u8], bytes: &[u8]| {
             // Convert key bytes to IDkgMessageId
             let mut key_bytes = Vec::<u8>::new();
@@ -1852,9 +1898,9 @@ impl IDkgMessageDb {
                 }
             };
 
-            // Stop iterating if we hit a different prefix.
-            if let Some(prefix) = &prefix_cl {
-                if id.prefix() != *prefix {
+            // Stop iterating if we hit a different pattern.
+            if let Some(pattern) = &pattern_cl {
+                if id_to_pattern(&id) != *pattern {
                     return None;
                 }
             }
@@ -1895,7 +1941,7 @@ impl IDkgMessageDb {
             self.db_env.clone(),
             self.db,
             deserialize_fn,
-            prefix.map(|p| IDkgIdKey::from(p.get())),
+            pattern.map(|p| p.into()),
             self.log.clone(),
         ))
     }
@@ -2012,7 +2058,7 @@ impl IDkgPoolSection for PersistentIDkgPoolSection {
 
     fn signed_dealings(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::Dealing);
-        message_db.iter(None)
+        message_db.iter()
     }
 
     fn signed_dealings_by_prefix(
@@ -2020,14 +2066,22 @@ impl IDkgPoolSection for PersistentIDkgPoolSection {
         prefix: IDkgPrefixOf<SignedIDkgDealing>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::Dealing);
-        message_db.iter(Some(prefix))
+        message_db.iter_by_prefix(prefix)
+    }
+
+    fn signed_dealings_by_transcript_id(
+        &self,
+        transcript_id: &IDkgTranscriptId,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)> + '_> {
+        let message_db = self.get_message_db(IDkgMessageType::Dealing);
+        message_db.iter_by_transcript_id(*transcript_id)
     }
 
     fn dealing_support(
         &self,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::DealingSupport);
-        message_db.iter(None)
+        message_db.iter()
     }
 
     fn dealing_support_by_prefix(
@@ -2035,14 +2089,22 @@ impl IDkgPoolSection for PersistentIDkgPoolSection {
         prefix: IDkgPrefixOf<IDkgDealingSupport>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::DealingSupport);
-        message_db.iter(Some(prefix))
+        message_db.iter_by_prefix(prefix)
+    }
+
+    fn dealing_support_by_transcript_id(
+        &self,
+        transcript_id: &IDkgTranscriptId,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_> {
+        let message_db = self.get_message_db(IDkgMessageType::DealingSupport);
+        message_db.iter_by_transcript_id(*transcript_id)
     }
 
     fn ecdsa_signature_shares(
         &self,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaSigShare)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::EcdsaSigShare);
-        message_db.iter(None)
+        message_db.iter()
     }
 
     fn ecdsa_signature_shares_by_prefix(
@@ -2050,14 +2112,14 @@ impl IDkgPoolSection for PersistentIDkgPoolSection {
         prefix: IDkgPrefixOf<EcdsaSigShare>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaSigShare)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::EcdsaSigShare);
-        message_db.iter(Some(prefix))
+        message_db.iter_by_prefix(prefix)
     }
 
     fn schnorr_signature_shares(
         &self,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SchnorrSigShare)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::SchnorrSigShare);
-        message_db.iter(None)
+        message_db.iter()
     }
 
     fn schnorr_signature_shares_by_prefix(
@@ -2065,12 +2127,12 @@ impl IDkgPoolSection for PersistentIDkgPoolSection {
         prefix: IDkgPrefixOf<SchnorrSigShare>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SchnorrSigShare)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::SchnorrSigShare);
-        message_db.iter(Some(prefix))
+        message_db.iter_by_prefix(prefix)
     }
 
     fn vetkd_key_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdKeyShare)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::VetKdKeyShare);
-        message_db.iter(None)
+        message_db.iter()
     }
 
     fn vetkd_key_shares_by_prefix(
@@ -2078,7 +2140,7 @@ impl IDkgPoolSection for PersistentIDkgPoolSection {
         prefix: IDkgPrefixOf<VetKdKeyShare>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdKeyShare)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::VetKdKeyShare);
-        message_db.iter(Some(prefix))
+        message_db.iter_by_prefix(prefix)
     }
 
     fn signature_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SigShare)> + '_> {
@@ -2087,16 +2149,16 @@ impl IDkgPoolSection for PersistentIDkgPoolSection {
         let vetkd_db = self.get_message_db(IDkgMessageType::VetKdKeyShare);
         Box::new(
             ecdsa_db
-                .iter(None)
+                .iter()
                 .map(|(id, share)| (id, SigShare::Ecdsa(share)))
                 .chain(
                     schnorr_db
-                        .iter(None)
+                        .iter()
                         .map(|(id, share)| (id, SigShare::Schnorr(share))),
                 )
                 .chain(
                     vetkd_db
-                        .iter(None)
+                        .iter()
                         .map(|(id, share)| (id, SigShare::VetKd(share))),
                 ),
         )
@@ -2104,7 +2166,7 @@ impl IDkgPoolSection for PersistentIDkgPoolSection {
 
     fn complaints(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgComplaint)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::Complaint);
-        message_db.iter(None)
+        message_db.iter()
     }
 
     fn complaints_by_prefix(
@@ -2112,12 +2174,12 @@ impl IDkgPoolSection for PersistentIDkgPoolSection {
         prefix: IDkgPrefixOf<SignedIDkgComplaint>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgComplaint)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::Complaint);
-        message_db.iter(Some(prefix))
+        message_db.iter_by_prefix(prefix)
     }
 
     fn openings(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgOpening)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::Opening);
-        message_db.iter(None)
+        message_db.iter()
     }
 
     fn openings_by_prefix(
@@ -2125,7 +2187,7 @@ impl IDkgPoolSection for PersistentIDkgPoolSection {
         prefix: IDkgPrefixOf<SignedIDkgOpening>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgOpening)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::Opening);
-        message_db.iter(Some(prefix))
+        message_db.iter_by_prefix(prefix)
     }
 }
 
