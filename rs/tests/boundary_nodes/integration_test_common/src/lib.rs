@@ -34,7 +34,7 @@ use ic_system_test_driver::{
     util::{agent_observes_canister_module, assert_create_agent, block_on},
 };
 use ic_types::PrincipalId;
-use std::{env, iter, net::SocketAddrV6, time::Duration};
+use std::{env, net::SocketAddrV6, time::Duration};
 
 use anyhow::{anyhow, bail, Context, Error};
 use futures::stream::FuturesUnordered;
@@ -471,8 +471,7 @@ pub fn legacy_asset_canister_test(env: TestEnv) {
         async move {
             let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
             // 12 bytes * 86 = 1024 bytes
-            let req_body = iter::repeat(hello_world)
-                .take(86 * 4 * 1024)
+            let req_body = std::iter::repeat_n(hello_world, 86 * 4 * 1024)
                 .flatten()
                 .collect::<Vec<_>>();
 
@@ -516,8 +515,7 @@ pub fn legacy_asset_canister_test(env: TestEnv) {
         async move {
             let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
             // 12 bytes * 86 = 1024 bytes
-            let req_body = iter::repeat(hello_world)
-                .take(86 * 6 * 1024)
+            let req_body = std::iter::repeat_n(hello_world, 86 * 6 * 1024)
                 .flatten()
                 .collect::<Vec<_>>();
 
@@ -561,8 +559,7 @@ pub fn legacy_asset_canister_test(env: TestEnv) {
         async move {
             let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
             // 12 bytes * 86 = 1024 bytes
-            let req_body = iter::repeat(hello_world)
-                .take(86 * 8 * 1024)
+            let req_body = std::iter::repeat_n(hello_world, 86 * 8 * 1024)
                 .flatten()
                 .collect::<Vec<_>>();
 
@@ -606,8 +603,7 @@ pub fn legacy_asset_canister_test(env: TestEnv) {
         async move {
             let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
                 // 12 bytes * 86 = 1024 bytes
-                let req_body = iter::repeat(hello_world)
-                    .take(86 * 10 * 1024)
+                let req_body = std::iter::repeat_n(hello_world, 86 * 10 * 1024)
                     .flatten()
                     .collect::<Vec<_>>();
 
@@ -651,8 +647,7 @@ pub fn legacy_asset_canister_test(env: TestEnv) {
         async move {
             let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
                 // 12 bytes * 86 = 1024 bytes
-                let req_body = iter::repeat(hello_world)
-                    .take(86 * 4 * 1024)
+                let req_body = std::iter::repeat_n(hello_world, 86 * 4 * 1024)
                     .flatten()
                     .collect::<Vec<_>>();
 
@@ -693,8 +688,7 @@ pub fn legacy_asset_canister_test(env: TestEnv) {
         async move {
             let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
                 // 12 bytes * 86 = 1024 bytes
-                let req_body = iter::repeat(hello_world)
-                    .take(86 * 10 * 1024)
+                let req_body = std::iter::repeat_n(hello_world, 86 * 10 * 1024)
                     .flatten()
                     .collect::<Vec<_>>();
 

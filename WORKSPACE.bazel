@@ -135,7 +135,7 @@ rust_register_toolchains(
     # The nightly version is required to compile fuzz tests from Bazel.
     # The version below is chosen so that it is in sync with the non-nightly version.
     versions = [
-        "1.85.1",
+        "1.86.0",
         # Use the nightly version from the day before the branch.
         "nightly/2025-03-08",
     ],
