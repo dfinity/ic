@@ -1132,7 +1132,10 @@ mod tests {
         let key = b"key";
 
         let too_large_value = vec![0; max_mutation_value_size(version, key) + 1];
-        let mutations = vec![upsert(key, too_large_value).into()];
+        let mutations = vec![HighCapacityRegistryMutation::from(upsert(
+            key,
+            too_large_value,
+        ))];
         let req = HighCapacityRegistryAtomicMutateRequest {
             mutations,
             preconditions: vec![],
@@ -1195,7 +1198,7 @@ mod tests {
         let key = b"key";
 
         let value = vec![0; max_mutation_value_size(version, key) + bytes_above_max_size];
-        let mutation: HighCapacityRegistryMutation = upsert(key, value).into();
+        let mutation = HighCapacityRegistryMutation::from(upsert(key, value));
         let mutations = vec![mutation.clone()];
         let req = HighCapacityRegistryAtomicMutateRequest {
             mutations,
@@ -1436,8 +1439,8 @@ Average length of the values: {} (desired: {})",
         );
 
         assert!(
-            timestamp_before_applying_mutation < registry_value.timestamp_seconds
-                && registry_value.timestamp_seconds < timestamp_after_applying_mutation
+            timestamp_before_applying_mutation <= registry_value.timestamp_seconds
+                && registry_value.timestamp_seconds <= timestamp_after_applying_mutation
         );
 
         // Step 1.2.2: Verify original_registry.changelog.
@@ -1496,8 +1499,8 @@ Average length of the values: {} (desired: {})",
             },
         );
         assert!(
-            timestamp_before_applying_mutation < composite_mutation.timestamp_seconds
-                && composite_mutation.timestamp_seconds < timestamp_after_applying_mutation
+            timestamp_before_applying_mutation <= composite_mutation.timestamp_seconds
+                && composite_mutation.timestamp_seconds <= timestamp_after_applying_mutation
         );
 
         // Step 2: Call code under test. Simulate (Registry) canister upgrade.

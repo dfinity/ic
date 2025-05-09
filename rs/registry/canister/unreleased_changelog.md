@@ -12,6 +12,8 @@ on the process that this file is part of, see
   the provided canisters when called so that requests will be routed to a different subnet. This will be used to support
   the broader canister migrations feature.
 
+* Started populating `timestamp_seconds` fields.
+
 ## Changed
 
 ## Deprecated
