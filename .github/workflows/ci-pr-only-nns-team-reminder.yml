@@ -35,7 +35,7 @@ jobs:
               .data
               .some(review => review
                 .body
-                .startsWith("If this pull request affects the behavior of any canister owned by")
+                .startsWith("If this pull request changes the behavior")
               );
             console.log("alreadyRemindedAboutUnreleasedChangelog = " + alreadyRemindedAboutUnreleasedChangelog);
             if (alreadyRemindedAboutUnreleasedChangelog) {
@@ -46,9 +46,9 @@ jobs:
             // TODO: Figure out how to post in such a way that there is a "Resolve" button nearby.
             console.log("Adding reminder to update unreleased_changelog.md...");
             const reminderText = `
-              If this pull request changes behavior of any canister owned by the
-              Governance team in an externally visible way, remember to update
-              the corresponding unreleased_changelog.md file(s).
+              If this pull request changes the behavior of any canister owned by
+              the Governance team in an externally visible way, remember to
+              update the corresponding unreleased_changelog.md file(s).
 
               To acknowldge this reminder (and unblock the PR), dismiss this
               code review by going to the bottom of the pull request page, look
