@@ -35,7 +35,7 @@ class GithubApp:
         # see https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-json-web-token-jwt-for-a-github-app#example-using-python-to-generate-a-jwt
         payload = {
             "iat": int(time.time()),
-            "exp": int(time.time()) + 60,
+            "exp": int(time.time()) + 540,
             "iss": GITHUB_APP_CREDENTIALS[owner][0],
         }
         return jwt.encode(payload, GITHUB_APP_CREDENTIALS[owner][1], algorithm="RS256")

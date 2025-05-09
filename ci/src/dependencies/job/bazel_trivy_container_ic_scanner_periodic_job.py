@@ -6,6 +6,7 @@ from data_source.slack_findings_failover_data_store import SlackFindingsFailover
 from integration.slack.slack_default_notification_handler import SlackDefaultNotificationHandler
 from integration.slack.slack_trivy_finding_notification_handler import SlackTrivyFindingNotificationHandler
 from model.ic import get_ic_repo_ci_pipeline_base_url, get_ic_repo_merge_request_base_url
+from model.log_level import get_log_level
 from notification.notification_config import NotificationConfig
 from notification.notification_creator import NotificationCreator
 from scanner.dependency_scanner import DependencyScanner
@@ -14,7 +15,7 @@ from scanner.scanner_job_type import ScannerJobType
 
 
 def main():
-    logging.basicConfig(level=logging.WARNING)
+    logging.basicConfig(level=get_log_level())
 
     scanner_job = ScannerJobType.PERIODIC_SCAN
     notify_on_scan_job_succeeded, notify_on_scan_job_failed = {}, {}
