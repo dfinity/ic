@@ -201,6 +201,9 @@ struct RosettaTestingEnvironmentBuilder {
     icrc1_symbol: Option<String>,
 }
 
+/// Timeout for the Rosetta client to wait for transactions to be added to the blockchain.
+const ROSETTA_CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
+
 impl RosettaTestingEnvironmentBuilder {
     pub fn new(setup: &Setup) -> Self {
         Self {
@@ -284,9 +287,11 @@ impl RosettaTestingEnvironmentBuilder {
             },
         )
         .await;
-        let rosetta_client =
-            RosettaClient::from_str_url(&format!("http://0.0.0.0:{}", rosetta_context.port))
-                .expect("Unable to parse url");
+        let rosetta_client = RosettaClient::from_str_url_and_timeout(
+            &format!("http://0.0.0.0:{}", rosetta_context.port),
+            ROSETTA_CLIENT_TIMEOUT,
+        )
+        .expect("Unable to parse url");
 
         let network_identifier = NetworkIdentifier::new(
             DEFAULT_BLOCKCHAIN.to_owned(),
