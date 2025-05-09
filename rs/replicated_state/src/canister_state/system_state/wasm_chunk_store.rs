@@ -135,15 +135,26 @@ impl WasmChunkStore {
         Ok(())
     }
 
-    pub fn insert_chunk(&mut self, max_size: NumBytes, chunk: &[u8]) -> Result<[u8; 32], String> {
-        let hash = ic_crypto_sha2::Sha256::hash(chunk);
+    pub fn contains_chunk(&self, hash: &[u8; 32]) -> bool {
+        self.metadata.chunks.contains_key(hash)
+    }
+
+    pub fn insert_chunk(&mut self, max_size: NumBytes, chunk: &[u8], hash: &[u8; 32]) {
+        debug_assert!(
+            *hash == ic_crypto_sha2::Sha256::hash(chunk),
+            "Provided hash {:?} does not match actual chunk hash {:?}",
+            hash,
+            ic_crypto_sha2::Sha256::hash(chunk)
+        );
 
         // No changes needed if we already have the chunk
-        if self.metadata.chunks.contains_key(&hash) {
-            return Ok(hash);
+        if self.contains_chunk(hash) {
+            // We should not attempt to insert an existing chunk: `Self::contains_chunk` should be invoked first.
+            debug_assert!(false, "Inserting an existing chunk {:?}", hash);
+            return;
         }
 
-        self.can_insert_chunk(max_size, chunk)?;
+        self.can_insert_chunk(max_size, chunk).unwrap();
 
         let index = self.metadata.chunks.len() as u64;
         let start_page = Self::page_index(index);
@@ -174,14 +185,12 @@ impl WasmChunkStore {
         self.metadata.size += NumOsPages::from(PAGES_PER_CHUNK);
         self.data.update(&pages_to_insert);
         self.metadata.chunks.insert(
-            hash,
+            *hash,
             ChunkInfo {
                 index,
                 length: chunk.len() as u64,
             },
         );
-
-        Ok(hash)
     }
 
     pub fn from_checkpoint(data: PageMap, metadata: WasmChunkStoreMetadata) -> Self {
@@ -256,7 +265,6 @@ impl TryFrom<pb::WasmChunkStoreMetadata> for WasmChunkStoreMetadata {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use assert_matches::assert_matches;
     use ic_config::embedders::Config;
 
     fn get_chunk_as_vec(store: &WasmChunkStore, hash: WasmChunkHash) -> Vec<u8> {
@@ -284,7 +292,8 @@ mod tests {
     fn store_and_retrieve_chunk() {
         let mut store = WasmChunkStore::new_for_testing();
         let contents = [1, 2, 3].repeat(10_000);
-        let hash = store.insert_chunk(default_max_size(), &contents).unwrap();
+        let hash = ic_crypto_sha2::Sha256::hash(&contents);
+        store.insert_chunk(default_max_size(), &contents, &hash);
         let round_trip_contents = get_chunk_as_vec(&store, hash);
         assert_eq!(contents, round_trip_contents);
     }
@@ -293,16 +302,17 @@ mod tests {
     fn store_and_retrieve_empty_chunk() {
         let mut store = WasmChunkStore::new_for_testing();
         let contents = vec![];
-        let hash = store.insert_chunk(default_max_size(), &contents).unwrap();
+        let hash = ic_crypto_sha2::Sha256::hash(&contents);
+        store.insert_chunk(default_max_size(), &contents, &hash);
         let round_trip_contents = get_chunk_as_vec(&store, hash);
         assert_eq!(contents, round_trip_contents);
     }
 
     #[test]
     fn error_when_chunk_exceeds_size_limit() {
-        let mut store = WasmChunkStore::new_for_testing();
+        let store = WasmChunkStore::new_for_testing();
         let contents = vec![0xab; chunk_size().get() as usize + 1];
-        let result = store.insert_chunk(default_max_size(), &contents);
+        let result = store.can_insert_chunk(default_max_size(), &contents);
         assert_eq!(
             result,
             Err("Wasm chunk size 1048577 exceeds the maximum chunk size of 1048576".to_string())
@@ -313,17 +323,19 @@ mod tests {
     fn can_insert_chunk_up_to_max_size() {
         let mut store = WasmChunkStore::new_for_testing();
         let contents = vec![0xab; chunk_size().get() as usize];
-        let result = store.insert_chunk(default_max_size(), &contents);
-        assert_matches!(result, Ok(_));
+        let hash = ic_crypto_sha2::Sha256::hash(&contents);
+        store.insert_chunk(default_max_size(), &contents, &hash);
     }
 
     #[test]
     fn can_insert_and_retrieve_multiple_chunks() {
         let mut store = WasmChunkStore::new_for_testing();
         let contents1 = vec![0xab; 1024];
-        let hash1 = store.insert_chunk(default_max_size(), &contents1).unwrap();
+        let hash1 = ic_crypto_sha2::Sha256::hash(&contents1);
+        store.insert_chunk(default_max_size(), &contents1, &hash1);
         let contents2 = vec![0x41; 1024];
-        let hash2 = store.insert_chunk(default_max_size(), &contents2).unwrap();
+        let hash2 = ic_crypto_sha2::Sha256::hash(&contents2);
+        store.insert_chunk(default_max_size(), &contents2, &hash2);
 
         let round_trip_contents1 = get_chunk_as_vec(&store, hash1);
         assert_eq!(contents1, round_trip_contents1);
@@ -340,75 +352,25 @@ mod tests {
     fn cant_grow_beyond_max_size() {
         let mut store = WasmChunkStore::new_for_testing();
         let contents = vec![0xab; 1024];
-        let _hash = store.insert_chunk(two_chunk_max_size(), &contents).unwrap();
+        let hash = ic_crypto_sha2::Sha256::hash(&contents);
+        store.insert_chunk(two_chunk_max_size(), &contents, &hash);
         let contents = vec![0xbc; 1024];
-        let _hash = store.insert_chunk(two_chunk_max_size(), &contents).unwrap();
+        let hash = ic_crypto_sha2::Sha256::hash(&contents);
+        store.insert_chunk(two_chunk_max_size(), &contents, &hash);
         let contents = vec![0xcd; 1024];
         store
-            .insert_chunk(two_chunk_max_size(), &contents)
+            .can_insert_chunk(two_chunk_max_size(), &contents)
             .unwrap_err();
     }
 
     #[test]
-    fn inserting_same_chunk_doesnt_increase_size() {
-        // Store only has space for two chunks
+    fn contains_chunk() {
         let mut store = WasmChunkStore::new_for_testing();
         let contents = vec![0xab; 1024];
 
-        // We can insert the same chunk many times because it doesn't take up
-        // new space in the store since it is already present.
-        let _hash = store.insert_chunk(two_chunk_max_size(), &contents).unwrap();
-        let _hash = store.insert_chunk(two_chunk_max_size(), &contents).unwrap();
-        let _hash = store.insert_chunk(two_chunk_max_size(), &contents).unwrap();
-        let _hash = store.insert_chunk(two_chunk_max_size(), &contents).unwrap();
-    }
-
-    #[test]
-    fn inserting_existing_chunk_succeeds_when_full() {
-        // Store only has space for two chunks
-        let mut store = WasmChunkStore::new_for_testing();
-
-        // We can insert the same chunk many times because it doesn't take up
-        // new space in the store since it is already present.
-        let _hash = store
-            .insert_chunk(two_chunk_max_size(), &[0xab; 10])
-            .unwrap();
-        let _hash = store
-            .insert_chunk(two_chunk_max_size(), &[0xcd; 10])
-            .unwrap();
-        // Store is now full, but inserting the same chunk again succeeds.
-        let _hash = store
-            .insert_chunk(two_chunk_max_size(), &[0xab; 10])
-            .unwrap();
-    }
-
-    mod proptest_tests {
-        use super::*;
-        use proptest::collection::vec as prop_vec;
-        use proptest::prelude::*;
-
-        const MB: usize = 1024 * 1024;
-        const MAX_SIZE: NumBytes = NumBytes::new(20 * MB as u64);
-
-        #[test_strategy::proptest]
-        // Try chunks 2x as big as the size limit.
-        // If all inserts below the size limit succeeded, we'd expect 50 *
-        // .5 MiB = 25 MiB total. So set the max size below that to
-        // evenutally hit the size limit.
-        fn insert_result_matches_can_insert(
-            #[strategy(prop_vec((any::<u8>(), 0..2 * MB), 100))] vecs: Vec<(u8, usize)>,
-        ) {
-            let mut store = WasmChunkStore::new_for_testing();
-            for (byte, length) in vecs {
-                let chunk = vec![byte; length];
-                let check = store.can_insert_chunk(MAX_SIZE, &chunk);
-                let hash = store.insert_chunk(MAX_SIZE, &chunk);
-                if hash.is_ok() {
-                    prop_assert_eq!(check, Ok(()));
-                } else {
-                    prop_assert_eq!(check.unwrap_err(), hash.unwrap_err());
-                }
-            }
-        }
+        let hash = ic_crypto_sha2::Sha256::hash(&contents);
+        assert!(!store.contains_chunk(&hash));
+        store.insert_chunk(two_chunk_max_size(), &contents, &hash);
+        assert!(store.contains_chunk(&hash));
     }
 }

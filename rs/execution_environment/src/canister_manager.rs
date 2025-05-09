@@ -1188,6 +1188,36 @@ impl CanisterManager {
             validate_controller(canister, &sender)?
         }
 
+        // Charge for the upload. We charge before checking if the chunk has already been uploaded
+        // since that check involves hash computation that we also want to charge for.
+        let instructions = self.config.upload_wasm_chunk_instructions;
+        self.cycles_account_manager
+            .consume_cycles_for_instructions(
+                &sender,
+                canister,
+                instructions,
+                subnet_size,
+                // For the `upload_chunk` operation, it does not matter if this is a Wasm64 or Wasm32 module
+                // since the number of instructions charged depends on a constant fee
+                // and Wasm64 does not bring any additional overhead for this operation.
+                // The only overhead is during execution time.
+                WasmExecutionMode::Wasm32,
+            )
+            .map_err(|err| CanisterManagerError::WasmChunkStoreError {
+                message: format!("Error charging for 'upload_chunk': {}", err),
+            })?;
+
+        // Check if the chunk has already been uploaded before any further checks and updates.
+        let hash = ic_crypto_sha2::Sha256::hash(chunk);
+        if canister.system_state.wasm_chunk_store.contains_chunk(&hash) {
+            return Ok(UploadChunkResult {
+                reply: UploadChunkReply {
+                    hash: hash.to_vec(),
+                },
+                heap_delta_increase: NumBytes::new(0),
+            });
+        }
+
         canister
             .system_state
             .wasm_chunk_store
@@ -1196,7 +1226,6 @@ impl CanisterManager {
 
         let chunk_bytes = wasm_chunk_store::chunk_size();
         let new_memory_usage = canister.memory_usage() + chunk_bytes;
-        let instructions = self.config.upload_wasm_chunk_instructions;
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
             && canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit
@@ -1210,45 +1239,6 @@ impl CanisterManager {
         }
 
         let memory_usage = canister.memory_usage();
-        let message_memory_usage = canister.message_memory_usage();
-        let compute_allocation = canister.compute_allocation();
-        let reveal_top_up = canister.controllers().contains(&sender);
-
-        // Charge for the upload.
-        let prepaid_cycles = self
-            .cycles_account_manager
-            .prepay_execution_cycles(
-                &mut canister.system_state,
-                memory_usage,
-                message_memory_usage,
-                compute_allocation,
-                instructions,
-                subnet_size,
-                reveal_top_up,
-                // For the upload chunk operation, it does not matter if this is a Wasm64 or Wasm32 module
-                // since the number of instructions charged is a constant set fee and Wasm64 does not bring
-                // any additional overhead for this operation. The only overhead is during execution time.
-                WasmExecutionMode::Wasm32,
-            )
-            .map_err(|err| CanisterManagerError::WasmChunkStoreError {
-                message: format!("Error charging for 'upload_chunk': {}", err),
-            })?;
-        // To keep the invariant that `prepay_execution_cycles` is always paired
-        // with `refund_unused_execution_cycles` we refund zero immediately.
-        self.cycles_account_manager.refund_unused_execution_cycles(
-            &mut canister.system_state,
-            NumInstructions::from(0),
-            instructions,
-            prepaid_cycles,
-            // This counter is incremented if we refund more
-            // instructions than initially charged, which is impossible
-            // here.
-            &IntCounter::new("no_op", "no_op").unwrap(),
-            subnet_size,
-            WasmExecutionMode::Wasm32,
-            &self.log,
-        );
-
         let validated_memory_usage = self.memory_usage_checks(
             subnet_size,
             canister,
@@ -1265,13 +1255,11 @@ impl CanisterManager {
 
         round_limits.instructions -= as_round_instructions(instructions);
 
-        // We initially checked that this chunk can be inserted, so the unwarp
-        // here is guaranteed to succeed.
-        let hash = canister
-            .system_state
-            .wasm_chunk_store
-            .insert_chunk(self.config.wasm_chunk_store_max_size, chunk)
-            .expect("Error: Insert chunk cannot fail after checking `can_insert_chunk`");
+        canister.system_state.wasm_chunk_store.insert_chunk(
+            self.config.wasm_chunk_store_max_size,
+            chunk,
+            &hash,
+        );
         Ok(UploadChunkResult {
             reply: UploadChunkReply {
                 hash: hash.to_vec(),
