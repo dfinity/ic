@@ -1,5 +1,3 @@
-#[rustfmt::skip]
-
 use anyhow::Result;
 
 use ic_boundary_nodes_integration_test_common::reboot_test;
