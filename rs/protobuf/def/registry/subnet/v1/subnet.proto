@@ -328,8 +328,8 @@ message KeyConfig {
 message ChainKeyConfig {
   // Configurations for keys held by the subnet.
   repeated KeyConfig key_configs = 1;
-  // Signature requests will timeout after the given number of nano seconds.
-  optional uint64 signature_request_timeout_ns = 2;
+  // Requests will timeout after the given number of nano seconds.
+  optional uint64 request_timeout_ns = 2;
   // Key rotation period of a single node in milliseconds.
   // If none is specified key rotation is disabled.
   optional uint64 idkg_key_rotation_period_ms = 3;

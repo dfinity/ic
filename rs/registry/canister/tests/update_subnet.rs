@@ -465,7 +465,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
             ic_nns_constants::GOVERNANCE_CANISTER_ID
         );
 
-        let signature_request_timeout_ns = Some(12345);
+        let request_timeout_ns = Some(12345);
         let idkg_key_rotation_period_ms = Some(12345);
 
         let chain_key_config = ChainKeyConfig {
@@ -474,7 +474,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
                 pre_signatures_to_create_in_advance: Some(10),
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             }],
-            signature_request_timeout_ns,
+            request_timeout_ns,
             idkg_key_rotation_period_ms,
         };
 

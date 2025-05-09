@@ -145,7 +145,7 @@ impl VetKdPayloadBuilderImpl {
         };
 
         let request_expiry_time = config
-            .signature_request_timeout_ns
+            .request_timeout_ns
             .and_then(|timeout| context_time.checked_sub(Duration::from_nanos(timeout)));
 
         let enabled_subnets = self
@@ -1247,7 +1247,7 @@ mod tests {
     #[test]
     fn test_get_enabled_keys_and_expiry_if_enabled_multiple_keys() {
         let config = make_chain_key_config();
-        let timeout = Duration::from_nanos(config.signature_request_timeout_ns.unwrap());
+        let timeout = Duration::from_nanos(config.request_timeout_ns.unwrap());
         let now = current_time();
         test_payload_builder(Some(config), BTreeMap::new(), vec![], |builder| {
             let (keys, expiry) = builder.get_enabled_keys_and_expiry(HEIGHT, now).unwrap();
@@ -1270,7 +1270,7 @@ mod tests {
     fn test_get_enabled_keys_and_expiry_if_disabled_multiple_keys() {
         let height = CERTIFIED_HEIGHT;
         let config = make_chain_key_config();
-        let timeout = Duration::from_nanos(config.signature_request_timeout_ns.unwrap());
+        let timeout = Duration::from_nanos(config.request_timeout_ns.unwrap());
         let now = current_time();
         test_payload_builder_ext(
             Some(config),

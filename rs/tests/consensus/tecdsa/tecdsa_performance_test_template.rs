@@ -180,7 +180,7 @@ pub fn setup(env: TestEnv) {
                             key_id,
                         })
                         .collect(),
-                    signature_request_timeout_ns: None,
+                    request_timeout_ns: None,
                     idkg_key_rotation_period_ms: None,
                 })
                 .add_nodes(NODES_COUNT),

@@ -209,7 +209,7 @@ mod tests {
                         max_queue_size: 50,
                     },
                 ],
-                signature_request_timeout_ns: None,
+                request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
             })
             .build();

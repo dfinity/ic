@@ -261,7 +261,7 @@ fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: Mas
                 pre_signatures_to_create_in_advance: 100,
                 max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
             }],
-            signature_request_timeout_ns: None,
+            request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         }));
 
@@ -290,7 +290,7 @@ fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: Mas
         let initial_subnet_list_record = get_subnet_list_record(&registry).await;
 
         // Create payload message with KeyConfigRequest
-        let signature_request_timeout_ns = Some(12345);
+        let request_timeout_ns = Some(12345);
         let idkg_key_rotation_period_ms = Some(12345);
         let payload = CreateSubnetPayload {
             chain_key_config: Some(InitialChainKeyConfig {
@@ -302,7 +302,7 @@ fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: Mas
                     }),
                     subnet_id: Some(*system_subnet_principal),
                 }],
-                signature_request_timeout_ns,
+                request_timeout_ns,
                 idkg_key_rotation_period_ms,
             }),
             ..make_create_subnet_payload(node_ids.clone())
@@ -334,10 +334,7 @@ fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: Mas
         let chain_key_config_pb = subnet_record.chain_key_config.unwrap();
         let chain_key_config = ChainKeyConfig::try_from(chain_key_config_pb).unwrap();
 
-        assert_eq!(
-            chain_key_config.signature_request_timeout_ns,
-            signature_request_timeout_ns
-        );
+        assert_eq!(chain_key_config.request_timeout_ns, request_timeout_ns);
         assert_eq!(
             chain_key_config.idkg_key_rotation_period_ms,
             idkg_key_rotation_period_ms

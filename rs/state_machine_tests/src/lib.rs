@@ -455,7 +455,7 @@ fn add_subnet_local_registry_records(
                     max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
                 })
                 .collect(),
-            signature_request_timeout_ns: None,
+            request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         })
         .with_features(features)
