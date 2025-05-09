@@ -11,7 +11,6 @@ use evm_rpc_client::{
 };
 use ic_cdk::api::call::RejectionCode;
 use ic_ethereum_types::Address;
-pub use metrics::encode as encode_metrics;
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -445,76 +444,3 @@ pub fn is_response_too_large(code: &RejectionCode, message: &str) -> bool {
 }
 
 pub type HttpOutcallResult<T> = Result<T, HttpOutcallError>;
-
-pub(super) mod metrics {
-    use ic_metrics_encoder::MetricsEncoder;
-    use std::cell::RefCell;
-    use std::collections::BTreeMap;
-
-    /// The max number of RPC call retries we expect to see (plus one).
-    const MAX_EXPECTED_RETRIES: usize = 20;
-
-    #[derive(Default)]
-    struct RetryHistogram {
-        /// The histogram of HTTP call retry counts.
-        /// The last bucket corresponds to the "infinite" value that exceeds the maximum number we
-        /// expect to see in practice.
-        retry_buckets: [u64; MAX_EXPECTED_RETRIES + 1],
-        retry_count: u64,
-    }
-
-    impl RetryHistogram {
-        /// Returns a iterator over the histrogram buckets in the format that ic-metrics-encoder
-        /// expects.
-        fn iter(&self) -> impl Iterator<Item = (f64, f64)> + '_ {
-            (0..MAX_EXPECTED_RETRIES)
-                .zip(self.retry_buckets[0..MAX_EXPECTED_RETRIES].iter().cloned())
-                .map(|(k, v)| (k as f64, v as f64))
-                .chain(std::iter::once((
-                    f64::INFINITY,
-                    self.retry_buckets[MAX_EXPECTED_RETRIES] as f64,
-                )))
-        }
-    }
-
-    #[derive(Default)]
-    pub struct HttpMetrics {
-        /// Retry counts histograms indexed by the ETH RCP method name.
-        retry_histogram_per_method: BTreeMap<String, RetryHistogram>,
-    }
-
-    impl HttpMetrics {
-        pub fn encode<W: std::io::Write>(
-            &self,
-            encoder: &mut MetricsEncoder<W>,
-        ) -> std::io::Result<()> {
-            if self.retry_histogram_per_method.is_empty() {
-                return Ok(());
-            }
-
-            let mut histogram_vec = encoder.histogram_vec(
-                "cketh_eth_rpc_call_retry_count",
-                "The number of ETH RPC call retries by method.",
-            )?;
-
-            for (method, histogram) in &self.retry_histogram_per_method {
-                histogram_vec = histogram_vec.histogram(
-                    &[("method", method.as_str())],
-                    histogram.iter(),
-                    histogram.retry_count as f64,
-                )?;
-            }
-
-            Ok(())
-        }
-    }
-
-    thread_local! {
-        static METRICS: RefCell<HttpMetrics> = RefCell::default();
-    }
-
-    /// Encodes the metrics related to ETH RPC method calls.
-    pub fn encode<W: std::io::Write>(encoder: &mut MetricsEncoder<W>) -> std::io::Result<()> {
-        METRICS.with(|metrics| metrics.borrow().encode(encoder))
-    }
-}

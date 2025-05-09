@@ -70,7 +70,11 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
                 .iter()
                 .map(|key_id| KeyConfig {
                     key_id: key_id.clone(),
-                    pre_signatures_to_create_in_advance: 4,
+                    pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
+                        4
+                    } else {
+                        0
+                    },
                     max_queue_size: 40,
                 })
                 .collect(),
