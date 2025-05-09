@@ -10,7 +10,7 @@ use ic_interfaces::messaging::{MessageRouting, MessageRoutingError};
 use ic_interfaces::{crypto::ErrorReproducibility, execution_environment::ChainKeySettings};
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::{CertificationScope, StateManager, StateManagerError};
+use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::{debug, fatal, info, warn, ReplicaLogger};
 use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
@@ -37,6 +37,7 @@ use ic_types::batch::{Batch, BatchSummary};
 use ic_types::crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose};
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::registry::RegistryClientError;
+use ic_types::state_manager::StateManagerError;
 use ic_types::xnet::{StreamHeader, StreamIndex};
 use ic_types::{
     Height, NodeId, NumBytes, PrincipalIdBlobParseError, RegistryVersion, SubnetId, Time,

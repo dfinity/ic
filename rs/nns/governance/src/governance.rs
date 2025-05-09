@@ -96,15 +96,12 @@ use ic_nns_constants::{
     SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_nns_governance_api::{
-    pb::v1::{
-        self as api,
-        manage_neuron_response::{self, MergeMaturityResponse, StakeMaturityResponse},
-        CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons,
-        ListNeuronsResponse, ListProposalInfoResponse, ManageNeuronResponse, NeuronInfo,
-        ProposalInfo,
-    },
+    self as api,
+    manage_neuron_response::{self, MergeMaturityResponse, StakeMaturityResponse},
     proposal_validation,
     subnet_rental::SubnetRentalRequest,
+    CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons, ListNeuronsResponse,
+    ListProposalInfoResponse, ManageNeuronResponse, NeuronInfo, ProposalInfo,
 };
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,

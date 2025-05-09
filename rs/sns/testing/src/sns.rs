@@ -25,7 +25,7 @@ use ic_nervous_system_integration_tests::{
 };
 use ic_nns_common::pb::v1::NeuronId;
 
-use ic_nns_governance_api::pb::v1::create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution;
+use ic_nns_governance_api::create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution;
 
 use ic_sns_governance_api::pb::v1::{
     get_proposal_response::Result as ProposalResult, manage_neuron::Follow, proposal::Action,

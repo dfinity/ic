@@ -129,13 +129,13 @@ benches:
     scopes: {}
   with_neuron_mut_all_sections_maximum_stable:
     total:
-      instructions: 5029879
+      instructions: 4367660
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   with_neuron_mut_all_sections_typical_stable:
     total:
-      instructions: 1080740
+      instructions: 837487
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
