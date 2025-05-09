@@ -40,10 +40,8 @@ pub struct EthRpcClient {
 
 impl EthRpcClient {
     pub fn from_state(state: &State) -> Self {
-        let chain = state.ethereum_network;
-        let evm_rpc_id = state
-            .evm_rpc_id
-            .expect("BUG: Missing evm_rpc_id. Should be validated in post_upgrade");
+        let chain = state.ethereum_network();
+        let evm_rpc_id = state.evm_rpc_id();
         const MIN_ATTACHED_CYCLES: u128 = 500_000_000_000;
 
         let providers = match chain {
