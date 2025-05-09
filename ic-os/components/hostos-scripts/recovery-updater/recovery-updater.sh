@@ -96,7 +96,7 @@ extract_upgrade() {
 install_upgrade() {
     local tmpdir="$1"
     echo "Installing upgrade using manageboot..."
-    ${MANAGEBOOT_SCRIPT} upgrade-recovery \
+    ${MANAGEBOOT_SCRIPT} guestos upgrade-recovery \
         "${grubdir}/grubenv" \
         "${boot_target}" \
         "${root_target}" \
