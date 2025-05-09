@@ -29,6 +29,7 @@ use ic_universal_canister::wasm;
 
 use anyhow::Result;
 use slog::info;
+use std::time::Duration;
 
 const DKG_INTERVAL: u64 = 9;
 const FAULT_HEIGHT: u64 = DKG_INTERVAL + 1;
@@ -65,10 +66,27 @@ fn test(env: TestEnv) {
         .nodes()
         .find(|n| n.is_malicious())
         .expect("No malicious node found in the subnet.");
-    let agent = malicious_node.with_default_agent(|agent| async move { agent });
+
     let rt = tokio::runtime::Runtime::new().expect("could not create tokio runtime");
     rt.block_on({
         async move {
+            let agent = ic_system_test_driver::retry_with_msg_async!(
+                "Creating an agent for the malicious node",
+                &log,
+                Duration::from_secs(300),
+                Duration::from_secs(5),
+                || async {
+                    match malicious_node.try_build_default_agent_async().await {
+                        Ok(agent) => Ok(agent),
+                        Err(e) => {
+                            panic!("Failed to create agent: {}", e);
+                        }
+                    }
+                }
+            )
+            .await
+            .expect("Failed to create agent");
+
             let canister = UniversalCanister::new_with_retries(
                 &agent,
                 malicious_node.effective_canister_id(),
