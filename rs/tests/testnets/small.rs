@@ -117,6 +117,7 @@ pub fn setup(env: TestEnv) {
         .start(&env)
         .expect("Failed to start prometheus VM");
     InternetComputer::new()
+        .with_mainnet_config()
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .add_nodes(40)
