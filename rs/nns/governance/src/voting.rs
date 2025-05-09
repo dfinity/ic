@@ -693,34 +693,22 @@ mod test {
                 neuron_map.insert(id, neuron);
             };
 
-        let mut heap_neurons = BTreeMap::new();
+        let mut neurons = BTreeMap::new();
         let mut ballots = HashMap::new();
         for id in 1..=5 {
             // Each neuron follows all neurons with a lower id
             let followees = (1..id).collect();
 
-            add_neuron_with_ballot(
-                &mut heap_neurons,
-                &mut ballots,
-                id,
-                followees,
-                Vote::Unspecified,
-            );
+            add_neuron_with_ballot(&mut neurons, &mut ballots, id, followees, Vote::Unspecified);
         }
         // Add another neuron that follows both a neuron with a ballot and without a ballot
-        add_neuron_with_ballot(
-            &mut heap_neurons,
-            &mut ballots,
-            6,
-            vec![1, 7],
-            Vote::Unspecified,
-        );
+        add_neuron_with_ballot(&mut neurons, &mut ballots, 6, vec![1, 7], Vote::Unspecified);
 
         // Add a neuron without a ballot for neuron 6 to follow.
-        add_neuron_without_ballot(&mut heap_neurons, 7, vec![1]);
+        add_neuron_without_ballot(&mut neurons, 7, vec![1]);
 
         let governance_proto = crate::pb::v1::Governance {
-            neurons: heap_neurons
+            neurons: neurons
                 .into_iter()
                 .map(|(id, neuron)| (id, pb::Neuron::from(neuron)))
                 .collect(),
