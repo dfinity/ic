@@ -276,7 +276,7 @@ async fn try_fetch_delegation_from_nns(
     let tls_connector = TlsConnector::from(Arc::new(tls_client_config));
     let irrelevant_domain = "domain.is-irrelevant-as-hostname-verification-is.disabled";
 
-    info!(log, "Establishing a TLS stream to {peer_id} @ {addr}");
+    info!(log, "Establishing TLS stream to {peer_id} @ {addr}");
     let tls_stream = tls_connector
         .connect(
             irrelevant_domain
