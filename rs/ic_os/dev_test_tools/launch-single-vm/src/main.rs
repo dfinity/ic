@@ -22,6 +22,11 @@ use std::path::PathBuf;
 use std::process::Command;
 use tempfile::tempdir;
 use url::Url;
+
+use config::generate_testnet_config::{
+    generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
+};
+use config_types::DeploymentEnvironment;
 const FARM_BASE_URL: &str = "https://farm.dfinity.systems";
 
 /// Deploy a single ICOS VM to Farm
@@ -190,14 +195,53 @@ fn main() {
             std::fs::copy(key, keys_dir.join("admin")).unwrap();
         }
 
+        // Build GuestOS config object
+        let config = GenerateTestnetConfigArgs {
+            ipv6_config_type: Some(Ipv6ConfigType::RouterAdvertisement),
+            deterministic_prefix: None,
+            deterministic_prefix_length: None,
+            deterministic_gateway: None,
+            fixed_address: None,
+            fixed_gateway: None,
+            ipv4_address: None,
+            ipv4_gateway: None,
+            ipv4_prefix_length: None,
+            node_reward_type: None,
+            domain_name: None,
+            mgmt_mac: None,
+            deployment_environment: Some(DeploymentEnvironment::Testnet),
+            elasticsearch_hosts: None,
+            elasticsearch_tags: None,
+            use_nns_public_key: Some(true),
+            nns_urls: Some(vec![format!("http://[{}]", ipv6_addr)]),
+            use_node_operator_private_key: Some(true),
+            use_ssh_authorized_keys: Some(true),
+            inject_ic_crypto: Some(false),
+            inject_ic_state: Some(false),
+            inject_ic_registry_local_store: Some(false),
+            backup_retention_time_seconds: None,
+            backup_purging_interval_seconds: None,
+            malicious_behavior: None,
+            query_stats_epoch_length: None,
+            bitcoind_addr: None,
+            jaeger_addr: None,
+            socks_proxy: None,
+            hostname: None,
+            generate_ic_boundary_tls_cert: None,
+        };
+
+        // populate guestos_config_json_path with serialized guestos config object
+        let guestos_config_json_path = tempdir.as_ref().join("guestos_config.json");
+        let _ = generate_testnet_config(config, guestos_config_json_path.clone());
+
         // Build config image
         let filename = "config.tar.gz";
         let config_path = tempdir.as_ref().join(filename);
         let local_store = prep_dir.join("ic_registry_local_store");
         Command::new(build_bootstrap_script)
             .arg(&config_path)
-            .arg("--nns_urls")
-            .arg(ipv6_addr.to_string())
+            .arg("--guestos_config")
+            .arg(guestos_config_json_path)
             .arg("--ic_crypto")
             .arg(node.crypto_path())
             .arg("--ic_registry_local_store")

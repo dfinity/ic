@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fs::write;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
@@ -6,13 +5,11 @@ use std::str::FromStr;
 
 use anyhow::{bail, Context, Result};
 
-use config::config_ini::config_map_from_path;
+use config_types::Ipv6Config;
 use network::interfaces::{get_interface_name as get_valid_interface_name, get_interface_paths};
 use utils::get_command_stdout;
 
 use network::systemd::IPV6_NAME_SERVER_NETWORKD_CONTENTS;
-
-pub static DEFAULT_GUESTOS_NETWORK_CONFIG_PATH: &str = "/boot/config/network.conf";
 
 const IPV4_NAME_SERVER_NETWORKD_CONTENTS: &str =
     "DNS=1.1.1.1\nDNS=1.0.0.1\nDNS=8.8.8.8\nDNS=8.8.4.4\n";
@@ -85,23 +82,20 @@ impl IpAddressInfo {
 
 /// Generate network configuration for systemd networkd based on the provided network configuration.
 pub fn generate_networkd_config(
-    network_config: &Path,
+    ipv6_config: Ipv6Config,
     systemd_network_dir: &Path,
     ipv4_info: Option<IpAddressInfo>,
 ) -> Result<()> {
-    eprintln!("Network config file: {}", network_config.display());
+    eprintln!("IPv6 config info: {:?}", ipv6_config);
+    eprintln!("IPv4 address info: {:?}", ipv4_info);
     eprintln!(
         "Systemd network directory: {}",
         systemd_network_dir.display()
     );
-    eprintln!("IPv4 address info: {:?}", ipv4_info);
 
     std::fs::create_dir_all(systemd_network_dir)?;
 
-    let network_config_variables: HashMap<String, String> = config_map_from_path(network_config)?;
-    eprintln!("Network parameters {:#?}", network_config_variables);
-
-    let network_info: NetworkInfo = create_network_info(&network_config_variables, ipv4_info)?;
+    let network_info: NetworkInfo = create_network_info(ipv6_config, ipv4_info)?;
     eprintln!("{:#?}", network_info);
 
     let network_interface_name = get_interface_name()?;
@@ -148,42 +142,24 @@ pub fn validate_and_construct_ipv4_address_info(
 }
 
 fn create_network_info(
-    network_config_variables: &HashMap<String, String>,
+    ipv6_config: Ipv6Config,
     ipv4_info: Option<IpAddressInfo>,
 ) -> Result<NetworkInfo> {
-    let ipv6_info = match (
-        network_config_variables.get("ipv6_address"),
-        network_config_variables.get("ipv6_gateway"),
-    ) {
-        (Some(ipv6_address_with_prefix), Some(ipv6_gateway)) => {
-            process_ipv6_address_and_gateway(ipv6_address_with_prefix, ipv6_gateway)?
+    let ipv6_info = match ipv6_config {
+        Ipv6Config::RouterAdvertisement => None,
+        Ipv6Config::Deterministic(_) => {
+            bail!("GuestOSConfig Ipv6Config should not be of type Deterministic.");
         }
-        (Some(_), None) | (None, Some(_)) => {
-            // Either IPv6 address or gateway is provided, but not both
-            bail!("ERROR: Incomplete configuration - both an IPv6 address and a gateway are required. Please specify both.");
-        }
-        _ => None,
+        Ipv6Config::Fixed(ipv6_config) => Some(IpAddressInfo::new_ipv6_address(
+            &ipv6_config.address,
+            &ipv6_config.gateway.to_string(),
+        )?),
     };
 
     Ok(NetworkInfo {
         ipv6_info,
         ipv4_info,
     })
-}
-
-fn process_ipv6_address_and_gateway(
-    ipv6_address_with_prefix: &str,
-    ipv6_gateway: &str,
-) -> Result<Option<IpAddressInfo>> {
-    if ipv6_address_with_prefix.is_empty() && ipv6_gateway.is_empty() {
-        eprintln!("Both IPv6 address and gateway are unspecified. Proceeding with network configuration using Router Advertisements.");
-        Ok(None)
-    } else {
-        Ok(Some(IpAddressInfo::new_ipv6_address(
-            ipv6_address_with_prefix,
-            ipv6_gateway,
-        )?))
-    }
 }
 
 fn generate_networkd_config_contents(
@@ -299,19 +275,18 @@ fn is_k8s_testnet() -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use config_types::*;
 
     #[test]
     fn test_create_network_info_with_valid_ipv6_and_ipv4() {
-        let mut network_config_variables = HashMap::new();
-        network_config_variables.insert("ipv6_address".to_string(), "2001:db8::1/64".to_string());
-        network_config_variables.insert("ipv6_gateway".to_string(), "2001:db8::1".to_string());
-
-        eprintln!("network_config_variables: {:?}", network_config_variables);
-
         let ipv4_info =
             Some(IpAddressInfo::new_ipv4_address("192.168.1.100", "30", "192.168.1.1").unwrap());
+        let ipv6_config = Ipv6Config::Fixed(FixedIpv6Config {
+            address: "2001:db8::1/64".to_string(),
+            gateway: "2001:db8::1".parse().unwrap(),
+        });
 
-        let result = create_network_info(&network_config_variables, ipv4_info).unwrap();
+        let result = create_network_info(ipv6_config, ipv4_info).unwrap();
         assert!(result.ipv6_info.is_some());
 
         let ipv6_info = result.ipv6_info.as_ref().unwrap();
@@ -325,54 +300,18 @@ mod tests {
 
     #[test]
     fn test_create_network_info_with_valid_ipv6_and_no_ipv4() {
-        let mut network_config_variables = HashMap::new();
-        network_config_variables.insert("ipv6_address".to_string(), "2001:db8::1/64".to_string());
-        network_config_variables.insert("ipv6_gateway".to_string(), "2001:db8::1".to_string());
-
-        eprintln!("network_config_variables: {:?}", network_config_variables);
-
+        let ipv6_config = Ipv6Config::Fixed(FixedIpv6Config {
+            address: "2001:db8::1/64".to_string(),
+            gateway: "2001:db8::1".parse().unwrap(),
+        });
         let ipv4_info = None;
 
-        let result = create_network_info(&network_config_variables, ipv4_info).unwrap();
+        let result = create_network_info(ipv6_config, ipv4_info).unwrap();
         assert!(result.ipv6_info.is_some());
 
         let ipv6_info = result.ipv6_info.as_ref().unwrap();
         assert_eq!(ipv6_info.address_with_prefix, "2001:db8::1/64");
         assert_eq!(ipv6_info.gateway, "2001:db8::1");
-    }
-
-    #[test]
-    fn test_create_network_info_with_invalid_ipv6() {
-        let mut network_config_variables = HashMap::new();
-        network_config_variables.insert("ipv6_address".to_string(), "invalid_address".to_string());
-        network_config_variables.insert("ipv6_gateway".to_string(), "invalid_gateway".to_string());
-
-        let result = create_network_info(&network_config_variables, None);
-
-        assert!(result.is_err(), "Invalid ipv6 address configuration");
-    }
-
-    #[test]
-    fn test_create_network_info_with_missing_ipv6_gateway() {
-        let mut network_config_variables = HashMap::new();
-        network_config_variables.insert("ipv6_address".to_string(), "invalid_address".to_string());
-        // ipv6 gateway intentionally omitted:
-        // network_config_variables.insert("ipv6_gateway".to_string(), "invalid_gateway".to_string());
-
-        let result = create_network_info(&network_config_variables, None);
-
-        assert!(
-            result.is_err(),
-            "Expected an error when IPv6 gateway is missing"
-        );
-    }
-
-    #[test]
-    fn test_create_network_info_without_ipv6_or_ipv4_or_nameservers() {
-        let network_config_variables = HashMap::new();
-
-        let result = create_network_info(&network_config_variables, None).unwrap();
-        assert!(result.ipv6_info.is_none());
     }
 
     #[test]
