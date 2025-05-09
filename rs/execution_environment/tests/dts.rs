@@ -1244,8 +1244,8 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
                     0,
                     0,
                     vec![],
-                    GlobalTimer::Inactive,
-                    OnLowWasmMemoryHookStatus::Ready,
+                    Some(GlobalTimer::Inactive),
+                    Some(OnLowWasmMemoryHookStatus::Ready),
                 )
                 .encode();
                 (method, call_args().other_side(args))

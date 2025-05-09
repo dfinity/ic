@@ -4083,8 +4083,8 @@ pub struct UploadCanisterSnapshotMetadataArgs {
     pub stable_memory_size: u64,
     #[serde(with = "serde_bytes")]
     pub certified_data: Vec<u8>,
-    pub global_timer: GlobalTimer,
-    pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+    pub global_timer: Option<GlobalTimer>,
+    pub on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
 }
 
 impl Payload<'_> for UploadCanisterSnapshotMetadataArgs {}
@@ -4098,8 +4098,8 @@ impl UploadCanisterSnapshotMetadataArgs {
         wasm_memory_size: u64,
         stable_memory_size: u64,
         certified_data: Vec<u8>,
-        global_timer: GlobalTimer,
-        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+        global_timer: Option<GlobalTimer>,
+        on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
     ) -> Self {
         Self {
             canister_id: canister_id.get(),
@@ -4117,6 +4117,32 @@ impl UploadCanisterSnapshotMetadataArgs {
     pub fn get_canister_id(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(self.canister_id)
     }
+
+    pub fn replace_snapshot(&self) -> Option<SnapshotId> {
+        self.replace_snapshot
+            .as_ref()
+            .map(|bytes| SnapshotId::try_from(&bytes.clone().into_vec()).unwrap())
+    }
+
+    pub fn snapshot_size_bytes(&self) -> NumBytes {
+        let num_bytes = self.wasm_module_size
+            + self.wasm_memory_size
+            + self.stable_memory_size
+            + self.certified_data.len() as u64
+            + self.exported_globals.len() as u64 * size_of::<Global>() as u64;
+
+        NumBytes::new(num_bytes)
+    }
+}
+
+/// Struct to encode/decode
+/// (record {
+///     snapshot_id: blob;
+/// };)
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+pub struct UploadCanisterSnapshotMetadataResponse {
+    #[serde(with = "serde_bytes")]
+    pub snapshot_id: Vec<u8>,
 }
 
 /// Struct to encode/decode
@@ -4167,6 +4193,10 @@ impl UploadCanisterSnapshotDataArgs {
 
     pub fn get_canister_id(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(self.canister_id)
+    }
+
+    pub fn get_snapshot_id(&self) -> SnapshotId {
+        SnapshotId::try_from(&self.snapshot_id).unwrap()
     }
 }
 
