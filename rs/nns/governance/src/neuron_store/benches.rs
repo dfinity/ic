@@ -216,7 +216,6 @@ fn with_neuron_mut_benchmark(size: NeuronSize, f: impl FnOnce(&mut Neuron)) -> B
 fn modify_neuron_all_sections(neuron: &mut Neuron) {
     neuron.cached_neuron_stake_e8s += 1;
     neuron.hot_keys.push(PrincipalId::new_user_test_id(1));
-    neuron.register_recent_ballot(Topic::Governance, &ProposalId { id: 1 }, Vote::Yes);
     neuron.followees.insert(
         Topic::Governance as i32,
         Followees {

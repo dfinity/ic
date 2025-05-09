@@ -2578,6 +2578,14 @@ impl MasterPublicKeyId {
             Self::VetKd(_) => false,
         }
     }
+
+    /// Check whether this type of [`MasterPublicKeyId`] requires pre-signatures
+    pub fn requires_pre_signatures(&self) -> bool {
+        match self {
+            Self::Ecdsa(_) | Self::Schnorr(_) => true,
+            Self::VetKd(_) => false,
+        }
+    }
 }
 
 impl FromStr for MasterPublicKeyId {

@@ -6,7 +6,9 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("//bazel:mainnet-canisters.bzl", "canisters")
 load("//bazel:mainnet-icos-images.bzl", "mainnet_icos_images")
 load("//third_party/jemalloc:repository.bzl", "jemalloc_repository")
+load("//third_party/libfuzzer:repository.bzl", "libfuzzer_repository")
 load("//third_party/lmdb:repository.bzl", "lmdb_repository")
+load("//third_party/openssl:repository.bzl", "openssl_repository")
 
 # We cannot derive the Bazel repository names (e.g. @mainnet_nns_registry_canister) directly
 # from the canister names because we use inconsistent repo names. Same goes for filenames.
@@ -108,6 +110,8 @@ sol_register_toolchains(
 http_archive(
     name = "rules_rust",
     integrity = "sha256-8TBqrAsli3kN8BrZq8arsN8LZUFsdLTvJ/Sqsph4CmQ=",
+    patch_args = ["-p1"],
+    patches = ["//bazel:rules_rust.patch"],
     urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.56.0/rules_rust-0.56.0.tar.gz"],
 )
 
@@ -120,6 +124,11 @@ rust_analyzer_dependencies()
 
 rust_register_toolchains(
     edition = "2021",
+    strip_level = {"x86_64-unknown-linux-gnu": {
+        "dbg": "none",
+        "fastbuild": "none",
+        "opt": "none",
+    }},
     # The nightly version is required to compile fuzz tests from Bazel.
     # The version below is chosen so that it is in sync with the non-nightly version.
     versions = [
@@ -168,6 +177,10 @@ rules_motoko_dependencies()
 lmdb_repository()
 
 jemalloc_repository()
+
+openssl_repository()
+
+libfuzzer_repository()
 
 http_archive(
     name = "buildifier_prebuilt",
@@ -269,3 +282,29 @@ mainnet_icos_images()
 load("//bazel:spawn_proto_library.bzl", "spawn_proto_library")
 
 spawn_proto_library(name = "spawn_proto_library")
+
+# Use libsystemd from the host environment
+# Ideally this is pulled hermetically, but as this is only used by infogetty
+# within IC images, we have less compatibility to worry about, and packaging it
+# this way is easier.
+new_local_repository(
+    name = "libsystemd",
+    build_file_content = """
+cc_import(
+    name = "libsystemd-internal",
+    hdrs = glob(["include/systemd/*.h"]),
+    interface_library = "lib/x86_64-linux-gnu/libsystemd.so",
+    system_provided = True,
+    visibility = ["//visibility:private"],
+)
+
+# Use an extra cc_library to hide the depth of the include folder
+cc_library(
+    name = "libsystemd",
+    includes = ["include"],
+    deps = ["libsystemd-internal"],
+    visibility = ["//visibility:public"],
+)
+""",
+    path = "/usr",
+)
