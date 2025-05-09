@@ -143,6 +143,11 @@ pub fn setup_impl(env: TestEnv, deploy_nns_canisters: bool, http_requests: bool)
                     .nodes()
                     .for_each(|node| node.await_status_is_healthy().unwrap())
             });
+
+            cloned_env
+                .topology_snapshot()
+                .api_boundary_nodes()
+                .for_each(|api_bn| api_bn.await_status_is_healthy().unwrap());
         },
     );
     if http_requests {

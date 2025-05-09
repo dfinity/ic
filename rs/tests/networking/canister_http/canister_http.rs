@@ -37,12 +37,20 @@ pub enum PemType {
 }
 
 pub fn await_nodes_healthy(env: &TestEnv) {
-    info!(&env.logger(), "Checking readiness of all nodes...");
+    info!(&env.logger(), "Checking readiness of all replica nodes...");
     env.topology_snapshot().subnets().for_each(|subnet| {
         subnet
             .nodes()
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
+
+    info!(
+        &env.logger(),
+        "Checking readiness of all API boundary nodes..."
+    );
+    env.topology_snapshot()
+        .api_boundary_nodes()
+        .for_each(|api_bn| api_bn.await_status_is_healthy().unwrap());
 }
 
 pub fn install_nns_canisters(env: &TestEnv) {
