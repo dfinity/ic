@@ -27,8 +27,8 @@ pub enum KeyPair {
         public_key: ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes,
     },
     Secp256r1 {
-        secret_key: ic_crypto_ecdsa_secp256r1::PrivateKey,
-        public_key: ic_crypto_ecdsa_secp256r1::PublicKey,
+        secret_key: ic_secp256r1::PrivateKey,
+        public_key: ic_secp256r1::PublicKey,
     },
 }
 
@@ -85,7 +85,7 @@ impl signature::Keypair for KeyPair {
 #[derive(Clone)]
 pub enum VerifyingKey {
     Ed25519(ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes),
-    Secp256r1(ic_crypto_ecdsa_secp256r1::PublicKey),
+    Secp256r1(ic_secp256r1::PublicKey),
 }
 
 impl pkcs8::EncodePublicKey for VerifyingKey {
@@ -112,7 +112,7 @@ impl KeyPair {
     }
 
     pub fn gen_secp256r1<R: Rng + CryptoRng>(rng: &mut R) -> Self {
-        let secret_key = ic_crypto_ecdsa_secp256r1::PrivateKey::generate_using_rng(rng);
+        let secret_key = ic_secp256r1::PrivateKey::generate_using_rng(rng);
         let public_key = secret_key.public_key();
         Self::Secp256r1 {
             secret_key,
