@@ -1326,7 +1326,7 @@ fn get_changes_since(
         },
         Ok((Err(err), _)) => Err(format!("Query failed: {:?}", err)),
         Err(QueryExecutionError::CertifiedStateUnavailable) => {
-            panic!("Certified state unavailable for query call.")
+            Err("Certified state unavailable for query call.".to_string())
         }
     }
 }

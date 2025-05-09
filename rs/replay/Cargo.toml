@@ -19,7 +19,6 @@ ic-consensus = { path = "../consensus" }
 ic-consensus-certification = { path = "../consensus/certification" }
 ic-consensus-dkg = { path = "../consensus/dkg" }
 ic-consensus-utils = { path = "../consensus/utils" }
-ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-for-verification-only = { path = "../crypto/for_verification_only" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-error-types = { path = "../../packages/ic-error-types" }
@@ -60,6 +59,7 @@ tower = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
+ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
