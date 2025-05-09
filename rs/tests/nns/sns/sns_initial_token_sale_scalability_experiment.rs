@@ -1,12 +1,8 @@
-use std::time::Duration;
-
-#[rustfmt::skip]
-
 use anyhow::Result;
-
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
 use sns_system_test_lib::sns_deployment::{setup, test};
+use std::time::Duration;
 
 fn main() -> Result<()> {
     let max_group_lifetime = Duration::from_secs(55 * 60);
