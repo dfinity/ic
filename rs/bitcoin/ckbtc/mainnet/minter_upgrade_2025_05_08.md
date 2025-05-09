@@ -6,7 +6,7 @@ Git hash: `f8131bfbc2d339716a9cff06e04de49a68e5a80b`
 
 New compressed Wasm hash: `78e06234358f6e6e067de9b9cfa0ce9e8193952a943f267986a84d90401aac01`
 
-Upgrade args hash: `0fee102bd16b053022b69f2c65fd5e2f41d150ce9c214ac8731cfaf496ebda4e`
+Upgrade args hash: `bd308dda17e56cd6abbacead803e1e1d313fcb42976904d153ed098e5c24bd81`
 
 Target canister: `mqygn-kiaaa-aaaar-qaadq-cai`
 
@@ -18,7 +18,8 @@ Previous ckBTC minter proposal: https://dashboard.internetcomputer.org/proposal/
 
 Upgrade the ckBTC minter to include the latest code changes, notably:
 
-* Improve `update_balance` latency by caching `get_utxos` results.
+* Improve `update_balance` latency by caching `get_utxos` results. Set `get_utxos_cache_expiration_seconds` parameter to
+  60 seconds.
 * Increase concurrent BTC withdrawal request limit from 1,000 to 5,000.
 * Add latency metric for `sign_with_ecdsa`.
 * Allow `get_btc_address` calls from the anonymous principal.
@@ -43,7 +44,7 @@ a6267fb8e1 feat(ckbtc): Allow get_btc_address calls from anonymous principal (#4
 ```
 git fetch
 git checkout f8131bfbc2d339716a9cff06e04de49a68e5a80b
-didc encode '()' | xxd -r -p | sha256sum
+didc encode -d rs/bitcoin/ckbtc/minter/ckbtc_minter.did -t '(MinterArg)' '(variant { Upgrade = opt record { get_utxos_cache_expiration_seconds = opt (60 : nat64) } })' | xxd -r -p | sha256sum
 ```
 
 ## Wasm Verification
