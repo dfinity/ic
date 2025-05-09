@@ -10,6 +10,18 @@ get_cmdline_var() {
     grep -oP "${var}=[^ ]*" /proc/cmdline | head -n1 | cut -d= -f2-
 }
 
+# Get partition targets based on boot alternative
+get_partition_targets() {
+    local lodev="$1"
+    local boot_alternative="$2"
+
+    if [ "$boot_alternative" = "A" ]; then
+        echo "${lodev}p7 ${lodev}p8 ${lodev}p9"
+    else
+        echo "${lodev}p4 ${lodev}p5 ${lodev}p6"
+    fi
+}
+
 # Upgrade and boot into the alternative boot partition (help: reverse this?)
 function prepare_guestos_upgrade() {
     echo "Starting guestos upgrade preparation"
@@ -30,16 +42,8 @@ function prepare_guestos_upgrade() {
     boot_alternative="$(grep -oP '^boot_alternative=\K[a-zA-Z]+' "${grubdir}/grubenv")"
     echo "Current boot alternative: $boot_alternative"
 
-    # Choose the targets of the inactive partitions
-    if [ "$boot_alternative" = "A" ]; then
-        boot_target="${lodev}p7"
-        root_target="${lodev}p8"
-        var_target="${lodev}p9"
-    else
-        boot_target="${lodev}p4"
-        root_target="${lodev}p5"
-        var_target="${lodev}p6"
-    fi
+    # Get partition targets
+    read -r boot_target root_target var_target < <(get_partition_targets "$lodev" "$boot_alternative")
     echo "Target boot partition: $boot_target"
     echo "Target root partition: $root_target"
     echo "Target var partition: $var_target"
@@ -91,10 +95,14 @@ function install_upgrade() {
 
 function guestos_upgrade_cleanup() {
     echo "Starting cleanup"
-    umount "${grubdir}"
-    echo "Unmounted ${grubdir}"
-    rm -rf "${workdir}"
-    echo "Removed temporary directory ${workdir}"
+    if [ -n "${grubdir}" ] && mountpoint -q "${grubdir}"; then
+        umount "${grubdir}"
+        echo "Unmounted ${grubdir}"
+    fi
+    if [ -n "${workdir}" ] && [ -d "${workdir}" ]; then
+        rm -rf "${workdir}"
+        echo "Removed temporary directory ${workdir}"
+    fi
 }
 
 main() {
@@ -106,14 +114,13 @@ main() {
     echo "Download hash: $TARGET_HASH"
 
     TMPDIR=$(mktemp -d)
-    trap 'rm -rf "$TMPDIR"' EXIT
+    trap 'guestos_upgrade_cleanup; rm -rf "$TMPDIR"' EXIT
 
     prepare_guestos_upgrade
     download_and_verify_upgrade "$URL" "$TARGET_HASH" "$TMPDIR"
     extract_upgrade "$TMPDIR"
     install_upgrade "$TMPDIR"
 
-    guestos_upgrade_cleanup
     echo "Recovery updater completed successfully"
 
     echo "Rebooting GuestOS into new version..."
