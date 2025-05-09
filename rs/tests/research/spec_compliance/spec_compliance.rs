@@ -335,14 +335,12 @@ pub fn with_endpoint(
     included_tests: Vec<&str>,
 ) {
     let endpoint = if use_api_bn {
-        let api_bn = env
-            .topology_snapshot()
+        env.topology_snapshot()
             .api_boundary_nodes()
             .next()
-            .expect("No API boundary node found");
-
-        let api_bn_addr = format!("[{}]", api_bn.get_public_addr().ip());
-        format!("https://{}/", api_bn_addr)
+            .expect("No API boundary node found")
+            .get_public_url()
+            .to_string()
     } else {
         test_subnet
             .nodes()

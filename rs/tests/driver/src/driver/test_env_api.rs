@@ -150,7 +150,7 @@ use crate::{
         virtualmachine::{destroy_vm, restart_vm, start_vm},
     },
     retry_with_msg, retry_with_msg_async,
-    util::{block_on, create_agent_mapping},
+    util::{block_on, create_agent},
 };
 use anyhow::{anyhow, bail, Result};
 use async_trait::async_trait;
@@ -869,6 +869,14 @@ impl IcNodeSnapshot {
                     )
                     .contains(&self.node_id)
             })
+    }
+
+    pub fn is_api_boundary_node(&self) -> bool {
+        let registry_version = self.registry_version;
+        self.local_registry
+            .get_api_boundary_node_ids(registry_version)
+            .unwrap()
+            .contains(&self.node_id)
     }
 
     pub fn effective_canister_id(&self) -> PrincipalId {
@@ -1744,14 +1752,12 @@ impl HasPublicApiUrl for IcNodeSnapshot {
     fn get_public_url(&self) -> Url {
         let node_record = self.raw_node_record();
 
-        node_record
-            .domain
-            .map(|d| Url::parse(&format!("https://{}", d)).expect("Failed to parse URL"))
-            .unwrap_or_else(|| {
-                IcNodeSnapshot::http_endpoint_to_url(
-                    &node_record.http.expect("Node doesn't have URL"),
-                )
-            })
+        // API boundary nodes listen on port 443, while replicas listen on port 8080
+        if self.is_api_boundary_node() {
+            Url::parse(&format!("https://[{}]", self.get_ip_addr())).expect("Failed to parse URL")
+        } else {
+            IcNodeSnapshot::http_endpoint_to_url(&node_record.http.expect("Node doesn't have URL"))
+        }
     }
 
     fn get_public_addr(&self) -> SocketAddr {
@@ -1770,9 +1776,7 @@ impl HasPublicApiUrl for IcNodeSnapshot {
 
     async fn try_build_default_agent_async(&self) -> Result<Agent, AgentError> {
         let url = self.get_public_url().to_string();
-        let ip_addr = self.get_public_addr().ip();
-
-        create_agent_mapping(&url, ip_addr).await
+        create_agent(&url).await
     }
 }
 

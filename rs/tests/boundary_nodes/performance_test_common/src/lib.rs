@@ -10,7 +10,7 @@ use ic_system_test_driver::{
     driver::{
         farm::HostFeature,
         ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-        prometheus_vm::PrometheusVm,
+        prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
@@ -68,6 +68,8 @@ pub fn setup(env: TestEnv) {
     NnsInstallationBuilder::new()
         .install(&nns_node, &env)
         .expect("Could not install NNS canisters");
+
+    env.sync_with_prometheus();
 }
 
 // Execute update calls (without polling) with an increasing req/s rate, against a counter canister via the boundary node agent.

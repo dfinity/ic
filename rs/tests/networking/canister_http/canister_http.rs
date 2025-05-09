@@ -4,6 +4,7 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::prometheus_vm::HasPrometheus;
 use ic_system_test_driver::driver::prometheus_vm::PrometheusVm;
 use ic_system_test_driver::driver::simulate_network::ProductionSubnetTopology;
 use ic_system_test_driver::driver::simulate_network::SimulateNetwork;
@@ -155,6 +156,8 @@ pub fn stress_setup(env: TestEnv) {
             13 => s.apply_network_settings(ProductionSubnetTopology::IO67),
             _ => {}
         });
+
+    env.sync_with_prometheus();
 }
 
 pub fn get_universal_vm_address(env: &TestEnv) -> Ipv6Addr {
