@@ -28,7 +28,7 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::{
-    WasmChunkHash, CHUNK_SIZE,
+    ChunkValidationResult, WasmChunkHash, CHUNK_SIZE,
 };
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_replicated_state::{
@@ -1178,7 +1178,7 @@ impl CanisterManager {
         &self,
         sender: PrincipalId,
         canister: &mut CanisterState,
-        chunk: &[u8],
+        chunk: Vec<u8>,
         round_limits: &mut RoundLimits,
         subnet_size: usize,
         resource_saturation: &ResourceSaturation,
@@ -1207,22 +1207,24 @@ impl CanisterManager {
                 message: format!("Error charging for 'upload_chunk': {}", err),
             })?;
 
-        // Check if the chunk has already been uploaded before any further checks and updates.
-        let hash = ic_crypto_sha2::Sha256::hash(chunk);
-        if canister.system_state.wasm_chunk_store.contains_chunk(&hash) {
-            return Ok(UploadChunkResult {
-                reply: UploadChunkReply {
-                    hash: hash.to_vec(),
-                },
-                heap_delta_increase: NumBytes::new(0),
-            });
-        }
-
-        canister
+        let validated_chunk = match canister
             .system_state
             .wasm_chunk_store
             .can_insert_chunk(self.config.wasm_chunk_store_max_size, chunk)
-            .map_err(|err| CanisterManagerError::WasmChunkStoreError { message: err })?;
+        {
+            ChunkValidationResult::Insert(validated_chunk) => validated_chunk,
+            ChunkValidationResult::AlreadyExists(hash) => {
+                return Ok(UploadChunkResult {
+                    reply: UploadChunkReply {
+                        hash: hash.to_vec(),
+                    },
+                    heap_delta_increase: NumBytes::new(0),
+                });
+            }
+            ChunkValidationResult::ValidationError(err) => {
+                return Err(CanisterManagerError::WasmChunkStoreError { message: err });
+            }
+        };
 
         let chunk_bytes = wasm_chunk_store::chunk_size();
         let new_memory_usage = canister.memory_usage() + chunk_bytes;
@@ -1255,15 +1257,13 @@ impl CanisterManager {
 
         round_limits.instructions -= as_round_instructions(instructions);
 
-        canister.system_state.wasm_chunk_store.insert_chunk(
-            self.config.wasm_chunk_store_max_size,
-            chunk,
-            &hash,
-        );
+        let hash = validated_chunk.hash.to_vec();
+        canister
+            .system_state
+            .wasm_chunk_store
+            .insert_chunk(validated_chunk);
         Ok(UploadChunkResult {
-            reply: UploadChunkReply {
-                hash: hash.to_vec(),
-            },
+            reply: UploadChunkReply { hash },
             heap_delta_increase: chunk_bytes,
         })
     }

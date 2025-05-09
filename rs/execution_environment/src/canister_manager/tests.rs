@@ -45,6 +45,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    canister_state::system_state::wasm_chunk_store::ChunkValidationResult,
     canister_state::system_state::{wasm_chunk_store, CyclesUseCase},
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
     page_map::TestPageAllocatorFileDescriptorImpl,
@@ -2919,18 +2920,18 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
         .build();
 
     // Insert data to the chunk store to verify it is cleared on uninstall.
-    let chunk = [0x41, 200];
-    let hash = ic_crypto_sha2::Sha256::hash(&chunk);
-    state
+    let store = &mut state
         .canister_state_mut(&canister_test_id(0))
         .unwrap()
         .system_state
-        .wasm_chunk_store
-        .insert_chunk(
-            canister_manager.config.wasm_chunk_store_max_size,
-            &chunk,
-            &hash,
-        );
+        .wasm_chunk_store;
+    let chunk = [0x41, 200].to_vec();
+    let result = store.can_insert_chunk(canister_manager.config.wasm_chunk_store_max_size, chunk);
+    let validated_chunk = match result {
+        ChunkValidationResult::Insert(validated_chunk) => validated_chunk,
+        res => panic!("Unexpected chunk validation result: {:?}", res),
+    };
+    store.insert_chunk(validated_chunk);
 
     assert!(state
         .canister_state(&canister_test_id(0))
