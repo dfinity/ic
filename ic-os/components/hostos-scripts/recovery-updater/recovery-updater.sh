@@ -14,7 +14,7 @@ ROOT_PARTITION_B=8
 VAR_PARTITION_B=9
 
 GUESTOS_DEVICE="/dev/hostlvm/guestos"
-MANAGEBOOT_SCRIPT="/opt/ic/bin/manageboot_recovery.sh"
+MANAGEBOOT_SCRIPT="/opt/ic/bin/manageboot.sh"
 
 # Helper function to extract a value from /proc/cmdline
 get_cmdline_var() {
@@ -96,7 +96,7 @@ function extract_upgrade() {
 function install_upgrade() {
     local tmpdir="$1"
     echo "Installing upgrade using manageboot..."
-    ${MANAGEBOOT_SCRIPT} upgrade-install \
+    ${MANAGEBOOT_SCRIPT} upgrade-recovery \
         "${grubdir}/grubenv" \
         "${boot_target}" \
         "${root_target}" \

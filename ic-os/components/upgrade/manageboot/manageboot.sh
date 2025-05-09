@@ -131,6 +131,9 @@ Usage:
       successfully. Calling it under any other circumstances is illegal and
       will result in a wrong (possibly failing) boot.
 
+    upgrade-recovery
+      Used by recovery-updater.sh to performs a manual GuestOS upgrade from the HostOS
+
     confirm
       Confirm that the current system booted fine (required after first
       boot of newly installed upgrade to prevent bootloader falling back
@@ -322,6 +325,73 @@ case "${ACTION}" in
         # the script exits without error.
         trap -- '' SIGTERM
         reboot
+        ;;
+    upgrade-recovery)
+        if [ "$#" != 6 ]; then
+            echo "upgrade-recovery requires exactly 6 arguments" >&2
+            usage >&2
+            exit 1
+        fi
+
+        GRUBENV_FILE="$1"
+        BOOT_DEV="$2"
+        ROOT_DEV="$3"
+        VAR_DEV="$4"
+        BOOT_IMG="$5"
+        ROOT_IMG="$6"
+
+        echo "=== Recovery Updater Mode ==="
+        echo "Grubenv file: ${GRUBENV_FILE}"
+        echo "Boot device: ${BOOT_DEV}"
+        echo "Root device: ${ROOT_DEV}"
+        echo "Var device: ${VAR_DEV}"
+        echo "Boot image: ${BOOT_IMG}"
+        echo "Root image: ${ROOT_IMG}"
+
+        echo "Reading grubenv configuration..."
+        read_grubenv "${GRUBENV_FILE}"
+        echo "Current boot alternative: ${boot_alternative}"
+        echo "Current boot cycle: ${boot_cycle}"
+
+        echo "Writing boot image to ${BOOT_DEV}..."
+        dd if="${BOOT_IMG}" of="${BOOT_DEV}" bs=1M status=progress
+        if [ $? -ne 0 ]; then
+            echo "ERROR: Failed to write boot image"
+            exit 1
+        fi
+        echo "Boot image written successfully"
+
+        echo "Writing root image to ${ROOT_DEV}..."
+        dd if="${ROOT_IMG}" of="${ROOT_DEV}" bs=1M status=progress
+        if [ $? -ne 0 ]; then
+            echo "ERROR: Failed to write root image"
+            exit 1
+        fi
+        echo "Root image written successfully"
+
+        echo "Wiping var partition header on ${VAR_DEV}..."
+        dd if=/dev/zero of="${VAR_DEV}" bs=1M count=16 status=progress
+        if [ $? -ne 0 ]; then
+            echo "ERROR: Failed to wipe var partition header"
+            exit 1
+        fi
+        echo "Var partition header wiped successfully"
+
+        echo "Updating grubenv to prepare for next boot..."
+        if [[ "${BOOT_DEV}" == *"p7" ]]; then
+            boot_alternative="B"
+        elif [[ "${BOOT_DEV}" == *"p4" ]]; then
+            boot_alternative="A"
+        else
+            echo "ERROR: Invalid boot device partition number"
+            exit 1
+        fi
+        boot_cycle=first_boot
+        echo "Setting boot_alternative to ${boot_alternative} and boot_cycle to ${boot_cycle}"
+        write_grubenv "${GRUBENV_FILE}"
+        echo "Grubenv updated successfully"
+
+        echo "Recovery updater mode completed. Waiting for HostOS to reboot GuestOS..."
         ;;
     confirm)
         if [ "$boot_cycle" != "stable" ]; then
