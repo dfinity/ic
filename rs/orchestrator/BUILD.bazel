@@ -102,6 +102,7 @@ rust_test(
         "//rs/crypto/test_utils/ni-dkg",
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/crypto/test_utils/tls",
+        "//rs/crypto/tls_interfaces/mocks",
         "//rs/registry/fake",
         "//rs/registry/proto_data_provider",
         "//rs/registry/subnet_type",
@@ -112,6 +113,10 @@ rust_test(
         "//rs/test_utilities/registry",
         "//rs/test_utilities/time",
         "//rs/test_utilities/types",
+        "@crate_index//:axum",
+        "@crate_index//:axum-server",
         "@crate_index//:mockall",
+        "@crate_index//:rcgen",
+        "@crate_index//:rustls",
     ],
 )

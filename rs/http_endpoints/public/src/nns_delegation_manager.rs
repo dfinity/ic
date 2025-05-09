@@ -276,7 +276,10 @@ async fn try_fetch_delegation_from_nns(
     let tls_connector = TlsConnector::from(Arc::new(tls_client_config));
     let irrelevant_domain = "domain.is-irrelevant-as-hostname-verification-is.disabled";
 
-    info!(log, "Initializing a TLS handshake to {peer_id} @ {addr}");
+    info!(
+        log,
+        "Establishing TLS stream to {peer_id}. Tcp stream: {tcp_stream:?}"
+    );
     let tls_stream = tls_connector
         .connect(
             irrelevant_domain
@@ -293,7 +296,10 @@ async fn try_fetch_delegation_from_nns(
             )
         })?;
 
-    info!(log, "Establishing HTTP connection to {peer_id} @ {addr}");
+    info!(
+        log,
+        "Establishing HTTP connection to {peer_id}. Tls stream: {tls_stream:?}"
+    );
     let (mut request_sender, connection) =
         hyper::client::conn::http1::handshake(TokioIo::new(tls_stream)).await?;
 

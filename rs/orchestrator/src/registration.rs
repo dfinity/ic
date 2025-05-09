@@ -513,10 +513,13 @@ impl NodeRegistration {
         let mut urls: Vec<Url> = t_infos
             .iter()
             .filter_map(|(_nid, n_record)| {
-                n_record
-                    .http
-                    .as_ref()
-                    .and_then(|h| http_endpoint_to_url(h, &self.log))
+                n_record.http.as_ref().and_then(|h| {
+                    http_endpoint_to_url(h)
+                        .inspect_err(|err| {
+                            warn!(self.log, "failed to convert http endpoint to url {err}")
+                        })
+                        .ok()
+                })
             })
             .collect();
 

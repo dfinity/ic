@@ -17592,6 +17592,8 @@ name = "orchestrator"
 version = "0.9.0"
 dependencies = [
  "async-trait",
+ "axum 0.8.1",
+ "axum-server",
  "backoff",
  "candid",
  "clap 4.5.27",
@@ -17616,6 +17618,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-test-utils-tls",
  "ic-crypto-tls-interfaces",
+ "ic-crypto-tls-interfaces-mocks",
  "ic-dashboard",
  "ic-http-endpoints-async-utils",
  "ic-http-endpoints-metrics",
@@ -17652,6 +17655,8 @@ dependencies = [
  "prometheus",
  "prost 0.13.4",
  "rand 0.8.5",
+ "rcgen",
+ "rustls 0.23.22",
  "serde",
  "serde_cbor",
  "serde_json",
