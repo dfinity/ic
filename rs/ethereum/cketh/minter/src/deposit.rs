@@ -240,12 +240,8 @@ where
         let (from_block, to_block) = range.clone().into_inner();
 
         let request = GetLogsArgs {
-            from_block: Some(BlockTag::Number(Nat256::from_be_bytes(
-                from_block.to_be_bytes(),
-            ))),
-            to_block: Some(BlockTag::Number(Nat256::from_be_bytes(
-                to_block.to_be_bytes(),
-            ))),
+            from_block: Some(BlockTag::Number(Nat256::from(from_block))),
+            to_block: Some(BlockTag::Number(Nat256::from(to_block))),
             addresses: vec![Hex20::from(contract_address.into_bytes())],
             topics: Some(into_evm_topic(topics.clone())),
         };

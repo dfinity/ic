@@ -774,7 +774,7 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
 
 fn into_evm_block_tag(block: BlockSpec) -> EvmBlockTag {
     match block {
-        BlockSpec::Number(n) => EvmBlockTag::Number(Nat256::from_be_bytes(n.to_be_bytes())),
+        BlockSpec::Number(n) => EvmBlockTag::Number(Nat256::from(n)),
         BlockSpec::Tag(BlockTag::Latest) => EvmBlockTag::Latest,
         BlockSpec::Tag(BlockTag::Safe) => EvmBlockTag::Safe,
         BlockSpec::Tag(BlockTag::Finalized) => EvmBlockTag::Finalized,
