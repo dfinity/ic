@@ -3789,47 +3789,47 @@ pub fn test_allowance_listing_sequences<T>(
     };
 
     let mut prev_from = None;
-    for (idx, (from, spender)) in approve_pairs.iter().enumerate() {
+    for (idx, (&from, &spender)) in approve_pairs.iter().enumerate() {
         let mut args = GetAllowancesArgs {
-            from_account: Some(*approve_pair.0),
+            from_account: Some(from),
             prev_spender: None,
             take: None,
         };
 
-        if prev_from != Some(approve_pair.0) {
-            prev_from = Some(approve_pair.0);
+        if prev_from != Some(from) {
+            prev_from = Some(from);
 
             // Listing without specifying the spender.
-            let allowances = list_allowances(&env, canister_id, approve_pair.0.owner, args.clone())
+            let allowances = list_allowances(&env, canister_id, from.owner, args.clone())
                 .expect("failed to list allowances");
-            check_allowances(allowances, idx, approve_pair.0.owner);
+            check_allowances(allowances, idx, from.owner);
 
             // List from a smaller `from_account`. If the smaller `from_account` has a different owner
             // the result list is empty - we don't have any approvals for that owner.
             // If the smaller `from_account` has a different subaccount, the result is the same
             // as listing for current `from_account` - the smaller subaccount does not match any account we generated.
-            args.from_account = Some(prev_account(approve_pair.0));
-            let allowances = list_allowances(&env, canister_id, approve_pair.0.owner, args.clone())
+            args.from_account = Some(prev_account(&from));
+            let allowances = list_allowances(&env, canister_id, from.owner, args.clone())
                 .expect("failed to list allowances");
-            if args.from_account.unwrap().owner == approve_pair.0.owner {
-                check_allowances(allowances, idx, approve_pair.0.owner);
+            if args.from_account.unwrap().owner == from.owner {
+                check_allowances(allowances, idx, from.owner);
             } else {
                 assert_eq!(allowances.len(), 0);
             }
-            args.from_account = Some(*approve_pair.0);
+            args.from_account = Some(from);
         }
 
         // Listing with spender specified, the current `approve_pair` is skipped.
-        args.prev_spender = Some(*approve_pair.1);
-        let allowances = list_allowances(&env, canister_id, approve_pair.0.owner, args.clone())
+        args.prev_spender = Some(spender);
+        let allowances = list_allowances(&env, canister_id, from.owner, args.clone())
             .expect("failed to list allowances");
-        check_allowances(allowances, idx + 1, approve_pair.0.owner);
+        check_allowances(allowances, idx + 1, from.owner);
 
         // Listing with smaller spender, the current `approve_pair` is included.
-        args.prev_spender = Some(prev_account(approve_pair.1));
-        let allowances = list_allowances(&env, canister_id, approve_pair.0.owner, args)
+        args.prev_spender = Some(prev_account(&spender));
+        let allowances = list_allowances(&env, canister_id, from.owner, args)
             .expect("failed to list allowances");
-        check_allowances(allowances, idx, approve_pair.0.owner);
+        check_allowances(allowances, idx, from.owner);
     }
 }
 
