@@ -44,8 +44,8 @@ pub struct ValidatedChunk {
 }
 
 /// The result of validating a chunk before it is inserted into the chunk store:
-/// - the chunk already exists (its hash is returned to be included in the management canister call response);
 /// - the chunk is validated and supposed to be inserted later (after further checks, e.g., subnet available memory);
+/// - the chunk already exists (its hash is returned to be included in the management canister call response);
 /// - a validation error.
 #[derive(Debug)]
 pub enum ChunkValidationResult {
