@@ -1,6 +1,6 @@
 use crate::eth_rpc::{
-    Block, BlockSpec, BlockTag, Data, FixedSizeData, GetLogsParam, Hash, HttpOutcallError,
-    LogEntry, Quantity, SendRawTransactionResult, Topic, HEADER_SIZE_LIMIT,
+    Block, BlockSpec, BlockTag, Data, FixedSizeData, Hash,
+    HttpOutcallError, LogEntry, Quantity, SendRawTransactionResult, HEADER_SIZE_LIMIT,
 };
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;
@@ -10,8 +10,8 @@ use crate::state::State;
 use candid::Nat;
 use evm_rpc_client::{
     Block as EvmBlock, BlockTag as EvmBlockTag, ConsensusStrategy, EthSepoliaService, EvmRpcClient,
-    FeeHistory, FeeHistoryArgs, GetLogsArgs as EvmGetLogsArgs,
-    GetTransactionCountArgs as EvmGetTransactionCountArgs, Hex20, Hex32, IcRuntime,
+    FeeHistory, FeeHistoryArgs, GetLogsArgs,
+    GetTransactionCountArgs as EvmGetTransactionCountArgs, Hex20, IcRuntime,
     LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256, OverrideRpcConfig,
     RpcConfig as EvmRpcConfig, RpcError as EvmRpcError, RpcResult as EvmRpcResult,
     RpcService as EvmRpcService, RpcServices as EvmRpcServices,
@@ -95,19 +95,10 @@ impl EthRpcClient {
 
     pub async fn eth_get_logs(
         &self,
-        params: GetLogsParam,
+        params: GetLogsArgs,
     ) -> Result<Vec<LogEntry>, MultiCallError<Vec<LogEntry>>> {
         self.evm_rpc_client
-            .eth_get_logs(EvmGetLogsArgs {
-                from_block: Some(into_evm_block_tag(params.from_block)),
-                to_block: Some(into_evm_block_tag(params.to_block)),
-                addresses: params
-                    .address
-                    .into_iter()
-                    .map(|a| Hex20::from(a.into_bytes()))
-                    .collect(),
-                topics: Some(into_evm_topic(params.topics)),
-            })
+            .eth_get_logs(params)
             .await
             .reduce()
             .into()
@@ -602,14 +593,6 @@ trait ReduceWithStrategy<S> {
 pub enum Equality {}
 pub enum MinByKey {}
 
-impl ReduceWithStrategy<Equality> for MultiCallResults<TransactionCount> {
-    type Item = TransactionCount;
-
-    fn reduce(self) -> ReducedResult<Self::Item> {
-        self.reduce_with_equality().into()
-    }
-}
-
 impl ReduceWithStrategy<Equality> for EvmMultiRpcResult<Nat256> {
     type Item = TransactionCount;
 
@@ -620,15 +603,6 @@ impl ReduceWithStrategy<Equality> for EvmMultiRpcResult<Nat256> {
             },
             MultiCallResults::reduce_with_equality,
         )
-    }
-}
-
-impl ReduceWithStrategy<MinByKey> for MultiCallResults<TransactionCount> {
-    type Item = TransactionCount;
-
-    fn reduce(self) -> ReducedResult<Self::Item> {
-        self.reduce_with_min_by_key(|transaction_count| *transaction_count)
-            .into()
     }
 }
 
@@ -784,23 +758,9 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
 
 fn into_evm_block_tag(block: BlockSpec) -> EvmBlockTag {
     match block {
-        BlockSpec::Number(n) => EvmBlockTag::Number(Nat256::from_be_bytes(n.to_be_bytes())),
+        BlockSpec::Number(n) => EvmBlockTag::Number(Nat256::from(n)),
         BlockSpec::Tag(BlockTag::Latest) => EvmBlockTag::Latest,
         BlockSpec::Tag(BlockTag::Safe) => EvmBlockTag::Safe,
         BlockSpec::Tag(BlockTag::Finalized) => EvmBlockTag::Finalized,
     }
-}
-
-fn into_evm_topic(topics: Vec<Topic>) -> Vec<Vec<Hex32>> {
-    let into_hex_32 = |data: FixedSizeData| Hex32::from(data.0);
-    let mut result = Vec::with_capacity(topics.len());
-    for topic in topics {
-        result.push(match topic {
-            Topic::Single(single_topic) => vec![into_hex_32(single_topic)],
-            Topic::Multiple(multiple_topic) => {
-                multiple_topic.into_iter().map(into_hex_32).collect()
-            }
-        });
-    }
-    result
 }
