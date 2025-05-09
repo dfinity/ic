@@ -255,7 +255,8 @@ pub fn node_exists_with_ipv4(registry: &Registry, ipv4_addr: &str) -> bool {
 }
 
 /// Similar to `get_key_family` on the `RegistryClient`, return a list of
-/// tuples, (ID, value).
+/// tuples, (ID, value).  This strips the prefix from the key and returns the
+/// value as a decoded struct.
 pub(crate) fn get_key_family<T: prost::Message + Default>(
     registry: &Registry,
     prefix: &str,
