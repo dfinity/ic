@@ -37,11 +37,16 @@ use tokio_util::sync::CancellationToken;
 use tower::BoxError;
 
 use crate::{
-    common::{get_root_threshold_public_key, CONTENT_TYPE_CBOR, MAX_REQUEST_RECEIVE_TIMEOUT},
+    common::{get_root_threshold_public_key, CONTENT_TYPE_CBOR},
     metrics::DelegationManagerMetrics,
 };
 
+/// How often should we fetch a new NNS delegation.
 const DELEGATION_UPDATE_INTERVAL: Duration = Duration::from_secs(10 * 60);
+/// How long to wait before timing out while fetching an NNS delegation.
+const DELEGATION_FETCH_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+/// At most how long should we wait before retrying fetching an NNS delegation, in seconds.
+const DELEGATION_FETCH_MAX_RETRY_BACKOFF_SECONDS: u64 = 15;
 
 /// Spawns a task which periodically fetches the nns delegation.
 pub fn start_nns_delegation_manager(
@@ -177,27 +182,41 @@ async fn load_root_delegation(
             fetching_root_delagation_attempts
         );
 
-        let backoff = Duration::from_secs(rand::thread_rng().gen_range(1..15));
+        let backoff = Duration::from_secs(
+            rand::thread_rng().gen_range(1..DELEGATION_FETCH_MAX_RETRY_BACKOFF_SECONDS),
+        );
 
-        match try_fetch_delegation_from_nns(
-            config,
-            log,
-            rt_handle,
-            &subnet_id,
-            &nns_subnet_id,
-            registry_client,
-            tls_config,
+        match timeout(
+            DELEGATION_FETCH_TIMEOUT,
+            try_fetch_delegation_from_nns(
+                config,
+                log,
+                rt_handle,
+                &subnet_id,
+                &nns_subnet_id,
+                registry_client,
+                tls_config,
+            ),
         )
         .await
         {
-            Ok(delegation) => return Some(delegation),
-            Err(err) => {
+            Ok(Ok(delegation)) => return Some(delegation),
+            Ok(Err(err)) => {
                 warn!(
                     log,
                     "Fetching delegation from nns subnet failed. Retrying again in {} seconds...\
                     Error received: {}",
                     backoff.as_secs(),
                     err
+                );
+
+                metrics.errors.inc();
+            }
+            Err(_timeout) => {
+                warn!(
+                    log,
+                    "Fetching delegation from nns subnet timed out after {DELEGATION_FETCH_TIMEOUT:?}. \
+                    Retrying again in {backoff:?}",
                 );
 
                 metrics.errors.inc();
@@ -330,33 +349,22 @@ async fn try_fetch_delegation_from_nns(
 
     let raw_response_res = request_sender.send_request(nns_request).await?;
 
-    let raw_response = match timeout(
-        MAX_REQUEST_RECEIVE_TIMEOUT,
-        http_body_util::Limited::new(
-            raw_response_res.into_body(),
-            config.max_delegation_certificate_size_bytes as usize,
-        )
-        .collect(),
+    let raw_response = match http_body_util::Limited::new(
+        raw_response_res.into_body(),
+        config.max_delegation_certificate_size_bytes as usize,
     )
+    .collect()
     .await
     {
-        Ok(Ok(c)) => c.to_bytes(),
-        Ok(Err(e)) if e.is::<LengthLimitError>() => {
+        Ok(c) => c.to_bytes(),
+        Err(e) if e.is::<LengthLimitError>() => {
             return Err(format!(
                 "Http body exceeds size limit of {} bytes.",
                 config.max_delegation_certificate_size_bytes
             )
             .into())
         }
-        Ok(Err(e)) => return Err(format!("Failed to read body from connection: {}", e).into()),
-        Err(e) => {
-            return Err(format!(
-                "Timeout of {}s reached while receiving http body: {}",
-                MAX_REQUEST_RECEIVE_TIMEOUT.as_secs(),
-                e
-            )
-            .into())
-        }
+        Err(e) => return Err(format!("Failed to read body from connection: {}", e).into()),
     };
 
     debug!(log, "Response from nns subnet: {:?}", raw_response);
@@ -752,9 +760,9 @@ mod tests {
         }
     }
 
-    const TIMEOUT_WAIT: Duration = Duration::from_secs(3);
+    const TIMEOUT_WAIT: Duration = Duration::from_secs(DELEGATION_FETCH_MAX_RETRY_BACKOFF_SECONDS);
 
-    #[tokio::test(start_paused = true)]
+    #[tokio::test(start_paused = false)]
     async fn manager_should_not_refresh_if_not_enough_time_passed_test() {
         let rt_handle = tokio::runtime::Handle::current();
         let (registry_client, tls_config) =
@@ -776,7 +784,8 @@ mod tests {
         rx.changed().await.unwrap();
         // The subsequent delegations should be fetched only after `DELEGATION_UPDATE_INTERVAL`
         // has elapsed.
-        tokio::time::advance(DELEGATION_UPDATE_INTERVAL / 2).await;
+        tokio::time::pause();
+        tokio::time::advance(DELEGATION_UPDATE_INTERVAL / 2 - TIMEOUT_WAIT).await;
         tokio::time::resume();
 
         assert!(timeout(TIMEOUT_WAIT, rx.changed()).await.is_err());
