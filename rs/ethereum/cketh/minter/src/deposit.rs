@@ -2,7 +2,7 @@ use crate::eth_logs::{
     report_transaction_error, LogParser, LogScraping, ReceivedErc20LogScraping,
     ReceivedEthLogScraping, ReceivedEthOrErc20LogScraping, ReceivedEvent, ReceivedEventError,
 };
-use crate::eth_rpc::{BlockSpec, FixedSizeData, HttpOutcallError, LogEntry, Topic};
+use crate::eth_rpc::{FixedSizeData, HttpOutcallError, LogEntry, Topic};
 use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
