@@ -40,3 +40,10 @@ artifact_bundle(
     name = "bundle",
     inputs = [":prod"],
 )
+
+# Referenced from NNS proposals
+upload_artifacts(
+    name = "upload_update-img",
+    inputs = [ icos_images.update_image ],
+    remote_subdir = "guestos-os/update-img",
+)
