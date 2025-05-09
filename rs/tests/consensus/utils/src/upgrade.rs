@@ -39,18 +39,14 @@ pub fn get_public_update_image_sha_url(git_revision: &str) -> String {
     )
 }
 
-pub async fn fetch_update_file_sha256_with_retry(
-    log: &Logger,
-    version_str: &str,
-    is_test_img: bool,
-) -> String {
+pub async fn fetch_update_file_sha256_with_retry(log: &Logger, version_str: &str) -> String {
     ic_system_test_driver::retry_with_msg_async!(
         format!("fetch update file sha256 of version {}", version_str),
         log,
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
         || async {
-            match fetch_update_file_sha256(version_str, is_test_img).await {
+            match fetch_update_file_sha256(version_str).await {
                 Err(err) => bail!(err),
                 Ok(sha) => Ok(sha),
             }
@@ -60,10 +56,7 @@ pub async fn fetch_update_file_sha256_with_retry(
     .expect("Failed to fetch sha256 file.")
 }
 
-pub async fn fetch_update_file_sha256(
-    version_str: &str,
-    is_test_img: bool,
-) -> Result<String, String> {
+pub async fn fetch_update_file_sha256(version_str: &str) -> Result<String, String> {
     let sha_url = get_public_update_image_sha_url(version_str);
     let tmp_dir = tempfile::tempdir().unwrap().into_path();
     let mut tmp_file = tmp_dir.clone();
@@ -78,11 +71,7 @@ pub async fn fetch_update_file_sha256(
         .map_err(|err| format!("Something went wrong reading the file: {:?}", err))?;
     for line in contents.lines() {
         let words: Vec<&str> = line.split(char::is_whitespace).collect();
-        let suffix = if is_test_img {
-            "-img-test.tar.zst"
-        } else {
-            "-img.tar.zst"
-        };
+        let suffix = "-img.tar.zst";
         if words.len() == 2 && words[1].ends_with(suffix) {
             return Ok(words[0].to_string());
         }
@@ -284,7 +273,7 @@ pub async fn bless_public_replica_version(
     let upgrade_url = get_public_update_image_url(target_version);
     info!(logger, "Upgrade URL: {}", upgrade_url);
 
-    let sha256 = fetch_update_file_sha256_with_retry(logger, target_version, false).await;
+    let sha256 = fetch_update_file_sha256_with_retry(logger, target_version).await;
 
     bless_replica_version_with_sha(
         nns_node,
