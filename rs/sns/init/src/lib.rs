@@ -610,7 +610,8 @@ impl SnsInitPayload {
                     // 10 Trillion cycles
                     cycles_for_archive_creation: Some(10_000_000_000_000),
                     max_transactions_per_response: None,
-                });
+                })
+                .with_index_principal(Principal::from(sns_canister_ids.index));
 
         if let Some(token_logo) = &self.token_logo {
             payload_builder = payload_builder.with_metadata_entry(
