@@ -140,7 +140,7 @@ impl ConsentMessageBuilder {
                 Some(_) => account
                     .to_string()
                     .split('.')
-                    .last()
+                    .next_back()
                     .ok_or(Icrc21Error::GenericError {
                         error_code: Nat::from(500u64),
                         description: "Subaccount has an unexpected format.".to_owned(),

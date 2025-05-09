@@ -1,5 +1,3 @@
-#[rustfmt::skip]
-
 use anyhow::Result;
 use std::time::Duration;
 

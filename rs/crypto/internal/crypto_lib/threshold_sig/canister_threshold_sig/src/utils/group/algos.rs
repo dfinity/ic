@@ -216,7 +216,7 @@ macro_rules! declare_sswu_p_3_mod_4_map_to_curve_impl {
                 const P_BITS: usize = $fe::BYTES * 8;
                 const SECURITY_LEVEL: usize = P_BITS / 2;
 
-                const FIELD_BYTES: usize = (P_BITS + SECURITY_LEVEL + 7) / 8; // "L" in spec
+                const FIELD_BYTES: usize = (P_BITS + SECURITY_LEVEL).div_ceil(8); // "L" in spec
                 const XMD_BYTES: usize = 2 * FIELD_BYTES;
                 const WIDE_BYTES_OFFSET: usize = 2 * $fe::BYTES - FIELD_BYTES;
 

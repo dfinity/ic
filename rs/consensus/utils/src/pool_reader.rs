@@ -790,7 +790,7 @@ pub mod test {
                 .collect::<Vec<_>>();
             // We expect to see `rounds * ((f+1)/2)` unvalidated block proposals sorted by
             // height in ascending order.
-            assert_eq!(artifacts.len(), rounds * ((f as usize + 1) / 2));
+            assert_eq!(artifacts.len(), rounds * (f as usize).div_ceil(2));
             for i in 0..artifacts.len() - 1 {
                 // Heights are ascending, but NOT unique.
                 assert!(artifacts[i].content.height() <= artifacts[i + 1].content.height());

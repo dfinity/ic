@@ -27,7 +27,7 @@ pub const NUM_ZK_REPETITIONS: usize = 32;
 pub const CHALLENGE_BITS: usize = SECURITY_LEVEL.div_ceil(NUM_ZK_REPETITIONS);
 
 // The number of bytes needed to represent a challenge (which must fit in a usize)
-pub const CHALLENGE_BYTES: usize = (CHALLENGE_BITS + 7) / 8;
+pub const CHALLENGE_BYTES: usize = CHALLENGE_BITS.div_ceil(8);
 const _: () = assert!(CHALLENGE_BYTES < std::mem::size_of::<usize>());
 
 // A bitmask specifyng the size of a challenge

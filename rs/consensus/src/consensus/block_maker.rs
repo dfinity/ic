@@ -1056,9 +1056,9 @@ mod tests {
         #[case] expected_block_maker_delay: Duration,
     ) {
         // there should be 11 non-rank-0 blocks in the past 30 heights
-        let initial = std::iter::repeat(Rank(1)).take(5);
-        let mid = std::iter::repeat(Rank(0)).take(19);
-        let terminal = std::iter::repeat(Rank(2)).take(8);
+        let initial = std::iter::repeat_n(Rank(1), 5);
+        let mid = std::iter::repeat_n(Rank(0), 19);
+        let terminal = std::iter::repeat_n(Rank(2), 8);
 
         let ranks: Vec<Rank> = initial.chain(mid).chain(terminal).collect();
 
@@ -1078,9 +1078,9 @@ mod tests {
         #[case] expected_block_maker_delay: Duration,
     ) {
         // there should be 10 non-rank-0 blocks in the past 30 heights
-        let initial = std::iter::repeat(Rank(1)).take(5);
-        let mid = std::iter::repeat(Rank(0)).take(20);
-        let terminal = std::iter::repeat(Rank(2)).take(8);
+        let initial = std::iter::repeat_n(Rank(1), 5);
+        let mid = std::iter::repeat_n(Rank(0), 20);
+        let terminal = std::iter::repeat_n(Rank(2), 8);
 
         let ranks: Vec<Rank> = initial.chain(mid).chain(terminal).collect();
 
@@ -1092,7 +1092,7 @@ mod tests {
 
     #[test]
     fn get_block_maker_delay_short_chain_many_non_rank_0_blocks_test() {
-        let previous_ranks = std::iter::repeat(Rank(1)).take(11).collect::<Vec<_>>();
+        let previous_ranks = std::iter::repeat_n(Rank(1), 11).collect::<Vec<_>>();
         assert_eq!(
             block_maker_delay_test_case(
                 &previous_ranks,

@@ -339,7 +339,7 @@ fn counter_canister_call_test() {
         (
             IngressStatus::Known { .. },
             IngressStatus::Known { .. },
-            IngressStatus::Unknown { .. }
+            IngressStatus::Unknown
         )
     ));
 

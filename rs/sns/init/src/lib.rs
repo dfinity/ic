@@ -914,6 +914,7 @@ impl SnsInitPayload {
         self.join_validation_results(&validation_fns)
     }
 
+    #[allow(clippy::manual_ok_err)]
     fn join_validation_results(
         &self,
         validation_fns: &[Result<(), String>],
@@ -1512,17 +1513,11 @@ impl SnsInitPayload {
     /// - `max_direct_participation_icp_e8s` - Maximum ICP amount that the swap can obtain.
     /// - `min_participant_icp_e8s`          - Required ICP participation amount.
     /// - `max_participant_icp_e8s`          - Maximum ICP amount from one participant.
-    /// - `min_participants`                 - Required number of *direct* participants for the swap
-    ///                                        to succeed. This does not restrict the number of
-    ///                                        *Neurons' Fund* participants.
-    /// - `initial_token_distribution.swap_distribution.initial_swap_amount_e8s`
-    ///                                      - How many SNS tokens will be distributed amoung all
-    ///                                        the swap participants if the swap succeeds.
-    /// - `neuron_basket_construction_parameters`
-    ///                                      - How many SNS neurons will be created per participant.
+    /// - `min_participants`                 - Required number of *direct* participants for the swap to succeed. This does not restrict the number of *Neurons' Fund* participants.
+    /// - `initial_token_distribution.swap_distribution.initial_swap_amount_e8s` - How many SNS tokens will be distributed amoung all the swap participants if the swap succeeds.
+    /// - `neuron_basket_construction_parameters` - How many SNS neurons will be created per participant.
     /// - `neuron_minimum_stake_e8s`         - Determines the smallest SNS neuron size.
-    /// - `sns_transaction_fee_e8s`          - SNS ledger transaction fee, in particular, charged
-    ///                                        for SNS neuron creation at swap finalization.
+    /// - `sns_transaction_fee_e8s`          - SNS ledger transaction fee, in particular, charged for SNS neuron creation at swap finalization.
     fn validate_participation_constraints(&self) -> Result<(), String> {
         // (1)
         let min_direct_participation_icp_e8s = self
