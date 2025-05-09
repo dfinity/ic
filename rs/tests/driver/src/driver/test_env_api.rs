@@ -1754,7 +1754,10 @@ impl HasPublicApiUrl for IcNodeSnapshot {
 
         // API boundary nodes listen on port 443, while replicas listen on port 8080
         if self.is_api_boundary_node() {
-            Url::parse(&format!("https://[{}]", self.get_ip_addr())).expect("Failed to parse URL")
+            match self.get_ip_addr() {
+                IpAddr::V4(ipv4) => Url::parse(&format!("https://{}", ipv4)).unwrap(),
+                IpAddr::V6(ipv6) => Url::parse(&format!("https://[{}]", ipv6)).unwrap(),
+            }
         } else {
             IcNodeSnapshot::http_endpoint_to_url(&node_record.http.expect("Node doesn't have URL"))
         }
