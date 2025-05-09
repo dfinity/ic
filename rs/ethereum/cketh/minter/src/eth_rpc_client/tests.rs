@@ -605,8 +605,8 @@ mod evm_rpc_conversion {
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
     use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
     use crate::eth_rpc_client::{
-        Block, HttpOutcallError, LogEntry, MultiCallError,
-        MultiCallResults, Reduce, SingleCallError,
+        Block, HttpOutcallError, LogEntry, MultiCallError, MultiCallResults, Reduce,
+        SingleCallError,
     };
     use crate::numeric::{BlockNumber, Wei};
     use crate::test_fixtures::arb::{
@@ -766,20 +766,6 @@ mod evm_rpc_conversion {
         ) {
             let (minter_block, evm_rpc_block) = blocks;
             test_consistency_between_minter_and_evm_rpc(minter_block, evm_rpc_block, first_error, second_error, third_error)?;
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn should_have_consistent_log_entries_between_minter_and_evm_rpc
-        (
-            minter_logs in vec(arb_log_entry(), 1..=100),
-            first_error in arb_evm_rpc_error(),
-            second_error in arb_evm_rpc_error(),
-            third_error in arb_evm_rpc_error(),
-        ) {
-            let evm_rpc_logs: Vec<_> = minter_logs.clone().into_iter().map(evm_rpc_log_entry).collect();
-            test_consistency_between_minter_and_evm_rpc(minter_logs, evm_rpc_logs, first_error, second_error, third_error)?;
         }
     }
 

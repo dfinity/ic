@@ -1,6 +1,6 @@
 use crate::eth_rpc::{
-    Block, BlockSpec, BlockTag, Data, FixedSizeData, Hash,
-    HttpOutcallError, LogEntry, Quantity, SendRawTransactionResult, HEADER_SIZE_LIMIT,
+    Block, BlockSpec, BlockTag, Data, FixedSizeData, Hash, HttpOutcallError, LogEntry, Quantity,
+    SendRawTransactionResult, HEADER_SIZE_LIMIT,
 };
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;
@@ -10,11 +10,10 @@ use crate::state::State;
 use candid::Nat;
 use evm_rpc_client::{
     Block as EvmBlock, BlockTag as EvmBlockTag, ConsensusStrategy, EthSepoliaService, EvmRpcClient,
-    FeeHistory, FeeHistoryArgs, GetLogsArgs,
-    GetTransactionCountArgs as EvmGetTransactionCountArgs, Hex20, IcRuntime,
-    LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256, OverrideRpcConfig,
-    RpcConfig as EvmRpcConfig, RpcError as EvmRpcError, RpcResult as EvmRpcResult,
-    RpcService as EvmRpcService, RpcServices as EvmRpcServices,
+    FeeHistory, FeeHistoryArgs, GetLogsArgs, GetTransactionCountArgs as EvmGetTransactionCountArgs,
+    Hex20, IcRuntime, LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256,
+    OverrideRpcConfig, RpcConfig as EvmRpcConfig, RpcError as EvmRpcError,
+    RpcResult as EvmRpcResult, RpcService as EvmRpcService, RpcServices as EvmRpcServices,
     SendRawTransactionStatus as EvmSendRawTransactionStatus,
     TransactionReceipt as EvmTransactionReceipt,
 };
@@ -493,14 +492,6 @@ impl Reduce for EvmMultiRpcResult<Vec<EvmLogEntry>> {
 
         ReducedResult::from_internal(self)
             .map_reduce(&map_logs, MultiCallResults::reduce_with_equality)
-    }
-}
-
-impl Reduce for MultiCallResults<Vec<LogEntry>> {
-    type Item = Vec<LogEntry>;
-
-    fn reduce(self) -> ReducedResult<Self::Item> {
-        self.reduce_with_equality().into()
     }
 }
 
