@@ -49,9 +49,10 @@ use ic_registry_local_store::{
 use ic_registry_nns_data_provider::registry::registry_deltas_to_registry_transport_records;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{
-    dechunkify_delta, deserialize_get_changes_since_response,
-    deserialize_get_latest_version_response, deserialize_get_value_response,
-    serialize_get_changes_since_request, serialize_get_value_request, GetChunk,
+    dechunkify_delta, dechunkify_get_value_response_content,
+    deserialize_get_changes_since_response, deserialize_get_latest_version_response,
+    deserialize_get_value_response, serialize_get_changes_since_request,
+    serialize_get_value_request, GetChunk,
 };
 use ic_state_manager::StateManagerImpl;
 use ic_types::{
@@ -876,6 +877,7 @@ impl Player {
         &self,
         ingress_expiry: Time,
     ) -> Result<BlessedReplicaVersions, String> {
+        // Construct request.
         let key = make_blessed_replica_versions_key();
         let query = Query {
             source: QuerySource::User {
@@ -888,30 +890,39 @@ impl Player {
             method_payload: serialize_get_value_request(key.as_bytes().to_vec(), None)
                 .map_err(|err| format!("{}", err))?,
         };
+
         self.certify_state_with_dummy_certification();
-        match self
+
+        // Call get_value.
+        let reply: Vec<u8> = match self
             .runtime
             .block_on(self.query_handler.clone().oneshot((query, None)))
             .unwrap()
         {
-            Ok((Ok(wasm_result), _)) => match wasm_result {
-                WasmResult::Reply(v) => {
-                    let bytes = deserialize_get_value_response(v)
-                        .map_err(|err| format!("{}", err))?
-                        .0;
-                    let record =
-                        deserialize_registry_value::<BlessedReplicaVersions>(Ok(Some(bytes)))
-                            .map_err(|err| format!("{}", err))?
-                            .expect("BlessedReplicaVersions does not exist");
-                    Ok(record)
-                }
-                WasmResult::Reject(e) => Err(format!("Query rejected: {}", e)),
-            },
-            Ok((Err(err), _)) => Err(format!("Query failed: {:?}", err)),
-            Err(QueryExecutionError::CertifiedStateUnavailable) => {
-                panic!("Certified state unavailable for query call.")
+            Ok((Ok(WasmResult::Reply(reply)), _)) => reply,
+            garbage => {
+                return Err(format!(
+                    "Did not get reply from Registry get_value call: {:?}. key={}",
+                    garbage, key,
+                ));
             }
-        }
+        };
+
+        // Parse (and possibly dechunkify) reply.
+        let record: Vec<u8> = self
+            .runtime
+            .block_on(deserialize_and_dechunkify_get_value_response(
+                reply,
+                &self.query_handler,
+                &key,
+            ))
+            .map_err(|err| format!("{:?}", err))?;
+        let record = deserialize_registry_value::<BlessedReplicaVersions>(Ok(Some(record)))
+            .map_err(|err| format!("{}", err))?
+            .expect("BlessedReplicaVersions does not exist");
+
+        // Done!
+        Ok(record)
     }
 
     /// Return the latest registry version by querying the registry canister.
@@ -973,6 +984,7 @@ impl Player {
 
     /// Return the SubnetRecord of this subnet at the latest registry version.
     pub fn get_subnet_record(&self, ingress_expiry: Time) -> Result<SubnetRecord, String> {
+        // Construct request.
         let subnet_record_key = make_subnet_record_key(self.subnet_id);
         let query = Query {
             source: QuerySource::User {
@@ -988,29 +1000,39 @@ impl Player {
             )
             .map_err(|err| format!("{}", err))?,
         };
+
         self.certify_state_with_dummy_certification();
-        match self
+
+        // Call get_value.
+        let reply: Vec<u8> = match self
             .runtime
             .block_on(self.query_handler.clone().oneshot((query, None)))
             .unwrap()
         {
-            Ok((Ok(wasm_result), _)) => match wasm_result {
-                WasmResult::Reply(v) => {
-                    let bytes = deserialize_get_value_response(v)
-                        .map_err(|err| format!("{}", err))?
-                        .0;
-                    let record = deserialize_registry_value::<SubnetRecord>(Ok(Some(bytes)))
-                        .map_err(|err| format!("{}", err))?
-                        .expect("SubnetRecord does not exist");
-                    Ok(record)
-                }
-                WasmResult::Reject(e) => Err(format!("Query rejected: {}", e)),
-            },
-            Ok((Err(err), _)) => Err(format!("Query failed: {:?}", err)),
-            Err(QueryExecutionError::CertifiedStateUnavailable) => {
-                panic!("Certified state unavailable for query call.")
+            Ok((Ok(WasmResult::Reply(reply)), _)) => reply,
+            garbage => {
+                return Err(format!(
+                    "Did not get reply from Registry get_value call: {:?}. key={}",
+                    garbage, subnet_record_key,
+                ));
             }
-        }
+        };
+
+        // Parse (and possibly dechunkify) reply.
+        let record: Vec<u8> = self
+            .runtime
+            .block_on(deserialize_and_dechunkify_get_value_response(
+                reply,
+                &self.query_handler,
+                &subnet_record_key,
+            ))
+            .map_err(|err| format!("{:?}", err))?;
+        let record = deserialize_registry_value::<SubnetRecord>(Ok(Some(record)))
+            .map_err(|err| format!("{}", err))?
+            .expect("SubnetRecord does not exist");
+
+        // Done!
+        Ok(record)
     }
 
     /// Restores the execution state starting from the given height.
@@ -1308,7 +1330,6 @@ fn get_changes_since(
                 for delta in high_capacity_deltas {
                     let get_chunk = GetChunkImpl {
                         perform_query,
-                        ingress_expiry,
                     };
 
                     let delta = runtime
@@ -1333,7 +1354,6 @@ fn get_changes_since(
 
 struct GetChunkImpl<'a, PerformQueryImpl: PerformQuery + Sync> {
     perform_query: &'a PerformQueryImpl,
-    ingress_expiry: Time,
 }
 
 #[async_trait]
@@ -1355,7 +1375,12 @@ impl<PerformQueryImpl: PerformQuery + Sync> GetChunk for GetChunkImpl<'_, Perfor
         let request = Query {
             source: QuerySource::User {
                 user_id: UserId::from(PrincipalId::new_anonymous()),
-                ingress_expiry: self.ingress_expiry.as_nanos_since_unix_epoch(),
+
+                // DO NOT MERGE - Set this to 5 minutes into the future. The
+                // brilliant thing about get_chunk is that it is immune from
+                // reply attacks, since it uses content addressing.
+                ingress_expiry: u64::MAX,
+
                 nonce: None,
             },
             receiver: REGISTRY_CANISTER_ID,
@@ -1405,6 +1430,31 @@ impl<PerformQueryImpl: PerformQuery + Sync> GetChunk for GetChunkImpl<'_, Perfor
         // Nice reply!
         Ok(content)
     }
+}
+
+async fn deserialize_and_dechunkify_get_value_response(
+    reply: Vec<u8>,
+    query_handler: &QueryExecutionService,
+    key: &str,
+) -> Result<Vec<u8>, ic_registry_transport::Error> {
+    let breadcrumbs = || format!("key={}", key);
+
+    // Deserialize reply.
+    let reply = deserialize_get_value_response(reply)?;
+
+    // Unpack response.
+    let Some(content) = reply.content else {
+        return Err(ic_registry_transport::Error::MalformedMessage(format!(
+            "Got a reply from Registry to get_value call, and was able to \
+             deserialize it, but no content field was populated. {}",
+            breadcrumbs(),
+        )));
+    };
+
+    // Dechunkify.
+    let query_handler = Arc::new(Mutex::new(query_handler.clone()));
+    let get_chunk = GetChunkImpl { perform_query: &query_handler };
+    dechunkify_get_value_response_content(content, &get_chunk).await
 }
 
 /// Return the set of signers that created multiple valid certification shares for the same height
