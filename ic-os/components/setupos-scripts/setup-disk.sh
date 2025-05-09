@@ -37,14 +37,14 @@ function purge_partitions() {
     for drive in "${large_drives[@]}"; do
         echo "Wiping partitions on drive: /dev/${drive}."
 
-        # First remove any LVM metadata
+        # Remove any LVM metadata
         pvremove --force "/dev/${drive}"* 2>/dev/null || true
         vgremove --force hostlvm 2>/dev/null || true
 
         # Remove any device mappings
         dmsetup remove_all 2>/dev/null || true
 
-        # Now wipe the partition table and filesystem signatures
+        # Wipe the partition table and filesystem signatures
         wipefs --all --force "/dev/${drive}"*
         if [ "${?}" -ne 0 ]; then
             log_and_halt_installation_on_error 1 "Failed to wipe partitions on /dev/${drive}"
