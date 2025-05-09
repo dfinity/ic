@@ -2,6 +2,8 @@
 
 set -e
 
+# Perform a manual GuestOS upgrade from the HostOS
+
 # Helper function to extract a value from /proc/cmdline
 get_cmdline_var() {
     local var="$1"
@@ -96,17 +98,15 @@ function guestos_upgrade_cleanup() {
 }
 
 main() {
-    echo "=== Recovery Updater Started ==="
+    echo "Starting GuestOS recovery updater"
 
     URL="$(get_cmdline_var url)"
     TARGET_HASH="$(get_cmdline_var hash)"
-    echo "URL: $URL"
-    echo "Target Hash: $TARGET_HASH"
-    echo "==============================="
+    echo "Download url: $URL"
+    echo "Download hash: $TARGET_HASH"
 
     TMPDIR=$(mktemp -d)
     trap 'rm -rf "$TMPDIR"' EXIT
-    echo "Created temporary directory: $TMPDIR"
 
     prepare_guestos_upgrade
     download_and_verify_upgrade "$URL" "$TARGET_HASH" "$TMPDIR"
@@ -116,7 +116,7 @@ main() {
     guestos_upgrade_cleanup
     echo "Recovery updater completed successfully"
 
-    echo "Rebooting guestos..."
+    echo "Rebooting GuestOS into new version..."
     systemctl restart guestos
 }
 
