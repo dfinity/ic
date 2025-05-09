@@ -4,28 +4,41 @@ set -e
 
 # Perform a manual GuestOS upgrade from the HostOS
 
+# Constants for partitions and paths
+GRUB_PARTITION_NUM=2
+BOOT_PARTITION_A=4
+ROOT_PARTITION_A=5
+VAR_PARTITION_A=6
+BOOT_PARTITION_B=7
+ROOT_PARTITION_B=8
+VAR_PARTITION_B=9
+
+GUESTOS_DEVICE="/dev/hostlvm/guestos"
+MANAGEBOOT_SCRIPT="/opt/ic/bin/manageboot_recovery.sh"
+
 # Helper function to extract a value from /proc/cmdline
 get_cmdline_var() {
     local var="$1"
     grep -oP "${var}=[^ ]*" /proc/cmdline | head -n1 | cut -d= -f2-
 }
 
-# Get partition targets based on boot alternative
+# Get partition targets based on boot alternative (help: should it be the other system?)
 get_partition_targets() {
     local lodev="$1"
     local boot_alternative="$2"
 
+    # boot_alternative is the system that is *currently running*
     if [ "$boot_alternative" = "A" ]; then
-        echo "${lodev}p7 ${lodev}p8 ${lodev}p9"
+        echo "${lodev}p${BOOT_PARTITION_B} ${lodev}p${ROOT_PARTITION_B} ${lodev}p${VAR_PARTITION_B}"
     else
-        echo "${lodev}p4 ${lodev}p5 ${lodev}p6"
+        echo "${lodev}p${BOOT_PARTITION_A} ${lodev}p${ROOT_PARTITION_A} ${lodev}p${VAR_PARTITION_A}"
     fi
 }
 
 # Upgrade and boot into the alternative boot partition (help: reverse this?)
 function prepare_guestos_upgrade() {
     echo "Starting guestos upgrade preparation"
-    lodev="$(losetup -Pf --show /dev/hostlvm/guestos)"
+    lodev="$(losetup -Pf --show ${GUESTOS_DEVICE})"
     echo "Set up loop device: $lodev"
 
     workdir="$(mktemp -d)"
@@ -35,7 +48,7 @@ function prepare_guestos_upgrade() {
     mkdir "${grubdir}" "${bootdir}" "${rootdir}"
     echo "Created temporary directories in $workdir"
 
-    mount -o rw,sync "${lodev}p2" "${grubdir}"
+    mount -o rw,sync "${lodev}p${GRUB_PARTITION_NUM}" "${grubdir}"
     echo "Mounted grub partition at ${grubdir}"
 
     # Get the boot alternative
@@ -83,7 +96,7 @@ function extract_upgrade() {
 function install_upgrade() {
     local tmpdir="$1"
     echo "Installing upgrade using manageboot..."
-    /opt/ic/bin/manageboot_recovery.sh upgrade-install \
+    ${MANAGEBOOT_SCRIPT} upgrade-install \
         "${grubdir}/grubenv" \
         "${boot_target}" \
         "${root_target}" \
