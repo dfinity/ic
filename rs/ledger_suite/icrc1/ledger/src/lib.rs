@@ -1216,27 +1216,28 @@ pub fn get_allowances(
         },
     };
     ALLOWANCES_MEMORY.with_borrow(|allowances| {
-        for allowance in allowances.range(start_account_spender.clone()..) {
-            if spender.is_some() && allowance.0 == start_account_spender {
+        for (allowance_spender, storable_allowance) in
+            allowances.range(start_account_spender.clone()..)
+        {
+            if spender.is_some() && allowance_spender == start_account_spender {
                 continue;
             }
             if result.len() >= max_results as usize {
                 break;
             }
-            if allowance.0.account.owner != from.owner {
+            if allowance_spender.account.owner != from.owner {
                 break;
             }
-            if let Some(expires_at) = allowance.1.expires_at {
+            if let Some(expires_at) = storable_allowance.expires_at {
                 if expires_at.as_nanos_since_unix_epoch() <= now {
                     continue;
                 }
             }
             result.push(Allowance103 {
-                from_account: allowance.0.account,
-                to_spender: allowance.0.spender,
-                allowance: allowance.1.amount.into(),
-                expires_at: allowance
-                    .1
+                from_account: allowance_spender.account,
+                to_spender: allowance_spender.spender,
+                allowance: Nat::from(storable_allowance.amount),
+                expires_at: storable_allowance
                     .expires_at
                     .map(|t| t.as_nanos_since_unix_epoch()),
             });
