@@ -1,6 +1,6 @@
 use crate::eth_rpc::{
     Block, BlockSpec, BlockTag, Data, FeeHistory, FeeHistoryParams, FixedSizeData, GetLogsParam,
-    Hash, HttpOutcallError, LogEntry, Quantity, SendRawTransactionResult, Topic, HEADER_SIZE_LIMIT,
+    Hash, HttpOutcallError, LogEntry, Quantity, Topic, HEADER_SIZE_LIMIT,
 };
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;
@@ -14,8 +14,7 @@ use evm_rpc_client::{
     Hex32, IcRuntime, LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256,
     OverrideRpcConfig, RpcConfig as EvmRpcConfig, RpcError as EvmRpcError,
     RpcResult as EvmRpcResult, RpcService as EvmRpcService, RpcServices as EvmRpcServices,
-    SendRawTransactionStatus as EvmSendRawTransactionStatus,
-    TransactionReceipt as EvmTransactionReceipt,
+    SendRawTransactionStatus, TransactionReceipt as EvmTransactionReceipt,
 };
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
@@ -152,7 +151,7 @@ impl EthRpcClient {
     pub async fn eth_send_raw_transaction(
         &self,
         raw_signed_transaction_hex: String,
-    ) -> Result<SendRawTransactionResult, MultiCallError<SendRawTransactionResult>> {
+    ) -> Result<SendRawTransactionStatus, MultiCallError<SendRawTransactionStatus>> {
         self.evm_rpc_client
             .eth_send_raw_transaction(raw_signed_transaction_hex)
             .await
@@ -593,28 +592,14 @@ impl Reduce for MultiCallResults<Option<TransactionReceipt>> {
     }
 }
 
-impl Reduce for EvmMultiRpcResult<EvmSendRawTransactionStatus> {
-    type Item = SendRawTransactionResult;
+impl Reduce for EvmMultiRpcResult<SendRawTransactionStatus> {
+    type Item = SendRawTransactionStatus;
 
     fn reduce(self) -> ReducedResult<Self::Item> {
         ReducedResult::from_internal(self).map_reduce(
-            &|tx_status| {
-                Ok::<SendRawTransactionResult, Infallible>(SendRawTransactionResult::from(
-                    tx_status,
-                ))
-            },
+            &|tx_status| Ok::<SendRawTransactionStatus, Infallible>(tx_status),
             |results| results.at_least_one_ok().map(|(_provider, result)| result),
         )
-    }
-}
-
-impl Reduce for MultiCallResults<SendRawTransactionResult> {
-    type Item = SendRawTransactionResult;
-
-    fn reduce(self) -> ReducedResult<Self::Item> {
-        self.at_least_one_ok()
-            .map(|(_provider, result)| result)
-            .into()
     }
 }
 
