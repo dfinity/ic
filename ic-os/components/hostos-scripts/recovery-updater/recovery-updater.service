@@ -2,6 +2,7 @@
 Description=Recovery Updater Service
 ConditionKernelCommandLine=recovery=1
 After=network-online.target
+Requires=network-online.target
 
 [Service]
 Type=oneshot
