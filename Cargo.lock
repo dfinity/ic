@@ -11089,6 +11089,7 @@ dependencies = [
  "ic-base-types",
  "ic-cdk 0.17.2",
  "ic-crypto-sha2",
+ "ic-nervous-system-canisters",
  "ic-nervous-system-common",
  "ic-nns-common-protobuf-generator",
  "ic-nns-constants",
