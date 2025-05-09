@@ -47,7 +47,13 @@ bazel_args=( "$@" )
 bazel_command="$1"
 
 # Periodically print the available space in /tmp.
-(while true; do df -Th /tmp >&2; sleep 5; done)&
+(
+    while true; do
+        df -Th /tmp \
+          | awk 'NR==1 {next} {print "/tmp: Filesystem: "$1", Type: "$2", Size: "$3", Used: "$4", Avail: "$5", Use%: "$6", Mounted on: "$7}';
+        sleep 5;
+    done
+)&
 
 # Setup zig-cache
 mkdir -p /tmp/zig-cache
@@ -137,7 +143,7 @@ startup_options=(
 log bazel "${startup_options[@]}" "${bazel_args[@]}"
 
 if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
-    bazel_bes "${startup_options[@]}" "${bazel_args[@]}"
+    (bazel_bes "${startup_options[@]}" "${bazel_args[@]}")
 else
-    bazel "${startup_options[@]}" "${bazel_args[@]}"
+    (bazel "${startup_options[@]}" "${bazel_args[@]}")
 fi
