@@ -265,8 +265,7 @@ impl std::str::FromStr for BlockSpec {
 }
 
 /// A topic is either a 32 Bytes DATA, or an array of 32 Bytes DATA with "or" options.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(untagged)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Topic {
     Single(FixedSizeData),
     Multiple(Vec<FixedSizeData>),
