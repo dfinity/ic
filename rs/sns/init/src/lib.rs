@@ -1674,8 +1674,7 @@ impl SnsInitPayload {
         // (9)
         if min_participant_icp_e8s < MIN_PARTICIPANT_ICP_LOWER_BOUND_E8S {
             return Err(format!(
-                "Error: min_participant_icp_e8s ({}) is too small. It must be at least
-                as large as {}",
+                "Error: min_participant_icp_e8s ({}) is too small. It must be at least as large as {}",
                 min_participant_icp_e8s, MIN_PARTICIPANT_ICP_LOWER_BOUND_E8S
             ));
         }
@@ -1961,7 +1960,7 @@ mod test {
         NeuronsFundParticipationConstraintsValidationError, RestrictedCountriesValidationError,
         SnsCanisterIds, SnsInitPayload, ICRC1_TOKEN_LOGO_KEY, MAX_CONFIRMATION_TEXT_LENGTH,
         MAX_DAPP_CANISTERS_COUNT, MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP,
-        MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT,
+        MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT, MIN_PARTICIPANT_ICP_LOWER_BOUND_E8S,
     };
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_icrc1_ledger::LedgerArgument;
@@ -3494,7 +3493,7 @@ initial_token_distribution: !FractionalDeveloperVotingPower
                 .validate_participation_constraints()
                 .unwrap_err();
             {
-                let expected_error_fragment_a = "min_participant_icp_e8s=1 is too small.";
+                let expected_error_fragment_a = "min_participant_icp_e8s (1) is too small.";
                 assert!(
                     error.contains(expected_error_fragment_a),
                     "Unexpected error: `{}`\nExpected `{}`",
@@ -3514,5 +3513,43 @@ initial_token_distribution: !FractionalDeveloperVotingPower
                 );
             }
         }
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Error: min_participant_icp_e8s (999999) is too small. It must be at least as large as 1000000"
+    )]
+    fn test_validate_participation_constraints_panics() {
+        // Common part for the happy and failing scenarios.
+        let fdvp = FractionalDVP {
+            swap_distribution: Some(SwapDistribution {
+                initial_swap_amount_e8s: MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP,
+                // Not used in this test.
+                total_e8s: 0,
+            }),
+            // Not used in this test.
+            developer_distribution: None,
+            treasury_distribution: None,
+        };
+        let sns_init_payload = SnsInitPayload {
+            max_direct_participation_icp_e8s: Some(MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP),
+            min_direct_participation_icp_e8s: Some(1),
+            max_participant_icp_e8s: Some(MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP),
+            min_participant_icp_e8s: Some(MIN_PARTICIPANT_ICP_LOWER_BOUND_E8S - 1),
+            min_participants: Some(40_000),
+            initial_token_distribution: Some(FractionalDeveloperVotingPower(fdvp)),
+            neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+                count: 2,
+                // Not used in this test.
+                dissolve_delay_interval_seconds: 0,
+            }),
+            neuron_minimum_stake_e8s: Some(1),
+            transaction_fee_e8s: Some(0),
+            ..SnsInitPayload::with_valid_values_for_testing_pre_execution()
+        };
+
+        sns_init_payload
+            .validate_participation_constraints()
+            .unwrap();
     }
 }
