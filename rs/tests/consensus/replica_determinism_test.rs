@@ -27,7 +27,7 @@ use ic_system_test_driver::{
 use ic_types::{malicious_behaviour::MaliciousBehaviour, Height};
 use ic_universal_canister::wasm;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use slog::info;
 use std::time::Duration;
 
@@ -79,7 +79,7 @@ fn test(env: TestEnv) {
                     match malicious_node.try_build_default_agent_async().await {
                         Ok(agent) => Ok(agent),
                         Err(e) => {
-                            panic!("Failed to create agent: {}", e);
+                            bail!("Failed to create agent: {}", e)
                         }
                     }
                 }
