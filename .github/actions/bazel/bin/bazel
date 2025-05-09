@@ -46,6 +46,12 @@ bazel_args=( "$@" )
 # stored here again for easy access
 bazel_command="$1"
 
+# Find out how /tmp is mounted
+log "/tmp is mounted as:"
+findmnt /tmp >&2
+# Periodically print the available space in /tmp.
+(while true; do df -h /tmp >&2; sleep 5; done)&
+
 # Setup zig-cache
 mkdir -p /tmp/zig-cache
 
