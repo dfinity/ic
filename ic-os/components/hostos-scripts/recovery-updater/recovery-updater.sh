@@ -36,7 +36,7 @@ get_partition_targets() {
 }
 
 # Upgrade and boot into the alternative boot partition (help: reverse this?)
-function prepare_guestos_upgrade() {
+prepare_guestos_upgrade() {
     echo "Starting guestos upgrade preparation"
     lodev="$(losetup -Pf --show ${GUESTOS_DEVICE})"
     echo "Set up loop device: $lodev"
@@ -62,7 +62,7 @@ function prepare_guestos_upgrade() {
     echo "Target var partition: $var_target"
 }
 
-function download_and_verify_upgrade() {
+download_and_verify_upgrade() {
     local url="$1"
     local target_hash="$2"
     local tmpdir="$3"
@@ -85,7 +85,7 @@ function download_and_verify_upgrade() {
     echo "Hash verification successful"
 }
 
-function extract_upgrade() {
+extract_upgrade() {
     local tmpdir="$1"
     echo "Extracting upgrade file..."
     zstd -d "$tmpdir/upgrade.tar.zst" -o "$tmpdir/upgrade.tar"
@@ -93,7 +93,7 @@ function extract_upgrade() {
     echo "Extraction completed"
 }
 
-function install_upgrade() {
+install_upgrade() {
     local tmpdir="$1"
     echo "Installing upgrade using manageboot..."
     ${MANAGEBOOT_SCRIPT} upgrade-recovery \
@@ -106,7 +106,7 @@ function install_upgrade() {
     echo "Upgrade installation complete"
 }
 
-function guestos_upgrade_cleanup() {
+guestos_upgrade_cleanup() {
     echo "Starting cleanup"
     if [ -n "${grubdir}" ] && mountpoint -q "${grubdir}"; then
         umount "${grubdir}"
