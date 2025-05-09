@@ -4,7 +4,6 @@ set -euox pipefail
 source '/opt/ic/bin/helpers.shlib'
 
 readonly BN_CONFIG="${BOOT_DIR}/bn_vars.conf"
-readonly IC_BOUNDARY_CONFIG="${BOOT_DIR}/ic_boundary.conf"
 
 readonly RUN_DIR='/run/ic-node/etc/ic-gateway'
 readonly ENV_FILE="${RUN_DIR}/env"
@@ -61,18 +60,6 @@ function read_variables() {
     fi
 
     API_DOMAINS+=("rosetta.dfinity.network")
-
-    # TODO move this later to bn_vars or somewhere else
-    MAX_CONCURRENCY=""
-    SHED_EWMA_PARAM=""
-    if [ -f "${IC_BOUNDARY_CONFIG}" ]; then
-        while IFS="=" read -r key value; do
-            case "${key}" in
-                "max_concurrency") MAX_CONCURRENCY="${value}" ;;
-                "shed_ewma_param") SHED_EWMA_PARAM="${value}" ;;
-            esac
-        done <"${IC_BOUNDARY_CONFIG}"
-    fi
 
     check_nns_pem
 }
@@ -136,8 +123,10 @@ DOMAIN_CANISTER_ALIAS="identity:rdmx6-jaaaa-aaaaa-aaadq-cai,nns:qoctq-giaaa-aaaa
 DOMAIN_CUSTOM_PROVIDER="https://boundary.caffeine.ai/subdomains,https://beta.boundary.caffeine.ai/subdomains,https://dev.boundary.caffeine.ai/subdomains"
 DOMAIN_CUSTOM_PROVIDER_POLL_INTERVAL="10s"
 GEOIP_DB="${RUN_DIR}/GeoLite2-Country.mmdb"
-IC_URL="http://127.0.0.1:9000"
+IC_URL="https://bc1-dll02.blockchaindevlabs.com,https://dll02.sg2.icp.162.technology,https://br1-dll01.aviatelabs.co,https://ic0.app"
 IC_ROOT_KEY="${ROOT_KEY}"
+IC_USE_DISCOVERY="true"
+IC_USE_K_TOP_API_NODES="5"
 CERT_PROVIDER_DIR="${RUN_DIR}/certs"
 CERT_PROVIDER_ISSUER_URL="http://127.0.0.1:3000"
 CERT_DEFAULT="icp0.io"
@@ -148,8 +137,8 @@ CACHE_TTL="10s"
 CACHE_LOCK_TIMEOUT="10s"
 CACHE_XFETCH_BETA="3.0"
 SHED_SYSTEM_EWMA="0.9"
-SHED_SYSTEM_CPU="0.95"
-SHED_SYSTEM_MEMORY="0.95"
+SHED_SYSTEM_CPU="0.9"
+SHED_SYSTEM_MEMORY="0.8"
 EOF
 
     if [ ! -z "${DENYLIST_URL:-}" ]; then
@@ -160,10 +149,8 @@ EOF
         echo "LOG_VECTOR_URL=\"${LOGGING_URL}\"" >>"${ENV_FILE}"
         echo "LOG_VECTOR_USER=\"${LOGGING_USER}\"" >>"${ENV_FILE}"
         echo "LOG_VECTOR_PASS=\"${LOGGING_PASSWORD}\"" >>"${ENV_FILE}"
-    fi
-
-    if [ ! -z "${MAX_CONCURRENCY:-}" ]; then
-        echo "LOAD_MAX_CONCURRENCY=\"${MAX_CONCURRENCY}\"" >>"${ENV_FILE}"
+        echo "LOG_VECTOR_INTERVAL=\"2s\"" >>"${ENV_FILE}"
+        echo "LOG_VECTOR_FLUSHERS=\"32\"" >>"${ENV_FILE}"
     fi
 }
 
