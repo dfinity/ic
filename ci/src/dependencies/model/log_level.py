@@ -1,7 +1,7 @@
 import logging
 import os
 
-LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "WARNING").upper()
 
 
 def get_log_level() -> int:
@@ -19,4 +19,4 @@ def get_log_level() -> int:
         return logging.INFO
     elif LOG_LEVEL == "DEBUG":
         return logging.DEBUG
-    return logging.INFO
+    return logging.WARNING
