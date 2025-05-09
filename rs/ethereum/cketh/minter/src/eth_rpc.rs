@@ -6,7 +6,7 @@ use crate::numeric::{BlockNumber, LogIndex, Wei, WeiPerGas};
 use candid::CandidType;
 use ethnum;
 use evm_rpc_client::{
-    HttpOutcallError as EvmHttpOutcallError,
+    BlockTag as EvmBlockTag, HttpOutcallError as EvmHttpOutcallError,
     SendRawTransactionStatus as EvmSendRawTransactionStatus,
 };
 use ic_cdk::api::call::RejectionCode;
@@ -219,6 +219,16 @@ impl From<BlockTag> for CandidBlockTag {
     }
 }
 
+impl From<BlockTag> for EvmBlockTag {
+    fn from(block_tag: BlockTag) -> Self {
+        match block_tag {
+            BlockTag::Latest => EvmBlockTag::Latest,
+            BlockTag::Safe => EvmBlockTag::Safe,
+            BlockTag::Finalized => EvmBlockTag::Finalized,
+        }
+    }
+}
+
 impl Display for BlockTag {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
@@ -378,8 +388,7 @@ impl From<BlockNumber> for BlockSpec {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Block {
     ///The block number. `None` when its pending block.
     pub number: BlockNumber,

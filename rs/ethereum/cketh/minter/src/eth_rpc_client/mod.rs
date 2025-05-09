@@ -105,10 +105,10 @@ impl EthRpcClient {
 
     pub async fn eth_get_block_by_number(
         &self,
-        block: BlockSpec,
+        block: BlockTag,
     ) -> Result<Block, MultiCallError<Block>> {
         self.evm_rpc_client
-            .eth_get_block_by_number(into_evm_block_tag(block))
+            .eth_get_block_by_number(block.into())
             .await
             .reduce()
             .into()
@@ -455,14 +455,6 @@ impl Reduce for EvmMultiRpcResult<EvmBlock> {
             },
             MultiCallResults::reduce_with_equality,
         )
-    }
-}
-
-impl Reduce for MultiCallResults<Block> {
-    type Item = Block;
-
-    fn reduce(self) -> ReducedResult<Self::Item> {
-        self.reduce_with_equality().into()
     }
 }
 

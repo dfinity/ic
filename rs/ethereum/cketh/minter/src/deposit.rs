@@ -2,7 +2,7 @@ use crate::eth_logs::{
     report_transaction_error, LogParser, LogScraping, ReceivedErc20LogScraping,
     ReceivedEthLogScraping, ReceivedEthOrErc20LogScraping, ReceivedEvent, ReceivedEventError,
 };
-use crate::eth_rpc::{BlockSpec, FixedSizeData, HttpOutcallError, LogEntry, Topic};
+use crate::eth_rpc::{FixedSizeData, HttpOutcallError, LogEntry, Topic};
 use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
@@ -155,7 +155,7 @@ pub async fn scrape_logs() {
 pub async fn update_last_observed_block_number() -> Option<BlockNumber> {
     let block_height = read_state(State::ethereum_block_height);
     match read_state(EthRpcClient::from_state)
-        .eth_get_block_by_number(BlockSpec::Tag(block_height))
+        .eth_get_block_by_number(block_height)
         .await
     {
         Ok(latest_block) => {
