@@ -132,7 +132,7 @@ Usage:
       will result in a wrong (possibly failing) boot.
 
     upgrade-recovery
-      Used by recovery-updater.sh to performs a manual GuestOS upgrade from the HostOS
+      Used by recovery-updater.sh to perform a manual GuestOS upgrade from the HostOS
 
     confirm
       Confirm that the current system booted fine (required after first
