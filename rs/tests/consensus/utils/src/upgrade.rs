@@ -20,27 +20,27 @@ use slog::{info, Logger};
 use std::{convert::TryFrom, fs, io::Read, path::Path};
 
 #[derive(Copy, Clone, PartialEq)]
+pub enum PublicUpdateImageType {
+    Image,
+    Sha256,
+}
+
+#[derive(Copy, Clone, PartialEq)]
 pub enum UpdateImageType {
     Image,
     ImageTest,
     Sha256,
 }
 
-pub fn get_update_image_url(image_type: UpdateImageType, git_revision: &str) -> String {
+pub fn get_update_image_url(image_type: PublicUpdateImageType, git_revision: &str) -> String {
     match image_type {
-        UpdateImageType::Image => {
+        PublicUpdateImageType::Image => {
             format!(
                 "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img.tar.zst",
                 git_revision
             )
         }
-        UpdateImageType::ImageTest => {
-            format!(
-                "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img-test.tar.zst",
-                git_revision
-            )
-        }
-        UpdateImageType::Sha256 => {
+        PublicUpdateImageType::Sha256 => {
             format!(
                 "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/SHA256SUMS",
                 git_revision
@@ -74,7 +74,7 @@ pub async fn fetch_update_file_sha256(
     version_str: &str,
     is_test_img: bool,
 ) -> Result<String, String> {
-    let sha_url = get_update_image_url(UpdateImageType::Sha256, version_str);
+    let sha_url = get_update_image_url(PublicUpdateImageType::Sha256, version_str);
     let tmp_dir = tempfile::tempdir().unwrap().into_path();
     let mut tmp_file = tmp_dir.clone();
     tmp_file.push("SHA256.txt");
@@ -286,8 +286,8 @@ pub async fn bless_replica_version(
 pub async fn bless_public_replica_version(
     nns_node: &IcNodeSnapshot,
     target_version: &str,
-    image_type: UpdateImageType,
-    url_image_type: UpdateImageType, // normally it is the same as above, unless we want to have bogus url
+    image_type: PublicUpdateImageType,
+    url_image_type: PublicUpdateImageType, // normally it is the same as above, unless we want to have bogus url
     logger: &Logger,
 ) {
     let upgrade_url = get_update_image_url(url_image_type, target_version);
@@ -296,9 +296,14 @@ pub async fn bless_public_replica_version(
     let sha256 = fetch_update_file_sha256_with_retry(
         logger,
         target_version,
-        image_type == UpdateImageType::ImageTest,
+        false,
     )
     .await;
+
+    let image_type = match image_type {
+        PublicUpdateImageType::Image => UpdateImageType::Image,
+        PublicUpdateImageType::Sha256 => UpdateImageType::Sha256,
+    };
 
     bless_replica_version_with_sha(
         nns_node,

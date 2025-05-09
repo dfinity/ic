@@ -37,6 +37,7 @@ use ic_consensus_system_test_utils::{
     upgrade::{
         assert_assigned_replica_version, bless_public_replica_version,
         deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version, UpdateImageType,
+        PublicUpdateImageType,
     },
 };
 use ic_consensus_threshold_sig_system_test_utils::{
@@ -139,8 +140,8 @@ pub fn test_downgrade(env: TestEnv) {
     block_on(bless_public_replica_version(
         &nns_node,
         &mainnet_version,
-        UpdateImageType::Image,
-        UpdateImageType::Image,
+        PublicUpdateImageType::Image,
+        PublicUpdateImageType::Image,
         &log,
     ));
     test(env, initial_version, mainnet_version);
