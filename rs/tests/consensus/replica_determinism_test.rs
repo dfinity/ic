@@ -74,7 +74,7 @@ fn test(env: TestEnv) {
                 "Creating an agent for the malicious node",
                 &log,
                 Duration::from_secs(300),
-                Duration::from_secs(5),
+                Duration::from_secs(10),
                 || async {
                     match malicious_node.try_build_default_agent_async().await {
                         Ok(agent) => Ok(agent),
