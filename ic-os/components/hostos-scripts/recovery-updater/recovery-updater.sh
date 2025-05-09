@@ -43,14 +43,6 @@ function prepare_guestos_upgrade() {
     echo "Target var partition: $var_target"
 }
 
-function guestos_upgrade_cleanup() {
-    echo "Starting cleanup"
-    umount "${grubdir}"
-    echo "Unmounted ${grubdir}"
-    rm -rf "${workdir}"
-    echo "Removed temporary directory ${workdir}"
-}
-
 function download_and_verify_upgrade() {
     local url="$1"
     local target_hash="$2"
@@ -95,26 +87,37 @@ function install_upgrade() {
     echo "Upgrade installation complete"
 }
 
-# Main execution
-echo "=== Recovery Updater Started ==="
+function guestos_upgrade_cleanup() {
+    echo "Starting cleanup"
+    umount "${grubdir}"
+    echo "Unmounted ${grubdir}"
+    rm -rf "${workdir}"
+    echo "Removed temporary directory ${workdir}"
+}
 
-URL="$(get_cmdline_var url)"
-TARGET_HASH="$(get_cmdline_var hash)"
-echo "URL: $URL"
-echo "Target Hash: $TARGET_HASH"
-echo "==============================="
+main() {
+    echo "=== Recovery Updater Started ==="
 
-TMPDIR=$(mktemp -d)
-trap 'rm -rf "$TMPDIR"' EXIT
-echo "Created temporary directory: $TMPDIR"
+    URL="$(get_cmdline_var url)"
+    TARGET_HASH="$(get_cmdline_var hash)"
+    echo "URL: $URL"
+    echo "Target Hash: $TARGET_HASH"
+    echo "==============================="
 
-prepare_guestos_upgrade
-download_and_verify_upgrade "$URL" "$TARGET_HASH" "$TMPDIR"
-extract_upgrade "$TMPDIR"
-install_upgrade "$TMPDIR"
+    TMPDIR=$(mktemp -d)
+    trap 'rm -rf "$TMPDIR"' EXIT
+    echo "Created temporary directory: $TMPDIR"
 
-guestos_upgrade_cleanup
-echo "Recovery updater completed successfully"
+    prepare_guestos_upgrade
+    download_and_verify_upgrade "$URL" "$TARGET_HASH" "$TMPDIR"
+    extract_upgrade "$TMPDIR"
+    install_upgrade "$TMPDIR"
 
-echo "Rebooting guestos..."
-systemctl restart guestos
+    guestos_upgrade_cleanup
+    echo "Recovery updater completed successfully"
+
+    echo "Rebooting guestos..."
+    systemctl restart guestos
+}
+
+main
