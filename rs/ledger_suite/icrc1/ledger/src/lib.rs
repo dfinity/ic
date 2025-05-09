@@ -1216,16 +1216,16 @@ pub fn get_allowances(
         },
     };
     ALLOWANCES_MEMORY.with_borrow(|allowances| {
-        for (allowance_spender, storable_allowance) in
+        for (account_spender, storable_allowance) in
             allowances.range(start_account_spender.clone()..)
         {
-            if spender.is_some() && allowance_spender == start_account_spender {
+            if spender.is_some() && account_spender == start_account_spender {
                 continue;
             }
             if result.len() >= max_results as usize {
                 break;
             }
-            if allowance_spender.account.owner != from.owner {
+            if account_spender.account.owner != from.owner {
                 break;
             }
             if let Some(expires_at) = storable_allowance.expires_at {
@@ -1234,8 +1234,8 @@ pub fn get_allowances(
                 }
             }
             result.push(Allowance103 {
-                from_account: allowance_spender.account,
-                to_spender: allowance_spender.spender,
+                from_account: account_spender.account,
+                to_spender: account_spender.spender,
                 allowance: Nat::from(storable_allowance.amount),
                 expires_at: storable_allowance
                     .expires_at
