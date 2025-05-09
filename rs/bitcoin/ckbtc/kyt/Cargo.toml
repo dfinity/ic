@@ -11,8 +11,8 @@ askama = { workspace = true }
 candid = { workspace = true }
 ciborium = { workspace = true }
 hex = { workspace = true }
-ic-cdk = { workspace = true }
-ic-cdk-macros = { workspace = true }
+ic-cdk = "0.17.1"
+ic-cdk-macros = "0.17.1"
 ic-http-types = { path = "../../../../packages/ic-http-types" }
 ic-metrics-encoder = "1.1"
 ic-stable-structures = { workspace = true }

@@ -46,6 +46,8 @@ bazel_args=( "$@" )
 # stored here again for easy access
 bazel_command="$1"
 
+# Setup zig-cache
+mkdir -p /tmp/zig-cache
 
 # Unless explicitly provided, we set a default --repository_cache to a volume mounted inside our runners
 # Only for Linux builds since there `/cache` is mounted to host local storage.

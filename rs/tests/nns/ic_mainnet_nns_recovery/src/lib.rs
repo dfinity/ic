@@ -20,7 +20,7 @@ use ic_consensus_system_test_utils::{
 };
 use ic_nervous_system_common::E8;
 use ic_nns_common::types::NeuronId;
-use ic_nns_governance_api::pb::v1::NnsFunction;
+use ic_nns_governance_api::NnsFunction;
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_registry_subnet_type::SubnetType;
 use ic_sns_wasm::pb::v1::{
