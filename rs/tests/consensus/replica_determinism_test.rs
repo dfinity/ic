@@ -79,7 +79,7 @@ fn test(env: TestEnv) {
                     match malicious_node.try_build_default_agent_async().await {
                         Ok(agent) => Ok(agent),
                         Err(e) => {
-                            bail!("Failed to create agent: {}", e)
+                            bail!("Failed to create agent: {}. This is okay as the malicious node is expected to eventually panic due to divergence.", e)
                         }
                     }
                 }
