@@ -13,8 +13,8 @@ use self::queue::{CanisterQueue, IngressQueue, InputQueue, OutputQueue};
 use crate::page_map::int_map::MutableIntMap;
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{
-    CanisterState, CheckpointLoadingMetrics, InputQueueType, InputSource, MessageMemoryUsage,
-    StateError,
+    CanisterState, CheckpointLoadingMetrics, DroppedMessageMetrics, InputQueueType, InputSource,
+    MessageMemoryUsage, StateError,
 };
 use ic_base_types::PrincipalId;
 use ic_error_types::RejectCode;
@@ -1413,27 +1413,31 @@ impl CanisterQueues {
     /// into a previously empty input queue also requires the set of local canisters
     /// to decide whether the destination canister was local or remote.
     ///
-    /// Returns the number of messages that were timed out and the total amount of
-    /// attached cycles that was lost (where a reject response refunding the cycles
-    /// was not enqueued).
+    /// Returns the total amount of attached cycles that was lost (where a reject
+    /// response refunding the cycles was not enqueued).
     pub fn time_out_messages(
         &mut self,
         current_time: Time,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
-    ) -> (usize, Cycles) {
+        metrics: &impl DroppedMessageMetrics,
+    ) -> Cycles {
         let expired_messages = self.store.pool.expire_messages(current_time);
-        let expired_message_count = expired_messages.len();
         let mut cycles_lost = Cycles::zero();
 
         let input_queue_type_fn = input_queue_type_fn(own_canister_id, local_canisters);
         for (reference, msg) in expired_messages.into_iter() {
+            metrics.observe_timed_out_message(
+                reference.kind().to_label_value(),
+                reference.context().to_label_value(),
+                reference.class().to_label_value(),
+            );
             cycles_lost += self.on_message_dropped(reference, msg, &input_queue_type_fn);
         }
 
         debug_assert_eq!(Ok(()), self.test_invariants());
         debug_assert_eq!(Ok(()), self.schedules_ok(&input_queue_type_fn));
-        (expired_message_count, cycles_lost)
+        cycles_lost
     }
 
     /// Removes the largest best-effort message in the underlying pool. Returns
@@ -1449,9 +1453,15 @@ impl CanisterQueues {
         &mut self,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        metrics: &impl DroppedMessageMetrics,
     ) -> (bool, Cycles) {
         if let Some((reference, msg)) = self.store.pool.shed_largest_message() {
             let input_queue_type_fn = input_queue_type_fn(own_canister_id, local_canisters);
+            metrics.observe_shed_message(
+                reference.kind().to_label_value(),
+                reference.context().to_label_value(),
+                msg.count_bytes(),
+            );
             let cycles_lost = self.on_message_dropped(reference, msg, &input_queue_type_fn);
 
             debug_assert_eq!(Ok(()), self.test_invariants());

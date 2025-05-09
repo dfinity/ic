@@ -15,7 +15,7 @@ use ic_nns_test_utils::{
     registry::{get_value_or_panic, prepare_registry},
 };
 use ic_protobuf::registry::{
-    crypto::v1::ChainKeySigningSubnetList,
+    crypto::v1::ChainKeyEnabledSubnetList,
     subnet::v1::{
         CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb, EcdsaInitialization,
         KeyConfig as KeyConfigPb, SubnetListRecord, SubnetRecord,
@@ -23,7 +23,7 @@ use ic_protobuf::registry::{
 };
 use ic_protobuf::types::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
 use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_chain_key_signing_subnet_list_key,
+    make_catch_up_package_contents_key, make_chain_key_enabled_subnet_list_key,
     make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_subnet_features::{
@@ -559,8 +559,8 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
         let ecdsa_signing_subnets_mutate = RegistryAtomicMutateRequest {
             preconditions: vec![],
             mutations: vec![insert(
-                make_chain_key_signing_subnet_list_key(&key_id),
-                ChainKeySigningSubnetList {
+                make_chain_key_enabled_subnet_list_key(&key_id),
+                ChainKeyEnabledSubnetList {
                     subnets: vec![subnet_id_into_protobuf(subnet_to_recover_subnet_id)],
                 }
                 .encode_to_vec(),
@@ -643,7 +643,7 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
         // Check `chain_key_signing_subnet_list` for this `key_id` is empty now.
         assert_eq!(
             chain_key_signing_subnet_list(&registry, &key_id).await,
-            ChainKeySigningSubnetList { subnets: vec![] }
+            ChainKeyEnabledSubnetList { subnets: vec![] }
         )
     });
 }
@@ -1128,10 +1128,10 @@ fn test_recover_subnet_resets_cup_contents() {
 pub async fn chain_key_signing_subnet_list(
     registry: &Canister<'_>,
     key_id: &MasterPublicKeyId,
-) -> ChainKeySigningSubnetList {
-    get_value_or_panic::<ChainKeySigningSubnetList>(
+) -> ChainKeyEnabledSubnetList {
+    get_value_or_panic::<ChainKeyEnabledSubnetList>(
         registry,
-        make_chain_key_signing_subnet_list_key(key_id).as_bytes(),
+        make_chain_key_enabled_subnet_list_key(key_id).as_bytes(),
     )
     .await
 }

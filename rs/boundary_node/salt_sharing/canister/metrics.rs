@@ -1,5 +1,5 @@
-use ic_canisters_http_types::{HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::stable::WASM_PAGE_SIZE_IN_BYTES;
+use ic_http_types::{HttpResponse, HttpResponseBuilder};
 use prometheus::{
     CounterVec, Encoder, Gauge, IntGauge, Opts, Registry, Result as PrometheusResult, TextEncoder,
 };

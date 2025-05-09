@@ -20,6 +20,7 @@ const ZERO_AMOUNT: u64 = 0u64;
 const FEE_AMOUNT: u64 = 10_000u64;
 const TIMESTAMP_NOW: u64 = 0;
 const TIMESTAMP_LATER: u64 = 1;
+const TIMESTAMP_EVEN_LATER: u64 = 2;
 
 #[cfg(not(any(feature = "u256-tokens", feature = "icp-tokens")))]
 type Tokens = ic_icrc1_tokens_u64::U64;
@@ -339,6 +340,139 @@ fn should_remove_allowance_when_set_to_zero() {
     ));
     let account2_allowance = ledger.allowances.get(&allowance_key);
     assert_eq!(account2_allowance, None);
+}
+
+#[test]
+fn should_set_allowance_with_expected_allowance_and_no_existing_allowance() {
+    let now = TimeStamp::from_nanos_since_unix_epoch(TIMESTAMP_NOW);
+    let ledger = LedgerBuilder::new()
+        .with_mint(&account_from_u64(ACCOUNT_ID_1), &Tokens::from(MINT_AMOUNT))
+        .with_approve(
+            &account_from_u64(ACCOUNT_ID_1),
+            &account_from_u64(ACCOUNT_ID_2),
+            &Tokens::from(APPROVE_AMOUNT),
+            &Some(Tokens::from(0u64)),
+            &None,
+            &Some(Tokens::from(FEE_AMOUNT)),
+            now,
+        )
+        .build();
+
+    let allowance_key = ApprovalKey::from((
+        &account_from_u64(ACCOUNT_ID_1),
+        &account_from_u64(ACCOUNT_ID_2),
+    ));
+    let account2_allowance = ledger.allowances.get(&allowance_key);
+    let expected_allowance2: Allowance<Tokens> = Allowance {
+        amount: Tokens::from(APPROVE_AMOUNT),
+        expires_at: None,
+        arrived_at: now,
+    };
+    assert_eq!(account2_allowance, Some(&expected_allowance2));
+}
+
+#[test]
+fn should_set_allowance_with_expected_allowance_and_existing_allowance() {
+    let now = TimeStamp::from_nanos_since_unix_epoch(TIMESTAMP_NOW);
+    let ledger = LedgerBuilder::new()
+        .with_mint(&account_from_u64(ACCOUNT_ID_1), &Tokens::from(MINT_AMOUNT))
+        .with_approve(
+            &account_from_u64(ACCOUNT_ID_1),
+            &account_from_u64(ACCOUNT_ID_2),
+            &Tokens::from(APPROVE_AMOUNT),
+            &None,
+            &None,
+            &Some(Tokens::from(FEE_AMOUNT)),
+            now,
+        )
+        .with_approve(
+            &account_from_u64(ACCOUNT_ID_1),
+            &account_from_u64(ACCOUNT_ID_2),
+            &Tokens::from(ANOTHER_APPROVE_AMOUNT),
+            &Some(Tokens::from(APPROVE_AMOUNT)),
+            &None,
+            &Some(Tokens::from(FEE_AMOUNT)),
+            now,
+        )
+        .build();
+
+    let allowance_key = ApprovalKey::from((
+        &account_from_u64(ACCOUNT_ID_1),
+        &account_from_u64(ACCOUNT_ID_2),
+    ));
+    let account2_allowance = ledger.allowances.get(&allowance_key);
+    let expected_allowance2: Allowance<Tokens> = Allowance {
+        amount: Tokens::from(ANOTHER_APPROVE_AMOUNT),
+        expires_at: None,
+        arrived_at: now,
+    };
+    assert_eq!(account2_allowance, Some(&expected_allowance2));
+}
+
+#[test]
+fn should_set_allowance_with_expected_allowance_and_expired_existing_allowance() {
+    let now = TimeStamp::from_nanos_since_unix_epoch(TIMESTAMP_NOW);
+    let even_later = TimeStamp::from_nanos_since_unix_epoch(TIMESTAMP_EVEN_LATER);
+    let ledger = LedgerBuilder::new()
+        .with_mint(&account_from_u64(ACCOUNT_ID_1), &Tokens::from(MINT_AMOUNT))
+        .with_approve(
+            &account_from_u64(ACCOUNT_ID_1),
+            &account_from_u64(ACCOUNT_ID_2),
+            &Tokens::from(APPROVE_AMOUNT),
+            &None,
+            &Some(TIMESTAMP_LATER),
+            &Some(Tokens::from(FEE_AMOUNT)),
+            now,
+        )
+        .with_approve(
+            &account_from_u64(ACCOUNT_ID_1),
+            &account_from_u64(ACCOUNT_ID_2),
+            &Tokens::from(ANOTHER_APPROVE_AMOUNT),
+            &Some(Tokens::from(0u64)),
+            &None,
+            &Some(Tokens::from(FEE_AMOUNT)),
+            even_later,
+        )
+        .build();
+
+    let allowance_key = ApprovalKey::from((
+        &account_from_u64(ACCOUNT_ID_1),
+        &account_from_u64(ACCOUNT_ID_2),
+    ));
+    let account2_allowance = ledger.allowances.get(&allowance_key);
+    let expected_allowance2: Allowance<Tokens> = Allowance {
+        amount: Tokens::from(ANOTHER_APPROVE_AMOUNT),
+        expires_at: None,
+        arrived_at: even_later,
+    };
+    assert_eq!(account2_allowance, Some(&expected_allowance2));
+}
+
+#[test]
+#[should_panic(expected = "does not match in-memory allowance")]
+fn should_panic_if_expected_allowance_different_than_existing_allowance() {
+    let now = TimeStamp::from_nanos_since_unix_epoch(TIMESTAMP_NOW);
+    LedgerBuilder::new()
+        .with_mint(&account_from_u64(ACCOUNT_ID_1), &Tokens::from(MINT_AMOUNT))
+        .with_approve(
+            &account_from_u64(ACCOUNT_ID_1),
+            &account_from_u64(ACCOUNT_ID_2),
+            &Tokens::from(APPROVE_AMOUNT),
+            &Some(Tokens::from(0u64)),
+            &None,
+            &Some(Tokens::from(FEE_AMOUNT)),
+            now,
+        )
+        .with_approve(
+            &account_from_u64(ACCOUNT_ID_1),
+            &account_from_u64(ACCOUNT_ID_2),
+            &Tokens::from(APPROVE_AMOUNT),
+            &Some(Tokens::from(0u64)),
+            &None,
+            &Some(Tokens::from(FEE_AMOUNT)),
+            now,
+        )
+        .build();
 }
 
 #[test]

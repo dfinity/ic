@@ -33,6 +33,7 @@ PACKAGES = [
     "@focal//rsync/amd64",
     "@focal//gzip/amd64",
     "@focal//zstd/amd64",
+    "@focal//xz-utils/amd64",
 ]
 
 tar(

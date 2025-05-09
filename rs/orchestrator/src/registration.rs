@@ -82,14 +82,27 @@ impl NodeRegistration {
     ) -> Self {
         // If we can open a PEM file under the path specified in the replica config,
         // we use the given node operator private key to register the node.
-        let signer: Box<dyn Signer> = match node_config
-            .clone()
-            .registration
-            .node_operator_pem
-            .and_then(|path| NodeProviderSigner::new(path.as_path()))
-        {
-            Some(signer) => Box::new(signer),
-            None => Box::new(Hsm),
+        let signer: Box<dyn Signer> = match node_config.clone().registration.node_operator_pem {
+            Some(path) => match NodeProviderSigner::new(path.as_path()) {
+                Some(signer) => {
+                    UtilityCommand::notify_host(
+                        "Node operator private key found and signer successfully created.",
+                        1,
+                    );
+                    Box::new(signer)
+                }
+                None => {
+                    UtilityCommand::notify_host("Node operator private key found but could not be successfully read. Falling back to HSM.", 1);
+                    Box::new(Hsm)
+                }
+            },
+            None => {
+                UtilityCommand::notify_host(
+                    "Node operator private key not found. Falling back to HSM.",
+                    1,
+                );
+                Box::new(Hsm)
+            }
         };
         Self {
             log,

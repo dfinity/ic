@@ -1,6 +1,5 @@
-use ic_interfaces_state_manager::StateManagerError;
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_types::{CanisterId, NodeId, QueryStatsEpoch};
+use ic_types::{state_manager::StateManagerError, CanisterId, NodeId, QueryStatsEpoch};
 
 #[derive(Debug)]
 pub enum InvalidQueryStatsPayloadReason {

@@ -1,6 +1,5 @@
 use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_config::embedders::BestEffortResponsesFeature;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_management_canister_types_private::{
     self as ic00, BitcoinGetUtxosArgs, BitcoinNetwork, BoundedHttpHeaders, CanisterChange,
@@ -400,7 +399,6 @@ fn output_best_effort_requests_on_application_subnets_update_subnet_available_me
         .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
         .with_subnet_guaranteed_response_message_memory(ONE_GIB)
-        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .with_manual_execution()
         .build();
     let canister_id = test.canister_from_wat(CALL_BEST_EFFORT_WAT).unwrap();
@@ -3663,7 +3661,7 @@ fn test_vetkd_public_key_api_is_enabled() {
     let response = test.xnet_messages()[1].clone();
     assert_eq!(
         get_reject_message(response),
-        "failed to retrieve VetKD public key: InvalidPublicKey",
+        "Invalid VetKD subnet key: InvalidPublicKey",
     )
 }
 

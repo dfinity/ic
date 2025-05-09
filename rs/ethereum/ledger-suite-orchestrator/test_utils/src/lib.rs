@@ -10,10 +10,8 @@ use ic_ledger_suite_orchestrator::candid::{
 use ic_ledger_suite_orchestrator::state::{
     ArchiveWasm, IndexWasm, LedgerSuiteVersion, LedgerWasm, Wasm, WasmHash,
 };
-use ic_management_canister_types_private::{
-    CanisterInstallMode, CanisterStatusResultV2, CanisterStatusType, InstallCodeArgs, Method,
-    Payload,
-};
+use ic_management_canister_types::{CanisterInstallMode, InstallCodeArgs};
+use ic_management_canister_types_private::{CanisterStatusResultV2, CanisterStatusType};
 use ic_metrics_assert::{CanisterHttpQuery, MetricsAssert};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
 use ic_types::Cycles;
@@ -511,16 +509,15 @@ pub fn out_of_band_upgrade<T: AsRef<StateMachine>>(
         .execute_ingress_as(
             controller,
             CanisterId::ic_00(),
-            Method::InstallCode,
-            InstallCodeArgs::new(
-                CanisterInstallMode::Upgrade,
-                target,
-                wasm,
-                Encode!(&()).unwrap(),
-                None,
-                None,
-            )
-            .encode(),
+            "install_code",
+            Encode!(&InstallCodeArgs {
+                mode: CanisterInstallMode::Upgrade(None),
+                canister_id: target.into(),
+                wasm_module: wasm,
+                arg: Encode!(&()).unwrap(),
+                sender_canister_version: None,
+            })
+            .unwrap(),
         )
         .map(|_| ())
 }

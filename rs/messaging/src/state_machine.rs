@@ -123,10 +123,7 @@ impl StateMachine for StateMachineImpl {
         }
 
         // Time out expired messages.
-        let (timed_out_messages, lost_cycles) = state.time_out_messages();
-        self.metrics
-            .timed_out_messages_total
-            .inc_by(timed_out_messages as u64);
+        let lost_cycles = state.time_out_messages(&self.metrics);
         state
             .metadata
             .subnet_metrics
@@ -214,12 +211,10 @@ impl StateMachine for StateMachineImpl {
 
         let since = Instant::now();
         // Shed enough messages to stay below the best-effort message memory limit.
-        let (shed_messages, shed_message_bytes, lost_cycles) = state_after_stream_builder
-            .enforce_best_effort_message_limit(self.best_effort_message_memory_capacity);
-        self.metrics.shed_messages_total.inc_by(shed_messages);
-        self.metrics
-            .shed_message_bytes_total
-            .inc_by(shed_message_bytes.get());
+        let lost_cycles = state_after_stream_builder.enforce_best_effort_message_limit(
+            self.best_effort_message_memory_capacity,
+            &self.metrics,
+        );
         state_after_stream_builder
             .metadata
             .subnet_metrics

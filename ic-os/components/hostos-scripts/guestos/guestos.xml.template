@@ -8,7 +8,7 @@
   </metadata>
   <memory unit='GiB'>{{ resources_memory }}</memory>
   <currentMemory unit='GiB'>{{ resources_memory }}</currentMemory>
-  <vcpu placement='static'>64</vcpu>
+  <vcpu placement='static'>{{ nr_of_vcpus }}</vcpu>
   {{ cpu_spec }}
   <resource>
     <partition>/machine</partition>

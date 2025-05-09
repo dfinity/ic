@@ -1,0 +1,21 @@
+[package]
+name = "canlog_derive"
+version = "0.1.0"
+description = "Crate with macro definitions for the canlog crate"
+license = "Apache-2.0"
+readme = "README.md"
+include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
+repository = "https://github.com/dfinity/ic"
+authors.workspace = true
+edition.workspace = true
+documentation = "https://docs.rs/canlog"
+
+[dependencies]
+syn = { version = "2.0.100", features = ["derive"] }
+quote = "1.0.40"
+proc-macro2 = "1.0.94"
+darling = "0.20.11"
+
+[lib]
+proc-macro = true
+

@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 
 
 def main():
@@ -27,9 +28,7 @@ def main():
     boot_image = args.boot
     version_file = args.versionfile
 
-    tmpdir = os.getenv("ICOS_TMPDIR")
-    if not tmpdir:
-        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
+    tmpdir = tempfile.mkdtemp()
 
     boot_path = os.path.join(tmpdir, "boot.img")
     subprocess.run(["tar", "xf", boot_image, "--transform=s/partition.img/boot.img/", "-C", tmpdir], check=True)
@@ -57,6 +56,8 @@ def main():
         ],
         check=True,
     )
+
+    # tempfile cleanup is handled by proc_wrapper.sh
 
 
 if __name__ == "__main__":

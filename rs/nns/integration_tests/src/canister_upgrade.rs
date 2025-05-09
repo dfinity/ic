@@ -2,7 +2,7 @@ use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{install_code::CanisterInstallMode, proposal::Action};
+use ic_nns_governance_api::{install_code::CanisterInstallMode, proposal::Action};
 use ic_nns_test_utils::common::{
     build_governance_wasm, build_lifeline_wasm, build_root_wasm, modify_wasm_bytes,
 };

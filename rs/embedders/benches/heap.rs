@@ -177,6 +177,7 @@ fn bench(c: &mut C, mem: Mem, call: Call, op: Op, dir: Dir, size: Size, step: St
     match call {
         Call::Query => embedders_bench::query_bench(
             c,
+            "embedders:heap/query",
             &name,
             &wasm,
             &[],
@@ -189,6 +190,7 @@ fn bench(c: &mut C, mem: Mem, call: Call, op: Op, dir: Dir, size: Size, step: St
             // Running checkpoint benchmarks once or multiple times yields the same results.
             Src::Checkpoint => embedders_bench::update_bench(
                 c,
+                "embedders:heap/update",
                 &name,
                 &wasm,
                 &[],
@@ -202,6 +204,7 @@ fn bench(c: &mut C, mem: Mem, call: Call, op: Op, dir: Dir, size: Size, step: St
             // New allocation benchmarks are only meaningful when run once.
             Src::PageDelta | Src::NewAllocation => embedders_bench::update_bench_once(
                 c,
+                "embedders:heap/update",
                 &name,
                 &wasm,
                 &[],

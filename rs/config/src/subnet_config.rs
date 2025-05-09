@@ -165,6 +165,11 @@ pub const DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS: NumInstructions = NumInstructions::
 pub const DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS: NumInstructions =
     NumInstructions::new(2_000_000_000);
 
+/// Baseline cost for up/downloading binary snapshot data (5M instructions).
+/// The cost is based on the benchmarks: rs/execution_environment/benches/management_canister/
+pub const DEFAULT_CANISTERS_SNAPSHOT_DATA_BASELINE_INSTRUCTIONS: NumInstructions =
+    NumInstructions::new(5_000_000);
+
 /// The cycle cost overhead of executing canister instructions when running in Wasm64 mode.
 /// This overhead is a multiplier over the cost of executing the same instructions
 /// in Wasm32 mode. The overhead comes from the bound checks performed in Wasm64 mode
@@ -272,6 +277,9 @@ pub struct SchedulerConfig {
 
     /// Number of instructions to count when creating or loading a canister snapshot.
     pub canister_snapshot_baseline_instructions: NumInstructions,
+
+    /// Number of instructions to count when uploading or downloading binary snapshot data.
+    pub canister_snapshot_data_baseline_instructions: NumInstructions,
 }
 
 impl SchedulerConfig {
@@ -301,6 +309,8 @@ impl SchedulerConfig {
             upload_wasm_chunk_instructions: DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS,
             canister_snapshot_baseline_instructions:
                 DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS,
+            canister_snapshot_data_baseline_instructions:
+                DEFAULT_CANISTERS_SNAPSHOT_DATA_BASELINE_INSTRUCTIONS,
         }
     }
 
@@ -344,6 +354,7 @@ impl SchedulerConfig {
             accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
             upload_wasm_chunk_instructions: NumInstructions::from(0),
             canister_snapshot_baseline_instructions: NumInstructions::from(0),
+            canister_snapshot_data_baseline_instructions: NumInstructions::from(0),
         }
     }
 

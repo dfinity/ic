@@ -15,5 +15,5 @@ type NodeProvidersMonthlyXdrRewards = record {
 service : () -> {
     get_node_providers_monthly_xdr_rewards: (GetNodeProvidersMonthlyXdrRewardsRequest) -> (
         GetNodeProvidersMonthlyXdrRewardsResponse
-    ) query;
+    );
 }

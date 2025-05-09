@@ -11,6 +11,7 @@ use ic_system_test_driver::{
         farm::HostFeature, ic::InternetComputer, nested::NestedVms, test_env::TestEnv,
         test_env_api::*,
     },
+    retry_with_msg,
     util::block_on,
 };
 use ic_types::hostos_version::HostosVersion;
@@ -22,6 +23,8 @@ use util::{
     check_hostos_version, elect_hostos_version, setup_nested_vm, start_nested_vm,
     update_nodes_hostos_version,
 };
+
+use anyhow::bail;
 
 const HOST_VM_NAME: &str = "host-1";
 
@@ -97,6 +100,10 @@ pub fn upgrade_hostos(env: TestEnv) {
         HostosVersion::try_from(target_version_str.trim()).expect("Invalid mainnet hostos version");
 
     let update_image_url_str = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_URL").unwrap();
+    info!(
+        logger,
+        "HostOS update image URL: '{}'", update_image_url_str
+    );
     let update_image_url =
         Url::parse(update_image_url_str.trim()).expect("Invalid mainnet hostos update image URL");
     let update_image_sha256 = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_SHA").unwrap();
@@ -142,6 +149,19 @@ pub fn upgrade_hostos(env: TestEnv) {
     ));
     info!(logger, "Elected target HostOS version");
 
+    info!(logger, "Retrieving the current boot ID from the host before we upgrade so we can determine when it rebooted post upgrade...");
+    let retrieve_host_boot_id = || {
+        host.block_on_bash_script("journalctl -q --list-boots | tail -n1 | awk '{print $2}'")
+            .unwrap()
+            .trim()
+            .to_string()
+    };
+    let host_boot_id_pre_upgrade = retrieve_host_boot_id();
+    info!(
+        logger,
+        "Host boot ID pre upgrade: '{}'", host_boot_id_pre_upgrade
+    );
+
     info!(
         logger,
         "Upgrading node '{}' to '{}'", node_id, target_version
@@ -155,7 +175,31 @@ pub fn upgrade_hostos(env: TestEnv) {
     // The HostOS upgrade is applied with a reboot to the host machine.
     // Wait for the host to reboot before checking Orchestrator dashboard status
     info!(logger, "Waiting for the HostOS upgrade to apply...");
-    std::thread::sleep(std::time::Duration::from_secs(180));
+
+    retry_with_msg!(
+        format!(
+            "Waiting until the host's boot ID changes from its pre upgrade value of '{}'",
+            host_boot_id_pre_upgrade
+        ),
+        logger.clone(),
+        Duration::from_secs(5 * 60),
+        Duration::from_secs(5),
+        || {
+            let host_boot_id = retrieve_host_boot_id();
+            if host_boot_id != host_boot_id_pre_upgrade {
+                info!(
+                    logger,
+                    "Host boot ID changed from '{}' to '{}'",
+                    host_boot_id_pre_upgrade,
+                    host_boot_id
+                );
+                Ok(())
+            } else {
+                bail!("Host boot ID is still '{}'", host_boot_id_pre_upgrade)
+            }
+        }
+    )
+    .unwrap();
 
     info!(logger, "Waiting for Orchestrator dashboard...");
     host.await_orchestrator_dashboard_accessible().unwrap();

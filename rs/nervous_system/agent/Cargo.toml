@@ -17,6 +17,7 @@ ic-management-canister-types = { workspace = true }
 ic-nns-common = { path = "../../nns/common" }
 ic-nervous-system-clients = { path = "../clients" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
+ic-node-rewards-canister-api = { path = "../../node_rewards/canister/api" }
 cycles-minting-canister = { path = "../../nns/cmc" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-registry-canister-api = { path = "../../registry/canister/api" }

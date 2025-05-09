@@ -51,12 +51,10 @@ SYSTEM_API_FUZZ_DEPENDENCIES = [
     # Keep sorted.
     "//rs/config",
     "//rs/embedders/fuzz:wasm_fuzzers",
-    "//rs/registry/subnet_type",
-    "//rs/state_machine_tests",
+    "//rs/test_utilities/execution_environment",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:libfuzzer-sys",
-    "@crate_index//:wat",
 ]
 
 rust_fuzz_test_binary(

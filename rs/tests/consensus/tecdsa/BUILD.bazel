@@ -339,6 +339,7 @@ system_test_nns(
     },
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "manual",
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
@@ -363,6 +364,7 @@ system_test_nns(
     },
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "manual",
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
@@ -387,6 +389,7 @@ system_test_nns(
     },
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "manual",
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
@@ -411,6 +414,7 @@ system_test_nns(
     },
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "manual",
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,

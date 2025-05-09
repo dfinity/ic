@@ -52,7 +52,7 @@ use std::fs;
 use url::Url;
 
 const DKG_INTERVAL: u64 = 9;
-const SUBNET_SIZE: usize = 3;
+const SUBNET_SIZE: usize = 4;
 pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 
 fn main() -> Result<()> {

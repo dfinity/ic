@@ -2923,6 +2923,26 @@ impl From<pb_api::get_proposal_response::Result> for pb::get_proposal_response::
     }
 }
 
+impl From<pb::TopicSelector> for pb_api::TopicSelector {
+    fn from(item: pb::TopicSelector) -> Self {
+        let pb::TopicSelector { topic } = item;
+
+        let topic = topic.and_then(topic_id_to_api);
+
+        Self { topic }
+    }
+}
+
+impl From<pb_api::TopicSelector> for pb::TopicSelector {
+    fn from(item: pb_api::TopicSelector) -> Self {
+        let pb_api::TopicSelector { topic } = item;
+
+        let topic = topic.map(|topic| i32::from(pb::Topic::from(topic)));
+
+        Self { topic }
+    }
+}
+
 impl From<pb::ListProposals> for pb_api::ListProposals {
     fn from(item: pb::ListProposals) -> Self {
         Self {
@@ -2931,6 +2951,12 @@ impl From<pb::ListProposals> for pb_api::ListProposals {
             exclude_type: item.exclude_type,
             include_reward_status: item.include_reward_status,
             include_status: item.include_status,
+            include_topics: Some(
+                item.include_topics
+                    .into_iter()
+                    .map(|topic_selector| topic_selector.into())
+                    .collect(),
+            ),
         }
     }
 }
@@ -2942,6 +2968,14 @@ impl From<pb_api::ListProposals> for pb::ListProposals {
             exclude_type: item.exclude_type,
             include_reward_status: item.include_reward_status,
             include_status: item.include_status,
+            include_topics: if let Some(include_topics) = item.include_topics {
+                include_topics
+                    .into_iter()
+                    .map(|topic_selector| topic_selector.into())
+                    .collect()
+            } else {
+                vec![]
+            },
         }
     }
 }
@@ -2951,6 +2985,7 @@ impl From<pb::ListProposalsResponse> for pb_api::ListProposalsResponse {
         Self {
             proposals: item.proposals.into_iter().map(|x| x.into()).collect(),
             include_ballots_by_caller: item.include_ballots_by_caller,
+            include_topic_filtering: item.include_topic_filtering,
         }
     }
 }
@@ -2959,6 +2994,7 @@ impl From<pb_api::ListProposalsResponse> for pb::ListProposalsResponse {
         Self {
             proposals: item.proposals.into_iter().map(|x| x.into()).collect(),
             include_ballots_by_caller: item.include_ballots_by_caller,
+            include_topic_filtering: item.include_topic_filtering,
         }
     }
 }

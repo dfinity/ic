@@ -8,9 +8,7 @@ use crate::{
 };
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance_api::pb::v1::manage_neuron_response::{
-    MergeMaturityResponse, StakeMaturityResponse,
-};
+use ic_nns_governance_api::manage_neuron_response::{MergeMaturityResponse, StakeMaturityResponse};
 use maplit::btreemap;
 use std::sync::Arc;
 

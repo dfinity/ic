@@ -6,7 +6,7 @@ use crate::{
 use assert_matches::assert_matches;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1 as pb;
-use ic_nns_governance_api::pb::v1 as pb_api;
+use ic_nns_governance_api as pb_api;
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use maplit::btreemap;
 use test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING;

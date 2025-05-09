@@ -101,12 +101,10 @@ async fn get_canister_status() -> CanisterStatusResponse {
 }
 
 #[query(hidden = true)]
-fn http_request(
-    req: ic_canisters_http_types::HttpRequest,
-) -> ic_canisters_http_types::HttpResponse {
+fn http_request(req: ic_http_types::HttpRequest) -> ic_http_types::HttpResponse {
     use askama::Template;
     use dashboard::DashboardTemplate;
-    use ic_canisters_http_types::HttpResponseBuilder;
+    use ic_http_types::HttpResponseBuilder;
 
     if ic_cdk::api::in_replicated_execution() {
         ic_cdk::trap("update call rejected");

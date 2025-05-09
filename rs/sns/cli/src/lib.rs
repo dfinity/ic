@@ -11,7 +11,7 @@ use ic_base_types::PrincipalId;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     manage_neuron::{self, NeuronIdOrSubaccount},
     manage_neuron_response::{self, MakeProposalResponse},
     ManageNeuron, ManageNeuronResponse, Proposal,
@@ -228,7 +228,7 @@ pub(crate) fn generate_sns_init_payload(path: &Path) -> Result<SnsInitPayload> {
 
 fn read_create_service_nervous_system_from_init_yaml(
     path: &Path,
-) -> Result<ic_nns_governance_api::pb::v1::CreateServiceNervousSystem> {
+) -> Result<ic_nns_governance_api::CreateServiceNervousSystem> {
     let contents = std::fs::read_to_string(path).context(format!("Unable to read {path:?}"))?;
     let configuration =
         serde_yaml::from_str::<crate::init_config_file::friendly::SnsConfigurationFile>(&contents)
@@ -254,7 +254,8 @@ impl DeployTestflightArgs {
                     .swap_parameters
                     .as_ref()
                     .unwrap()
-                    .neurons_fund_participation()
+                    .neurons_fund_participation
+                    .unwrap_or_default()
                 {
                     println!("Neuron's fund participation was enabled in {}, but is not supported by SNS testflight. Proceeding as if it was disabled.", init_config_file.display());
                     create_service_nervous_system

@@ -1,0 +1,15 @@
+[package]
+name = "ic-http-endpoints-test-agent"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
+ic-types = { path = "../../types/types" }
+ic-validator = { path = "../../validator" }
+reqwest = { workspace = true }
+serde_cbor = { workspace = true }
+tokio = { workspace = true }

@@ -10,8 +10,6 @@ component_files = {
     Label("hostos-scripts/guestos/start-guestos.sh"): "/opt/ic/bin/start-guestos.sh",
     Label("hostos-scripts/guestos/stop-guestos.sh"): "/opt/ic/bin/stop-guestos.sh",
     Label("hostos-scripts/guestos/guestos.xml.template"): "/opt/ic/share/guestos.xml.template",
-    Label("hostos-scripts/guestos/kvm-cpu.xml"): "/opt/ic/share/kvm-cpu.xml",
-    Label("hostos-scripts/guestos/qemu-cpu.xml"): "/opt/ic/share/qemu-cpu.xml",
     Label("hostos-scripts/libvirt/setup-libvirt.sh"): "/opt/ic/bin/setup-libvirt.sh",
     Label("hostos-scripts/libvirt/setup-libvirt.service"): "/etc/systemd/system/setup-libvirt.service",
     Label("hostos-scripts/misc/setup-var.sh"): "/opt/ic/bin/setup-var.sh",
@@ -35,7 +33,7 @@ component_files = {
     # early-boot
     Label("early-boot/relabel-machine-id/relabel-machine-id.sh"): "/opt/ic/bin/relabel-machine-id.sh",
     Label("early-boot/relabel-machine-id/relabel-machine-id.service"): "/etc/systemd/system/relabel-machine-id.service",
-    Label("early-boot/setup-hostname/hostos/setup-hostname.sh"): "/opt/ic/bin/setup-hostname.sh",
+    Label("early-boot/setup-hostname/setup-hostname.sh"): "/opt/ic/bin/setup-hostname.sh",
     Label("early-boot/setup-hostname/hostos/setup-hostname.service"): "/etc/systemd/system/setup-hostname.service",
     Label("early-boot/setup-hostname/hostname-empty"): "/etc/hostname",
     Label("early-boot/save-machine-id/save-machine-id.sh"): "/opt/ic/bin/save-machine-id.sh",
@@ -49,9 +47,9 @@ component_files = {
     Label("early-boot/initramfs-tools/hostos/set-machine-id/set-machine-id"): "/etc/initramfs-tools/scripts/init-bottom/set-machine-id/set-machine-id",
 
     # misc
+    Label("misc/config/config.sh"): "/opt/ic/bin/config.sh",
     Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
     Label("misc/metrics.sh"): "/opt/ic/bin/metrics.sh",
-    Label("misc/fetch-property.sh"): "/opt/ic/bin/fetch-property.sh",
     Label("misc/vsock/vsock-agent.service"): "/etc/systemd/system/vsock-agent.service",
     Label("misc/vsock/10-vhost-vsock.rules"): "/etc/udev/rules.d/10-vhost-vsock.rules",
     Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",

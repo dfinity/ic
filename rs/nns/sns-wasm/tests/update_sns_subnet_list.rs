@@ -5,7 +5,7 @@ use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     sns_wasm::{get_sns_subnet_ids, update_sns_subnet_list, update_sns_subnet_list_via_proposal},
-    state_test_helpers::{self, create_canister},
+    state_test_helpers::create_canister,
 };
 use ic_sns_wasm::pb::v1::UpdateSnsSubnetListRequest;
 use ic_state_machine_tests::StateMachine;
@@ -31,7 +31,6 @@ fn test_update_sns_subnet_list_can_be_called_via_nns_proposal() {
 #[test]
 fn test_update_sns_subnet_list_cannot_be_called_directly() {
     // We don't want the underlying warnings of the StateMachine
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = StateMachine::new();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new().build();

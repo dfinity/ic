@@ -6,20 +6,20 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-http-types",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/ledger_suite/common/ledger_canister_core",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/ledger_suite/icrc1/index-ng",
     "//rs/rust_canisters/canister_log",
-    "//rs/rust_canisters/http_types",
     "//rs/types/base_types",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
-    "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
+    "@crate_index//:ic_cdk_0_17_1",
     "@crate_index//:num-traits",
     "@crate_index//:scopeguard",
     "@crate_index//:serde",
@@ -39,7 +39,7 @@ DEV_DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
-    "@crate_index//:ic-cdk-macros",
+    "@crate_index//:ic_cdk_macros_0_17_1",
 ]
 
 rust_library(

@@ -69,6 +69,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:insta",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
+    "@crate_index//:more-asserts",
     "@crate_index//:pretty_assertions",
     "@crate_index//:proptest",
     "@crate_index//:strum",
@@ -152,6 +153,8 @@ rust_ic_test_suite_with_extra_srcs(
         exclude = [
             "tests/wasmtime_simple.rs",
             "tests/instrumentation.rs",
+            "tests/system_api.rs",
+            "tests/sandbox_safe_system_state.rs",
         ],
     ),
     aliases = ALIASES,
@@ -180,6 +183,26 @@ rust_ic_test_suite_with_extra_srcs(
         "tests/instrumentation.rs",
     ],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":embedders"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "system_api_integration_test",
+    srcs = [
+        "tests/common/mod.rs",
+        "tests/system_api.rs",
+    ],
+    crate_root = "tests/system_api.rs",
+    deps = [":embedders"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "sandbox_safe_system_state_test",
+    srcs = [
+        "tests/common/mod.rs",
+        "tests/sandbox_safe_system_state.rs",
+    ],
+    crate_root = "tests/sandbox_safe_system_state.rs",
     deps = [":embedders"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 

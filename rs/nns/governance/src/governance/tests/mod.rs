@@ -11,7 +11,7 @@ use ic_nervous_system_common::{assert_is_err, assert_is_ok, E8};
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_common::pb::v1::NeuronId;
 #[cfg(feature = "test")]
-use ic_nns_governance_api::pb::v1::CreateServiceNervousSystem as ApiCreateServiceNervousSystem;
+use ic_nns_governance_api::CreateServiceNervousSystem as ApiCreateServiceNervousSystem;
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 #[cfg(feature = "test")]
 use ic_sns_init::pb::v1::SnsInitPayload;
@@ -146,7 +146,7 @@ mod settle_neurons_fund_participation_mem_tests {
     };
     use ic_base_types::PrincipalId;
     use ic_nns_common::pb::v1::NeuronId;
-    use ic_nns_governance_api::pb::v1::SettleNeuronsFundParticipationResponse;
+    use ic_nns_governance_api::SettleNeuronsFundParticipationResponse;
 
     fn make_dummy_neuron_portion() -> NeuronsFundNeuronPortion {
         NeuronsFundNeuronPortion {

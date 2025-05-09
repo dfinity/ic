@@ -33,7 +33,7 @@ fn vetkd_bench(criterion: &mut Criterion) {
         name: "dummy_key_name".to_string(),
     }));
 
-    for subnet_size in [13, 34] {
+    for subnet_size in [1, 4, 13, 34, 40] {
         let threshold = dkg_tag.threshold_for_subnet_of_size(subnet_size);
 
         let group = &mut criterion.benchmark_group(format!(
@@ -48,7 +48,9 @@ fn vetkd_bench(criterion: &mut Criterion) {
         bench_create_encrypted_key_share(group, &config, &env, rng);
         bench_verify_encrypted_key_share(group, &config, &env, rng);
         bench_combine_encrypted_key_shares(group, &config, subnet_size, &env, rng);
-        bench_combine_encrypted_key_shares(group, &config, threshold, &env, rng);
+        if threshold != subnet_size {
+            bench_combine_encrypted_key_shares(group, &config, threshold, &env, rng);
+        }
         bench_verify_encrypted_key(group, &config, &env, rng);
     }
 }

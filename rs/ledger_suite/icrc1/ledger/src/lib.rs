@@ -691,6 +691,11 @@ impl Ledger {
             ledger_version: LEDGER_VERSION,
         };
 
+        if ledger.fee_collector.as_ref().map(|fc| fc.fee_collector) == Some(ledger.minting_account)
+        {
+            ic_cdk::trap("The fee collector account cannot be the same as the minting account");
+        }
+
         for (account, balance) in initial_balances.into_iter() {
             let amount = Tokens::try_from(balance.clone()).unwrap_or_else(|e| {
                 panic!(
@@ -959,29 +964,17 @@ impl Ledger {
                 let last_block_index = self.blockchain().chain_length().checked_sub(1).unwrap();
                 let last_block_index_label = Label::from("last_block_index");
 
-                #[cfg(feature = "icrc3-compatible-data-certificate")]
-                {
-                    let last_block_hash_label = Label::from("last_block_hash");
-                    let mut last_block_index_encoded = Vec::with_capacity(MAX_U64_ENCODING_BYTES);
-                    leb128::write::unsigned(&mut last_block_index_encoded, last_block_index)
-                        .expect("Failed to write LEB128");
-                    fork(
-                        label(
-                            last_block_hash_label,
-                            leaf(last_block_hash.as_slice().to_vec()),
-                        ),
-                        label(last_block_index_label, leaf(last_block_index_encoded)),
-                    )
-                }
-                #[cfg(not(feature = "icrc3-compatible-data-certificate"))]
-                {
-                    let tip_hash_label = Label::from("tip_hash");
-                    let last_block_index_encoded = last_block_index.to_be_bytes().to_vec();
-                    fork(
-                        label(last_block_index_label, leaf(last_block_index_encoded)),
-                        label(tip_hash_label, leaf(last_block_hash.as_slice().to_vec())),
-                    )
-                }
+                let last_block_hash_label = Label::from("last_block_hash");
+                let mut last_block_index_encoded = Vec::with_capacity(MAX_U64_ENCODING_BYTES);
+                leb128::write::unsigned(&mut last_block_index_encoded, last_block_index)
+                    .expect("Failed to write LEB128");
+                fork(
+                    label(
+                        last_block_hash_label,
+                        leaf(last_block_hash.as_slice().to_vec()),
+                    ),
+                    label(last_block_index_label, leaf(last_block_index_encoded)),
+                )
             }
             None => empty(),
         }

@@ -2,7 +2,7 @@ use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     self as api,
     governance_error::ErrorType,
     manage_neuron_response::{Command, RegisterVoteResponse},
@@ -16,7 +16,7 @@ use ic_nns_test_utils::{
         get_unauthorized_neuron, submit_proposal,
     },
     state_test_helpers::{
-        get_pending_proposals, list_all_neurons_and_combine_responses, nns_cast_vote,
+        get_pending_proposals, list_all_neurons_and_combine_responses, nns_cast_vote_or_panic,
         nns_governance_get_full_neuron, nns_governance_make_proposal, setup_nns_canisters,
         state_machine_builder_for_nns_tests,
     },
@@ -50,7 +50,7 @@ fn unauthorized_neuron_cannot_create_proposal() {
     .command
     .expect("Making NNS proposal failed");
 
-    assert_matches!(response, Command::Error(ref err) if err.error_type() == ErrorType::NotAuthorized);
+    assert_matches!(response, Command::Error(ref err) if err.error_type == ErrorType::NotAuthorized as i32);
     assert_matches!(response, Command::Error(ref err) if err.error_message.contains("Caller not authorized to propose"));
 }
 
@@ -59,7 +59,7 @@ fn unauthorized_neuron_cannot_vote_on_nonexistent_proposal() {
     let state_machine = setup_state_machine_with_nns_canisters();
     let unauthorized_neuron = get_unauthorized_neuron();
 
-    let response = nns_cast_vote(
+    let response = nns_cast_vote_or_panic(
         &state_machine,
         unauthorized_neuron.principal_id,
         unauthorized_neuron.neuron_id,
@@ -69,7 +69,7 @@ fn unauthorized_neuron_cannot_vote_on_nonexistent_proposal() {
     .command
     .expect("Casting vote failed");
 
-    assert_matches!(response, Command::Error(ref err) if err.error_type() == ErrorType::NotAuthorized);
+    assert_matches!(response, Command::Error(ref err) if err.error_type == ErrorType::NotAuthorized as i32);
     assert_matches!(response, Command::Error(ref err) if err.error_message.contains("Caller is not authorized to vote for neuron"));
 }
 
@@ -78,7 +78,7 @@ fn anonymous_principal_cannot_vote_on_nonexistent_proposal() {
     let state_machine = setup_state_machine_with_nns_canisters();
     let n1 = get_neuron_1();
 
-    let response = nns_cast_vote(
+    let response = nns_cast_vote_or_panic(
         &state_machine,
         PrincipalId::new_anonymous(),
         n1.neuron_id,
@@ -88,7 +88,7 @@ fn anonymous_principal_cannot_vote_on_nonexistent_proposal() {
     .command
     .expect("Casting vote failed");
 
-    assert_matches!(response, Command::Error(ref err) if err.error_type() == ErrorType::NotAuthorized);
+    assert_matches!(response, Command::Error(ref err) if err.error_type == ErrorType::NotAuthorized as i32);
     assert_matches!(response, Command::Error(ref err) if err.error_message.contains("Caller is not authorized to vote for neuron"));
 }
 
@@ -98,7 +98,7 @@ fn anonymous_principal_cannot_vote_on_existent_proposal() {
     let n1 = get_neuron_1();
     let proposal_id = submit_proposal(&state_machine, &n1);
 
-    let response = nns_cast_vote(
+    let response = nns_cast_vote_or_panic(
         &state_machine,
         PrincipalId::new_anonymous(),
         n1.neuron_id,
@@ -108,7 +108,7 @@ fn anonymous_principal_cannot_vote_on_existent_proposal() {
     .command
     .expect("Casting vote failed");
 
-    assert_matches!(response, Command::Error(ref err) if err.error_type() == ErrorType::NotAuthorized);
+    assert_matches!(response, Command::Error(ref err) if err.error_type == ErrorType::NotAuthorized as i32);
     assert_matches!(response, Command::Error(ref err) if err.error_message.contains("Caller is not authorized to vote for neuron"));
 }
 
@@ -117,7 +117,7 @@ fn neuron_cannot_vote_on_nonexistent_proposal() {
     let state_machine = setup_state_machine_with_nns_canisters();
     let n1 = get_neuron_1();
 
-    let response = nns_cast_vote(
+    let response = nns_cast_vote_or_panic(
         &state_machine,
         n1.principal_id,
         n1.neuron_id,
@@ -127,7 +127,7 @@ fn neuron_cannot_vote_on_nonexistent_proposal() {
     .command
     .expect("Casting vote failed");
 
-    assert_matches!(response, Command::Error(ref err) if err.error_type() == ErrorType::NotFound);
+    assert_matches!(response, Command::Error(ref err) if err.error_type == ErrorType::NotFound as i32);
     assert_matches!(response, Command::Error(ref err) if err.error_message.contains("Can't find proposal"));
 }
 
@@ -138,7 +138,7 @@ fn propose_and_vote_with_other_neuron() {
     let n2 = get_neuron_2();
     let proposal_id = submit_proposal(&state_machine, &n1);
 
-    let response = nns_cast_vote(
+    let response = nns_cast_vote_or_panic(
         &state_machine,
         n2.principal_id,
         n2.neuron_id,
@@ -159,7 +159,7 @@ fn proposer_neuron_cannot_vote_explicitly() {
     let proposal_id = submit_proposal(&state_machine, &n1);
 
     // neuron 1 already implicitly voted when submitting the proposal
-    let response = nns_cast_vote(
+    let response = nns_cast_vote_or_panic(
         &state_machine,
         n1.principal_id,
         n1.neuron_id,
@@ -169,7 +169,7 @@ fn proposer_neuron_cannot_vote_explicitly() {
     .command
     .expect("Casting vote failed");
 
-    assert_matches!(response, Command::Error(ref err) if err.error_type() == ErrorType::NeuronAlreadyVoted);
+    assert_matches!(response, Command::Error(ref err) if err.error_type == ErrorType::NeuronAlreadyVoted as i32);
     assert_matches!(response, Command::Error(ref err) if err.error_message.contains("Neuron already voted"));
 }
 
@@ -181,7 +181,7 @@ fn neuron_cannot_vote_twice() {
     let proposal_id = submit_proposal(&state_machine, &n1);
 
     // vote once with neuron 2
-    let response_1 = nns_cast_vote(
+    let response_1 = nns_cast_vote_or_panic(
         &state_machine,
         n2.principal_id,
         n2.neuron_id,
@@ -194,7 +194,7 @@ fn neuron_cannot_vote_twice() {
     assert_eq!(response_1, Command::RegisterVote(RegisterVoteResponse {}));
 
     // vote again with neuron 2
-    let response_2 = nns_cast_vote(
+    let response_2 = nns_cast_vote_or_panic(
         &state_machine,
         n2.principal_id,
         n2.neuron_id,
@@ -204,7 +204,7 @@ fn neuron_cannot_vote_twice() {
     .command
     .expect("Casting vote failed");
 
-    assert_matches!(response_2, Command::Error(ref err) if err.error_type() == ErrorType::NeuronAlreadyVoted);
+    assert_matches!(response_2, Command::Error(ref err) if err.error_type == ErrorType::NeuronAlreadyVoted as i32);
     assert_matches!(response_2, Command::Error(ref err) if err.error_message.contains("Neuron already voted"));
 }
 
@@ -215,7 +215,7 @@ fn nonexistent_neuron_cannot_vote() {
     let nonexistent_neuron = get_nonexistent_neuron();
     let proposal_id = submit_proposal(&state_machine, &n1);
 
-    let response = nns_cast_vote(
+    let response = nns_cast_vote_or_panic(
         &state_machine,
         nonexistent_neuron.principal_id,
         nonexistent_neuron.neuron_id,
@@ -225,7 +225,7 @@ fn nonexistent_neuron_cannot_vote() {
     .command
     .expect("Casting vote failed");
 
-    assert_matches!(response, Command::Error(ref err) if err.error_type() == ErrorType::NotFound);
+    assert_matches!(response, Command::Error(ref err) if err.error_type == ErrorType::NotFound as i32);
     assert_matches!(response, Command::Error(ref err) if err.error_message.contains("Neuron not found"));
 }
 
@@ -241,7 +241,7 @@ fn cannot_submit_proposals_with_insufficient_funds() {
             .command
             .expect("Making NNS proposal failed");
 
-    assert_matches!(response, Command::Error(ref err) if err.error_type() == ErrorType::InsufficientFunds);
+    assert_matches!(response, Command::Error(ref err) if err.error_type == ErrorType::InsufficientFunds as i32);
     assert_matches!(response, Command::Error(ref err) if err.error_message.contains("Neuron doesn't have enough minted stake to submit proposal"));
 }
 
@@ -253,7 +253,7 @@ fn can_vote_on_proposal_with_insufficient_funds() {
 
     // however, proposal can be voted on even when the voting neuron has insufficient funds for submitting proposals
     let proposal_id = submit_proposal(&state_machine, &n2);
-    let response = nns_cast_vote(
+    let response = nns_cast_vote_or_panic(
         &state_machine,
         n3.principal_id,
         n3.neuron_id,
@@ -280,7 +280,7 @@ fn failed_proposal_causes_reject_cost_deduction_for_proposer() {
     let proposal_id = submit_proposal(&state_machine, &n2);
 
     // vote "no" with heavy neuron 1 to cause the proposal to fail
-    let response = nns_cast_vote(
+    let response = nns_cast_vote_or_panic(
         &state_machine,
         n1.principal_id,
         n1.neuron_id,
@@ -307,7 +307,7 @@ fn cannot_vote_on_future_proposal() {
     let n2 = get_neuron_2();
     let future_proposal_id = ProposalId(1);
 
-    let response = nns_cast_vote(
+    let response = nns_cast_vote_or_panic(
         &state_machine,
         n1.principal_id,
         n1.neuron_id,
@@ -317,7 +317,7 @@ fn cannot_vote_on_future_proposal() {
     .command
     .expect("Casting vote failed");
 
-    assert_matches!(response, Command::Error(ref err) if err.error_type() == ErrorType::NotFound);
+    assert_matches!(response, Command::Error(ref err) if err.error_type == ErrorType::NotFound as i32);
     assert_matches!(response, Command::Error(ref err) if err.error_message.contains("Can't find proposal"));
 
     let proposal_id = submit_proposal(&state_machine, &n2);
@@ -331,14 +331,17 @@ fn cannot_vote_on_future_proposal() {
 
     // either there is no ballot registered for neuron 1 or it is unspecified
     if proposal.ballots.contains_key(&n1.neuron_id.id) {
-        assert_eq!(proposal.ballots[&n1.neuron_id.id].vote(), Vote::Unspecified);
+        assert_eq!(
+            proposal.ballots[&n1.neuron_id.id].vote,
+            Vote::Unspecified as i32
+        );
     }
 }
 
 fn neuron_with_followees(
     id: u64,
     followees: HashMap<i32, Followees>,
-) -> ic_nns_governance_api::pb::v1::Neuron {
+) -> ic_nns_governance_api::Neuron {
     const TWELVE_MONTHS_SECONDS: u64 = 30 * 12 * 24 * 60 * 60;
 
     let neuron_id = NeuronId::from_u64(id);

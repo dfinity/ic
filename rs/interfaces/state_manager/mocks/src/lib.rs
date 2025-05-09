@@ -1,12 +1,11 @@
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces_state_manager::{
-    CertificationScope, CertifiedStateSnapshot, Labeled, StateHashError, StateManager,
-    StateManagerResult, StateReader,
+    CertificationScope, CertifiedStateSnapshot, Labeled, StateHashError, StateManager, StateReader,
 };
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    batch::BatchSummary, consensus::certification::Certification, CryptoHashOfPartialState,
-    CryptoHashOfState, Height,
+    batch::BatchSummary, consensus::certification::Certification,
+    state_manager::StateManagerResult, CryptoHashOfPartialState, CryptoHashOfState, Height,
 };
 use mockall::*;
 use std::sync::Arc;

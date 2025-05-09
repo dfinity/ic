@@ -4746,7 +4746,7 @@ fn test_list_topics() {
                     function_1,
                 ],
             },
-            is_critical: false,
+            is_critical: true,
         },
         TopicInfo {
             topic: Topic::SnsFrameworkManagement,

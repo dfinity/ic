@@ -22,7 +22,7 @@ use ic_system_test_driver::{
 };
 use ic_tests_ckbtc::{
     activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_btc_checker,
-    install_ledger, install_minter, setup, subnet_sys,
+    install_ledger, install_minter, setup, subnet_app, subnet_sys,
     utils::{
         ensure_wallet, generate_blocks, get_btc_address, get_btc_client, send_to_btc_address,
         wait_for_finalization, wait_for_mempool_change, wait_for_signed_tx,
@@ -37,7 +37,9 @@ use slog::{debug, info};
 pub fn test_deposit_and_withdrawal(env: TestEnv) {
     let logger = env.logger();
     let subnet_sys = subnet_sys(&env);
+    let subnet_app = subnet_app(&env);
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
+    let app_node = subnet_app.nodes().next().expect("No node in app subnet.");
     let btc_rpc = get_btc_client(&env);
     ensure_wallet(&btc_rpc, &logger);
 
@@ -55,15 +57,17 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
         .unwrap();
 
     block_on(async {
-        let runtime = runtime_from_url(sys_node.get_public_url(), sys_node.effective_canister_id());
-        install_bitcoin_canister(&runtime, &logger).await;
+        let sys_runtime =
+            runtime_from_url(sys_node.get_public_url(), sys_node.effective_canister_id());
+        let runtime = runtime_from_url(app_node.get_public_url(), app_node.effective_canister_id());
+        install_bitcoin_canister(&sys_runtime, &logger).await;
 
         let mut ledger_canister = create_canister(&runtime).await;
         let mut minter_canister = create_canister(&runtime).await;
         let mut btc_checker_canister = create_canister(&runtime).await;
 
         let minting_user = minter_canister.canister_id().get();
-        let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
+        let agent = assert_create_agent(app_node.get_public_url().as_str()).await;
         let btc_checker_id = install_btc_checker(&mut btc_checker_canister, &env).await;
         let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
         // Here we put the max_time_in_queue to 0 because we want the minter to send request right away with no batching

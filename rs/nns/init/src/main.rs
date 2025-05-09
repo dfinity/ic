@@ -4,18 +4,12 @@ use ic_base_types::{PrincipalId, SubnetId};
 use ic_canister_client::{Agent, HttpClientConfig, Sender};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_nns_governance_api::pb::v1::Governance as GovernanceProto;
 use ic_nns_init::{make_hsm_sender, set_up_env_vars_for_all_canisters};
 use ic_nns_test_utils::{
     common::{NnsInitPayloads, NnsInitPayloadsBuilder},
     itest_helpers::NnsCanisters,
 };
-use prost::Message;
-use std::{
-    fs,
-    io::Write,
-    path::{Path, PathBuf},
-};
+use std::path::PathBuf;
 use url::Url;
 
 #[derive(Debug, Parser)]
@@ -87,11 +81,6 @@ struct CliArgs {
     )]
     pin: String,
 
-    /// The Governance protobuf file with which to initialize the governance
-    /// system.
-    #[clap(long)]
-    governance_pb_file: Option<PathBuf>,
-
     /// If `true`, initialize the GTC and Governance canisters with Genesis
     /// neurons.
     #[clap(long)]
@@ -106,12 +95,6 @@ struct CliArgs {
     /// the specified ledger accounts.
     #[clap(long, num_args(1..))]
     initialize_ledger_with_test_accounts: Vec<String>,
-
-    /// If set, instead of installing the NNS, ic-nns-init will only output
-    /// the initial state, candid encoded. This can be used to reset the
-    /// state of the NNS canisters to a consistent state.
-    #[clap(long)]
-    output_initial_state_candid_only: bool,
 
     /// The number of months over which a GTC Seed Round account will be
     /// released as neurons (one neuron each month).
@@ -154,74 +137,42 @@ async fn main() {
 
     let init_payloads = create_init_payloads(&args);
 
-    if args.output_initial_state_candid_only {
-        let bytes = candid::encode_one(init_payloads.ledger).unwrap();
-        let mut f = std::fs::File::create("initial_ledger.candid").unwrap();
-        f.write_all(&bytes[..]).unwrap();
-        f.flush().unwrap();
+    let default_wasm_dir = PathBuf::from(".".to_string());
+    set_up_env_vars_for_all_canisters(args.wasm_dir.as_ref().unwrap_or(&default_wasm_dir));
 
-        let mut bytes = Vec::new();
-        init_payloads
-            .governance
-            .encode(&mut bytes)
-            .expect("Couldn't serialize init payload.");
+    let url = args.url.expect("Url must be provided to install canister.");
 
-        let mut f = std::fs::File::create("initial_governance.pb").unwrap();
-        f.write_all(&bytes[..]).unwrap();
-        f.flush().unwrap();
-
-        let mut bytes = Vec::new();
-        init_payloads
-            .genesis_token
-            .encode(&mut bytes)
-            .expect("Couldn't serialize init payload.");
-
-        let mut f = std::fs::File::create("initial_gtc.pb").unwrap();
-        f.write_all(&bytes[..]).unwrap();
-        f.flush().unwrap();
-
-        let bytes = candid::encode_one(init_payloads.cycles_minting).unwrap();
-        let mut f = std::fs::File::create("initial_cmc.candid").unwrap();
-        f.write_all(&bytes[..]).unwrap();
-        f.flush().unwrap();
+    let http_client_config = HttpClientConfig {
+        http2_only: args.http2_only,
+        ..HttpClientConfig::default()
+    };
+    let agent = if args.use_hsm {
+        let sender = make_hsm_sender(&args.hsm_slot, &args.key_id, &args.pin);
+        Agent::new_with_http_client_config(url.clone(), sender, http_client_config)
     } else {
-        let default_wasm_dir = PathBuf::from(".".to_string());
-        set_up_env_vars_for_all_canisters(args.wasm_dir.as_ref().unwrap_or(&default_wasm_dir));
+        // Use the special identity that has superpowers, like calling
+        // ic00::Method::ProvisionalCreateCanisterWithCycles.
+        Agent::new_with_http_client_config(
+            url.clone(),
+            Sender::from_keypair(&ic_test_identity::TEST_IDENTITY_KEYPAIR),
+            http_client_config,
+        )
+    };
 
-        let url = args.url.expect("Url must be provided to install canister.");
-
-        let http_client_config = HttpClientConfig {
-            http2_only: args.http2_only,
-            ..HttpClientConfig::default()
-        };
-        let agent = if args.use_hsm {
-            let sender = make_hsm_sender(&args.hsm_slot, &args.key_id, &args.pin);
-            Agent::new_with_http_client_config(url.clone(), sender, http_client_config)
-        } else {
-            // Use the special identity that has superpowers, like calling
-            // ic00::Method::ProvisionalCreateCanisterWithCycles.
-            Agent::new_with_http_client_config(
-                url.clone(),
-                Sender::from_keypair(&ic_test_identity::TEST_IDENTITY_KEYPAIR),
-                http_client_config,
-            )
-        };
-
-        // Don't let the "Test" distract you -- the RemoteTestRuntime is simply a
-        // client-side view of a subnet.
-        let runtime = Runtime::Remote(RemoteTestRuntime {
-            agent,
-            effective_canister_id: REGISTRY_CANISTER_ID.into(),
-        });
-        match args.pass_specified_id {
-            true => NnsCanisters::set_up_at_ids(&runtime, init_payloads).await,
-            false => NnsCanisters::set_up(&runtime, init_payloads).await,
-        };
-        eprintln!(
-            "{}All NNS canisters have been set up on the replica with {}",
-            LOG_PREFIX, url
-        );
-    }
+    // Don't let the "Test" distract you -- the RemoteTestRuntime is simply a
+    // client-side view of a subnet.
+    let runtime = Runtime::Remote(RemoteTestRuntime {
+        agent,
+        effective_canister_id: REGISTRY_CANISTER_ID.into(),
+    });
+    match args.pass_specified_id {
+        true => NnsCanisters::set_up_at_ids(&runtime, init_payloads).await,
+        false => NnsCanisters::set_up(&runtime, init_payloads).await,
+    };
+    eprintln!(
+        "{}All NNS canisters have been set up on the replica with {}",
+        LOG_PREFIX, url
+    );
 }
 
 /// Constructs the `NnsInitPayloads` from the command line options.
@@ -240,16 +191,6 @@ fn create_init_payloads(args: &CliArgs) -> NnsInitPayloads {
             LOG_PREFIX, path
         );
         init_payloads_builder.with_neurons_from_csv_file(path);
-    } else if let Some(path) = &args.governance_pb_file {
-        eprintln!(
-            "{}Initializing governance from PB file: {:?}",
-            LOG_PREFIX, path
-        );
-        let governance_pb =
-            read_governance_pb_from_file(path).expect("Couldn't decode Governance protobuf.");
-        init_payloads_builder
-            .governance
-            .with_governance_proto(governance_pb);
     } else {
         eprintln!(
             "{}Initial neuron CSV or PB path not specified, initializing with test neurons",
@@ -349,11 +290,4 @@ fn add_registry_content(
             .registry
             .push_init_mutate_request(mutate_req);
     }
-}
-
-/// Reads the initial contents of the governance protobuf from a file.
-fn read_governance_pb_from_file(file_path: &Path) -> Result<GovernanceProto, String> {
-    let bytes = fs::read(file_path).expect("Couldn't read governance protobuf file.");
-    GovernanceProto::decode(&bytes[..])
-        .map_err(|err| format!("Error decoding governance protobuf file: {:?}", err))
 }

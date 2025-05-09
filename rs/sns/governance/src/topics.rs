@@ -6,7 +6,7 @@ use ic_canister_log::log;
 use ic_sns_governance_api::pb::v1::topics::Topic;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use itertools::Itertools;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
 
 /// Each topic has some information associated with it. This information is for the benefit of the user but has
@@ -65,7 +65,7 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
                     MANAGE_SNS_METADATA,
                 ],
             },
-            is_critical: false,
+            is_critical: true,
         },
         TopicInfo::<NativeFunctions> {
             topic: Topic::SnsFrameworkManagement,
@@ -244,9 +244,10 @@ impl Governance {
 }
 
 impl pb::Governance {
-    /// For each custom function ID, returns a pair (`function_name`, `topic`).
-    pub fn custom_functions_to_topics(&self) -> BTreeMap<u64, (String, Option<pb::Topic>)> {
-        self.id_to_nervous_system_functions
+    fn custom_functions_to_topics_impl(
+        id_to_nervous_system_functions: &BTreeMap<u64, NervousSystemFunction>,
+    ) -> BTreeMap<u64, (String, Option<pb::Topic>)> {
+        id_to_nervous_system_functions
             .iter()
             .filter_map(|(function_id, function)| {
                 let Some(FunctionType::GenericNervousSystemFunction(generic)) =
@@ -268,7 +269,7 @@ impl pb::Governance {
                         log!(
                             ERROR,
                             "Custom proposal ID {function_id}: Cannot interpret \
-                                {topic} as Topic: {err}",
+                            {topic} as Topic: {err}",
                         );
 
                         // This should never happen; if it somehow does, treat this
@@ -292,6 +293,31 @@ impl pb::Governance {
             })
             .collect()
     }
+
+    pub fn get_custom_functions_for_topic(
+        id_to_nervous_system_functions: &BTreeMap<u64, NervousSystemFunction>,
+        topic: pb::Topic,
+    ) -> BTreeSet<u64> {
+        Self::custom_functions_to_topics_impl(id_to_nervous_system_functions)
+            .iter()
+            .filter_map(|(function_id, (_, this_topic))| {
+                let Some(this_topic) = this_topic else {
+                    return None;
+                };
+
+                if *this_topic == topic {
+                    Some(*function_id)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// For each custom function ID, returns a pair (`function_name`, `topic`).
+    pub fn custom_functions_to_topics(&self) -> BTreeMap<u64, (String, Option<pb::Topic>)> {
+        Self::custom_functions_to_topics_impl(&self.id_to_nervous_system_functions)
+    }
 }
 
 impl pb::Topic {
@@ -308,12 +334,31 @@ impl pb::Topic {
             .any(|topic| *self == Self::from(topic.topic) && topic.is_critical)
     }
 
+    pub fn is_non_critical(&self) -> bool {
+        !self.is_critical()
+    }
+
     pub fn proposal_criticality(&self) -> ProposalCriticality {
         if self.is_critical() {
             ProposalCriticality::Critical
         } else {
             ProposalCriticality::Normal
         }
+    }
+
+    pub fn native_functions(&self) -> BTreeSet<u64> {
+        topic_descriptions()
+            .iter()
+            .flat_map(|topic_info| {
+                let this_topic = Self::from(topic_info.topic);
+
+                if this_topic != *self {
+                    return vec![];
+                }
+
+                topic_info.functions.native_functions.clone()
+            })
+            .collect()
     }
 
     pub fn get_topic_for_native_action(action: &pb::proposal::Action) -> Option<Self> {

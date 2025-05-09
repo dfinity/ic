@@ -2,7 +2,6 @@ use crate::dashboard::DashboardPaginationParameters;
 use candid::Nat;
 use dashboard::DashboardTemplate;
 use ic_canister_log::log;
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cketh_minter::address::{validate_address_as_destination, AddressValidationError};
 use ic_cketh_minter::deposit::scrape_logs;
@@ -47,6 +46,7 @@ use ic_cketh_minter::{
     SCRAPING_ETH_LOGS_INTERVAL,
 };
 use ic_ethereum_types::Address;
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
@@ -1015,8 +1015,6 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                         .unwrap_or_default(),
                     "Last max fee per gas",
                 )?;
-
-                ic_cketh_minter::eth_rpc::encode_metrics(w)?;
 
                 Ok(())
             })

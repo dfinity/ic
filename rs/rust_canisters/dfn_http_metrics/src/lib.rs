@@ -1,4 +1,4 @@
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use ic_http_types::{HttpRequest, HttpResponse};
 use serde_bytes::ByteBuf;
 
 /// Implements an HTTP endpoint that handles /metrics requests and return 404

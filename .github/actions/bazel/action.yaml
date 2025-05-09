@@ -6,6 +6,9 @@ inputs:
     required: true
     description: |
       The commands to run. Will be evaluated with bash.
+  execlogs-artifact-name:
+    required: false
+    description: "When provided, the execlogs will be uploaded as an artifact with the specified name."
   GPG_PASSPHRASE:
     required: true
     description: "GPG key to encrypt build events. Upload can be disabled by explicitly setting the input to an empty string."
@@ -69,6 +72,28 @@ runs:
         path: |
           ${{ steps.metrics-tmpdir.outputs.dir }}/bazel-bep-*.pb.gpg
           ${{ steps.metrics-tmpdir.outputs.dir }}/profile-*.json
+
+    - name: Convert execlogs to CSV
+      shell: bash
+      if: (success() || failure()) && inputs.execlogs-artifact-name != ''
+      run: |
+        execlog="$(mktemp)"
+        trap "rm -f $execlog" INT TERM EXIT
+        for execlog_zst in $(find '${{ steps.metrics-tmpdir.outputs.dir }}' -name 'execlog-*.zst'); do
+          zstd -f -d "$execlog_zst" -o "$execlog"
+          bazel run //bazel:execution_log_compact_to_csv \
+            $([[ "$(uname)" == "Linux" ]] && echo '--repository_cache=/cache/bazel') -- \
+            --input_execlog="$execlog" \
+            --whitelist_pat='^//'
+        done > '${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv'
+
+    - name: Upload execution log
+      if: (success() || failure()) && inputs.execlogs-artifact-name != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.execlogs-artifact-name }}
+        path: |
+          ${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv
 
     - name: Cleanup
       shell: bash

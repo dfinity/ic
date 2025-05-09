@@ -3,7 +3,7 @@ use anyhow::Context;
 use candid::Nat;
 use candid::Principal;
 use ic_base_types::PrincipalId;
-use ic_nns_governance_api::pb::v1::Proposal;
+use ic_nns_governance_api::Proposal;
 use ic_rosetta_api::ledger_client::pending_proposals_response::PendingProposalsResponse;
 use ic_rosetta_api::models::seconds::Seconds;
 use ic_rosetta_api::models::AccountType;

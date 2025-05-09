@@ -16,7 +16,7 @@ use pocket_ic::common::rest::{
     CreateHttpGatewayResponse, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
     HttpsConfig, InstanceConfig, SubnetConfigSet, SubnetKind, Topology,
 };
-use pocket_ic::{update_candid, PocketIc, PocketIcBuilder};
+use pocket_ic::{update_candid, PocketIc, PocketIcBuilder, PocketIcState};
 use rcgen::{CertificateParams, KeyPair};
 use registry_canister::init::RegistryCanisterInitPayload;
 use reqwest::blocking::Client;
@@ -482,6 +482,8 @@ async fn test_gateway(server_url: Url, https: bool) {
         }
         std::thread::sleep(Duration::from_millis(20));
     }
+
+    pic.drop().await;
 }
 
 #[tokio::test]
@@ -897,7 +899,7 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     // and persisting the state in a separate (write) state.
     let pic = PocketIcBuilder::new()
         .with_server_url(new_server_url)
-        .with_read_only_state_dir(state_dir_path_buf.clone())
+        .with_read_only_state(&PocketIcState::new_from_path(state_dir_path_buf.clone()))
         .with_state_dir(write_state_dir_path_buf.clone())
         .build();
 
@@ -932,7 +934,7 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     // Create a PocketIC instance mounting the (read-only) state.
     let pic = PocketIcBuilder::new()
         .with_server_url(new_server_url)
-        .with_read_only_state_dir(state_dir_path_buf.clone())
+        .with_read_only_state(&PocketIcState::new_from_path(state_dir_path_buf.clone()))
         .build();
 
     // Check that the canister states have not changed
@@ -962,7 +964,7 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     // Create a PocketIC instance mounting the (read-only) state.
     let pic = PocketIcBuilder::new()
         .with_server_url(new_server_url)
-        .with_read_only_state_dir(state_dir_path_buf.clone())
+        .with_read_only_state(&PocketIcState::new_from_path(state_dir_path_buf.clone()))
         .build();
 
     // Check that the canister states have not changed
@@ -979,7 +981,9 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     // Create a PocketIC instance mounting the persisted state created so far.
     let pic = PocketIcBuilder::new()
         .with_server_url(new_server_url)
-        .with_read_only_state_dir(write_state_dir_path_buf.clone())
+        .with_read_only_state(&PocketIcState::new_from_path(
+            write_state_dir_path_buf.clone(),
+        ))
         .build();
 
     // Check that the canister states have been changed in the persisted state

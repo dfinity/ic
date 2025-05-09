@@ -7,6 +7,9 @@ inputs:
   release-build:
     required: false
     default: true
+  execlogs-artifact-name:
+    required: false
+    description: "When provided, the execlogs will be uploaded as an artifact with the specified name."
   BAZEL_COMMAND:
     required: true
     default: 'test'
@@ -62,7 +65,9 @@ runs:
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         with:
           GPG_PASSPHRASE: ${{ inputs.GPG_PASSPHRASE }}
+          execlogs-artifact-name: ${{ inputs.execlogs-artifact-name }}
           run: |
+            set -euo pipefail
 
             diff_only='${{ inputs.diff-only }}'
             release_build='${{ inputs.release-build }}'

@@ -10,7 +10,7 @@ use crate::{
 };
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance_api::pb::v1::manage_neuron_response::MergeResponse;
+use ic_nns_governance_api::manage_neuron_response::MergeResponse;
 use icp_ledger::Subaccount;
 use std::collections::BTreeMap;
 

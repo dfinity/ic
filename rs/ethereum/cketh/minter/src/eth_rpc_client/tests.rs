@@ -1,57 +1,8 @@
-use crate::eth_rpc_client::providers::{EthereumProvider, RpcNodeProvider};
+use evm_rpc_client::{EthMainnetService, RpcService as EvmRpcService};
 
-const BLOCK_PI: RpcNodeProvider = RpcNodeProvider::Ethereum(EthereumProvider::BlockPi);
-const PUBLIC_NODE: RpcNodeProvider = RpcNodeProvider::Ethereum(EthereumProvider::PublicNode);
-const LLAMA_NODES: RpcNodeProvider = RpcNodeProvider::Ethereum(EthereumProvider::LlamaNodes);
-
-mod eth_rpc_client {
-    use crate::eth_rpc_client::providers::{EthereumProvider, RpcNodeProvider, SepoliaProvider};
-    use crate::eth_rpc_client::{EthRpcClient, TOTAL_NUMBER_OF_PROVIDERS};
-    use crate::lifecycle::EthereumNetwork;
-
-    #[test]
-    fn should_retrieve_sepolia_providers_in_stable_order() {
-        let client = EthRpcClient::new(EthereumNetwork::Sepolia);
-
-        let providers = client.providers();
-
-        assert_eq!(
-            providers,
-            &[
-                RpcNodeProvider::Sepolia(SepoliaProvider::BlockPi),
-                RpcNodeProvider::Sepolia(SepoliaProvider::PublicNode),
-                RpcNodeProvider::Sepolia(SepoliaProvider::Alchemy),
-                RpcNodeProvider::Sepolia(SepoliaProvider::Ankr)
-            ]
-        );
-    }
-
-    #[test]
-    fn should_retrieve_mainnet_providers_in_stable_order() {
-        let client = EthRpcClient::new(EthereumNetwork::Mainnet);
-
-        let providers = client.providers();
-
-        assert_eq!(
-            providers,
-            &[
-                RpcNodeProvider::Ethereum(EthereumProvider::BlockPi),
-                RpcNodeProvider::Ethereum(EthereumProvider::PublicNode),
-                RpcNodeProvider::Ethereum(EthereumProvider::LlamaNodes),
-                RpcNodeProvider::Ethereum(EthereumProvider::Alchemy)
-            ]
-        );
-    }
-
-    #[test]
-    fn should_query_same_number_of_providers_as_with_evm_rpc_canister() {
-        let client = EthRpcClient::new(EthereumNetwork::Sepolia);
-        assert_eq!(client.providers().len() as u8, TOTAL_NUMBER_OF_PROVIDERS);
-
-        let client = EthRpcClient::new(EthereumNetwork::Mainnet);
-        assert_eq!(client.providers().len() as u8, TOTAL_NUMBER_OF_PROVIDERS);
-    }
-}
+const BLOCK_PI: EvmRpcService = EvmRpcService::EthMainnet(EthMainnetService::BlockPi);
+const PUBLIC_NODE: EvmRpcService = EvmRpcService::EthMainnet(EthMainnetService::PublicNode);
+const LLAMA_NODES: EvmRpcService = EvmRpcService::EthMainnet(EthMainnetService::Llama);
 
 mod multi_call_results {
 
@@ -626,24 +577,7 @@ mod eth_get_transaction_receipt {
 }
 
 mod eth_get_transaction_count {
-    use crate::eth_rpc::{BlockSpec, BlockTag};
-    use crate::eth_rpc_client::requests::GetTransactionCountParams;
     use crate::numeric::TransactionCount;
-    use ic_ethereum_types::Address;
-    use std::str::FromStr;
-
-    #[test]
-    fn should_serialize_get_transaction_count_params_as_tuple() {
-        let params = GetTransactionCountParams {
-            address: Address::from_str("0x407d73d8a49eeb85d32cf465507dd71d507100c1").unwrap(),
-            block: BlockSpec::Tag(BlockTag::Finalized),
-        };
-        let serialized_params = serde_json::to_string(&params).unwrap();
-        assert_eq!(
-            serialized_params,
-            r#"["0x407d73d8a49eeb85d32cf465507dd71d507100c1","finalized"]"#
-        );
-    }
 
     #[test]
     fn should_deserialize_transaction_count() {
@@ -657,8 +591,8 @@ mod evm_rpc_conversion {
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
     use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
     use crate::eth_rpc_client::{
-        providers::RpcNodeProvider, Block, Equality, FeeHistory, HttpOutcallError, LogEntry,
-        MinByKey, MultiCallError, MultiCallResults, Reduce, ReduceWithStrategy, SingleCallError,
+        Block, Equality, FeeHistory, HttpOutcallError, LogEntry, MinByKey, MultiCallError,
+        MultiCallResults, Reduce, ReduceWithStrategy, SingleCallError,
     };
     use crate::numeric::{BlockNumber, TransactionCount, Wei};
     use crate::test_fixtures::arb::{
@@ -723,18 +657,14 @@ mod evm_rpc_conversion {
             Err(MultiCallError::InconsistentResults(
                 MultiCallResults::from_non_empty_iter(vec![
                     (
-                        RpcNodeProvider::EvmRpc(EvmRpcService::EthMainnet(
-                            EvmEthMainnetService::Alchemy
-                        )),
+                        EvmRpcService::EthMainnet(EvmEthMainnetService::Alchemy),
                         Ok(Block {
                             number: BlockNumber::from(block.number),
                             base_fee_per_gas: Wei::from(block.base_fee_per_gas.unwrap()),
                         }),
                     ),
                     (
-                        RpcNodeProvider::EvmRpc(EvmRpcService::EthMainnet(
-                            EvmEthMainnetService::Ankr
-                        )),
+                        EvmRpcService::EthMainnet(EvmEthMainnetService::Ankr),
                         Ok(Block {
                             number: BlockNumber::from(next_block.number),
                             base_fee_per_gas: Wei::from(next_block.base_fee_per_gas.unwrap()),

@@ -16,7 +16,7 @@ use ic_nns_governance::{
         ManageNeuron, NetworkEconomics,
     },
 };
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     self as api,
     manage_neuron_response::{Command as CommandResponse, MergeResponse},
 };

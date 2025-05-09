@@ -21,10 +21,10 @@ dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
 hex = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
-ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
-ic-cdk = { workspace = true }
-ic-cdk-macros = { workspace = true }
+ic-cdk = "0.17.1"
+ic-cdk-macros = "0.17.1"
 ic-cdk-timers = { workspace = true }
+ic-http-types = { path = "../../../../packages/ic-http-types" }
 ic-limits = { path = "../../../limits" }
 ic-icrc1 = { path = "../../icrc1" }
 ic-ledger-canister-core = { path = "../../common/ledger_canister_core" }
@@ -57,4 +57,4 @@ proptest = { workspace = true }
 notify-method = []
 icp-allowance-getter = []
 next-ledger-version = []
-low-upgrade-instruction-limits = []
+prev-ledger-version = []

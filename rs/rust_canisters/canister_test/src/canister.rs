@@ -787,6 +787,7 @@ impl<'a> Canister<'a> {
                         reserved_cycles_limit: None,
                         log_visibility: None,
                         wasm_memory_limit: None,
+                        wasm_memory_threshold: None,
                     },
                     sender_canister_version: None,
                 },),

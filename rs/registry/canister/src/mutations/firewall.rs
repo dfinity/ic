@@ -62,7 +62,7 @@ impl Registry {
             deletion_marker: _,
         } = self
             .get(&key, self.latest_version())
-            .unwrap_or(&default_registry_value);
+            .unwrap_or(default_registry_value);
 
         let current_ruleset = FirewallRuleSet::decode(current_ruleset_vec.as_slice()).unwrap();
         current_ruleset.entries

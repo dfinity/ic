@@ -56,15 +56,6 @@ rust_binary(
     deps = DEPENDENCIES + [":init"],
 )
 
-rust_binary(
-    name = "ic-get-neuron-ids",
-    testonly = True,
-    srcs = ["src/get_neuron_ids.rs"],
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [":init"],
-)
-
 rust_test(
     name = "init_test",
     crate = ":init",

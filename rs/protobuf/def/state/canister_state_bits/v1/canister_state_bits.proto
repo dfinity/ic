@@ -142,7 +142,7 @@ message ExecutionStateBits {
   repeated WasmMethod exports = 3;
   uint64 last_executed_round = 4;
   WasmMetadata metadata = 5;
-  optional bytes binary_hash = 6;
+  bytes binary_hash = 6;
   optional NextScheduledMethod next_scheduled_method = 7;
   bool is_wasm64 = 8;
 }

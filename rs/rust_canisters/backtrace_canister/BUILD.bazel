@@ -6,12 +6,12 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:candid",
-    "@crate_index//:ic-cdk",
+    "@crate_index//:ic_cdk_0_17_1",
 ]
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
-    "@crate_index//:ic-cdk-macros",
+    "@crate_index//:ic_cdk_macros_0_17_1",
 ]
 
 DEV_DEPENDENCIES = []
@@ -25,6 +25,18 @@ rust_canister(
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     keep_name_section = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":backtrace_canister.did",
+    deps = DEPENDENCIES,
+)
+
+# The same canister, but without the name section. Used to test that we don't
+# clutter errors with useless backtraces when the name section is missing.
+rust_canister(
+    name = "backtrace-canister-without-names",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    keep_name_section = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":backtrace_canister.did",
     deps = DEPENDENCIES,

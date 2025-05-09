@@ -4,6 +4,8 @@ use serde::Serialize;
 use std::{collections::HashSet, fmt, net::Ipv4Addr, str::FromStr};
 use thiserror::Error;
 
+pub mod mutate_test_high_capacity_records;
+
 #[derive(Debug, Error)]
 pub enum IPv4ConfigError {
     #[error("Invalid IPv4 address")]
@@ -158,6 +160,11 @@ impl fmt::Display for IPv4Config {
             self.ip_addr, self.prefix_length, self.gateway_ip_addr
         )
     }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
+pub struct GetNodeProvidersMonthlyXdrRewardsRequest {
+    pub registry_version: Option<u64>,
 }
 
 /// The payload of an update request to add a new node.

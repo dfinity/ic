@@ -8,12 +8,10 @@ cc_binary(
         "infogetty-cpp/network_info.h",
     ],
     copts = ["-std=c++17"],
-    linkopts = [
-        "-lsystemd",
-    ],
     target_compatible_with = [
         "@platforms//os:linux",
     ],
+    deps = ["@libsystemd"],
 )
 
 genrule(

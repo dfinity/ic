@@ -8,7 +8,7 @@ use ic_system_test_driver::{
 };
 
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_nns_governance_api::pb::v1::NnsFunction;
+use ic_nns_governance_api::NnsFunction;
 use ic_types::{time::current_time, SubnetId};
 use openssh_keys::PublicKey;
 use registry_canister::mutations::{

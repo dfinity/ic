@@ -16,7 +16,7 @@ import sys
 import tarfile
 import tempfile
 
-from crc import INITIAL_CRC, calc_crc
+from toolchains.sysimage.crc import INITIAL_CRC, calc_crc
 
 LVM_HEADER_SIZE_BYTES = int(2048 * 512)
 BYTES_PER_MEBIBYTE = int(2**20)
@@ -52,9 +52,7 @@ def main():
         lvm_entries = read_volume_description(f.read())
     validate_volume_table(lvm_entries)
 
-    tmpdir = os.getenv("ICOS_TMPDIR")
-    if not tmpdir:
-        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
+    tmpdir = tempfile.mkdtemp()
 
     lvm_image = os.path.join(tmpdir, "partition.img")
     prepare_lvm_image(lvm_entries, lvm_image, vg_name, vg_uuid, pv_uuid)
@@ -105,6 +103,8 @@ def main():
         ],
         check=True,
     )
+
+    # tempfile cleanup is handled by proc_wrapper.sh
 
 
 def read_volume_description(data):
@@ -176,10 +176,7 @@ def select_partition_file(name, partition_files):
 
 
 def write_partition_image_from_tzst(lvm_entry, image_file, partition_tzst):
-    base_temp_dir = os.getenv("ICOS_TMPDIR")
-    if not base_temp_dir:
-        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
-    with tempfile.TemporaryDirectory(dir=base_temp_dir) as tmpdir:
+    with tempfile.TemporaryDirectory() as tmpdir:
         partition_tf = os.path.join(tmpdir, "partition.tar")
         subprocess.run(["zstd", "-q", "--threads=0", "-f", "-d", partition_tzst, "-o", partition_tf], check=True)
 

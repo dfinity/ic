@@ -10,41 +10,49 @@ To interact with the testnet bitcoin minter please move to rs/bitcoin/ckbtc/test
 
 === Bitcoin to ckBTC
 ```
- ┌────┐         ┌──────┐┌──────────────┐
- │User│         │Minter││BitcoinNetwork│
- └─┬──┘         └──┬───┘└──────┬───────┘
-   │               │           │        
-   │get_btc_address│           │        
-   │──────────────>│           │        
-   │               │           │        
-   │    address    │           │        
-   │<──────────────│           │        
-   │               │           │        
-   │    Send BTC to address    │        
-   │──────────────────────────>│        
-   │               │           │        
-   │update_balance │           │        
-   │──────────────>│           │        
- ┌─┴──┐         ┌──┴───┐┌──────┴───────┐
- │User│         │Minter││BitcoinNetwork│
- └────┘         └──────┘└──────────────┘
+ ┌────┐                    ┌──────┐┌──────────────┐
+ │User│                    │Minter││BitcoinNetwork│
+ └─┬──┘                    └──┬───┘└──────┬───────┘
+   │                          │           │
+   │ get_btc_address(account) │           │
+   │─────────────────────────>│           │
+   │                          │           │
+   │       address            │           │
+   │<─────────────────────────│           │
+   │                          │           │
+   │    Send BTC to address   │           │
+   │─────────────────────────────────────>│
+   │                          │           │
+   │ update_balance(account)  │           │
+   │─────────────────────────>│           │
+ ┌─┴──┐                    ┌──┴───┐┌──────┴───────┐
+ │User│                    │Minter││BitcoinNetwork│
+ └────┘                    └──────┘└──────────────┘
 ```
 
 1. Obtain the deposit address:
 +
 ----
-dfx canister --network ic call minter get_btc_address "(record {subaccount=null;})"
+dfx canister --network ic call minter get_btc_address "(record {})"
 ----
 +
-2. Send bitcoin to the BTC address the minter gave you.
+2. Send bitcoin to the BTC address the minter gave you, which by default is identified by the principal id of your dfx identity if the account argument is left unspecified, as shown in the `get_btc_address` call above.
 3. Wait until your Bitcoin transaction got enough confirmations.
-   Mainnet ckBTC can require up to 72 confirmations, corresponding to a 12-hour waiting period on average.
+   Mainnet ckBTC can require up to 6 confirmations (which depends on the minter's latest setting), corresponding to a 1-hour waiting period on average.
 4. Notify the minter about the transfer.
 +
 ----
-dfx canister --network ic call minter update_balance "(record {subaccount=null;})"
+dfx canister --network ic call minter update_balance "(record {})"
 ----
-+
+
+If you want to get the deposit address of a different account than your dfx identity, you may specify full account details including both owner principal and subaccount like this:
+----
+dfx canister --network ic call minter get_btc_address '(record { owner = opt principal ".."; subaccount = opt blob ".." })'
+----
+Similarly, the argument to `update_balance` can specify full account details too:
+----
+dfx canister --network ic call minter update_balance '(record { owner = opt principal ".."; subaccount = opt blob ".." })'
+----
 
 You now have some ckBTC, you can enjoy the Internet Computer speed and low fees!
 
@@ -52,31 +60,31 @@ If you would like to transfer them to your wallet (plug, stoic, ...), copy the p
 ----
 dfx canister --network ic call ledger icrc1_transfer "(record { to = record { owner = principal "PRINCIPAL" }; amount = AMOUNT; })"
 ----
-If you want to override the default transfer arguments (for more information on the supported parameters, see the https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/README.md[ICRC-1 Token Standard]), you can modify the following command: 
+If you want to override the default transfer arguments (for more information on the supported parameters, see the https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/README.md[ICRC-1 Token Standard]), you can modify the following command:
 ----
 dfx canister --network ic call ledger icrc1_transfer "(record { from_subaccount = null; to = record { owner = principal "PRINCIPAL"; subaccount = null; }; amount = AMOUNT; fee = null; memo = null; created_at_time = null;})"
 ----
 
 === ckBTC to Bitcoin
 ```
- ┌────┐    ┌────────────┐         ┌──────┐                  ┌───────────────┐
- │User│    │ckBTC Ledger│         │Minter│                  │Bitcoin Network│
- └─┬──┘    └─────┬──────┘         └──┬───┘                  └───────┬───────┘
-   │             │                   │                              │        
-   │icrc2_approve│                   │                              │        
-   │────────────>│                   │                              │        
-   │             │                   │                              │        
-   │   retrieve_btc_with_approval    │                              │        
-   │────────────────────────────────>│                              │        
-   │             │                   │                              │        
-   │             │icrc2_transfer_from│                              │        
-   │             │<──────────────────│                              │        
-   │             │                   │                              │        
-   │             │                   │Send BTC to withdrawal address│        
-   │             │                   │─────────────────────────────>│        
- ┌─┴──┐    ┌─────┴──────┐         ┌──┴───┐                  ┌───────┴───────┐
- │User│    │ckBTC Ledger│         │Minter│                  │Bitcoin Network│
- └────┘    └────────────┘         └──────┘                  └───────────────┘
+ ┌────┐                   ┌────────────┐                             ┌──────┐                  ┌───────────────┐
+ │User│                   │ckBTC Ledger│                             │Minter│                  │Bitcoin Network│
+ └─┬──┘                   └─────┬──────┘                             └──┬───┘                  └───────┬───────┘
+   │                            │                                       │                              │
+   │icrc2_approve(minter,amount)│                                       │                              │
+   │───────────────────────────>│                                       │                              │
+   │                            │                                       │                              │
+   │        retrieve_btc_with_approval(address,amount)                  │                              │
+   │───────────────────────────────────────────────────────────────────>│                              │
+   │                            │                                       │                              │
+   │                            │icrc2_transfer_from(user,minter,amount)│                              │
+   │                            │<──────────────────────────────────────│                              │
+   │                            │                                       │                              │
+   │                            │                                       │Send BTC to withdrawal address│
+   │                            │                                       │─────────────────────────────>│
+ ┌─┴──┐                   ┌─────┴──────┐                             ┌──┴───┐                  ┌───────┴───────┐
+ │User│                   │ckBTC Ledger│                             │Minter│                  │Bitcoin Network│
+ └────┘                   └────────────┘                             └──────┘                  └───────────────┘
 ```
 1. Approve the minter's principal:
 +
@@ -96,7 +104,7 @@ You now have your BTC back on the Bitcoin network (caution: transaction finaliza
 
 [NOTE]
 ====
-You can query the status of your `retrieve_btc_with_approval` request using the following command (replace `BLOCK_INDEX` with the block index you get when calling retrieve_btc): 
+You can query the status of your `retrieve_btc_with_approval` request using the following command (replace `BLOCK_INDEX` with the block index you get when calling retrieve_btc):
 ----
 dfx canister --network ic call minter retrieve_btc_status "(record { block_index = BLOCK_INDEX; })"
 ----
@@ -104,27 +112,27 @@ dfx canister --network ic call minter retrieve_btc_status "(record { block_index
 
 === ckBTC to Bitcoin (old flow)
 ```
- ┌────┐                ┌──────┐┌────────────┐    ┌───────────────┐
- │User│                │Minter││ckBTC ledger│    │Bitcoin Network│
- └─┬──┘                └──┬───┘└─────┬──────┘    └───────┬───────┘
-   │                      │          │                   │        
-   │get_withdrawal_account│          │                   │        
-   │─────────────────────>│          │                   │        
-   │                      │          │                   │        
-   │       account        │          │                   │        
-   │<─────────────────────│          │                   │        
-   │                      │          │                   │        
-   │     icrc1_transfer(account)     │                   │        
-   │────────────────────────────────>│                   │        
-   │                      │          │                   │        
-   │     retrieve_btc     │          │                   │        
-   │─────────────────────>│          │                   │        
-   │                      │          │                   │        
-   │                      │Send BTC to withdrawal address│        
-   │                      │─────────────────────────────>│        
- ┌─┴──┐                ┌──┴───┐┌─────┴──────┐    ┌───────┴───────┐
- │User│                │Minter││ckBTC ledger│    │Bitcoin Network│
- └────┘                └──────┘└────────────┘    └───────────────┘
+ ┌────┐                       ┌──────┐    ┌────────────┐    ┌───────────────┐
+ │User│                       │Minter│    │ckBTC ledger│    │Bitcoin Network│
+ └─┬──┘                       └──┬───┘    └─────┬──────┘    └───────┬───────┘
+   │                             │              │                   │
+   │  get_withdrawal_account()   │              │                   │
+   │────────────────────────────>│              │                   │
+   │                             │              │                   │
+   │       account               │              │                   │
+   │<────────────────────────────│              │                   │
+   │                             │              │                   │
+   │         icrc1_transfer(account)            │                   │
+   │───────────────────────────────────────────>│                   │
+   │                             │              │                   │
+   │retrieve_btc(address,amount) │              │                   │
+   │────────────────────────────>│              │                   │
+   │                             │              │                   │
+   │                             │  Send BTC to withdrawal address  │
+   │                             │─────────────────────────────────>│
+ ┌─┴──┐                       ┌──┴───┐    ┌─────┴──────┐    ┌───────┴───────┐
+ │User│                       │Minter│    │ckBTC ledger│    │Bitcoin Network│
+ └────┘                       └──────┘    └────────────┘    └───────────────┘
 ```
 
 1. Obtain the withdrawal address and store it in a variable.
@@ -154,7 +162,7 @@ dfx canister --network ic call ledger icrc1_transfer "(record {from=null; to=$cl
 dfx canister --network ic call minter retrieve_btc "(record {address=\"BTC_ADDRESS\"; amount=AMOUNT})"
 ----
 
-You now have your BTC back on the Bitcoin network (caution: transaction finalization may take a while). 
+You now have your BTC back on the Bitcoin network (caution: transaction finalization may take a while).
 
 === Ledger Memos
 

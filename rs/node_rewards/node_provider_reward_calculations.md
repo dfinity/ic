@@ -31,7 +31,7 @@ This document provides an overview of the Internet Computer's node provider rewa
 
 ### Node Provider (NP)
 
-A Node Provider is an entity that contributes to the Internet Computer network by providing nodes. The system tracks Node Providers through a dedicated data structure defined in [`ic_nns_governance_api::pb::v1::NodeProvider`](../nns/governance/api/src/ic_nns_governance.pb.v1.rs):
+A Node Provider is an entity that contributes to the Internet Computer network by providing nodes. The system tracks Node Providers through a dedicated data structure defined in [`ic_nns_governance_api::NodeProvider`](../nns/governance/api/src/ic_nns_governance.pb.v1.rs):
 
 ```rust
 pub struct NodeProvider {

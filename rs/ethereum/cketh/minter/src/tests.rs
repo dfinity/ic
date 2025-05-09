@@ -24,29 +24,6 @@ fn deserialize_block_spec() {
     );
 }
 
-#[test]
-fn deserialize_json_reply() {
-    use crate::eth_rpc::*;
-    let reply: JsonRpcReply<String> =
-        serde_json::from_str(r#"{"id":2,"jsonrpc":"2.0","result":"0x1639e49bba16280000"}"#)
-            .unwrap();
-    assert_eq!(
-        reply.result,
-        JsonRpcResult::Result("0x1639e49bba16280000".to_string())
-    );
-
-    let reply: JsonRpcReply<String> =
-        serde_json::from_str(r#"{"jsonrpc": "2.0", "error": {"code": -32602, "message": "Invalid params: invalid username"}, "id": 1}"#)
-            .unwrap();
-    assert_eq!(
-        reply.result,
-        JsonRpcResult::Error {
-            code: -32602,
-            message: "Invalid params: invalid username".to_string(),
-        }
-    );
-}
-
 mod eth_get_logs {
     use crate::numeric::{BlockNumber, LogIndex};
     use ic_ethereum_types::Address;
@@ -252,18 +229,8 @@ mod rlp_encoding {
 }
 
 mod eth_get_block_by_number {
-    use crate::eth_rpc::{into_nat, Block, BlockSpec, BlockTag, GetBlockByNumberParams, Quantity};
+    use crate::eth_rpc::{into_nat, Block, Quantity};
     use crate::numeric::{BlockNumber, Wei};
-
-    #[test]
-    fn should_serialize_get_block_by_number_params_as_tuple() {
-        let params = GetBlockByNumberParams {
-            block: BlockSpec::Tag(BlockTag::Finalized),
-            include_full_transactions: false,
-        };
-        let serialized_params = serde_json::to_string(&params).unwrap();
-        assert_eq!(serialized_params, r#"["finalized",false]"#);
-    }
 
     #[test]
     fn should_deserialize_block() {

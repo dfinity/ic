@@ -133,12 +133,12 @@ rm -rf "$BINARIES_DIR_FULL"
 rm -rf "$CANISTERS_DIR_FULL"
 rm -rf "$DISK_DIR_FULL"
 
-if "$BUILD_BIN"; then BAZEL_TARGETS+=("//publish/binaries:compute_checksums"); fi
-if "$BUILD_CAN"; then BAZEL_TARGETS+=("//publish/canisters:compute_checksums"); fi
+if "$BUILD_BIN"; then BAZEL_TARGETS+=("//publish/binaries:bundle"); fi
+if "$BUILD_CAN"; then BAZEL_TARGETS+=("//publish/canisters:bundle"); fi
 if "$BUILD_IMG"; then BAZEL_TARGETS+=(
-    "//ic-os/guestos/envs/prod:compute_checksums"
-    "//ic-os/hostos/envs/prod:compute_checksums"
-    "//ic-os/setupos/envs/prod:compute_checksums"
+    "//ic-os/guestos/envs/prod:bundle"
+    "//ic-os/hostos/envs/prod:bundle"
+    "//ic-os/setupos/envs/prod:bundle"
 ); fi
 
 echo_blue "Bazel targets: ${BAZEL_TARGETS[*]}"

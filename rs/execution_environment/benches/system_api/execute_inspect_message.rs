@@ -89,7 +89,7 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
     ];
     common::run_benchmarks(
         c,
-        "inspect",
+        "execution_environment:inspect_message",
         &benchmarks,
         |id: &str,
          exec_env: &ExecutionEnvironment,

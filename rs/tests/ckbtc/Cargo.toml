@@ -22,6 +22,7 @@ ic-ckbtc-agent = { path = "../../bitcoin/ckbtc/agent" }
 ic-ckbtc-minter = { path = "../../bitcoin/ckbtc/minter" }
 ic-config = { path = "../../config" }
 ic-icrc1-ledger = { path = "../../ledger_suite/icrc1/ledger" }
+ic-management-canister-types = { workspace = true }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-nns-common = { path = "../../nns/common" }

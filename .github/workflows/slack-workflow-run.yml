@@ -18,7 +18,7 @@ on:
       - Release Testing
       - Publish Release
       - Container IC Base Images
-      - Update IC versions file
+      - PocketIC Windows
 
 jobs:
   slack-workflow-run:

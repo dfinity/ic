@@ -17,7 +17,7 @@ impl CreateServiceNervousSystem {
         duration: Duration,
         swap_approved_timestamp_seconds: u64,
     ) -> Result<(u64, u64), String> {
-        ic_nns_governance_api::pb::v1::CreateServiceNervousSystem::swap_start_and_due_timestamps(
+        ic_nns_governance_api::CreateServiceNervousSystem::swap_start_and_due_timestamps(
             start_time_of_day,
             duration,
             swap_approved_timestamp_seconds,

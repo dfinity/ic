@@ -1,6 +1,6 @@
 use candid::Deserialize;
 use ic_canister_log::{declare_log_buffer, export as export_logs};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use std::str::FromStr;
 
 // High-priority messages.

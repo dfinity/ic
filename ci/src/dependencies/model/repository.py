@@ -23,5 +23,6 @@ class Repository:
         assert isinstance(self.projects, list) and len(self.projects) > 0
         assert self.engine_version is None or len(self.engine_version) > 0
 
-        for project in self.projects:
-            assert project.path.startswith(self.name)
+        if self.name != "ic":
+            for project in self.projects:
+                assert project.path.startswith(self.name)

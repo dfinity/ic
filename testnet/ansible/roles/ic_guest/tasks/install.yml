@@ -78,19 +78,9 @@
 
       echo "Installing NNS"
 
-      GOVERNANCE_PB=""
-      {% if governance_pb_file is defined %}
-        GOVERNANCE_PB="--governance-pb-file {{ governance_pb_file }}"
-      {% else %}
-        if [[ -r "{{ inventory_file | dirname }}/initial-governance.pb" ]]; then
-          GOVERNANCE_PB="--governance-pb-file '{{ inventory_file | dirname }}/initial-governance.pb'"
-        fi
-      {% endif %}
-
       timeout 600 "{{ ic_media_path }}/bin/ic-nns-init" \
           --url "$NNS_URL" \
           --registry-local-store-dir "{{ ic_media_path }}/ic_registry_local_store" \
-          $GOVERNANCE_PB \
           {% if initial_neurons is defined %} --initial-neurons "{{ initial_neurons }}" {% endif %} \
           {% if test_ledger_accounts is defined %}
           {% for principal in test_ledger_accounts %}

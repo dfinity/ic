@@ -4,21 +4,7 @@ from model.project import Project
 from model.repository import Repository
 from model.team import Team
 
-CI_PROJECT_PATH = os.environ.get("CI_PROJECT_PATH", "dfinity/ic")
-GITHUB_REF = os.environ.get("GITHUB_REF", "refs/heads/master")
 REPO_NAME = os.environ.get("REPO_NAME", "dfinity/ic")
-
-
-def is_running_in_ic_repo() -> bool:
-    return CI_PROJECT_PATH == "dfinity/ic"
-
-
-def is_running_on_main_branch() -> bool:
-    return GITHUB_REF == "refs/heads/master"
-
-
-def is_env_for_periodic_job() -> bool:
-    return is_running_in_ic_repo() and is_running_on_main_branch()
 
 
 def get_ic_repo_for_rust() -> Repository:

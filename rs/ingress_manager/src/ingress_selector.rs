@@ -666,7 +666,6 @@ mod tests {
         time_source::TimeSource,
     };
     use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
-    use ic_interfaces_state_manager::{StateManagerError, StateManagerResult};
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_management_canister_types_private::{CanisterIdRecord, Payload, IC_00};
     use ic_metrics::MetricsRegistry;
@@ -691,6 +690,7 @@ mod tests {
         ingress::{IngressState, IngressStatus},
         malicious_flags::MaliciousFlags,
         messages::{MessageId, SignedIngress},
+        state_manager::{StateManagerError, StateManagerResult},
         time::{expiry_time_from_now, UNIX_EPOCH},
         Height, RegistryVersion,
     };

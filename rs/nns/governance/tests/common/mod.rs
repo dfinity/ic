@@ -4,7 +4,7 @@ use ic_nns_governance::{
     governance::Governance,
     pb::v1::{manage_neuron, manage_neuron::NeuronIdOrSubaccount, ManageNeuron},
 };
-use ic_nns_governance_api::pb::v1::ManageNeuronResponse;
+use ic_nns_governance_api::ManageNeuronResponse;
 
 pub async fn increase_dissolve_delay_raw(
     gov: &mut Governance,

@@ -101,8 +101,9 @@ pub fn retrieve_btc_guard(account: Account) -> Result<Guard<RetrieveBtcUpdates>,
 mod tests {
     use crate::{
         guard::{GuardError, MAX_CONCURRENT},
-        lifecycle::init::{init, BtcNetwork, InitArgs},
+        lifecycle::init::{init, InitArgs},
         state::read_state,
+        Network,
     };
     use candid::Principal;
     use ic_base_types::CanisterId;
@@ -123,7 +124,7 @@ mod tests {
     #[allow(deprecated)]
     fn test_state_args() -> InitArgs {
         InitArgs {
-            btc_network: BtcNetwork::Regtest,
+            btc_network: Network::Regtest,
             ecdsa_key_name: "some_key".to_string(),
             retrieve_btc_min_amount: 2000,
             ledger_id: CanisterId::from_u64(42),
@@ -134,6 +135,7 @@ mod tests {
             check_fee: None,
             kyt_principal: None,
             kyt_fee: None,
+            get_utxos_cache_expiration_seconds: None,
         }
     }
 

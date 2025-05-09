@@ -31,9 +31,6 @@ mod cycles_minting_canister_with_exchange_rate_canister;
 mod node_provider_remuneration;
 
 #[cfg(test)]
-mod governance_mem_test;
-
-#[cfg(test)]
 mod governance_get_build_metadata_test;
 
 #[cfg(test)]
@@ -98,9 +95,6 @@ mod update_unassigned_nodes_config;
 
 #[cfg(test)]
 mod wait_for_quiet;
-
-#[cfg(test)]
-mod governance_migrations;
 
 #[cfg(test)]
 mod governance_neurons;

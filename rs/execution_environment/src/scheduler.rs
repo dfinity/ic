@@ -100,7 +100,7 @@ struct SchedulerRoundLimits {
     /// the subnet before canisters are limited to their own callback quota only.
     subnet_available_callbacks: i64,
 
-    // Keeps track of the compute allocation limit.
+    /// Keeps track of the compute allocation limit.
     compute_allocation_used: u64,
 }
 
@@ -959,7 +959,7 @@ impl SchedulerImpl {
         // Delete any snapshots associated with the canister
         // that ran out of cycles.
         for canister_id in uninstalled_canisters {
-            state.canister_snapshots.delete_snapshots(canister_id);
+            state.delete_snapshots(canister_id);
         }
 
         // Send rejects to any requests that were forcibly closed while uninstalling.
@@ -1803,7 +1803,7 @@ fn execute_canisters_on_thread(
         }
 
         // Process all messages of the canister until
-        // - it has not tasks and input messages to execute
+        // - it has no tasks or input messages to execute
         // - or the canister is blocked by a long-running install code.
         // - or the instruction limit is reached.
         // - or the canister finishes a long execution

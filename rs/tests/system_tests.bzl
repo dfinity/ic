@@ -49,7 +49,7 @@ def _run_system_test(ctx):
               done
             fi
 
-            if [ -n "RUN_SCRIPT_HOSTOS_UPDATE_IMG_TEST" ]; then
+            if [ "${{RUN_SCRIPT_HOSTOS_UPDATE_IMG_TEST}}" = "true" ]; then
                 export ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION="$(cat ${{ENV_DEPS__IC_VERSION_FILE}})-test"
                 export ENV_DEPS__HOSTOS_UPDATE_IMG_URL="${{ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_URL:-}}"
                 export ENV_DEPS__HOSTOS_UPDATE_IMG_SHA="${{ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_HASH:-}}"
@@ -278,8 +278,9 @@ def system_test(
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = mainnet_hostos_version
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = base_download_url(mainnet_hostos_version, "host-os", True, False) + "update-img.tar.zst"
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_SHA"] = mainnet_icos_versions["hostos"]["latest_release"]["update_img_hash"]
+        env["RUN_SCRIPT_HOSTOS_UPDATE_IMG_TEST"] = "false"
     else:
-        env["RUN_SCRIPT_HOSTOS_UPDATE_IMG_TEST"] = "1"
+        env["RUN_SCRIPT_HOSTOS_UPDATE_IMG_TEST"] = "true"
 
     if uses_setupos_mainnet:
         # Note: SetupOS is still passed directly by path, as it needs some local processing.

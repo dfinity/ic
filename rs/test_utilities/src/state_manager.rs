@@ -5,8 +5,7 @@ use ic_interfaces_certified_stream_store::{
 };
 use ic_interfaces_state_manager::{
     CertificationScope, CertifiedStateSnapshot, Labeled, PermanentStateHashError::*,
-    StateHashError, StateManager, StateManagerError, StateManagerResult, StateReader,
-    TransientStateHashError::*,
+    StateHashError, StateManager, StateReader, TransientStateHashError::*,
 };
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_registry_subnet_type::SubnetType;
@@ -20,6 +19,7 @@ use ic_types::{
         CryptoHash, CryptoHashOf,
     },
     messages::{Request, RequestOrResponse, Response},
+    state_manager::{StateManagerError, StateManagerResult},
     xnet::{
         CertifiedStreamSlice, RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex,
         StreamIndexedQueue, StreamSlice,
