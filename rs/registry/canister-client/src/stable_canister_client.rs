@@ -199,9 +199,9 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
                     .unwrap_or(current_local_version.get()),
             );
 
+            self.add_deltas(remote_deltas)?;
             self.latest_version
                 .store(current_local_version.get(), AtomicOrdering::SeqCst);
-            self.add_deltas(remote_deltas)?;
         }
         Ok(current_local_version)
     }
