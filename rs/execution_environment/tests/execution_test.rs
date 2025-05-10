@@ -3115,3 +3115,25 @@ fn test_canister_liquid_cycle_balance() {
     let receiver_balance = env.cycle_balance(callee);
     assert!(receiver_balance > 2 * INITIAL_CYCLES_BALANCE.get() - 100 * B);
 }
+
+/// Test that a message which results in many calls with large payloads (2 GB in
+/// total) hits the instruction limit. This ensures that we don't have messages
+/// over 2GB being sent over the sandbox IPC channel.
+#[test]
+fn large_ipc_call_fails() {
+    let wasm = canister_test::Project::cargo_bin_maybe_from_env("call_loop_canister", &[]);
+    let env = StateMachine::new();
+
+    let canister_id = env
+        .install_canister_with_cycles(wasm.bytes(), vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+
+    // Canister takes the number of bytes to send during one message in
+    // megabytes. We send 2 GB total.
+    let err = env
+        .execute_ingress(canister_id, "send_calls", Encode!(&(2 * 1024_u32)).unwrap())
+        .unwrap_err();
+    err.assert_contains(ErrorCode::CanisterInstructionLimitExceeded, "Error from Canister \
+        rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister exceeded the limit of 50000000000 instructions for single message \
+        execution.");
+}

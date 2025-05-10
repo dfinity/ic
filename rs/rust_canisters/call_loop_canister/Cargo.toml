@@ -1,0 +1,15 @@
+[package]
+name = "call-loop-canister"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "call-loop-canister"
+path = "src/main.rs"
+
+[dependencies]
+candid = { workspace = true }
+futures = { workspace = true }
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
+ic-principal = { workspace = true }
