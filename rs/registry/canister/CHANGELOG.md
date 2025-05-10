@@ -11,6 +11,23 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-05-10: Proposal 136581
+
+http://dashboard.internetcomputer.org/proposal/136581
+
+## Added
+
+* Added new endpoint for `migrate_canisters` which is only callable by governance, and updates the routing table for
+  the provided canisters when called so that requests will be routed to a different subnet. This will be used to support
+  the broader canister migrations feature.
+
+* Started populating `timestamp_seconds` fields.
+
+## Changed
+
+* The `create_subnet` and `recover_subnet` calls are using the `reshare_chain_key` endpoint rather than the old `compute_initial_i_dkg_dealings` endpoint. With this change, recovery of vetkeys is supported.
+
+
 # 2025-05-02: Proposal 136428
 
 https://dashboard.internetcomputer.org/proposal/136428
