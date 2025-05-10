@@ -1,80 +1,22 @@
 import logging
 
+from config.bazel_rust_periodic import REPOS_TO_SCAN
 from data_source.jira_finding_data_source import JiraFindingDataSource
+from integration.github.github_app import GithubApp
 from model.ic import (
     get_ic_repo_ci_pipeline_base_url,
-    get_ic_repo_for_rust,
     get_ic_repo_merge_request_base_url,
-    is_env_for_periodic_job,
 )
-from model.project import Project
-from model.repository import Repository
-from model.team import Team
+from model.log_level import get_log_level
 from notification.notification_config import NotificationConfig
 from notification.notification_creator import NotificationCreator
 from scanner.dependency_scanner import DependencyScanner
 from scanner.manager.bazel_rust_dependency_manager import BazelRustDependencyManager
 from scanner.scanner_job_type import ScannerJobType
 
-REPOS_TO_SCAN = [
-    Repository(
-        "nns-dapp",
-        "https://github.com/dfinity/nns-dapp",
-        [Project(name="nns-dapp", path="nns-dapp", owner=Team.NNS_TEAM)],
-    ),
-    Repository(
-        "internet-identity",
-        "https://github.com/dfinity/internet-identity",
-        [Project(name="internet-identity", path="internet-identity", owner=Team.IDENTITY_TEAM)],
-    ),
-    Repository(
-        "response-verification",
-        "https://github.com/dfinity/response-verification",
-        [Project(name="response-verification", path="response-verification", owner=Team.TRUST_TEAM)],
-    ),
-    Repository(
-        "canfund",
-        "https://github.com/dfinity/canfund",
-        [Project(name="canfund", path="canfund", owner=Team.TRUST_TEAM)],
-    ),
-    Repository(
-        "agent-rs",
-        "https://github.com/dfinity/agent-rs",
-        [Project(name="agent-rs", path="agent-rs", owner=Team.SDK_TEAM)],
-    ),
-    Repository(
-        "ic-canister-sig-creation",
-        "https://github.com/dfinity/ic-canister-sig-creation",
-        [Project(name="ic-canister-sig-creation", path="ic-canister-sig-creation", owner=Team.GIX_TEAM)],
-    ),
-    Repository(
-        "ic-gateway",
-        "https://github.com/dfinity/ic-gateway",
-        [Project(name="ic-gateway", path="ic-gateway", owner=Team.BOUNDARY_NODE_TEAM)],
-    ),
-    Repository(
-        "papi",
-        "https://github.com/dfinity/papi",
-        [Project(name="papi", path="papi", owner=Team.GIX_TEAM)],
-    ),
-    Repository(
-        "oisy-wallet",
-        "https://github.com/dfinity/oisy-wallet",
-        [Project(name="oisy-wallet", path="oisy-wallet", owner=Team.GIX_TEAM)],
-    ),
-    Repository(
-        "chain-fusion-signer",
-        "https://github.com/dfinity/chain-fusion-signer",
-        [Project(name="chain-fusion-signer", path="chain-fusion-signer", owner=Team.GIX_TEAM)],
-    ),
-]
-
 
 def main():
-    logging.basicConfig(level=logging.WARNING)
-    if not is_env_for_periodic_job():
-        logging.warning("skipping periodic RUST job because it is run in the wrong environment")
-        return
+    logging.basicConfig(level=get_log_level())
 
     scanner_job = ScannerJobType.PERIODIC_SCAN
     notify_on_scan_job_succeeded, notify_on_scan_job_failed = {}, {}
@@ -102,8 +44,9 @@ def main():
         BazelRustDependencyManager(),
         JiraFindingDataSource(finding_data_source_subscribers, app_owner_msg_subscriber=notifier),
         scanner_subscribers,
+        github_app=GithubApp(REPOS_TO_SCAN),
     )
-    scanner_job.do_periodic_scan([get_ic_repo_for_rust()] + REPOS_TO_SCAN)
+    scanner_job.do_periodic_scan(REPOS_TO_SCAN)
 
 
 if __name__ == "__main__":

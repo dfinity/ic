@@ -35,6 +35,7 @@ jobs:
       release_build: ${{ steps.config.outputs.release_build }}
       diff_only: ${{ steps.config.outputs.diff_only }}
       skip_long_tests: ${{ steps.config.outputs.skip_long_tests }}
+      full_macos_build: ${{ steps.config.outputs.full_macos_build }}
     steps:
       - name: Infer build config
         id: config
@@ -76,6 +77,13 @@ jobs:
               skip_long_tests="true"
           fi
 
+          if [[ $release_build == 'true' ]] || [[ '${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_MACOS_INTEL') }}' == 'true' ]]; then
+              full_macos_build="true"
+          else
+              full_macos_build="false"
+          fi
+
+
           echo "| config | value |" >> "$GITHUB_STEP_SUMMARY"
           echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
 
@@ -90,11 +98,15 @@ jobs:
           echo "skip_long_tests: $skip_long_tests"
           echo "skip_long_tests=$skip_long_tests" >> "$GITHUB_OUTPUT"
           echo "| \`skip_long_tests\` | \`$skip_long_tests\` |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "full_macos_build: $full_macos_build"
+          echo "full_macos_build=$full_macos_build" >> "$GITHUB_OUTPUT"
+          echo "| \`full_macos_build\` | \`$full_macos_build\` |" >> "$GITHUB_STEP_SUMMARY"
   bazel-test-all:
     name: Bazel Test All
     needs: [config]
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2c855bb374d797860852f24b3387cc59278236d92beb8eb3308d0d16df8d9821
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -137,7 +149,20 @@ jobs:
           # Prepend tags with '-' and join them with commas for Bazel
           TEST_TAG_FILTERS=$(IFS=,; echo "${EXCLUDED_TEST_TAGS[*]/#/-}")
           # Determine BAZEL_EXTRA_ARGS based on event type or branch name
-          BAZEL_EXTRA_ARGS=( "--test_tag_filters=$TEST_TAG_FILTERS" )
+          BAZEL_EXTRA_ARGS=(
+            "--test_tag_filters=$TEST_TAG_FILTERS"
+
+            # default all tests to fail ...
+            #   ... after three attempts for tests marked as flaky
+            #   ... after three attempts for all tests in //rs/tests
+            #   ... after the first attempt for other tests
+            #   see also:
+            #     https://bazel.build/reference/command-line-reference#build-flag--flaky_test_attempts
+            --flaky_test_attempts=default
+            --flaky_test_attempts=//rs/tests/.*@3
+
+            --config=lint # enable lint checks
+            )
           if [[ "$CI_EVENT_NAME" == 'merge_group' ]]; then
               BAZEL_EXTRA_ARGS+=( --test_timeout_filters=short,moderate --flaky_test_attempts=3 )
           elif [[ $BRANCH_NAME =~ ^hotfix-.* ]]; then
@@ -150,26 +175,22 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
+          execlogs-artifact-name: execlogs-bazel-test-all
           diff-only: ${{ needs.config.outputs.diff_only }}
           release-build: ${{ needs.config.outputs.release_build }}
           BAZEL_COMMAND: test --config=ci ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
           BAZEL_TARGETS: //...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      - name: Upload SHA256SUMS (cache)
-        uses: ./.github/actions/bazel-upload-checksums/
-        with:
-          artifact-name: shasums-cache
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
+    needs: [config]
     timeout-minutes: 130
     runs-on:
       labels: macOS
     # Run on protected branches, but only on public repo
     # Allow running if CI_MACOS_INTEL label is used
-    if: |
-      (github.ref_protected && github.repository == 'dfinity/ic') ||
-      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_MACOS_INTEL'))
+    if: github.repository == 'dfinity/ic'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -181,11 +202,19 @@ jobs:
           echo "$HOME/.cargo/bin:" >> $GITHUB_PATH
           # use llvm-clang instead of apple's
           echo "CC=/usr/local/opt/llvm/bin/clang" >> "$GITHUB_ENV"
-      - name: Run Bazel Test Darwin x86-64
+      - name: Infer macos intel build command
+        id: cfg
+        run: |
+          if [[ '${{ needs.config.outputs.full_macos_build }}' == 'true' ]]; then
+            echo build-command='test --config=ci --config=macos_ci --test_tag_filters=test_macos' >> "$GITHUB_OUTPUT"
+          else
+            echo build-command='build --config=ci --config=macos_ci --test_tag_filters=test_macos --nobuild' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Run Bazel Checks on Darwin x86-64
         id: bazel-test-darwin-x86-64
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: test --config=ci --config=macos_ci --test_tag_filters=test_macos
+          BAZEL_COMMAND: ${{ steps.cfg.outputs.build-command }}
           BAZEL_TARGETS: //rs/... //publish/binaries/...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ''
@@ -200,7 +229,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2c855bb374d797860852f24b3387cc59278236d92beb8eb3308d0d16df8d9821
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -221,7 +250,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2c855bb374d797860852f24b3387cc59278236d92beb8eb3308d0d16df8d9821
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -242,7 +271,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2c855bb374d797860852f24b3387cc59278236d92beb8eb3308d0d16df8d9821
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -273,7 +302,7 @@ jobs:
     needs: [config]
     name: Build IC
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2c855bb374d797860852f24b3387cc59278236d92beb8eb3308d0d16df8d9821
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -288,44 +317,36 @@ jobs:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Run Build IC
         id: build-ic
-        run: ./ci/scripts/run-build-ic.sh
+        uses: ./.github/actions/bazel
+        with:
+          execlogs-artifact-name: execlogs-build-ic
+          run: ./ci/scripts/run-build-ic.sh
         env:
-          BAZEL_COMMAND: build --config=ci
-          BAZEL_TARGETS: //...
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ON_DIFF_ONLY: ${{ needs.config.outputs.diff_only }}
           RELEASE_BUILD: ${{ needs.config.outputs.release_build }}
-      - name: Upload SHA256SUMS (nocache)
-        uses: ./.github/actions/bazel-upload-checksums/
-        with:
-          artifact-name: shasums-nocache
   build-determinism:
     name: Build Determinism
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    # NOTE: this expects "build-ic" to have built the same set of targets
-    # as "bazel-test-all"
     needs: [build-ic, bazel-test-all]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      - name: Download SHA256SUMS (cache)
+      - name: Download execution logs (cache)
         uses: actions/download-artifact@v4
         with:
-          name: shasums-cache
-          path: shasums-cache
-      - name: Download SHA256SUMS (nocache)
+          name: execlogs-bazel-test-all
+          path: execlogs-cache
+      - name: Download execution logs (nocache)
         uses: actions/download-artifact@v4
         with:
-          name: shasums-nocache
-          path: shasums-nocache
+          name: execlogs-build-ic
+          path: execlogs-nocache
       - name: Build Determinism Test
         run: |
-          n_lines_cache=$(cat shasums-cache/SHA256SUMS | wc -l)
-          n_lines_nocache=$(cat shasums-nocache/SHA256SUMS | wc -l)
+          set -euo pipefail
+
+          n_lines_cache=$(cat execlogs-cache/execlogs.csv | wc -l)
+          n_lines_nocache=$(cat execlogs-nocache/execlogs.csv | wc -l)
           echo "comparing $n_lines_cache (cache) and $n_lines_nocache (nocache) lines"
 
           # running tests may not pull all targets locally. If that's the case,
@@ -335,23 +356,34 @@ jobs:
             exit 0
           fi
 
-          # this checks that all lines in the first argument (subset) are identical
-          # in the second argument (set)
-          difference=$(comm -23 <(sort shasums-nocache/SHA256SUMS | uniq) <(sort shasums-cache/SHA256SUMS | uniq))
-          if [ -n "$difference" ]; then
-            echo "Build Determinism Check Failed! Please contact IDX."
-            echo "The following artifacts were different:"
-            echo "$difference"
-            exit 1
-          fi
+          # sort the files by the field we join on (artifact path), see below
+          sponge=$(mktemp)
 
-          echo "Build Determinism Check Successful"
+          sort -t, -k2 <execlogs-cache/execlogs.csv >"$sponge"
+          cp "$sponge" execlogs-cache/execlogs.csv
+
+          sort -t, -k2 <execlogs-nocache/execlogs.csv >"$sponge"
+          cp "$sponge" execlogs-nocache/execlogs.csv
+
+          rm "$sponge"
+
+          # join the CSVs (separator ',') and compare the hashes. This creates a table with the following columns:
+          #   //rs/foo,bazel-out/path/to-artifact,deadbeef,deafb33f
+          # target label (1.1), artifact path (1.2), and hashes (1.3 & 2.3). The join is done
+          # on the artifact path, second field on input one (-1) and input two (-2) :'-12 -22'
+          # The output is then compared with awk, printing mismatches, and keeping track of how many mismatches we
+          # encountered.
+          join \
+            -t, -o 1.1,1.2,1.3,2.3 -12 -22 \
+            execlogs-cache/execlogs.csv \
+            execlogs-nocache/execlogs.csv \
+            | awk -F, 'BEGIN { N_BAD=0; } $3 != $4 { print $1 " " $2 ": " $3 " != " $4; N_BAD++; } END { if (N_BAD) { print N_BAD " mismatches found"; exit 1; } else { print "No mismatches"; }; }'
   cargo-clippy-linux:
     name: Cargo Clippy Linux
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2c855bb374d797860852f24b3387cc59278236d92beb8eb3308d0d16df8d9821
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -386,7 +418,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2c855bb374d797860852f24b3387cc59278236d92beb8eb3308d0d16df8d9821
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
     timeout-minutes: 30
     steps:
       - name: Checkout

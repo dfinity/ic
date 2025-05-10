@@ -13,7 +13,7 @@ jobs:
   bazel-test-bare-metal:
     name: Bazel Test Bare Metal
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2c855bb374d797860852f24b3387cc59278236d92beb8eb3308d0d16df8d9821
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 120
@@ -29,29 +29,28 @@ jobs:
           echo "$ZH2_DLL01_CSV_SECRETS" > file1
           echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
 
+          launch_bare_metal() {
+            # shellcheck disable=SC2046,SC2086
+            bazel --output_base=/var/tmp/bazel-output run ${BAZEL_CI_CONFIG} \
+              //ic-os/setupos/envs/dev:launch_bare_metal -- \
+                --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
+                --csv_filename "$(realpath file1)" \
+                --file_share_ssh_key "$(realpath file2)" \
+                --inject_image_pub_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3gjE/2K5nxIBbk3ohgs8J5LW+XiObwA+kGtSaF5+4c" \
+                --file_share_username ci_interim \
+                --ci_mode \
+                $@
+          }
+
           # Run bare metal installation test
-          # shellcheck disable=SC2046,SC2086
-          bazel --output_base=/var/tmp/bazel-output run ${BAZEL_CI_CONFIG} \
-            //ic-os/setupos/envs/dev:launch_bare_metal -- \
-              --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
-              --csv_filename "$(realpath file1)" \
-              --file_share_ssh_key "$(realpath file2)" \
-              --inject_image_pub_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3gjE/2K5nxIBbk3ohgs8J5LW+XiObwA+kGtSaF5+4c" \
-              --file_share_username ci_interim \
-              --hsm \
-              --ci_mode
+          launch_bare_metal --hsm
 
           # Run bare metal node performance benchmarks
-          # shellcheck disable=SC2046,SC2086
-          bazel --output_base=/var/tmp/bazel-output run ${BAZEL_CI_CONFIG} \
-            //ic-os/setupos/envs/dev:launch_bare_metal -- \
-              --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
-              --csv_filename "$(realpath file1)" \
-              --file_share_ssh_key "$(realpath file2)" \
-              --inject_image_pub_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3gjE/2K5nxIBbk3ohgs8J5LW+XiObwA+kGtSaF5+4c" \
-              --file_share_username ci_interim \
-              --ci_mode \
-              --benchmark
+          launch_bare_metal --benchmark
+
+          # Run bare metal node hostOS metrics check
+          launch_bare_metal --check_hostos_metrics
+
           bazel clean
         env:
           BAZEL_CI_CONFIG: "--config=ci"
@@ -63,7 +62,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2c855bb374d797860852f24b3387cc59278236d92beb8eb3308d0d16df8d9821
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 720 # 12 hours
@@ -84,7 +83,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2c855bb374d797860852f24b3387cc59278236d92beb8eb3308d0d16df8d9821
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 20
@@ -105,7 +104,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2c855bb374d797860852f24b3387cc59278236d92beb8eb3308d0d16df8d9821
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 480
@@ -134,12 +133,13 @@ jobs:
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
   dependency-scan-nightly:
+    if: false
     name: Dependency Scan Nightly
     runs-on:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2c855bb374d797860852f24b3387cc59278236d92beb8eb3308d0d16df8d9821
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 60
@@ -191,7 +191,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2c855bb374d797860852f24b3387cc59278236d92beb8eb3308d0d16df8d9821
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 120

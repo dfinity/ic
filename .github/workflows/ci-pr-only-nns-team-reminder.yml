@@ -35,7 +35,7 @@ jobs:
               .data
               .some(review => review
                 .body
-                .startsWith("If this pull request affects the behavior of any canister owned by")
+                .startsWith("If this pull request changes the behavior")
               );
             console.log("alreadyRemindedAboutUnreleasedChangelog = " + alreadyRemindedAboutUnreleasedChangelog);
             if (alreadyRemindedAboutUnreleasedChangelog) {
@@ -46,17 +46,25 @@ jobs:
             // TODO: Figure out how to post in such a way that there is a "Resolve" button nearby.
             console.log("Adding reminder to update unreleased_changelog.md...");
             const reminderText = `
-              If this pull request affects the behavior of any canister owned by
-              the Governance team, remember to update the corresponding
-              unreleased_changes.md file(s).
+              If this pull request changes the behavior of any canister owned by
+              the Governance team in an externally visible way, remember to
+              update the corresponding unreleased_changelog.md file(s).
 
               To acknowldge this reminder (and unblock the PR), dismiss this
-              code review by going to the bottom of the pull request page, and
-              supply one of the following reasons:
+              code review by going to the bottom of the pull request page, look
+              for where it says this bot is requesting changes, click the three
+              dots on the right, select "Dismiss review", and supply one of the
+              following reasons:
 
               1. Done.
 
               2. No canister behavior changes.
+
+              To be more precise, "externally visible behavior change" usually
+              means that responses differ in some way. However, "externally
+              visible behavior change" is not limited to that. For example, it
+              could also means that the canister makes different requests to
+              other canisters.
             `
             .replace(/^ +/gm, '')
             .trim();

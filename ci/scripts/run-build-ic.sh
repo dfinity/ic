@@ -16,23 +16,22 @@ if ! [ "${RUN_ON_DIFF_ONLY:-}" == "true" ]; then
 fi
 
 # otherwise, infer targets to build
-TARGETS=$(ci/bazel-scripts/diff.sh)
-if [ "$TARGETS" == "//..." ]; then
-    ci/container/build-ic.sh -i -c -b --no-release
-    exit 0
-fi
+targets=$(mktemp)
+ci/bazel-scripts/diff.sh "${MERGE_BASE_SHA:-HEAD}..${BRANCH_HEAD_SHA:-}" >"$targets"
 
 ARGS=()
 
-if [[ $TARGETS =~ ic-os ]]; then
+if grep -q '^//ic-os' <"$targets"; then
     ARGS+=(-i)
 fi
-if [[ $TARGETS =~ publish/canisters ]]; then
+if grep -q '^//publish/canisters' <"$targets"; then
     ARGS+=(-c)
 fi
-if [[ $TARGETS =~ publish/binaries ]]; then
+if grep -q '^//publish/binaries' <"$targets"; then
     ARGS+=(-b)
 fi
+
+rm "$targets"
 
 if [[ ${#ARGS[@]} -eq 0 ]]; then
     echo "No changes that require building IC-OS, binaries or canisters."

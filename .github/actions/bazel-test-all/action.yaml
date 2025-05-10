@@ -7,6 +7,9 @@ inputs:
   release-build:
     required: false
     default: true
+  execlogs-artifact-name:
+    required: false
+    description: "When provided, the execlogs will be uploaded as an artifact with the specified name."
   BAZEL_COMMAND:
     required: true
     default: 'test'
@@ -62,31 +65,63 @@ runs:
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         with:
           GPG_PASSPHRASE: ${{ inputs.GPG_PASSPHRASE }}
+          execlogs-artifact-name: ${{ inputs.execlogs-artifact-name }}
           run: |
+            set -euo pipefail
 
             diff_only='${{ inputs.diff-only }}'
             release_build='${{ inputs.release-build }}'
 
-            # Some environment variables needed by diff.sh
-            export BAZEL_TARGETS='${{ inputs.BAZEL_TARGETS }}'
-            export BAZEL_COMMAND='${{ inputs.BAZEL_COMMAND }}'
+            bazel_args=( )
 
-            if [[ $diff_only == "true" ]]; then
-                # get bazel targets that changed within the MR
-                BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
+            if [[ $release_build == "true" ]]; then
+              bazel_args+=( --config=release )
             fi
 
-            # if bazel targets is empty we don't need to run any tests
-            if [ -z "${BAZEL_TARGETS:-}" ]; then
-                echo "No bazel targets to build"
-                exit 0
+            BAZEL_TARGETS='${{ inputs.BAZEL_TARGETS }}'
+
+            bazel_targets=( )
+            for tgt in $BAZEL_TARGETS; do
+              bazel_targets+=( "$tgt" )
+            done
+
+
+            if [[ $diff_only == "true" ]]; then
+                target_pattern_file=$(mktemp)
+                trap "rm $target_pattern_file" INT TERM EXIT
+
+                merge_base_sha='${{ github.event.pull_request.base.sha }}'
+                branch_head_sha='${{ github.event.pull_request.head.sha }}'
+
+                # we can't use HEAD as a fallback for branch_head_sha because that is
+                # the merge commit which contains the changes of the current HEAD of master
+                # XXX: the logic was ported from a legacy script though ranges like `HEAD..`
+                # may not make much sense
+                commit_range="${merge_base_sha:-HEAD}..${branch_head_sha:-}"
+                # get bazel targets that changed in the commit range and take the union with
+                # the targets that are expected to be built.
+                comm -12 \
+                  <("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh "$commit_range" | sort) \
+                  <(IFS='+'; bazel query "${bazel_targets[*]} except attr(tags, \"manual\", //...)" | sort; ) > "$target_pattern_file"
+
+                # if bazel targets is empty we don't need to run any tests
+                if [ $(wc <"$target_pattern_file" -l) -eq 0 ]; then
+                  echo "No bazel targets to build"
+                  exit 0
+                fi
+
+                # If there are targets to build, pass them as a file to avoid bash & the OS
+                # complaining about the argument list being too long.
+                bazel_args+=( --target_pattern_file="$target_pattern_file" )
+            else
+                bazel_args+=( "${bazel_targets[@]}" )
             fi
 
             echo "Building as user: $(whoami)"
             echo "Bazel version: $(bazel version)"
 
             if [[ $release_build == "true" ]]; then
-              bazel ${{ inputs.BAZEL_COMMAND }} $BAZEL_TARGETS --config=release
+              bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}" --config=release
             else
-              bazel ${{ inputs.BAZEL_COMMAND }} $BAZEL_TARGETS
+              bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}"
             fi

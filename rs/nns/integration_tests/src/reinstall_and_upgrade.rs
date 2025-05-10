@@ -8,7 +8,7 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::types::{NeuronId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{Governance as GovernanceProto, NnsFunction};
+use ic_nns_governance_api::NnsFunction;
 use ic_nns_gtc::{
     pb::v1::{AccountState, Gtc as GtcProto},
     test_constants::{TEST_IDENTITY_1, TEST_IDENTITY_2, TEST_IDENTITY_3, TEST_IDENTITY_4},
@@ -222,8 +222,7 @@ fn encode_init_state(init_state: NnsInitPayloads) -> Vec<Vec<u8>> {
     GtcProto::encode(&init_state.genesis_token, &mut gtc_init_vec).unwrap();
     let cmc_init_vec = Encode!(&init_state.cycles_minting).unwrap();
     let lifeline_init_vec = Encode!(&init_state.lifeline).unwrap();
-    let mut governance_init_vec = Vec::new();
-    GovernanceProto::encode(&init_state.governance, &mut governance_init_vec).unwrap();
+    let governance_init_vec = Encode!(&init_state.governance).unwrap();
     let root_init_vec = Encode!(&init_state.root).unwrap();
     let registry_init_vec = Encode!(&init_state.registry).unwrap();
 

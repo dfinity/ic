@@ -33,7 +33,7 @@ use ic_management_canister_types_private::{CanisterStatusResultV2, EmptyBlob, Pa
 use ic_message::ForwardParams;
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     create_service_nervous_system::{
         swap_parameters::NeuronBasketConstructionParameters as GovApiNeuronBasketConstructionParameters,
         SwapParameters,

@@ -1,5 +1,5 @@
 {
-  "checksum": "7833ae5f24a3f65ae437de1ee31d4afa983452a5f8dda490d70c2b080a2203db",
+  "checksum": "b908b96e4913cfc202890880cec00b55f6fda2f3a2a3f1440da7df3bd665ee24",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1072,7 +1072,7 @@
               "target": "actix_router"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -1080,7 +1080,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -1916,7 +1916,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 2.0.11",
+              "id": "thiserror 2.0.12",
               "target": "thiserror"
             },
             {
@@ -3130,7 +3130,7 @@
               "target": "mime_guess"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -3142,7 +3142,7 @@
               "target": "serde"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -3373,7 +3373,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -3381,7 +3381,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             },
             {
@@ -3433,7 +3433,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -3441,7 +3441,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -4169,7 +4169,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -4177,7 +4177,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -4400,7 +4400,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -4408,7 +4408,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -4501,7 +4501,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -4509,7 +4509,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -4800,7 +4800,7 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -5608,7 +5608,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -5616,7 +5616,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -5669,7 +5669,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -5677,7 +5677,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -6975,7 +6975,7 @@
               "target": "prettyplease"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -6995,7 +6995,7 @@
               "target": "shlex"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -7109,7 +7109,7 @@
               "target": "lazycell"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -7129,7 +7129,7 @@
               "target": "shlex"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -7272,7 +7272,7 @@
               "target": "either"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -9099,7 +9099,7 @@
               "target": "proc_macro_crate"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -9107,7 +9107,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -9915,7 +9915,7 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -10267,7 +10267,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -10895,11 +10895,11 @@
         "deps": {
           "common": [
             {
-              "id": "darling 0.20.10",
+              "id": "darling 0.20.11",
               "target": "darling"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -10907,7 +10907,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -11246,7 +11246,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -11427,7 +11427,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -11435,7 +11435,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -11729,7 +11729,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/cc/1.1.37/download",
-          "sha256": "40545c26d092346d8a8dab71ee48e7685a7a9cba76e634790c215b41a4a7b4cf"
+          "sha256": "40545c26d092346d8a8dab71ee48e7685a7a9cba76e634790c215b41a4a7b4cf",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:cc_rs.patch"
+          ]
         }
       },
       "targets": [
@@ -13623,7 +13629,7 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -13689,7 +13695,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -13697,7 +13703,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -13981,7 +13987,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -13993,7 +13999,7 @@
               "target": "serde_derive_internals"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -14557,7 +14563,7 @@
               "target": "convert_case"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -14617,7 +14623,7 @@
               "target": "convert_case"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -15605,20 +15611,19 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "cranelift-assembler-x64 0.117.2": {
+    "cranelift-assembler-x64 0.119.0": {
       "name": "cranelift-assembler-x64",
-      "version": "0.117.2",
+      "version": "0.119.0",
       "package_url": null,
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-assembler-x64/0.117.2/download",
-          "sha256": "d2b83fcf2fc1c8954561490d02079b496fd0c757da88129981e15bfe3a548229",
+          "url": "https://static.crates.io/crates/cranelift-assembler-x64/0.119.0/download",
+          "sha256": "263cc79b8a23c29720eb596d251698f604546b48c34d0d84f8fd2761e5bf8888",
           "patch_args": [
             "-p3"
           ],
           "patches": [
-            "@@//bazel:cranelift-assembler-lib.patch",
-            "@@//bazel:cranelift-assembler-main.patch"
+            "@@//bazel:cranelift-assembler-lib.patch"
           ]
         }
       },
@@ -15656,14 +15661,14 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-assembler-x64 0.117.2",
+              "id": "cranelift-assembler-x64 0.119.0",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.117.2"
+        "version": "0.119.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -15675,7 +15680,7 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-assembler-x64-meta 0.117.2",
+              "id": "cranelift-assembler-x64-meta 0.119.0",
               "target": "cranelift_assembler_x64_meta"
             }
           ],
@@ -15688,14 +15693,14 @@
       ],
       "license_file": null
     },
-    "cranelift-assembler-x64-meta 0.117.2": {
+    "cranelift-assembler-x64-meta 0.119.0": {
       "name": "cranelift-assembler-x64-meta",
-      "version": "0.117.2",
+      "version": "0.119.0",
       "package_url": null,
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-assembler-x64-meta/0.117.2/download",
-          "sha256": "c7496a6e92b5cee48c5d772b0443df58816dee30fed6ba19b2a28e78037ecedf"
+          "url": "https://static.crates.io/crates/cranelift-assembler-x64-meta/0.119.0/download",
+          "sha256": "5b4a113455f8c0e13e3b3222a9c38d6940b958ff22573108be083495c72820e1"
         }
       },
       "targets": [
@@ -15717,8 +15722,17 @@
         "compile_data_glob": [
           "**"
         ],
+        "deps": {
+          "common": [
+            {
+              "id": "cranelift-srcgen 0.119.0",
+              "target": "cranelift_srcgen"
+            }
+          ],
+          "selects": {}
+        },
         "edition": "2021",
-        "version": "0.117.2"
+        "version": "0.119.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -15726,14 +15740,14 @@
       ],
       "license_file": null
     },
-    "cranelift-bforest 0.117.2": {
+    "cranelift-bforest 0.119.0": {
       "name": "cranelift-bforest",
-      "version": "0.117.2",
+      "version": "0.119.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-bforest/0.117.2/download",
-          "sha256": "73a9dc0a8d3d49ee772101924968830f1c1937d650c571d3c2dd69dc36a68f41"
+          "url": "https://static.crates.io/crates/cranelift-bforest/0.119.0/download",
+          "sha256": "58f96dca41c5acf5d4312c1d04b3391e21a312f8d64ce31a2723a3bb8edd5d4d"
         }
       },
       "targets": [
@@ -15758,14 +15772,14 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-entity 0.117.2",
+              "id": "cranelift-entity 0.119.0",
               "target": "cranelift_entity"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.117.2"
+        "version": "0.119.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -15773,14 +15787,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-bitset 0.117.2": {
+    "cranelift-bitset 0.119.0": {
       "name": "cranelift-bitset",
-      "version": "0.117.2",
+      "version": "0.119.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-bitset/0.117.2/download",
-          "sha256": "573c641174c40ef31021ae4a5a3ad78974e280633502d0dfc6e362385e0c100f"
+          "url": "https://static.crates.io/crates/cranelift-bitset/0.119.0/download",
+          "sha256": "7d821ed698dd83d9c012447eb63a5406c1e9c23732a2f674fb5b5015afd42202"
         }
       },
       "targets": [
@@ -15827,7 +15841,7 @@
           ],
           "selects": {}
         },
-        "version": "0.117.2"
+        "version": "0.119.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -15835,14 +15849,14 @@
       ],
       "license_file": null
     },
-    "cranelift-codegen 0.117.2": {
+    "cranelift-codegen 0.119.0": {
       "name": "cranelift-codegen",
-      "version": "0.117.2",
+      "version": "0.119.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-codegen/0.117.2/download",
-          "sha256": "2d7c94d572615156f2db682181cadbd96342892c31e08cc26a757344319a9220"
+          "url": "https://static.crates.io/crates/cranelift-codegen/0.119.0/download",
+          "sha256": "06c52fdec4322cb8d5545a648047819aaeaa04e630f88d3a609c0d3c1a00e9a0"
         }
       },
       "targets": [
@@ -15894,31 +15908,31 @@
               "target": "bumpalo"
             },
             {
-              "id": "cranelift-assembler-x64 0.117.2",
+              "id": "cranelift-assembler-x64 0.119.0",
               "target": "cranelift_assembler_x64"
             },
             {
-              "id": "cranelift-bforest 0.117.2",
+              "id": "cranelift-bforest 0.119.0",
               "target": "cranelift_bforest"
             },
             {
-              "id": "cranelift-bitset 0.117.2",
+              "id": "cranelift-bitset 0.119.0",
               "target": "cranelift_bitset"
             },
             {
-              "id": "cranelift-codegen 0.117.2",
+              "id": "cranelift-codegen 0.119.0",
               "target": "build_script_build"
             },
             {
-              "id": "cranelift-codegen-shared 0.117.2",
+              "id": "cranelift-codegen-shared 0.119.0",
               "target": "cranelift_codegen_shared"
             },
             {
-              "id": "cranelift-control 0.117.2",
+              "id": "cranelift-control 0.119.0",
               "target": "cranelift_control"
             },
             {
-              "id": "cranelift-entity 0.117.2",
+              "id": "cranelift-entity 0.119.0",
               "target": "cranelift_entity"
             },
             {
@@ -15934,11 +15948,11 @@
               "target": "log"
             },
             {
-              "id": "pulley-interpreter 30.0.2",
+              "id": "pulley-interpreter 32.0.0",
               "target": "pulley_interpreter"
             },
             {
-              "id": "regalloc2 0.11.1",
+              "id": "regalloc2 0.11.2",
               "target": "regalloc2"
             },
             {
@@ -15957,7 +15971,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.117.2"
+        "version": "0.119.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -15969,11 +15983,11 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen-meta 0.117.2",
+              "id": "cranelift-codegen-meta 0.119.0",
               "target": "cranelift_codegen_meta"
             },
             {
-              "id": "cranelift-isle 0.117.2",
+              "id": "cranelift-isle 0.119.0",
               "target": "cranelift_isle"
             }
           ],
@@ -15986,21 +16000,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-codegen-meta 0.117.2": {
+    "cranelift-codegen-meta 0.119.0": {
       "name": "cranelift-codegen-meta",
-      "version": "0.117.2",
+      "version": "0.119.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-codegen-meta/0.117.2/download",
-          "sha256": "beecd9fcf2c3e06da436d565de61a42676097ea6eb6b4499346ac6264b6bb9ce",
-          "patch_args": [
-            "-p4"
-          ],
-          "patches": [
-            "@@//bazel:cranelift-codegen-meta-isle.patch",
-            "@@//bazel:cranelift-codegen-meta.patch"
-          ]
+          "url": "https://static.crates.io/crates/cranelift-codegen-meta/0.119.0/download",
+          "sha256": "af2c215e0c9afa8069aafb71d22aa0e0dde1048d9a5c3c72a83cacf9b61fcf4a"
         }
       },
       "targets": [
@@ -16031,22 +16038,26 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-assembler-x64 0.117.2",
-              "target": "cranelift_assembler_x64"
+              "id": "cranelift-assembler-x64-meta 0.119.0",
+              "target": "cranelift_assembler_x64_meta"
             },
             {
-              "id": "cranelift-codegen-shared 0.117.2",
+              "id": "cranelift-codegen-shared 0.119.0",
               "target": "cranelift_codegen_shared"
             },
             {
-              "id": "pulley-interpreter 30.0.2",
+              "id": "cranelift-srcgen 0.119.0",
+              "target": "cranelift_srcgen"
+            },
+            {
+              "id": "pulley-interpreter 32.0.0",
               "target": "pulley_interpreter"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.117.2"
+        "version": "0.119.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -16054,14 +16065,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-codegen-shared 0.117.2": {
+    "cranelift-codegen-shared 0.119.0": {
       "name": "cranelift-codegen-shared",
-      "version": "0.117.2",
+      "version": "0.119.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-codegen-shared/0.117.2/download",
-          "sha256": "0f4ff8d2e1235f2d6e7fc3c6738be6954ba972cd295f09079ebffeca2f864e22"
+          "url": "https://static.crates.io/crates/cranelift-codegen-shared/0.119.0/download",
+          "sha256": "97524b2446fc26a78142132d813679dda19f620048ebc9a9fbb0ac9f2d320dcb"
         }
       },
       "targets": [
@@ -16084,7 +16095,7 @@
           "**"
         ],
         "edition": "2021",
-        "version": "0.117.2"
+        "version": "0.119.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -16092,14 +16103,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-control 0.117.2": {
+    "cranelift-control 0.119.0": {
       "name": "cranelift-control",
-      "version": "0.117.2",
+      "version": "0.119.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-control/0.117.2/download",
-          "sha256": "001312e9fbc7d9ca9517474d6fe71e29d07e52997fd7efe18f19e8836446ceb2"
+          "url": "https://static.crates.io/crates/cranelift-control/0.119.0/download",
+          "sha256": "8e32e900aee81f9e3cc493405ef667a7812cb5c79b5fc6b669e0a2795bda4b22"
         }
       },
       "targets": [
@@ -16138,7 +16149,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.117.2"
+        "version": "0.119.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -16146,14 +16157,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-entity 0.117.2": {
+    "cranelift-entity 0.119.0": {
       "name": "cranelift-entity",
-      "version": "0.117.2",
+      "version": "0.119.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-entity/0.117.2/download",
-          "sha256": "eb0fd6d4aae680275fcbceb08683416b744e65c8b607352043d3f0951d72b3b2"
+          "url": "https://static.crates.io/crates/cranelift-entity/0.119.0/download",
+          "sha256": "d16a2e28e0fa6b9108d76879d60fe1cc95ba90e1bcf52bac96496371044484ee"
         }
       },
       "targets": [
@@ -16186,7 +16197,7 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-bitset 0.117.2",
+              "id": "cranelift-bitset 0.119.0",
               "target": "cranelift_bitset"
             },
             {
@@ -16206,7 +16217,7 @@
           ],
           "selects": {}
         },
-        "version": "0.117.2"
+        "version": "0.119.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -16214,14 +16225,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-frontend 0.117.2": {
+    "cranelift-frontend 0.119.0": {
       "name": "cranelift-frontend",
-      "version": "0.117.2",
+      "version": "0.119.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-frontend/0.117.2/download",
-          "sha256": "9fd44e7e5dcea20ca104d45894748205c51365ce4cdb18f4418e3ba955971d1b"
+          "url": "https://static.crates.io/crates/cranelift-frontend/0.119.0/download",
+          "sha256": "328181a9083d99762d85954a16065d2560394a862b8dc10239f39668df528b95"
         }
       },
       "targets": [
@@ -16253,7 +16264,7 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen 0.117.2",
+              "id": "cranelift-codegen 0.119.0",
               "target": "cranelift_codegen"
             },
             {
@@ -16272,7 +16283,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.117.2"
+        "version": "0.119.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -16280,14 +16291,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-isle 0.117.2": {
+    "cranelift-isle 0.119.0": {
       "name": "cranelift-isle",
-      "version": "0.117.2",
+      "version": "0.119.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime/tree/main/cranelift/isle",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-isle/0.117.2/download",
-          "sha256": "f900e0a3847d51eed0321f0777947fb852ccfce0da7fb070100357f69a2f37fc",
+          "url": "https://static.crates.io/crates/cranelift-isle/0.119.0/download",
+          "sha256": "e916f36f183e377e9a3ed71769f2721df88b72648831e95bb9fa6b0cd9b1c709",
           "patch_args": [
             "-p4"
           ],
@@ -16336,14 +16347,14 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-isle 0.117.2",
+              "id": "cranelift-isle 0.119.0",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.117.2"
+        "version": "0.119.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -16359,14 +16370,14 @@
       ],
       "license_file": null
     },
-    "cranelift-native 0.117.2": {
+    "cranelift-native 0.119.0": {
       "name": "cranelift-native",
-      "version": "0.117.2",
+      "version": "0.119.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-native/0.117.2/download",
-          "sha256": "7617f13f392ebb63c5126258aca8b8eca739636ca7e4eeee301d3eff68489a6a"
+          "url": "https://static.crates.io/crates/cranelift-native/0.119.0/download",
+          "sha256": "fc852cf04128877047dc2027aa1b85c64f681dc3a6a37ff45dcbfa26e4d52d2f"
         }
       },
       "targets": [
@@ -16398,7 +16409,7 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen 0.117.2",
+              "id": "cranelift-codegen 0.119.0",
               "target": "cranelift_codegen"
             },
             {
@@ -16416,13 +16427,51 @@
           }
         },
         "edition": "2021",
-        "version": "0.117.2"
+        "version": "0.119.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
         "Apache-2.0"
       ],
       "license_file": "LICENSE"
+    },
+    "cranelift-srcgen 0.119.0": {
+      "name": "cranelift-srcgen",
+      "version": "0.119.0",
+      "package_url": "https://github.com/bytecodealliance/wasmtime",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/cranelift-srcgen/0.119.0/download",
+          "sha256": "47e1a86340a16e74b4285cc86ac69458fa1c8e7aaff313da4a89d10efd3535ee"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "cranelift_srcgen",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "cranelift_srcgen",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "version": "0.119.0"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
     },
     "crc32fast 1.3.2": {
       "name": "crc32fast",
@@ -16742,7 +16791,7 @@
         "deps": {
           "common": [
             {
-              "id": "crossbeam-channel 0.5.13",
+              "id": "crossbeam-channel 0.5.15",
               "target": "crossbeam_channel"
             },
             {
@@ -16774,14 +16823,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "crossbeam-channel 0.5.13": {
+    "crossbeam-channel 0.5.15": {
       "name": "crossbeam-channel",
-      "version": "0.5.13",
+      "version": "0.5.15",
       "package_url": "https://github.com/crossbeam-rs/crossbeam",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/crossbeam-channel/0.5.13/download",
-          "sha256": "33480d6946193aa8033910124896ca395333cae7e2d1113d1fef6c3272217df2"
+          "url": "https://static.crates.io/crates/crossbeam-channel/0.5.15/download",
+          "sha256": "82b8f8f868b36967f9606790d1903570de9ceaf870a7bf9fbbd3016d636a2cb2"
         }
       },
       "targets": [
@@ -16820,7 +16869,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.5.13"
+        "version": "0.5.15"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -17936,7 +17985,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -18350,7 +18399,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -18358,7 +18407,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -18555,14 +18604,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "darling 0.20.10": {
+    "darling 0.20.11": {
       "name": "darling",
-      "version": "0.20.10",
+      "version": "0.20.11",
       "package_url": "https://github.com/TedDriggs/darling",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/darling/0.20.10/download",
-          "sha256": "6f63b86c8a8826a49b8c21f08a2d07338eec8d900540f8630dc76284be802989"
+          "url": "https://static.crates.io/crates/darling/0.20.11/download",
+          "sha256": "fc7f46116c46ff9ab3eb1597a45688b6715c6e628b5c133e288e709a29bcb4ee"
         }
       },
       "targets": [
@@ -18594,7 +18643,7 @@
         "deps": {
           "common": [
             {
-              "id": "darling_core 0.20.10",
+              "id": "darling_core 0.20.11",
               "target": "darling_core"
             }
           ],
@@ -18604,13 +18653,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "darling_macro 0.20.10",
+              "id": "darling_macro 0.20.11",
               "target": "darling_macro"
             }
           ],
           "selects": {}
         },
-        "version": "0.20.10"
+        "version": "0.20.11"
       },
       "license": "MIT",
       "license_ids": [
@@ -18665,7 +18714,7 @@
               "target": "ident_case"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -18692,14 +18741,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "darling_core 0.20.10": {
+    "darling_core 0.20.11": {
       "name": "darling_core",
-      "version": "0.20.10",
+      "version": "0.20.11",
       "package_url": "https://github.com/TedDriggs/darling",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/darling_core/0.20.10/download",
-          "sha256": "95133861a8032aaea082871032f5815eb9e98cef03fa916ab4500513994df9e5"
+          "url": "https://static.crates.io/crates/darling_core/0.20.11/download",
+          "sha256": "0d00b9596d185e565c2207a0b01f8bd1a135483d02d9b7b0a54b11da8d53412e"
         }
       },
       "targets": [
@@ -18739,7 +18788,7 @@
               "target": "ident_case"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -18751,14 +18800,14 @@
               "target": "strsim"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.20.10"
+        "version": "0.20.11"
       },
       "license": "MIT",
       "license_ids": [
@@ -18821,14 +18870,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "darling_macro 0.20.10": {
+    "darling_macro 0.20.11": {
       "name": "darling_macro",
-      "version": "0.20.10",
+      "version": "0.20.11",
       "package_url": "https://github.com/TedDriggs/darling",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/darling_macro/0.20.10/download",
-          "sha256": "d336a2a514f6ccccaa3e09b02d41d35330c07ddf03a62165fcec10bb561c7806"
+          "url": "https://static.crates.io/crates/darling_macro/0.20.11/download",
+          "sha256": "fc34b93ccb385b40dc71c6fceac4b2ad23662c7eeb248cf10d529b7e055b6ead"
         }
       },
       "targets": [
@@ -18853,7 +18902,7 @@
         "deps": {
           "common": [
             {
-              "id": "darling_core 0.20.10",
+              "id": "darling_core 0.20.11",
               "target": "darling_core"
             },
             {
@@ -18861,14 +18910,14 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.20.10"
+        "version": "0.20.11"
       },
       "license": "MIT",
       "license_ids": [
@@ -19536,7 +19585,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -19544,7 +19593,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -19660,7 +19709,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -19668,7 +19717,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -19715,7 +19764,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -19723,7 +19772,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -19806,7 +19855,7 @@
               "target": "convert_case"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -20571,7 +20620,7 @@
               "target": "crossbeam"
             },
             {
-              "id": "crossbeam-channel 0.5.13",
+              "id": "crossbeam-channel 0.5.15",
               "target": "crossbeam_channel"
             },
             {
@@ -20589,6 +20638,10 @@
             {
               "id": "cvt 0.1.2",
               "target": "cvt"
+            },
+            {
+              "id": "darling 0.20.11",
+              "target": "darling"
             },
             {
               "id": "dashmap 5.5.0",
@@ -20764,12 +20817,12 @@
             },
             {
               "id": "ic-cdk 0.17.1",
-              "target": "ic_cdk"
+              "target": "ic_cdk",
+              "alias": "ic_cdk_0_17_1"
             },
             {
-              "id": "ic-cdk 0.18.0-alpha.1",
-              "target": "ic_cdk",
-              "alias": "ic_cdk_next"
+              "id": "ic-cdk 0.18.0",
+              "target": "ic_cdk"
             },
             {
               "id": "ic-cdk-timers 0.11.0",
@@ -20800,7 +20853,7 @@
               "target": "ic_http_gateway"
             },
             {
-              "id": "ic-management-canister-types 0.2.1",
+              "id": "ic-management-canister-types 0.3.0",
               "target": "ic_management_canister_types"
             },
             {
@@ -21116,7 +21169,7 @@
               "target": "priority_queue"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -21413,6 +21466,11 @@
               "target": "syn"
             },
             {
+              "id": "syn 2.0.101",
+              "target": "syn",
+              "alias": "syn2"
+            },
+            {
               "id": "syscalls 0.6.18",
               "target": "syscalls"
             },
@@ -21437,7 +21495,7 @@
               "target": "textplots"
             },
             {
-              "id": "thiserror 2.0.11",
+              "id": "thiserror 2.0.12",
               "target": "thiserror"
             },
             {
@@ -21589,35 +21647,35 @@
               "target": "wasm_bindgen"
             },
             {
-              "id": "wasm-encoder 0.224.1",
+              "id": "wasm-encoder 0.228.0",
               "target": "wasm_encoder"
             },
             {
-              "id": "wasm-smith 0.224.1",
+              "id": "wasm-smith 0.228.0",
               "target": "wasm_smith"
             },
             {
-              "id": "wasmparser 0.224.1",
+              "id": "wasmparser 0.228.0",
               "target": "wasmparser"
             },
             {
-              "id": "wasmprinter 0.224.1",
+              "id": "wasmprinter 0.228.0",
               "target": "wasmprinter"
             },
             {
-              "id": "wasmtime 30.0.2",
+              "id": "wasmtime 32.0.0",
               "target": "wasmtime"
             },
             {
-              "id": "wasmtime-environ 30.0.2",
+              "id": "wasmtime-environ 32.0.0",
               "target": "wasmtime_environ"
             },
             {
-              "id": "wast 224.0.1",
+              "id": "wast 228.0.0",
               "target": "wast"
             },
             {
-              "id": "wat 1.227.1",
+              "id": "wat 1.229.0",
               "target": "wat"
             },
             {
@@ -21676,12 +21734,12 @@
             },
             {
               "id": "ic-cdk-macros 0.17.1",
-              "target": "ic_cdk_macros"
+              "target": "ic_cdk_macros",
+              "alias": "ic_cdk_macros_0_17_1"
             },
             {
-              "id": "ic-cdk-macros 0.18.0-alpha.1",
-              "target": "ic_cdk_macros",
-              "alias": "ic_cdk_macros_next"
+              "id": "ic-cdk-macros 0.18.0",
+              "target": "ic_cdk_macros"
             },
             {
               "id": "indoc 1.0.9",
@@ -22043,7 +22101,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -22051,7 +22109,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -22894,7 +22952,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -23466,7 +23524,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -23526,7 +23584,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -23534,7 +23592,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -23590,7 +23648,7 @@
               "target": "num_traits"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -23598,7 +23656,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -23934,7 +23992,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -23942,7 +24000,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -25563,7 +25621,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.11",
+              "id": "thiserror 2.0.12",
               "target": "thiserror"
             },
             {
@@ -27556,7 +27614,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -27564,7 +27622,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -31057,7 +31115,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -32704,7 +32762,7 @@
               "target": "stop_token"
             },
             {
-              "id": "thiserror 2.0.11",
+              "id": "thiserror 2.0.12",
               "target": "thiserror"
             },
             {
@@ -32945,7 +33003,7 @@
               "target": "systemstat"
             },
             {
-              "id": "thiserror 2.0.11",
+              "id": "thiserror 2.0.12",
               "target": "thiserror"
             },
             {
@@ -33207,7 +33265,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 2.0.11",
+              "id": "thiserror 2.0.12",
               "target": "thiserror"
             }
           ],
@@ -33421,17 +33479,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk 0.18.0-alpha.1": {
+    "ic-cdk 0.18.0": {
       "name": "ic-cdk",
-      "version": "0.18.0-alpha.1",
+      "version": "0.18.0",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/cdk-rs.git",
-          "commitish": {
-            "Rev": "4e287ce51636b0e70768c193da38d2fc5324ea15"
-          },
-          "strip_prefix": "ic-cdk"
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-cdk/0.18.0/download",
+          "sha256": "b11cc255410be6a7e47e1a756ea94c1f31a2397a79e696f6f7d207d5ebd3e144"
         }
       },
       "targets": [
@@ -33460,7 +33515,15 @@
               "target": "candid"
             },
             {
-              "id": "ic0 0.24.0-alpha.1",
+              "id": "ic-error-types 0.1.0",
+              "target": "ic_error_types"
+            },
+            {
+              "id": "ic-management-canister-types 0.3.0",
+              "target": "ic_management_canister_types"
+            },
+            {
+              "id": "ic0 0.24.0",
               "target": "ic0"
             },
             {
@@ -33472,7 +33535,11 @@
               "target": "serde_bytes"
             },
             {
-              "id": "thiserror 2.0.11",
+              "id": "slotmap 1.0.7",
+              "target": "slotmap"
+            },
+            {
+              "id": "thiserror 2.0.12",
               "target": "thiserror"
             }
           ],
@@ -33482,13 +33549,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "ic-cdk-macros 0.18.0-alpha.1",
+              "id": "ic-cdk-macros 0.18.0",
               "target": "ic_cdk_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.18.0-alpha.1"
+        "version": "0.18.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -33532,7 +33599,7 @@
               "target": "candid"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -33599,7 +33666,7 @@
               "target": "candid"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -33615,7 +33682,7 @@
               "target": "serde_tokenstream"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -33630,17 +33697,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk-macros 0.18.0-alpha.1": {
+    "ic-cdk-macros 0.18.0": {
       "name": "ic-cdk-macros",
-      "version": "0.18.0-alpha.1",
+      "version": "0.18.0",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/cdk-rs.git",
-          "commitish": {
-            "Rev": "4e287ce51636b0e70768c193da38d2fc5324ea15"
-          },
-          "strip_prefix": "ic-cdk-macros"
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-cdk-macros/0.18.0/download",
+          "sha256": "30bab0b748bc4059f19abbd2c2609761ca6d6c731979f01148b49afcc4fe7a9f"
         }
       },
       "targets": [
@@ -33669,7 +33733,7 @@
               "target": "candid"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -33685,14 +33749,14 @@
               "target": "serde_tokenstream"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.18.0-alpha.1"
+        "version": "0.18.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -34042,6 +34106,66 @@
       ],
       "license_file": "LICENSE"
     },
+    "ic-error-types 0.1.0": {
+      "name": "ic-error-types",
+      "version": "0.1.0",
+      "package_url": "https://github.com/dfinity/ic",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-error-types/0.1.0/download",
+          "sha256": "be844216781d6f4a0853b5a8d63dee8d1b6ee0b9aef310d8c0cb82a6796d7072"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_error_types",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_error_types",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            },
+            {
+              "id": "strum 0.26.3",
+              "target": "strum"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "strum_macros 0.26.4",
+              "target": "strum_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.1.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "ic-gateway 0.1.0": {
       "name": "ic-gateway",
       "version": "0.1.0",
@@ -34252,7 +34376,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.11",
+              "id": "thiserror 2.0.12",
               "target": "thiserror"
             },
             {
@@ -34576,7 +34700,7 @@
               "target": "simple_asn1"
             },
             {
-              "id": "thiserror 2.0.11",
+              "id": "thiserror 2.0.12",
               "target": "thiserror"
             }
           ],
@@ -34591,14 +34715,14 @@
       ],
       "license_file": null
     },
-    "ic-management-canister-types 0.2.1": {
+    "ic-management-canister-types 0.3.0": {
       "name": "ic-management-canister-types",
-      "version": "0.2.1",
+      "version": "0.3.0",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-management-canister-types/0.2.1/download",
-          "sha256": "1a23527ab5e2ede1aae270cdb79ef0491479c8b5c2de9fd393048ca907cac5e1"
+          "url": "https://static.crates.io/crates/ic-management-canister-types/0.3.0/download",
+          "sha256": "90253c6ac92f9a0b548a53a02c2d29dfa0f04a6c1ae919b86a6f54d4767d78b9"
         }
       },
       "targets": [
@@ -34627,10 +34751,6 @@
               "target": "candid"
             },
             {
-              "id": "candid_parser 0.1.4",
-              "target": "candid_parser"
-            },
-            {
               "id": "serde 1.0.217",
               "target": "serde"
             },
@@ -34642,7 +34762,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.2.1"
+        "version": "0.3.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -35147,7 +35267,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 2.0.11",
+              "id": "thiserror 2.0.12",
               "target": "thiserror"
             }
           ],
@@ -35695,17 +35815,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic0 0.24.0-alpha.1": {
+    "ic0 0.24.0": {
       "name": "ic0",
-      "version": "0.24.0-alpha.1",
+      "version": "0.24.0",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/cdk-rs.git",
-          "commitish": {
-            "Rev": "4e287ce51636b0e70768c193da38d2fc5324ea15"
-          },
-          "strip_prefix": "ic0"
+        "Http": {
+          "url": "https://static.crates.io/crates/ic0/0.24.0/download",
+          "sha256": "673a6b846467547f3fc61f95d246aadff03e368b53c931655300b9d1bd05a55a"
         }
       },
       "targets": [
@@ -35728,7 +35845,7 @@
           "**"
         ],
         "edition": "2021",
-        "version": "0.24.0-alpha.1"
+        "version": "0.24.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -36668,7 +36785,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -36676,7 +36793,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -37288,7 +37405,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -37765,7 +37882,7 @@
               "target": "clap"
             },
             {
-              "id": "crossbeam-channel 0.5.13",
+              "id": "crossbeam-channel 0.5.15",
               "target": "crossbeam_channel"
             },
             {
@@ -38734,6 +38851,62 @@
         },
         "edition": "2018",
         "version": "0.13.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "itertools 0.14.0": {
+      "name": "itertools",
+      "version": "0.14.0",
+      "package_url": "https://github.com/rust-itertools/itertools",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/itertools/0.14.0/download",
+          "sha256": "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "itertools",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "itertools",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "use_alloc",
+            "use_std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "either 1.14.0",
+              "target": "either"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.14.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -40447,11 +40620,11 @@
         "deps": {
           "common": [
             {
-              "id": "darling 0.20.10",
+              "id": "darling 0.20.11",
               "target": "darling"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -40463,7 +40636,7 @@
               "target": "serde_json"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -42600,7 +42773,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "openssl-sys 0.9.105",
+                "id": "openssl-sys 0.9.107",
                 "target": "openssl_sys"
               }
             ]
@@ -42613,6 +42786,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "data": {
+          "common": [
+            "@openssl//:gen_dir"
+          ],
+          "selects": {}
+        },
         "data_glob": [
           "**"
         ],
@@ -42646,7 +42825,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "openssl-sys 0.9.105",
+                "id": "openssl-sys 0.9.107",
                 "target": "openssl_sys"
               }
             ]
@@ -42796,7 +42975,8 @@
         ],
         "crate_features": {
           "common": [
-            "libc"
+            "libc",
+            "static"
           ],
           "selects": {}
         },
@@ -43036,6 +43216,82 @@
         },
         "edition": "2021",
         "version": "0.4.15"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "linux-raw-sys 0.9.4": {
+      "name": "linux-raw-sys",
+      "version": "0.9.4",
+      "package_url": "https://github.com/sunfishcode/linux-raw-sys",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/linux-raw-sys/0.9.4/download",
+          "sha256": "cd945864f07fe9f5371a27ad7b52a172b4b499999f1d97574c9fa68373937e12"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "linux_raw_sys",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "linux_raw_sys",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "general",
+            "ioctl",
+            "no_std"
+          ],
+          "selects": {
+            "aarch64-unknown-linux-gnu": [
+              "elf",
+              "errno"
+            ],
+            "aarch64-unknown-nixos-gnu": [
+              "elf",
+              "errno"
+            ],
+            "arm-unknown-linux-gnueabi": [
+              "elf",
+              "errno"
+            ],
+            "armv7-unknown-linux-gnueabi": [
+              "elf",
+              "errno"
+            ],
+            "i686-unknown-linux-gnu": [
+              "elf",
+              "errno"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "elf",
+              "errno"
+            ],
+            "x86_64-unknown-nixos-gnu": [
+              "elf",
+              "errno"
+            ]
+          }
+        },
+        "edition": "2021",
+        "version": "0.9.4"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "license_ids": [
@@ -43773,7 +44029,7 @@
               "target": "fnv"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -43785,7 +44041,7 @@
               "target": "regex_syntax"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -43841,7 +44097,7 @@
               "target": "fnv"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -45660,7 +45916,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -46272,7 +46528,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -46280,7 +46536,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -46482,7 +46738,7 @@
               "target": "async_lock"
             },
             {
-              "id": "crossbeam-channel 0.5.13",
+              "id": "crossbeam-channel 0.5.15",
               "target": "crossbeam_channel"
             },
             {
@@ -46882,7 +47138,7 @@
               "target": "either"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -48685,7 +48941,7 @@
               "target": "proc_macro_crate"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -48693,7 +48949,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -49444,7 +49700,7 @@
               "target": "bytes"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -49531,14 +49787,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "openssl 0.10.70": {
+    "openssl 0.10.72": {
       "name": "openssl",
-      "version": "0.10.70",
+      "version": "0.10.72",
       "package_url": "https://github.com/sfackler/rust-openssl",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/openssl/0.10.70/download",
-          "sha256": "61cfb4e166a8bb8c9b55c500bc2308550148ece889be90f609377e58140f42c6"
+          "url": "https://static.crates.io/crates/openssl/0.10.72/download",
+          "sha256": "fedfea7d58a1f73118430a55da6a286e7b044961736ce96a16a17068ea25e5da"
         }
       },
       "targets": [
@@ -49595,11 +49851,11 @@
               "target": "once_cell"
             },
             {
-              "id": "openssl 0.10.70",
+              "id": "openssl 0.10.72",
               "target": "build_script_build"
             },
             {
-              "id": "openssl-sys 0.9.105",
+              "id": "openssl-sys 0.9.107",
               "target": "openssl_sys",
               "alias": "ffi"
             }
@@ -49616,7 +49872,7 @@
           ],
           "selects": {}
         },
-        "version": "0.10.70"
+        "version": "0.10.72"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -49628,7 +49884,7 @@
         "link_deps": {
           "common": [
             {
-              "id": "openssl-sys 0.9.105",
+              "id": "openssl-sys 0.9.107",
               "target": "openssl_sys",
               "alias": "ffi"
             }
@@ -49674,7 +49930,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -49682,7 +49938,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -49785,14 +50041,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "openssl-sys 0.9.105": {
+    "openssl-sys 0.9.107": {
       "name": "openssl-sys",
-      "version": "0.9.105",
+      "version": "0.9.107",
       "package_url": "https://github.com/sfackler/rust-openssl",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/openssl-sys/0.9.105/download",
-          "sha256": "8b22d5b84be05a8d6947c7cb71f7c849aa0f112acd4bf51c2a7c1c988ac0a9dc"
+          "url": "https://static.crates.io/crates/openssl-sys/0.9.107/download",
+          "sha256": "8288979acd84749c744a9014b4382d42b8f7b2592847b5afb2ed29e5d16ede07"
         }
       },
       "targets": [
@@ -49833,19 +50089,25 @@
               "target": "libc"
             },
             {
-              "id": "openssl-sys 0.9.105",
+              "id": "openssl-sys 0.9.107",
               "target": "build_script_main"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.9.105"
+        "version": "0.9.107"
       },
       "build_script_attrs": {
         "compile_data_glob": [
           "**"
         ],
+        "data": {
+          "common": [
+            "@openssl//:gen_dir"
+          ],
+          "selects": {}
+        },
         "data_glob": [
           "**"
         ],
@@ -49864,6 +50126,15 @@
               "target": "vcpkg"
             }
           ],
+          "selects": {}
+        },
+        "build_script_env": {
+          "common": {
+            "OPENSSL_INCLUDE_DIR": "$(location @openssl//:gen_dir)/include",
+            "OPENSSL_LIB_DIR": "$(location @openssl//:gen_dir)/lib64",
+            "OPENSSL_NO_VENDOR": "1",
+            "OPENSSL_STATIC": "1"
+          },
           "selects": {}
         },
         "links": "openssl"
@@ -50668,7 +50939,7 @@
         "deps": {
           "common": [
             {
-              "id": "crossbeam-channel 0.5.13",
+              "id": "crossbeam-channel 0.5.15",
               "target": "crossbeam_channel"
             },
             {
@@ -50864,7 +51135,7 @@
         "deps": {
           "common": [
             {
-              "id": "crossbeam-channel 0.5.13",
+              "id": "crossbeam-channel 0.5.15",
               "target": "crossbeam_channel"
             },
             {
@@ -51612,7 +51883,7 @@
               "target": "proc_macro_crate"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -52869,7 +53140,7 @@
               "target": "pest_meta"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -52877,7 +53148,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -53367,7 +53638,7 @@
               "target": "phf_shared"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -53375,7 +53646,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -53615,7 +53886,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -53623,7 +53894,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -55491,11 +55762,11 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -55900,7 +56171,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -55998,7 +56269,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -56103,14 +56374,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "proc-macro2 1.0.89": {
+    "proc-macro2 1.0.95": {
       "name": "proc-macro2",
-      "version": "1.0.89",
+      "version": "1.0.95",
       "package_url": "https://github.com/dtolnay/proc-macro2",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/proc-macro2/1.0.89/download",
-          "sha256": "f139b0662de085916d1fb67d2b4169d1addddda1919e696f3252b740b629986e"
+          "url": "https://static.crates.io/crates/proc-macro2/1.0.95/download",
+          "sha256": "02b3e5e68a3a1a02aad3ec490a98007cbc13c37cbe84a3cd7b8e406d76e7f778"
         }
       },
       "targets": [
@@ -56154,7 +56425,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "build_script_build"
             },
             {
@@ -56165,7 +56436,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.0.89"
+        "version": "1.0.95"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -56751,7 +57022,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -56759,7 +57030,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -56989,7 +57260,7 @@
               "target": "regex"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             },
             {
@@ -57095,7 +57366,7 @@
               "target": "regex"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             },
             {
@@ -57154,7 +57425,7 @@
               "target": "itertools"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -57162,7 +57433,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -57217,7 +57488,7 @@
               "target": "itertools"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -57225,7 +57496,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -57603,7 +57874,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -57686,14 +57957,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "pulley-interpreter 30.0.2": {
+    "pulley-interpreter 32.0.0": {
       "name": "pulley-interpreter",
-      "version": "30.0.2",
+      "version": "32.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime/tree/main/pulley",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/pulley-interpreter/30.0.2/download",
-          "sha256": "cb0ecb9823083f71df8735f21f6c44f2f2b55986d674802831df20f27e26c907"
+          "url": "https://static.crates.io/crates/pulley-interpreter/32.0.0/download",
+          "sha256": "69c819888a64024f9c6bc7facbed99dfb4dd0124abe4335b6a54eabaa68ef506"
         }
       },
       "targets": [
@@ -57701,18 +57972,6 @@
           "Library": {
             "crate_name": "pulley_interpreter",
             "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
             "srcs": {
               "allow_empty": true,
               "include": [
@@ -57740,7 +57999,7 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-bitset 0.117.2",
+              "id": "cranelift-bitset 0.119.0",
               "target": "cranelift_bitset"
             },
             {
@@ -57748,26 +58007,14 @@
               "target": "log"
             },
             {
-              "id": "pulley-interpreter 30.0.2",
-              "target": "build_script_build"
-            },
-            {
-              "id": "wasmtime-math 30.0.2",
+              "id": "wasmtime-math 32.0.0",
               "target": "wasmtime_math"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "30.0.2"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "data_glob": [
-          "**"
-        ]
+        "version": "32.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -58366,7 +58613,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             }
           ],
@@ -59984,7 +60231,7 @@
               "target": "itertools"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -60690,14 +60937,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "regalloc2 0.11.1": {
+    "regalloc2 0.11.2": {
       "name": "regalloc2",
-      "version": "0.11.1",
+      "version": "0.11.2",
       "package_url": "https://github.com/bytecodealliance/regalloc2",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/regalloc2/0.11.1/download",
-          "sha256": "145c1c267e14f20fb0f88aa76a1c5ffec42d592c1d28b3cd9148ae35916158d3"
+          "url": "https://static.crates.io/crates/regalloc2/0.11.2/download",
+          "sha256": "dc06e6b318142614e4a48bc725abbf08ff166694835c43c9dae5a9009704639a"
         }
       },
       "targets": [
@@ -60757,7 +61004,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.11.1"
+        "version": "0.11.2"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -65211,7 +65458,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -65375,7 +65622,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -65731,7 +65978,7 @@
               "target": "glob"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -65751,7 +65998,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             },
             {
@@ -66415,7 +66662,6 @@
             "aarch64-apple-darwin": [
               "default",
               "event",
-              "mm",
               "pipe",
               "process",
               "termios",
@@ -66425,7 +66671,6 @@
             "aarch64-apple-ios": [
               "default",
               "event",
-              "mm",
               "pipe",
               "process",
               "termios",
@@ -66435,7 +66680,6 @@
             "aarch64-apple-ios-sim": [
               "default",
               "event",
-              "mm",
               "pipe",
               "process",
               "termios",
@@ -66445,7 +66689,6 @@
             "aarch64-linux-android": [
               "default",
               "event",
-              "mm",
               "pipe",
               "process",
               "termios",
@@ -66455,7 +66698,6 @@
             "aarch64-unknown-fuchsia": [
               "default",
               "event",
-              "mm",
               "pipe",
               "process",
               "termios",
@@ -66465,7 +66707,6 @@
             "aarch64-unknown-linux-gnu": [
               "default",
               "event",
-              "mm",
               "param",
               "pipe",
               "process",
@@ -66478,7 +66719,6 @@
             "aarch64-unknown-nixos-gnu": [
               "default",
               "event",
-              "mm",
               "param",
               "pipe",
               "process",
@@ -66491,7 +66731,6 @@
             "aarch64-unknown-nto-qnx710": [
               "default",
               "event",
-              "mm",
               "pipe",
               "process",
               "termios",
@@ -66501,7 +66740,6 @@
             "arm-unknown-linux-gnueabi": [
               "default",
               "event",
-              "mm",
               "param",
               "pipe",
               "process",
@@ -66514,7 +66752,6 @@
             "armv7-linux-androideabi": [
               "default",
               "event",
-              "mm",
               "pipe",
               "process",
               "termios",
@@ -66524,7 +66761,6 @@
             "armv7-unknown-linux-gnueabi": [
               "default",
               "event",
-              "mm",
               "param",
               "pipe",
               "process",
@@ -66537,7 +66773,6 @@
             "i686-apple-darwin": [
               "default",
               "event",
-              "mm",
               "pipe",
               "process",
               "termios",
@@ -66547,7 +66782,6 @@
             "i686-linux-android": [
               "default",
               "event",
-              "mm",
               "pipe",
               "process",
               "termios",
@@ -66557,7 +66791,6 @@
             "i686-unknown-freebsd": [
               "default",
               "event",
-              "mm",
               "pipe",
               "process",
               "termios",
@@ -66567,7 +66800,6 @@
             "i686-unknown-linux-gnu": [
               "default",
               "event",
-              "mm",
               "param",
               "pipe",
               "process",
@@ -66580,7 +66812,6 @@
             "powerpc-unknown-linux-gnu": [
               "default",
               "event",
-              "mm",
               "param",
               "pipe",
               "process",
@@ -66603,7 +66834,6 @@
             "s390x-unknown-linux-gnu": [
               "default",
               "event",
-              "mm",
               "param",
               "pipe",
               "process",
@@ -66631,7 +66861,6 @@
             "x86_64-apple-darwin": [
               "default",
               "event",
-              "mm",
               "pipe",
               "process",
               "termios",
@@ -66641,7 +66870,6 @@
             "x86_64-apple-ios": [
               "default",
               "event",
-              "mm",
               "pipe",
               "process",
               "termios",
@@ -66651,7 +66879,6 @@
             "x86_64-linux-android": [
               "default",
               "event",
-              "mm",
               "pipe",
               "process",
               "termios",
@@ -66661,7 +66888,6 @@
             "x86_64-unknown-freebsd": [
               "default",
               "event",
-              "mm",
               "pipe",
               "process",
               "termios",
@@ -66671,7 +66897,6 @@
             "x86_64-unknown-fuchsia": [
               "default",
               "event",
-              "mm",
               "pipe",
               "process",
               "termios",
@@ -66681,7 +66906,6 @@
             "x86_64-unknown-linux-gnu": [
               "default",
               "event",
-              "mm",
               "param",
               "pipe",
               "process",
@@ -66694,7 +66918,6 @@
             "x86_64-unknown-nixos-gnu": [
               "default",
               "event",
-              "mm",
               "param",
               "pipe",
               "process",
@@ -67046,6 +67269,309 @@
         },
         "edition": "2021",
         "version": "0.38.44"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "rustix 1.0.5": {
+      "name": "rustix",
+      "version": "1.0.5",
+      "package_url": "https://github.com/bytecodealliance/rustix",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/rustix/1.0.5/download",
+          "sha256": "d97817398dd4bb2e6da002002db259209759911da105da92bec29ccb12cf58bf"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rustix",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "rustix",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "default",
+            "mm",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.6.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "rustix 1.0.5",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {
+            "aarch64-apple-darwin": [
+              {
+                "id": "errno 0.3.10",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.170",
+                "target": "libc"
+              }
+            ],
+            "aarch64-apple-ios": [
+              {
+                "id": "errno 0.3.10",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.170",
+                "target": "libc"
+              }
+            ],
+            "aarch64-apple-ios-sim": [
+              {
+                "id": "errno 0.3.10",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.170",
+                "target": "libc"
+              }
+            ],
+            "aarch64-linux-android": [
+              {
+                "id": "errno 0.3.10",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.170",
+                "target": "libc"
+              }
+            ],
+            "aarch64-unknown-fuchsia": [
+              {
+                "id": "errno 0.3.10",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.170",
+                "target": "libc"
+              }
+            ],
+            "aarch64-unknown-nto-qnx710": [
+              {
+                "id": "errno 0.3.10",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.170",
+                "target": "libc"
+              }
+            ],
+            "armv7-linux-androideabi": [
+              {
+                "id": "errno 0.3.10",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.170",
+                "target": "libc"
+              }
+            ],
+            "cfg(all(any(target_os = \"android\", target_os = \"linux\"), any(rustix_use_libc, miri, not(all(target_os = \"linux\", any(target_endian = \"little\", any(target_arch = \"s390x\", target_arch = \"powerpc\")), any(target_arch = \"arm\", all(target_arch = \"aarch64\", target_pointer_width = \"64\"), target_arch = \"riscv64\", all(rustix_use_experimental_asm, target_arch = \"powerpc\"), all(rustix_use_experimental_asm, target_arch = \"powerpc64\"), all(rustix_use_experimental_asm, target_arch = \"s390x\"), all(rustix_use_experimental_asm, target_arch = \"mips\"), all(rustix_use_experimental_asm, target_arch = \"mips32r6\"), all(rustix_use_experimental_asm, target_arch = \"mips64\"), all(rustix_use_experimental_asm, target_arch = \"mips64r6\"), target_arch = \"x86\", all(target_arch = \"x86_64\", target_pointer_width = \"64\")))))))": [
+              {
+                "id": "linux-raw-sys 0.9.4",
+                "target": "linux_raw_sys"
+              }
+            ],
+            "cfg(all(not(rustix_use_libc), not(miri), target_os = \"linux\", any(target_endian = \"little\", any(target_arch = \"s390x\", target_arch = \"powerpc\")), any(target_arch = \"arm\", all(target_arch = \"aarch64\", target_pointer_width = \"64\"), target_arch = \"riscv64\", all(rustix_use_experimental_asm, target_arch = \"powerpc\"), all(rustix_use_experimental_asm, target_arch = \"powerpc64\"), all(rustix_use_experimental_asm, target_arch = \"s390x\"), all(rustix_use_experimental_asm, target_arch = \"mips\"), all(rustix_use_experimental_asm, target_arch = \"mips32r6\"), all(rustix_use_experimental_asm, target_arch = \"mips64\"), all(rustix_use_experimental_asm, target_arch = \"mips64r6\"), target_arch = \"x86\", all(target_arch = \"x86_64\", target_pointer_width = \"64\"))))": [
+              {
+                "id": "linux-raw-sys 0.9.4",
+                "target": "linux_raw_sys"
+              }
+            ],
+            "cfg(all(not(windows), any(rustix_use_libc, miri, not(all(target_os = \"linux\", any(target_endian = \"little\", any(target_arch = \"s390x\", target_arch = \"powerpc\")), any(target_arch = \"arm\", all(target_arch = \"aarch64\", target_pointer_width = \"64\"), target_arch = \"riscv64\", all(rustix_use_experimental_asm, target_arch = \"powerpc\"), all(rustix_use_experimental_asm, target_arch = \"powerpc64\"), all(rustix_use_experimental_asm, target_arch = \"s390x\"), all(rustix_use_experimental_asm, target_arch = \"mips\"), all(rustix_use_experimental_asm, target_arch = \"mips32r6\"), all(rustix_use_experimental_asm, target_arch = \"mips64\"), all(rustix_use_experimental_asm, target_arch = \"mips64r6\"), target_arch = \"x86\", all(target_arch = \"x86_64\", target_pointer_width = \"64\")))))))": [
+              {
+                "id": "errno 0.3.10",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.170",
+                "target": "libc"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "errno 0.3.10",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "windows-sys 0.59.0",
+                "target": "windows_sys"
+              }
+            ],
+            "i686-apple-darwin": [
+              {
+                "id": "errno 0.3.10",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.170",
+                "target": "libc"
+              }
+            ],
+            "i686-linux-android": [
+              {
+                "id": "errno 0.3.10",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.170",
+                "target": "libc"
+              }
+            ],
+            "i686-unknown-freebsd": [
+              {
+                "id": "errno 0.3.10",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.170",
+                "target": "libc"
+              }
+            ],
+            "powerpc-unknown-linux-gnu": [
+              {
+                "id": "errno 0.3.10",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.170",
+                "target": "libc"
+              }
+            ],
+            "s390x-unknown-linux-gnu": [
+              {
+                "id": "errno 0.3.10",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.170",
+                "target": "libc"
+              }
+            ],
+            "x86_64-apple-darwin": [
+              {
+                "id": "errno 0.3.10",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.170",
+                "target": "libc"
+              }
+            ],
+            "x86_64-apple-ios": [
+              {
+                "id": "errno 0.3.10",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.170",
+                "target": "libc"
+              }
+            ],
+            "x86_64-linux-android": [
+              {
+                "id": "errno 0.3.10",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.170",
+                "target": "libc"
+              }
+            ],
+            "x86_64-unknown-freebsd": [
+              {
+                "id": "errno 0.3.10",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.170",
+                "target": "libc"
+              }
+            ],
+            "x86_64-unknown-fuchsia": [
+              {
+                "id": "errno 0.3.10",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.170",
+                "target": "libc"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "version": "1.0.5"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -67595,7 +68121,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 2.0.11",
+              "id": "thiserror 2.0.12",
               "target": "thiserror"
             },
             {
@@ -68605,7 +69131,7 @@
               "target": "proc_macro_crate"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -68810,7 +69336,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -68822,7 +69348,7 @@
               "target": "serde_derive_internals"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -69171,7 +69697,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -69179,7 +69705,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -70711,7 +71237,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -70719,7 +71245,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -70767,7 +71293,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -70775,7 +71301,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -71022,7 +71548,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -71030,7 +71556,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -71078,7 +71604,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -71133,7 +71659,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -71145,7 +71671,7 @@
               "target": "serde"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -71392,7 +71918,7 @@
               "target": "darling"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -71448,11 +71974,11 @@
         "deps": {
           "common": [
             {
-              "id": "darling 0.20.10",
+              "id": "darling 0.20.11",
               "target": "darling"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -71460,7 +71986,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -73055,7 +73581,7 @@
         "deps": {
           "common": [
             {
-              "id": "crossbeam-channel 0.5.13",
+              "id": "crossbeam-channel 0.5.15",
               "target": "crossbeam_channel"
             },
             {
@@ -73736,7 +74262,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -73802,7 +74328,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -73810,7 +74336,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -74004,7 +74530,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "thiserror 2.0.11",
+              "id": "thiserror 2.0.12",
               "target": "thiserror"
             },
             {
@@ -74820,7 +75346,7 @@
               "target": "phf_shared"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -74948,7 +75474,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -74956,7 +75482,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -75013,7 +75539,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -75021,7 +75547,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -75185,7 +75711,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -75193,7 +75719,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -75253,7 +75779,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -75261,7 +75787,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -75694,7 +76220,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -75730,14 +76256,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "syn 2.0.87": {
+    "syn 2.0.101": {
       "name": "syn",
-      "version": "2.0.87",
+      "version": "2.0.101",
       "package_url": "https://github.com/dtolnay/syn",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/syn/2.0.87/download",
-          "sha256": "25aa4ce346d03a6dcd68dd8b4010bcb74e54e62c90c573f394c46eae99aba32d"
+          "url": "https://static.crates.io/crates/syn/2.0.101/download",
+          "sha256": "8ce2b7fc941b3a24138a0a7cf8e858bfc6a992e7978a068a5c760deb0ed43caf"
         }
       },
       "targets": [
@@ -75833,7 +76359,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -75848,7 +76374,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.0.87"
+        "version": "2.0.101"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -75988,7 +76514,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -75996,7 +76522,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -76996,7 +77522,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -77500,7 +78026,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -77512,7 +78038,7 @@
               "target": "structmeta"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -77750,14 +78276,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "thiserror 2.0.11": {
+    "thiserror 2.0.12": {
       "name": "thiserror",
-      "version": "2.0.11",
+      "version": "2.0.12",
       "package_url": "https://github.com/dtolnay/thiserror",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/thiserror/2.0.11/download",
-          "sha256": "d452f284b73e6d76dd36758a0c8684b1d5be31f92b89d07fd5822175732206fc"
+          "url": "https://static.crates.io/crates/thiserror/2.0.12/download",
+          "sha256": "567b8a2dae586314f7be2a752ec7474332959c6460e02bde30d702a66d488708"
         }
       },
       "targets": [
@@ -77801,7 +78327,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 2.0.11",
+              "id": "thiserror 2.0.12",
               "target": "build_script_build"
             }
           ],
@@ -77811,13 +78337,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "thiserror-impl 2.0.11",
+              "id": "thiserror-impl 2.0.12",
               "target": "thiserror_impl"
             }
           ],
           "selects": {}
         },
-        "version": "2.0.11"
+        "version": "2.0.12"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -77866,7 +78392,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -77874,7 +78400,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -77890,14 +78416,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "thiserror-impl 2.0.11": {
+    "thiserror-impl 2.0.12": {
       "name": "thiserror-impl",
-      "version": "2.0.11",
+      "version": "2.0.12",
       "package_url": "https://github.com/dtolnay/thiserror",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/thiserror-impl/2.0.11/download",
-          "sha256": "26afc1baea8a989337eeb52b6e72a039780ce45c3edfcc9c5b9d112feeb173c2"
+          "url": "https://static.crates.io/crates/thiserror-impl/2.0.12/download",
+          "sha256": "7f7cf42b4507d8ea322120659672cf1b9dbb93f8f2d4ecfd6e51350ff5b17a1d"
         }
       },
       "targets": [
@@ -77922,7 +78448,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -77930,14 +78456,14 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.0.11"
+        "version": "2.0.12"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -79266,7 +79792,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -79274,7 +79800,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -79882,7 +80408,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -79890,7 +80416,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -81022,7 +81548,7 @@
               "target": "prettyplease"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -81038,7 +81564,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -81792,7 +82318,7 @@
               "target": "pin_project"
             },
             {
-              "id": "thiserror 2.0.11",
+              "id": "thiserror 2.0.12",
               "target": "thiserror"
             },
             {
@@ -81922,7 +82448,7 @@
         "deps": {
           "common": [
             {
-              "id": "crossbeam-channel 0.5.13",
+              "id": "crossbeam-channel 0.5.15",
               "target": "crossbeam_channel"
             },
             {
@@ -81981,7 +82507,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -81989,7 +82515,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -85178,7 +85704,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -85629,7 +86155,7 @@
               "target": "log"
             },
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -85637,7 +86163,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             },
             {
@@ -85804,7 +86330,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -85812,7 +86338,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             },
             {
@@ -85956,14 +86482,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "wasm-encoder 0.224.1": {
+    "wasm-encoder 0.228.0": {
       "name": "wasm-encoder",
-      "version": "0.224.1",
+      "version": "0.228.0",
       "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-encoder",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-encoder/0.224.1/download",
-          "sha256": "1ab7a13a23790fe91ea4eb7526a1f3131001d874e3e00c2976c48861f2e82920"
+          "url": "https://static.crates.io/crates/wasm-encoder/0.228.0/download",
+          "sha256": "05d30290541f2d4242a162bbda76b8f2d8b1ac59eab3568ed6f2327d52c9b2c4"
         }
       },
       "targets": [
@@ -86009,22 +86535,22 @@
         "deps": {
           "common": [
             {
-              "id": "leb128 0.2.5",
-              "target": "leb128"
+              "id": "leb128fmt 0.1.0",
+              "target": "leb128fmt"
             },
             {
-              "id": "wasm-encoder 0.224.1",
+              "id": "wasm-encoder 0.228.0",
               "target": "build_script_build"
             },
             {
-              "id": "wasmparser 0.224.1",
+              "id": "wasmparser 0.228.0",
               "target": "wasmparser"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.224.1"
+        "version": "0.228.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -86041,14 +86567,14 @@
       ],
       "license_file": null
     },
-    "wasm-encoder 0.227.1": {
+    "wasm-encoder 0.229.0": {
       "name": "wasm-encoder",
-      "version": "0.227.1",
+      "version": "0.229.0",
       "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-encoder",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-encoder/0.227.1/download",
-          "sha256": "80bb72f02e7fbf07183443b27b0f3d4144abf8c114189f2e088ed95b696a7822"
+          "url": "https://static.crates.io/crates/wasm-encoder/0.229.0/download",
+          "sha256": "38ba1d491ecacb085a2552025c10a675a6fddcbd03b1fc9b36c536010ce265d2"
         }
       },
       "targets": [
@@ -86096,14 +86622,14 @@
               "target": "leb128fmt"
             },
             {
-              "id": "wasm-encoder 0.227.1",
+              "id": "wasm-encoder 0.229.0",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.227.1"
+        "version": "0.229.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -86120,14 +86646,14 @@
       ],
       "license_file": null
     },
-    "wasm-smith 0.224.1": {
+    "wasm-smith 0.228.0": {
       "name": "wasm-smith",
-      "version": "0.224.1",
+      "version": "0.228.0",
       "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-smith",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-smith/0.224.1/download",
-          "sha256": "aec28c4f2aedf9dbe381d6ddcb92b871cb6b5de93e03522a74a064c1f48ad207"
+          "url": "https://static.crates.io/crates/wasm-smith/0.228.0/download",
+          "sha256": "8906f0848b81bd33103f0db54396c52db4c46518eb55bebf28eae45a442b47f1"
         }
       },
       "targets": [
@@ -86170,26 +86696,18 @@
               "target": "flagset"
             },
             {
-              "id": "indexmap 2.7.1",
-              "target": "indexmap"
-            },
-            {
-              "id": "leb128 0.2.5",
-              "target": "leb128"
-            },
-            {
-              "id": "wasm-encoder 0.224.1",
+              "id": "wasm-encoder 0.228.0",
               "target": "wasm_encoder"
             },
             {
-              "id": "wasmparser 0.224.1",
+              "id": "wasmparser 0.228.0",
               "target": "wasmparser"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.224.1"
+        "version": "0.228.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "license_ids": [
@@ -86393,14 +86911,14 @@
       ],
       "license_file": null
     },
-    "wasmparser 0.224.1": {
+    "wasmparser 0.228.0": {
       "name": "wasmparser",
-      "version": "0.224.1",
+      "version": "0.228.0",
       "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmparser/0.224.1/download",
-          "sha256": "04f17a5917c2ddd3819e84c661fae0d6ba29d7b9c1f0e96c708c65a9c4188e11"
+          "url": "https://static.crates.io/crates/wasmparser/0.228.0/download",
+          "sha256": "4abf1132c1fdf747d56bbc1bb52152400c70f336870f968b85e89ea422198ae3"
         }
       },
       "targets": [
@@ -86470,14 +86988,14 @@
               "target": "serde"
             },
             {
-              "id": "wasmparser 0.224.1",
+              "id": "wasmparser 0.228.0",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.224.1"
+        "version": "0.228.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -86494,14 +87012,14 @@
       ],
       "license_file": null
     },
-    "wasmparser 0.227.1": {
+    "wasmparser 0.229.0": {
       "name": "wasmparser",
-      "version": "0.227.1",
+      "version": "0.229.0",
       "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmparser/0.227.1/download",
-          "sha256": "0f51cad774fb3c9461ab9bccc9c62dfb7388397b5deda31bf40e8108ccd678b2"
+          "url": "https://static.crates.io/crates/wasmparser/0.229.0/download",
+          "sha256": "0cc3b1f053f5d41aa55640a1fa9b6d1b8a9e4418d118ce308d20e24ff3575a8c"
         }
       },
       "targets": [
@@ -86542,14 +87060,14 @@
               "target": "bitflags"
             },
             {
-              "id": "wasmparser 0.227.1",
+              "id": "wasmparser 0.229.0",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.227.1"
+        "version": "0.229.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -86566,14 +87084,14 @@
       ],
       "license_file": null
     },
-    "wasmprinter 0.224.1": {
+    "wasmprinter 0.228.0": {
       "name": "wasmprinter",
-      "version": "0.224.1",
+      "version": "0.228.0",
       "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmprinter",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmprinter/0.224.1/download",
-          "sha256": "0095b53a3b09cbc2f90f789ea44aa1b17ecc2dad8b267e657c7391f3ded6293d"
+          "url": "https://static.crates.io/crates/wasmprinter/0.228.0/download",
+          "sha256": "0df64bd38c14db359d02ce2024c64eb161aa2618ccee5f3bc5acbbd65c9a875c"
         }
       },
       "targets": [
@@ -86613,14 +87131,14 @@
               "target": "termcolor"
             },
             {
-              "id": "wasmparser 0.224.1",
+              "id": "wasmparser 0.228.0",
               "target": "wasmparser"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.224.1"
+        "version": "0.228.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "license_ids": [
@@ -86629,14 +87147,14 @@
       ],
       "license_file": null
     },
-    "wasmtime 30.0.2": {
+    "wasmtime 32.0.0": {
       "name": "wasmtime",
-      "version": "30.0.2",
+      "version": "32.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime/30.0.2/download",
-          "sha256": "809cc8780708f1deed0a7c3fcab46954f0e8c08a6fe0252772481fbc88fcf946"
+          "url": "https://static.crates.io/crates/wasmtime/32.0.0/download",
+          "sha256": "ab05ab5e27e0d76a9a7cd93d30baa600549945ff7dcae57559de9678e28f3b7e"
         }
       },
       "targets": [
@@ -86729,7 +87247,7 @@
               "target": "postcard"
             },
             {
-              "id": "pulley-interpreter 30.0.2",
+              "id": "pulley-interpreter 32.0.0",
               "target": "pulley_interpreter"
             },
             {
@@ -86753,35 +87271,35 @@
               "target": "target_lexicon"
             },
             {
-              "id": "wasmparser 0.224.1",
+              "id": "wasmparser 0.228.0",
               "target": "wasmparser"
             },
             {
-              "id": "wasmtime 30.0.2",
+              "id": "wasmtime 32.0.0",
               "target": "build_script_build"
             },
             {
-              "id": "wasmtime-asm-macros 30.0.2",
+              "id": "wasmtime-asm-macros 32.0.0",
               "target": "wasmtime_asm_macros"
             },
             {
-              "id": "wasmtime-cranelift 30.0.2",
+              "id": "wasmtime-cranelift 32.0.0",
               "target": "wasmtime_cranelift"
             },
             {
-              "id": "wasmtime-environ 30.0.2",
+              "id": "wasmtime-environ 32.0.0",
               "target": "wasmtime_environ"
             },
             {
-              "id": "wasmtime-jit-icache-coherence 30.0.2",
+              "id": "wasmtime-jit-icache-coherence 32.0.0",
               "target": "wasmtime_jit_icache_coherence"
             },
             {
-              "id": "wasmtime-math 30.0.2",
+              "id": "wasmtime-math 32.0.0",
               "target": "wasmtime_math"
             },
             {
-              "id": "wasmtime-slab 30.0.2",
+              "id": "wasmtime-slab 32.0.0",
               "target": "wasmtime_slab"
             }
           ],
@@ -86792,7 +87310,7 @@
                 "target": "mach2"
               },
               {
-                "id": "rustix 0.38.44",
+                "id": "rustix 1.0.5",
                 "target": "rustix"
               }
             ],
@@ -86802,7 +87320,7 @@
                 "target": "mach2"
               },
               {
-                "id": "rustix 0.38.44",
+                "id": "rustix 1.0.5",
                 "target": "rustix"
               }
             ],
@@ -86812,13 +87330,13 @@
                 "target": "mach2"
               },
               {
-                "id": "rustix 0.38.44",
+                "id": "rustix 1.0.5",
                 "target": "rustix"
               }
             ],
             "aarch64-linux-android": [
               {
-                "id": "rustix 0.38.44",
+                "id": "rustix 1.0.5",
                 "target": "rustix"
               }
             ],
@@ -86830,7 +87348,7 @@
             ],
             "aarch64-unknown-fuchsia": [
               {
-                "id": "rustix 0.38.44",
+                "id": "rustix 1.0.5",
                 "target": "rustix"
               }
             ],
@@ -86840,7 +87358,7 @@
                 "target": "memfd"
               },
               {
-                "id": "rustix 0.38.44",
+                "id": "rustix 1.0.5",
                 "target": "rustix"
               }
             ],
@@ -86850,13 +87368,13 @@
                 "target": "memfd"
               },
               {
-                "id": "rustix 0.38.44",
+                "id": "rustix 1.0.5",
                 "target": "rustix"
               }
             ],
             "aarch64-unknown-nto-qnx710": [
               {
-                "id": "rustix 0.38.44",
+                "id": "rustix 1.0.5",
                 "target": "rustix"
               }
             ],
@@ -86866,13 +87384,13 @@
                 "target": "memfd"
               },
               {
-                "id": "rustix 0.38.44",
+                "id": "rustix 1.0.5",
                 "target": "rustix"
               }
             ],
             "armv7-linux-androideabi": [
               {
-                "id": "rustix 0.38.44",
+                "id": "rustix 1.0.5",
                 "target": "rustix"
               }
             ],
@@ -86882,7 +87400,7 @@
                 "target": "memfd"
               },
               {
-                "id": "rustix 0.38.44",
+                "id": "rustix 1.0.5",
                 "target": "rustix"
               }
             ],
@@ -86892,13 +87410,13 @@
                 "target": "mach2"
               },
               {
-                "id": "rustix 0.38.44",
+                "id": "rustix 1.0.5",
                 "target": "rustix"
               }
             ],
             "i686-linux-android": [
               {
-                "id": "rustix 0.38.44",
+                "id": "rustix 1.0.5",
                 "target": "rustix"
               }
             ],
@@ -86910,7 +87428,7 @@
             ],
             "i686-unknown-freebsd": [
               {
-                "id": "rustix 0.38.44",
+                "id": "rustix 1.0.5",
                 "target": "rustix"
               }
             ],
@@ -86920,7 +87438,7 @@
                 "target": "memfd"
               },
               {
-                "id": "rustix 0.38.44",
+                "id": "rustix 1.0.5",
                 "target": "rustix"
               }
             ],
@@ -86930,7 +87448,7 @@
                 "target": "memfd"
               },
               {
-                "id": "rustix 0.38.44",
+                "id": "rustix 1.0.5",
                 "target": "rustix"
               }
             ],
@@ -86944,7 +87462,7 @@
                 "target": "psm"
               },
               {
-                "id": "rustix 0.38.44",
+                "id": "rustix 1.0.5",
                 "target": "rustix"
               }
             ],
@@ -86954,7 +87472,7 @@
                 "target": "mach2"
               },
               {
-                "id": "rustix 0.38.44",
+                "id": "rustix 1.0.5",
                 "target": "rustix"
               }
             ],
@@ -86964,13 +87482,13 @@
                 "target": "mach2"
               },
               {
-                "id": "rustix 0.38.44",
+                "id": "rustix 1.0.5",
                 "target": "rustix"
               }
             ],
             "x86_64-linux-android": [
               {
-                "id": "rustix 0.38.44",
+                "id": "rustix 1.0.5",
                 "target": "rustix"
               }
             ],
@@ -86982,13 +87500,13 @@
             ],
             "x86_64-unknown-freebsd": [
               {
-                "id": "rustix 0.38.44",
+                "id": "rustix 1.0.5",
                 "target": "rustix"
               }
             ],
             "x86_64-unknown-fuchsia": [
               {
-                "id": "rustix 0.38.44",
+                "id": "rustix 1.0.5",
                 "target": "rustix"
               }
             ],
@@ -86998,7 +87516,7 @@
                 "target": "memfd"
               },
               {
-                "id": "rustix 0.38.44",
+                "id": "rustix 1.0.5",
                 "target": "rustix"
               }
             ],
@@ -87008,7 +87526,7 @@
                 "target": "memfd"
               },
               {
-                "id": "rustix 0.38.44",
+                "id": "rustix 1.0.5",
                 "target": "rustix"
               }
             ]
@@ -87018,21 +87536,17 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "paste 1.0.15",
-              "target": "paste"
-            },
-            {
               "id": "serde_derive 1.0.217",
               "target": "serde_derive"
             },
             {
-              "id": "wasmtime-versioned-export-macros 30.0.2",
+              "id": "wasmtime-versioned-export-macros 32.0.0",
               "target": "wasmtime_versioned_export_macros"
             }
           ],
           "selects": {}
         },
-        "version": "30.0.2"
+        "version": "32.0.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -87053,7 +87567,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "wasmtime-versioned-export-macros 30.0.2",
+              "id": "wasmtime-versioned-export-macros 32.0.0",
               "target": "wasmtime_versioned_export_macros"
             }
           ],
@@ -87066,14 +87580,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "wasmtime-asm-macros 30.0.2": {
+    "wasmtime-asm-macros 32.0.0": {
       "name": "wasmtime-asm-macros",
-      "version": "30.0.2",
+      "version": "32.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-asm-macros/30.0.2/download",
-          "sha256": "236964b6b35af0f08879c9c56dbfbc5adc12e8d624672341a0121df31adaa3fa"
+          "url": "https://static.crates.io/crates/wasmtime-asm-macros/32.0.0/download",
+          "sha256": "194241137d4c1a30a3c2d713016d3de7e2c4e25c9a1a49ef23fc9b850d9e2068"
         }
       },
       "targets": [
@@ -87105,7 +87619,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "30.0.2"
+        "version": "32.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -87113,14 +87627,14 @@
       ],
       "license_file": null
     },
-    "wasmtime-cranelift 30.0.2": {
+    "wasmtime-cranelift 32.0.0": {
       "name": "wasmtime-cranelift",
-      "version": "30.0.2",
+      "version": "32.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-cranelift/30.0.2/download",
-          "sha256": "abcc9179097235c91f299a8ff56b358ee921266b61adff7d14d6e48428954dd2"
+          "url": "https://static.crates.io/crates/wasmtime-cranelift/32.0.0/download",
+          "sha256": "925c030360b8084e450f29d4d772e89ba0a8855dd0a47e07dd11e7f5fd900b42"
         }
       },
       "targets": [
@@ -87161,23 +87675,23 @@
               "target": "cfg_if"
             },
             {
-              "id": "cranelift-codegen 0.117.2",
+              "id": "cranelift-codegen 0.119.0",
               "target": "cranelift_codegen"
             },
             {
-              "id": "cranelift-control 0.117.2",
+              "id": "cranelift-control 0.119.0",
               "target": "cranelift_control"
             },
             {
-              "id": "cranelift-entity 0.117.2",
+              "id": "cranelift-entity 0.119.0",
               "target": "cranelift_entity"
             },
             {
-              "id": "cranelift-frontend 0.117.2",
+              "id": "cranelift-frontend 0.119.0",
               "target": "cranelift_frontend"
             },
             {
-              "id": "cranelift-native 0.117.2",
+              "id": "cranelift-native 0.119.0",
               "target": "cranelift_native"
             },
             {
@@ -87185,7 +87699,7 @@
               "target": "gimli"
             },
             {
-              "id": "itertools 0.12.0",
+              "id": "itertools 0.14.0",
               "target": "itertools"
             },
             {
@@ -87197,7 +87711,7 @@
               "target": "object"
             },
             {
-              "id": "pulley-interpreter 30.0.2",
+              "id": "pulley-interpreter 32.0.0",
               "target": "pulley_interpreter"
             },
             {
@@ -87209,15 +87723,15 @@
               "target": "target_lexicon"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 2.0.12",
               "target": "thiserror"
             },
             {
-              "id": "wasmparser 0.224.1",
+              "id": "wasmparser 0.228.0",
               "target": "wasmparser"
             },
             {
-              "id": "wasmtime-environ 30.0.2",
+              "id": "wasmtime-environ 32.0.0",
               "target": "wasmtime_environ"
             }
           ],
@@ -87227,13 +87741,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "wasmtime-versioned-export-macros 30.0.2",
+              "id": "wasmtime-versioned-export-macros 32.0.0",
               "target": "wasmtime_versioned_export_macros"
             }
           ],
           "selects": {}
         },
-        "version": "30.0.2"
+        "version": "32.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -87241,14 +87755,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "wasmtime-environ 30.0.2": {
+    "wasmtime-environ 32.0.0": {
       "name": "wasmtime-environ",
-      "version": "30.0.2",
+      "version": "32.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-environ/30.0.2/download",
-          "sha256": "8e90f6cba665939381839bbf2ddf12d732fca03278867910348ef1281b700954"
+          "url": "https://static.crates.io/crates/wasmtime-environ/32.0.0/download",
+          "sha256": "58d78b12eb1f2d2ac85eff89693963ba9c13dd9c90796d92d83ff27b23b29fbe"
         }
       },
       "targets": [
@@ -87286,11 +87800,11 @@
               "target": "anyhow"
             },
             {
-              "id": "cranelift-bitset 0.117.2",
+              "id": "cranelift-bitset 0.119.0",
               "target": "cranelift_bitset"
             },
             {
-              "id": "cranelift-entity 0.117.2",
+              "id": "cranelift-entity 0.119.0",
               "target": "cranelift_entity"
             },
             {
@@ -87326,15 +87840,15 @@
               "target": "target_lexicon"
             },
             {
-              "id": "wasm-encoder 0.224.1",
+              "id": "wasm-encoder 0.228.0",
               "target": "wasm_encoder"
             },
             {
-              "id": "wasmparser 0.224.1",
+              "id": "wasmparser 0.228.0",
               "target": "wasmparser"
             },
             {
-              "id": "wasmprinter 0.224.1",
+              "id": "wasmprinter 0.228.0",
               "target": "wasmprinter"
             }
           ],
@@ -87350,7 +87864,7 @@
           ],
           "selects": {}
         },
-        "version": "30.0.2"
+        "version": "32.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -87358,14 +87872,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "wasmtime-fiber 30.0.2": {
+    "wasmtime-fiber 32.0.0": {
       "name": "wasmtime-fiber",
-      "version": "30.0.2",
+      "version": "32.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-fiber/30.0.2/download",
-          "sha256": "ba5c2ac21f0b39d72d2dac198218a12b3ddeb4ab388a8fa0d2e429855876783c"
+          "url": "https://static.crates.io/crates/wasmtime-fiber/32.0.0/download",
+          "sha256": "ced0efdb1553ada01704540d3cf3e525c93c8f5ca24a48d3e50ba5f2083c36ba"
         }
       },
       "targets": [
@@ -87410,18 +87924,18 @@
               "target": "cfg_if"
             },
             {
-              "id": "wasmtime-asm-macros 30.0.2",
+              "id": "wasmtime-asm-macros 32.0.0",
               "target": "wasmtime_asm_macros"
             },
             {
-              "id": "wasmtime-fiber 30.0.2",
+              "id": "wasmtime-fiber 32.0.0",
               "target": "build_script_build"
             }
           ],
           "selects": {
             "cfg(unix)": [
               {
-                "id": "rustix 0.38.44",
+                "id": "rustix 1.0.5",
                 "target": "rustix"
               }
             ],
@@ -87437,13 +87951,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "wasmtime-versioned-export-macros 30.0.2",
+              "id": "wasmtime-versioned-export-macros 32.0.0",
               "target": "wasmtime_versioned_export_macros"
             }
           ],
           "selects": {}
         },
-        "version": "30.0.2"
+        "version": "32.0.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -87464,7 +87978,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "wasmtime-versioned-export-macros 30.0.2",
+              "id": "wasmtime-versioned-export-macros 32.0.0",
               "target": "wasmtime_versioned_export_macros"
             }
           ],
@@ -87477,14 +87991,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "wasmtime-jit-icache-coherence 30.0.2": {
+    "wasmtime-jit-icache-coherence 32.0.0": {
       "name": "wasmtime-jit-icache-coherence",
-      "version": "30.0.2",
+      "version": "32.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-jit-icache-coherence/30.0.2/download",
-          "sha256": "3f180cc0d2745e3a5df5d02231cd3046f49c75512eaa987b8202363b112e125d"
+          "url": "https://static.crates.io/crates/wasmtime-jit-icache-coherence/32.0.0/download",
+          "sha256": "eb399eaabd7594f695e1159d236bf40ef55babcb3af97f97c027864ed2104db6"
         }
       },
       "targets": [
@@ -87533,7 +88047,7 @@
           }
         },
         "edition": "2021",
-        "version": "30.0.2"
+        "version": "32.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -87541,14 +88055,14 @@
       ],
       "license_file": null
     },
-    "wasmtime-math 30.0.2": {
+    "wasmtime-math 32.0.0": {
       "name": "wasmtime-math",
-      "version": "30.0.2",
+      "version": "32.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-math/30.0.2/download",
-          "sha256": "f5f04c5dcf5b2f88f81cfb8d390294b2f67109dc4d0197ea7303c60a092df27c"
+          "url": "https://static.crates.io/crates/wasmtime-math/32.0.0/download",
+          "sha256": "a527168840e87fc06422b44e7540b4e38df7c84237abdad3dc2450dcde8ab38e"
         }
       },
       "targets": [
@@ -87586,7 +88100,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "30.0.2"
+        "version": "32.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -87594,14 +88108,14 @@
       ],
       "license_file": null
     },
-    "wasmtime-slab 30.0.2": {
+    "wasmtime-slab 32.0.0": {
       "name": "wasmtime-slab",
-      "version": "30.0.2",
+      "version": "32.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-slab/30.0.2/download",
-          "sha256": "fe9681707f1ae9a4708ca22058722fca5c135775c495ba9b9624fe3732b94c97"
+          "url": "https://static.crates.io/crates/wasmtime-slab/32.0.0/download",
+          "sha256": "46a3a2798fb5472381cebd72c1daa1f99bbfd6fb645bf8285db8b3a48405daec"
         }
       },
       "targets": [
@@ -87624,7 +88138,7 @@
           "**"
         ],
         "edition": "2021",
-        "version": "30.0.2"
+        "version": "32.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -87632,14 +88146,14 @@
       ],
       "license_file": null
     },
-    "wasmtime-versioned-export-macros 30.0.2": {
+    "wasmtime-versioned-export-macros 32.0.0": {
       "name": "wasmtime-versioned-export-macros",
-      "version": "30.0.2",
+      "version": "32.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-versioned-export-macros/30.0.2/download",
-          "sha256": "dd2fe69d04986a12fc759d2e79494100d600adcb3bb79e63dedfc8e6bb2ab03e"
+          "url": "https://static.crates.io/crates/wasmtime-versioned-export-macros/32.0.0/download",
+          "sha256": "b5afcdcb7f97cce62f6f512182259bfed5d2941253ad43780b3a4e1ad72e4fea"
         }
       },
       "targets": [
@@ -87664,7 +88178,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -87672,14 +88186,14 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "30.0.2"
+        "version": "32.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -87687,14 +88201,14 @@
       ],
       "license_file": null
     },
-    "wasmtime-winch 30.0.2": {
+    "wasmtime-winch 32.0.0": {
       "name": "wasmtime-winch",
-      "version": "30.0.2",
+      "version": "32.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-winch/30.0.2/download",
-          "sha256": "5a9c8eae8395d530bb00a388030de9f543528674c382326f601de47524376975"
+          "url": "https://static.crates.io/crates/wasmtime-winch/32.0.0/download",
+          "sha256": "0ac4f31e4657e385d53c71cf963868dc6efdff39fe657c873a0f5da8f465f164"
         }
       },
       "targets": [
@@ -87723,7 +88237,7 @@
               "target": "anyhow"
             },
             {
-              "id": "cranelift-codegen 0.117.2",
+              "id": "cranelift-codegen 0.119.0",
               "target": "cranelift_codegen"
             },
             {
@@ -87739,26 +88253,26 @@
               "target": "target_lexicon"
             },
             {
-              "id": "wasmparser 0.224.1",
+              "id": "wasmparser 0.228.0",
               "target": "wasmparser"
             },
             {
-              "id": "wasmtime-cranelift 30.0.2",
+              "id": "wasmtime-cranelift 32.0.0",
               "target": "wasmtime_cranelift"
             },
             {
-              "id": "wasmtime-environ 30.0.2",
+              "id": "wasmtime-environ 32.0.0",
               "target": "wasmtime_environ"
             },
             {
-              "id": "winch-codegen 30.0.2",
+              "id": "winch-codegen 32.0.0",
               "target": "winch_codegen"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "30.0.2"
+        "version": "32.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -87766,14 +88280,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "wast 224.0.1": {
+    "wast 228.0.0": {
       "name": "wast",
-      "version": "224.0.1",
+      "version": "228.0.0",
       "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wast",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wast/224.0.1/download",
-          "sha256": "ddf8e902015ff670011613811be3310408d2dba911217eea711aa98c89584aca"
+          "url": "https://static.crates.io/crates/wast/228.0.0/download",
+          "sha256": "9e5aae124478cb51439f6587f074a3a5e835afd22751c59a87b2e2a882727c97"
         }
       },
       "targets": [
@@ -87810,8 +88324,8 @@
               "target": "bumpalo"
             },
             {
-              "id": "leb128 0.2.5",
-              "target": "leb128"
+              "id": "leb128fmt 0.1.0",
+              "target": "leb128fmt"
             },
             {
               "id": "memchr 2.7.4",
@@ -87822,14 +88336,14 @@
               "target": "unicode_width"
             },
             {
-              "id": "wasm-encoder 0.224.1",
+              "id": "wasm-encoder 0.228.0",
               "target": "wasm_encoder"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "224.0.1"
+        "version": "228.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "license_ids": [
@@ -87838,14 +88352,14 @@
       ],
       "license_file": null
     },
-    "wast 227.0.1": {
+    "wast 229.0.0": {
       "name": "wast",
-      "version": "227.0.1",
+      "version": "229.0.0",
       "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wast",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wast/227.0.1/download",
-          "sha256": "85c14e5042b16c9d267da3b9b0f4529870455178415286312c25c34dfc1b2816"
+          "url": "https://static.crates.io/crates/wast/229.0.0/download",
+          "sha256": "63fcaff613c12225696bb163f79ca38ffb40e9300eff0ff4b8aa8b2f7eadf0d9"
         }
       },
       "targets": [
@@ -87893,14 +88407,14 @@
               "target": "unicode_width"
             },
             {
-              "id": "wasm-encoder 0.227.1",
+              "id": "wasm-encoder 0.229.0",
               "target": "wasm_encoder"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "227.0.1"
+        "version": "229.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "license_ids": [
@@ -87909,14 +88423,14 @@
       ],
       "license_file": null
     },
-    "wat 1.227.1": {
+    "wat 1.229.0": {
       "name": "wat",
-      "version": "1.227.1",
+      "version": "1.229.0",
       "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wat",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wat/1.227.1/download",
-          "sha256": "b3d394d5bef7006ff63338d481ca10f1af76601e65ebdf5ed33d29302994e9cc"
+          "url": "https://static.crates.io/crates/wat/1.229.0/download",
+          "sha256": "4189bad08b70455a9e9e67dc126d2dcf91fac143a80f1046747a5dde6d4c33e0"
         }
       },
       "targets": [
@@ -87948,14 +88462,14 @@
         "deps": {
           "common": [
             {
-              "id": "wast 227.0.1",
+              "id": "wast 229.0.0",
               "target": "wast"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.227.1"
+        "version": "1.229.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "license_ids": [
@@ -88802,14 +89316,14 @@
       ],
       "license_file": null
     },
-    "winch-codegen 30.0.2": {
+    "winch-codegen 32.0.0": {
       "name": "winch-codegen",
-      "version": "30.0.2",
+      "version": "32.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/winch-codegen/30.0.2/download",
-          "sha256": "7dbd4e07bd92c7ddace2f3267bdd31d4197b5ec58c315751325d45c19bfb56df"
+          "url": "https://static.crates.io/crates/winch-codegen/32.0.0/download",
+          "sha256": "108e1f810933ac36e7168313a0e5393c84a731f0394c3cb3e5f5667b378a03fc"
         }
       },
       "targets": [
@@ -88850,7 +89364,7 @@
               "target": "anyhow"
             },
             {
-              "id": "cranelift-codegen 0.117.2",
+              "id": "cranelift-codegen 0.119.0",
               "target": "cranelift_codegen"
             },
             {
@@ -88858,7 +89372,7 @@
               "target": "gimli"
             },
             {
-              "id": "regalloc2 0.11.1",
+              "id": "regalloc2 0.11.2",
               "target": "regalloc2"
             },
             {
@@ -88870,30 +89384,30 @@
               "target": "target_lexicon"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 2.0.12",
               "target": "thiserror"
             },
             {
-              "id": "wasmparser 0.224.1",
+              "id": "wasmparser 0.228.0",
               "target": "wasmparser"
             },
             {
-              "id": "wasmtime-cranelift 30.0.2",
+              "id": "wasmtime-cranelift 32.0.0",
               "target": "wasmtime_cranelift"
             },
             {
-              "id": "wasmtime-environ 30.0.2",
+              "id": "wasmtime-environ 32.0.0",
               "target": "wasmtime_environ"
             },
             {
-              "id": "winch-codegen 30.0.2",
+              "id": "winch-codegen 32.0.0",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "30.0.2"
+        "version": "32.0.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -92279,7 +92793,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -92287,7 +92801,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             },
             {
@@ -92481,7 +92995,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -92489,7 +93003,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -92538,7 +93052,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -92546,7 +93060,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -92649,7 +93163,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -92657,7 +93171,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             },
             {
@@ -92765,7 +93279,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -92773,7 +93287,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -92888,7 +93402,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.89",
+              "id": "proc-macro2 1.0.95",
               "target": "proc_macro2"
             },
             {
@@ -92896,7 +93410,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.101",
               "target": "syn"
             }
           ],
@@ -93337,6 +93851,14 @@
     "cfg(all(any(target_arch = \"x86_64\", target_arch = \"arm64ec\"), target_env = \"msvc\", not(windows_raw_dylib)))": [
       "x86_64-pc-windows-msvc"
     ],
+    "cfg(all(any(target_os = \"android\", target_os = \"linux\"), any(rustix_use_libc, miri, not(all(target_os = \"linux\", any(target_endian = \"little\", any(target_arch = \"s390x\", target_arch = \"powerpc\")), any(target_arch = \"arm\", all(target_arch = \"aarch64\", target_pointer_width = \"64\"), target_arch = \"riscv64\", all(rustix_use_experimental_asm, target_arch = \"powerpc\"), all(rustix_use_experimental_asm, target_arch = \"powerpc64\"), all(rustix_use_experimental_asm, target_arch = \"s390x\"), all(rustix_use_experimental_asm, target_arch = \"mips\"), all(rustix_use_experimental_asm, target_arch = \"mips32r6\"), all(rustix_use_experimental_asm, target_arch = \"mips64\"), all(rustix_use_experimental_asm, target_arch = \"mips64r6\"), target_arch = \"x86\", all(target_arch = \"x86_64\", target_pointer_width = \"64\")))))))": [
+      "aarch64-linux-android",
+      "armv7-linux-androideabi",
+      "i686-linux-android",
+      "powerpc-unknown-linux-gnu",
+      "s390x-unknown-linux-gnu",
+      "x86_64-linux-android"
+    ],
     "cfg(all(any(target_os = \"android\", target_os = \"linux\"), any(rustix_use_libc, miri, not(all(target_os = \"linux\", any(target_endian = \"little\", target_arch = \"s390x\"), any(target_arch = \"arm\", all(target_arch = \"aarch64\", target_pointer_width = \"64\"), target_arch = \"riscv64\", all(rustix_use_experimental_asm, target_arch = \"powerpc64\"), all(rustix_use_experimental_asm, target_arch = \"s390x\"), all(rustix_use_experimental_asm, target_arch = \"mips\"), all(rustix_use_experimental_asm, target_arch = \"mips32r6\"), all(rustix_use_experimental_asm, target_arch = \"mips64\"), all(rustix_use_experimental_asm, target_arch = \"mips64r6\"), target_arch = \"x86\", all(target_arch = \"x86_64\", target_pointer_width = \"64\")))))))": [
       "aarch64-linux-android",
       "armv7-linux-androideabi",
@@ -93379,6 +93901,15 @@
       "x86_64-unknown-nixos-gnu",
       "x86_64-unknown-none"
     ],
+    "cfg(all(not(rustix_use_libc), not(miri), target_os = \"linux\", any(target_endian = \"little\", any(target_arch = \"s390x\", target_arch = \"powerpc\")), any(target_arch = \"arm\", all(target_arch = \"aarch64\", target_pointer_width = \"64\"), target_arch = \"riscv64\", all(rustix_use_experimental_asm, target_arch = \"powerpc\"), all(rustix_use_experimental_asm, target_arch = \"powerpc64\"), all(rustix_use_experimental_asm, target_arch = \"s390x\"), all(rustix_use_experimental_asm, target_arch = \"mips\"), all(rustix_use_experimental_asm, target_arch = \"mips32r6\"), all(rustix_use_experimental_asm, target_arch = \"mips64\"), all(rustix_use_experimental_asm, target_arch = \"mips64r6\"), target_arch = \"x86\", all(target_arch = \"x86_64\", target_pointer_width = \"64\"))))": [
+      "aarch64-unknown-linux-gnu",
+      "aarch64-unknown-nixos-gnu",
+      "arm-unknown-linux-gnueabi",
+      "armv7-unknown-linux-gnueabi",
+      "i686-unknown-linux-gnu",
+      "x86_64-unknown-linux-gnu",
+      "x86_64-unknown-nixos-gnu"
+    ],
     "cfg(all(not(rustix_use_libc), not(miri), target_os = \"linux\", any(target_endian = \"little\", target_arch = \"s390x\"), any(target_arch = \"arm\", all(target_arch = \"aarch64\", target_pointer_width = \"64\"), target_arch = \"riscv64\", all(rustix_use_experimental_asm, target_arch = \"powerpc64\"), all(rustix_use_experimental_asm, target_arch = \"s390x\"), all(rustix_use_experimental_asm, target_arch = \"mips\"), all(rustix_use_experimental_asm, target_arch = \"mips32r6\"), all(rustix_use_experimental_asm, target_arch = \"mips64\"), all(rustix_use_experimental_asm, target_arch = \"mips64r6\"), target_arch = \"x86\", all(target_arch = \"x86_64\", target_pointer_width = \"64\"))))": [
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
@@ -93387,6 +93918,32 @@
       "i686-unknown-linux-gnu",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu"
+    ],
+    "cfg(all(not(windows), any(rustix_use_libc, miri, not(all(target_os = \"linux\", any(target_endian = \"little\", any(target_arch = \"s390x\", target_arch = \"powerpc\")), any(target_arch = \"arm\", all(target_arch = \"aarch64\", target_pointer_width = \"64\"), target_arch = \"riscv64\", all(rustix_use_experimental_asm, target_arch = \"powerpc\"), all(rustix_use_experimental_asm, target_arch = \"powerpc64\"), all(rustix_use_experimental_asm, target_arch = \"s390x\"), all(rustix_use_experimental_asm, target_arch = \"mips\"), all(rustix_use_experimental_asm, target_arch = \"mips32r6\"), all(rustix_use_experimental_asm, target_arch = \"mips64\"), all(rustix_use_experimental_asm, target_arch = \"mips64r6\"), target_arch = \"x86\", all(target_arch = \"x86_64\", target_pointer_width = \"64\")))))))": [
+      "aarch64-apple-darwin",
+      "aarch64-apple-ios",
+      "aarch64-apple-ios-sim",
+      "aarch64-linux-android",
+      "aarch64-unknown-fuchsia",
+      "aarch64-unknown-nto-qnx710",
+      "armv7-linux-androideabi",
+      "i686-apple-darwin",
+      "i686-linux-android",
+      "i686-unknown-freebsd",
+      "powerpc-unknown-linux-gnu",
+      "riscv32imc-unknown-none-elf",
+      "riscv64gc-unknown-none-elf",
+      "s390x-unknown-linux-gnu",
+      "thumbv7em-none-eabi",
+      "thumbv8m.main-none-eabi",
+      "wasm32-unknown-unknown",
+      "wasm32-wasip1",
+      "x86_64-apple-darwin",
+      "x86_64-apple-ios",
+      "x86_64-linux-android",
+      "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
+      "x86_64-unknown-none"
     ],
     "cfg(all(not(windows), any(rustix_use_libc, miri, not(all(target_os = \"linux\", any(target_endian = \"little\", target_arch = \"s390x\"), any(target_arch = \"arm\", all(target_arch = \"aarch64\", target_pointer_width = \"64\"), target_arch = \"riscv64\", all(rustix_use_experimental_asm, target_arch = \"powerpc64\"), all(rustix_use_experimental_asm, target_arch = \"s390x\"), all(rustix_use_experimental_asm, target_arch = \"mips\"), all(rustix_use_experimental_asm, target_arch = \"mips32r6\"), all(rustix_use_experimental_asm, target_arch = \"mips64\"), all(rustix_use_experimental_asm, target_arch = \"mips64r6\"), target_arch = \"x86\", all(target_arch = \"x86_64\", target_pointer_width = \"64\")))))))": [
       "aarch64-apple-darwin",
@@ -94353,11 +94910,12 @@
     "crc32fast 1.3.2",
     "criterion 0.5.1",
     "crossbeam 0.8.4",
-    "crossbeam-channel 0.5.13",
+    "crossbeam-channel 0.5.15",
     "csv 1.2.2",
     "ctrlc 3.4.5",
     "curve25519-dalek 4.1.3",
     "cvt 0.1.2",
+    "darling 0.20.11",
     "dashmap 5.5.0",
     "dfx-core 0.1.3",
     "dyn-clone 1.0.14",
@@ -94403,9 +94961,9 @@
     "ic-canister-sig-creation 1.1.0",
     "ic-cbor 3.0.3",
     "ic-cdk 0.17.1",
-    "ic-cdk 0.18.0-alpha.1",
+    "ic-cdk 0.18.0",
     "ic-cdk-macros 0.17.1",
-    "ic-cdk-macros 0.18.0-alpha.1",
+    "ic-cdk-macros 0.18.0",
     "ic-cdk-timers 0.11.0",
     "ic-certificate-verification 3.0.3",
     "ic-certification 3.0.3",
@@ -94413,7 +94971,7 @@
     "ic-gateway 0.1.0",
     "ic-http-certification 3.0.3",
     "ic-http-gateway 0.2.0",
-    "ic-management-canister-types 0.2.1",
+    "ic-management-canister-types 0.3.0",
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 3.0.3",
     "ic-sha3 1.0.0",
@@ -94495,7 +95053,7 @@
     "pretty-bytes 0.2.2",
     "pretty_assertions 1.4.0",
     "priority-queue 1.3.2",
-    "proc-macro2 1.0.89",
+    "proc-macro2 1.0.95",
     "procfs 0.9.1",
     "prometheus 0.13.4",
     "prometheus-parse 0.2.4",
@@ -94573,6 +95131,7 @@
     "stubborn-io 0.3.2",
     "subtle 2.6.1",
     "syn 1.0.109",
+    "syn 2.0.101",
     "syscalls 0.6.18",
     "tar 0.4.39",
     "tarpc 0.34.0",
@@ -94580,7 +95139,7 @@
     "test-strategy 0.3.1",
     "tester 0.7.0",
     "textplots 0.8.4",
-    "thiserror 2.0.11",
+    "thiserror 2.0.12",
     "thousands 0.2.0",
     "threadpool 1.8.1",
     "tikv-jemalloc-ctl 0.6.0",
@@ -94618,14 +95177,14 @@
     "walkdir 2.3.3",
     "warp 0.3.7",
     "wasm-bindgen 0.2.100",
-    "wasm-encoder 0.224.1",
-    "wasm-smith 0.224.1",
-    "wasmparser 0.224.1",
-    "wasmprinter 0.224.1",
-    "wasmtime 30.0.2",
-    "wasmtime-environ 30.0.2",
-    "wast 224.0.1",
-    "wat 1.227.1",
+    "wasm-encoder 0.228.0",
+    "wasm-smith 0.228.0",
+    "wasmparser 0.228.0",
+    "wasmprinter 0.228.0",
+    "wasmtime 32.0.0",
+    "wasmtime-environ 32.0.0",
+    "wast 228.0.0",
+    "wat 1.229.0",
     "wee_alloc 0.4.5",
     "which 4.4.0",
     "wsl 0.1.0",

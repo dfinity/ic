@@ -1,9 +1,9 @@
 use crate::{
     governance::{
         LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
-        MAX_NEURON_RECENT_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON,
+        MAX_NUM_HOT_KEYS_PER_NEURON,
     },
-    is_voting_power_adjustment_enabled,
+    is_disburse_maturity_enabled,
     neuron::{combine_aged_stakes, dissolve_state_and_age::DissolveStateAndAge, neuron_stake_e8s},
     neuron_store::NeuronStoreError,
     pb::v1::{
@@ -21,8 +21,8 @@ use crate::{
 use ic_base_types::PrincipalId;
 use ic_cdk::println;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
-use ic_nns_common::pb::v1::{NeuronId, ProposalId};
-use ic_nns_governance_api::pb::v1::{self as api, NeuronInfo};
+use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_governance_api::{self as api, NeuronInfo};
 use icp_ledger::Subaccount;
 use rust_decimal::{Decimal, RoundingStrategy};
 use std::{
@@ -304,15 +304,13 @@ impl Neuron {
     ) -> u64 {
         // Main inputs to main calculation.
 
-        let adjustment_factor: Decimal = if is_voting_power_adjustment_enabled() {
+        let adjustment_factor: Decimal = {
             let time_since_last_refreshed = Duration::from_secs(
                 now_seconds.saturating_sub(self.voting_power_refreshed_timestamp_seconds),
             );
 
             voting_power_economics
                 .deciding_voting_power_adjustment_factor(time_since_last_refreshed)
-        } else {
-            Decimal::from(1)
         };
 
         let potential_voting_power = self.potential_voting_power(now_seconds);
@@ -441,46 +439,6 @@ impl Neuron {
             .get(&(Topic::NeuronManagement as i32))
             .map(|x| x.followees.clone())
             .unwrap_or_default()
-    }
-
-    /// Register that this neuron has cast a ballot for a
-    /// proposal. Don't include votes on "real time" topics (such as
-    /// setting the ICP/SDR exchange rate).
-    /// TODO(NNS1-3479) delete this method after all neurons are migrated to stable memory
-    pub(crate) fn register_recent_ballot(
-        &mut self,
-        topic: Topic,
-        proposal_id: &ProposalId,
-        vote: Vote,
-    ) {
-        // Ignore votes on topics for which no public voting history
-        // is required.
-        if topic == Topic::ExchangeRate {
-            return;
-        }
-
-        // Data migration for updating the recent ballots so we can use a circular buffer here.
-        let next_entry_index = if let Some(index) = self.recent_ballots_next_entry_index {
-            index
-        } else {
-            self.recent_ballots.reverse();
-            self.recent_ballots.len() % MAX_NEURON_RECENT_BALLOTS
-        };
-
-        let ballot_info = BallotInfo {
-            proposal_id: Some(*proposal_id),
-            vote: vote as i32,
-        };
-
-        // Vector is full
-        if self.recent_ballots.len() >= MAX_NEURON_RECENT_BALLOTS {
-            self.recent_ballots[next_entry_index] = ballot_info;
-        } else {
-            self.recent_ballots.push(ballot_info);
-        }
-        // Advance the index
-        self.recent_ballots_next_entry_index =
-            Some((next_entry_index + 1) % MAX_NEURON_RECENT_BALLOTS);
     }
 
     pub(crate) fn refresh_voting_power(&mut self, now_seconds: u64) {
@@ -730,6 +688,10 @@ impl Neuron {
 
     pub fn is_dissolved(&self, now_seconds: u64) -> bool {
         self.dissolve_delay_seconds(now_seconds) == 0
+    }
+
+    pub fn maturity_disbursements_in_progress(&self) -> &[MaturityDisbursement] {
+        &self.maturity_disbursements_in_progress
     }
 
     fn is_authorized_to_configure_or_err(
@@ -1133,6 +1095,40 @@ impl Neuron {
     pub(crate) fn clear_known_neuron_data(&mut self) {
         self.known_neuron_data = None;
     }
+
+    /// Returns whether this neuron has a maturity disbursement in progress.
+    pub fn has_maturity_disbursement_in_progress(&self) -> bool {
+        !self.maturity_disbursements_in_progress.is_empty()
+    }
+
+    /// Adds a maturity disbursement in progress at the end.
+    pub fn add_maturity_disbursement_in_progress(
+        &mut self,
+        maturity_disbursement: MaturityDisbursement,
+    ) {
+        self.maturity_disbursements_in_progress
+            .push(maturity_disbursement);
+    }
+
+    /// Pops the first maturity disbursement in progress.
+    pub fn pop_maturity_disbursement_in_progress(&mut self) -> Option<MaturityDisbursement> {
+        if self.maturity_disbursements_in_progress.is_empty() {
+            None
+        } else {
+            // This is safe because we know that the vector is not empty.
+            Some(self.maturity_disbursements_in_progress.remove(0))
+        }
+    }
+
+    /// Pushes a maturity disbursement in progress at the front. This should only be used if the
+    /// ledger operation fails and the disbursement needs to be put back in the queue.
+    pub fn push_front_maturity_disbursement_in_progress(
+        &mut self,
+        maturity_disbursement: MaturityDisbursement,
+    ) {
+        self.maturity_disbursements_in_progress
+            .insert(0, maturity_disbursement);
+    }
 }
 
 impl From<Neuron> for NeuronProto {
@@ -1364,7 +1360,7 @@ impl Neuron {
             known_neuron_data,
             neuron_type,
             voting_power_refreshed_timestamp_seconds,
-            maturity_disbursements_in_progress: _,
+            maturity_disbursements_in_progress,
 
             // Not used.
             visibility: _,
@@ -1397,6 +1393,17 @@ impl Neuron {
             .into_iter()
             .map(|(topic_id, followees)| (topic_id, api::neuron::Followees::from(followees)))
             .collect();
+
+        let maturity_disbursements_in_progress = if is_disburse_maturity_enabled() {
+            Some(
+                maturity_disbursements_in_progress
+                    .into_iter()
+                    .map(api::MaturityDisbursement::from)
+                    .collect(),
+            )
+        } else {
+            None
+        };
         api::Neuron {
             id,
             account,
@@ -1421,6 +1428,7 @@ impl Neuron {
             neuron_type,
             visibility,
             voting_power_refreshed_timestamp_seconds,
+            maturity_disbursements_in_progress,
 
             potential_voting_power,
             deciding_voting_power,
@@ -1853,7 +1861,7 @@ impl NeuronBuilder {
     #[cfg(any(test, feature = "canbench-rs"))]
     pub fn with_recent_ballots(mut self, recent_ballots: Vec<BallotInfo>) -> Self {
         let recent_ballots_next_entry_index =
-            Some(recent_ballots.len() % MAX_NEURON_RECENT_BALLOTS);
+            Some(recent_ballots.len() % crate::governance::MAX_NEURON_RECENT_BALLOTS);
         self.recent_ballots = recent_ballots;
         self.recent_ballots_next_entry_index = recent_ballots_next_entry_index;
         self
@@ -1893,6 +1901,15 @@ impl NeuronBuilder {
         voting_power_refreshed_timestamp_seconds: u64,
     ) -> Self {
         self.voting_power_refreshed_timestamp_seconds = voting_power_refreshed_timestamp_seconds;
+        self
+    }
+
+    #[cfg(test)]
+    pub fn with_maturity_disbursements_in_progress(
+        mut self,
+        maturity_disbursements_in_progress: Vec<MaturityDisbursement>,
+    ) -> Self {
+        self.maturity_disbursements_in_progress = maturity_disbursements_in_progress;
         self
     }
 

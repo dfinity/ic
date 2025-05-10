@@ -90,6 +90,7 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) upload_wasm_chunk_instructions: NumInstructions,
     pub(crate) wasm_chunk_store_max_size: NumBytes,
     pub(crate) canister_snapshot_baseline_instructions: NumInstructions,
+    pub(crate) canister_snapshot_data_baseline_instructions: NumInstructions,
     pub(crate) default_wasm_memory_limit: NumBytes,
     pub(crate) max_number_of_snapshots_per_canister: usize,
 }
@@ -113,6 +114,7 @@ impl CanisterMgrConfig {
         upload_wasm_chunk_instructions: NumInstructions,
         wasm_chunk_store_max_size: NumBytes,
         canister_snapshot_baseline_instructions: NumInstructions,
+        canister_snapshot_data_baseline_instructions: NumInstructions,
         default_wasm_memory_limit: NumBytes,
         max_number_of_snapshots_per_canister: usize,
     ) -> Self {
@@ -133,6 +135,7 @@ impl CanisterMgrConfig {
             upload_wasm_chunk_instructions,
             wasm_chunk_store_max_size,
             canister_snapshot_baseline_instructions,
+            canister_snapshot_data_baseline_instructions,
             default_wasm_memory_limit,
             max_number_of_snapshots_per_canister,
         }
@@ -487,6 +490,10 @@ pub(crate) enum CanisterManagerError {
     InvalidUpgradeOptionError {
         message: String,
     },
+    InvalidSubslice {
+        offset: u64,
+        size: u64,
+    },
 }
 
 impl AsErrorHelp for CanisterManagerError {
@@ -662,6 +669,12 @@ impl AsErrorHelp for CanisterManagerError {
                     "Try resending the message after omitting or modifying the invalid options."
                         .to_string(),
                 doc_link: doc_ref("invalid-upgrade-option"),
+            },
+            CanisterManagerError::InvalidSubslice{ .. } => ErrorHelp::UserError {
+                suggestion:
+                    "Use the snapshot metadata API to learn the size of the wasm module / main memory / stable memory."
+                        .to_string(),
+                doc_link: "".to_string(),
             },
         }
     }
@@ -986,6 +999,12 @@ impl From<CanisterManagerError> for UserError {
                     )
                 )
             }
+            InvalidSubslice { offset, size } => {
+                Self::new(
+                    ErrorCode::InvalidManagementPayload,
+                    format!("Invalid subslice into wasm module / main memory / stable memory: offset: {}, size: {}", offset, size)
+                )
+            }
         }
     }
 }
@@ -995,6 +1014,9 @@ impl From<CanisterSnapshotError> for CanisterManagerError {
         match err {
             CanisterSnapshotError::EmptyExecutionState(canister_id) => {
                 CanisterManagerError::CanisterSnapshotExecutionStateNotFound { canister_id }
+            }
+            CanisterSnapshotError::InvalidSubslice { offset, size } => {
+                CanisterManagerError::InvalidSubslice { offset, size }
             }
         }
     }

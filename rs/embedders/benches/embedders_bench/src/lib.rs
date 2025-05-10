@@ -91,6 +91,7 @@ fn initialize_execution_test(
 
 pub fn update_bench(
     c: &mut Criterion,
+    group_name: &str,
     name: &str,
     wasm: &[u8],
     initialization_arg: &[u8],
@@ -101,7 +102,7 @@ pub fn update_bench(
 ) {
     let cell = RefCell::new(None);
 
-    let mut group = c.benchmark_group("update");
+    let mut group = c.benchmark_group(group_name);
     if let Some(throughput) = throughput {
         group.throughput(throughput);
     }
@@ -133,6 +134,7 @@ pub fn update_bench(
 
 pub fn update_bench_once(
     c: &mut Criterion,
+    group_name: &str,
     name: &str,
     wasm: &[u8],
     initialization_arg: &[u8],
@@ -141,7 +143,7 @@ pub fn update_bench_once(
     throughput: Option<Throughput>,
     setup_action: SetupAction,
 ) {
-    let mut group = c.benchmark_group("update");
+    let mut group = c.benchmark_group(group_name);
     if let Some(throughput) = throughput {
         group.throughput(throughput);
     }
@@ -166,6 +168,7 @@ pub fn update_bench_once(
 
 pub fn query_bench(
     c: &mut Criterion,
+    group_name: &str,
     name: &str,
     wasm: &[u8],
     initialization_arg: &[u8],
@@ -176,7 +179,7 @@ pub fn query_bench(
 ) {
     let cell = RefCell::new(None);
 
-    let mut group = c.benchmark_group("query");
+    let mut group = c.benchmark_group(group_name);
     if let Some(throughput) = throughput {
         group.throughput(throughput);
     }

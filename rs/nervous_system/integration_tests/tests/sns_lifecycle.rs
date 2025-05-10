@@ -23,10 +23,10 @@ use ic_nervous_system_integration_tests::{
 use ic_nervous_system_proto::pb::v1::{Duration as DurationPb, Tokens as TokensPb};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys;
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution,
     get_neurons_fund_audit_info_response, neurons_fund_snapshot::NeuronsFundNeuronPortion,
-    CreateServiceNervousSystem, Neuron,
+    CreateServiceNervousSystem, Neuron as NnsNeuron,
 };
 use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
 use ic_sns_governance_api::pb::v1::{self as sns_pb, NeuronPermissionType};
@@ -270,7 +270,7 @@ async fn test_sns_lifecycle(
         .collect();
 
     // Install the pre-configured NNS canisters, obtaining information about the original neuron(s).
-    let original_nns_controller_to_neurons: BTreeMap<PrincipalId, Vec<Neuron>> = {
+    let original_nns_controller_to_neurons: BTreeMap<PrincipalId, Vec<NnsNeuron>> = {
         let direct_participant_initial_icp_balances = direct_participants
             .values()
             .map(|(account_identifier, balance_icp, _)| (*account_identifier, *balance_icp))
@@ -319,7 +319,7 @@ async fn test_sns_lifecycle(
                 )
             })
             .collect();
-    let nns_controller_to_neurons_fund_neurons: BTreeMap<PrincipalId, Vec<Neuron>> =
+    let nns_controller_to_neurons_fund_neurons: BTreeMap<PrincipalId, Vec<NnsNeuron>> =
         original_nns_controller_to_neurons
             .iter()
             .filter_map(|(controller_principal_id, nns_neurons)| {
@@ -437,15 +437,19 @@ async fn test_sns_lifecycle(
         .unwrap()
         .count;
 
-    // This set is used to determine SNS neurons created as a result of the swap (by excluding those
-    // which are in this collection).
-    let original_sns_neuron_ids: BTreeSet<_> =
+    let original_sns_neurons =
         sns::governance::list_neurons(&pocket_ic, sns.governance.canister_id)
             .await
             .neurons
             .into_iter()
-            .map(|sns_neuron| sns_neuron.id.unwrap())
-            .collect();
+            .collect::<Vec<sns_pb::Neuron>>();
+
+    // This set is used to determine SNS neurons created as a result of the swap (by excluding those
+    // which are in this collection).
+    let original_sns_neuron_ids: BTreeSet<_> = original_sns_neurons
+        .iter()
+        .map(|sns_neuron| sns_neuron.id.clone().unwrap())
+        .collect();
 
     // Assert that the mode of SNS Governance is `PreInitializationSwap`.
     assert_eq!(
@@ -1166,15 +1170,68 @@ async fn test_sns_lifecycle(
     // launched, and that `PreInitializationSwap` mode limitations are still in place if and only
     // if the swap aborted.
     {
+        // Make all neurons follow this developer neuron to ensure that a critical proposal passes.
+        let set_following = sns_pb::manage_neuron::SetFollowing {
+            topic_following: [
+                sns_pb::topics::Topic::DappCanisterManagement,
+                sns_pb::topics::Topic::ApplicationBusinessLogic,
+                sns_pb::topics::Topic::Governance,
+                sns_pb::topics::Topic::TreasuryAssetManagement,
+                sns_pb::topics::Topic::CriticalDappOperations,
+                sns_pb::topics::Topic::DaoCommunitySettings,
+                sns_pb::topics::Topic::SnsFrameworkManagement,
+            ]
+            .iter()
+            .map(|topic| sns_pb::neuron::FolloweesForTopic {
+                topic: Some(*topic),
+                followees: vec![sns_pb::Followee {
+                    neuron_id: Some(sns_neuron_id.clone()),
+                    alias: Some("Majority holder".to_string()),
+                }],
+            })
+            .collect(),
+        };
+
+        for neuron in sns::governance::list_neurons(&pocket_ic, sns.governance.canister_id)
+            .await
+            .neurons
+        {
+            let neuron_id = neuron.id.unwrap();
+            let sender = neuron
+                .permissions
+                .iter()
+                .find_map(
+                    |sns_pb::NeuronPermission {
+                         principal,
+                         permission_type,
+                     }| {
+                        let _ = permission_type.iter().find(|permission| {
+                            **permission == sns_pb::NeuronPermissionType::Vote as i32
+                        })?;
+
+                        Some(principal.unwrap())
+                    },
+                )
+                .unwrap();
+
+            sns::governance::set_following(
+                &pocket_ic,
+                sns.governance.canister_id,
+                sender,
+                neuron_id,
+                set_following.clone(),
+            )
+            .await
+            .expect("Failed to follow the dev neuron");
+        }
+
         let proposal_result = sns::governance::propose_and_wait(
             &pocket_ic,
             sns.governance.canister_id,
             sns_neuron_principal_id,
             sns_neuron_id.clone(),
             sns_pb::Proposal {
-                title: "Try to smuggle in a ManageNervousSystemParameters proposal while \
-                        in PreInitializationSwap mode."
-                    .to_string(),
+                title: "ManageNervousSystemParameters".to_string(),
                 summary: "".to_string(),
                 url: "".to_string(),
                 action: Some(sns_pb::proposal::Action::ManageNervousSystemParameters(

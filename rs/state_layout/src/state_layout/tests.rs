@@ -208,7 +208,7 @@ fn test_canister_snapshots_decode() {
         canister_id,
         taken_at_timestamp: UNIX_EPOCH,
         canister_version: 3,
-        binary_hash: Some(WasmHash::from(&CanisterModule::new(vec![2, 3, 4]))),
+        binary_hash: WasmHash::from(&CanisterModule::new(vec![2, 3, 4])),
         certified_data: vec![3, 4, 7],
         wasm_chunk_store_metadata: WasmChunkStoreMetadata::default(),
         stable_memory_size: NumWasmPages::new(10),
@@ -631,6 +631,178 @@ fn test_all_existing_pagemaps() {
         pagemaps[1].existing_overlays().unwrap(),
         vec![snapshot_overlay],
     );
+}
+
+#[test]
+fn test_all_existing_wasm_files() {
+    let tmp = tmpdir("checkpoint");
+    let checkpoint_layout: CheckpointLayout<RwPolicy<()>> =
+        CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0)).unwrap();
+    assert!(checkpoint_layout
+        .all_existing_wasm_files()
+        .unwrap()
+        .is_empty());
+
+    // Create directories for a canister and its corresponding snapshot, both containing wasm files.
+    let wasm_path_1 = checkpoint_layout
+        .canister(&canister_test_id(42))
+        .unwrap()
+        .wasm()
+        .path()
+        .to_path_buf();
+    File::create(&wasm_path_1).unwrap();
+
+    let wasm_path_2 = checkpoint_layout
+        .snapshot(&SnapshotId::from((canister_test_id(42), 4)))
+        .unwrap()
+        .wasm()
+        .path()
+        .to_path_buf();
+    File::create(&wasm_path_2).unwrap();
+
+    // Create a canister directory with a wasm file.
+    let wasm_path_3 = checkpoint_layout
+        .canister(&canister_test_id(43))
+        .unwrap()
+        .wasm()
+        .path()
+        .to_path_buf();
+    File::create(&wasm_path_3).unwrap();
+
+    // Create a snapshot directory with a wasm file.
+    let wasm_path_4 = checkpoint_layout
+        .snapshot(&SnapshotId::from((canister_test_id(44), 4)))
+        .unwrap()
+        .wasm()
+        .path()
+        .to_path_buf();
+    File::create(&wasm_path_4).unwrap();
+
+    // Create a canister directory without wasm files.
+    let _ = checkpoint_layout.canister(&canister_test_id(45)).unwrap();
+
+    let wasm_files = checkpoint_layout.all_existing_wasm_files().unwrap();
+    assert_eq!(wasm_files.len(), 4);
+    let wasm_paths: BTreeSet<_> = wasm_files
+        .iter()
+        .map(|w| w.raw_path().to_path_buf())
+        .collect();
+
+    assert_eq!(wasm_paths.len(), 4);
+    assert_eq!(
+        wasm_paths,
+        BTreeSet::from([wasm_path_1, wasm_path_2, wasm_path_3, wasm_path_4])
+    )
+}
+
+#[test]
+fn wasm_can_be_serialized_to_and_loaded_from_a_file() {
+    let wasm_in_memory = CanisterModule::new(vec![0x00, 0x61, 0x73, 0x6d]);
+    let wasm_hash = wasm_in_memory.module_hash();
+    let len = wasm_in_memory.len();
+
+    let tmpdir = tmpdir("canister");
+    let canister_layout: CanisterLayout<WriteOnly> =
+        CanisterLayout::new_untracked(tmpdir.path().to_owned()).unwrap();
+    let wasm_file = canister_layout.wasm();
+    wasm_file
+        .serialize(&wasm_in_memory)
+        .expect("failed to write Wasm to disk");
+
+    let canister_layout: CanisterLayout<ReadOnly> =
+        CanisterLayout::new_untracked(tmpdir.path().to_owned()).unwrap();
+    let wasm_on_disk =
+        CanisterModule::new_from_file(Box::new(canister_layout.wasm()), wasm_hash.into(), None)
+            .expect("failed to read Wasm from disk");
+
+    let wasm_on_disk_with_len = CanisterModule::new_from_file(
+        Box::new(canister_layout.wasm()),
+        wasm_hash.into(),
+        Some(len),
+    )
+    .expect("failed to read Wasm from disk");
+
+    assert!(!wasm_in_memory.is_file());
+    assert!(wasm_on_disk.wasm_file_not_loaded_and_path_matches(wasm_file.path.as_path()));
+    assert_eq!(wasm_in_memory.as_slice(), wasm_on_disk.as_slice());
+    assert_eq!(wasm_in_memory, wasm_on_disk);
+
+    assert!(wasm_on_disk_with_len.wasm_file_not_loaded_and_path_matches(wasm_file.path.as_path()));
+    assert_eq!(wasm_on_disk, wasm_on_disk_with_len);
+    assert_eq!(wasm_on_disk.len(), wasm_on_disk_with_len.len());
+    assert_eq!(wasm_on_disk.as_slice(), wasm_on_disk_with_len.as_slice());
+}
+
+#[test]
+fn wasm_file_can_hold_checkpoint_for_lazy_loading() {
+    with_test_replica_logger(|log| {
+        let tempdir = tmpdir("state_layout");
+        let root_path = tempdir.path().to_path_buf();
+        let metrics_registry = ic_metrics::MetricsRegistry::new();
+        let state_layout = StateLayout::try_new(log, root_path.clone(), &metrics_registry).unwrap();
+        let scratchpad_dir = tmpdir("scratchpad");
+
+        let scratchpad = CheckpointLayout::<RwPolicy<()>>::new_untracked(
+            scratchpad_dir.path().to_path_buf().join("1"),
+            Height::new(1),
+        )
+        .unwrap();
+
+        let canister_layout = scratchpad.canister(&canister_test_id(42)).unwrap();
+        let wasm_in_memory = CanisterModule::new(vec![0x00, 0x61, 0x73, 0x6d]);
+
+        // Write a wasm file to the scratchpad layout.
+        canister_layout
+            .wasm()
+            .serialize(&wasm_in_memory)
+            .expect("failed to write Wasm to disk");
+
+        let cp1 = state_layout
+            .promote_scratchpad_to_unverified_checkpoint(scratchpad, Height::new(1))
+            .unwrap();
+        cp1.finalize_and_remove_unverified_marker(None).unwrap();
+
+        // Create another checkpoint at height 2 so that we can remove the first one.
+        let cp2 = state_layout
+            .promote_scratchpad_to_unverified_checkpoint(
+                CheckpointLayout::<RwPolicy<()>>::new_untracked(
+                    scratchpad_dir.path().to_path_buf().join("2"),
+                    Height::new(2),
+                )
+                .unwrap(),
+                Height::new(2),
+            )
+            .unwrap();
+        cp2.finalize_and_remove_unverified_marker(None).unwrap();
+
+        // Create a `CanisterModule` that holds the checkpoint layout at height 1.
+        let wasm_on_disk = CanisterModule::new_from_file(
+            Box::new(cp1.canister(&canister_test_id(42)).unwrap().wasm()),
+            wasm_in_memory.module_hash().into(),
+            None,
+        )
+        .expect("failed to read Wasm from disk");
+
+        drop(cp1);
+        state_layout.remove_checkpoint_when_unused(Height::new(1));
+
+        // The checkpoint at height 1 still exists because `wasm_on_disk` is alive.
+        assert_eq!(
+            vec![Height::new(1), Height::new(2)],
+            state_layout.checkpoint_heights().unwrap(),
+        );
+
+        // The wasm file is still accessible and the content can be correctly read.
+        // Calling `as_slice()` on the canister module will drop the wasm file as well as the checkpoint layout.
+        assert_eq!(wasm_in_memory.as_slice(), wasm_on_disk.as_slice());
+        assert_eq!(
+            vec![Height::new(2)],
+            state_layout.checkpoint_heights().unwrap(),
+        );
+
+        // The cached mmap is still accessible after the checkpoint is removed.
+        assert_eq!(wasm_in_memory.as_slice(), wasm_on_disk.as_slice());
+    });
 }
 
 #[test_strategy::proptest]

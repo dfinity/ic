@@ -1,0 +1,47 @@
+name: 'Dependency Scan Nightly'
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Setup environment deps
+      id: setup-environment-deps
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../../..
+      run: |
+        # this is needed to get more free space on the runner, otherwise might run OOM when building icOS
+        rm -rf /opt/hostedtoolcache
+        # Ignore externally-managed-environment pip error, install packages system-wide.
+        PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
+        cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
+        cargo install wasm-pack --version "${CARGO_WASMPACK_VERSION}"
+        source "${NVM_DIR}/nvm.sh"
+        nvm install ${NNS_NODE_VERSION}
+        nvm install ${DEFAULT_NODE_VERSION}
+        nvm install ${OISY_NODE_VERSION}
+        nvm use ${DEFAULT_NODE_VERSION}
+        node --version
+        npm --version
+      env:
+        CARGO_AUDIT_VERSION: "0.21.0"
+        CARGO_WASMPACK_VERSION: "0.12.1"
+        NNS_NODE_VERSION: "18.20.5"
+        DEFAULT_NODE_VERSION: "20"
+        OISY_NODE_VERSION: "22.11.0"
+    - name: Run Dependency Scan Nightly
+      id: dependency-scan-nightly
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../../..
+      run: |
+        set -euo pipefail
+        export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
+        cd ci/src/dependencies/
+        cp -a $GITHUB_WORKSPACE/config/. config/
+        $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_periodic_job.py
+        $SHELL_WRAPPER python3 job/npm_scanner_periodic_job.py
+        $SHELL_WRAPPER python3 job/bazel_trivy_container_ic_scanner_periodic_job.py
+      env:
+        SHELL_WRAPPER: "/usr/bin/time"
+        CI_PIPELINE_ID: ${{ github.run_id }}

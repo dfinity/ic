@@ -8,10 +8,8 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_ledger::ChangeArchiveOptions;
 use ic_ledger_suite_orchestrator::candid::{AddErc20Arg, ManagedCanisterIds};
 use ic_ledger_suite_orchestrator::state::{IndexWasm, LedgerWasm};
-use ic_management_canister_types_private::{
-    CanisterInfoResponse, CanisterInstallMode, CanisterStatusResultV2, InstallCodeArgs, Method,
-    Payload,
-};
+use ic_management_canister_types::{CanisterInfoResult, CanisterInstallMode, InstallCodeArgs};
+use ic_management_canister_types_private::CanisterStatusResultV2;
 use ic_metrics_assert::{CanisterHttpQuery, MetricsAssert};
 use ic_state_machine_tests::{StateMachine, UserError};
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
@@ -148,7 +146,7 @@ impl ManagedCanistersAssert {
         }
     }
 
-    pub fn assert_ledger_canister_info_satisfy<P: FnOnce(&CanisterInfoResponse) -> bool>(
+    pub fn assert_ledger_canister_info_satisfy<P: FnOnce(&CanisterInfoResult) -> bool>(
         self,
         caller: &UniversalCanister,
         predicate: P,
@@ -162,7 +160,7 @@ impl ManagedCanistersAssert {
         self
     }
 
-    pub fn assert_index_canister_info_satisfy<P: FnOnce(&CanisterInfoResponse) -> bool>(
+    pub fn assert_index_canister_info_satisfy<P: FnOnce(&CanisterInfoResult) -> bool>(
         self,
         caller: &UniversalCanister,
         predicate: P,
@@ -176,7 +174,7 @@ impl ManagedCanistersAssert {
         self
     }
 
-    pub fn assert_all_archive_canister_info_satisfy<P: Fn(&CanisterInfoResponse) -> bool>(
+    pub fn assert_all_archive_canister_info_satisfy<P: Fn(&CanisterInfoResult) -> bool>(
         self,
         caller: &UniversalCanister,
         predicate: P,
@@ -279,16 +277,15 @@ impl ManagedCanistersAssert {
         let res = self.setup.env.execute_ingress_as(
             self.setup.ledger_suite_orchestrator_id.into(),
             CanisterId::ic_00(),
-            Method::InstallCode,
-            InstallCodeArgs::new(
-                CanisterInstallMode::Upgrade,
-                self.ledger_canister_id(),
-                ledger_wasm().to_bytes(),
-                Encode!(&upgrade_args).unwrap(),
-                None,
-                None,
-            )
-            .encode(),
+            "install_code",
+            Encode!(&InstallCodeArgs {
+                mode: CanisterInstallMode::Upgrade(None),
+                canister_id: self.ledger_canister_id().into(),
+                wasm_module: ledger_wasm().to_bytes(),
+                arg: Encode!(&upgrade_args).unwrap(),
+                sender_canister_version: None,
+            })
+            .unwrap(),
         );
         assert_reply(res.unwrap());
         let module_hash_after = self
