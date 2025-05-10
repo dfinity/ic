@@ -1,3 +1,4 @@
+load("//bazel:defs.bzl", "file_size_check")
 load("//ic-os:defs.bzl", "icos_build")
 load("//ic-os/dev-tools/bare_metal_deployment:tools.bzl", "launch_bare_metal")
 load("//ic-os/setupos:defs.bzl", "image_deps")
@@ -7,15 +8,18 @@ load("//publish:defs.bzl", "artifact_bundle")
 # Check
 #       //ic-os/setupos/BUILD.bazel for examples
 #    or //ic-os/defs.bzl for the full list of targets.
-icos_build(
+icos_images = icos_build(
     name = "prod",
     image_deps_func = image_deps,
-    max_file_sizes = {
-        "disk-img.tar.zst": 2100 * 1000 * 1000,  # 2.1 GB on 2025-03-21
-    },
     upgrades = False,
     upload_prefix = "setup-os",
     vuln_scan = False,
+)
+
+file_size_check(
+    name = "disk_img_size_check",
+    file = icos_images.disk_image,
+    max_file_size = 2100 * 1000 * 1000,  # 2.1 GB on 2025-03-21
 )
 
 launch_bare_metal(
