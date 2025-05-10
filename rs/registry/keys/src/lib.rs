@@ -371,7 +371,7 @@ pub fn make_nns_canister_records_key() -> String {
 }
 
 /// Returns a key for the CanisterRange registry entry
-pub fn make_canister_ranges_key(range_start: CanisterId, subnet_id: SubnetId) -> String {
+pub fn make_canister_range_key(range_start: CanisterId, subnet_id: SubnetId) -> String {
     if CanisterId::try_from_principal_id(range_start.get()).is_err() {
         // try_from_principal_id ensures the CanisterId is plausibly represeting a u64
         // which is currently an implied requirement for our routing table
