@@ -68,6 +68,9 @@ pub const MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT: usize = 15;
 /// Aka, the ceiling for the value `max_direct_participation_icp_e8s`.
 pub const MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP: u64 = 1_000_000_000 * E8;
 
+/// The lower bound on `min_participant_icp_e8s`.
+pub const MIN_PARTICIPANT_ICP_LOWER_BOUND_E8S: u64 = 1000000;
+
 /// Minimum allowed number of SNS neurons per neuron basket.
 pub const MIN_SNS_NEURONS_PER_BASKET: u64 = 2;
 
@@ -573,7 +576,7 @@ impl SnsInitPayload {
         Ok(governance)
     }
 
-    /// Construct the params used to initialize a SNS Ledger canister.
+    /// Construct the params used to initialize an SNS Ledger canister.
     fn ledger_init_args(
         &self,
         sns_canister_ids: &SnsCanisterIds,
@@ -633,7 +636,7 @@ impl SnsInitPayload {
         }))
     }
 
-    /// Construct the params used to initialize a SNS Root canister.
+    /// Construct the params used to initialize an SNS Root canister.
     fn root_init_args(
         &self,
         sns_canister_ids: &SnsCanisterIds,
@@ -1502,10 +1505,15 @@ impl SnsInitPayload {
     ///     participants.
     /// (6) If the minimum required number of participants participate each with the minimum
     ///     required amount of ICP, the maximum ICP amount that the swap can obtain is not exceeded.
-    /// (7) Determines the smallest SNS neuron size is greated than the SNS ledger transaction fee.
+    /// (7) Determines the smallest SNS neuron size is greater than the SNS ledger transaction fee.
     /// (8) Required ICP participation amount is big enough to ensure that all participants will
     ///     end up with enough SNS tokens to form the right number of SNS neurons (after paying for
     ///     the SNS ledger transaction fee to create each such SNS neuron).
+    ///
+    /// (9) min_participant_icp_e8s is at least as big as `MIN_PARTICIPANT_ICP_LOWER_BOUND_E8S`.
+    ///     This ensures, that users upon calling `swap.refresh_buyer_token()` must participate
+    ///     at least `MIN_PARTICIPANT_ICP_LOWER_BOUND_E8S` Hence, no malicious user can overflow
+    ///     node's memory by participating with very low amounts.\
     ///
     /// * -- In the context of this function, swap participation-related parameters include:
     /// - `min_direct_participation_icp_e8s` - Required ICP amount for the swap to succeed.
@@ -1575,6 +1583,7 @@ impl SnsInitPayload {
             return Err("Error: min_participants must be > 0".to_string());
         }
         // Needed as the SwapInit min_participants field is a `u32`.
+        // Shah-Question: ?
         if min_participants > (u32::MAX as u64) {
             return Err(format!(
                 "Error: min_participants cannot be greater than {}",
@@ -1597,6 +1606,7 @@ impl SnsInitPayload {
             ));
         }
 
+        // Shah-Question: what is direct participation? Is it the maximum ICP amount that a swap can obtain?
         // (4)
         if max_participant_icp_e8s > max_direct_participation_icp_e8s {
             return Err(format!(
@@ -1628,12 +1638,13 @@ impl SnsInitPayload {
         // (7)
         if neuron_minimum_stake_e8s <= sns_transaction_fee_e8s {
             return Err(format!(
-                "Error: neuron_minimum_stake_e8s={} is too small. It needs to be \
+                "Error: neuron_minimum_stake_e8s ({}) is too small. It needs to be \
                  greater than the transaction fee ({} e8s)",
                 neuron_minimum_stake_e8s, sns_transaction_fee_e8s
             ));
         }
 
+        // Shah-Question: is ICP <-> SNS Token 1:1?
         // (8)
         let min_participant_sns_e8s = min_participant_icp_e8s as u128
             * initial_swap_amount_e8s as u128
@@ -1645,7 +1656,7 @@ impl SnsInitPayload {
 
         if !min_participant_icp_e8s_big_enough {
             return Err(format!(
-                "Error: min_participant_icp_e8s={} is too small. It needs to be \
+                "Error: min_participant_icp_e8s ({}) is too small. It needs to be \
                  large enough to ensure that participants will end up with \
                  enough SNS tokens to form {} SNS neurons, each of which \
                  require at least {} SNS e8s, plus {} e8s in transaction \
@@ -1657,6 +1668,14 @@ impl SnsInitPayload {
                 neuron_basket_construction_parameters_count,
                 neuron_minimum_stake_e8s,
                 sns_transaction_fee_e8s,
+            ));
+        }
+
+        // (9)
+        if min_participant_icp_e8s < MIN_PARTICIPANT_ICP_LOWER_BOUND_E8S {
+            return Err(format!(
+                "Error: min_participant_icp_e8s ({}) is too small. It must be at least as large as {}",
+                min_participant_icp_e8s, MIN_PARTICIPANT_ICP_LOWER_BOUND_E8S
             ));
         }
 
@@ -1941,7 +1960,7 @@ mod test {
         NeuronsFundParticipationConstraintsValidationError, RestrictedCountriesValidationError,
         SnsCanisterIds, SnsInitPayload, ICRC1_TOKEN_LOGO_KEY, MAX_CONFIRMATION_TEXT_LENGTH,
         MAX_DAPP_CANISTERS_COUNT, MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP,
-        MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT,
+        MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT, MIN_PARTICIPANT_ICP_LOWER_BOUND_E8S,
     };
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_icrc1_ledger::LedgerArgument;
@@ -3474,7 +3493,7 @@ initial_token_distribution: !FractionalDeveloperVotingPower
                 .validate_participation_constraints()
                 .unwrap_err();
             {
-                let expected_error_fragment_a = "min_participant_icp_e8s=1 is too small.";
+                let expected_error_fragment_a = "min_participant_icp_e8s (1) is too small.";
                 assert!(
                     error.contains(expected_error_fragment_a),
                     "Unexpected error: `{}`\nExpected `{}`",
@@ -3494,5 +3513,43 @@ initial_token_distribution: !FractionalDeveloperVotingPower
                 );
             }
         }
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Error: min_participant_icp_e8s (999999) is too small. It must be at least as large as 1000000"
+    )]
+    fn test_validate_participation_constraints_panics() {
+        // Common part for the happy and failing scenarios.
+        let fdvp = FractionalDVP {
+            swap_distribution: Some(SwapDistribution {
+                initial_swap_amount_e8s: MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP,
+                // Not used in this test.
+                total_e8s: 0,
+            }),
+            // Not used in this test.
+            developer_distribution: None,
+            treasury_distribution: None,
+        };
+        let sns_init_payload = SnsInitPayload {
+            max_direct_participation_icp_e8s: Some(MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP),
+            min_direct_participation_icp_e8s: Some(1),
+            max_participant_icp_e8s: Some(MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP),
+            min_participant_icp_e8s: Some(MIN_PARTICIPANT_ICP_LOWER_BOUND_E8S - 1),
+            min_participants: Some(40_000),
+            initial_token_distribution: Some(FractionalDeveloperVotingPower(fdvp)),
+            neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+                count: 2,
+                // Not used in this test.
+                dissolve_delay_interval_seconds: 0,
+            }),
+            neuron_minimum_stake_e8s: Some(1),
+            transaction_fee_e8s: Some(0),
+            ..SnsInitPayload::with_valid_values_for_testing_pre_execution()
+        };
+
+        sns_init_payload
+            .validate_participation_constraints()
+            .unwrap();
     }
 }
