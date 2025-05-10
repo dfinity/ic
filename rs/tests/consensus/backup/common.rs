@@ -139,8 +139,6 @@ pub fn test_downgrade(env: TestEnv) {
     block_on(bless_public_replica_version(
         &nns_node,
         &mainnet_version,
-        UpdateImageType::Image,
-        UpdateImageType::Image,
         &log,
     ));
     test(env, initial_version, mainnet_version);
