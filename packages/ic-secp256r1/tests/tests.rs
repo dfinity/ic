@@ -1,6 +1,21 @@
 use hex_literal::hex;
-use ic_crypto_ecdsa_secp256r1::*;
-use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_secp256r1::*;
+use rand::Rng;
+use rand_chacha::ChaCha20Rng;
+use sha2::Digest;
+
+fn test_rng_with_seed(seed: [u8; 32]) -> ChaCha20Rng {
+    use rand::SeedableRng;
+    ChaCha20Rng::from_seed(seed)
+}
+
+fn test_rng() -> ChaCha20Rng {
+    let seed = rand::thread_rng().gen::<[u8; 32]>();
+    // If a test ever fails, reproduce it using
+    // let mut rng = test_rng_with_seed(hex!("SEED"));
+    println!("RNG seed: {}", hex::encode(seed));
+    test_rng_with_seed(seed)
+}
 
 #[test]
 fn should_pass_wycheproof_ecdsa_secp256r1_verification_tests() -> Result<(), KeyDecodingError> {
@@ -46,7 +61,9 @@ fn should_use_rfc6979_nonces_for_ecdsa_signature_generation() {
     assert_eq!(hex::encode(generated_sig), expected_sig);
 
     // Now check the prehash variant:
-    let message_hash = ic_crypto_sha2::Sha256::hash(message);
+    let mut sha256 = sha2::Sha256::new();
+    sha256.update(message);
+    let message_hash = sha256.finalize();
     let generated_sig = sk.sign_digest(&message_hash).unwrap();
     assert_eq!(hex::encode(generated_sig), expected_sig);
 }
@@ -71,7 +88,7 @@ fn should_reject_long_x_when_deserializing_private_key() {
 fn should_accept_signatures_that_we_generate() {
     use rand::RngCore;
 
-    let rng = &mut reproducible_rng();
+    let rng = &mut test_rng();
 
     let sk = PrivateKey::generate_using_rng(rng);
     let pk = sk.public_key();
@@ -94,7 +111,7 @@ fn should_accept_signatures_that_we_generate() {
 #[test]
 fn should_serialization_and_deserialization_round_trip_for_private_keys(
 ) -> Result<(), KeyDecodingError> {
-    let rng = &mut reproducible_rng();
+    let rng = &mut test_rng();
 
     for _ in 0..200 {
         let key = PrivateKey::generate_using_rng(rng);
@@ -119,7 +136,7 @@ fn should_serialization_and_deserialization_round_trip_for_private_keys(
 
 #[test]
 fn test_sign_prehash_works_with_any_size_input_gte_16() {
-    let rng = &mut reproducible_rng();
+    let rng = &mut test_rng();
 
     let sk = PrivateKey::generate_using_rng(rng);
     let pk = sk.public_key();
@@ -139,7 +156,7 @@ fn test_sign_prehash_works_with_any_size_input_gte_16() {
 #[test]
 fn should_serialization_and_deserialization_round_trip_for_public_keys(
 ) -> Result<(), KeyDecodingError> {
-    let rng = &mut reproducible_rng();
+    let rng = &mut test_rng();
 
     for _ in 0..200 {
         let key = PrivateKey::generate_using_rng(rng).public_key();
@@ -277,7 +294,7 @@ NRLvCGaIxJfchxpjcCysTG12MfKOf6/Phw==
 fn private_derivation_is_compatible_with_public_derivation() {
     use rand::Rng;
 
-    let rng = &mut reproducible_rng();
+    let rng = &mut test_rng();
 
     fn random_path<R: Rng>(rng: &mut R) -> DerivationPath {
         let l = 1 + rng.gen::<usize>() % 9;
@@ -366,7 +383,7 @@ fn should_match_slip10_derivation_test_data() {
 
 #[test]
 fn private_derivation_also_works_for_derived_keys() {
-    let rng = &mut reproducible_rng();
+    let rng = &mut test_rng();
     use rand::Rng;
 
     for _ in 0..100 {
