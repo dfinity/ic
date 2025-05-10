@@ -11,6 +11,15 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-05-10: Proposal 136580
+
+http://dashboard.internetcomputer.org/proposal/136580
+
+## Removed
+
+* The `governance_heap_neuron_count` metric is removed as there are no neurons in the heap anymore.
+
+
 # 2025-05-02: Proposal 136427
 
 http://dashboard.internetcomputer.org/proposal/136427
