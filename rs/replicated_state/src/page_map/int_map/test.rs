@@ -400,7 +400,7 @@ fn test_u128_values(
 
         #[inline]
         fn as_int(&self) -> u128 {
-            (self.0 as u128) << 64 | self.1 as u128
+            ((self.0 as u128) << 64) | self.1 as u128
         }
     }
 
