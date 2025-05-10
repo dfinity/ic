@@ -54,6 +54,7 @@ ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 num-bigint = { workspace = true }
 proptest = { workspace = true }
+test-strategy = "0.4.0"
 
 [features]
 default = []
