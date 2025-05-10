@@ -97,8 +97,8 @@ mod test {
             .unwrap();
 
         registry.apply_mutations_for_test(routing_table_into_registry_mutation(
+            &registry,
             initial_routing_table.clone(),
-            registry_mutation::Type::Upsert as i32,
         ));
 
         let first_saved_table = registry.get_routing_table_or_panic(registry.latest_version());
