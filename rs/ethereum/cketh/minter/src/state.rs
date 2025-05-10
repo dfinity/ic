@@ -13,6 +13,7 @@ use crate::numeric::{
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData, WithdrawalRequest};
 use crate::tx::GasFeeEstimate;
+use crate::{EVM_RPC_ID_MAINNET, EVM_RPC_ID_STAGING};
 use candid::Principal;
 use ic_canister_log::log;
 use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
@@ -594,6 +595,14 @@ impl State {
             // https://developers.cloudflare.com/web3/ethereum-gateway/
             799_u16
         }
+    }
+
+    pub fn evm_rpc_id(&self) -> Principal {
+        self.evm_rpc_id
+            .unwrap_or_else(|| match self.ethereum_network {
+                EthereumNetwork::Mainnet => EVM_RPC_ID_MAINNET.parse().unwrap(),
+                EthereumNetwork::Sepolia => EVM_RPC_ID_STAGING.parse().unwrap(),
+            })
     }
 }
 

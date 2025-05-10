@@ -805,6 +805,7 @@ fn state_equivalence() {
     use crate::tx::{
         Eip1559Signature, Eip1559TransactionRequest, SignedTransactionRequest, TransactionRequest,
     };
+    use crate::EVM_RPC_ID_MAINNET;
     use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
     use maplit::{btreemap, btreeset};
 
@@ -1039,7 +1040,7 @@ fn state_equivalence() {
         skipped_blocks: Default::default(),
         last_transaction_price_estimate: None,
         ledger_suite_orchestrator_id: Some("2s5qh-7aaaa-aaaar-qadya-cai".parse().unwrap()),
-        evm_rpc_id: Some("7hfb6-caaaa-aaaar-qadga-cai".parse().unwrap()),
+        evm_rpc_id: Some(EVM_RPC_ID_MAINNET.parse().unwrap()),
         ckerc20_tokens,
     };
 
