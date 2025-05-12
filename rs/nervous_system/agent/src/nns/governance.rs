@@ -3,7 +3,7 @@ use crate::CallCanisters;
 use ic_base_types::CanisterId;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     manage_neuron_response, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
     GetNeuronsFundAuditInfoResponse, ListNeurons, ListNeuronsResponse, MakeProposalRequest,
     ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, NnsFunction,
@@ -166,7 +166,7 @@ pub async fn get_proposal_info<C: CallCanisters>(
 
 pub async fn get_network_economics_parameters<C: CallCanisters>(
     agent: &C,
-) -> Result<ic_nns_governance_api::pb::v1::NetworkEconomics, C::Error> {
+) -> Result<ic_nns_governance_api::NetworkEconomics, C::Error> {
     agent
         .call(GOVERNANCE_CANISTER_ID, GetNetworkEconomicsParameters())
         .await

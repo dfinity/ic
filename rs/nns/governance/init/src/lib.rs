@@ -9,7 +9,7 @@ use std::path::Path;
 
 use ic_base_types::PrincipalId;
 use ic_nns_common::types::NeuronId;
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     Governance, NetworkEconomics, Neuron, XdrConversionRate as XdrConversionRatePb,
 };
 
@@ -94,7 +94,7 @@ impl GovernanceCanisterInitPayloadBuilder {
             TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
             TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_ID, TEST_NEURON_3_OWNER_PRINCIPAL,
         };
-        use ic_nns_governance_api::pb::v1::{neuron::DissolveState, Neuron};
+        use ic_nns_governance_api::{neuron::DissolveState, Neuron};
         use std::time::SystemTime;
 
         // This assumption here is that with_current_time is used.
@@ -241,7 +241,7 @@ impl GovernanceCanisterInitPayloadBuilder {
         use ic_base_types::PrincipalId;
         use ic_nervous_system_common::ledger;
         use ic_nns_common::types::NeuronId;
-        use ic_nns_governance_api::pb::v1::{
+        use ic_nns_governance_api::{
             neuron::{DissolveState, Followees},
             Neuron, Topic,
         };

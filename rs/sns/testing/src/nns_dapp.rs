@@ -13,7 +13,7 @@ use ic_nns_constants::{
     LEDGER_INDEX_CANISTER_ID, NNS_UI_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID,
     SNS_WASM_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::{neuron::DissolveState, Neuron};
+use ic_nns_governance_api::{neuron::DissolveState, Neuron};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use icp_ledger::{AccountIdentifier, Tokens};
 use pocket_ic::nonblocking::PocketIc;

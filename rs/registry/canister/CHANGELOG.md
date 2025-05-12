@@ -11,6 +11,16 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-05-02: Proposal 136428
+
+https://dashboard.internetcomputer.org/proposal/136428
+
+No behavior changes. When there are large registry records, then, the new code
+here will behave differently (per [this forum post]), but there is currently no
+way to generate such records.
+
+[this forum post]: https://forum.dfinity.org/t/breaking-registry-changes-for-large-records/42893
+
 # 2025-04-25: Proposal 136371
 
 http://dashboard.internetcomputer.org/proposal/136371

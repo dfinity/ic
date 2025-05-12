@@ -106,38 +106,66 @@ fn main() -> Result<()> {
         .add_parallel(
             SystemTestSubGroup::new()
                 .add_test(systest!(test_enforce_https))
-                .add_test(systest!(test_transform_function_is_executed))
-                .add_test(systest!(test_composite_transform_function_is_executed))
                 .add_test(systest!(test_no_cycles_attached))
                 .add_test(systest!(test_2mb_response_cycle_for_rejection_path))
                 .add_test(systest!(test_4096_max_response_cycle_case_1))
                 .add_test(systest!(test_4096_max_response_cycle_case_2))
-                .add_test(systest!(test_max_response_bytes_too_large))
-                .add_test(systest!(test_max_response_bytes_2_mb_returns_ok))
+                .add_test(systest!(test_post_request))
                 .add_test(systest!(
-                    test_transform_that_bloats_response_above_2mb_limit
+                    test_http_endpoint_with_delayed_response_is_rejected
                 ))
-                .add_test(systest!(test_transform_that_bloats_on_the_2mb_limit))
+                .add_test(systest!(test_that_redirects_are_not_followed))
+                .add_test(systest!(test_http_calls_to_ic_fails))
+                .add_test(systest!(test_get_hello_world_call))
+                .add_test(systest!(test_post_call))
+                .add_test(systest!(test_head_call))
+                .add_test(systest!(test_max_possible_request_size))
+                .add_test(systest!(test_max_possible_request_size_exceeded))
+                // This section tests the request headers limits scenarios
                 .add_test(systest!(test_request_header_name_and_value_within_limits))
                 .add_test(systest!(test_request_header_name_too_long))
                 .add_test(systest!(test_request_header_value_too_long))
-                .add_test(systest!(test_response_header_name_within_limit))
-                .add_test(systest!(test_response_header_name_over_limit))
-                .add_test(systest!(test_response_header_value_within_limit))
-                .add_test(systest!(test_response_header_value_over_limit))
                 .add_test(systest!(
                     test_request_header_total_size_within_the_48_kib_limit
                 ))
                 .add_test(systest!(
                     test_request_header_total_size_over_the_48_kib_limit
                 ))
+                // This section tests the response headers limits scenarios
+                .add_test(systest!(test_response_header_name_within_limit))
+                .add_test(systest!(test_response_header_name_over_limit))
+                .add_test(systest!(test_response_header_value_within_limit))
+                .add_test(systest!(test_response_header_value_over_limit))
                 .add_test(systest!(
                     test_response_header_total_size_within_the_48_kib_limit
                 ))
                 .add_test(systest!(
                     test_response_header_total_size_over_the_48_kib_limit
                 ))
-                .add_test(systest!(test_post_request))
+                // This section tests the url and ip scenarios
+                .add_test(systest!(test_non_ascii_url_is_rejected))
+                .add_test(systest!(test_invalid_ip))
+                .add_test(systest!(test_invalid_domain_name))
+                .add_test(systest!(test_max_url_length))
+                .add_test(systest!(test_max_url_length_exceeded))
+                // This section tests the transform function scenarios
+                .add_test(systest!(test_transform_function_is_executed))
+                .add_test(systest!(test_composite_transform_function_is_executed))
+                .add_test(systest!(check_caller_id_on_transform_function))
+                .add_test(systest!(
+                    test_transform_that_bloats_response_above_2mb_limit
+                ))
+                .add_test(systest!(test_transform_that_bloats_on_the_2mb_limit))
+                .add_test(systest!(
+                    reference_transform_function_exposed_by_different_canister
+                ))
+                .add_test(systest!(test_non_existent_transform_function))
+                // This section tests the max number of request or response headers scenarios
+                .add_test(systest!(test_max_number_of_request_headers))
+                .add_test(systest!(test_max_number_of_request_headers_exceeded))
+                .add_test(systest!(test_max_number_of_response_headers))
+                .add_test(systest!(test_max_number_of_response_headers_exceeded))
+                // This section tests the max_response_bytes scenarios
                 .add_test(systest!(
                     test_http_endpoint_response_is_too_large_with_custom_max_response_bytes
                 ))
@@ -150,40 +178,12 @@ fn main() -> Result<()> {
                 .add_test(systest!(
                     test_http_endpoint_response_is_within_limits_with_default_max_response_bytes
                 ))
+                .add_test(systest!(test_only_headers_with_custom_max_response_bytes))
                 .add_test(systest!(
-                    test_http_endpoint_with_delayed_response_is_rejected
+                    test_only_headers_with_custom_max_response_bytes_exceeded
                 ))
-                .add_test(systest!(test_that_redirects_are_not_followed))
-                .add_test(systest!(test_http_calls_to_ic_fails))
-                .add_test(systest!(test_invalid_domain_name))
-                .add_test(systest!(test_invalid_ip))
-                .add_test(systest!(test_get_hello_world_call))
-                .add_test(systest!(test_post_call))
-                .add_test(systest!(test_head_call))
-                .add_test(systest!(test_max_possible_request_size))
-                .add_test(systest!(test_max_possible_request_size_exceeded))
-                .add_test(systest!(test_non_ascii_url_is_rejected))
-                .add_test(systest!(test_max_url_length))
-                .add_test(systest!(test_max_url_length_exceeded))
-                .add_test(systest!(
-                    test_small_maximum_possible_response_size_only_headers
-                ))
-                .add_test(systest!(
-                    test_small_maximum_possible_response_size_exceeded_only_headers
-                ))
-                .add_test(systest!(test_maximum_possible_value_of_max_response_bytes))
-                .add_test(systest!(
-                    test_maximum_possible_value_of_max_response_bytes_exceeded
-                ))
-                .add_test(systest!(check_caller_id_on_transform_function))
-                .add_test(systest!(
-                    reference_transform_function_exposed_by_different_canister
-                ))
-                .add_test(systest!(test_max_number_of_request_headers))
-                .add_test(systest!(test_max_number_of_request_headers_exceeded))
-                .add_test(systest!(test_max_number_of_response_headers))
-                .add_test(systest!(test_non_existent_transform_function))
-                .add_test(systest!(test_max_number_of_response_headers_exceeded)),
+                .add_test(systest!(test_max_response_bytes_too_large))
+                .add_test(systest!(test_max_response_bytes_2_mb_returns_ok)),
         )
         .execute_from_args()?;
 
@@ -1581,7 +1581,7 @@ fn test_head_call(env: TestEnv) {
     );
 }
 
-fn test_small_maximum_possible_response_size_only_headers(env: TestEnv) {
+fn test_only_headers_with_custom_max_response_bytes(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -1619,7 +1619,7 @@ fn test_small_maximum_possible_response_size_only_headers(env: TestEnv) {
     assert_http_response(&response);
 }
 
-fn test_small_maximum_possible_response_size_exceeded_only_headers(env: TestEnv) {
+fn test_only_headers_with_custom_max_response_bytes_exceeded(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -1764,89 +1764,6 @@ fn test_max_url_length_exceeded(env: TestEnv) {
         response,
         Err(RejectResponse {
             reject_code: RejectCode::CanisterReject,
-            ..
-        })
-    );
-}
-
-fn test_maximum_possible_value_of_max_response_bytes(env: TestEnv) {
-    let handlers = Handlers::new(&env);
-    let webserver_ipv6 = get_universal_vm_address(&env);
-
-    let url = format!(
-        "https://[{}]:20443/{}/{}",
-        webserver_ipv6, "ascii", "hello_world"
-    );
-
-    //   { Response headers
-    //       date: Jan 1 1970 00:00:00 GMT
-    //       content-type: application/octet-stream
-    //       content-length: 11
-    //       access-control-allow-origin: *
-    //       access-control-allow-credentials: true
-    //   }
-    let header_size = 143;
-    let max_response_bytes = Some(header_size + "hello_world".len() as u64);
-
-    let response = block_on(submit_outcall(
-        &handlers,
-        RemoteHttpRequest {
-            request: UnvalidatedCanisterHttpRequestArgs {
-                url,
-                headers: vec![],
-                method: HttpMethod::GET,
-                body: None,
-                transform: None,
-                max_response_bytes,
-            },
-            cycles: 500_000_000_000,
-        },
-    ))
-    .expect("Request is successful.");
-
-    assert_matches!(&response, RemoteHttpResponse { status: 200, .. });
-    assert_http_response(&response);
-}
-
-fn test_maximum_possible_value_of_max_response_bytes_exceeded(env: TestEnv) {
-    let handlers = Handlers::new(&env);
-    let webserver_ipv6 = get_universal_vm_address(&env);
-
-    let url = format!(
-        "https://[{}]:20443/{}/{}",
-        webserver_ipv6, "ascii", "hello_world"
-    );
-
-    //   { Response headers
-    //       date: Jan 1 1970 00:00:00 GMT
-    //       content-type: application/octet-stream
-    //       content-length: 11
-    //       access-control-allow-origin: *
-    //       access-control-allow-credentials: true
-    //   }
-
-    let header_size = 143;
-    let max_response_bytes = Some(header_size + "hello_world".len() as u64 - 1);
-
-    let response = block_on(submit_outcall(
-        &handlers,
-        RemoteHttpRequest {
-            request: UnvalidatedCanisterHttpRequestArgs {
-                url,
-                headers: vec![],
-                method: HttpMethod::GET,
-                body: None,
-                transform: None,
-                max_response_bytes,
-            },
-            cycles: 500_000_000_000,
-        },
-    ));
-
-    assert_matches!(
-        response,
-        Err(RejectResponse {
-            reject_code: RejectCode::SysFatal,
             ..
         })
     );
