@@ -69,7 +69,7 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{Query, QuerySource},
     signature::ThresholdSignature,
-    time::current_time,
+    time::{current_time, expiry_time_from_now},
     CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, PrincipalId, Randomness,
     RegistryVersion, ReplicaVersion, SubnetId, Time, UserId,
 };
@@ -1375,12 +1375,7 @@ impl<PerformQueryImpl: PerformQuery + Sync> GetChunk for GetChunkImpl<'_, Perfor
         let request = Query {
             source: QuerySource::User {
                 user_id: UserId::from(PrincipalId::new_anonymous()),
-
-                // DO NOT MERGE - Set this to 5 minutes into the future. The
-                // brilliant thing about get_chunk is that it is immune from
-                // reply attacks, since it uses content addressing.
-                ingress_expiry: u64::MAX,
-
+                ingress_expiry: expiry_time_from_now().as_nanos_since_unix_epoch(),
                 nonce: None,
             },
             receiver: REGISTRY_CANISTER_ID,
