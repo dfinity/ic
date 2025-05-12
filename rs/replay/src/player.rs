@@ -4,6 +4,8 @@ use crate::{
     ingress::IngressWithPrinter,
     validator::{InvalidArtifact, ReplayValidator},
 };
+use async_trait::async_trait;
+use candid::{Decode, Encode};
 use ic_artifact_pool::{
     certification_pool::CertificationPoolImpl,
     consensus_pool::{ConsensusPoolImpl, UncachedConsensusPoolImpl},
@@ -36,6 +38,7 @@ use ic_protobuf::{
     registry::{replica_version::v1::BlessedReplicaVersions, subnet::v1::SubnetRecord},
     types::v1 as pb,
 };
+use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::{deserialize_registry_value, subnet::SubnetRegistry};
 use ic_registry_keys::{make_blessed_replica_versions_key, make_subnet_record_key};
@@ -45,9 +48,9 @@ use ic_registry_local_store::{
 use ic_registry_nns_data_provider::registry::registry_deltas_to_registry_transport_records;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{
-    deserialize_get_changes_since_response, deserialize_get_latest_version_response,
-    deserialize_get_value_response, serialize_get_changes_since_request,
-    serialize_get_value_request,
+    dechunkify_delta, deserialize_get_changes_since_response,
+    deserialize_get_latest_version_response, deserialize_get_value_response,
+    serialize_get_changes_since_request, serialize_get_value_request, GetChunk,
 };
 use ic_state_manager::StateManagerImpl;
 use ic_types::{
@@ -73,7 +76,7 @@ use slog_async::AsyncGuard;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 use tempfile::TempDir;
@@ -972,9 +975,32 @@ impl Player {
             .unwrap()
         {
             Ok((Ok(wasm_result), _)) => match wasm_result {
-                WasmResult::Reply(v) => deserialize_get_changes_since_response(v)
-                    .and_then(|(deltas, _)| registry_deltas_to_registry_transport_records(deltas))
-                    .map_err(|err| format!("{:?}", err)),
+                WasmResult::Reply(v) => {
+                    let (high_capacity_deltas, _version) =
+                        deserialize_get_changes_since_response(v)
+                            .map_err(|err| format!("{:?}", err))?;
+
+                    // Dechunkify deltas.
+                    let mut inlined_deltas = vec![];
+                    for delta in high_capacity_deltas {
+                        let query_handler = Arc::new(Mutex::new(self.query_handler.clone()));
+                        let get_chunk = GetChunkImpl {
+                            query_handler,
+                            ingress_expiry,
+                        };
+
+                        let delta = self
+                            .runtime
+                            .block_on(dechunkify_delta(delta, &get_chunk))
+                            .map_err(|err| format!("{:?}", err))?;
+
+                        inlined_deltas.push(delta);
+                    }
+
+                    registry_deltas_to_registry_transport_records(inlined_deltas)
+                        .map_err(|err| format!("{:?}", err))
+                }
+
                 WasmResult::Reject(e) => Err(format!("Query rejected: {}", e)),
             },
             Ok((Err(err), _)) => Err(format!("Query failed: {:?}", err)),
@@ -1265,6 +1291,87 @@ impl Player {
 
     fn get_state_hash(&self, height: Height) -> Option<CryptoHashOfState> {
         get_state_hash(self.state_manager.as_ref(), &self.log, height)
+    }
+}
+
+struct GetChunkImpl {
+    query_handler: Arc<Mutex<QueryExecutionService>>,
+    ingress_expiry: Time,
+}
+
+#[async_trait]
+impl GetChunk for GetChunkImpl {
+    async fn get_chunk_without_validation(
+        &self,
+        chunk_content_sha256: &[u8],
+    ) -> Result<Vec<u8>, String> {
+        // Construct request.
+        let request = GetChunkRequest {
+            content_sha256: Some(chunk_content_sha256.to_vec()),
+        };
+        let request = Encode!(&request).map_err(|err| {
+            format!(
+                "Unable to call get_chunk, because unable to encode request: {}",
+                err
+            )
+        })?;
+        let request = Query {
+            source: QuerySource::User {
+                user_id: UserId::from(PrincipalId::new_anonymous()),
+                ingress_expiry: self.ingress_expiry.as_nanos_since_unix_epoch(),
+                nonce: None,
+            },
+            receiver: REGISTRY_CANISTER_ID,
+            method_name: "get_chunk".to_string(),
+            method_payload: request,
+        };
+
+        // Send request.
+        let result = {
+            let query_handler = self.query_handler.lock().unwrap().clone();
+            // Release hold.
+
+            query_handler.oneshot((request, None)).await.unwrap()
+        };
+
+        // Handle problems with sending.
+        let result = match result {
+            Ok((ok, _version)) => ok,
+            Err(QueryExecutionError::CertifiedStateUnavailable) => {
+                return Err(format!(
+                    "Certified state unavailable for Registry get_chunk query \
+                     call with key={:?}.",
+                    String::from_utf8_lossy(chunk_content_sha256),
+                ));
+            }
+        };
+
+        // Handle more problems...
+        let result: WasmResult = result.map_err(|err| format!("Query failed: {:?}", err))?;
+
+        // Handle canister replied vs. rejected.
+        let result: Vec<u8> = match result {
+            WasmResult::Reply(ok) => ok,
+            WasmResult::Reject(err) => {
+                return Err(format!("Query rejected: {}", err));
+            }
+        };
+
+        // Unpack reply.
+        let result = Decode!(&result, Result<Chunk, String>).map_err(|err| {
+            format!(
+                "Unable to decode get_chunk response from the Registry canister: {}",
+                err
+            )
+        })?;
+        let Chunk { content } = result
+            .map_err(|err| format!("The Registry canister replied, but with an Err: {}", err))?;
+        let content = content.ok_or_else(|| {
+            "The Registry canister replied Ok, but did not include chunk content.".to_string()
+        })?;
+
+        // Nice reply!
+        Ok(content)
     }
 }
 

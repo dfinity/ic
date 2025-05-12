@@ -10476,6 +10476,7 @@ dependencies = [
  "ic-nervous-system-common",
  "ic-nervous-system-runtime",
  "ic-nns-constants",
+ "ic-registry-canister-api",
  "ic-registry-transport",
  "icp-ledger",
  "icrc-ledger-types",
@@ -12138,17 +12139,22 @@ dependencies = [
 name = "ic-registry-transport"
 version = "0.9.0"
 dependencies = [
+ "async-trait",
  "candid",
  "ic-base-types",
+ "ic-crypto-sha2",
  "ic-nervous-system-common-test-keys",
  "ic-protobuf",
  "ic-registry-keys",
  "ic-registry-transport-protobuf-generator",
  "ic-test-utilities-compare-dirs",
+ "lazy_static",
+ "mockall",
  "pretty_assertions",
  "prost 0.13.4",
  "serde",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]
@@ -12163,6 +12169,7 @@ dependencies = [
 name = "ic-replay"
 version = "0.9.0"
 dependencies = [
+ "async-trait",
  "candid",
  "clap 4.5.27",
  "hex",
@@ -12189,6 +12196,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-nns-governance-api",
  "ic-protobuf",
+ "ic-registry-canister-api",
  "ic-registry-client",
  "ic-registry-client-helpers",
  "ic-registry-keys",

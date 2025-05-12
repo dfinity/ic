@@ -7,6 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+async-trait = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
 hex = { workspace = true }
@@ -32,6 +33,7 @@ ic-nns-common = { path = "../nns/common" }
 ic-nns-constants = { path = "../nns/constants" }
 ic-nns-governance-api = { path = "../nns/governance/api" }
 ic-protobuf = { path = "../protobuf" }
+ic-registry-canister-api = { path = "../registry/canister/api" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
