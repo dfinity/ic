@@ -1335,10 +1335,14 @@ impl GetChunk for GetChunkImpl {
         };
 
         // Handle problems with sending.
-        let (result, _) = match result {
-            Ok(ok) => ok,
+        let result = match result {
+            Ok((ok, _version)) => ok,
             Err(QueryExecutionError::CertifiedStateUnavailable) => {
-                panic!("Certified state unavailable for query call.");
+                return Err(format!(
+                    "Certified state unavailable for Registry get_chunk query \
+                     call with key={:?}.",
+                    String::from_utf8_lossy(chunk_content_sha256),
+                ));
             }
         };
 
@@ -1353,7 +1357,7 @@ impl GetChunk for GetChunkImpl {
             }
         };
 
-        // Handle reply.
+        // Unpack reply.
         let result = Decode!(&result, Result<Chunk, String>).map_err(|err| {
             format!(
                 "Unable to decode get_chunk response from the Registry canister: {}",
