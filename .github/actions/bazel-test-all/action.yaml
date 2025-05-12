@@ -30,6 +30,7 @@ runs:
         shell: bash
         run: |
           # freshly deployed k8s machines require ownership correctly set
+          sudo mkdir -p /cache/bazel/content_addressable
           if [ -e /cache ]; then
             sudo find /cache \( -not -user 1001 -or -not -group 1001 \) -exec chown 1001:1001 {} +
           fi
