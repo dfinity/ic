@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Removed
+- The endpoint `/instances/<instance_id>/update/await_ingress_message`:
+  use the two endpoints `/instances/<instance_id>/update/tick` and `/instances/<instance_id>/read/ingress_status`
+  to execute a round and fetch the status of the update call instead.
+
+
+
 ## 9.0.1 - 2025-04-30
 
 ### Fixed
