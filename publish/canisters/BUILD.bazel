@@ -42,7 +42,6 @@ CANISTERS = {
     "sns-root-canister.wasm.gz": "//rs/sns/root:sns-root-canister",
     "sns-swap-canister.wasm.gz": "//rs/sns/swap:sns-swap-canister",
     "sns-wasm-canister.wasm.gz": "//rs/nns/sns-wasm:sns-wasm-canister",
-    "wasm.wasm.gz": "//rs/rust_canisters/dfn_core:wasm",
     # Needed by DRE team for qualification
     "xnet-test-canister.wasm.gz": "//rs/rust_canisters/xnet_test:xnet-test-canister",
     # Used in snsdemo repo for NNS dapp test environment
