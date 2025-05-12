@@ -2658,7 +2658,6 @@ fn read_canister_snapshot_data_fails_canister_and_snapshot_must_match() {
 
 #[test]
 fn canister_snapshot_roundtrip_succeeds() {
-    // 1. create canister
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
@@ -2667,7 +2666,7 @@ fn canister_snapshot_roundtrip_succeeds() {
         .with_own_subnet_id(own_subnet)
         .with_caller(own_subnet, caller_canister)
         .build();
-    // Create new canister.
+    // 1. Create new canister
     let counter_canister_wasm = wat::parse_str(COUNTER_CANISTER_WAT).unwrap();
     let canister_id = test
         .canister_from_cycles_and_binary(
@@ -2729,6 +2728,7 @@ fn canister_snapshot_roundtrip_succeeds() {
         wasm_chunk_store,
         ..
     } = metadata.clone();
+    let md_orig = metadata.clone();
     println!(
         "wasm_module_size {}, wasm_memory_size {}, stable_memory_size {}, wasm_chunk_store {:?}",
         wasm_module_size, wasm_memory_size, stable_memory_size, wasm_chunk_store
@@ -2889,25 +2889,52 @@ fn canister_snapshot_roundtrip_succeeds() {
     // 10. observe original state
     // we reverted to the old state, so the counter should be 3 again.
     assert_eq!(3, i32::from_le_bytes(bytes[0..4].try_into().unwrap()));
+
+    // change state
+    let WasmResult::Reply(bytes) = test
+        .ingress(canister_id, "inc", Encode!(&()).unwrap())
+        .unwrap()
+    else {
+        panic!("Expected reply")
+    };
+    assert_eq!(4, i32::from_le_bytes(bytes[0..4].try_into().unwrap()));
+
+    // 11. compare snapshot metadata
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    let snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
+        .unwrap()
+        .snapshot_id();
+    let args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id);
+    let WasmResult::Reply(bytes) = test
+        .subnet_message("read_canister_snapshot_metadata", args.encode())
+        .unwrap()
+    else {
+        panic!("expected WasmResult::Reply")
+    };
+    let md_2 = Decode!(&bytes, ReadCanisterSnapshotMetadataResponse).unwrap();
+    assert_eq!(md_orig, md_2);
 }
 
 /// Counter canister that also grows the stable memory by one page on "inc".
 const COUNTER_CANISTER_WAT: &str = r#"
 (module
-(import "ic0" "msg_reply" (func $msg_reply))
-(import "ic0" "msg_reply_data_append"
-(func $msg_reply_data_append (param i32 i32)))
-(import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
+  (import "ic0" "msg_reply" (func $msg_reply))
+  (import "ic0" "msg_reply_data_append"
+  (func $msg_reply_data_append (param i32 i32)))
+  (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
 
-(func $read
-(i32.store
-(i32.const 0)
-(global.get 0)
-)
-(call $msg_reply_data_append
-(i32.const 0)
-(i32.const 4))
-(call $msg_reply))
+  (func $read
+    (i32.store
+    (i32.const 0)
+    (global.get 0)
+  )
+
+  (call $msg_reply_data_append
+    (i32.const 0)
+    (i32.const 4))
+    (call $msg_reply)
+  )
 
   (func $write
     (i32.const 1)

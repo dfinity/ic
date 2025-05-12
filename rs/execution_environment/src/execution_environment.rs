@@ -1697,8 +1697,6 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::UploadCanisterSnapshotMetadata) => {
-                println!("ok before decoding");
-
                 match UploadCanisterSnapshotMetadataArgs::decode(payload) {
                     Err(err) => ExecuteSubnetMessageResult::Finished {
                         response: Err(err),
@@ -1710,7 +1708,6 @@ impl ExecutionEnvironment {
                             refund: msg.take_cycles(),
                         },
                         FlagStatus::Enabled => {
-                            println!("ok after decoding");
                             let canister_id = args.get_canister_id();
                             let (result, instructions_used) = self.create_snapshot_from_metadata(
                                 *msg.sender(),
