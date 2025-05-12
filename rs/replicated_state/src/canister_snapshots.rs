@@ -388,7 +388,7 @@ impl CanisterSnapshot {
             size: NumWasmPages::new(0),
         };
         let execution_snapshot = ExecutionStateSnapshot {
-            // This is invalid now, but will be written to later.
+            // This is an invalid module now, but will be written to via `upload_canister_snapshot_data`.
             wasm_binary: CanisterModule::new(vec![0; metadata.wasm_module_size as usize]),
             exported_globals: metadata.exported_globals.clone(),
             stable_memory,

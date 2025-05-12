@@ -4137,6 +4137,13 @@ pub struct UploadCanisterSnapshotMetadataResponse {
     pub snapshot_id: Vec<u8>,
 }
 
+impl UploadCanisterSnapshotMetadataResponse {
+    // TODO: EXC-1997.
+    pub fn get_snapshot_id(&self) -> SnapshotId {
+        SnapshotId::try_from(&self.snapshot_id).unwrap()
+    }
+}
+
 /// Struct to encode/decode
 /// (record {
 ///     canister_id : principal;

@@ -6,12 +6,13 @@ use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterSettingsArgsBuilder,
-    CanisterSnapshotDataKind, CanisterSnapshotResponse, ChunkHash, ClearChunkStoreArgs,
-    DeleteCanisterSnapshotArgs, GlobalTimer, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    Method, OnLowWasmMemoryHookStatus, Payload as Ic00Payload, ReadCanisterSnapshotDataArgs,
-    ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataArgs,
-    ReadCanisterSnapshotMetadataResponse, SnapshotSource, TakeCanisterSnapshotArgs,
-    UpdateSettingsArgs, UploadChunkArgs,
+    CanisterSnapshotDataKind, CanisterSnapshotDataOffset, CanisterSnapshotResponse, ChunkHash,
+    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, GlobalTimer, ListCanisterSnapshotArgs,
+    LoadCanisterSnapshotArgs, Method, OnLowWasmMemoryHookStatus, Payload as Ic00Payload,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotDataResponse,
+    ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse, SnapshotSource,
+    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse, UploadChunkArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -2657,20 +2658,12 @@ fn read_canister_snapshot_data_fails_canister_and_snapshot_must_match() {
 
 #[test]
 fn canister_snapshot_roundtrip_succeeds() {
-    //=== create canister
-    //=== set state
-    //=== create snapshot
-    //=== download snapshot md
-    //=== download snapshot data
-    //=== upload snapshot md
-    //=== unpload snapshot data
-    //=== change state
-    //=== load snapshot
-    //=== observe original state
+    // 1. create canister
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
         .with_snapshot_metadata_download()
+        .with_snapshot_metadata_upload()
         .with_own_subnet_id(own_subnet)
         .with_caller(own_subnet, caller_canister)
         .build();
@@ -2682,6 +2675,7 @@ fn canister_snapshot_roundtrip_succeeds() {
             counter_canister_wasm.clone(),
         )
         .unwrap();
+    // 2. set state
     // Upload chunk 1.
     let chunk1 = vec![1, 2, 3, 4, 5];
     let upload_args = UploadChunkArgs {
@@ -2712,14 +2706,14 @@ fn canister_snapshot_roundtrip_succeeds() {
     }
     assert_eq!(3, i32::from_le_bytes(res[0..4].try_into().unwrap()));
 
-    // Take a snapshot of the canister.
+    // 3. Take a snapshot of the canister.
     let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
     let result = test.subnet_message("take_canister_snapshot", args.encode());
     let snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
         .unwrap()
         .snapshot_id();
 
-    // Get the metadata
+    // 4. Get the metadata
     let args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id);
     let WasmResult::Reply(bytes) = test
         .subnet_message("read_canister_snapshot_metadata", args.encode())
@@ -2727,18 +2721,19 @@ fn canister_snapshot_roundtrip_succeeds() {
     else {
         panic!("expected WasmResult::Reply")
     };
+    let metadata = Decode!(&bytes, ReadCanisterSnapshotMetadataResponse).unwrap();
     let ReadCanisterSnapshotMetadataResponse {
         wasm_module_size,
         wasm_memory_size,
         stable_memory_size,
         wasm_chunk_store,
         ..
-    } = Decode!(&bytes, ReadCanisterSnapshotMetadataResponse).unwrap();
+    } = metadata.clone();
     println!(
         "wasm_module_size {}, wasm_memory_size {}, stable_memory_size {}, wasm_chunk_store {:?}",
         wasm_module_size, wasm_memory_size, stable_memory_size, wasm_chunk_store
     );
-    // Get all binary snapshot data
+    // 5. Download all binary snapshot data
     // wasm module
     let args_module = ReadCanisterSnapshotDataArgs::new(
         canister_id,
@@ -2790,24 +2785,122 @@ fn canister_snapshot_roundtrip_succeeds() {
     );
     let chunk1_res = read_canister_snapshot_data(&mut test, &args_chunk_1);
     let chunk2_res = read_canister_snapshot_data(&mut test, &args_chunk_2);
+    // 6. upload snapshot md
+    let md_upload_args = UploadCanisterSnapshotMetadataArgs::new(
+        canister_id,
+        None,
+        metadata.wasm_module_size,
+        metadata.exported_globals,
+        metadata.wasm_memory_size,
+        metadata.stable_memory_size,
+        metadata.certified_data,
+        metadata.global_timer,
+        metadata.on_low_wasm_memory_hook_status,
+    );
+    println!("upload md: \n{:?}", md_upload_args);
+    let WasmResult::Reply(bytes) = test
+        .subnet_message("upload_canister_snapshot_metadata", md_upload_args.encode())
+        .unwrap()
+    else {
+        panic!("expected WasmResult::Reply")
+    };
+
+    let res = Decode!(&bytes, UploadCanisterSnapshotMetadataResponse).unwrap();
+    let new_snapshot_id = res.get_snapshot_id();
+
+    // 7. unpload snapshot data
+    // wasm module
+    let args_module = UploadCanisterSnapshotDataArgs::new(
+        canister_id,
+        new_snapshot_id.to_vec(),
+        CanisterSnapshotDataOffset::WasmModule { offset: 0 },
+        snapshot_wasm_module,
+    );
+    test.subnet_message(
+        "upload_canister_snapshot_data",
+        Encode!(&args_module).unwrap(),
+    )
+    .unwrap();
+    // main memory
+    let args_heap = UploadCanisterSnapshotDataArgs::new(
+        canister_id,
+        new_snapshot_id.to_vec(),
+        CanisterSnapshotDataOffset::MainMemory { offset: 0 },
+        snapshot_wasm_heap,
+    );
+    test.subnet_message(
+        "upload_canister_snapshot_data",
+        Encode!(&args_heap).unwrap(),
+    )
+    .unwrap();
+    // stable memory
+    let args_stable = UploadCanisterSnapshotDataArgs::new(
+        canister_id,
+        new_snapshot_id.to_vec(),
+        CanisterSnapshotDataOffset::StableMemory { offset: 0 },
+        snapshot_stable_memory,
+    );
+    test.subnet_message(
+        "upload_canister_snapshot_data",
+        Encode!(&args_stable).unwrap(),
+    )
+    .unwrap();
+    // chunk store
+    let args_chunk1 = UploadCanisterSnapshotDataArgs::new(
+        canister_id,
+        new_snapshot_id.to_vec(),
+        CanisterSnapshotDataOffset::WasmChunk,
+        chunk1_res,
+    );
+    test.subnet_message(
+        "upload_canister_snapshot_data",
+        Encode!(&args_chunk1).unwrap(),
+    )
+    .unwrap();
+    let args_chunk2 = UploadCanisterSnapshotDataArgs::new(
+        canister_id,
+        new_snapshot_id.to_vec(),
+        CanisterSnapshotDataOffset::WasmChunk,
+        chunk2_res,
+    );
+    test.subnet_message(
+        "upload_canister_snapshot_data",
+        Encode!(&args_chunk2).unwrap(),
+    )
+    .unwrap();
+
+    // 8. change state
+    let WasmResult::Reply(bytes) = test
+        .ingress(canister_id, "inc", Encode!(&()).unwrap())
+        .unwrap()
+    else {
+        panic!("Expected reply")
+    };
+    assert_eq!(4, i32::from_le_bytes(bytes[0..4].try_into().unwrap()));
+
+    // 9. load snapshot
+    // helper_load_snapshot(&mut test, canister_id, snapshot_id);
+
+    // 10. observe original state
 }
 
+/// Counter canister that also grows the stable memory by one page on "inc".
 const COUNTER_CANISTER_WAT: &str = r#"
 (module
-  (import "ic0" "msg_reply" (func $msg_reply))
-  (import "ic0" "msg_reply_data_append"
-    (func $msg_reply_data_append (param i32 i32)))
-  (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
+(import "ic0" "msg_reply" (func $msg_reply))
+(import "ic0" "msg_reply_data_append"
+(func $msg_reply_data_append (param i32 i32)))
+(import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
 
-  (func $read
-    (i32.store
-      (i32.const 0)
-      (global.get 0)
-    )
-    (call $msg_reply_data_append
-      (i32.const 0)
-      (i32.const 4))
-    (call $msg_reply))
+(func $read
+(i32.store
+(i32.const 0)
+(global.get 0)
+)
+(call $msg_reply_data_append
+(i32.const 0)
+(i32.const 4))
+(call $msg_reply))
 
   (func $write
     (i32.const 1)
