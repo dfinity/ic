@@ -285,7 +285,7 @@ jobs:
 
   python-ci-tests:
     name: Python CI Tests
-    <<: *dind-small-setup
+    runs-on: ubuntu-latest
     steps:
       - <<: *checkout
       - <<: *python-setup
