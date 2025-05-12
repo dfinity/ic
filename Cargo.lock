@@ -19628,6 +19628,7 @@ dependencies = [
  "ic-nervous-system-common-test-keys",
  "ic-nervous-system-string",
  "ic-nervous-system-temporary",
+ "ic-nervous-system-time-helpers",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-test-utils",

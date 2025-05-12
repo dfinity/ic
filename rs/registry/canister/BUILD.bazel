@@ -41,6 +41,7 @@ DEPENDENCIES = [
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/utils",
+    "//rs/nervous_system/time_helpers",
     "@crate_index//:build-info",
     "@crate_index//:candid",
     "@crate_index//:futures",

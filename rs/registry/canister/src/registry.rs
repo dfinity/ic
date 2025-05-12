@@ -6,6 +6,7 @@ use crate::{
     storage::{chunkify_composite_mutation_if_too_large, with_chunks},
 };
 use ic_certified_map::RbTree;
+use ic_nervous_system_time_helpers::now_seconds;
 use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_canister_chunkify::dechunkify_registry_value;
 use ic_registry_transport::{
@@ -22,7 +23,6 @@ use prost::Message;
 use std::{
     collections::{BTreeMap, VecDeque},
     fmt,
-    time::SystemTime,
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -323,7 +323,7 @@ impl Registry {
             preconditions: vec![],
         };
         let mut mutations = chunkify_composite_mutation_if_too_large(mutations);
-        mutations.timestamp_seconds = Self::get_current_timestamp_seconds();
+        mutations.timestamp_seconds = now_seconds();
 
         self.increment_version();
         self.apply_mutations_as_version(mutations, self.version);
@@ -509,19 +509,6 @@ impl Registry {
                      like it could not possibly be needed in practice anymore."
                 );
             }
-        }
-    }
-
-    fn get_current_timestamp_seconds() -> u64 {
-        if cfg!(target_arch = "wasm32") {
-            ic_cdk::api::time()
-        } else {
-            SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .expect("Failed to get time since epoch")
-                .as_nanos()
-                .try_into()
-                .expect("Failed to convert time to u64")
         }
     }
 }
@@ -889,7 +876,7 @@ mod tests {
         assert_eq!(
             // Subtract 1 to prevent `mutation2` from fitting into the fitting deltas,
             // and another 1 to account for the `timestamp_seconds` tag in HighCapacity structs.
-            registry.count_fitting_deltas(1, MAX_REGISTRY_DELTAS_SIZE - 1 - 1),
+            registry.count_fitting_deltas(1, MAX_REGISTRY_DELTAS_SIZE - 1),
             0
         );
         assert_eq!(
@@ -1178,9 +1165,7 @@ mod tests {
         let version = 1;
         let key = b"key";
 
-        // In the `RegistryMutation` the tag is missing so we have to add that tag alongside
-        // with the 1 byte to overflow the `MAX_REGISTRY_DELTAS_SIZE`
-        let too_large_value = vec![0; max_mutation_value_size(version, key) + 1 + 1];
+        let too_large_value = vec![0; max_mutation_value_size(version, key) + 1];
         let mutations = vec![upsert(key, too_large_value)];
 
         apply_mutations_skip_invariant_checks(&mut registry, mutations);
@@ -1203,7 +1188,7 @@ mod tests {
         let req = HighCapacityRegistryAtomicMutateRequest {
             mutations,
             preconditions: vec![],
-            timestamp_seconds: u64::MAX,
+            timestamp_seconds: now_seconds(),
         };
         // Circumvent `changelog_insert()` to insert potentially oversized mutations.
         registry
@@ -1347,9 +1332,12 @@ Average length of the values: {} (desired: {})",
     fn max_mutation_value_size(version: u64, key: &[u8]) -> usize {
         fn delta_size(version: u64, key: &[u8], value_size: usize) -> usize {
             let req = HighCapacityRegistryAtomicMutateRequest {
-                mutations: vec![upsert(key, vec![0; value_size]).into()],
+                mutations: vec![HighCapacityRegistryMutation::from(upsert(
+                    key,
+                    vec![0; value_size],
+                ))],
                 preconditions: vec![],
-                timestamp_seconds: u64::MAX,
+                timestamp_seconds: now_seconds(),
             };
 
             let version = EncodedVersion::from(version);
@@ -1394,9 +1382,9 @@ Average length of the values: {} (desired: {})",
             value: original_value.clone(),
         };
         let mut original_registry = Registry::new();
-        let timestamp_before_applying_mutation = Registry::get_current_timestamp_seconds();
+        let timestamp_before_applying_mutation = now_seconds();
         apply_mutations_skip_invariant_checks(&mut original_registry, vec![mutation]);
-        let timestamp_after_applying_mutation = Registry::get_current_timestamp_seconds();
+        let timestamp_after_applying_mutation = now_seconds();
 
         // Step 1.2: Verify contents of original Registry.
 
