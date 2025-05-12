@@ -1,7 +1,7 @@
 use crate::{
     governance::{
         LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
-        MAX_NEURON_RECENT_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON,
+        MAX_NUM_HOT_KEYS_PER_NEURON,
     },
     is_disburse_maturity_enabled,
     neuron::{combine_aged_stakes, dissolve_state_and_age::DissolveStateAndAge, neuron_stake_e8s},
@@ -21,8 +21,8 @@ use crate::{
 use ic_base_types::PrincipalId;
 use ic_cdk::println;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
-use ic_nns_common::pb::v1::{NeuronId, ProposalId};
-use ic_nns_governance_api::pb::v1::{self as api, NeuronInfo};
+use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_governance_api::{self as api, NeuronInfo};
 use icp_ledger::Subaccount;
 use rust_decimal::{Decimal, RoundingStrategy};
 use std::{
@@ -439,46 +439,6 @@ impl Neuron {
             .get(&(Topic::NeuronManagement as i32))
             .map(|x| x.followees.clone())
             .unwrap_or_default()
-    }
-
-    /// Register that this neuron has cast a ballot for a
-    /// proposal. Don't include votes on "real time" topics (such as
-    /// setting the ICP/SDR exchange rate).
-    /// TODO(NNS1-3479) delete this method after all neurons are migrated to stable memory
-    pub(crate) fn register_recent_ballot(
-        &mut self,
-        topic: Topic,
-        proposal_id: &ProposalId,
-        vote: Vote,
-    ) {
-        // Ignore votes on topics for which no public voting history
-        // is required.
-        if topic == Topic::ExchangeRate {
-            return;
-        }
-
-        // Data migration for updating the recent ballots so we can use a circular buffer here.
-        let next_entry_index = if let Some(index) = self.recent_ballots_next_entry_index {
-            index
-        } else {
-            self.recent_ballots.reverse();
-            self.recent_ballots.len() % MAX_NEURON_RECENT_BALLOTS
-        };
-
-        let ballot_info = BallotInfo {
-            proposal_id: Some(*proposal_id),
-            vote: vote as i32,
-        };
-
-        // Vector is full
-        if self.recent_ballots.len() >= MAX_NEURON_RECENT_BALLOTS {
-            self.recent_ballots[next_entry_index] = ballot_info;
-        } else {
-            self.recent_ballots.push(ballot_info);
-        }
-        // Advance the index
-        self.recent_ballots_next_entry_index =
-            Some((next_entry_index + 1) % MAX_NEURON_RECENT_BALLOTS);
     }
 
     pub(crate) fn refresh_voting_power(&mut self, now_seconds: u64) {
@@ -1134,6 +1094,11 @@ impl Neuron {
     #[cfg(test)] // This can be used in production, but so far, it is not needed.
     pub(crate) fn clear_known_neuron_data(&mut self) {
         self.known_neuron_data = None;
+    }
+
+    /// Returns whether this neuron has a maturity disbursement in progress.
+    pub fn has_maturity_disbursement_in_progress(&self) -> bool {
+        !self.maturity_disbursements_in_progress.is_empty()
     }
 
     /// Adds a maturity disbursement in progress at the end.
@@ -1896,7 +1861,7 @@ impl NeuronBuilder {
     #[cfg(any(test, feature = "canbench-rs"))]
     pub fn with_recent_ballots(mut self, recent_ballots: Vec<BallotInfo>) -> Self {
         let recent_ballots_next_entry_index =
-            Some(recent_ballots.len() % MAX_NEURON_RECENT_BALLOTS);
+            Some(recent_ballots.len() % crate::governance::MAX_NEURON_RECENT_BALLOTS);
         self.recent_ballots = recent_ballots;
         self.recent_ballots_next_entry_index = recent_ballots_next_entry_index;
         self

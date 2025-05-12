@@ -205,7 +205,7 @@ mod tests {
                             curve: VetKdCurve::Bls12_381_G2,
                             name: String::from("second_vet_kd_key"),
                         }),
-                        pre_signatures_to_create_in_advance: 50,
+                        pre_signatures_to_create_in_advance: 0,
                         max_queue_size: 50,
                     },
                 ],

@@ -681,7 +681,7 @@ fn test_recover_subnet_without_schnorr_removes_it_from_signing_list() {
 }
 
 #[test]
-fn test_recover_subnet_without_vetkd_key_removes_it_from_signing_list() {
+fn test_recover_subnet_without_vetkd_removes_it_from_signing_list() {
     let key_id = MasterPublicKeyId::VetKd(VetKdKeyId {
         curve: VetKdCurve::Bls12_381_G2,
         name: "foo-bar".to_string(),

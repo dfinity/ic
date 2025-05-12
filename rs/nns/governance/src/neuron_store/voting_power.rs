@@ -1,4 +1,4 @@
-use ic_nns_governance_api::pb::v1::Vote;
+use ic_nns_governance_api::Vote;
 
 use super::{NeuronStore, NeuronStoreError};
 
@@ -148,7 +148,7 @@ impl NeuronStore {
         self.with_active_neurons_iter_sections(
             |iter| {
                 for neuron in iter {
-                    process_neuron(neuron.as_ref());
+                    process_neuron(&neuron);
                 }
             },
             NeuronSections::NONE,

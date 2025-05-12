@@ -28,7 +28,7 @@ use crate::{
         StopDissolve,
     },
 };
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     manage_neuron::{self, configure, Command, NeuronIdOrSubaccount},
     ClaimOrRefreshNeuronFromAccount, ManageNeuron,
 };
@@ -429,7 +429,7 @@ fn handle_list_neurons(
         .map_err(|err| ApiError::InvalidPublicKey(false, err.into()))?;
 
     // Argument for the method called on the governance canister.
-    let args = ic_nns_governance_api::pb::v1::ListNeurons {
+    let args = ic_nns_governance_api::ListNeurons {
         neuron_ids: vec![],
         include_neurons_readable_by_caller: true,
         include_empty_neurons_readable_by_caller: None,
@@ -927,7 +927,7 @@ fn add_neuron_management_payload(
     account: icp_ledger::AccountIdentifier,
     controller: Option<PrincipalId>, // specify with hotkey.
     neuron_index: u64,
-    command: ic_nns_governance_api::pb::v1::manage_neuron::Command,
+    command: ic_nns_governance_api::manage_neuron::Command,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
     pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,

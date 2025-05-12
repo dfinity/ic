@@ -16,7 +16,7 @@ import sys
 import tarfile
 import tempfile
 
-from crc import INITIAL_CRC, calc_crc
+from toolchains.sysimage.crc import INITIAL_CRC, calc_crc
 
 LVM_HEADER_SIZE_BYTES = int(2048 * 512)
 BYTES_PER_MEBIBYTE = int(2**20)
