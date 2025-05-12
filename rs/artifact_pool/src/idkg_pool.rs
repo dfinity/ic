@@ -27,7 +27,8 @@ use ic_types::{
     consensus::{
         idkg::{
             EcdsaSigShare, IDkgArtifactId, IDkgMessage, IDkgMessageType, IDkgPrefixOf, IDkgStats,
-            SchnorrSigShare, SigShare, SignedIDkgComplaint, SignedIDkgOpening, VetKdKeyShare,
+            IterationPattern, SchnorrSigShare, SigShare, SignedIDkgComplaint, SignedIDkgOpening,
+            VetKdKeyShare,
         },
         CatchUpPackage,
     },
@@ -95,37 +96,12 @@ impl IDkgObjectPool {
         }))
     }
 
-    fn iter_by_prefix<T: TryFrom<IDkgMessage>>(
+    /// Iterate over the pool for a given pattern. Start at the first key that matches the pattern
+    /// and stop at the first that does not.
+    fn iter_by<T: TryFrom<IDkgMessage>>(
         &self,
-        prefix: IDkgPrefixOf<T>,
+        pattern: IterationPattern,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, T)> + '_>
-    where
-        <T as TryFrom<IDkgMessage>>::Error: Debug,
-    {
-        self.iter_impl(prefix.get(), |message_id| message_id.prefix())
-    }
-
-    fn iter_by_transcript_id<T: TryFrom<IDkgMessage>>(
-        &self,
-        transcript_id: IDkgTranscriptId,
-    ) -> Box<dyn Iterator<Item = (IDkgMessageId, T)> + '_>
-    where
-        <T as TryFrom<IDkgMessage>>::Error: Debug,
-    {
-        self.iter_impl(transcript_id, move |message_id| {
-            IDkgTranscriptId::new(
-                *transcript_id.source_subnet(),
-                message_id.prefix().group_tag(),
-                transcript_id.source_height(),
-            )
-        })
-    }
-
-    fn iter_impl<'a, T: TryFrom<IDkgMessage>, U: Clone + PartialEq + 'a>(
-        &'a self,
-        pattern: U,
-        id_to_pattern: impl Fn(&IDkgMessageId) -> U + Clone + 'a,
-    ) -> Box<dyn Iterator<Item = (IDkgMessageId, T)> + 'a>
     where
         <T as TryFrom<IDkgMessage>>::Error: Debug,
     {
@@ -134,20 +110,23 @@ impl IDkgObjectPool {
         // indexing for partial matching. Since the in memory map is fairly fast, this should not
         // be a problem, revisit if needed.
 
-        // Find the first entry that matches the prefix.
-        let pattern_cl = pattern.clone();
-        let id_to_pattern_cl = id_to_pattern.clone();
+        let is_same_pattern = move |key: &IDkgMessageId| match &pattern {
+            IterationPattern::GroupTag(group_tag) => group_tag == &key.prefix().group_tag(),
+            IterationPattern::Prefix(prefix) => prefix == &key.prefix(),
+        };
+
+        // Find the first entry that matches the pattern.
+        let is_same_pattern_clone = is_same_pattern.clone();
         let first = self
             .objects
             .iter()
-            .skip_while(move |(key, _)| id_to_pattern_cl(key) != pattern_cl);
+            .skip_while(move |(key, _)| !is_same_pattern_clone(key));
 
-        // Keep collecting while the prefix matches.
-        let pattern_cl = pattern.clone();
-        let id_to_pattern_cl = id_to_pattern.clone();
+        // Keep collecting while the pattern matches.
+        let is_same_pattern_clone = is_same_pattern.clone();
         Box::new(
             first
-                .take_while(move |(key, _)| id_to_pattern_cl(key) == pattern_cl)
+                .take_while(move |(key, _)| is_same_pattern_clone(key))
                 .map(|(key, object)| {
                     let inner = T::try_from(object.clone()).unwrap_or_else(|err| {
                         panic!("Failed to convert IDkgMessage to inner type: {:?}", err)
@@ -231,7 +210,7 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
         prefix: IDkgPrefixOf<SignedIDkgDealing>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)> + '_> {
         let object_pool = self.get_pool(IDkgMessageType::Dealing);
-        object_pool.iter_by_prefix(prefix)
+        object_pool.iter_by(IterationPattern::Prefix(prefix.get()))
     }
 
     fn signed_dealings_by_transcript_id(
@@ -239,7 +218,7 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
         transcript_id: &IDkgTranscriptId,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)> + '_> {
         let object_pool = self.get_pool(IDkgMessageType::Dealing);
-        object_pool.iter_by_transcript_id(*transcript_id)
+        object_pool.iter_by(IterationPattern::GroupTag(transcript_id.id()))
     }
 
     fn dealing_support(
@@ -254,7 +233,7 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
         prefix: IDkgPrefixOf<IDkgDealingSupport>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_> {
         let object_pool = self.get_pool(IDkgMessageType::DealingSupport);
-        object_pool.iter_by_prefix(prefix)
+        object_pool.iter_by(IterationPattern::Prefix(prefix.get()))
     }
 
     fn dealing_support_by_transcript_id(
@@ -262,7 +241,7 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
         transcript_id: &IDkgTranscriptId,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_> {
         let object_pool = self.get_pool(IDkgMessageType::DealingSupport);
-        object_pool.iter_by_transcript_id(*transcript_id)
+        object_pool.iter_by(IterationPattern::GroupTag(transcript_id.id()))
     }
 
     fn ecdsa_signature_shares(
@@ -277,7 +256,7 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
         prefix: IDkgPrefixOf<EcdsaSigShare>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaSigShare)> + '_> {
         let object_pool = self.get_pool(IDkgMessageType::EcdsaSigShare);
-        object_pool.iter_by_prefix(prefix)
+        object_pool.iter_by(IterationPattern::Prefix(prefix.get()))
     }
 
     fn schnorr_signature_shares(
@@ -292,7 +271,7 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
         prefix: IDkgPrefixOf<SchnorrSigShare>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SchnorrSigShare)> + '_> {
         let object_pool = self.get_pool(IDkgMessageType::SchnorrSigShare);
-        object_pool.iter_by_prefix(prefix)
+        object_pool.iter_by(IterationPattern::Prefix(prefix.get()))
     }
 
     fn vetkd_key_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdKeyShare)> + '_> {
@@ -305,7 +284,7 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
         prefix: IDkgPrefixOf<VetKdKeyShare>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdKeyShare)> + '_> {
         let object_pool = self.get_pool(IDkgMessageType::VetKdKeyShare);
-        object_pool.iter_by_prefix(prefix)
+        object_pool.iter_by(IterationPattern::Prefix(prefix.get()))
     }
 
     fn signature_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SigShare)> + '_> {
@@ -339,7 +318,7 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
         prefix: IDkgPrefixOf<SignedIDkgComplaint>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgComplaint)> + '_> {
         let object_pool = self.get_pool(IDkgMessageType::Complaint);
-        object_pool.iter_by_prefix(prefix)
+        object_pool.iter_by(IterationPattern::Prefix(prefix.get()))
     }
 
     fn openings(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgOpening)> + '_> {
@@ -352,7 +331,7 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
         prefix: IDkgPrefixOf<SignedIDkgOpening>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgOpening)> + '_> {
         let object_pool = self.get_pool(IDkgMessageType::Opening);
-        object_pool.iter_by_prefix(prefix)
+        object_pool.iter_by(IterationPattern::Prefix(prefix.get()))
     }
 }
 
