@@ -11,6 +11,7 @@ import argparse
 import os
 import subprocess
 import sys
+import datetime
 
 
 def limit_file_contexts(file_contexts, base_path):
@@ -205,6 +206,9 @@ def main():
     strip_files(fs_basedir, fakeroot_statefile, strip_paths)
     subprocess.run(["sync"], check=True)
 
+    with open("/tmp/build_ext4.log", "a") as f:
+        print(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} start mkfs", file=f, flush=True)
+
     # Now build the basic filesystem image. Wrap again in fakeroot
     # so correct permissions are read for all files etc.
     mke2fs_args = [
@@ -224,6 +228,9 @@ def main():
     ]
     subprocess.run(mke2fs_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
 
+    with open("/tmp/build_ext4.log", "a") as f:
+        print(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} end mkfs", file=f, flush=True)
+
     # Use our tool, diroid, to create an fs_config file to be used by e2fsdroid.
     # This file is a simple list of files with their desired uid, gid, and mode.
     fs_config_path = os.path.join(tmpdir, "fs_config")
@@ -237,6 +244,9 @@ def main():
         fs_config_path,
     ]
     subprocess.run(diroid_args, check=True)
+
+    with open("/tmp/build_ext4.log", "a") as f:
+        print(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} end diroid", file=f, flush=True)
 
     e2fsdroid_args = [
         "faketime",
@@ -258,7 +268,13 @@ def main():
     e2fsdroid_args += [image_file]
     subprocess.run(e2fsdroid_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
 
+    with open("/tmp/build_ext4.log", "a") as f:
+        print(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} end e2fsdroid", file=f, flush=True)
+
     subprocess.run(["sync"], check=True)
+
+    with open("/tmp/build_ext4.log", "a") as f:
+        print(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} end sync", file=f, flush=True)
 
     # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
     # If dflate is ever misbehaving, it can be replaced with:
@@ -275,6 +291,9 @@ def main():
         check=True,
     )
 
+    with open("/tmp/build_ext4.log", "a") as f:
+        print(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} end dflate", file=f, flush=True)
+
     subprocess.run(
         [
             "zstd",
@@ -286,6 +305,9 @@ def main():
         ],
         check=True,
     )
+
+    with open("/tmp/build_ext4.log", "a") as f:
+        print(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} end zstd", file=f, flush=True)
 
 
 if __name__ == "__main__":

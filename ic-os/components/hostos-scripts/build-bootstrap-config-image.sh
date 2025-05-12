@@ -16,6 +16,9 @@ Following that are the options specifying the configuration to write. Each of
 option takes a value given as next argument, and any number of the following
 options may be specified:
 
+  --guestos_type
+    Configure the VM type. "default" (default value) or "upgrade"
+
   --ipv6_address a:b::c/n
     The IPv6 address to assign. Must include netmask in bits (e.g.
     dead:beef::1/64). Overrides all other generation for testing.
@@ -123,6 +126,7 @@ function build_ic_bootstrap_tar() {
     local OUT_FILE="$1"
     shift
 
+    local GUESTOS_TYPE
     local IPV6_ADDRESS UPGADE_IPV6_ADDRESS IPV6_GATEWAY DOMAIN HOSTNAME
     local IC_CRYPTO IC_STATE IC_REGISTRY_LOCAL_STORE
     local NNS_URLS NNS_PUBLIC_KEY NODE_OPERATOR_PRIVATE_KEY
@@ -139,7 +143,9 @@ function build_ic_bootstrap_tar() {
             break
         fi
         case "$1" in
-
+            --guestos_type)
+              GUESTOS_TYPE="$2"
+                ;;
             --ipv6_address)
                 IPV6_ADDRESS="$2"
                 ;;
@@ -230,6 +236,13 @@ function build_ic_bootstrap_tar() {
         exit 1
     }
 
+    if [[ "$GUESTOS_TYPE" == "" ]]; then
+      GUESTOS_TYPE="default"
+    elif [[ "$GUESTOS_TYPE" != "default" && "$GUESTOS_TYPE" != "upgrade" ]]; then
+      echo "Invalid VM type: '$GUESTOS_TYPE', supported values: {default, upgrade}" >&2
+      exit 1
+    fi
+
     local BOOTSTRAP_TMPDIR=$(mktemp -d)
 
     cat >"${BOOTSTRAP_TMPDIR}/network.conf" <<EOF
@@ -241,6 +254,8 @@ ${IPV4_ADDRESS:+ipv4_address=$IPV4_ADDRESS}
 ${IPV4_GATEWAY:+ipv4_gateway=$IPV4_GATEWAY}
 ${DOMAIN:+domain=$DOMAIN}
 EOF
+    mkdir "${BOOTSTRAP_TMPDIR}/guestos_type"
+    touch "${BOOTSTRAP_TMPDIR}/guestos_type/${GUESTOS_TYPE}"
     if [ "${NODE_REWARD_TYPE}" != "" ]; then
         echo "node_reward_type=$NODE_REWARD_TYPE" >"${BOOTSTRAP_TMPDIR}/reward.conf"
     fi

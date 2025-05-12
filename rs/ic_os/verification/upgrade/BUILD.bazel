@@ -27,7 +27,7 @@ ALIASES = {}
 rust_binary(
     name = "server",
     srcs = glob([
-        "src/server.rs",
+        "src/mod",
         "src/api.rs",
     ]),
     aliases = ALIASES,
@@ -40,7 +40,7 @@ rust_binary(
 rust_binary(
     name = "client",
     srcs = glob([
-        "src/client.rs",
+        "src/mod",
         "src/api.rs",
     ]),
     aliases = ALIASES,

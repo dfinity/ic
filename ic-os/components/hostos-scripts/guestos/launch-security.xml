@@ -1,0 +1,5 @@
+<launchSecurity type='sev-snp' kernelHashes='yes'>
+    <cbitpos>51</cbitpos>
+    <reducedPhysBits>1</reducedPhysBits>
+    <policy>30000</policy>
+</launchSecurity>

@@ -158,6 +158,7 @@ impl Registry {
             public_ipv4_config: ipv4_intf_config,
             domain,
             node_reward_type,
+            trusted_execution_environment: None, // TODO: fix
         };
 
         // 8. Insert node, public keys, and crypto keys

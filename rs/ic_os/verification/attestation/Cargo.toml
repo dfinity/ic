@@ -1,5 +1,3 @@
-[workspace]
-
 [package]
 name = "attestation"
 description = "Attestation."
@@ -12,7 +10,7 @@ candid = "0.10.11"
 sev = { version = "6.0.0", features = ["crypto_nossl"] }
 #anyhow = "1.0.93"
 #sha2 = "0.11.0-pre.4"
-der = { version = "0.8.0-rc.1", features = ["alloc", "derive", "std"] }
+der = { version = "0.7.10", features = ["alloc", "derive", "std"] }
 #mockall = "0.13.1"
 #tokio = { version = "1.42.0", features = ["macros"] }
 #ic-certified-map = "0.4"
@@ -23,7 +21,7 @@ rand = "0.9.0"
 ring = "0.17"
 anyhow = "1.0.95"
 slog = "2.7.0"
-reqwest = { version = "0.12.15", features = ["blocking"] }
+reqwest = { version = "0.12.15", features = ["blocking", "rustls-tls"] }
 prost = "0.13"
 
 [build-dependencies]

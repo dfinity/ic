@@ -1,5 +1,3 @@
-[workspace]
-
 [package]
 edition = "2021"
 license = "MIT"
@@ -7,17 +5,18 @@ name = "ic-os-upgrade"
 
 [[bin]]
 name = "server"
-path = "src/server/server.rs"
+path = "src/server/mod.rs"
 
 [[bin]]
 name = "client"
-path = "src/client/client.rs"
+path = "src/client/mod.rs"
 
 [[bin]]
-name = "print_measurement"
-path = "src/print_measurement.rs"
+name = "print-disk-encryption-key"
+path = "src/print_disk_encryption_key.rs"
 
 [dependencies]
+ic-interfaces = { path = "../../../interfaces" }
 tokio = { version = "1.44", features = ["rt-multi-thread"] }
 prost = "0.13"
 tonic = { version = "0.12", features = ["tls"] }
@@ -26,6 +25,9 @@ rcgen = "0.13"
 tokio-stream = "0.1.17"
 rustls = "0.23.23"
 rand = "0.8.5" # FIXME
+ic-crypto = { path = "../../../crypto" }
+ic-config = { path = "../../../config" }
+ic-logger = { path = "../../../monitoring/logger" }
 ic-registry-client = { path = "../../../registry/client" }
 ic-registry-local-registry = { path = "../../../registry/local_registry" }
 ic-registry-local-store = { path = "../../../registry/local_store" }
@@ -43,9 +45,9 @@ sev = { version = "6.0.0", features = ["crypto_nossl", "sev"] }
 ring = "0.17"
 base64 = "0.22.1"
 ic-protobuf = { path = "../../../protobuf" }
-attestation = { path ="../attestation" }
+attestation = { path = "../attestation" }
 x509-parser = "0.17"
-der = { version = "0.8.0-rc.1", features = ["alloc", "derive", "std"] }
+der = { version = "0.7.10", features = ["alloc", "derive", "std"] }
 rustls-webpki = "0.103.1"
 hyper-rustls = "0.27.5"
 hyper = "1.6.0"
@@ -53,9 +55,14 @@ hyper-util = "0.1.10"
 ic-types = { path = "../../../types/types" }
 tower = "0.4.13"
 pin-project = "1.1.9"
+thiserror = "1.0.69"
+ic-crypto-internal-csp = { path = "../../../crypto/internal/crypto_service_provider" }
+tokio-util = "0.7.14"
 
 [build-dependencies]
 tonic-build = { version = "0.12", features = ["prost"] }
 
 [dev-dependencies]
 ic-interfaces-registry-mocks = { path = "../../../interfaces/registry/mocks" }
+mockall = "0.13.1"
+ic-registry-keys = { path = "../../../registry/keys" }

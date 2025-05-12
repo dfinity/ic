@@ -3,7 +3,6 @@ tmpfs    /tmp    tmpfs   defaults 0   2
 /dev/vda1   /boot/efi   vfat    ro    0   2
 /dev/vda2   /boot/grub  vfat    ro    0   2
 /dev/vda3   /boot/config    ext4    ro,sync    0   2
-/dev/sda    /var/lib/ic/guestos_type    vfat    defaults,nofail    0   2
 /dev/mapper/var_crypt   /var  ext4    defaults    0   2
 /dev/mapper/store-shared--backup   /var/lib/ic/backup    ext4 defaults,context=system_u:object_r:ic_data_t:s0   0   2
 /dev/mapper/store-shared--crypto   /var/lib/ic/crypto    ext4 defaults   0   2

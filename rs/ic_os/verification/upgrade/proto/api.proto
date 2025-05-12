@@ -3,6 +3,7 @@ syntax = "proto3";
 package verification.upgrade.api;
 
 import "attestation.proto";
+import "types/v1/types.proto";
 
 message GetDiskEncryptionKeyRequest {
   optional verification.attestation.SevAttestationPackage sev_attestation_package = 1;
@@ -13,21 +14,30 @@ message GetDiskEncryptionKeyResponse {
   optional verification.attestation.SevAttestationPackage sev_attestation_package = 2;
 }
 
-message InitializeGetDiskEncryptionKeyRequest {
+message GetNodeSigningKeyRequest {
+  optional bytes challenge = 1;
 }
 
-message InitializeGetDiskEncryptionKeyResponse {
+message GetNodeSigningKeyResponse {
+  optional types.v1.NodeId node_id = 1;
+  optional bytes proof = 2;
 }
 
-service UpgradeService {
-  // This is not called from the client at the moment and the server returns
-  // an empty response without doing anything.
-  // It serves as a placeholder if we want to add options in the future.
-  rpc InitializeGetDiskEncryptionKey(InitializeGetDiskEncryptionKeyRequest)
-    returns (InitializeGetDiskEncryptionKeyResponse) {
-  }
+message SignalStatusRequest {
+  optional bool success = 1;
+}
 
+message SignalStatusResponse {
+}
+
+service DiskEncryptionKeyExchangeService {
   rpc GetDiskEncryptionKey(GetDiskEncryptionKeyRequest)
     returns (GetDiskEncryptionKeyResponse) {
+  }
+
+  rpc GetNodeSigningKey(GetNodeSigningKeyRequest) returns (GetNodeSigningKeyResponse) {
+  }
+
+  rpc SignalStatus(SignalStatusRequest) returns (SignalStatusResponse) {
   }
 }

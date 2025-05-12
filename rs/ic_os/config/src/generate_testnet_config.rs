@@ -242,6 +242,9 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         network_settings,
         icos_settings,
         guestos_settings,
+        upgrade_config: GuestOSUpgradeConfig {
+            peer_guestos_address: None,
+        },
     };
 
     Ok(guestos_config)

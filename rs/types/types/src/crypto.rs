@@ -13,7 +13,7 @@ pub use hash::DOMAIN_IC_REQUEST;
 
 mod sign;
 
-pub use sign::{Signable, SignableMock};
+pub use sign::{NodeIdProof, Signable, SignableMock};
 
 pub mod error;
 pub mod threshold_sig;

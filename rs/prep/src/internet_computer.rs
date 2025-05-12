@@ -596,12 +596,11 @@ impl IcConfig {
         let replica_version_record = ReplicaVersionRecord {
             release_package_sha256_hex: self.initial_release_package_sha256_hex.unwrap_or_default(),
             release_package_urls: opturl_to_string_vec(self.initial_release_package_url),
-            guest_launch_measurement_sha256_hex: None,
+            guest_launch_measurements: vec![], // TODO
         };
 
         let blessed_replica_versions_record = BlessedReplicaVersions {
             blessed_version_ids: vec![initial_replica_version],
-            blessed_guest_launch_measurement_sha256_hexes: vec![], // TODO
         };
 
         write_registry_entry(

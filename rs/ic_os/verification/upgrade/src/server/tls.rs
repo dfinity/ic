@@ -1,4 +1,4 @@
-use ic_os_upgrade::tls::shared_key_for_attestation;
+use crate::tls::shared_key_for_attestation;
 use pin_project::pin_project;
 use std::io::{Error, IoSlice};
 use std::pin::Pin;
@@ -9,7 +9,7 @@ use tonic::transport::server::Connected;
 
 #[derive(Clone, Debug)]
 pub struct TlsConnectionInfoForUpgrade {
-    pub(crate) shared_secret: [u8; 32],
+    pub(crate) tls_shared_key_for_attestation: [u8; 32],
 }
 
 #[pin_project]
@@ -30,7 +30,7 @@ impl Connected for TlsStreamWrapper {
 
     fn connect_info(&self) -> Self::ConnectInfo {
         TlsConnectionInfoForUpgrade {
-            shared_secret: shared_key_for_attestation(&self.0.get_ref().1),
+            tls_shared_key_for_attestation: shared_key_for_attestation(&self.0.get_ref().1),
         }
     }
 }

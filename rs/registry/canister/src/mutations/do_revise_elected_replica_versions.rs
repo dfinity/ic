@@ -74,8 +74,7 @@ impl Registry {
                                 panic!("{LOG_PREFIX}Release package hash has to be provided")
                             }),
                         release_package_urls: payload.release_package_urls,
-                        guest_launch_measurement_sha256_hex: payload
-                            .guest_launch_measurement_sha256_hex,
+                        guest_launch_measurements: vec![], // TODO: fix this
                     }
                     .encode_to_vec(),
                 },
@@ -89,7 +88,6 @@ impl Registry {
                 key: make_blessed_replica_versions_key().as_bytes().to_vec(),
                 value: BlessedReplicaVersions {
                     blessed_version_ids: versions,
-                    blessed_guest_launch_measurement_sha256_hexes: vec![], // TODO
                 }
                 .encode_to_vec(),
             },

@@ -11,7 +11,7 @@ scp -o StrictHostKeyChecking=no -6 ${file} admin@[${hostos}]:/tmp
 ssh -o StrictHostKeyChecking=no -6 admin@${hostos} << EOF
    sudo systemctl stop monitor-guestos
    sudo systemctl stop guestos
-   sudo virsh shutdown guestos_upgrader
+   sudo virsh shutdown guestos-upgrader
    tar xaf /tmp/disk-img.tar.zst -C /tmp disk.img
    sudo dd if=/tmp/disk.img of=/dev/hostlvm/guestos bs=8M conv=sparse
    sudo systemctl start guestos

@@ -3,15 +3,15 @@ name = "vsock_lib"
 version = "1.0.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[target.'cfg(target_os = "linux")'.dependencies]
+[dependencies]
 anyhow = { workspace = true }
-regex = { workspace = true }
 reqwest = { workspace = true }
 rusb = "0.9"
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 tempfile = { workspace = true }
+mockall = "0.13.1"
+
+[target.'cfg(target_os = "linux")'.dependencies]
 vsock = "0.4"

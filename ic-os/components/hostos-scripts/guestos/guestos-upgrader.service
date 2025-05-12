@@ -1,0 +1,10 @@
+[Unit]
+Description=Manage GuestOS Upgrade virtual machine
+
+[Service]
+Type=notify
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/start-new-guestos.sh --guestos_type=upgrade
+# Give some time to the VM to shut down
+TimeoutStopSec=30
+#Restart=always

@@ -120,6 +120,10 @@
     http_handler: {
         listen_addr: "[{{ ipv6_address }}]:8080",
     },
+    
+    guestos_upgrade: {
+        default_vm_ip: "{{ default_vm_ipv6_address }}"
+    }
 
     // ====================================
     // Configuration of various adapters.

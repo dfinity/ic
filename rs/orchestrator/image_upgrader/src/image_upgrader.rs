@@ -113,6 +113,8 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
         version: &V,
     ) -> UpgradeResult<(Vec<String>, Option<String>)>;
 
+    async fn exchange_disk_encryption_key(&mut self) -> UpgradeResult<()>;
+
     /// Calls a corresponding script to "confirm" that the base OS could boot
     /// successfully. Without a confirmation the image will be reverted on the next
     /// restart.
@@ -207,15 +209,17 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
             .output()
             .await
             .map_err(|e| UpgradeError::file_command_error(e, &c))?;
-        if out.status.success() {
-            self.set_prepared_version(Some(version.clone()));
-            Ok(())
-        } else {
+
+        if !out.status.success() {
             warn!(self.log(), "upgrade-install has failed");
-            Err(UpgradeError::GenericError(
+            return Err(UpgradeError::GenericError(
                 "upgrade-install failed".to_string(),
-            ))
+            ));
         }
+
+        self.exchange_disk_encryption_key().await?;
+        self.set_prepared_version(Some(version.clone()));
+        Ok(())
     }
 
     /// Executes the node upgrade by unpacking the downloaded image (if it didn't happen yet)

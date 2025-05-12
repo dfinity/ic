@@ -10,6 +10,9 @@ Before=umount.target
 Before=cryptsetup.target
 BindsTo=dev-vda10.device
 After=dev-vda10.device
+RequiresMountsFor=/var
+After=generate-ic-config.service
+Requires=generate-ic-config.service
 #After=network-online.target
 #Wants=network-online.target
 

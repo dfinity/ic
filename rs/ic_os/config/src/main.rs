@@ -44,6 +44,8 @@ pub enum Commands {
         guestos_config_json_path: PathBuf,
         #[arg(long, value_name = "ipv6_address")]
         guestos_ipv6_address: String,
+        #[arg(long)]
+        peer_guestos_ipv6_address: String,
     },
     /// Creates a GuestOSConfig object directly from GenerateTestnetConfigClapArgs. Only used for testing purposes.
     GenerateTestnetConfig(GenerateTestnetConfigClapArgs),
@@ -288,6 +290,7 @@ pub fn main() -> Result<()> {
             hostos_config_json_path,
             guestos_config_json_path,
             guestos_ipv6_address,
+            peer_guestos_ipv6_address,
         }) => {
             let hostos_config_json_path = Path::new(&hostos_config_json_path);
 
@@ -312,11 +315,16 @@ pub fn main() -> Result<()> {
                 }
             }
 
+            let upgrade_config = GuestOSUpgradeConfig {
+                peer_guestos_address: Some(peer_guestos_ipv6_address.parse()?),
+            };
+
             let guestos_config = GuestOSConfig {
                 config_version: hostos_config.config_version,
                 network_settings: guestos_network_settings,
                 icos_settings: hostos_config.icos_settings,
                 guestos_settings: hostos_config.guestos_settings,
+                upgrade_config,
             };
 
             let guestos_config_json_path = Path::new(&guestos_config_json_path);

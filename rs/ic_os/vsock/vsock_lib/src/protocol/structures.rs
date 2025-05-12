@@ -50,6 +50,7 @@ pub enum Command {
     Notify(NotifyData),
     GetVsockProtocol,
     GetHostOSVersion,
+    StartUpgradeVm,
 }
 
 impl fmt::Display for Command {
@@ -69,6 +70,7 @@ impl fmt::Display for Command {
             ),
             Command::GetVsockProtocol => write!(f, "Command: Get Vsock Protocol"),
             Command::GetHostOSVersion => write!(f, "Command: Get HostOS Version"),
+            Command::StartUpgradeVm => write!(f, "Command: Start Upgrade VM"),
         }
     }
 }

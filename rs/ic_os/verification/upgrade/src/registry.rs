@@ -23,22 +23,24 @@ pub fn get_blessed_guest_launch_measurements_from_registry(
     let latest_registry_version = nns_registry_client.get_latest_version();
     let blessed_replica_versions = nns_registry_client
         .get_blessed_replica_versions(latest_registry_version)
-        .map_err(|err| err.to_string())?
-        .ok_or_else(|| "Blessed replica versions are not available".to_string())?;
+        .map_err(|err| format!("Failed to get blessed replica versions: {err}"))?
+        .ok_or_else(|| "Blessed replica versions not found in registry".to_string())?;
 
     let measurements = blessed_replica_versions
         .blessed_version_ids
         .iter()
-        .flat_map(|version_id| ReplicaVersion::from_str(version_id))
-        .flat_map(|replica_version| {
-            nns_registry_client.get_replica_version_record_from_version_id(
-                &replica_version,
-                latest_registry_version,
-            )
-            // TODO: consider logging errors
+        .filter_map(|version_id| ReplicaVersion::from_str(version_id).ok())
+        .filter_map(|replica_version| {
+            nns_registry_client
+                .get_replica_version_record_from_version_id(
+                    &replica_version,
+                    latest_registry_version,
+                )
+                // TODO: consider logging errors
+                .ok()
+                .flatten()
         })
-        .flatten()
-        .flat_map(|version_record| version_record.guest_launch_measurements)
+        .flat_map(|record| record.guest_launch_measurements)
         .map(|measurement| measurement.measurement)
         .collect_vec();
 
@@ -65,7 +67,7 @@ mod tests {
         let measurement1 = [1, 2, 3, 4, 5];
         let measurement2 = [6, 7, 8, 9, 10];
         let measurement3 = [11, 12, 13, 14, 15];
-        let measurement4 = [16, 17, 18, 19, 20];
+        let measurement4 = [16, 17, 18, 19, 20]; // From unblessed version
 
         let replica_versions_and_records = vec![
             (
@@ -121,10 +123,7 @@ mod tests {
             .return_const(registry_version);
 
         let blessed_versions = BlessedReplicaVersions {
-            blessed_version_ids: blessed_replica_ids
-                .iter()
-                .map(|id| id.to_string())
-                .collect(),
+            blessed_version_ids: blessed_replica_ids.iter().map(|x| x.to_string()).collect(),
         };
 
         mock_client

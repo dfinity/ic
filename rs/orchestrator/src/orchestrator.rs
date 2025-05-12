@@ -1,3 +1,5 @@
+// use crate::disk_encryption_key_exchange::DiskEncryptionKeyExchangeAgent;
+// use crate::error::OrchestratorError;
 use crate::{
     args::OrchestratorArgs,
     boundary_node::BoundaryNodeManager,
@@ -22,6 +24,8 @@ use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_image_upgrader::ImageUpgrader;
 use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+// use ic_os_upgrade::server::DiskEncryptionKeyExchangeServer;
+// use ic_os_upgrade::DiskEncryptionKeyProvider;
 use ic_registry_replicator::RegistryReplicator;
 use ic_sys::utility_command::UtilityCommand;
 use ic_types::{hostos_version::HostosVersion, ReplicaVersion, SubnetId};
@@ -38,6 +42,9 @@ use tokio::{
     sync::watch::{self, Receiver, Sender},
     task::JoinHandle,
 };
+// use attestation::attestation_report::SevAttestationPackageGenerator;
+// use attestation::certificates::CertificateProvider;
+// use vsock_lib::{MockVSockClient};
 
 const CHECK_INTERVAL_SECS: Duration = Duration::from_secs(10);
 
@@ -228,6 +235,16 @@ impl Orchestrator {
             registration.register_node().await;
         }
 
+        // let disk_encryption_key_provider = Arc::new(
+        //     DiskEncryptionKeyProvider::new().unwrap() // TODO: error handling
+        // );
+        //
+        // let attestation_package_generator =
+        //     Arc::new(SevAttestationPackageGenerator::new(CertificateProvider::new(
+        //         // TODO: use correct path
+        //         PathBuf::from("/tmp"),
+        //     )));
+
         let upgrade = Some(
             Upgrade::new(
                 Arc::clone(&registry),
@@ -242,6 +259,16 @@ impl Orchestrator {
                 args.replica_binary_dir.clone(),
                 logger.clone(),
                 args.orchestrator_data_directory.clone(),
+                // DiskEncryptionKeyExchangeAgent::new(
+                //     tokio::runtime::Handle::current(),
+                //     // Box::new(LinuxVSockClient::default()),
+                //     Box::new(MockVSockClient::new()),
+                //     attestation_package_generator,
+                //     disk_encryption_key_provider,
+                //     node_id,
+                //     Arc::clone(&crypto) as _,
+                //     Arc::clone(&registry_client),
+                // ),
             )
             .await,
         );

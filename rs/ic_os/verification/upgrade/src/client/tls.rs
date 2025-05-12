@@ -1,3 +1,4 @@
+use futures_util::FutureExt;
 use hyper::Uri;
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder, MaybeHttpsStream};
 use hyper_util::client::legacy::connect::HttpConnector;
@@ -38,7 +39,7 @@ impl Service<Uri> for TlsConnector {
             .enable_http2()
             .build();
 
-        let secret = self.tls_shared_key_for_attestation.clone();
+        let tls_shared_key_for_attestation = self.tls_shared_key_for_attestation.clone();
         let mut parts = req.into_parts();
         parts.scheme = Some(hyper::http::uri::Scheme::HTTPS);
         Box::pin(
@@ -46,7 +47,7 @@ impl Service<Uri> for TlsConnector {
                 .call(Uri::try_from(parts).expect("Could not create Uri"))
                 .map(move |stream| match stream {
                     Ok(MaybeHttpsStream::Https(ref inner)) => {
-                        *secret.lock().unwrap().deref_mut() =
+                        *tls_shared_key_for_attestation.lock().unwrap().deref_mut() =
                             shared_key_for_attestation(&inner.inner().get_ref().1);
                         stream
                     }

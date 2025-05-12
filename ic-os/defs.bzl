@@ -177,6 +177,26 @@ def icos_build(
 
     # -------------------- Extract boot partition --------------------
 
+    if "boot_args_template" in image_deps:
+        native.alias(
+            name = "boot_args_template",
+            actual = image_deps["boot_args_template"],
+        )
+        native.genrule(
+            name = "generate_boot_args",
+            outs = ["boot_args"],
+            srcs = [":extra_boot_args", ":boot_args_template"],
+            cmd = """
+                source "$(location :extra_boot_args)"
+                if [ ! -v EXTRA_BOOT_ARGS ]; then
+                    echo "EXTRA_BOOT_ARGS is not set in $(location :extra_boot_args)"
+                    exit 1
+                fi
+                sed "s/EXTRA_BOOT_ARGS/$${EXTRA_BOOT_ARGS}/" "$(location :boot_args_template)" > $@
+            """,
+            tags = ["manual"],
+        )
+
     ext4_image(
         name = "partition-boot.tzst",
         src = ":rootfs-tree.tar",
@@ -192,6 +212,7 @@ def icos_build(
                 image_deps["bootfs"].items() + [
                     (":version.txt", "/version.txt:0644"),
                     (":extra_boot_args", "/extra_boot_args:0644"),
+                    (":boot_args", "/boot_args:0644"),
                 ]
             )
         },
@@ -217,7 +238,7 @@ def icos_build(
         )
 
     # When boot_args are fixed, don't bother signing
-    if "boot_args_template" not in image_deps:
+    if "extra_boot_args_template" not in image_deps:
         native.alias(name = "partition-root.tzst", actual = ":partition-root-unsigned.tzst", tags = ["manual", "no-cache"])
         native.alias(name = "extra_boot_args", actual = image_deps["extra_boot_args"], tags = ["manual"])
 
@@ -225,7 +246,7 @@ def icos_build(
             native.alias(name = "partition-root-test.tzst", actual = ":partition-root-test-unsigned.tzst", tags = ["manual", "no-cache"])
             native.alias(name = "extra_boot_test_args", actual = image_deps["extra_boot_args"], tags = ["manual"])
     else:
-        native.alias(name = "extra_boot_args_template", actual = image_deps["boot_args_template"], tags = ["manual"])
+        native.alias(name = "extra_boot_args_template", actual = image_deps["extra_boot_args_template"], tags = ["manual"])
 
         native.genrule(
             name = "partition-root-sign",

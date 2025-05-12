@@ -9,5 +9,5 @@ use der::asn1::OctetStringRef;
 
 #[derive(der::Sequence, Debug, Eq, PartialEq)]
 pub struct GetDiskEncryptionKeyTokenCustomData<'a> {
-    pub tls_shared_secret: OctetStringRef<'a>,
+    pub tls_shared_key_for_attestation: OctetStringRef<'a>,
 }

@@ -25,6 +25,11 @@ pub struct IPv4InterfaceConfig {
     #[prost(uint32, tag = "3")]
     pub prefix_length: u32,
 }
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq, ::prost::Message)]
+pub struct TrustedExecutionEnvironment {
+    #[prost(bool, optional, tag = "1")]
+    pub enabled: ::core::option::Option<bool>,
+}
 /// A node: one machine running a replica instance.
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct NodeRecord {
@@ -52,6 +57,8 @@ pub struct NodeRecord {
     pub domain: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(enumeration = "NodeRewardType", optional, tag = "20")]
     pub node_reward_type: ::core::option::Option<i32>,
+    #[prost(message, optional, tag = "21")]
+    pub trusted_execution_environment: ::core::option::Option<TrustedExecutionEnvironment>,
 }
 /// The type of the node.
 #[derive(

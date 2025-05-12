@@ -1,6 +1,6 @@
 <domain type='{{ cpu_domain }}' id='1'>
-  <name>guestos</name>
-  <uuid>fd897da5-8017-41c8-8575-a706dba30766</uuid>
+  <name>{{ vm_name }}</name>
+  <uuid>{{ vm_uuid }}</uuid>
   <metadata>
     <libosinfo:libosinfo xmlns:libosinfo="http://libosinfo.org/xmlns/libvirt/domain/1.0">
       <libosinfo:os id="http://ubuntu.com/ubuntu/20.04"/>
@@ -15,13 +15,12 @@
   </resource>
   <os>
     <type arch='x86_64' machine='pc-q35-6.2'>hvm</type>
-    <loader readonly='yes'>/usr/share/OVMF/OVMF.fd</loader>
-    <!--
-        <kernel>/tmp/sev-boot-components/vmlinuz</kernel>
-        <initrd>/tmp/sev-boot-components/initrd.img</initrd>
-        <cmdline>BOOT_IMAGE=/vmlinuz root=/dev/vda5 console=ttyS0 dfinity.system=A dfinity.boot_state=stable security=selinux selinux=1 enforcing=1 root_hash=XXXTODOXXX</cmdline>
-    -->
+    <loader readonly='yes'>/tmp/OVMF.fd</loader>
+    <kernel>{{ kernel }}</kernel>
+    <initrd>{{ initrd }}</initrd>
+    <cmdline>{{ cmdline }}</cmdline>
   </os>
+  <!-- TODO: remote when running on non-SEV machine -->
   <launchSecurity type='sev-snp' kernelHashes='yes'>
       <cbitpos>51</cbitpos>
       <reducedPhysBits>1</reducedPhysBits>
@@ -41,9 +40,10 @@
     <timer name='pit' tickpolicy='delay'/>
     <timer name='hpet' present='no'/>
   </clock>
-  <on_poweroff>restart</on_poweroff>
-  <on_reboot>restart</on_reboot>
-  <on_crash>restart</on_crash>
+  <!-- Destroy the VM in all these cases and let systemd restart it -->
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>destroy</on_reboot>
+  <on_crash>destroy</on_crash>
   <pm>
     <suspend-to-mem enabled='no'/>
     <suspend-to-disk enabled='no'/>
@@ -59,14 +59,14 @@
       <address type='pci' domain='0x0000' bus='0x04' slot='0x00' function='0x0'/>
       <boot order='1'/>
     </disk>
-    <disk type='file' device='disk'>
+  <!-- <disk type='file' device='disk'>
         <driver name='qemu' type='raw'/>
         <source file='/tmp/guestos_type/upgrade.img'/>
         <target dev='sda' bus='sata'/>
         <boot order='2'/>
-    </disk>
+    </disk> -->
     <disk type='file' device='disk'>
-      <source file='/run/ic-node/config.img'/>
+      <source file='{{ config_image_path }}'/>
       <target dev='sdb' bus='usb' removable='on'/>
     </disk>
     <controller type='usb' index='0' model='ich9-ehci1'>
@@ -155,7 +155,7 @@
         <model name='isa-serial'/>
       </target>
       <alias name='serial0'/>
-      <log file='/var/log/libvirt/qemu/guestos-serial.log' append='off'/>
+      <log file='/var/log/libvirt/qemu/{{ vm_name }}-serial.log' append='off'/>
     </serial>
     <console type='pty' tty='/dev/pts/3'>
       <source path='/dev/pts/3'/>

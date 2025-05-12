@@ -36,6 +36,7 @@ pub mod args;
 mod boundary_node;
 mod catch_up_package_provider;
 mod dashboard;
+mod disk_encryption_key_exchange;
 mod error;
 mod firewall;
 mod hostos_upgrade;

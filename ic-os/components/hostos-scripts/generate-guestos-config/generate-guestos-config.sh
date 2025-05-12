@@ -28,6 +28,9 @@ Arguments:
   -h, --help            show this help message and exit
   -i=, --input=         specify the input template file (Default: /opt/ic/share/guestos.xml.template)
   -m=, --media=         specify the config media image file (Default: /run/ic-node/config.img)
+  --kernel=             specify the kernel image file path
+  --initrd=             specify the initrd image file path
+  --cmdline=            specify the kernel command line
   -o=, --output=        specify the output configuration file (Default: /var/lib/libvirt/guestos.xml)
 '
             exit 1
@@ -44,6 +47,18 @@ Arguments:
             OUTPUT="${argument#*=}"
             shift
             ;;
+        --kernel=*)
+            KERNEL="${argument#*=}"
+            shift
+            ;;
+        --initrd=*)
+            INITRD="${argument#*=}"
+            shift
+            ;;
+        --cmdline=*)
+            CMDLINE="${argument#*=}"
+            shift
+            ;;
         *)
             echo "Error: Argument is not supported."
             exit 1
@@ -52,7 +67,8 @@ Arguments:
 done
 
 function validate_arguments() {
-    if [ "${CONFIG}" == "" -o "${DEPLOYMENT}" == "" -o "${INPUT}" == "" -o "${OUTPUT}" == "" ]; then
+    if [ "${CONFIG}" == "" -o "${DEPLOYMENT}" == "" -o "${INPUT}" == "" -o "${OUTPUT}" == "" -o "${KERNEL}" == ""
+        -o "${INITRD}" == "" -o "${CMDLINE}" == "" ]; then
         $0 --help
     fi
 }
@@ -123,8 +139,12 @@ function generate_guestos_config() {
         mkdir -p "$(dirname "$OUTPUT")"
         sed -e "s@{{ resources_memory }}@${RESOURCES_MEMORY}@" \
             -e "s@{{ mac_address }}@${MAC_ADDRESS}@" \
+            -e "s@{{ config_image_path }}@${MEDIA}@" \
             -e "s@{{ cpu_domain }}@${CPU_DOMAIN}@" \
             -e "/{{ cpu_spec }}/{r ${CPU_SPEC}" -e "d" -e "}" \
+            -e "s@{{ kernel }}@${KERNEL}@" \
+            -e "s@{{ initrd }}@${INITRD}@" \
+            -e "s@{{ cmdline }}@${CMDLINE}@" \
             "${INPUT}" >"${OUTPUT}"
         restorecon -R "$(dirname "$OUTPUT")"
         write_log "Generating GuestOS configuration file: ${OUTPUT}"

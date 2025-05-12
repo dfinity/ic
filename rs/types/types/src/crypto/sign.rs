@@ -47,6 +47,14 @@ pub trait SignatureDomain: private::SignatureDomainSeal {
     fn domain(&self) -> Vec<u8>;
 }
 
+pub struct NodeIdProof(pub Vec<u8>);
+
+impl SignedBytesWithoutDomainSeparator for NodeIdProof {
+    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
+        self.0.clone()
+    }
+}
+
 mod private {
     use super::*;
     use crate::{
@@ -76,6 +84,7 @@ mod private {
     impl SignatureDomainSeal for SignableMock {}
     impl SignatureDomainSeal for QueryResponseHash {}
     impl SignatureDomainSeal for VetKdEncryptedKeyShareContent {}
+    impl SignatureDomainSeal for NodeIdProof {}
 }
 
 impl SignatureDomain for CanisterHttpResponseMetadata {
@@ -83,6 +92,12 @@ impl SignatureDomain for CanisterHttpResponseMetadata {
         domain_with_prepended_length(
             DomainSeparator::CryptoHashOfCanisterHttpResponseMetadata.as_str(),
         )
+    }
+}
+
+impl SignatureDomain for NodeIdProof {
+    fn domain(&self) -> Vec<u8> {
+        domain_with_prepended_length(DomainSeparator::NodeIdProof.as_str())
     }
 }
 

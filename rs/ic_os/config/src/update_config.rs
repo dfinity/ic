@@ -76,6 +76,9 @@ pub fn update_guestos_config() -> Result<()> {
             network_settings,
             icos_settings,
             guestos_settings,
+            upgrade_config: GuestOSUpgradeConfig {
+                peer_guestos_address: None, // TODO: check this
+            },
         };
 
         // GuestOSConfig is safe to log; it does not contain any secret material

@@ -1,3 +1,4 @@
+// use crate::disk_encryption_key_exchange::DiskEncryptionKeyExchangeAgent;
 use crate::{
     catch_up_package_provider::CatchUpPackageProvider,
     error::{OrchestratorError, OrchestratorResult},
@@ -15,6 +16,7 @@ use ic_image_upgrader::{
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_management_canister_types_private::MasterPublicKeyId;
+// use ic_os_upgrade::server::DiskEncryptionKeyExchangeServer;
 use ic_protobuf::proxy::try_from_option_field;
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
@@ -80,6 +82,7 @@ pub(crate) struct Upgrade {
     registry_replicator: Arc<RegistryReplicator>,
     pub logger: ReplicaLogger,
     node_id: NodeId,
+    // disk_encryption_key_exchange_agent: DiskEncryptionKeyExchangeAgent,
     /// The replica version that is prepared by 'prepare_upgrade' to upgrade to.
     pub prepared_upgrade_version: Option<ReplicaVersion>,
     pub orchestrator_data_directory: PathBuf,
@@ -100,6 +103,7 @@ impl Upgrade {
         release_content_dir: PathBuf,
         logger: ReplicaLogger,
         orchestrator_data_directory: PathBuf,
+        // disk_encryption_key_exchange_agent: DiskEncryptionKeyExchangeAgent,
     ) -> Self {
         let value = Self {
             registry,
@@ -115,6 +119,7 @@ impl Upgrade {
             logger: logger.clone(),
             prepared_upgrade_version: None,
             orchestrator_data_directory,
+            // disk_encryption_key_exchange_agent,
         };
         if let Err(e) = value.report_reboot_time() {
             warn!(logger, "Cannot report the reboot time: {}", e);
@@ -557,6 +562,14 @@ impl ImageUpgrader<ReplicaVersion, Option<SubnetId>> for Upgrade {
             record.release_package_urls,
             Some(record.release_package_sha256_hex),
         ))
+    }
+
+    async fn exchange_disk_encryption_key(&mut self) -> UpgradeResult<()> {
+        // self.disk_encryption_key_exchange_agent
+        //     .exchange_keys()
+        //     .await
+        //     .map_err(|e| UpgradeError::DiskEncryptionKeyExchangeError(e.to_string()))
+        Ok(())
     }
 
     fn log(&self) -> &ReplicaLogger {

@@ -49,15 +49,15 @@ TYPE=$(blkid -o value --match-tag TYPE "${VAR_PARTITION}")
 # on having a clean slate here after first boot of an upgrade.
 if [ "${TYPE}" == "crypto_LUKS" ]; then
     echo "Found LUKS header in partition ${VAR_PARTITION} for /var."
-    cryptsetup luksOpen "${VAR_PARTITION}" var_crypt --key-file /boot/config/store.keyfile
+    /opt/ic/bin/print-disk-encryption-key var | cryptsetup luksOpen "${VAR_PARTITION}" var_crypt --key-file -
 else
     dd if=/dev/zero of=${VAR_PARTITION} count=16 bs=1M
     echo "No LUKS header found in partition ${VAR_PARTITION} for /var. Setting it up on first boot."
     # Set minimal iteration count -- we already use a random key with
     # maximal entropy, pbkdf doesn't gain anything (besides slowing
     # down boot by a couple seconds which needlessly annoys for testing).
-    cryptsetup luksFormat --type luks2 --pbkdf pbkdf2 --pbkdf-force-iterations 1000 "${VAR_PARTITION}" /boot/config/store.keyfile
-    cryptsetup luksOpen "${VAR_PARTITION}" var_crypt --key-file /boot/config/store.keyfile
+    /opt/ic/bin/print-disk-encryption-key var | cryptsetup luksFormat --type luks2 --pbkdf pbkdf2 --pbkdf-force-iterations 1000 "${VAR_PARTITION}" -
+    /opt/ic/bin/print-disk-encryption-key var | cryptsetup luksOpen "${VAR_PARTITION}" var_crypt --key-file -
     echo "Populating /var filesystem in ${VAR_PARTITION} on first boot."
     mkfs.ext4 -F /dev/mapper/var_crypt -d /var
     # Fix root inode (mkfs fails to set correct security context).

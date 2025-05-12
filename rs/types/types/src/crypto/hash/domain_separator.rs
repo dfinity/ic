@@ -63,6 +63,7 @@ pub enum DomainSeparator {
     CanisterHttpResponse,
     CryptoHashOfCanisterHttpResponseMetadata,
     CanisterHttpResponseShare,
+    NodeIdProof,
 }
 
 impl DomainSeparator {
@@ -128,6 +129,7 @@ impl DomainSeparator {
                 "ic-crypto-hash-of-canister-http-response-metadata-domain"
             }
             DomainSeparator::CanisterHttpResponseShare => "ic-canister-http-response-share-domain",
+            DomainSeparator::NodeIdProof => "ic-node-id-proof-domain",
         }
     }
 }

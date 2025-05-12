@@ -12,6 +12,7 @@ use crate::{
     execution_environment::Config as HypervisorConfig,
     firewall::BoundaryNodeConfig as BoundaryNodeFirewallConfig,
     firewall::ReplicaConfig as ReplicaFirewallConfig,
+    guestos_upgrade::GuestOsUpgradeConfig,
     http_handler::Config as HttpHandlerConfig,
     initial_ipv4_config::IPv4Config,
     logger::Config as LoggerConfig,
@@ -58,6 +59,7 @@ pub struct Config {
     pub bitcoin_payload_builder_config: BitcoinPayloadBuilderConfig,
     pub initial_ipv4_config: IPv4Config,
     pub domain: String,
+    pub guestos_upgrade: GuestOsUpgradeConfig,
 }
 
 /// Mirrors the Config struct except that fields are made optional. This is
@@ -86,6 +88,7 @@ pub struct ConfigOptional {
     pub bitcoin_payload_builder_config: Option<BitcoinPayloadBuilderConfig>,
     pub initial_ipv4_config: Option<IPv4Config>,
     pub domain: Option<String>,
+    pub guestos_upgrade: Option<GuestOsUpgradeConfig>,
 }
 
 impl Config {
@@ -119,6 +122,7 @@ impl Config {
             bitcoin_payload_builder_config: BitcoinPayloadBuilderConfig::default(),
             initial_ipv4_config: IPv4Config::default(),
             domain: String::default(),
+            guestos_upgrade: GuestOsUpgradeConfig::default(),
         }
     }
 
@@ -182,6 +186,7 @@ impl Config {
                 .initial_ipv4_config
                 .unwrap_or(default.initial_ipv4_config),
             domain: cfg.domain.unwrap_or_default(),
+            guestos_upgrade: cfg.guestos_upgrade.unwrap_or(default.guestos_upgrade),
         })
     }
 

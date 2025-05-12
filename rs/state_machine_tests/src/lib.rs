@@ -252,7 +252,6 @@ pub fn finalize_registry(
     let replica_version = ReplicaVersion::default();
     let blessed_replica_version = BlessedReplicaVersions {
         blessed_version_ids: vec![replica_version.clone().into()],
-        blessed_guest_launch_measurement_sha256_hexes: vec![], // TODO
     };
     registry_data_provider
         .add(
@@ -264,7 +263,7 @@ pub fn finalize_registry(
     let replica_version_record = ReplicaVersionRecord {
         release_package_sha256_hex: "".to_string(),
         release_package_urls: vec![],
-        guest_launch_measurement_sha256_hex: None,
+        guest_launch_measurements: vec![],
     };
     registry_data_provider
         .add(
@@ -333,6 +332,7 @@ fn make_nodes_registry(
             public_ipv4_config: None,
             domain: None,
             node_reward_type: None,
+            trusted_execution_environment: None,
         };
         registry_data_provider
             .add(

@@ -2,12 +2,15 @@
 
 set -e
 
-encryption_key="TEST_ENCRYPTION_KEY"
-
-#if echo $encryption_key | cryptsetup luksOpen /dev/vda10 vda10-crypt -; then
-if cryptsetup luksOpen /dev/vda10 vda10-crypt --key-file /boot/config/store.keyfile; then
-    echo "Successfully decrypted /dev/vda10"
+if [ -e /boot/config/guestos_type/upgrade ]; then
+  /opt/ic/bin/upgrade-client --replica-config-file /run/ic-node/config/ic.json5
+  poweroff
 else
-    echo "Could not decrypt /dev/vda10, will try communicating with old VM to set passphrase"
+#if echo $encryption_key | cryptsetup luksOpen /dev/vda10 vda10-crypt -; then
+  if cryptsetup luksOpen /dev/vda10 vda10-crypt --key-file /var/store.keyfile; then
+    echo "Successfully decrypted /dev/vda10"
+  else
+    echo "Successfully decrypted /dev/vda10"
+    exit 1
 fi
 

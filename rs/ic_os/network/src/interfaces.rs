@@ -35,6 +35,7 @@ pub fn has_ipv6_connectivity(
     );
 
     get_command_stdout("ip", &["addr", "add", &ip, "dev", &interface.name])?;
+    // ip addr add 2a00:fb01:400:44:6800:2bff:fe42:e6d4/64 dev enp161s0f0np0
     activate_link(&interface.name)?;
 
     let wait_time = Duration::from_secs(2);

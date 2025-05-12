@@ -14,6 +14,7 @@ pub mod embedders;
 pub mod execution_environment;
 pub mod firewall;
 pub mod flag_status;
+pub mod guestos_upgrade;
 pub mod http_handler;
 pub mod initial_ipv4_config;
 pub mod logger;

@@ -1,6 +1,8 @@
 pub mod api;
 pub mod custom_data;
 pub mod registry;
+pub mod server;
+pub mod sev_status;
 pub mod tls;
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
@@ -18,8 +20,26 @@ impl DiskEncryptionKeyProvider {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum Partition {
+    /// Encrypted var partition, private to the current GuestOS version.
+    Var,
+    /// Encrypted store partition, shared between GuestOS releases.
+    Store,
+}
+
+impl Partition {
+    fn name(&self) -> &str {
+        // The name must be max. 200 bytes
+        match self {
+            Self::Var => "var",
+            Self::Store => "store",
+        }
+    }
+}
+
 impl DiskEncryptionKeyProvider {
-    pub fn get_disk_encryption_key(&mut self) -> anyhow::Result<Vec<u8>> {
+    pub fn get_disk_encryption_key(&self, partition: Partition) -> anyhow::Result<String> {
         let mut field_select = GuestFieldSelect::default();
         // TODO: review this
         field_select.set_measurement(true);
@@ -31,26 +51,28 @@ impl DiskEncryptionKeyProvider {
 
         let mut key = vec![];
         key.extend(derived_key);
-        key.extend(b"ic-disk-encryption-key");
+        let domain = format!("ic-disk-encryption-key/{}", partition.name()).into_bytes();
+        key.push(domain.len().try_into().expect("Domain too long"));
+        key.extend(domain);
 
         let digest = ring::digest::digest(&ring::digest::SHA256, &key);
-        Ok(STANDARD.encode(digest.as_ref()).into_bytes())
+        Ok(STANDARD.encode(digest.as_ref()))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sev::firmware::guest::Firmware;
+    // use sev::firmware::guest::Firmware;
 
     #[test]
     fn test_get_disk_encryption_key() {
         // Mock a Firmware instance, or use a suitable framework for mocking where possible
         // let firmware = Firmware::default(); // Assuming default implementation exists for testing
         // let mut key_provider = DiskEncryptionKeyProvider { sev_firmware: firmware };
-        let mut key_provider = DiskEncryptionKeyProvider::new().unwrap();
+        let key_provider = DiskEncryptionKeyProvider::new().unwrap();
 
-        let key_result = key_provider.get_disk_encryption_key();
+        let key_result = key_provider.get_disk_encryption_key(Partition::Store);
 
         assert!(
             key_result.is_ok(),

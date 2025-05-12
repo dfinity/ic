@@ -1,6 +1,6 @@
 <!--<domain type='{{ cpu_domain }}' id='1'>-->
 <domain type='kvm' id='2'>
-    <name>guestos_upgrader</name>
+    <name>guestos-upgrader</name>
     <uuid>ab20bf21-b3af-4bb3-a5df-5cdad7453325</uuid>
     <metadata>
         <libosinfo:libosinfo xmlns:libosinfo="http://libosinfo.org/xmlns/libvirt/domain/1.0">
@@ -32,7 +32,7 @@
 <!--        <loader readonly='yes' stateless='yes'>/usr/share/ovmf/OVMF.fd</loader>-->
         <loader readonly='yes' stateless='yes'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
 
-<nvram>/var/lib/libvirt/qemu/nvram/guestos_upgrader_VARS.fd</nvram>
+<nvram>/var/lib/libvirt/qemu/nvram/guestos-upgrader_VARS.fd</nvram>
             <kernel>/mnt/loop0p4/vmlinuz</kernel>
             <initrd>/mnt/loop0p4/initrd.img</initrd>
 <!--            <cmdline>security=selinux selinux=1 enforcing=0 root_hash=373b8526c4956b18c9031228f14c62b54fef19e3d692412df93bf9faed018ed5</cmdline>-->
@@ -180,7 +180,7 @@
                 <model name='isa-serial'/>
             </target>
             <alias name='serial0'/>
-            <log file='/var/log/libvirt/qemu/guestos_upgrader-serial.log' append='off'/>
+            <log file='/var/log/libvirt/qemu/guestos-upgrader-serial.log' append='off'/>
         </serial>
         <console type='pty' tty='/dev/pts/3'>
             <source path='/dev/pts/3'/>

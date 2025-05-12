@@ -101,8 +101,7 @@ pub fn generate_networkd_config(
     let network_config_variables: HashMap<String, String> = config_map_from_path(network_config)?;
     eprintln!("Network parameters {:#?}", network_config_variables);
 
-    let upgrade_vm = Path::new("/var/lib/ic/guestos_type/upgrade").exists();
-    eprintln!("IS UPGRADE: {:?}", upgrade_vm);
+    let upgrade_vm = Path::new("/boot/config/guestos_type/upgrade").exists();
     let network_info: NetworkInfo =
         create_network_info(&network_config_variables, ipv4_info, upgrade_vm)?;
     eprintln!("{:#?}", network_info);

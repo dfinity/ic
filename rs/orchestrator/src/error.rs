@@ -77,6 +77,9 @@ pub(crate) enum OrchestratorError {
 
     /// The given node is missing a domain name
     DomainNameMissingError(NodeId),
+
+    /// An error occurred while handling disk encryption key exchange during IC-OS upgrade.
+    DiskEncryptionKeyExchangeError(String),
 }
 
 impl OrchestratorError {
@@ -177,6 +180,12 @@ impl fmt::Display for OrchestratorError {
                 "Node {} does not have an associated domain name",
                 node_id
             ),
+            OrchestratorError::DiskEncryptionKeyExchangeError(msg) => {
+                write!(
+                    f,
+                    "Failed to handle disk encryption key exchange during IC-OS upgrade: {msg}"
+                )
+            }
         }
     }
 }
@@ -200,6 +209,9 @@ impl From<UpgradeError> for OrchestratorError {
             UpgradeError::FileDownloadError(e) => OrchestratorError::FileDownloadError(e),
             UpgradeError::GenericError(s) => OrchestratorError::UpgradeError(s),
             UpgradeError::RebootTimeError(s) => OrchestratorError::RebootTimeError(s),
+            UpgradeError::DiskEncryptionKeyExchangeError(s) => {
+                OrchestratorError::DiskEncryptionKeyExchangeError(s)
+            }
         }
     }
 }

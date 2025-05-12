@@ -7,6 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+attestation = { path = "../ic_os/verification/attestation" }
 async-trait = { workspace = true }
 backoff = { workspace = true }
 candid = { workspace = true }
@@ -45,6 +46,7 @@ ic-registry-local-store = { path = "../registry/local_store" }
 ic-registry-replicator = { path = "./registry_replicator" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
+ic-os-upgrade = { path = "../ic_os/verification/upgrade" }
 idna = { workspace = true }
 indoc = "1.0.9"
 nix = { workspace = true }
@@ -61,6 +63,8 @@ strum_macros = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
+thiserror = { workspace = true }
+vsock_lib = { path = "../ic_os/vsock/vsock_lib" }
 
 [dev-dependencies]
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
