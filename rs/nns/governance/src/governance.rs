@@ -5625,11 +5625,22 @@ impl Governance {
         }
     }
 
+    /// Preconditions:
+    /// 0. `register_vote.proposal` is a proposal ID of a proposal that still accepts votes.
+    /// 1. Neuron identified by `neuron_id` is authorized to vote on that proposal
+    ///    (either due to being the controller or a hotkey of a neuron that has a ballot).
+    /// 2. `register_vote.vote` must not be `Vote::Unspecified`.
+    /// 3. The neuron has not already cast its vote.
+    ///
+    /// Practically, neurons that have already dissolved cannto vote, so long as the minimal
+    /// possible dissolve delay is greated than the maximum possible voting period. Refer to:
+    /// - `VotingPowerEconomics.NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS_BOUNDS`
+    /// - `ProposalData.evaluate_wait_for_quiet`
     async fn register_vote(
         &mut self,
         neuron_id: &NeuronId,
         caller: &PrincipalId,
-        pb: &manage_neuron::RegisterVote,
+        register_vote: &manage_neuron::RegisterVote,
     ) -> Result<(), GovernanceError> {
         let now_seconds = self.env.now();
         let voting_period_seconds = self.voting_period_seconds();
@@ -5644,7 +5655,10 @@ impl Governance {
                 "Caller is not authorized to vote for neuron.",
             ));
         }
-        let proposal_id = pb.proposal.as_ref().ok_or_else(||
+
+        let manage_neuron::RegisterVote { proposal, vote } = register_vote;
+
+        let proposal_id = proposal.as_ref().ok_or_else(||
             // Proposal not specified.
             GovernanceError::new_with_message(ErrorType::PreconditionFailed, "Vote must include a proposal id."))?;
         let proposal = self
@@ -5660,7 +5674,7 @@ impl Governance {
             .map(|p| p.topic())
             .unwrap_or(Topic::Unspecified);
 
-        let vote = Vote::try_from(pb.vote).unwrap_or(Vote::Unspecified);
+        let vote = Vote::try_from(vote).unwrap_or(Vote::Unspecified);
         if vote == Vote::Unspecified {
             // Invalid vote specified, i.e., not yes or no.
             return Err(GovernanceError::new_with_message(
