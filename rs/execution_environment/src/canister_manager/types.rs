@@ -616,7 +616,7 @@ impl AsErrorHelp for CanisterManagerError {
                 }
             }
             CanisterManagerError::ReservedCyclesLimitIsTooLow { .. } => ErrorHelp::UserError {
-                suggestion: "Set the reserved cycles limit in the canister settings to a value higher than the current reserved cycles balance.".to_string(),
+                suggestion: "Set the reserved cycles limit in the canister settings to a value that is at least the current reserved cycles balance.".to_string(),
                 doc_link: "reserved-cycles-limit-is-too-low".to_string(),
             },
             CanisterManagerError::WasmChunkStoreError { .. } => ErrorHelp::UserError {
