@@ -1,3 +1,4 @@
+load("//bazel:defs.bzl", "file_size_check")
 load("//ic-os:defs.bzl", "icos_build")
 load("//ic-os/hostos:defs.bzl", "image_deps")
 load("//publish:defs.bzl", "artifact_bundle")
@@ -6,17 +7,30 @@ load("//publish:defs.bzl", "artifact_bundle")
 # Check
 #       //ic-os/hostos/BUILD.bazel for examples
 #    or //ic-os/defs.bzl for the full list of targets.
-icos_build(
+icos_images = icos_build(
     name = "prod",
     image_deps_func = image_deps,
-    max_file_sizes = {
-        "disk-img.tar.zst": 900 * 1000 * 1000,  # 837 MB on 2025-03-21
-        "update-img.tar.zst": 900 * 1000 * 1000,  # 835 MB on 2025-03-21
-        "update-img-test.tar.zst": 900 * 1000 * 1000,  # 835 MB on 2025-03-21
-    },
     upload_prefix = "host-os",
     visibility = ["//rs:ic-os-pkg"],
     vuln_scan = False,
+)
+
+file_size_check(
+    name = "update_img_size_check",
+    file = icos_images.update_image,
+    max_file_size = 900 * 1000 * 1000,  # 835 MB on 2025-03-21
+)
+
+file_size_check(
+    name = "disk_img_size_check",
+    file = icos_images.disk_image,
+    max_file_size = 900 * 1000 * 1000,  # 837 MB on 2025-03-21
+)
+
+file_size_check(
+    name = "update_img_test_size_check",
+    file = icos_images.update_image_test,
+    max_file_size = 900 * 1000 * 1000,  # 835 MB on 2025-03-21
 )
 
 # Export checksums & build artifacts
