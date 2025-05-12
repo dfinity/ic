@@ -2234,7 +2234,7 @@ impl CanisterManager {
         // The memory has already been paid for in `create_snapshot_from_metadata`,
         // but the instructions used have to be accounted for.
         let snapshot_inner = Arc::make_mut(snapshot);
-        match args.kind {
+        let num_bytes = match args.kind {
             CanisterSnapshotDataOffset::WasmModule { offset } => {
                 let res = snapshot_inner
                     .execution_snapshot_mut()
@@ -2246,14 +2246,17 @@ impl CanisterManager {
                         size: args.chunk.len() as u64,
                     });
                 }
+                args.chunk.len() as u64
             }
             CanisterSnapshotDataOffset::MainMemory { offset } => {
                 let mut buffer = Buffer::new(snapshot_inner.wasm_memory().page_map.clone());
                 buffer.write(&args.chunk, offset as usize);
+                args.chunk.len() as u64
             }
             CanisterSnapshotDataOffset::StableMemory { offset } => {
                 let mut buffer = Buffer::new(snapshot_inner.stable_memory().page_map.clone());
                 buffer.write(&args.chunk, offset as usize);
+                args.chunk.len() as u64
             }
             CanisterSnapshotDataOffset::WasmChunk => {
                 // The chunk store is initialized as empty, and no memory cost has been charged yet.
@@ -2287,20 +2290,20 @@ impl CanisterManager {
                 )?;
                 self.memory_usage_updates(canister, round_limits, validated_memory_usage);
 
-                if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
-                    canister.scheduler_state.heap_delta_debit += chunk_bytes;
-                }
-                round_limits.instructions -= as_round_instructions(instructions);
-
                 // We don't have to return the hash, because the user already knows it.
                 let _hash = snapshot_inner
                     .chunk_store_mut()
                     .insert_chunk(self.config.wasm_chunk_store_max_size, &args.chunk)
                     .expect("Error: Insert chunk cannot fail after checking `can_insert_chunk`");
+                chunk_bytes.get()
             }
         };
+        if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
+            canister.scheduler_state.heap_delta_debit += NumBytes::new(num_bytes);
+        }
+        let instructions = NumInstructions::new(num_bytes);
+        round_limits.instructions -= as_round_instructions(instructions);
         // Return the instructions needed to write the chunk to the destination.
-        let instructions = NumInstructions::new(args.chunk.len() as u64);
         Ok(instructions)
     }
 
