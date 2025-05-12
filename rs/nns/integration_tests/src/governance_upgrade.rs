@@ -129,8 +129,6 @@ fn test_root_restarts_canister_during_upgrade_canister_with_stop_canister_timeou
         canister_id: GOVERNANCE_CANISTER_ID,
         wasm_module,
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         chunked_canister_wasm: None,
     };
 

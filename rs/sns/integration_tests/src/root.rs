@@ -315,8 +315,6 @@ fn test_root_restarts_governance_on_stop_canister_timeout() {
         canister_id: GOVERNANCE_CANISTER_ID,
         wasm_module,
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         chunked_canister_wasm: None,
     };
 
