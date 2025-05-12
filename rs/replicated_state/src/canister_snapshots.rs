@@ -378,7 +378,6 @@ impl CanisterSnapshot {
         canister_version: u64,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Self {
-        // TODO [EXC-2039]: grow these to the specified sizes.
         let stable_memory = PageMemory {
             page_map: PageMap::new(Arc::clone(&fd_factory)),
             size: NumWasmPages::new(metadata.stable_memory_size as usize / WASM_PAGE_SIZE_IN_BYTES),

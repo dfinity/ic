@@ -2112,7 +2112,7 @@ impl CanisterManager {
             .memory_usage()
             .saturating_add(&new_snapshot_size)
             .saturating_sub(&replace_snapshot_size);
-        self.memory_usage_checks(
+        let validated_memory_usage = self.memory_usage_checks(
             subnet_size,
             canister,
             round_limits,
@@ -2121,7 +2121,7 @@ impl CanisterManager {
             resource_saturation,
         )?;
 
-        // Charge for taking a snapshot of the canister.
+        // Charge for creating a snapshot of the given size.
         let instructions = self
             .config
             .canister_snapshot_baseline_instructions
@@ -2159,14 +2159,7 @@ impl CanisterManager {
             );
         }
 
-        // TODO: the new_snapshot does not have the correct size yet because of the page-map
-        // backed memories. this means we may be underestimating the memory here (new_snapshot.heap_delta).
-
-        // Actually deduct memory from the subnet. It's safe to unwrap
-        // here because we already checked the available memory above.
-        round_limits.subnet_available_memory
-            .try_decrement(new_snapshot_size, NumBytes::from(0), NumBytes::from(0))
-            .expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
+        self.memory_usage_updates(canister, round_limits, validated_memory_usage);
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
             canister.scheduler_state.heap_delta_debit = canister
