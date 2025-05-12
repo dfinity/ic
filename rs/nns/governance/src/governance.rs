@@ -5632,7 +5632,7 @@ impl Governance {
     /// 2. `register_vote.vote` must not be `Vote::Unspecified`.
     /// 3. The neuron has not already cast its vote.
     ///
-    /// Practically, neurons that have already dissolved cannto vote, so long as the minimal
+    /// Practically, neurons that have already dissolved cannot vote, as long as the minimal
     /// possible dissolve delay is greated than the maximum possible voting period. Refer to:
     /// - `VotingPowerEconomics.NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS_BOUNDS`
     /// - `ProposalData.evaluate_wait_for_quiet`
