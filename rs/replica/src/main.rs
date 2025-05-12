@@ -1,4 +1,4 @@
-//! Replica -- Internet Computer
+//! Replica -- Internet Computer!
 
 use ic_config::Config;
 use ic_crypto_sha2::Sha256;
