@@ -1,4 +1,5 @@
 use crate::{
+    metrics::DkgPayloadBuilderMetrics,
     payload_validator::validate_payload,
     utils::{self, tags_iter, vetkd_key_ids_for_subnet},
     MAX_REMOTE_DKGS_PER_INTERVAL, MAX_REMOTE_DKG_ATTEMPTS, REMOTE_DKG_REPEATED_FAILURE_ERROR,
@@ -13,6 +14,7 @@ use ic_interfaces::{
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{error, warn, ReplicaLogger};
+use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::{
     chain_key_initialization::Initialization, CatchUpPackageContents,
 };
@@ -46,7 +48,7 @@ pub struct DkgPayloadBuilderImpl {
     crypto: Arc<dyn ConsensusCrypto>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
-    // TODO: Metrics
+    metrics: DkgPayloadBuilderMetrics,
     log: ReplicaLogger,
 }
 
@@ -97,9 +99,31 @@ impl DkgPayloadBuilder for DkgPayloadBuilderImpl {
             payload,
             &*self.state_manager,
             validation_context,
-            todo!(),
+            &self.metrics.dkg_validator,
             &self.log,
         )
+    }
+}
+
+impl DkgPayloadBuilderImpl {
+    pub fn new(
+        subnet_id: SubnetId,
+        registry_client: Arc<dyn RegistryClient>,
+        crypto: Arc<dyn ConsensusCrypto>,
+        dkg_pool: Arc<RwLock<dyn DkgPool>>,
+        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+        metrics_registry: &MetricsRegistry,
+        log: ReplicaLogger,
+    ) -> Self {
+        Self {
+            subnet_id,
+            registry_client,
+            crypto,
+            dkg_pool,
+            state_manager,
+            metrics: DkgPayloadBuilderMetrics::new(metrics_registry),
+            log,
+        }
     }
 }
 

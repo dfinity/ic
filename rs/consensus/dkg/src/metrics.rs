@@ -1,6 +1,6 @@
 use ic_metrics::MetricsRegistry;
 
-struct DkgPayloadBuilderMetrics {
+pub(crate) struct DkgPayloadBuilderMetrics {
     pub(crate) dkg_validator: IntCounterVec,
 }
 
