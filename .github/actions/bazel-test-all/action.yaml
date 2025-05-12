@@ -120,22 +120,8 @@ runs:
             echo "Building as user: $(whoami)"
             echo "Bazel version: $(bazel version)"
 
-
-            rc=0
             if [[ $release_build == "true" ]]; then
-              bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}" --config=release || rc="$?"
+              bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}" --config=release
             else
-              bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}" || rc="$?"
+              bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}"
             fi
-
-            if ! [[ $rc -eq 0 ]]; then
-              exit "$rc"
-            fi
-
-            # TODO move to 'release_build'
-            for uploadable in $(bazel query "attr(tags, '\\buploadable\\b', //...)"); do
-              echo "Uploading: $uploadable"
-              bundle=$(bazel cquery "$uploadable" --output=files)
-              echo "bundle is $bundle"
-              ls "$bundle"
-            done
