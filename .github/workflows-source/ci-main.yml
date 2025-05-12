@@ -189,7 +189,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - <<: *checkout
-      - <<: *python-setup
+      #- <<: *python-setup
       - name: Run Python CI Tests
         id: python-ci-tests
         shell: bash
