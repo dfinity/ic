@@ -1,3 +1,4 @@
+use crate::allowances::list_allowances;
 use crate::in_memory_ledger::{verify_ledger_state, InMemoryLedger};
 use crate::metrics::{parse_metric, retrieve_metrics};
 use assert_matches::assert_matches;
@@ -31,9 +32,7 @@ use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc::generic_value::Value as GenericValue;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount, DEFAULT_SUBACCOUNT};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
-use icrc_ledger_types::icrc103::get_allowances::{
-    Allowances, GetAllowancesArgs, GetAllowancesError,
-};
+use icrc_ledger_types::icrc103::get_allowances::{Allowances, GetAllowancesArgs};
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
@@ -64,6 +63,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+mod allowances;
 pub mod fee_collector;
 pub mod in_memory_ledger;
 pub mod metrics;
@@ -3671,27 +3671,6 @@ where
         ErrorCode::CanisterCalledTrap,
         "the minting account cannot delegate mints",
     );
-}
-
-fn list_allowances(
-    env: &StateMachine,
-    ledger: CanisterId,
-    from: Principal,
-    args: GetAllowancesArgs,
-) -> Result<Allowances, GetAllowancesError> {
-    Decode!(
-        &env.execute_ingress_as(
-            PrincipalId(from),
-            ledger,
-            "icrc103_get_allowances",
-            Encode!(&args)
-            .unwrap()
-        )
-        .expect("failed to list allowances")
-        .bytes(),
-        Result<Allowances, GetAllowancesError>
-    )
-    .expect("failed to decode icrc103_get_allowances response")
 }
 
 // The test focuses on testing whether given an (approver, spender) pair the correct
