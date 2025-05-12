@@ -1863,15 +1863,11 @@ impl IDkgMessageDb {
             };
 
             // Stop iterating if we hit a different pattern.
-            if let Some(pattern) = &pattern_clone {
-                let same_pattern = match pattern {
-                    IterationPattern::GroupTag(group_tag) => group_tag == &id.prefix().group_tag(),
-                    IterationPattern::Prefix(prefix) => prefix == &id.prefix(),
-                };
-
-                if !same_pattern {
-                    return None;
-                }
+            if pattern_clone.as_ref().is_some_and(|pattern| match pattern {
+                IterationPattern::GroupTag(group_tag) => group_tag != &id.prefix().group_tag(),
+                IterationPattern::Prefix(prefix) => prefix != &id.prefix(),
+            }) {
+                return None;
             }
 
             // Deserialize value bytes and convert to inner type
