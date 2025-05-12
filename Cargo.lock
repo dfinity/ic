@@ -10480,6 +10480,7 @@ dependencies = [
  "candid",
  "dfn_core",
  "ic-base-types",
+ "ic-cdk 0.18.0",
  "ic-ledger-core",
  "ic-nervous-system-common",
  "ic-nervous-system-runtime",
@@ -11968,7 +11969,7 @@ name = "ic-registry-fetch-large-record-test-canister"
 version = "0.0.1"
 dependencies = [
  "candid",
- "ic-cdk 0.17.1",
+ "ic-cdk 0.18.0",
  "ic-crypto-sha2",
  "ic-nervous-system-canisters",
  "ic-registry-transport",
