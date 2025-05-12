@@ -134,6 +134,7 @@ jobs:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
 
   dependency-scan-nightly:
+    if: false
     name: Dependency Scan Nightly
     <<: *dind-large-setup
     timeout-minutes: 60

@@ -1,9 +1,9 @@
 use ic_base_types::PrincipalId;
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::{
     caller as ic_cdk_caller, heartbeat, init, post_upgrade, pre_upgrade, println, query, spawn,
     update,
 };
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_canisters::cmc::CMCCanister;
 use ic_nervous_system_common::{
     memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
@@ -16,8 +16,6 @@ use ic_nns_common::{
     types::{NeuronId, ProposalId},
 };
 use ic_nns_constants::LEDGER_CANISTER_ID;
-#[cfg(feature = "test")]
-use ic_nns_governance::governance::TimeWarp as GovTimeWarp;
 use ic_nns_governance::{
     canister_state::{governance, governance_mut, set_governance, CanisterEnv},
     encode_metrics,
@@ -27,7 +25,9 @@ use ic_nns_governance::{
     storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
     timer_tasks::schedule_tasks,
 };
-use ic_nns_governance_api::pb::v1::{
+#[cfg(feature = "test")]
+use ic_nns_governance_api::test_api::TimeWarp;
+use ic_nns_governance_api::{
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
     governance::GovernanceCachedMetrics,
     governance_error::ErrorType,
@@ -46,10 +46,11 @@ use ic_nns_governance_api::pb::v1::{
     SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
     SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
 };
-#[cfg(feature = "test")]
-use ic_nns_governance_api::test_api::TimeWarp;
 use std::sync::Arc;
 use std::{boxed::Box, time::Duration};
+
+#[cfg(feature = "test")]
+use ic_nns_governance::governance::TimeWarp as GovTimeWarp;
 
 #[cfg(not(feature = "tla"))]
 use ic_nervous_system_canisters::ledger::IcpLedgerCanister;

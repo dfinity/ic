@@ -11,8 +11,9 @@ use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamErr
 use ic_interfaces_state_manager::*;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
-    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, InstallChunkedCodeArgs,
-    LoadCanisterSnapshotArgs, TakeCanisterSnapshotArgs, UploadChunkArgs,
+    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotDataKind,
+    InstallChunkedCodeArgs, LoadCanisterSnapshotArgs, ReadCanisterSnapshotDataArgs,
+    TakeCanisterSnapshotArgs, UploadChunkArgs,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
@@ -55,6 +56,7 @@ use ic_test_utilities_types::{
 use ic_types::batch::{
     BatchSummary, CanisterQueryStats, QueryStats, QueryStatsPayload, RawQueryStats, TotalQueryStats,
 };
+use ic_types::state_manager::StateManagerError;
 use ic_types::{
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -364,6 +366,85 @@ fn lazy_pagemaps() {
     env.execute_ingress(canister_id, "write_heap_64k", vec![])
         .unwrap();
     assert!(page_maps_by_status("loaded", &env) > 0);
+}
+
+#[test]
+fn lazy_wasms() {
+    fn wasm_files_by_source(source: &str, env: &StateMachine) -> i64 {
+        env.metrics_registry()
+            .prometheus_registry()
+            .gather()
+            .into_iter()
+            .filter(|x| x.get_name() == "state_manager_num_loaded_wasm_files_by_source")
+            .map(|x| -> f64 {
+                x.get_metric()
+                    .iter()
+                    .find(|x| {
+                        for l in x.get_label() {
+                            if l.get_name() == "source" && l.get_value() == source {
+                                return true;
+                            }
+                        }
+                        false
+                    })
+                    .unwrap()
+                    .get_gauge()
+                    .get_value()
+            })
+            .next()
+            .unwrap() as i64
+    }
+
+    // Enable snapshot downloading.
+    let env = StateMachineBuilder::new()
+        .with_snapshot_download_enabled(true)
+        .build();
+    env.set_checkpoints_enabled(true);
+
+    let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
+    env.tick();
+
+    // The execution layer stores the compilation cache.
+    // Therefore, executing the ingress message does not require loading the wasm file.
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    assert_eq!(wasm_files_by_source("canister", &env), 0);
+    assert_eq!(wasm_files_by_source("snapshot", &env), 0);
+
+    // Restarting the node clears the in-memory compilation cache.
+    // The next execution requires loading the wasm binary from disk.
+    let env = env.restart_node_with_snapshot_download_enabled();
+    env.tick();
+    assert_eq!(wasm_files_by_source("canister", &env), 0);
+    assert_eq!(wasm_files_by_source("snapshot", &env), 0);
+
+    read_and_assert_eq(&env, canister_id, 1);
+    // After the restart, the wasm binary is loaded from the checkpoint, so we expect a file load from the "canister" source.
+    assert_eq!(wasm_files_by_source("canister", &env), 1);
+    assert_eq!(wasm_files_by_source("snapshot", &env), 0);
+
+    // Create a snapshot of the canister.
+    let snapshot_id = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs {
+            canister_id: canister_id.into(),
+            replace_snapshot: None,
+        })
+        .unwrap()
+        .snapshot_id();
+
+    // Because state machine performs checkpointing every round,
+    // here the snapshot wasm binary has already switched to the file in snapshot layout.
+    // Therefore, metrics from "canister" source and "snapshot" source won't affect each other.
+    let args = ReadCanisterSnapshotDataArgs::new(
+        canister_id,
+        snapshot_id,
+        CanisterSnapshotDataKind::WasmModule { offset: 0, size: 1 },
+    );
+    let _ = env
+        .read_canister_snapshot_data(&args)
+        .expect("Error reading snapshot data");
+
+    assert_eq!(wasm_files_by_source("canister", &env), 0);
+    assert_eq!(wasm_files_by_source("snapshot", &env), 1);
 }
 
 #[test]
@@ -6047,8 +6128,8 @@ fn wasm_binaries_can_be_correctly_switched_from_memory_to_checkpoint() {
             .wasm_binary;
 
         // Before checkpointing, wasm binaries of both the canister and the snapshot are in memory.
-        assert!(canister_wasm_binary.file().is_none());
-        assert!(snapshot_wasm_binary.file().is_none());
+        assert!(!canister_wasm_binary.is_file());
+        assert!(!snapshot_wasm_binary.is_file());
 
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         state_manager.flush_tip_channel();
@@ -6080,15 +6161,15 @@ fn wasm_binaries_can_be_correctly_switched_from_memory_to_checkpoint() {
 
         // After checkpointing, wasm binaries of both the canister and the snapshot are backed by files in checkpoint@1
         // and file contents can be correctly read.
-        assert_eq!(canister_wasm_binary.as_slice(), EMPTY_WASM);
+        // Note that `wasm_file_not_loaded_and_path_matches()` needs to be called before `as_slice()`
+        // because the path is no longer visible after we load the wasm file and thus cannot be checked.
         assert!(canister_wasm_binary
-            .file()
-            .is_some_and(|path| path == canister_layout.wasm().raw_path()));
+            .wasm_file_not_loaded_and_path_matches(canister_layout.wasm().raw_path()));
+        assert_eq!(canister_wasm_binary.as_slice(), EMPTY_WASM);
 
-        assert_eq!(snapshot_wasm_binary.as_slice(), EMPTY_WASM);
         assert!(snapshot_wasm_binary
-            .file()
-            .is_some_and(|path| path == snapshot_layout.wasm().raw_path()));
+            .wasm_file_not_loaded_and_path_matches(snapshot_layout.wasm().raw_path()));
+        assert_eq!(snapshot_wasm_binary.as_slice(), EMPTY_WASM);
 
         assert_error_counters(metrics);
     });
@@ -6124,10 +6205,9 @@ fn wasm_binaries_can_be_correctly_switched_from_checkpoint_to_checkpoint() {
             .binary;
 
         // After checkpointing at height 1, wasm binary the canister is backed by file in checkpoint@1.
-        assert_eq!(canister_wasm_binary.as_slice(), EMPTY_WASM);
         assert!(canister_wasm_binary
-            .file()
-            .is_some_and(|path| path == canister_layout.wasm().raw_path()));
+            .wasm_file_not_loaded_and_path_matches(canister_layout.wasm().raw_path()));
+        assert_eq!(canister_wasm_binary.as_slice(), EMPTY_WASM);
 
         // We create a snapshot from the canister, which already has wasm binary backed by file on disk.
         let new_snapshot = CanisterSnapshot::from_canister(
@@ -6174,15 +6254,13 @@ fn wasm_binaries_can_be_correctly_switched_from_checkpoint_to_checkpoint() {
 
         // After checkpointing at height 2, wasm binaries of both the canister and the snapshot are backed by files in checkpoint@2
         // and file contents can be correctly read.
-        assert_eq!(canister_wasm_binary.as_slice(), EMPTY_WASM);
         assert!(canister_wasm_binary
-            .file()
-            .is_some_and(|path| path == canister_layout.wasm().raw_path()));
+            .wasm_file_not_loaded_and_path_matches(canister_layout.wasm().raw_path()));
+        assert_eq!(canister_wasm_binary.as_slice(), EMPTY_WASM);
 
-        assert_eq!(snapshot_wasm_binary.as_slice(), EMPTY_WASM);
         assert!(snapshot_wasm_binary
-            .file()
-            .is_some_and(|path| path == snapshot_layout.wasm().raw_path()));
+            .wasm_file_not_loaded_and_path_matches(snapshot_layout.wasm().raw_path()));
+        assert_eq!(snapshot_wasm_binary.as_slice(), EMPTY_WASM);
 
         assert_error_counters(metrics);
     });

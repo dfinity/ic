@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -17,7 +17,7 @@ CANISTER_HTTP_BASE_DEPS = [
     "//rs/types/management_canister_types",
     "@crate_index//:anyhow",
     "@crate_index//:candid",
-    "@crate_index//:ic-cdk",
+    "@crate_index//:ic_cdk_0_17_1",
     "@crate_index//:slog",
 ]
 
@@ -27,9 +27,18 @@ COMMON_DEPS = [
     "//rs/registry/subnet_type",
     "//rs/tests/driver:ic-system-test-driver",
     "@crate_index//:anyhow",
+    "@crate_index//:itertools",
+    "@crate_index//:reqwest",
     "@crate_index//:slog",
     "@crate_index//:slog-async",
     "@crate_index//:slog-term",
+]
+
+HTTP_ENDPOINTS_DEPS = [
+    # Keep sorted.
+    "//rs/crypto/tree_hash",
+    "//rs/http_endpoints/test_agent",
+    "//rs/types/types",
 ]
 
 system_test_nns(
@@ -65,7 +74,6 @@ system_test_nns(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
-        BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS + [
         "//rs/registry/subnet_features",
@@ -94,7 +102,6 @@ system_test_nns(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
-        BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS + [
         "//rs/registry/subnet_features",
@@ -248,8 +255,20 @@ system_test_nns(
         "//rs/registry/keys",
         "//rs/types/types",
         "@crate_index//:candid",
-        "@crate_index//:reqwest",
         "@crate_index//:url",
+    ],
+)
+
+system_test(
+    name = "http_endpoints_public_spec_test",
+    env = UNIVERSAL_CANISTER_ENV,
+    flaky = False,
+    target_compatible_with = ["@platforms//os:linux"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = COMMON_DEPS + HTTP_ENDPOINTS_DEPS + [
+        "@crate_index//:ic-agent",
+        "@crate_index//:tokio",
+        "@crate_index//:tokio-util",
     ],
 )
 

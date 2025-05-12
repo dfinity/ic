@@ -576,7 +576,6 @@ pub fn syscalls<
 
     linker
         .func_wrap("ic0", "debug_print", {
-            let feature_flags = feature_flags.clone();
             move |mut caller: Caller<'_, StoreData>, offset: I, length: I| {
                 let length: u64 = length.try_into().expect("Failed to convert I to u64");
                 let mut num_bytes = 0;

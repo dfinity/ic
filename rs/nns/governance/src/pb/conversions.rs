@@ -1,6 +1,6 @@
 use crate::pb::v1 as pb;
 use ic_crypto_sha2::Sha256;
-use ic_nns_governance_api::pb::v1 as pb_api;
+use ic_nns_governance_api as pb_api;
 
 use crate::pb::proposal_conversions::convert_proposal;
 
@@ -3997,6 +3997,19 @@ impl From<ic_nns_governance_api::test_api::TimeWarp> for crate::TimeWarp {
     fn from(value: ic_nns_governance_api::test_api::TimeWarp) -> Self {
         Self {
             delta_s: value.delta_s,
+        }
+    }
+}
+
+impl From<pb::MaturityDisbursement> for pb_api::MaturityDisbursement {
+    fn from(item: pb::MaturityDisbursement) -> Self {
+        Self {
+            amount_e8s: Some(item.amount_e8s),
+            account_to_disburse_to: item.account_to_disburse_to.map(|x| x.into()),
+            timestamp_of_disbursement_seconds: Some(item.timestamp_of_disbursement_seconds),
+            finalize_disbursement_timestamp_seconds: Some(
+                item.finalize_disbursement_timestamp_seconds,
+            ),
         }
     }
 }

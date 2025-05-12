@@ -191,7 +191,6 @@ fn test_add_neurons() {
     // Step 3.1: verify that the active neuron is in the heap, not in the stable neuron store, and
     // can be read.
     assert!(is_neuron_in_stable(active_neuron.id()));
-    assert!(!is_neuron_in_heap(&neuron_store, active_neuron.id()));
     let active_neuron_read_result =
         neuron_store.with_neuron(&active_neuron.id(), |neuron| neuron.clone());
     assert_eq!(active_neuron_read_result, Ok(active_neuron.clone()));
@@ -199,7 +198,6 @@ fn test_add_neurons() {
     // Step 3.2: verify that inactive neuron is in the stable neuron store, not in the heap, and can
     // be read.
     assert!(is_neuron_in_stable(inactive_neuron.id()));
-    assert!(!is_neuron_in_heap(&neuron_store, inactive_neuron.id()));
     let inactive_neuron_read_result =
         neuron_store.with_neuron(&inactive_neuron.id(), |neuron| neuron.clone());
     assert_eq!(inactive_neuron_read_result, Ok(inactive_neuron.clone()));
@@ -276,8 +274,7 @@ fn test_neuron_store_new_then_restore() {
     );
 
     // Step 3: take its state and restore from it.
-    let heap_neurons = neuron_store.take();
-    let restored_neuron_store = NeuronStore::new_restored(heap_neurons);
+    let restored_neuron_store = NeuronStore::new_restored();
 
     // Step 4: verify again the neurons and followee index are in the restored neuron store.
     for neuron in neurons.values() {
@@ -314,10 +311,6 @@ fn inactive_neuron_builder(id: u64) -> NeuronBuilder {
         .with_dissolve_state_and_age(DissolveStateAndAge::DissolvingOrDissolved {
             when_dissolved_timestamp_seconds: 1,
         })
-}
-
-fn is_neuron_in_heap(neuron_store: &NeuronStore, neuron_id: NeuronId) -> bool {
-    neuron_store.heap_neurons.contains_key(&neuron_id.id)
 }
 
 fn is_neuron_in_stable(neuron_id: NeuronId) -> bool {
@@ -711,24 +704,31 @@ fn test_get_non_empty_neuron_ids_readable_by_caller() {
     let neuron_with_staked_maturity = neuron_builder(5)
         .with_staked_maturity_e8s_equivalent(1)
         .build();
+    let neuron_with_maturity_disbursement = neuron_builder(6)
+        .with_maturity_disbursements_in_progress(vec![MaturityDisbursement {
+            finalize_disbursement_timestamp_seconds: 1,
+            ..Default::default()
+        }])
+        .build();
     let neuron_store = NeuronStore::new(btreemap! {
         1 => neuron_empty,
         2 => neuron_empty_with_fees,
         3 => neuron_with_stake,
         4 => neuron_with_maturity,
         5 => neuron_with_staked_maturity,
+        6 => neuron_with_maturity_disbursement,
     });
 
     assert_eq!(
         neuron_store.get_non_empty_neuron_ids_readable_by_caller(controller),
-        btreeset! { 3, 4, 5 }
+        btreeset! { 3, 4, 5, 6 }
             .into_iter()
             .map(NeuronId::from_u64)
             .collect()
     );
     assert_eq!(
         neuron_store.get_non_empty_neuron_ids_readable_by_caller(hot_key),
-        btreeset! { 3, 4, 5 }
+        btreeset! { 3, 4, 5, 6 }
             .into_iter()
             .map(NeuronId::from_u64)
             .collect()
