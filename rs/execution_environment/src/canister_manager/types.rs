@@ -616,8 +616,8 @@ impl AsErrorHelp for CanisterManagerError {
                 }
             }
             CanisterManagerError::ReservedCyclesLimitIsTooLow { .. } => ErrorHelp::UserError {
-                suggestion: "".to_string(),
-                doc_link: "".to_string(),
+                suggestion: "Set the reserved cycles limit in the canister settings to a value higher than the current reserved cycles balance.".to_string(),
+                doc_link: "reserved-cycles-limit-is-too-low".to_string(),
             },
             CanisterManagerError::WasmChunkStoreError { .. } => ErrorHelp::UserError {
                 suggestion: "Use the `stored_chunks` API to check which hashes are present \
