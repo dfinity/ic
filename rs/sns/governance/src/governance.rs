@@ -3996,8 +3996,8 @@ impl Governance {
         }
 
         // Lastly, remove legacy catch-all following if either this command specifies following for
-        // all topics, or if this neuron follows on all topics (which can happen by executing
-        // multiple set-following commands).
+        // all non-critical topics, or if this neuron follows on all non-critical topics (which can
+        // happen by executing multiple set-following commands).
         let this_neurons_topics = neuron
             .topic_followees
             .iter()
@@ -4383,7 +4383,6 @@ impl Governance {
                 neuron_fees_e8s: 0,
                 created_timestamp_seconds: now,
                 aging_since_timestamp_seconds: now,
-                followees: neuron_recipe.construct_followees(),
                 topic_followees: Some(neuron_recipe.construct_topic_followees()),
                 maturity_e8s_equivalent: 0,
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(
@@ -4395,6 +4394,9 @@ impl Governance {
                 auto_stake_maturity: neuron_recipe.construct_auto_staking_maturity(),
                 vesting_period_seconds: None,
                 disburse_maturity_in_progress: vec![],
+
+                // Deprecated
+                followees: btreemap! {},
             };
 
             // Add the neuron to the various data structures and indexes to support neurons. This
