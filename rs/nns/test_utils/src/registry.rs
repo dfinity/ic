@@ -1,7 +1,7 @@
 //! Utilities to initialize and mutate the registry, for tests.
 
-use async_trait::async_trait;
 use assert_matches::assert_matches;
+use async_trait::async_trait;
 use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId, RegistryVersion, SubnetId};
@@ -29,7 +29,7 @@ use ic_protobuf::registry::{
         SubnetRecord,
     },
 };
-use ic_registry_canister_api::{AddNodePayload, GetChunkRequest, Chunk};
+use ic_registry_canister_api::{AddNodePayload, Chunk, GetChunkRequest};
 use ic_registry_keys::{
     make_blessed_replica_versions_key, make_catch_up_package_contents_key, make_crypto_node_key,
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
@@ -40,12 +40,12 @@ use ic_registry_keys::{
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{
-    deserialize_get_value_response, insert,
+    dechunkify_get_value_response_content, deserialize_get_value_response, insert,
     pb::v1::{
-        registry_mutation::Type, RegistryAtomicMutateRequest, RegistryAtomicMutateResponse,
-        RegistryMutation, HighCapacityRegistryGetValueResponse,
+        registry_mutation::Type, HighCapacityRegistryGetValueResponse, RegistryAtomicMutateRequest,
+        RegistryAtomicMutateResponse, RegistryMutation,
     },
-    serialize_get_value_request, Error, dechunkify_get_value_response_content, GetChunk,
+    serialize_get_value_request, Error, GetChunk,
 };
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
@@ -110,17 +110,23 @@ impl GetChunk for GetChunkImpl<'_> {
         };
 
         // Send request.
-        let chunk = self.registry
+        let chunk = self
+            .registry
             .query_("get_chunk", candid_one, request)
             .await
-            .map_err(|err| format!(
-                "Registry canister received our get_chunk request (key={:?}), \
-                 but found it lacking in some way: {}",
-                content_sha256, err,
-            ))?;
+            .map_err(|err| {
+                format!(
+                    "Registry canister received our get_chunk request (key={:?}), \
+                     but found it lacking in some way: {}",
+                    content_sha256, err,
+                )
+            })?;
 
         // Unpack result (and handle errors).
-        let Chunk { content: Some(content) } = chunk else {
+        let Chunk {
+            content: Some(content),
+        } = chunk
+        else {
             return Err(format!(
                 "Registry replied to our get_chunk request (key={:?}), \
                  but the reply did not have a populated `content` field.",
@@ -147,7 +153,8 @@ pub async fn get_value_result<T: Message + Default>(
         .await
         .unwrap();
 
-    let result: HighCapacityRegistryGetValueResponse = match deserialize_get_value_response(result) {
+    let result: HighCapacityRegistryGetValueResponse = match deserialize_get_value_response(result)
+    {
         Ok(ok) => ok,
         Err(error) => {
             return match error {
@@ -165,11 +172,8 @@ pub async fn get_value_result<T: Message + Default>(
         )));
     };
 
-    let result: Vec<u8> = dechunkify_get_value_response_content(
-        content,
-        &GetChunkImpl { registry },
-    )
-    .await?;
+    let result: Vec<u8> =
+        dechunkify_get_value_response_content(content, &GetChunkImpl { registry }).await?;
 
     Ok(Some(T::decode(result.as_slice()).unwrap()))
 }
