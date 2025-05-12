@@ -4,9 +4,16 @@ use super::*;
 use crate::{
     artifact::PbArtifact,
     crypto::threshold_sig::ni_dkg::{
-        config::NiDkgConfig, NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
+        config::NiDkgConfig,
+        errors::{
+            create_transcript_error::DkgCreateTranscriptError,
+            verify_dealing_error::DkgVerifyDealingError,
+        },
+        NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
     },
     messages::CallbackId,
+    registry::RegistryClientError,
+    state_manager::StateManagerError,
     ReplicaVersion,
 };
 use ic_protobuf::types::v1 as pb;
@@ -558,6 +565,76 @@ impl TryFrom<pb::DkgPayload> for Payload {
                 Ok(Payload::Data(DkgDataPayload::try_from(data_payload)?))
             }
         }
+    }
+}
+
+/// Errors which could occur when creating a Dkg payload.
+#[derive(PartialEq, Debug)]
+pub enum DkgPayloadCreationError {
+    CryptoError(CryptoError),
+    StateManagerError(StateManagerError),
+    DkgCreateTranscriptError(DkgCreateTranscriptError),
+    FailedToGetDkgIntervalSettingFromRegistry(RegistryClientError),
+    FailedToGetSubnetMemberListFromRegistry(RegistryClientError),
+    FailedToGetVetKdKeyList(RegistryClientError),
+    MissingDkgStartBlock,
+}
+
+/// Reasons for why a dkg payload might be invalid.
+#[derive(PartialEq, Debug)]
+pub enum InvalidDkgPayloadReason {
+    CryptoError(CryptoError),
+    DkgVerifyDealingError(DkgVerifyDealingError),
+    MismatchedDkgSummary(dkg::Summary, dkg::Summary),
+    MissingDkgConfigForDealing,
+    DkgStartHeightDoesNotMatchParentBlock,
+    DkgSummaryAtNonStartHeight(Height),
+    DkgDealingAtStartHeight(Height),
+    InvalidDealer(NodeId),
+    DealerAlreadyDealt(NodeId),
+    /// There are multiple dealings from the same dealer in the payload.
+    DuplicateDealers,
+    /// The number of dealings in the payload exceeds the maximum allowed number of dealings.
+    TooManyDealings {
+        limit: usize,
+        actual: usize,
+    },
+}
+
+/// Possible failures which could occur while validating a dkg payload. They don't imply that the
+/// payload is invalid.
+#[allow(dead_code)]
+#[derive(PartialEq, Debug)]
+pub enum DkgPayloadValidationFailure {
+    PayloadCreationFailed(DkgPayloadCreationError),
+    /// Crypto related errors.
+    CryptoError(CryptoError),
+    DkgVerifyDealingError(DkgVerifyDealingError),
+    FailedToGetMaxDealingsPerBlock(RegistryClientError),
+    FailedToGetRegistryVersion,
+}
+
+impl From<DkgVerifyDealingError> for InvalidDkgPayloadReason {
+    fn from(err: DkgVerifyDealingError) -> Self {
+        InvalidDkgPayloadReason::DkgVerifyDealingError(err)
+    }
+}
+
+impl From<DkgVerifyDealingError> for DkgPayloadValidationFailure {
+    fn from(err: DkgVerifyDealingError) -> Self {
+        DkgPayloadValidationFailure::DkgVerifyDealingError(err)
+    }
+}
+
+impl From<CryptoError> for InvalidDkgPayloadReason {
+    fn from(err: CryptoError) -> Self {
+        InvalidDkgPayloadReason::CryptoError(err)
+    }
+}
+
+impl From<CryptoError> for DkgPayloadValidationFailure {
+    fn from(err: CryptoError) -> Self {
+        DkgPayloadValidationFailure::CryptoError(err)
     }
 }
 

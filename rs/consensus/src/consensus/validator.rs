@@ -100,7 +100,7 @@ enum InvalidArtifactReason {
     SignerNotInThresholdCommittee(NodeId),
     SignerNotInMultiSigCommittee(NodeId),
     InvalidPayload(InvalidPayloadReason),
-    InvalidDkgPayload(ic_interfaces::dkg::InvalidDkgPayloadReason),
+    InvalidDkgPayload(ic_types::dkg::InvalidDkgPayloadReason),
     InvalidIDkgPayload(idkg::InvalidIDkgPayloadReason),
     InsufficientSignatures,
     CannotVerifyBlockHeightZero,

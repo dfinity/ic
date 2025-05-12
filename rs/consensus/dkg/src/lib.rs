@@ -5,7 +5,7 @@
 use ic_consensus_utils::{bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto};
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
-    dkg::{ChangeAction, DkgPool, InvalidDkgPayloadReason, Mutations, PayloadValidationError},
+    dkg::{ChangeAction, DkgPool, Mutations, PayloadValidationError},
     p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer},
     validation::ValidationResult,
 };
@@ -15,7 +15,7 @@ use ic_metrics::{
     MetricsRegistry,
 };
 use ic_types::{
-    consensus::dkg::{DealingContent, DkgMessageId, Message},
+    consensus::dkg::{DealingContent, DkgMessageId, InvalidDkgPayloadReason, Message},
     crypto::{
         threshold_sig::ni_dkg::{config::NiDkgConfig, NiDkgId, NiDkgTargetSubnet},
         Signed,

@@ -1,11 +1,13 @@
 use ic_consensus_utils::pool_reader::PoolReader;
-use ic_interfaces::dkg::DkgPayloadCreationError;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
-    consensus::{dkg::Summary, Block},
+    consensus::{
+        dkg::{DkgPayloadCreationError, Summary},
+        Block,
+    },
     crypto::{
         canister_threshold_sig::MasterPublicKey,
         threshold_sig::{

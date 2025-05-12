@@ -3,10 +3,7 @@ use crate::{
     MAX_REMOTE_DKGS_PER_INTERVAL, MAX_REMOTE_DKG_ATTEMPTS, REMOTE_DKG_REPEATED_FAILURE_ERROR,
 };
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
-use ic_interfaces::{
-    crypto::ErrorReproducibility,
-    dkg::{DkgPayloadCreationError, DkgPool},
-};
+use ic_interfaces::{crypto::ErrorReproducibility, dkg::DkgPool};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{error, warn, ReplicaLogger};
@@ -20,7 +17,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        dkg::{self, Summary},
+        dkg::{self, DkgPayloadCreationError, Summary},
         get_faults_tolerated, Block,
     },
     crypto::threshold_sig::ni_dkg::{

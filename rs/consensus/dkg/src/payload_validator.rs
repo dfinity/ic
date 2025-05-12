@@ -1,7 +1,7 @@
 use crate::{crypto_validate_dealing, payload_builder, utils};
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{
-    dkg::{DkgPayloadValidationFailure, DkgPool, InvalidDkgPayloadReason, PayloadValidationError},
+    dkg::{DkgPool, PayloadValidationError},
     validation::ValidationResult,
 };
 use ic_interfaces_registry::RegistryClient;
@@ -12,7 +12,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        dkg::{DkgDataPayload, Summary},
+        dkg::{DkgDataPayload, DkgPayloadValidationFailure, InvalidDkgPayloadReason, Summary},
         Block, BlockPayload,
     },
     SubnetId,
