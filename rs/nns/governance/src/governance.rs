@@ -5674,7 +5674,7 @@ impl Governance {
             .map(|p| p.topic())
             .unwrap_or(Topic::Unspecified);
 
-        let vote = Vote::try_from(vote).unwrap_or(Vote::Unspecified);
+        let vote = Vote::try_from(*vote).unwrap_or(Vote::Unspecified);
         if vote == Vote::Unspecified {
             // Invalid vote specified, i.e., not yes or no.
             return Err(GovernanceError::new_with_message(
