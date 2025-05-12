@@ -19,7 +19,7 @@ use ic_nns_constants::{
     LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
     ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     install_code::CanisterInstallMode, CreateServiceNervousSystem, GetNeuronsFundAuditInfoResponse,
     InstallCodeRequest, ListNeurons, ListNeuronsResponse, MakeProposalRequest,
     ManageNeuronCommandRequest, ManageNeuronResponse, NetworkEconomics, Neuron,
@@ -32,7 +32,7 @@ use ic_nns_test_utils::{
         build_mainnet_index_wasm, build_mainnet_ledger_wasm, build_mainnet_lifeline_wasm,
         build_mainnet_registry_wasm, build_mainnet_root_wasm, build_mainnet_sns_wasms_wasm,
         build_registry_wasm, build_root_wasm, build_sns_wasms_wasm, build_test_governance_wasm,
-        NnsInitPayloadsBuilder,
+        build_test_registry_wasm, NnsInitPayloadsBuilder,
     },
     sns_wasm::{
         build_archive_sns_wasm, build_governance_sns_wasm, build_index_ng_sns_wasm,
@@ -392,6 +392,7 @@ pub struct NnsInstaller {
     with_cycles_ledger: bool,
     with_index_canister: bool,
     with_test_governance_canister: bool,
+    with_test_registry_canister: bool,
     neurons: Option<Vec<Neuron>>,
 }
 
@@ -550,7 +551,11 @@ impl NnsInstaller {
                     build_root_wasm(),
                     build_lifeline_wasm(),
                     build_sns_wasms_wasm(),
-                    build_registry_wasm(),
+                    if self.with_test_registry_canister {
+                        build_test_registry_wasm()
+                    } else {
+                        build_registry_wasm()
+                    },
                 )
             };
 
@@ -2010,6 +2015,24 @@ pub mod sns {
                 );
             }
         }
+
+        pub async fn set_following(
+            pocket_ic: &PocketIc,
+            sns_governance_canister_id: PrincipalId,
+            sender: PrincipalId,
+            neuron_id: sns_pb::NeuronId,
+            set_following: sns_pb::manage_neuron::SetFollowing,
+        ) -> Result<sns_pb::ManageNeuronResponse, RejectResponse> {
+            let agent = PocketIcAgent::new(pocket_ic, sender);
+            let sns_governance_canister = GovernanceCanister::new(sns_governance_canister_id);
+            sns_governance_canister
+                .set_following(&agent, neuron_id, set_following)
+                .await
+                .map_err(|err| match err {
+                    PocketIcCallError::PocketIc(reject_response) => reject_response,
+                    err => panic!("Unexpected error when setting following: {:#?}", err),
+                })
+        }
     }
 
     pub mod index_ng {
@@ -2561,7 +2584,7 @@ pub mod sns {
     pub mod swap {
         use super::*;
         use ic_nervous_system_agent::sns::swap::SwapCanister;
-        use ic_nns_governance_api::pb::v1::create_service_nervous_system::SwapParameters;
+        use ic_nns_governance_api::create_service_nervous_system::SwapParameters;
         use ic_sns_swap::pb::v1::{GetOpenTicketResponse, SnsNeuronRecipe};
         use icp_ledger::DEFAULT_TRANSFER_FEE;
 

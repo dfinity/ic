@@ -11,7 +11,8 @@ use ic_base_types::{PrincipalId, SubnetId};
 use ic_config::Config;
 use ic_interfaces_registry::RegistryClient;
 use ic_management_canister_types_private::{
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
+    VetKdKeyId,
 };
 use ic_nns_test_utils::itest_helpers::try_call_via_universal_canister;
 use ic_nns_test_utils::{
@@ -366,6 +367,15 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet() {
 fn test_accepted_proposal_with_schnorr_gets_keys_from_other_subnet() {
     let key_id = MasterPublicKeyId::Schnorr(SchnorrKeyId {
         algorithm: SchnorrAlgorithm::Bip340Secp256k1,
+        name: "foo-bar".to_string(),
+    });
+    test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id);
+}
+
+#[test]
+fn test_accepted_proposal_with_vetkd_gets_keys_from_other_subnet() {
+    let key_id = MasterPublicKeyId::VetKd(VetKdKeyId {
+        curve: VetKdCurve::Bls12_381_G2,
         name: "foo-bar".to_string(),
     });
     test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id);

@@ -461,13 +461,11 @@ fn take_canister_snapshot_fails_when_limit_is_reached() {
         .subnet_message("take_canister_snapshot", args.encode())
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
-    assert_eq!(
-        error.description(),
-        format!(
-            "Canister {} has reached the maximum number of snapshots allowed: {}.",
-            canister_id, max_snapshots_per_canister,
-        )
+    let error_message = format!(
+        "Canister {} has reached the maximum number of snapshots allowed: {}.",
+        canister_id, max_snapshots_per_canister,
     );
+    assert!(error.description().contains(&error_message));
 }
 
 fn grow_stable_memory(

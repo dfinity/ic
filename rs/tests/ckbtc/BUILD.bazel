@@ -38,6 +38,7 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-btc-interface",
+    "@crate_index//:ic-management-canister-types",
     "@crate_index//:k256",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
