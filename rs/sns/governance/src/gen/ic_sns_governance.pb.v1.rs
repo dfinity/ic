@@ -2217,6 +2217,8 @@ pub struct GetMetadataResponse {
     pub name: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(string, optional, tag = "4")]
     pub description: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(uint64, tag = "5")]
+    pub num_submitted_proposals_past_2_months: u64,
 }
 /// Request message for 'get_sns_initialization_parameters'
 #[derive(

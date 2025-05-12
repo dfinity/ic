@@ -1592,6 +1592,7 @@ message GetMetadataResponse {
   optional string url = 2;
   optional string name = 3;
   optional string description = 4;
+  uint64 num_submitted_proposals_past_2_months = 5;
 }
 
 // Request message for 'get_sns_initialization_parameters'

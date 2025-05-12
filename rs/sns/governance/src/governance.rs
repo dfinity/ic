@@ -121,7 +121,7 @@ use std::{
     collections::{
         btree_map::{BTreeMap, Entry},
         btree_set::BTreeSet,
-        HashMap, HashSet,
+        HashMap, HashSet, VecDeque,
     },
     convert::{TryFrom, TryInto},
     future::Future,
@@ -159,6 +159,10 @@ pub const HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES: usize =
     MAX_HEAP_SIZE_IN_KIB / WASM32_PAGE_SIZE_IN_KIB * 7 / 8;
 
 pub const MAX_UPGRADE_JOURNAL_ENTRIES_PER_REQUEST: u64 = 100;
+
+/// Two months in seconds. For an SNS to be considered inactive,
+/// there should be no proposals submitted to it in the last 2 months.
+pub const TWO_MONTHS_SECS: u64 = 2 * 30 * 24 * 3600;
 
 /// Prefixes each log line for this canister.
 pub fn log_prefix() -> String {
@@ -673,6 +677,10 @@ pub struct Governance {
     /// not run in production can be gated behind a check for this flag as an
     /// extra layer of protection.
     pub test_features_enabled: bool,
+
+    /// A list of all transactions during at least the last
+    /// two months.
+    transactions: VecDeque<u64>,
 }
 
 /// This function is used to spawn a future in a way that is compatible with both the WASM and
@@ -752,6 +760,7 @@ impl Governance {
             latest_gc_num_proposals: 0,
             upgrade_periodic_task_lock: None,
             test_features_enabled: false,
+            transactions: VecDeque::new(),
         };
 
         gov.initialize_indices();
@@ -2005,6 +2014,18 @@ impl Governance {
             })
             .min()
             .unwrap_or(u64::MAX);
+    }
+
+    fn get_proposals_last_two_months(&self) -> u64 {
+        self.proto
+            .proposals
+            .values()
+            .filter(|proposal_data| {
+                self.env.now() >= proposal_data.proposal_creation_timestamp_seconds
+                    && self.env.now() - proposal_data.proposal_creation_timestamp_seconds
+                        <= TWO_MONTHS_SECS
+            })
+            .count() as u64
     }
 
     /// Starts execution of the given proposal in the background.
@@ -6053,6 +6074,7 @@ impl Governance {
             url: sns_metadata.url.clone(),
             name: sns_metadata.name.clone(),
             description: sns_metadata.description.clone(),
+            num_submitted_proposals_past_2_months: self.get_proposals_last_two_months(),
         }
     }
 

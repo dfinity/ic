@@ -1644,6 +1644,7 @@ pub struct GetMetadataResponse {
     pub url: Option<String>,
     pub name: Option<String>,
     pub description: Option<String>,
+    pub num_submitted_proposals_past_2_months: u64,
 }
 /// Request message for 'get_sns_initialization_parameters'
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, Copy, PartialEq)]
