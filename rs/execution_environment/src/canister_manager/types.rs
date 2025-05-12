@@ -974,7 +974,6 @@ impl From<CanisterManagerError> for UserError {
                     )
                 )
             }
-            
             CanisterSnapshotNotEnoughCycles(err) => {
                 Self::new(
                 ErrorCode::CanisterOutOfCycles,
