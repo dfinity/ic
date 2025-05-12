@@ -1,4 +1,5 @@
 load("//bazel:defs.bzl", "file_size_check")
+load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os:defs.bzl", "icos_build")
 load("//ic-os/dev-tools/bare_metal_deployment:tools.bzl", "launch_bare_metal")
 load("//ic-os/setupos:defs.bzl", "image_deps")
@@ -12,7 +13,6 @@ icos_images = icos_build(
     name = "prod",
     image_deps_func = image_deps,
     upgrades = False,
-    upload_prefix = "setup-os",
     vuln_scan = False,
 )
 
@@ -31,4 +31,11 @@ launch_bare_metal(
 artifact_bundle(
     name = "bundle",
     inputs = [":prod"],
+)
+
+# This image is used as the IC-OS installation image downloaded by Node Providers
+upload_artifacts(
+    name = "upload_disk-img",
+    inputs = [icos_images.disk_image],
+    remote_subdir = "setup-os/disk-img",
 )

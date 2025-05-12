@@ -1,4 +1,5 @@
 load("//bazel:defs.bzl", "file_size_check")
+load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os:defs.bzl", "icos_build")
 load("//ic-os/hostos:defs.bzl", "image_deps")
 load("//publish:defs.bzl", "artifact_bundle")
@@ -10,7 +11,6 @@ load("//publish:defs.bzl", "artifact_bundle")
 icos_images = icos_build(
     name = "prod",
     image_deps_func = image_deps,
-    upload_prefix = "host-os",
     visibility = ["//rs:ic-os-pkg"],
     vuln_scan = False,
 )
@@ -37,4 +37,11 @@ file_size_check(
 artifact_bundle(
     name = "bundle",
     inputs = [":prod"],
+)
+
+# This image is used for HostOS upgrades
+upload_artifacts(
+    name = "upload_update-img",
+    inputs = [icos_images.update_image],
+    remote_subdir = "host-os/update-img",
 )
