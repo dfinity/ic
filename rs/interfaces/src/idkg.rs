@@ -60,17 +60,13 @@ pub trait IDkgPoolSection: Send + Sync {
     fn signed_dealings_by_prefix(
         &self,
         _prefix: IDkgPrefixOf<SignedIDkgDealing>,
-    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)> + '_> {
-        unimplemented!()
-    }
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)> + '_>;
 
     /// Iterator for signed dealing objects matching the transcript id.
     fn signed_dealings_by_transcript_id(
         &self,
         _transcript_id: &IDkgTranscriptId,
-    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)> + '_> {
-        unimplemented!()
-    }
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)> + '_>;
 
     /// Iterator for dealing support objects.
     fn dealing_support(&self)
@@ -80,17 +76,13 @@ pub trait IDkgPoolSection: Send + Sync {
     fn dealing_support_by_prefix(
         &self,
         _prefix: IDkgPrefixOf<IDkgDealingSupport>,
-    ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_> {
-        unimplemented!()
-    }
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_>;
 
     /// Iterator for dealing support objects matching the transcript id.
     fn dealing_support_by_transcript_id(
         &self,
         _transcript_id: &IDkgTranscriptId,
-    ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_> {
-        unimplemented!()
-    }
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_>;
 
     /// Iterator for signature share objects.
     fn ecdsa_signature_shares(
@@ -101,9 +93,7 @@ pub trait IDkgPoolSection: Send + Sync {
     fn ecdsa_signature_shares_by_prefix(
         &self,
         _prefix: IDkgPrefixOf<EcdsaSigShare>,
-    ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaSigShare)> + '_> {
-        unimplemented!()
-    }
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaSigShare)> + '_>;
 
     /// Iterator for signature share objects.
     fn schnorr_signature_shares(
@@ -114,9 +104,7 @@ pub trait IDkgPoolSection: Send + Sync {
     fn schnorr_signature_shares_by_prefix(
         &self,
         _prefix: IDkgPrefixOf<SchnorrSigShare>,
-    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SchnorrSigShare)> + '_> {
-        unimplemented!()
-    }
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SchnorrSigShare)> + '_>;
 
     /// Iterator for VetKd share objects.
     fn vetkd_key_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdKeyShare)> + '_>;
@@ -125,9 +113,7 @@ pub trait IDkgPoolSection: Send + Sync {
     fn vetkd_key_shares_by_prefix(
         &self,
         _prefix: IDkgPrefixOf<VetKdKeyShare>,
-    ) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdKeyShare)> + '_> {
-        unimplemented!()
-    }
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdKeyShare)> + '_>;
 
     fn signature_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SigShare)> + '_>;
 
@@ -138,9 +124,7 @@ pub trait IDkgPoolSection: Send + Sync {
     fn complaints_by_prefix(
         &self,
         _prefix: IDkgPrefixOf<SignedIDkgComplaint>,
-    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgComplaint)> + '_> {
-        unimplemented!()
-    }
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgComplaint)> + '_>;
 
     /// Iterator for opening objects.
     fn openings(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgOpening)> + '_>;
@@ -149,9 +133,7 @@ pub trait IDkgPoolSection: Send + Sync {
     fn openings_by_prefix(
         &self,
         _prefix: IDkgPrefixOf<SignedIDkgOpening>,
-    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgOpening)> + '_> {
-        unimplemented!()
-    }
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgOpening)> + '_>;
 }
 
 /// The mutable interface for validated/unvalidated parts of the artifact pool.
