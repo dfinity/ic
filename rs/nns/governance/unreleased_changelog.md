@@ -15,6 +15,8 @@ on the process that this file is part of, see
 
 ## Removed
 
+* The `governance_heap_neuron_count` metric is removed as there are no neurons in the heap anymore.
+
 ## Fixed
 
 ## Security

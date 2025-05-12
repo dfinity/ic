@@ -1671,8 +1671,7 @@ impl Governance {
         cmc: Arc<dyn CMC>,
         mut randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
-        let (heap_neurons, heap_governance_proto, maybe_rng_seed) =
-            split_governance_proto(governance_proto);
+        let (_, heap_governance_proto, maybe_rng_seed) = split_governance_proto(governance_proto);
 
         // Carry over the previous rng seed to avoid race conditions in handling queued ingress
         // messages that may require a functioning RNG.
@@ -1682,7 +1681,7 @@ impl Governance {
 
         Self {
             heap_data: heap_governance_proto,
-            neuron_store: NeuronStore::new_restored(heap_neurons),
+            neuron_store: NeuronStore::new_restored(),
             env,
             ledger,
             cmc,
@@ -1699,11 +1698,9 @@ impl Governance {
     /// After calling this method, the proto and neuron_store (the heap neurons at least)
     /// becomes unusable, so it should only be called in pre_upgrade once.
     pub fn take_heap_proto(&mut self) -> GovernanceProto {
-        let neuron_store = std::mem::take(&mut self.neuron_store);
-        let neurons = neuron_store.take();
         let heap_governance_proto = std::mem::take(&mut self.heap_data);
         let rng_seed = self.randomness.get_rng_seed();
-        reassemble_governance_proto(neurons, heap_governance_proto, rng_seed)
+        reassemble_governance_proto(BTreeMap::new(), heap_governance_proto, rng_seed)
     }
 
     pub fn __get_state_for_test(&self) -> GovernanceProto {
