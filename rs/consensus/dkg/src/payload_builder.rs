@@ -1,9 +1,15 @@
 use crate::{
+    payload_validator::validate_payload,
     utils::{self, tags_iter, vetkd_key_ids_for_subnet},
     MAX_REMOTE_DKGS_PER_INTERVAL, MAX_REMOTE_DKG_ATTEMPTS, REMOTE_DKG_REPEATED_FAILURE_ERROR,
 };
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
-use ic_interfaces::{crypto::ErrorReproducibility, dkg::DkgPool};
+use ic_interfaces::{
+    consensus_pool::ConsensusPool,
+    crypto::ErrorReproducibility,
+    dkg::{DkgPayloadBuilder, DkgPool, PayloadValidationError},
+    validation::ValidationResult,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{error, warn, ReplicaLogger};
@@ -17,8 +23,8 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        dkg::{self, DkgPayloadCreationError, Summary},
-        get_faults_tolerated, Block,
+        dkg::{self, DkgPayloadCreationError, Payload, Summary},
+        get_faults_tolerated, Block, BlockPayload,
     },
     crypto::threshold_sig::ni_dkg::{
         config::{errors::NiDkgConfigValidationError, NiDkgConfig, NiDkgConfigData},
@@ -33,6 +39,69 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     sync::{Arc, RwLock},
 };
+
+pub struct DkgPayloadBuilderImpl {
+    subnet_id: SubnetId,
+    registry_client: Arc<dyn RegistryClient>,
+    crypto: Arc<dyn ConsensusCrypto>,
+    dkg_pool: Arc<RwLock<dyn DkgPool>>,
+    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    // TODO: Metrics
+    log: ReplicaLogger,
+}
+
+// TODO: Impl a new fn
+// TODO: Create an instance during initialization and pass to Block maker and Validator
+
+impl DkgPayloadBuilder for DkgPayloadBuilderImpl {
+    fn create_payload(
+        &self,
+        pool: &dyn ConsensusPool,
+        parent: &Block,
+        context: &ValidationContext,
+        max_dealings_per_block: usize,
+    ) -> Result<Payload, DkgPayloadCreationError> {
+        let pool_reader = PoolReader::new(pool);
+
+        create_payload(
+            self.subnet_id,
+            &*self.registry_client,
+            &*self.crypto,
+            &pool_reader,
+            self.dkg_pool.clone(),
+            parent,
+            &*self.state_manager,
+            context,
+            self.log.clone(),
+            max_dealings_per_block,
+        )
+    }
+
+    fn validate_payload(
+        &self,
+        payload: &BlockPayload,
+        pool: &dyn ConsensusPool,
+        parent: &Block,
+        context: &ValidationContext,
+        max_dealings_per_block: usize,
+    ) -> ValidationResult<PayloadValidationError> {
+        let pool_reader = PoolReader::new(pool);
+
+        validate_payload(
+            self.subnet_id,
+            &*self.registry_client,
+            &*self.crypto,
+            &pool_reader,
+            self.dkg_pool.clone(),
+            parent,
+            payload,
+            &*self.state_manager,
+            validation_context,
+            todo!(),
+            &self.log,
+        )
+    }
+}
 
 /// Creates the DKG payload for a new block proposal with the given parent. If
 /// the new height corresponds to a new DKG start interval, creates a summary,
@@ -50,7 +119,7 @@ pub fn create_payload(
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
     max_dealings_per_block: usize,
-) -> Result<dkg::Payload, DkgPayloadCreationError> {
+) -> Result<Payload, DkgPayloadCreationError> {
     let height = parent.height.increment();
     // Get the last summary from the chain.
     let last_summary_block = pool_reader
@@ -73,7 +142,7 @@ pub fn create_payload(
             validation_context,
             logger,
         )
-        .map(dkg::Payload::Summary)
+        .map(Payload::Summary)
     } else {
         // If the height is not a start height, create a payload with new dealings.
         create_data_payload(
@@ -84,7 +153,7 @@ pub fn create_payload(
             &last_summary_block,
             last_dkg_summary,
         )
-        .map(dkg::Payload::Data)
+        .map(Payload::Data)
     }
 }
 

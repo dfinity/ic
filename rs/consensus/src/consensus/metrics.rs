@@ -489,6 +489,7 @@ pub struct ValidatorMetrics {
     pub(crate) time_to_receive_block: HistogramVec,
     pub(crate) duplicate_artifact: IntCounterVec,
     pub(crate) validation_duration: HistogramVec,
+    // TODO: Remove when no longer in use
     pub(crate) dkg_validator: IntCounterVec,
     // Used to sum the values within a single validator run
     dkg_time_per_validator_run: RwLock<f64>,
