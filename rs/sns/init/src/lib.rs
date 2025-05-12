@@ -69,7 +69,7 @@ pub const MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT: usize = 15;
 pub const MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP: u64 = 1_000_000_000 * E8;
 
 /// The lower bound on `min_participant_icp_e8s`.
-pub const MIN_PARTICIPANT_ICP_LOWER_BOUND_E8S: u64 = 1000000;
+pub const MIN_PARTICIPANT_ICP_LOWER_BOUND_E8S: u64 = 1_000_000;
 
 /// Minimum allowed number of SNS neurons per neuron basket.
 pub const MIN_SNS_NEURONS_PER_BASKET: u64 = 2;
