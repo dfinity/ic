@@ -1366,11 +1366,9 @@ impl GetChunk for GetChunkImpl {
         })?;
         let Chunk { content } = result
             .map_err(|err| format!("The Registry canister replied, but with an Err: {}", err))?;
-        let Some(content) = content else {
-            return Err(
-                "The Registry canister replied Ok, but did not include chunk content.".to_string(),
-            );
-        };
+        let content = content.ok_or_else(|| {
+            "The Registry canister replied Ok, but did not include chunk content.".to_string()
+        })?;
 
         // Nice reply!
         Ok(content)
