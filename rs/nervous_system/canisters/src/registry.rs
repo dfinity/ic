@@ -90,16 +90,16 @@ impl Registry for RegistryCanister {
             })?;
 
         // Dechunkify deltas (this may require follow up get_chunk calls to Registry).
-        let mut inlined_deltas = vec![];
+        let mut dechunkified_deltas = vec![];
         for delta in high_capacity_deltas {
             let delta = dechunkify_delta(delta, self).await.map_err(|e| {
                 NervousSystemError::new_with_message(format!("Could not decode response {e:?}"))
             })?;
 
-            inlined_deltas.push(delta);
+            dechunkified_deltas.push(delta);
         }
 
-        Ok(inlined_deltas)
+        Ok(dechunkified_deltas)
     }
 }
 
