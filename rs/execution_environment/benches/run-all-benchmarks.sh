@@ -52,18 +52,18 @@ run() {
 }
 
 for i in $(seq 1 "${REPEAT}"); do
-    run "${i}" "Embedders Compilation" \
-        "//rs/embedders:compilation_bench" "EMBEDDERS_COMPILATION.min"
+    # run "${i}" "Embedders Compilation" \
+    #     "//rs/embedders:compilation_bench" "EMBEDDERS_COMPILATION.min"
     run "${i}" "Embedders Heap" \
-        "//rs/embedders:heap_bench" "EMBEDDERS_HEAP.min"
-    run "${i}" "Embedders Stable Memory" \
-        "//rs/embedders:stable_memory_bench" "EMBEDDERS_STABLE_MEMORY.min"
-    run "${i}" "System API Inspect Message" \
-        "//rs/execution_environment:execute_inspect_message_bench" "SYSTEM_API_INSPECT_MESSAGE.min"
-    run "${i}" "System API Query" \
-        "//rs/execution_environment:execute_query_bench" "SYSTEM_API_QUERY.min"
-    run "${i}" "System API Update" \
-        "//rs/execution_environment:execute_update_bench" "SYSTEM_API_UPDATE.min"
-    run "${i}" "Wasm Instructions" \
-        "//rs/execution_environment:wasm_instructions_bench" "WASM_INSTRUCTIONS.min"
+        "//rs/embedders:heap_bench" "EMBEDDERS_HEAP.min" "wasm32_"
+    # run "${i}" "Embedders Stable Memory" \
+    #     "//rs/embedders:stable_memory_bench" "EMBEDDERS_STABLE_MEMORY.min"
+    # run "${i}" "System API Inspect Message" \
+    #     "//rs/execution_environment:execute_inspect_message_bench" "SYSTEM_API_INSPECT_MESSAGE.min"
+    # run "${i}" "System API Query" \
+    #     "//rs/execution_environment:execute_query_bench" "SYSTEM_API_QUERY.min"
+    # run "${i}" "System API Update" \
+    #     "//rs/execution_environment:execute_update_bench" "SYSTEM_API_UPDATE.min"
+    # run "${i}" "Wasm Instructions" \
+    #     "//rs/execution_environment:wasm_instructions_bench" "WASM_INSTRUCTIONS.min"
 done
