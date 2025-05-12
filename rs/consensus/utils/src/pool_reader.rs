@@ -789,7 +789,7 @@ pub mod test {
                     Height::from((rounds * 2) as u64),
                 ))
                 .collect::<Vec<_>>();
-            // We expect to see `rounds * (block_proposals/2)` unvalidated block proposals sorted by
+            // We expect to see `rounds * (block_proposals_per_round/2)` unvalidated block proposals sorted by
             // height in ascending order.
             assert_eq!(
                 artifacts.len(),
