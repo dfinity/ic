@@ -113,10 +113,6 @@ fn read_state_with_identity(
         })
 }
 
-fn is_http_4xx(status_code: u16) -> bool {
-    (400..=499).contains(&status_code)
-}
-
 fn test_empty_paths_return_time(env: TestEnv) {
     let cert = read_state(&env, vec![]).unwrap();
     let mut value = lookup_value(&cert, vec!["time".as_bytes()]).unwrap();
@@ -199,7 +195,7 @@ fn test_invalid_request_rejected(env: TestEnv) {
         let cert = read_state(&env, vec![path]);
         assert_matches!(
             cert, Err(AgentError::HttpError(payload))
-            if is_http_4xx(payload.status)
+            if payload.status == 400
         );
     }
 }
@@ -224,7 +220,7 @@ fn test_invalid_path_rejected(env: TestEnv) {
     for invalid_path in ["", "foo"] {
         let path = vec![invalid_path.into()];
         let cert = read_state(&env, vec![path]);
-        assert_matches!(cert, Err(AgentError::HttpError(payload)) if is_http_4xx(payload.status));
+        assert_matches!(cert, Err(AgentError::HttpError(payload)) if payload.status == 404);
     }
 }
 
@@ -305,7 +301,7 @@ fn test_metadata(env: TestEnv) {
 
     // Invalid utf-8 bytes in metadata request
     let cert = lookup_metadata(&env, &canister_id, &[0xff, 0xfe, 0xfd], get_identity());
-    assert_matches!(cert, Err(AgentError::HttpError(payload)) if is_http_4xx(payload.status));
+    assert_matches!(cert, Err(AgentError::HttpError(payload)) if payload.status == 400);
 
     // Non-existing metadata section
     let value = lookup_metadata(&env, &canister_id, "foo".as_bytes(), get_identity());
@@ -338,11 +334,11 @@ fn test_metadata(env: TestEnv) {
 
         // Anonymous identity
         let res = lookup_metadata(&env, &canister_id, section_name, AnonymousIdentity);
-        assert_matches!(res, Err(AgentError::HttpError(payload)) if is_http_4xx(payload.status));
+        assert_matches!(res, Err(AgentError::HttpError(payload)) if payload.status == 403);
 
         // Non-controller identity
         let res = lookup_metadata(&env, &canister_id, section_name, random_ed25519_identity());
-        assert_matches!(res, Err(AgentError::HttpError(payload)) if is_http_4xx(payload.status));
+        assert_matches!(res, Err(AgentError::HttpError(payload)) if payload.status == 403);
     }
 }
 
