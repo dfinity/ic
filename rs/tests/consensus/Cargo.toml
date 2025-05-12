@@ -30,7 +30,6 @@ ic_consensus_system_test_catch_up_test_common = { path = "./catch_up_test_common
 ic_consensus_system_test_liveness_test_common = { path = "./liveness_test_common" }
 ic_consensus_system_test_utils = { path = "./utils" }
 k256 = { workspace = true }
-leb128 = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
@@ -42,7 +41,6 @@ ic-subnet-splitting = { path = "../../recovery/subnet_splitting" }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
-wabt-tests = { path = "../idx/wabt-tests" }
 
 [[bin]]
 name = "ic-systest-consensus-performance"
@@ -71,10 +69,6 @@ path = "max_ingress_payload_size_test.rs"
 [[bin]]
 name = "ic-systest-max-net-payload-size-test"
 path = "max_xnet_payload_size_test.rs"
-
-[[bin]]
-name = "ic-systest-read-state-test"
-path = "read_state_test.rs"
 
 [[bin]]
 name = "ic-systest-request-auth-malicious-replica-test"
