@@ -5627,10 +5627,12 @@ impl Governance {
 
     /// Preconditions:
     /// 0. `register_vote.proposal` is a proposal ID of a proposal that still accepts votes.
-    /// 1. Neuron identified by `neuron_id` is authorized to vote on that proposal
-    ///    (either due to being the controller or a hotkey of a neuron that has a ballot).
-    /// 2. `register_vote.vote` must not be `Vote::Unspecified`.
-    /// 3. The neuron has not already cast its vote.
+    /// 1. `neuron_id` identifies an existing neuron that is eligible to vote on that proposal
+    ///    (i.e., it has a corresponding ballot).
+    /// 2. `caller` is authorized to vote on behalf of `neuron_id` (either due to being its
+    ///    controller or a hotkey).
+    /// 3. `register_vote.vote` must not be `Vote::Unspecified`.
+    /// 4. The neuron has not already cast its vote.
     ///
     /// Practically, neurons that have already dissolved cannot vote, as long as the minimal
     /// possible dissolve delay is greated than the maximum possible voting period. Refer to:
