@@ -1,13 +1,14 @@
 use async_trait::async_trait;
-use ic_base_types::{CanisterId, RegistryVersion};
+use ic_base_types::{CanisterId, PrincipalId, RegistryVersion};
+use ic_cdk::call::{Call, CallErrorExt, CallFailed};
 use ic_nervous_system_common::NervousSystemError;
-use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_registry_transport::pb::v1::RegistryDelta;
 use ic_registry_transport::{
     deserialize_get_changes_since_response, deserialize_get_latest_version_response,
     serialize_get_changes_since_request,
 };
+use std::future::Future;
 
 #[async_trait]
 pub trait Registry: Send + Sync {
@@ -28,6 +29,34 @@ impl RegistryCanister {
             canister_id: REGISTRY_CANISTER_ID,
         }
     }
+
+    async fn execute_with_retries<F, Fut, Response>(
+        &self,
+        max_attempts: u8,
+        call: F,
+    ) -> Result<Response, NervousSystemError>
+    where
+        F: Fn() -> Fut,
+        Fut: Future<Output = Result<Response, CallFailed>>,
+    {
+        for _ in 0..max_attempts {
+            match call().await {
+                Ok(response) => return Ok(response),
+                Err(e) if e.is_immediately_retryable() => {
+                    continue;
+                }
+                Err(e) => {
+                    return Err(NervousSystemError::new_with_message(format!(
+                        "Request failed with error: {e}"
+                    )));
+                }
+            }
+        }
+
+        Err(NervousSystemError::new_with_message(format!(
+            "Request failed after {max_attempts} attempts"
+        )))
+    }
 }
 
 impl Default for RegistryCanister {
@@ -40,23 +69,22 @@ impl Default for RegistryCanister {
 #[async_trait]
 impl Registry for RegistryCanister {
     async fn get_latest_version(&self) -> Result<RegistryVersion, NervousSystemError> {
-        let response: Result<Vec<u8>, (i32, String)> =
-            CdkRuntime::call_bytes_with_cleanup(self.canister_id, "get_latest_version", &[]).await;
-        response
-            .map_err(|(code, msg)| {
-                NervousSystemError::new_with_message(format!(
-                    "Request to get_latest_version failed with code {code} and message: {msg}",
-                ))
-            })
-            .and_then(|r| {
-                deserialize_get_latest_version_response(r)
-                    .map_err(|e| {
-                        NervousSystemError::new_with_message(format!(
-                            "Could not decode response {e:?}"
-                        ))
-                    })
-                    .map(RegistryVersion::new)
-            })
+        self.execute_with_retries(5, || async {
+            Call::bounded_wait(
+                PrincipalId::from(self.canister_id).into(),
+                "get_latest_version",
+            )
+            .with_raw_args(&[])
+            .await
+        })
+        .await
+        .and_then(|response| {
+            deserialize_get_latest_version_response(response.into_bytes())
+                .map_err(|e| {
+                    NervousSystemError::new_with_message(format!("Could not decode response {e:?}"))
+                })
+                .map(RegistryVersion::new)
+        })
     }
 
     async fn registry_changes_since(
@@ -69,22 +97,23 @@ impl Registry for RegistryCanister {
                 version, e
             ))
         })?;
-        CdkRuntime::call_bytes_with_cleanup(self.canister_id, "get_changes_since", &bytes)
+
+        self.execute_with_retries(5, || async {
+            Call::bounded_wait(
+                PrincipalId::from(self.canister_id).into(),
+                "get_changes_since",
+            )
+            .with_raw_args(&bytes)
             .await
-            .map_err(|(code, msg)| {
-                NervousSystemError::new_with_message(format!(
-                    "Request to get_changes_since failed with code {code} and message: {msg}",
-                ))
-            })
-            .and_then(|r| {
-                deserialize_get_changes_since_response(r)
-                    .map_err(|e| {
-                        NervousSystemError::new_with_message(format!(
-                            "Could not decode response {e:?}"
-                        ))
-                    })
-                    .map(|(deltas, _)| deltas)
-            })
+        })
+        .await
+        .and_then(|response| {
+            deserialize_get_changes_since_response(response.into_bytes())
+                .map_err(|e| {
+                    NervousSystemError::new_with_message(format!("Could not decode response {e:?}"))
+                })
+                .map(|(deltas, _)| deltas)
+        })
     }
 }
 
