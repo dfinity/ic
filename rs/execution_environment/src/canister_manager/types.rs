@@ -648,7 +648,7 @@ impl AsErrorHelp for CanisterManagerError {
                 }
             }
             CanisterManagerError::CanisterSnapshotLimitExceeded { .. } => ErrorHelp::UserError {
-                suggestion: "Consider removing an unused snapshot of the specified canister before creating a new one.".to_string(),
+                suggestion: "Consider deleting an unused snapshot of the specified canister before creating a new one.".to_string(),
                 doc_link: "canister-snapshot-limit-exceeded".to_string(),
             },
             CanisterManagerError::CanisterSnapshotNotEnoughCycles { .. } => ErrorHelp::UserError {
