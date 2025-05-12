@@ -42,8 +42,7 @@ impl Default for RegistryCanister {
 #[async_trait]
 impl Registry for RegistryCanister {
     async fn get_latest_version(&self) -> Result<RegistryVersion, NervousSystemError> {
-        let reply: Vec<u8> =
-            Call::unbounded_wait(self.canister_id.into(), "get_latest_version")
+        let reply: Vec<u8> = Call::unbounded_wait(self.canister_id.into(), "get_latest_version")
             .with_raw_args(&[])
             .await
             .map_err(|err| {
@@ -54,13 +53,9 @@ impl Registry for RegistryCanister {
             })?
             .into_bytes();
 
-        let version = deserialize_get_latest_version_response(reply)
-            .map_err(|err| {
-                NervousSystemError::new_with_message(format!(
-                    "Could not decode response {:?}",
-                    err,
-                ))
-            })?;
+        let version = deserialize_get_latest_version_response(reply).map_err(|err| {
+            NervousSystemError::new_with_message(format!("Could not decode response {:?}", err,))
+        })?;
 
         Ok(RegistryVersion::new(version))
     }
@@ -76,17 +71,16 @@ impl Registry for RegistryCanister {
             ))
         })?;
 
-        let result =
-            Call::unbounded_wait(Principal::from(self.canister_id), "get_changes_since")
-                .with_raw_args(&bytes)
-                .await
-                .map_err(|err| {
-                    NervousSystemError::new_with_message(format!(
-                        "Request to get_changes_since failed: {}",
-                        err,
-                    ))
-                })?
-                .into_bytes();
+        let result = Call::unbounded_wait(Principal::from(self.canister_id), "get_changes_since")
+            .with_raw_args(&bytes)
+            .await
+            .map_err(|err| {
+                NervousSystemError::new_with_message(format!(
+                    "Request to get_changes_since failed: {}",
+                    err,
+                ))
+            })?
+            .into_bytes();
 
         let (high_capacity_deltas, _version) = deserialize_get_changes_since_response(result)
             .map_err(|err| {
@@ -132,23 +126,20 @@ impl GetChunk for RegistryCanister {
             format!(
                 "It seems we are not able to reach the registry canister ({}) \
                  to perform a get_chunk call: {}",
-                callee,
-                err,
+                callee, err,
             )
         })?;
 
         // Decode reply.
-        let reply: Result<Chunk, String> = reply
-            .candid()
-            .map_err(|err| {
-                format!(
-                    "Registry ({}) replied to our get_chunk call, \
-                     but we failed to decode the reply (len = {}): {}",
-                    callee,
-                    reply.len(),
-                    err,
-                )
-            })?;
+        let reply: Result<Chunk, String> = reply.candid().map_err(|err| {
+            format!(
+                "Registry ({}) replied to our get_chunk call, \
+                 but we failed to decode the reply (len = {}): {}",
+                callee,
+                reply.len(),
+                err,
+            )
+        })?;
 
         // Handle canister does not like the call.
         let chunk: Chunk =
