@@ -1,7 +1,7 @@
 /* tag::catalog[]
 Title:: Read State Request Tests
 
-Goal:: Test the behavior of the read_state endpoint according to its sepcification.
+Goal:: Test the behavior of the read_state endpoint according to its specification.
 
 Runbook::
 . Set up two subnets with one fast node each
@@ -33,12 +33,10 @@ use ic_agent::{lookup_value, Agent, AgentError, Certificate, Identity};
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::util::{
-    agent_with_identity, agent_with_identity_mapping, block_on, get_identity,
-    random_ed25519_identity, runtime_from_url,
+    agent_with_identity, block_on, get_identity, random_ed25519_identity, runtime_from_url,
 };
 use ic_system_test_driver::{
     driver::{
-        boundary_node::{BoundaryNode, BoundaryNodeVm},
         group::SystemTestGroup,
         ic::InternetComputer,
         test_env::TestEnv,
@@ -50,8 +48,6 @@ use ic_types::CanisterId;
 use slog::info;
 use wabt_tests::with_custom_sections;
 
-const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
-
 /// Sets up a testnet with
 /// 1. System subnet with a single node
 /// 2. Application subnet with a single node
@@ -60,25 +56,17 @@ fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .add_fast_single_node_subnet(SubnetType::Application)
+        .with_api_boundary_nodes(1)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot());
 
-    BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
-        .allocate_vm(&env)
-        .expect("Allocation of BoundaryNode failed.")
-        .for_ic(&env, "")
-        .use_real_certs_and_dns()
-        .start(&env)
-        .expect("failed to setup BoundaryNode VM");
-
-    env.get_deployed_boundary_node(BOUNDARY_NODE_NAME)
-        .unwrap()
-        .get_snapshot()
-        .unwrap()
-        .await_status_is_healthy()
-        .expect("Boundary node did not come up healthy.");
+    for api_bn in env.topology_snapshot().api_boundary_nodes() {
+        api_bn
+            .await_status_is_healthy()
+            .expect("API boundary node did not come up healthy.");
+    }
 }
 
 fn get_first_app_node(env: &TestEnv) -> IcNodeSnapshot {
@@ -92,24 +80,23 @@ fn get_first_app_node(env: &TestEnv) -> IcNodeSnapshot {
 }
 
 async fn build_agent_with_identity(env: &TestEnv, identity: impl Identity + 'static) -> Agent {
-    let deployed_boundary_node = env.get_deployed_boundary_node(BOUNDARY_NODE_NAME).unwrap();
-    let boundary_node_vm = deployed_boundary_node.get_snapshot().unwrap();
-    let url = boundary_node_vm.get_public_url();
-    if boundary_node_vm.uses_dns() {
-        agent_with_identity(url.as_ref(), identity).await.unwrap()
-    } else {
-        agent_with_identity_mapping(url.as_ref(), Some(boundary_node_vm.ipv6().into()), identity)
-            .await
-            .unwrap()
-    }
+    // get an agent for the API boundary node
+    let api_bn = env
+        .topology_snapshot()
+        .api_boundary_nodes()
+        .next()
+        .expect("There should be at least one API boundary node");
+    let url = api_bn.get_public_url();
+
+    agent_with_identity(url.as_ref(), identity).await.unwrap()
 }
 
-/// Call "read_state" with the given paths and the basic identity
+/// Call "read_state" with the given paths and the basic identity on the first Application subnet
 fn read_state(env: &TestEnv, paths: Vec<Vec<Label<Vec<u8>>>>) -> Result<Certificate, AgentError> {
     read_state_with_identity(env, paths, get_identity())
 }
 
-/// Call "read_state" with the given paths and identity
+/// Call "read_state" with the given paths and identity on the first Application subnet
 fn read_state_with_identity(
     env: &TestEnv,
     paths: Vec<Vec<Label<Vec<u8>>>>,
@@ -156,7 +143,9 @@ fn test_subnet_path(env: TestEnv) {
         .unwrap();
     let app_subnet_id = app_subnet.subnet_id;
 
-    let cert = read_state(&env, vec![vec!["subnet".into()]]).unwrap();
+    // Query the `/subnet` enpoint of the app subnet
+    let path = vec!["subnet".into()];
+    let cert = read_state(&env, vec![path]).unwrap();
 
     // Should contain public key and canister ranges for all subnets
     for subnet_id in [nns_subnet_id, app_subnet_id] {
@@ -170,7 +159,7 @@ fn test_subnet_path(env: TestEnv) {
         }
     }
 
-    // Should not contain public keys of nodes on other subnets
+    // Should not contain public keys of nodes on other subnets (the NNS)
     for node in nns_subnet.nodes() {
         let node_id = node.node_id;
         let value = lookup_value(
@@ -186,7 +175,7 @@ fn test_subnet_path(env: TestEnv) {
         assert_matches!(value, Err(AgentError::LookupPathAbsent(_)));
     }
 
-    // Should contain public keys of nodes on the subnet
+    // Should contain public keys of nodes on the current subnet (the App subnet)
     for node in app_subnet.nodes() {
         let node_id = node.node_id;
         let value = lookup_value(
@@ -205,8 +194,9 @@ fn test_subnet_path(env: TestEnv) {
 }
 
 fn test_invalid_request_rejected(env: TestEnv) {
-    for request in ["", "foo"] {
-        let cert = read_state(&env, vec![vec!["request_status".into(), request.into()]]);
+    for invalid_request_id in ["", "foo"] {
+        let path = vec!["request_status".into(), invalid_request_id.into()];
+        let cert = read_state(&env, vec![path]);
         assert_matches!(
             cert, Err(AgentError::HttpError(payload))
             if is_http_4xx(payload.status)
@@ -215,19 +205,25 @@ fn test_invalid_request_rejected(env: TestEnv) {
 }
 
 fn test_absent_request(env: TestEnv) {
-    for request in [&[0; 32], &[8; 32], &[255; 32]] {
-        let cert = read_state(&env, vec![vec!["request_status".into(), request.into()]]).unwrap();
+    for absent_request_id in [&[0; 32], &[8; 32], &[255; 32]] {
+        let path = vec!["request_status".into(), absent_request_id.into()];
+        let cert = read_state(&env, vec![path]).unwrap();
         let value = lookup_value(
             &cert,
-            vec!["request_status".as_bytes(), request, "status".as_bytes()],
+            vec![
+                "request_status".as_bytes(),
+                absent_request_id,
+                "status".as_bytes(),
+            ],
         );
         assert_matches!(value, Err(AgentError::LookupPathAbsent(_)));
     }
 }
 
 fn test_invalid_path_rejected(env: TestEnv) {
-    for request in ["", "foo"] {
-        let cert = read_state(&env, vec![vec![request.into()]]);
+    for invalid_path in ["", "foo"] {
+        let path = vec![invalid_path.into()];
+        let cert = read_state(&env, vec![path]);
         assert_matches!(cert, Err(AgentError::HttpError(payload)) if is_http_4xx(payload.status));
     }
 }
@@ -307,7 +303,7 @@ fn test_metadata(env: TestEnv) {
     // Install the wasm with public metadata sections first
     block_on(wasm_public.install_with_retries_onto_canister(&mut canister, None, None)).unwrap();
 
-    // Invalid utf-8 bytes in metadata reqeust
+    // Invalid utf-8 bytes in metadata request
     let cert = lookup_metadata(&env, &canister_id, &[0xff, 0xfe, 0xfd], get_identity());
     assert_matches!(cert, Err(AgentError::HttpError(payload)) if is_http_4xx(payload.status));
 
