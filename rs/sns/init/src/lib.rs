@@ -1583,7 +1583,6 @@ impl SnsInitPayload {
             return Err("Error: min_participants must be > 0".to_string());
         }
         // Needed as the SwapInit min_participants field is a `u32`.
-        // Shah-Question: ?
         if min_participants > (u32::MAX as u64) {
             return Err(format!(
                 "Error: min_participants cannot be greater than {}",
@@ -1606,7 +1605,6 @@ impl SnsInitPayload {
             ));
         }
 
-        // Shah-Question: what is direct participation? Is it the maximum ICP amount that a swap can obtain?
         // (4)
         if max_participant_icp_e8s > max_direct_participation_icp_e8s {
             return Err(format!(
@@ -1644,7 +1642,6 @@ impl SnsInitPayload {
             ));
         }
 
-        // Shah-Question: is ICP <-> SNS Token 1:1?
         // (8)
         let min_participant_sns_e8s = min_participant_icp_e8s as u128
             * initial_swap_amount_e8s as u128

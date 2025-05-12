@@ -1315,8 +1315,6 @@ impl Swap {
             );
         }
 
-        // Shah-Question: why don't we enforce this constraint?
-
         Ok(RefreshBuyerTokensResponse {
             icp_accepted_participation_e8s: new_balance_e8s,
             icp_ledger_account_balance_e8s: e8s,
