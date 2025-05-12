@@ -11519,6 +11519,7 @@ name = "ic-nns-test-utils"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
+ "async-trait",
  "candid",
  "canister-test",
  "cycles-minting-canister",
