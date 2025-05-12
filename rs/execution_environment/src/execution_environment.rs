@@ -1659,7 +1659,10 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::ReadCanisterSnapshotMetadata) => {
                 let res = ReadCanisterSnapshotMetadataArgs::decode(payload).and_then(|args| {
                     match self.config.canister_snapshot_download {
-                        FlagStatus::Disabled => Ok((vec![], None)),
+                        FlagStatus::Disabled => Err(UserError::new(
+                            ErrorCode::UnknownManagementMessage,
+                            "Not yet implemented".to_string(),
+                        )),
                         FlagStatus::Enabled => {
                             let canister_id = args.get_canister_id();
                             self.read_canister_snapshot_metadata(*msg.sender(), &state, args)
@@ -1678,7 +1681,10 @@ impl ExecutionEnvironment {
                     .config
                     .canister_snapshot_download
                 {
-                    FlagStatus::Disabled => Ok((vec![], None)),
+                    FlagStatus::Disabled => Err(UserError::new(
+                        ErrorCode::UnknownManagementMessage,
+                        "Not yet implemented".to_string(),
+                    )),
                     FlagStatus::Enabled => {
                         let canister_id = args.get_canister_id();
                         self.read_snapshot_data(
@@ -1704,7 +1710,10 @@ impl ExecutionEnvironment {
                     },
                     Ok(args) => match self.config.canister_snapshot_upload {
                         FlagStatus::Disabled => ExecuteSubnetMessageResult::Finished {
-                            response: Ok((vec![], None)),
+                            response: Err(UserError::new(
+                                ErrorCode::UnknownManagementMessage,
+                                "Not yet implemented".to_string(),
+                            )),
                             refund: msg.take_cycles(),
                         },
                         FlagStatus::Enabled => {
@@ -1736,7 +1745,10 @@ impl ExecutionEnvironment {
                     },
                     Ok(args) => match self.config.canister_snapshot_upload {
                         FlagStatus::Disabled => ExecuteSubnetMessageResult::Finished {
-                            response: Ok((vec![], None)),
+                            response: Err(UserError::new(
+                                ErrorCode::UnknownManagementMessage,
+                                "Not yet implemented".to_string(),
+                            )),
                             refund: msg.take_cycles(),
                         },
                         FlagStatus::Enabled => {
