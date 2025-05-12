@@ -144,14 +144,21 @@ impl CatchUpPackageProvider {
             .map(CatchUpPackageParam::try_from)
             .and_then(Result::ok);
 
-        for (node_id, node_record) in peers.iter() {
-            if let Some((proto, cup)) = self
+        for (node_id, node_record) in &peers {
+            match self
                 .fetch_and_verify_catch_up_package(node_id, node_record, param, subnet_id)
                 .await
             {
                 // Note: None is < Some(_)
-                if Some(CatchUpPackageParam::from(&cup)) > param {
+                Ok(Some((proto, cup))) if Some(CatchUpPackageParam::from(&cup)) > param => {
                     return Some(proto);
+                }
+                Ok(_) => {}
+                Err(err) => {
+                    warn!(
+                        self.logger,
+                        "Failed to fetch and verify the CUP from {node_id}: {err}"
+                    );
                 }
             }
         }
@@ -171,33 +178,28 @@ impl CatchUpPackageProvider {
         node_record: &NodeRecord,
         param: Option<CatchUpPackageParam>,
         subnet_id: SubnetId,
-    ) -> Option<(pb::CatchUpPackage, CatchUpPackage)> {
-        let http = node_record.clone().http.or_else(|| {
-            warn!(
-                self.logger,
-                "Node record's http endpoint is None: {:?}", node_record
-            );
-            None
-        })?;
-        let mut uri = http_endpoint_to_url(&http, &self.logger)?;
+    ) -> Result<Option<(pb::CatchUpPackage, CatchUpPackage)>, String> {
+        let http = node_record
+            .http
+            .as_ref()
+            .ok_or_else(|| format!("Node record's http endpoint is None: {:?}", node_record))?;
+        let mut uri = http_endpoint_to_url(&http, &self.logger)
+            .ok_or_else(|| format!("Failed to convert endpoint '{http:?}' to url"))?;
         uri.path_segments_mut()
-            .ok()?
+            .map_err(|()| String::from("Invalid url"))?
             .push("_")
             .push("catch_up_package");
 
         let uri = uri.to_string();
 
-        let protobuf = self
+        let Some(protobuf) = self
             .fetch_catch_up_package(node_id, uri.clone(), param)
-            .await?;
+            .await?
+        else {
+            return Ok(None);
+        };
         let cup = CatchUpPackage::try_from(&protobuf)
-            .map_err(|e| {
-                warn!(
-                    self.logger,
-                    "Failed to read CUP from peer at url {}: {:?}", uri, e
-                )
-            })
-            .ok()?;
+            .map_err(|e| format!("Failed to read CUP from peer at url {}: {:?}", uri, e))?;
 
         self.crypto
             .verify_combined_threshold_sig_by_public_key(
@@ -206,15 +208,9 @@ impl CatchUpPackageProvider {
                 subnet_id,
                 cup.content.block.get_value().context.registry_version,
             )
-            .map_err(|e| {
-                warn!(
-                    self.logger,
-                    "Failed to verify CUP signature at: {:?} with: {:?}", uri, e
-                )
-            })
-            .ok()?;
+            .map_err(|e| format!("Failed to verify CUP signature at: {:?} with: {:?}", uri, e))?;
 
-        Some((protobuf, cup))
+        Ok(Some((protobuf, cup)))
     }
 
     // Attempt to fetch a `CatchUpPackage` from the given endpoint.
@@ -226,7 +222,8 @@ impl CatchUpPackageProvider {
         node_id: &NodeId,
         url: String,
         param: Option<CatchUpPackageParam>,
-    ) -> Option<pb::CatchUpPackage> {
+    ) -> Result<Option<pb::CatchUpPackage>, String> {
+        info!(self.logger, "Fetching CUP from {node_id} @ {url}.");
         let body = Bytes::from(
             param
                 .and_then(|param| serde_cbor::to_vec(&param).ok())
@@ -236,8 +233,7 @@ impl CatchUpPackageProvider {
         let client_config = self
             .crypto_tls_config
             .client_config(*node_id, self.registry.get_latest_version())
-            .map_err(|e| warn!(self.logger, "Failed to create tls client config: {:?}", e))
-            .ok()?;
+            .map_err(|e| format!("Failed to create tls client config: {:?}", e))?;
 
         let https = HttpsConnectorBuilder::new()
             .with_tls_config(client_config)
@@ -258,43 +254,32 @@ impl CatchUpPackageProvider {
                     .header(hyper::header::CONTENT_TYPE, "application/cbor")
                     .uri(url)
                     .body(Full::from(body))
-                    .map_err(|e| warn!(self.logger, "Failed to create request: {:?}", e))
-                    .ok()?,
+                    .map_err(|e| format!("Failed to create request: {:?}", e))?,
             ),
         );
 
         let res = req
             .await
-            .map_err(|e| warn!(self.logger, "Querying CUP endpoint timed out: {:?}", e))
-            .ok()?
-            .map_err(|e| warn!(self.logger, "Failed to query CUP endpoint: {:?}", e))
-            .ok()?;
+            .map_err(|e| format!("Querying CUP endpoint timed out: {:?}", e))?
+            .map_err(|e| format!("Failed to query CUP endpoint: {:?}", e))?;
 
         let bytes = res
             .into_body()
             .collect()
             .await
-            .map_err(|e| {
-                warn!(
-                    self.logger,
-                    "Failed to convert the response body to bytes: {:?}", e
-                )
-            })
-            .ok()?
+            .map_err(|e| format!("Failed to convert the response body to bytes: {:?}", e))?
             .to_bytes();
 
-        if bytes.is_empty() {
+        let cup = if bytes.is_empty() {
             None
         } else {
-            pb::CatchUpPackage::decode(&bytes[..])
-                .map_err(|e| {
-                    warn!(
-                        self.logger,
-                        "Failed to deserialize CUP from protobuf: {:?}", e
-                    )
-                })
-                .ok()
-        }
+            Some(
+                pb::CatchUpPackage::decode(&bytes[..])
+                    .map_err(|e| format!("Failed to deserialize CUP from protobuf: {:?}", e))?,
+            )
+        };
+
+        Ok(cup)
     }
 
     /// Persist the given CUP to disk.
