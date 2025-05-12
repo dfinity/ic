@@ -2926,16 +2926,16 @@ const COUNTER_CANISTER_WAT: &str = r#"
 
   (func $read
     (i32.store
-    (i32.const 0)
-    (global.get 0)
-  )
-
-  (call $msg_reply_data_append
-    (i32.const 0)
-    (i32.const 4))
+      (i32.const 0)
+      (global.get 0)
+    )
+    (call $msg_reply_data_append
+      (i32.const 0)
+      (i32.const 4)
+    )
     (call $msg_reply)
   )
-
+  
   (func $write
     (i32.const 1)
     (call $stable_grow)
