@@ -124,4 +124,11 @@ runs:
               bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}" --config=release
             else
               bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}"
+              # TODO move to 'release_build'
+              for uploadable in $(bazel query "attr(tags, '\\buploadable\\b', //...)"); do
+                echo "Uploading: $uploadable"
+                bundle=$(bazel cquery "$uploadable" --output=files)
+                echo "bundle is $bundle"
+                ls "$bundle"
+              done
             fi

@@ -121,6 +121,15 @@ filegroup(
 artifact_bundle(
     name = "bundle",
     inputs = [":binaries"],
+    tags = [ "uploadable" ],
+    prefix = "binaries/" + os_info,
+)
+
+artifact_bundle(
+    name = "bundle-legacy",
+    prefix = "release",
+    inputs = [":binaries"],
+    tags = [ "uploadable" ],
 )
 
 upload_artifacts(

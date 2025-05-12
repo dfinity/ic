@@ -71,7 +71,7 @@ impl Environment for CanisterEnvironment {
 }
 
 /// An implementation of the LedgerCanisterClient trait that is suitable for
-/// production use.
+/// production use..
 struct RealLedgerCanisterClient {
     ledger_canister_id: CanisterId,
 }

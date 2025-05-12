@@ -125,51 +125,68 @@ def _artifact_bundle_impl(ctx):
     # List of input files
     input_files = ctx.files.inputs
 
-    bundle_dir = "{}_bundle".format(ctx.attr.name)
+    bundle_root = ctx.actions.declare_directory("bundle-{}".format(ctx.attr.name))
+
+    bundle_prefix = ctx.attr.prefix # TODO: enforce prefix?
+
+    #bundle_dir = "bundle-{}/{}".format(suffix, prefix)
 
     # Declare output files (NOTE: not windows friendly)
-    out_checksums = ctx.actions.declare_file(bundle_dir + "/SHA256SUMS")
+    #out_checksums = ctx.actions.declare_file(bundle_dir + "/SHA256SUMS")
 
-    def make_symlink(target):
-        symlink = ctx.actions.declare_file(bundle_dir + "/" + target.basename)
-        ctx.actions.symlink(output = symlink, target_file = target)
-        return symlink
+    #def make_symlink(target):
+    #    symlink = ctx.actions.declare_file(bundle_dir + "/" + target.basename)
+    #    ctx.actions.symlink(output = symlink, target_file = target)
+    #    return symlink
 
-    symlinks = [make_symlink(file) for file in input_files]
+    #symlinks = [make_symlink(file) for file in input_files]
+
+    #outsymlink = ctx.actions.declare_file("bundle-foo")
+    #ctx.actions.symlink(output = outsymlink, target_file = File(bundle_dir))
 
     # Compute checksums and print it to stdout & out file.
     # The filenames are stripped from anything but the basename.
     # NOTE: This might produce confusing output if `input_files` contain
     # files with identical names in different directories.
     ctx.actions.run_shell(
-        inputs = input_files,
+        inputs = input_files , # TODO: use 'symlinks' as arguments?
         arguments = [file.path for file in input_files],
-        outputs = [out_checksums],
+        env = {
+            "BUNDLE_ROOT": bundle_root.path,
+            "BUNDLE_PREFIX": bundle_prefix
+        },
+        outputs = [bundle_root],
         tools = [ctx.executable._sha256],
         command = """
         set -euo pipefail
 
-        out_checksums="{out}"
-        output=$(mktemp) # temporary file bc sha256 doesn't support writing to stdout (or /dev/stdout) directly
+        outdir="$BUNDLE_ROOT"
 
+        if [ -n "$BUNDLE_PREFIX" ]; then
+            outdir="$outdir/$BUNDLE_PREFIX"
+        fi
+
+        mkdir -p "$outdir"
+
+        out_checksums="$outdir/SHA256SUMS"
+
+        output=$(mktemp) # temporary file bc sha256 doesn't support writing to stdout (or /dev/stdout) directly
         for input in "$@"; do
-            if ! [[ $input =~ (\\.tar|\\.gz) ]]; then
-                echo "skipping non-archive file $input"
-                continue
-            fi
             {sha256} "$input" "$output"
             cat "$output" >> "$out_checksums"
             echo " $(basename $input)" >> "$out_checksums"
+            ln -s "$( realpath "$input" )" "$outdir/$(basename $input)"
         done
+
+        sort -o "$out_checksums" -k 2 "$out_checksums"
 
         cat "$out_checksums"
 
-        sort -o "$out_checksums" -k 2 "$out_checksums"
-        """.format(out = out_checksums.path, sha256 = ctx.executable._sha256.path),
+        """.format(sha256 = ctx.executable._sha256.path),
     )
 
     # Return the output file
-    return [DefaultInfo(files = depset([out_checksums] + symlinks))]
+    return [DefaultInfo(files = depset([bundle_root]))]
 
 # A rule that re-exports symlinks to all the inputs as well
 # as an extra file 'SHA256SUMS' containing the checksums of inputs.
@@ -179,6 +196,9 @@ artifact_bundle = rule(
         "inputs": attr.label_list(
             allow_files = True,
             mandatory = True,
+        ),
+        "prefix": attr.string(
+            default = "",
         ),
         # The bazel-provided sha256 tool to avoid relying on tools from the container/env
         "_sha256": attr.label(
