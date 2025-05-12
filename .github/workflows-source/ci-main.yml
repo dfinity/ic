@@ -146,6 +146,7 @@ jobs:
       # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
       OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
       CI_OVERRIDE_BUF_BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}
+      FORK_PR: ${{ github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name }}
     steps:
       - <<: *checkout
       - name: Set BAZEL_EXTRA_ARGS
@@ -168,6 +169,11 @@ jobs:
 
           if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
             EXCLUDED_TEST_TAGS+=(long_test)
+          fi
+
+          # No system tests on forked PR runs
+          if [[ "$IS_FORK" == "true" ]]; then
+            EXCLUDED_TEST_TAGS+=(system_test)
           fi
 
           # Export excluded tags as environment variable for ci/bazel-scripts/diff.sh
