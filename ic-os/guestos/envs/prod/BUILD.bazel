@@ -41,7 +41,7 @@ artifact_bundle(
     inputs = [":prod"],
 )
 
-# This image is downloaded by the replicas running on NPs
+# This image is used for GuestOS upgrades
 upload_artifacts(
     name = "upload_update-img",
     inputs = [icos_images.update_image],
