@@ -5,7 +5,7 @@ use ic_nervous_system_chunks::{
     Chunks,
 };
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_nns_handler_root::now_nanoseconds;
+use ic_nns_handler_root::now_seconds;
 use ic_nns_test_utils::{
     common::{build_test_registry_wasm, NnsInitPayloadsBuilder},
     state_test_helpers::{
@@ -28,7 +28,7 @@ use std::{cell::RefCell, rc::Rc};
 
 #[test]
 fn test_large_records() {
-    let test_beginning_timestamp = now_nanoseconds();
+    let test_beginning_timestamp = now_seconds();
     // Step 1: Prepare the world.
     let state_machine = state_machine_builder_for_nns_tests().build();
 
@@ -56,7 +56,7 @@ fn test_large_records() {
 
     // Step 3.2: Inspect value associated with "daniel_wong_42".
     let get_value_response = registry_get_value(&state_machine, b"daniel_wong_42");
-    let after_mutation_timestamp = now_nanoseconds();
+    let after_mutation_timestamp = now_seconds();
     assert_eq!(
         get_value_response,
         HighCapacityRegistryGetValueResponse {
@@ -114,14 +114,14 @@ fn test_large_records() {
 #[test]
 fn test_mutate_test_high_capacity_records() {
     // Step 1: Prepare the world.
-    let test_begining_timestamp = now_nanoseconds();
+    let test_begining_timestamp = now_seconds();
     let state_machine = state_machine_builder_for_nns_tests().build();
 
     let nns_init_payloads = NnsInitPayloadsBuilder::new()
         .with_initial_invariant_compliant_mutations()
         .build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
-    let after_initialization_timestamp = now_nanoseconds();
+    let after_initialization_timestamp = now_seconds();
 
     let original_version = registry_latest_version(&state_machine).unwrap();
 
