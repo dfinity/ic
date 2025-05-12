@@ -292,10 +292,18 @@ jobs:
         shell: bash
         run: |
           set -xeuo pipefail
+
+          # Set up virtualenv and activate it
+          python3 -m venv venv
+          source venv/bin/activate
+
+          # Upgrade pip and install requirements
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
           export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
-          # Ignore externally-managed-environment pip error, install packages system-wide.
-          PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
           cd ci/src
+
           pytest -m "not fails_on_merge_train" -v -o junit_family=xunit1 \
             --junitxml=../../test_report.xml --cov=. --cov-report=term \
             --cov-report=term-missing --cov-report=html --cov-branch
