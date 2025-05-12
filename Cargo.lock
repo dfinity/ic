@@ -16936,6 +16936,7 @@ dependencies = [
  "slog",
  "tokio",
  "url",
+ "wabt-tests",
 ]
 
 [[package]]
