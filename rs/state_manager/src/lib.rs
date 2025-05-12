@@ -2236,6 +2236,7 @@ impl StateManagerImpl {
         mut state: ReplicatedState,
         height: Height,
     ) -> CreateCheckpointResult {
+        info!(&self.log, "create_checkpoint_and_switch: {}", height);
         self.observe_num_loaded_pagemaps(&state);
         self.observe_num_loaded_wasm_files(&state);
         struct PreviousCheckpointInfo {

@@ -28,6 +28,7 @@ use canister_test::{Canister, Runtime};
 use dfn_candid::candid;
 use futures::future::join_all;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet, VmResources};
 use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
@@ -44,13 +45,13 @@ use systest_message_routing_common::{install_canisters, parallel_async, start_al
 use xnet_test::Metrics;
 
 // Constants for all xnet tests.
-const PAYLOAD_SIZE_BYTES: u64 = 1024;
+const PAYLOAD_SIZE_BYTES: u64 = 2000 * 1024;
 /// Maximum messages a canister should send every round (in order to prevent it
 /// filling up its output queue). This should be estimated as:
 ///
 /// `queue_capacity / 10 /* max_rounds roundtrip */`
-const MAX_CANISTER_TO_CANISTER_RATE: usize = 5;
-const SEND_RATE_THRESHOLD: f64 = 0.3;
+const MAX_CANISTER_TO_CANISTER_RATE: usize = 500;
+const SEND_RATE_THRESHOLD: f64 = 0.03;
 const ERROR_PERCENTAGE_THRESHOLD: f64 = 5.0;
 const TARGETED_LATENCY_SECONDS: u64 = 20;
 
@@ -179,11 +180,18 @@ fn setup(env: TestEnv, config: Config) {
     if let Some(resources) = config.vm_resources {
         ic = ic.with_default_vm_resources(resources);
     }
-    (0..config.subnets)
-        .fold(ic, |ic, _idx| {
-            ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(config.nodes_per_subnet))
-        })
-        .setup_and_start(&env)
+    assert_eq!(config.subnets, 2);
+    for machine in [
+        "dm1-dll45.dm1.dfinity.network",
+        "dm1-dll46.dm1.dfinity.network",
+    ] {
+        ic = ic.add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_required_host_features(vec![HostFeature::Host(machine.to_string())])
+                .add_nodes(config.nodes_per_subnet),
+        );
+    }
+    ic.setup_and_start(&env)
         .expect("failed to setup IC under test");
 
     if config.with_prometheus {
@@ -199,6 +207,9 @@ fn setup(env: TestEnv, config: Config) {
     if config.with_prometheus {
         env.sync_with_prometheus();
     }
+    println!("Sleeping...");
+    std::thread::sleep(std::time::Duration::from_millis(600000));
+    println!("Sleeping done.");
 }
 
 pub fn test(env: TestEnv, config: Config) {
@@ -212,15 +223,15 @@ pub async fn test_async(env: TestEnv, config: Config) {
     let topology = env.topology_snapshot();
     // Install NNS for long tests (note that for large numbers of subnets or
     // nodes the registry might be too big for installation as a canister)
-    if config.runtime > Duration::from_secs(1200) {
-        info!(logger, "Installing NNS canisters on the root subnet...");
-        let nns_node = topology.root_subnet().nodes().next().unwrap();
-        NnsInstallationBuilder::new()
-            .install(&nns_node, &env)
-            .expect("Could not install NNS canisters");
-        info!(&logger, "NNS canisters installed successfully.");
-    }
-
+    //    if config.runtime > Duration::from_secs(1200) {
+    //        info!(logger, "Installing NNS canisters on the root subnet...");
+    //        let nns_node = topology.root_subnet().nodes().next().unwrap();
+    //        NnsInstallationBuilder::new()
+    //            .install(&nns_node, &env)
+    //            .expect("Could not install NNS canisters");
+    //        info!(&logger, "NNS canisters installed successfully.");
+    //    }
+    //
     test_async_impl(
         env,
         topology

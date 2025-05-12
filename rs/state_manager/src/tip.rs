@@ -163,6 +163,7 @@ pub(crate) fn spawn_tip_thread(
     let mut tip_state = TipState::default();
     // Height(0) doesn't need manifest
     tip_state.latest_checkpoint_state.has_manifest = true;
+    let mut checkpoint_counter = 0;
     let tip_handle = JoinOnDrop::new(
         std::thread::Builder::new()
             .name("TipThread".to_string())
@@ -170,6 +171,7 @@ pub(crate) fn spawn_tip_thread(
                 while let Ok(req) = tip_receiver.recv() {
                     match req {
                         TipRequest::FilterTipCanisters { height, ids } => {
+                            info!(log, "FilterTipCanisters");
                             let _timer = request_timer(&metrics, "filter_tip_canisters");
                             debug_assert!(!tip_state.tip_folder_state.has_filtered_canisters);
                             tip_state.tip_folder_state.has_filtered_canisters = true;
@@ -191,6 +193,7 @@ pub(crate) fn spawn_tip_thread(
                             fd_factory,
                             sender,
                         } => {
+                            info!(log, "TipToCheckpoint");
                             debug_assert!(tip_state.latest_checkpoint_state.has_manifest);
                             debug_assert_eq!(tip_state.tip_folder_state.page_maps_height, height);
                             debug_assert!(tip_state.tip_folder_state.has_filtered_canisters);
@@ -223,15 +226,22 @@ pub(crate) fn spawn_tip_thread(
                                         .expect("Failed to send TipToCheckpoint result");
                                 }
                                 Ok(result) => {
-                                    sender
-                                        .send(Ok((
-                                            Arc::clone(&result.state),
-                                            result.checkpoint_readonly,
-                                        )))
-                                        .expect("Failed to send TipToCheckpoint result");
+                                    if checkpoint_counter % 2 != 0 {
+                                        sender
+                                            .send(Ok((
+                                                Arc::clone(&result.state),
+                                                result.checkpoint_readonly.clone(),
+                                            )))
+                                            .expect("Failed to send TipToCheckpoint result");
+                                    }
                                     if let Some(checkpoint_readwrite) = result.checkpoint_readwrite
                                     {
-                                        let _timer = request_timer(&metrics, "serialize_to_tip");
+                                        info!(log, "serialize protos");
+                                        let _timer =
+                                            request_timer(&metrics, "serialize_protos_to_tip");
+                                        //std::thread::sleep(std::time::Duration::from_millis(
+                                        //100000,
+                                        //));
                                         serialize_protos_to_tip(
                                             &result.state,
                                             &checkpoint_readwrite,
@@ -248,9 +258,18 @@ pub(crate) fn spawn_tip_thread(
                                             },
                                         );
                                     }
+                                    if checkpoint_counter % 2 == 0 {
+                                        sender
+                                            .send(Ok((
+                                                Arc::clone(&result.state),
+                                                result.checkpoint_readonly,
+                                            )))
+                                            .expect("Failed to send TipToCheckpoint result");
+                                    }
                                 }
                             };
                             tip_state.latest_checkpoint_state.has_protos = Some(height);
+                            checkpoint_counter += 1;
                         }
 
                         TipRequest::FlushPageMapDelta {
@@ -258,6 +277,7 @@ pub(crate) fn spawn_tip_thread(
                             pagemaps,
                             unflushed_checkpoint_ops,
                         } => {
+                            info!(log, "FlushPageMapDelta");
                             let _timer = request_timer(&metrics, "flush_unflushed_delta");
                             debug_assert!(tip_state.tip_folder_state.page_maps_height <= height);
                             tip_state.tip_folder_state.page_maps_height = height;
@@ -331,6 +351,7 @@ pub(crate) fn spawn_tip_thread(
                             checkpoint_layout,
                             pagemaptypes,
                         } => {
+                            info!(log, "ResetTipAndMerge");
                             let _timer = request_timer(&metrics, "reset_tip_to");
                             tip_state.tip_folder_state = Default::default();
                             tip_state.tip_folder_state.page_maps_height =
@@ -362,6 +383,7 @@ pub(crate) fn spawn_tip_thread(
                         }
 
                         TipRequest::Wait { sender } => {
+                            info!(log, "Wait");
                             let _timer = request_timer(&metrics, "wait");
                             let _ = sender.send(());
                         }
@@ -372,6 +394,8 @@ pub(crate) fn spawn_tip_thread(
                             states,
                             persist_metadata_guard,
                         } => {
+                            info!(log, "ComputeManifest");
+
                             let _timer = request_timer(&metrics, "compute_manifest");
                             if let Some(manifest_delta) = &manifest_delta {
                                 info!(
@@ -408,6 +432,7 @@ pub(crate) fn spawn_tip_thread(
                             own_subnet_type,
                             fd_factory,
                         } => {
+                            info!(log, "Validate");
                             let _timer = request_timer(&metrics, "validate_replicated_state");
                             debug_assert_eq!(
                                 tip_state.latest_checkpoint_state.page_maps_height,
