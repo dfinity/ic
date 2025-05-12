@@ -127,7 +127,7 @@ def _artifact_bundle_impl(ctx):
 
     bundle_root = ctx.actions.declare_directory("bundle-{}".format(ctx.attr.name))
 
-    bundle_prefix = ctx.attr.prefix # TODO: enforce prefix?
+    bundle_prefix = ctx.attr.prefix  # TODO: enforce prefix?
 
     #bundle_dir = "bundle-{}/{}".format(suffix, prefix)
 
@@ -149,11 +149,11 @@ def _artifact_bundle_impl(ctx):
     # NOTE: This might produce confusing output if `input_files` contain
     # files with identical names in different directories.
     ctx.actions.run_shell(
-        inputs = input_files , # TODO: use 'symlinks' as arguments?
+        inputs = input_files,  # TODO: use 'symlinks' as arguments?
         arguments = [file.path for file in input_files],
         env = {
             "BUNDLE_ROOT": bundle_root.path,
-            "BUNDLE_PREFIX": bundle_prefix
+            "BUNDLE_PREFIX": bundle_prefix,
         },
         outputs = [bundle_root],
         tools = [ctx.executable._sha256],
