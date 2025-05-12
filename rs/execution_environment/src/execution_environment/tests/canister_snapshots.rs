@@ -2838,7 +2838,7 @@ fn canister_snapshot_roundtrip_succeeds() {
         canister_id,
         new_snapshot_id.to_vec(),
         CanisterSnapshotDataOffset::StableMemory { offset: 0 },
-        snapshot_stable_memory,
+        snapshot_stable_memory.clone(),
     );
     test.subnet_message(
         "upload_canister_snapshot_data",
@@ -2890,15 +2890,6 @@ fn canister_snapshot_roundtrip_succeeds() {
     // we reverted to the old state, so the counter should be 3 again.
     assert_eq!(3, i32::from_le_bytes(bytes[0..4].try_into().unwrap()));
 
-    // change state
-    let WasmResult::Reply(bytes) = test
-        .ingress(canister_id, "inc", Encode!(&()).unwrap())
-        .unwrap()
-    else {
-        panic!("Expected reply")
-    };
-    assert_eq!(4, i32::from_le_bytes(bytes[0..4].try_into().unwrap()));
-
     // 11. compare snapshot metadata
     let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
     let result = test.subnet_message("take_canister_snapshot", args.encode());
@@ -2913,7 +2904,29 @@ fn canister_snapshot_roundtrip_succeeds() {
         panic!("expected WasmResult::Reply")
     };
     let md_2 = Decode!(&bytes, ReadCanisterSnapshotMetadataResponse).unwrap();
-    assert_eq!(md_orig, md_2);
+    assert_eq!(md_orig.wasm_module_size, md_2.wasm_module_size);
+    assert_eq!(md_orig.wasm_memory_size, md_2.wasm_memory_size);
+    assert_eq!(md_orig.stable_memory_size, md_2.stable_memory_size);
+    assert_eq!(md_orig.exported_globals, md_2.exported_globals);
+    assert_eq!(md_orig.wasm_chunk_store, md_2.wasm_chunk_store);
+    assert_eq!(md_orig.global_timer, md_2.global_timer);
+    assert_eq!(
+        md_orig.on_low_wasm_memory_hook_status,
+        md_2.on_low_wasm_memory_hook_status
+    );
+    assert_eq!(md_orig.certified_data, md_2.certified_data);
+
+    // also assert stable memory equal
+    let args_stable = ReadCanisterSnapshotDataArgs::new(
+        canister_id,
+        new_snapshot_id,
+        CanisterSnapshotDataKind::StableMemory {
+            offset: 0,
+            size: md_2.stable_memory_size,
+        },
+    );
+    let snapshot_stable_memory_2 = read_canister_snapshot_data(&mut test, &args_stable);
+    assert_eq!(snapshot_stable_memory, snapshot_stable_memory_2);
 }
 
 /// Counter canister that also grows the stable memory by one page on "inc".
