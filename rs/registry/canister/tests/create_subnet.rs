@@ -298,7 +298,7 @@ fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: Mas
                 key_configs: vec![KeyConfigRequest {
                     key_config: Some(KeyConfig {
                         key_id: Some(key_id.clone()),
-                        pre_signatures_to_create_in_advance: if key_id.is_idkg_key() {
+                        pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
                             Some(101)
                         } else {
                             Some(0)
@@ -351,7 +351,11 @@ fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: Mas
             chain_key_config.key_configs,
             vec![KeyConfigInternal {
                 key_id: key_id.clone(),
-                pre_signatures_to_create_in_advance: if key_id.is_idkg_key() { 101 } else { 0 },
+                pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
+                    101
+                } else {
+                    0
+                },
                 max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
             }],
         );

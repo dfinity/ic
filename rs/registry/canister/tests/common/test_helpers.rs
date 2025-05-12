@@ -61,7 +61,11 @@ pub fn get_subnet_holding_chain_keys(
             .into_iter()
             .map(|key_id| KeyConfig {
                 key_id: key_id.clone(),
-                pre_signatures_to_create_in_advance: if key_id.is_idkg_key() { 1 } else { 0 },
+                pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
+                    1
+                } else {
+                    0
+                },
                 max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
             })
             .collect(),

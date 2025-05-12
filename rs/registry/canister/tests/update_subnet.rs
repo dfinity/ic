@@ -481,7 +481,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
         let chain_key_config = ChainKeyConfig {
             key_configs: vec![KeyConfig {
                 key_id: Some(key_id.clone()),
-                pre_signatures_to_create_in_advance: Some(if key_id.is_idkg_key() {
+                pre_signatures_to_create_in_advance: Some(if key_id.requires_pre_signatures() {
                     10
                 } else {
                     0
