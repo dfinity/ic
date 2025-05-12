@@ -148,7 +148,7 @@ jobs:
           fi
 
           # No system tests on forked PR runs
-          if [[ "$IS_FORK" == "true" ]]; then
+          if [[ "$FORK_PR" == "true" ]]; then
             EXCLUDED_TEST_TAGS+=(system_test)
           fi
 
