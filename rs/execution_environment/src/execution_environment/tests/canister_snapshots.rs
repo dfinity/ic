@@ -2879,9 +2879,16 @@ fn canister_snapshot_roundtrip_succeeds() {
     assert_eq!(4, i32::from_le_bytes(bytes[0..4].try_into().unwrap()));
 
     // 9. load snapshot
-    // helper_load_snapshot(&mut test, canister_id, snapshot_id);
-
+    helper_load_snapshot(&mut test, canister_id, new_snapshot_id);
+    let WasmResult::Reply(bytes) = test
+        .ingress(canister_id, "read", Encode!(&()).unwrap())
+        .unwrap()
+    else {
+        panic!("Expected reply")
+    };
     // 10. observe original state
+    // we reverted to the old state, so the counter should be 3 again.
+    assert_eq!(3, i32::from_le_bytes(bytes[0..4].try_into().unwrap()));
 }
 
 /// Counter canister that also grows the stable memory by one page on "inc".
