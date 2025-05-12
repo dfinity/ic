@@ -77,6 +77,7 @@ pub(crate) enum InstallCodeStep {
         memory_handling: CanisterMemoryHandling,
     },
     ClearCertifiedData,
+    ClearLog,
     DeactivateGlobalTimer,
     BumpCanisterVersion,
     AddCanisterChange {
@@ -146,6 +147,11 @@ impl InstallCodeHelper {
     pub fn clear_certified_data(&mut self) {
         self.steps.push(InstallCodeStep::ClearCertifiedData);
         self.canister.system_state.certified_data = Vec::new();
+    }
+
+    pub fn clear_log(&mut self) {
+        self.steps.push(InstallCodeStep::ClearLog);
+        self.canister.clear_log();
     }
 
     pub fn deactivate_global_timer(&mut self) {
@@ -475,10 +481,6 @@ impl InstallCodeHelper {
                 self.total_heap_delta.get() as usize / PAGE_SIZE,
                 instructions_used,
             );
-        }
-
-        if original.mode == CanisterInstallModeV2::Reinstall {
-            self.canister.clear_log();
         }
 
         DtsInstallCodeResult::Finished {
@@ -835,6 +837,10 @@ impl InstallCodeHelper {
             ),
             InstallCodeStep::ClearCertifiedData => {
                 self.clear_certified_data();
+                Ok(())
+            }
+            InstallCodeStep::ClearLog => {
+                self.clear_log();
                 Ok(())
             }
             InstallCodeStep::DeactivateGlobalTimer => {
