@@ -1,5 +1,5 @@
 //! The DKG public interface.
-use ic_interfaces_state_manager::StateManagerError;
+use crate::validation::ValidationError;
 use ic_types::{
     consensus::dkg,
     crypto::{
@@ -10,10 +10,9 @@ use ic_types::{
         CryptoError,
     },
     registry::RegistryClientError,
+    state_manager::StateManagerError,
     Height, NodeId,
 };
-
-use crate::validation::ValidationError;
 
 /// Errors which could occur when creating a Dkg payload.
 #[derive(PartialEq, Debug)]

@@ -1185,7 +1185,7 @@ impl AsInt for (CoarseTime, CallbackId) {
 
     #[inline]
     fn as_int(&self) -> u128 {
-        (self.0.as_secs_since_unix_epoch() as u128) << 64 | self.1.get() as u128
+        ((self.0.as_secs_since_unix_epoch() as u128) << 64) | self.1.get() as u128
     }
 }
 

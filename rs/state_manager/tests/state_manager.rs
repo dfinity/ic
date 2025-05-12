@@ -56,6 +56,7 @@ use ic_test_utilities_types::{
 use ic_types::batch::{
     BatchSummary, CanisterQueryStats, QueryStats, QueryStatsPayload, RawQueryStats, TotalQueryStats,
 };
+use ic_types::state_manager::StateManagerError;
 use ic_types::{
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus, WasmResult},
