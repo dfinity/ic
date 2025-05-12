@@ -33,7 +33,7 @@ artifact_bundle(
     inputs = [":prod"],
 )
 
-# The node providers download this
+# This image is used as the IC-OS installation image downloaded by Node Providers
 upload_artifacts(
     name = "upload_disk-img",
     inputs = [icos_images.disk_image],
