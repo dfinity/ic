@@ -39,8 +39,14 @@ struct ChunkInfo {
 /// Struct wrapping a validated chunk with its hash to be inserted into the chunk store.
 #[derive(Debug)]
 pub struct ValidatedChunk {
-    pub chunk: Vec<u8>,
-    pub hash: WasmChunkHash,
+    chunk: Vec<u8>,
+    hash: WasmChunkHash,
+}
+
+impl ValidatedChunk {
+    pub fn hash(&self) -> WasmChunkHash {
+        self.hash
+    }
 }
 
 /// The result of validating a chunk before it is inserted into the chunk store:

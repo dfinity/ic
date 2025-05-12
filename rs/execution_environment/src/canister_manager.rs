@@ -1257,7 +1257,7 @@ impl CanisterManager {
 
         round_limits.instructions -= as_round_instructions(instructions);
 
-        let hash = validated_chunk.hash.to_vec();
+        let hash = validated_chunk.hash().to_vec();
         canister
             .system_state
             .wasm_chunk_store
