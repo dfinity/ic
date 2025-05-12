@@ -37,7 +37,7 @@ fn test_second_level_public_key_derivation() {
     let derived_key = canister_key.derive_sub_key(context);
 
     assert_eq!(hex::encode(derived_key.serialize()),
-               "9784a7db548f0271d7e35abf3bda4021d8a5993c7736bfe3cc8304d35f77441c0618bb47b53694e04a33382668a96012155cae5b0e48d586475a7148bc648a13ba680b847a2853a438a557c5e6ab2d430c8a5213042918145277aaa7c1ff75e2");
+               "80b4f1e11766d32bed0ea4e8b05e82bf84519de4a63eca0213d9e3603a946ea2968150882d1e9508701f34048fcec80919b4f493a2a254fc13dc956f1d82c6b8e641f962e1c0342c95eb58e168327d5e51e9337627ac9f1aa93d2e3058a1ff09");
 }
 
 #[test]

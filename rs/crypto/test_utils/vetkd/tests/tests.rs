@@ -27,7 +27,7 @@ fn should_generate_valid_bls_signature() {
 
     let dpk = DerivedPublicKey::deserialize(&pk.public_key_bytes())
         .unwrap()
-        .derive_sub_key(&canister_id)
+        .derive_canister_key(&canister_id)
         .derive_sub_key(&context);
 
     assert!(ek.decrypt_and_verify(&tsk, &dpk, &input).is_ok());

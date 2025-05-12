@@ -49,11 +49,21 @@ fn hash_to_scalar(input: &[u8], domain_sep: &str) -> ic_bls12_381::Scalar {
     s[0]
 }
 
-fn prefix_with_len(bytes: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(bytes.len() + 8);
-    out.extend_from_slice(&(bytes.len() as u64).to_be_bytes());
-    out.extend_from_slice(bytes);
-    out
+fn hash_to_scalar_two_inputs(
+    input1: &[u8],
+    input2: &[u8],
+    domain_sep: &str,
+) -> ic_bls12_381::Scalar {
+    let combined_input = {
+        let mut c = Vec::with_capacity(2 * 8 + input1.len() + input2.len());
+        c.extend_from_slice(&(input1.len() as u64).to_be_bytes());
+        c.extend_from_slice(input1);
+        c.extend_from_slice(&(input2.len() as u64).to_be_bytes());
+        c.extend_from_slice(input2);
+        c
+    };
+
+    hash_to_scalar(&combined_input, domain_sep)
 }
 
 #[cfg_attr(feature = "js", wasm_bindgen)]
@@ -156,6 +166,19 @@ impl DerivedPublicKey {
         Ok(Self { point: dpk })
     }
 
+    /// Perform first-stage derivation of a public key
+    ///
+    /// This function is only effective/useful if the DerivedPublicKey struct is holding
+    /// the master public key. It then derives the canister public key
+    pub fn derive_canister_key(&self, canister_id: &[u8]) -> Self {
+        let dst = "ic-vetkd-bls12-381-g2-canister";
+
+        let offset = hash_to_scalar_two_inputs(&self.serialize(), canister_id, dst);
+
+        let derived_key = G2Affine::from(self.point + G2Affine::generator() * offset);
+        Self { point: derived_key }
+    }
+
     /// Perform second-stage derivation of a public key
     ///
     /// To create the derived public key in VetKD, a two step derivation is performed. The first step
@@ -174,7 +197,7 @@ impl DerivedPublicKey {
 
         let dst = "ic-vetkd-bls12-381-g2-context";
 
-        let offset = hash_to_scalar(&prefix_with_len(context), dst);
+        let offset = hash_to_scalar_two_inputs(&self.serialize(), context, dst);
 
         let derived_key = G2Affine::from(self.point + G2Affine::generator() * offset);
         Self { point: derived_key }

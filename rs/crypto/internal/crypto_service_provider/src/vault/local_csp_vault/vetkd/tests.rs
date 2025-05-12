@@ -35,9 +35,9 @@ fn should_correctly_create_encrypted_vetkd_key_share_for_smoke_test_vector() {
                 f3e68e13f62604d027660883213c90ea72810bcecee58b883fb62118e538243\
                 03718e6876ea400d083beb0439d3934122a4c4b2e58e3f145305b9a0c0a00e3\
                 2dd808574dec2605dbc7f122fe593ca0c07ca92720d0f17b7d53c9c68dbb93d\
-                489078859e5e5fe2b6612ac9536fe7f8b463ca890e170836d25beee4806cc5a\
-                1e087be4fa2223d4b8e1e12ff0932ab3d5c71916f5a1fb0d72f44dadb79eb4c\
-                eff8670",
+                489078859e5e5fe2b6612ac9536fe7f8b463c8e3293595c1e10730d4bc393e1\
+                7da0a7a145465e430829b5c02272a06b1b5aefa9af16abbe3827785cb3aff94\
+                cad533b"
             )
             .expect("invalid test vector")
         ))

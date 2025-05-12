@@ -40,7 +40,7 @@ fn should_consistently_derive_the_same_vetkey_given_sufficient_shares() {
         .expect("failed to deserialize transcript public key");
 
     let derived_public_key = transcript_key
-        .derive_sub_key(caller.as_slice())
+        .derive_canister_key(caller.as_slice())
         .derive_sub_key(context)
         .serialize();
 

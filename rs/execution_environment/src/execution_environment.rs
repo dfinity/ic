@@ -2962,7 +2962,7 @@ impl ExecutionEnvironment {
             })?;
 
         Ok(dpk
-            .derive_sub_key(caller.as_slice())
+            .derive_canister_key(caller.as_slice())
             .derive_sub_key(&context)
             .serialize())
     }
