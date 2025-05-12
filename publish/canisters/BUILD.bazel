@@ -104,13 +104,14 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.update(SNS_CANISTER_NAME_TO_MAX_COMPRESSE
 
 [
     file_size_check(
-        name = name,
+        name = file + "_size_check",
+        file = file,
         max_file_size = CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.get(
-            name,
+            file,
             DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES,
         ) * 100000,
     )
-    for (name, size) in CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.items()
+    for (file, size) in CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.items()
 ]
 
 # `bazel cquery --output=files` that is used by build-ic script does not show external sources of `filegroup` targets.
