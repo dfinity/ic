@@ -39,8 +39,8 @@ if [[ ${#ARGS[@]} -eq 0 ]]; then
 fi
 
 if [ ! -e /cache ]; then
-    sudo mkdir /cache
-    sudo chown "$(id -u)":"$(id -g)" /cache
+    sudo mkdir -p /cache/bazel/content_addressable
+    sudo chown -R "$(id -u)":"$(id -g)" /cache
 fi
 
 ci/container/build-ic.sh "${ARGS[@]}" --no-release
