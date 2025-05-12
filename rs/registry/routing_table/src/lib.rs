@@ -314,6 +314,14 @@ impl RoutingTable {
         Ok(())
     }
 
+    pub fn assign_canister(&mut self, canister_id: CanisterId, destination: SubnetId) {
+        let range = CanisterIdRange {
+            start: canister_id,
+            end: canister_id,
+        };
+        self.assign_range(range, destination);
+    }
+
     /// Assigns a canister ID range to the destination subnet.
     ///
     /// Notes:

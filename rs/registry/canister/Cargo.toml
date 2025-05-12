@@ -20,7 +20,7 @@ dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types/" }
 ic-certified-map = "0.3.1"
-ic-cdk = { workspace = true }
+ic-cdk = "0.17.1"
 ic-crypto-node-key-validation = { path = "../../crypto/node_key_validation" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-crypto-utils-basic-sig = { path = "../../crypto/utils/basic_sig" }
@@ -98,3 +98,6 @@ itertools = { workspace = true }
 registry-canister-protobuf-generator = { path = "./protobuf_generator" }
 tempfile = { workspace = true }
 tokio = { workspace = true }
+
+[features]
+test = []
