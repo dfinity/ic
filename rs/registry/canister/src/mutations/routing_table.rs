@@ -47,59 +47,56 @@ fn mutations_for_canister_ranges(
 ) -> Vec<RegistryMutation> {
     let mut old_it = old_rt
         .iter()
-        .map(|(r, &s)| ((r.start, s), r.end))
+        .map(|(range, &subnet)| ((range.start, subnet), range.end))
         .peekable();
     let mut new_it = new_rt
         .iter()
-        .map(|(r, &s)| ((r.start, s), r.end))
+        .map(|(range, &subnet)| ((range.start, subnet), range.end))
         .peekable();
 
     let mut mutations = vec![];
+
+    let range_key = |key: (CanisterId, SubnetId)| -> Vec<u8> {
+        make_canister_range_key(key.0, key.1).as_bytes().to_vec()
+    };
+
+    let create_entry = |key: (CanisterId, SubnetId), range_end: CanisterId| -> Vec<u8> {
+        pb::routing_table::Entry {
+            range: Some(pb::CanisterIdRange {
+                start_canister_id: Some(key.0.into()),
+                end_canister_id: Some(range_end.into()),
+            }),
+            subnet_id: Some(pb_subnet_id(key.1)),
+        }
+        .encode_to_vec()
+    };
 
     while old_it.peek().is_some() || new_it.peek().is_some() {
         match (old_it.peek(), new_it.peek()) {
             (Some(&(o_key, o_end)), Some(&(n_key, n_end))) => match o_key.cmp(&n_key) {
                 Ordering::Less => {
-                    mutations.push(delete(make_canister_range_key(o_key.0, o_key.1)));
+                    mutations.push(delete(range_key(o_key)));
                     old_it.next();
                 }
                 Ordering::Greater => {
-                    mutations.push(upsert(
-                        make_canister_range_key(n_key.0, n_key.1),
-                        pb::CanisterIdRange {
-                            start_canister_id: Some(n_key.0.into()),
-                            end_canister_id: Some(n_end.into()),
-                        }
-                        .encode_to_vec(),
-                    ));
+                    mutations.push(upsert(range_key(n_key), create_entry(n_key, n_end)));
                     new_it.next();
                 }
                 Ordering::Equal => {
-                    mutations.push(upsert(
-                        make_canister_range_key(n_key.0, n_key.1),
-                        pb::CanisterIdRange {
-                            start_canister_id: Some(n_key.0.into()),
-                            end_canister_id: Some(n_end.into()),
-                        }
-                        .encode_to_vec(),
-                    ));
+                    // only change differences, these mutations take space.
+                    if o_end != n_end {
+                        mutations.push(upsert(range_key(n_key), create_entry(n_key, n_end)));
+                    }
                     old_it.next();
                     new_it.next();
                 }
             },
             (Some(&(o_key, _)), None) => {
-                mutations.push(delete(make_canister_range_key(o_key.0, o_key.1)));
+                mutations.push(delete(range_key(o_key)));
                 old_it.next();
             }
             (None, Some(&(n_key, n_end))) => {
-                mutations.push(upsert(
-                    make_canister_range_key(n_key.0, n_key.1),
-                    pb::CanisterIdRange {
-                        start_canister_id: Some(n_key.0.into()),
-                        end_canister_id: Some(n_end.into()),
-                    }
-                    .encode_to_vec(),
-                ));
+                mutations.push(upsert(range_key(n_key), create_entry(n_key, n_end)));
                 new_it.next();
             }
             (None, None) => unreachable!(),
@@ -107,6 +104,14 @@ fn mutations_for_canister_ranges(
     }
 
     mutations
+}
+
+fn pb_subnet_id(subnet_id: SubnetId) -> ic_protobuf::types::v1::SubnetId {
+    ic_protobuf::types::v1::SubnetId {
+        principal_id: Some(ic_protobuf::types::v1::PrincipalId {
+            raw: subnet_id.get().as_slice().to_vec(),
+        }),
+    }
 }
 
 pub(crate) fn routing_table_into_registry_mutation(
@@ -122,7 +127,7 @@ pub(crate) fn routing_table_into_registry_mutation(
 
     let new_routing_table = pb::RoutingTable::from(routing_table);
     mutations.push(upsert(
-        make_routing_table_record_key().as_bytes().to_vec(),
+        make_routing_table_record_key().as_bytes(),
         new_routing_table.encode_to_vec(),
     ));
 
@@ -141,14 +146,6 @@ fn canister_migrations_into_registry_mutation(
         mutation_type,
         key: make_canister_migrations_record_key().as_bytes().to_vec(),
         value: buf,
-    }
-}
-
-fn pb_subnet_id(subnet_id: SubnetId) -> ic_protobuf::types::v1::SubnetId {
-    ic_protobuf::types::v1::SubnetId {
-        principal_id: Some(ic_protobuf::types::v1::PrincipalId {
-            raw: subnet_id.get().as_slice().to_vec(),
-        }),
     }
 }
 
@@ -179,23 +176,8 @@ impl Registry {
             );
         }
 
-        let entries = get_key_family_iter(&self, CANISTER_RANGE_PREFIX)
-            .map(|(k, v)| {
-                // TODO DO NOT MERGE this parsing seems like it will be fragile - encode Entry instead of just
-                // the minimal information?
-                let subnet_id_string = k.split("_").next().unwrap();
-                let subnet_id = PrincipalId::from_str(subnet_id_string).ok().map(|p| {
-                    ic_protobuf::types::v1::SubnetId {
-                        principal_id: Some(ic_protobuf::types::v1::PrincipalId {
-                            raw: p.as_slice().to_vec(),
-                        }),
-                    }
-                });
-                pb::routing_table::Entry {
-                    range: Some(v),
-                    subnet_id,
-                }
-            })
+        let entries = get_key_family_iter(self, CANISTER_RANGE_PREFIX)
+            .map(|(_, v)| v)
             .collect::<Vec<pb::routing_table::Entry>>();
 
         RoutingTable::try_from(pb::RoutingTable { entries }).unwrap()
@@ -537,7 +519,7 @@ mod tests {
     }
 
     /// Helper to build a RoutingTable from a Vec of ((start, end), subnet_id)
-    fn make_rt(ranges: Vec<((u64, u64), SubnetId)>) -> RoutingTable {
+    fn make_routing_table(ranges: Vec<((u64, u64), SubnetId)>) -> RoutingTable {
         let mut rt = RoutingTable::new();
         for ((start, end), subnet) in ranges {
             rt.insert(
@@ -552,10 +534,20 @@ mod tests {
         rt
     }
 
+    fn make_entry(start: u64, end: u64, subnet: SubnetId) -> pb::routing_table::Entry {
+        pb::routing_table::Entry {
+            range: Some(pb::CanisterIdRange {
+                start_canister_id: Some(CanisterId::from(start).into()),
+                end_canister_id: Some(CanisterId::from(end).into()),
+            }),
+            subnet_id: Some(pb_subnet_id(subnet)),
+        }
+    }
+
     #[test]
     fn empty_old_and_new_yields_no_mutations() {
-        let old = make_rt(vec![]);
-        let new = make_rt(vec![]);
+        let old = make_routing_table(vec![]);
+        let new = make_routing_table(vec![]);
         let muts = mutations_for_canister_ranges(&old, &new);
         assert!(muts.is_empty());
     }
@@ -563,8 +555,8 @@ mod tests {
     #[test]
     fn old_has_extra_range_generates_delete() {
         let subnet = SubnetId::new(PrincipalId::new_user_test_id(1));
-        let old = make_rt(vec![((10, 20), subnet)]);
-        let new = make_rt(vec![]);
+        let old = make_routing_table(vec![((10, 20), subnet)]);
+        let new = make_routing_table(vec![]);
         let muts = mutations_for_canister_ranges(&old, &new);
 
         let expected = vec![delete(make_canister_range_key(
@@ -577,15 +569,11 @@ mod tests {
     #[test]
     fn new_has_extra_range_generates_upsert() {
         let subnet = SubnetId::new(PrincipalId::new_user_test_id(2));
-        let old = make_rt(vec![]);
-        let new = make_rt(vec![((30, 40), subnet)]);
+        let old = make_routing_table(vec![]);
+        let new = make_routing_table(vec![((30, 40), subnet)]);
         let muts = mutations_for_canister_ranges(&old, &new);
 
-        let value = pb::CanisterIdRange {
-            start_canister_id: Some(CanisterId::from(30).into()),
-            end_canister_id: Some(CanisterId::from(40).into()),
-        }
-        .encode_to_vec();
+        let value = make_entry(30, 40, subnet).encode_to_vec();
 
         let expected = vec![upsert(
             make_canister_range_key(CanisterId::from(30), subnet),
@@ -595,56 +583,34 @@ mod tests {
     }
 
     #[test]
-    fn identical_range_still_generates_idempotent_upsert() {
+    fn identical_range_generates_no_mutation() {
         let subnet = SubnetId::new(PrincipalId::new_user_test_id(3));
-        let old = make_rt(vec![((100, 200), subnet)]);
-        let new = make_rt(vec![((100, 200), subnet)]);
+        let old = make_routing_table(vec![((100, 200), subnet)]);
+        let new = make_routing_table(vec![((100, 200), subnet)]);
         let muts = mutations_for_canister_ranges(&old, &new);
 
-        let value = pb::CanisterIdRange {
-            start_canister_id: Some(CanisterId::from(100).into()),
-            end_canister_id: Some(CanisterId::from(200).into()),
-        }
-        .encode_to_vec();
-
-        let expected = vec![upsert(
-            make_canister_range_key(CanisterId::from(100), subnet),
-            value,
-        )];
+        let expected = vec![];
         assert_eq!(muts, expected);
     }
 
     #[test]
-    fn mixed_case_generates_upsert_delete_upsert_in_order() {
+    fn mixed_case_generates_delete_upsert() {
         let s1 = SubnetId::new(PrincipalId::new_user_test_id(4));
         let s2 = SubnetId::new(PrincipalId::new_user_test_id(5));
         let s3 = SubnetId::new(PrincipalId::new_user_test_id(6));
 
         // old has (1,5)->s1 and (3,7)->s2
-        let old = make_rt(vec![((1, 2), s1), ((3, 7), s2)]);
+        let old = make_routing_table(vec![((1, 2), s1), ((3, 7), s2)]);
         // new has (1,5)->s1 and (4,8)->s3
-        let new = make_rt(vec![((1, 2), s1), ((4, 8), s3)]);
+        let new = make_routing_table(vec![((1, 2), s1), ((4, 8), s3)]);
 
         let muts = mutations_for_canister_ranges(&old, &new);
 
-        // 1) equal on (1,s1) → upsert
-        let v1 = pb::CanisterIdRange {
-            start_canister_id: Some(CanisterId::from(1).into()),
-            end_canister_id: Some(CanisterId::from(2).into()),
-        }
-        .encode_to_vec();
-        // 2) old (3,s2) < new (4,s3) → delete
-        // 3) leftover new (4,s3) → upsert
-        let v3 = pb::CanisterIdRange {
-            start_canister_id: Some(CanisterId::from(4).into()),
-            end_canister_id: Some(CanisterId::from(8).into()),
-        }
-        .encode_to_vec();
+        let value = make_entry(4, 8, s3).encode_to_vec();
 
         let expected = vec![
-            upsert(make_canister_range_key(CanisterId::from(1), s1), v1),
             delete(make_canister_range_key(CanisterId::from(3), s2)),
-            upsert(make_canister_range_key(CanisterId::from(4), s3), v3),
+            upsert(make_canister_range_key(CanisterId::from(4), s3), value),
         ];
         assert_eq!(muts, expected);
     }
