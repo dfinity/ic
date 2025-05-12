@@ -552,6 +552,8 @@ impl CanisterState {
     /// executing on one subnet, but for which a response may only be produced by
     /// another subnet.
     pub fn drop_in_progress_management_calls_after_split(&mut self) {
+        use crate::CanisterStatus;
+
         // Destructure `self` in order for the compiler to enforce an explicit decision
         // whenever new fields are added.
         //

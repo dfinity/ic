@@ -634,24 +634,63 @@ impl ReplicatedState {
         &self,
         canister_id: &CanisterId,
     ) -> Result<&CanisterState, UserError> {
-        let canister = self.canister_state(canister_id).ok_or_else(|| {
-            UserError::new(
+        use crate::{SystemState, CanisterStatus};
+
+        match self.canister_state(canister_id) {
+            None => Err(UserError::new(
                 ErrorCode::CanisterNotFound,
                 format!("Canister {} not found", canister_id),
-            )
-        })?;
-
-        if canister.system_state.call_context_manager().is_none() {
-            Err(UserError::new(
+            )),
+            Some(
+                CanisterState {
+                    system_state:
+                        SystemState {
+                            status: CanisterStatus::Stopped(_),
+                            canister_id,
+                            ..
+                        },
+                    ..
+                },
+            ) => Err(UserError::new(
                 ErrorCode::CanisterStopped,
                 format!(
                     "Canister {} is stopped and therefore does not have a CallContextManager",
-                    canister.canister_id()
+                    canister_id
                 ),
-            ))
-        } else {
-            Ok(canister)
+            )),
+            Some(canister) => Ok(canister),
         }
+        /*
+                let canister = self.canister_state(canister_id).ok_or_else(|| {
+                    UserError::new(
+                        ErrorCode::CanisterNotFound,
+                        format!("Canister {} not found", canister_id),
+                    )
+                })?;
+
+                if let CanisterStatus::Stopped(_) = canister.system_state.status {
+                    Err(UserError::new(
+                        ErrorCode::CanisterStopped,
+                        format!(
+                            "Canister {} is stopped and therefore does not have a CallContextManager",
+                            canister.canister_id()
+                        ),
+                    ))
+                } else {
+                    Ok(canister)
+                }
+                if canister.system_state.call_context_manager().is_none() {
+                    Err(UserError::new(
+                        ErrorCode::CanisterStopped,
+                        format!(
+                            "Canister {} is stopped and therefore does not have a CallContextManager",
+                            canister.canister_id()
+                        ),
+                    ))
+                } else {
+                    Ok(canister)
+                }
+        */
     }
 
     pub fn system_metadata(&self) -> &SystemMetadata {
@@ -851,6 +890,7 @@ impl ReplicatedState {
             .map(|canister| {
                 canister
                     .system_state
+                    .status
                     .call_context_manager()
                     .map_or(0, |ccm| ccm.callbacks().len())
             })

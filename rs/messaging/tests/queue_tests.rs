@@ -21,6 +21,14 @@ use xnet_test::{Metrics, StartArgs};
 
 const MAX_TICKS: u64 = 100;
 
+#[test]
+fn ultra_test() {
+    use ic_replicated_state::canister_state::system_state::{
+        CanisterStatus, Running, Stopped, Stopping,
+    };
+    let _running = Running::new();
+}
+
 /// Wrapper for two references to state machines, one considered the `local subnet` and the
 /// other the `remote subnet`, such that both subnets have a main 'xnet-test-canister' installed,
 /// that will be referred to as 'the local canister' with ID `self.local_canister_id` and

@@ -71,7 +71,7 @@ pub use canister_state::{
     num_bytes_try_from,
     system_state::{
         memory_usage_of_request, CallContext, CallContextAction, CallContextManager, CallOrigin,
-        CanisterMetrics, CanisterStatus, ExecutionTask, SystemState,
+        CanisterMetrics, CanisterStatus, Running, Stopping, Stopped, ExecutionTask, SystemState,
     },
     CanisterQueues, CanisterState, EmbedderCache, ExecutionState, ExportedFunctions, NumWasmPages,
     SchedulerState,

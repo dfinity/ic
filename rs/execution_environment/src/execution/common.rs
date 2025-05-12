@@ -438,7 +438,7 @@ fn try_apply_canister_state_changes(
 /// Potential causes of failure:
 /// - Changes in the environment such as subnet available memory while the
 ///   long-execution with deterministic time slicing was in progress.
-/// - A mismatch between checks dones by the Wasm executor and checks done when
+/// - A mismatch between checks done by the Wasm executor and checks done when
 ///   applying the changes due to a bug.
 /// - An escape from the Wasm sandbox that corrupts the execution output.
 #[allow(clippy::too_many_arguments)]

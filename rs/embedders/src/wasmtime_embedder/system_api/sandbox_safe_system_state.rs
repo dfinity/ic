@@ -24,7 +24,7 @@ use ic_replicated_state::canister_state::system_state::{
 };
 use ic_replicated_state::{
     canister_state::execution_state::WasmExecutionMode, canister_state::DEFAULT_QUEUE_CAPACITY,
-    CallOrigin, ExecutionTask, MessageMemoryUsage, NetworkTopology, SystemState,
+    CallOrigin, ExecutionTask, MessageMemoryUsage, NetworkTopology, SystemState, CanisterStatus, Running, Stopping,
 };
 use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext, Request, RequestMetadata, NO_DEADLINE},
@@ -335,6 +335,20 @@ impl SystemStateModifications {
                     .remove(ExecutionTask::OnLowWasmMemory);
             }
         }
+        
+        let call_context_manager = match &mut system_state.status {
+            CanisterStatus::Running(Running {
+                call_context_manager,
+                ..
+            }) |
+            CanisterStatus::Stopping(Stopping {
+                call_context_manager,
+                ..
+            }) => call_context_manager,
+            CanisterStatus::Stopped(_) => {
+                return Err(Self::error("canister is stopped"));
+            }
+        };
 
         // Verify we don't accept more cycles than are available from call
         // context and update the call context balance.
@@ -342,7 +356,7 @@ impl SystemStateModifications {
             if call_context_balance_taken != Cycles::zero() {
                 let own_canister_id = system_state.canister_id;
 
-                let call_context = system_state
+                let call_context = call_context_manager
                     .withdraw_cycles(context_id, call_context_balance_taken)
                     .map_err(Self::error)?;
                 if (call_context_balance_taken).get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
@@ -464,17 +478,14 @@ impl SystemStateModifications {
                     if let Some(receiver) = callback_changes.get(&expected_id) {
                         callback.respondent = *receiver;
                     }
-                    let id = system_state
-                        .register_callback(callback)
-                        .map_err(|_| Self::error("Call context manager does not exist"))?;
+                    let id = call_context_manager.register_callback(callback);
                     if id != expected_id {
                         return Err(Self::error("Failed to register update callback"));
                     }
                 }
                 CallbackUpdate::Unregister(callback_id) => {
-                    system_state
+                    call_context_manager
                         .unregister_callback(callback_id)
-                        .map_err(|_| Self::error("Call context manager does not exist"))?
                         .ok_or_else(|| {
                             Self::error("Tried to unregister callback with an ID that isn't in use")
                         })?;

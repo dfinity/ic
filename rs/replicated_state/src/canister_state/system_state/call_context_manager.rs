@@ -602,7 +602,7 @@ impl CallContextManager {
     /// Returns a reference to the `CallContext` if successful. Returns an error
     /// message if the call context does not exist or if the call context does not
     /// have enough cycles.
-    pub(super) fn withdraw_cycles(
+    pub fn withdraw_cycles(
         &mut self,
         call_context_id: CallContextId,
         cycles: Cycles,
@@ -772,7 +772,7 @@ impl CallContextManager {
     }
 
     /// Registers a callback for an outgoing call.
-    pub(super) fn register_callback(&mut self, callback: Callback) -> CallbackId {
+    pub fn register_callback(&mut self, callback: Callback) -> CallbackId {
         self.next_callback_id += 1;
         let callback_id = CallbackId::from(self.next_callback_id);
 
@@ -801,7 +801,7 @@ impl CallContextManager {
 
     /// If we get a response for one of the outstanding calls, we unregister
     /// the callback and return it.
-    pub(super) fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Arc<Callback>> {
+    pub fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Arc<Callback>> {
         self.callbacks.remove(&callback_id).inspect(|callback| {
             let outstanding_callbacks = *self
                 .outstanding_callbacks
