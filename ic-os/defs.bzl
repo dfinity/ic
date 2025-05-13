@@ -180,17 +180,6 @@ def icos_build(
 
     # -------------------- Extract boot partition --------------------
 
-    boot_extra_files = {
-        k: v
-        for k, v in (
-            image_deps["bootfs"].items() + [
-                (":version.txt", "/version.txt:0644"),
-                (":extra_boot_args", "/extra_boot_args:0644"),
-                (":boot_args", "/boot_args:0644"),
-            ]
-        )
-    }
-
     ext4_image(
         name = "partition-boot.tzst",
         src = ":rootfs-tree.tar",
@@ -200,7 +189,16 @@ def icos_build(
         target_compatible_with = [
             "@platforms//os:linux",
         ],
-        extra_files = boot_extra_files,
+        extra_files = {
+            k: v
+            for k, v in (
+                image_deps["bootfs"].items() + [
+                    (":version.txt", "/version.txt:0644"),
+                    (":extra_boot_args", "/extra_boot_args:0644"),
+                    (":boot_args", "/boot_args:0644"),
+                ]
+            )
+        },
         tags = ["manual", "no-cache"],
     )
 
@@ -305,8 +303,7 @@ def icos_build(
                 echo "EXTRA_BOOT_ARGS is not set in $(location :extra_boot_args)"
                 exit 1
             fi
-            echo "define(EXTRA_BOOT_ARGS, $${EXTRA_BOOT_ARGS})dnl" > m4_defs.m4
-            m4 m4_defs.m4 "$(location :boot_args_template)" > $@
+            m4 --define=EXTRA_BOOT_ARGS="$${EXTRA_BOOT_ARGS}" "$(location :boot_args_template)" > $@
         """,
         tags = ["manual"],
     )
