@@ -860,7 +860,6 @@ pub async fn create_new_subnet_with_keys(
             .into_iter()
             .map(|(key_id, subnet_id)| KeyConfigRequest {
                 key_config: Some(KeyConfigCreate {
-                    key_id: Some(key_id),
                     pre_signatures_to_create_in_advance: Some(
                         if key_id.requires_pre_signatures() {
                             4
@@ -869,6 +868,7 @@ pub async fn create_new_subnet_with_keys(
                         },
                     ),
                     max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                    key_id: Some(key_id),
                 }),
                 subnet_id: Some(subnet_id),
             })
