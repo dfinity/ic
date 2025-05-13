@@ -197,10 +197,7 @@ impl CatchUpPackageProvider {
 
         let uri = uri.to_string();
 
-        let Some(protobuf) = self
-            .fetch_catch_up_package(node_id, uri.clone(), param)
-            .await?
-        else {
+        let Some(protobuf) = self.fetch_catch_up_package(node_id, &uri, param).await? else {
             return Ok(None);
         };
         let cup = CatchUpPackage::try_from(&protobuf)
@@ -225,7 +222,7 @@ impl CatchUpPackageProvider {
     async fn fetch_catch_up_package(
         &self,
         node_id: &NodeId,
-        url: String,
+        url: &str,
         param: Option<CatchUpPackageParam>,
     ) -> Result<Option<pb::CatchUpPackage>, String> {
         info!(self.logger, "Fetching CUP from {node_id} @ {url}.");
