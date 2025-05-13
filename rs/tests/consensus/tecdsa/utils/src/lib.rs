@@ -54,7 +54,7 @@ pub const DKG_INTERVAL: u64 = 19;
 pub const NUMBER_OF_NODES: usize = 4;
 
 const VETKD_TRANSPORT_SECRET_KEY_SEED: [u8; 32] = [13; 32];
-const GET_SIGNATURE_RETRIES: i32 = 10;
+const GET_SIGNATURE_RETRIES: i32 = 500;
 
 pub fn make_key(name: &str) -> EcdsaKeyId {
     EcdsaKeyId {
@@ -246,7 +246,7 @@ pub fn run_chain_key_signature_test(
     info!(logger, "Run through Chain key signature test.");
     let message_hash = vec![0xabu8; 32];
     block_on(async {
-        let public_key = get_public_key_with_retries(key_id, canister, logger, 100)
+        let public_key = get_public_key_with_retries(key_id, canister, logger, 500)
             .await
             .unwrap();
         assert_eq!(existing_key, public_key);
@@ -273,7 +273,7 @@ pub fn get_master_public_key(
         logger,
         "Getting threshold public key for key id: {}.", key_id
     );
-    let public_key = block_on(get_public_key_with_retries(key_id, canister, logger, 100)).unwrap();
+    let public_key = block_on(get_public_key_with_retries(key_id, canister, logger, 500)).unwrap();
     info!(logger, "Got public key {:?}", public_key);
     public_key
 }
@@ -368,7 +368,7 @@ pub async fn get_ecdsa_public_key_with_retries(
                         logger,
                         "ecdsa_public_key returns `{}`. Trying again in 2 seconds...", err
                     );
-                    tokio::time::sleep(Duration::from_secs(2)).await;
+                    tokio::time::sleep(Duration::from_secs(5)).await;
                 } else {
                     return Err(err);
                 }
@@ -631,9 +631,9 @@ pub async fn get_ecdsa_signature_with_logger(
                 if count < GET_SIGNATURE_RETRIES {
                     debug!(
                         logger,
-                        "sign_with_ecdsa returns `{}`. Trying again in 2 seconds...", err
+                        "sign_with_ecdsa returns `{}`. Trying again in 5 seconds...", err
                     );
-                    tokio::time::sleep(Duration::from_secs(2)).await;
+                    tokio::time::sleep(Duration::from_secs(5)).await;
                 } else {
                     return Err(err);
                 }
@@ -688,9 +688,9 @@ pub async fn get_schnorr_signature_with_logger(
                 if count < GET_SIGNATURE_RETRIES {
                     debug!(
                         logger,
-                        "sign_with_schnorr returns `{}`. Trying again in 2 seconds...", err
+                        "sign_with_schnorr returns `{}`. Trying again in 5 seconds...", err
                     );
-                    tokio::time::sleep(Duration::from_secs(2)).await;
+                    tokio::time::sleep(Duration::from_secs(5)).await;
                 } else {
                     return Err(err);
                 }
@@ -741,9 +741,9 @@ pub async fn get_vetkd_with_logger(
                 if count < GET_SIGNATURE_RETRIES {
                     debug!(
                         logger,
-                        "vetkd_derive_key returns `{}`. Trying again in 2 seconds...", err
+                        "vetkd_derive_key returns `{}`. Trying again in 5 seconds...", err
                     );
-                    tokio::time::sleep(Duration::from_secs(2)).await;
+                    tokio::time::sleep(Duration::from_secs(5)).await;
                 } else {
                     return Err(err);
                 }
@@ -855,14 +855,14 @@ pub async fn create_new_subnet_with_keys(
             .map(|(key_id, subnet_id)| KeyConfigRequest {
                 key_config: Some(KeyConfigCreate {
                     key_id: Some(key_id),
-                    pre_signatures_to_create_in_advance: Some(4),
-                    max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                    pre_signatures_to_create_in_advance: Some(7),
+                    max_queue_size: Some(20),
                 }),
                 subnet_id: Some(subnet_id),
             })
             .collect(),
-        signature_request_timeout_ns: None,
-        idkg_key_rotation_period_ms: None,
+        signature_request_timeout_ns: Some(1800000000000),
+        idkg_key_rotation_period_ms: Some(604800000),
     };
     let config = ic_prep_lib::subnet_configuration::get_default_config_params(
         SubnetType::Application,
@@ -879,13 +879,13 @@ pub async fn create_new_subnet_with_keys(
         initial_notary_delay_millis: ic_prep_lib::subnet_configuration::duration_to_millis(
             config.initial_notary_delay,
         ),
-        dkg_interval_length: DKG_INTERVAL,
+        dkg_interval_length: 499,
         dkg_dealings_per_block: config.dkg_dealings_per_block as u64,
         start_as_nns: false,
         subnet_type: SubnetType::Application,
         is_halted: false,
         features: Default::default(),
-        max_number_of_canisters: 4,
+        max_number_of_canisters: 400,
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
         chain_key_config: Some(chain_key_config),
