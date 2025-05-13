@@ -377,9 +377,6 @@ fn test_changing_the_sha_invalidates_the_proposal() {
         // Build and submit a second root proposal
         let change_canister_request2 =
             ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
-                .with_memory_allocation(ic_nns_constants::memory_allocation_of(
-                    GOVERNANCE_CANISTER_ID,
-                ))
                 .with_wasm(ic_test_utilities::empty_wasm::EMPTY_WASM.to_vec());
 
         let response: Result<(), String> = nns_canisters
