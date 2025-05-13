@@ -1906,7 +1906,7 @@ impl IDkgMessageDb {
             self.db_env.clone(),
             self.db,
             deserialize_fn,
-            pattern.map(|p| p.into()),
+            pattern.map(IDkgIdKey::from),
             self.log.clone(),
         ))
     }
