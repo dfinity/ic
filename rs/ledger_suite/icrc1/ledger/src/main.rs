@@ -1108,13 +1108,10 @@ fn is_ledger_ready() -> bool {
 #[query]
 #[candid_method(query)]
 fn icrc103_get_allowances(arg: GetAllowancesArgs) -> Result<Allowances, GetAllowancesError> {
-    let from_account = match arg.from_account {
-        Some(from_account) => from_account,
-        None => Account {
-            owner: ic_cdk::api::caller(),
-            subaccount: None,
-        },
-    };
+    let from_account = arg.from_account.unwrap_or_else(|| Account {
+        owner: ic_cdk::api::caller(),
+        subaccount: None,
+    });
     let max_take_allowances = Access::with_ledger(|ledger| ledger.max_take_allowances());
     let max_results = arg.take.unwrap_or(Nat::from(u64::MAX));
     let max_results = std::cmp::min(
