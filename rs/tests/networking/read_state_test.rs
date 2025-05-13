@@ -24,7 +24,7 @@ Success::
 
 end::catalog[] */
 
-use std::sync::Arc;
+use std::collections::BTreeSet;
 
 use anyhow::Result;
 use assert_matches::assert_matches;
@@ -105,12 +105,36 @@ fn read_state_with_identity(
     identity: impl Identity + 'static,
 ) -> Result<Certificate, AgentError> {
     let node = get_first_app_node(env);
+    read_state_with_identity_and_canister_id(env, paths, identity, node.effective_canister_id())
+}
+
+/// Call "read_state" with the given paths and canister ID for the default identity
+fn read_state_with_canister_id(
+    env: &TestEnv,
+    paths: Vec<Vec<Label<Vec<u8>>>>,
+    effective_canister_id: CanisterId,
+) -> Result<Certificate, AgentError> {
+    read_state_with_identity_and_canister_id(
+        env,
+        paths,
+        get_identity(),
+        effective_canister_id.get(),
+    )
+}
+
+/// Call "read_state" with the given paths, identity and canister ID
+fn read_state_with_identity_and_canister_id(
+    env: &TestEnv,
+    paths: Vec<Vec<Label<Vec<u8>>>>,
+    identity: impl Identity + 'static,
+    effective_canister_id: PrincipalId,
+) -> Result<Certificate, AgentError> {
     tokio::runtime::Runtime::new()
         .unwrap()
         .block_on(async move {
             let agent = build_agent_with_identity(env, identity).await;
             agent
-                .read_state_raw(paths, node.effective_canister_id().into())
+                .read_state_raw(paths, effective_canister_id.into())
                 .await
         })
 }
@@ -254,7 +278,7 @@ fn lookup_metadata(
     lookup_value(&cert, path).map(|s| s.to_vec())
 }
 
-fn test_metadata(env: TestEnv) {
+fn test_metadata_path(env: TestEnv) {
     let node = get_first_app_node(&env);
     let runtime = runtime_from_url(node.get_public_url(), node.effective_canister_id());
     let mut canister: Canister<'_> =
@@ -344,51 +368,83 @@ fn test_metadata(env: TestEnv) {
     }
 }
 
-fn test_canister(env: TestEnv) {
+fn test_canister_path(env: TestEnv) {
     let identities = [
-        PrincipalId::from(random_ed25519_identity().sender().unwrap()),
+        PrincipalId::from(get_identity().sender().unwrap()),
         PrincipalId::from(random_ed25519_identity().sender().unwrap()),
     ];
 
     let node = get_first_app_node(&env);
     let runtime = runtime_from_url(node.get_public_url(), node.effective_canister_id());
 
+    // Create an empty canister
     let empty_canister: Canister<'_> =
         block_on(runtime.create_canister_max_cycles_with_retries()).unwrap();
-    let empty_canister_id = empty_canister.canister_id();
 
-    let mut wasm_canister: Canister<'_> =
+    // Create a canister with some installed WASM
+    let mut installed_canister: Canister<'_> =
         block_on(runtime.create_canister_max_cycles_with_retries()).unwrap();
-    let wasm_canister_id = wasm_canister.canister_id();
     let wasm = wasm_with_custom_sections(vec![]);
-    block_on(wasm.install_with_retries_onto_canister(&mut wasm_canister, None, None)).unwrap();
+    block_on(wasm.install_with_retries_onto_canister(&mut installed_canister, None, None)).unwrap();
 
-    for i in 0..=2 {
+    // for 2, 1 and 0 controllers...
+    for i in (0..=2).rev() {
         let controllers = identities[..i].to_vec();
 
-        info!(env.logger(), "Setting controllers to {:?}", controllers);
-        block_on(empty_canister.set_controllers(controllers.clone())).unwrap();
-        block_on(wasm_canister.set_controllers(controllers)).unwrap();
-
-        let module_hash_path_empty = vec![
-            "canister".into(),
-            empty_canister_id.get_ref().as_slice().into(),
-            "module_hash".into(),
-        ];
-        let module_hash_path_wasm = vec![
-            "canister".into(),
-            wasm_canister_id.get_ref().as_slice().into(),
-            "module_hash".into(),
-        ];
-
-        let cert = read_state(&env, vec![module_hash_path_empty.clone()]).unwrap();
-        let value = lookup_value(&cert, module_hash_path_empty);
-        assert_matches!(value, Err(AgentError::LookupPathAbsent(_)));
-
-        let cert = read_state(&env, vec![module_hash_path_wasm.clone()]).unwrap();
-        let value = lookup_value(&cert, module_hash_path_wasm).unwrap();
-        assert!(!value.is_empty());
+        // Test `module_hash` and `controllers` endpoints for both canisters
+        test_module_hash_and_controllers(&env, &empty_canister, controllers.clone(), |res| {
+            // Empty canister should not have a module hash
+            matches!(res, Err(AgentError::LookupPathAbsent(_)))
+        });
+        test_module_hash_and_controllers(&env, &installed_canister, controllers, |res| {
+            // Installed canister should have a module hash
+            !res.unwrap().is_empty()
+        });
     }
+}
+
+fn test_module_hash_and_controllers<F>(
+    env: &TestEnv,
+    canister: &Canister<'_>,
+    controllers: Vec<PrincipalId>,
+    assert_module_hash: F,
+) where
+    F: FnOnce(Result<&[u8], AgentError>) -> bool,
+{
+    let canister_id = canister.canister_id();
+    info!(
+        env.logger(),
+        "Setting controllers of {} to {:?}", canister_id, controllers
+    );
+    block_on(canister.set_controllers(controllers.clone())).unwrap();
+
+    let module_hash_path = vec![
+        "canister".into(),
+        canister_id.get_ref().as_slice().into(),
+        "module_hash".into(),
+    ];
+    let cert =
+        read_state_with_canister_id(&env, vec![module_hash_path.clone()], canister_id).unwrap();
+    let value = lookup_value(&cert, module_hash_path);
+    assert!(assert_module_hash(value));
+
+    let controllers_path = vec![
+        "canister".into(),
+        canister_id.get_ref().as_slice().into(),
+        "controllers".into(),
+    ];
+    let cert =
+        read_state_with_canister_id(&env, vec![controllers_path.clone()], canister_id).unwrap();
+    let value = lookup_value(&cert, controllers_path).unwrap();
+    let controllers_read_state: Vec<PrincipalId> =
+        serde_cbor::from_slice(value).expect("Failed to decode CBOR");
+
+    // The returned controllers should be equal to what we set them to
+    assert_eq!(controllers_read_state.len(), controllers.len());
+    assert_eq!(
+        BTreeSet::from_iter(controllers_read_state),
+        BTreeSet::from_iter(controllers)
+    );
 }
 
 fn main() -> Result<()> {
@@ -400,8 +456,8 @@ fn main() -> Result<()> {
         .add_test(systest!(test_invalid_request_rejected))
         .add_test(systest!(test_absent_request))
         .add_test(systest!(test_invalid_path_rejected))
-        .add_test(systest!(test_metadata))
-        .add_test(systest!(test_canister))
+        .add_test(systest!(test_metadata_path))
+        .add_test(systest!(test_canister_path))
         .execute_from_args()?;
     Ok(())
 }
