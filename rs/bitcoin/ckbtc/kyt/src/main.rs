@@ -1,5 +1,4 @@
 use candid::Principal;
-use ic_canisters_http_types as http;
 use ic_cdk::api::management_canister::http_request::{HttpMethod, HttpResponse, TransformArgs};
 use ic_cdk_macros::{init, post_upgrade, query, update};
 use ic_ckbtc_kyt::SetApiKeyArg;
@@ -7,6 +6,7 @@ use ic_ckbtc_kyt::{
     Alert, AlertLevel, DepositRequest, Error, ExposureType, FetchAlertsResponse, KytMode,
     LifecycleArg, WithdrawalAttempt,
 };
+use ic_http_types as http;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory as VM};
 use ic_stable_structures::storable::{Bound, Storable};
 use ic_stable_structures::{DefaultMemoryImpl, RestrictedMemory as RM, StableCell, StableLog};
@@ -126,7 +126,7 @@ impl Event {
         match &self.kind {
             EventKind::UtxoCheck { .. } => "utxo_check",
             EventKind::AddressCheck { .. } => "address_check",
-            EventKind::ApiKeyUpdate { .. } => "legacy_api_key_update",
+            EventKind::ApiKeyUpdate => "legacy_api_key_update",
             EventKind::ApiKeySet { .. } => "api_key_set",
             EventKind::ApiKeyExpired { .. } => "api_key_expired",
         }
@@ -137,7 +137,7 @@ impl Event {
         match &self.kind {
             EventKind::UtxoCheck { external_id, .. } => Some(external_id),
             EventKind::AddressCheck { external_id, .. } => Some(external_id),
-            EventKind::ApiKeyUpdate { .. } => None,
+            EventKind::ApiKeyUpdate => None,
             EventKind::ApiKeySet { .. } => None,
             EventKind::ApiKeyExpired { .. } => None,
         }

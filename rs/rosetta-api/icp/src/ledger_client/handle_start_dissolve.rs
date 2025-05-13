@@ -3,7 +3,7 @@ use crate::{
     ledger_client::OperationOutput,
     request_types::{RequestType, START_DISSOLVE},
 };
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     governance_error, manage_neuron_response::Command, ManageNeuronResponse,
 };
 

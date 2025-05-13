@@ -86,6 +86,20 @@ impl Registry {
         routing_table_into_registry_mutation(routing_table, registry_mutation::Type::Update as i32)
     }
 
+    pub fn migrate_canisters_to_subnet(
+        &self,
+        version: u64,
+        canister_ids: Vec<CanisterId>,
+        subnet_id: SubnetId,
+    ) -> RegistryMutation {
+        self.modify_routing_table(version, |routing_table| {
+            for canister_id in canister_ids {
+                routing_table.assign_canister(canister_id, subnet_id);
+            }
+            routing_table.optimize();
+        })
+    }
+
     /// Handle adding a subnet to the routing table.
     pub fn add_subnet_to_routing_table(
         &self,

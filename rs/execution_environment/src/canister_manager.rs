@@ -28,7 +28,7 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::{
-    WasmChunkHash, CHUNK_SIZE,
+    ChunkValidationResult, WasmChunkHash, CHUNK_SIZE,
 };
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_replicated_state::{
@@ -873,9 +873,7 @@ impl CanisterManager {
 
         // Take out the canister from `ReplicatedState`.
         let canister_to_delete = state.take_canister_state(&canister_id_to_delete).unwrap();
-        state
-            .canister_snapshots
-            .delete_snapshots(canister_to_delete.canister_id());
+        state.delete_snapshots(canister_to_delete.canister_id());
 
         // Leftover cycles in the balance are considered `consumed`.
         let leftover_cycles = NominalCycles::from(canister_to_delete.system_state.balance());
@@ -1180,7 +1178,7 @@ impl CanisterManager {
         &self,
         sender: PrincipalId,
         canister: &mut CanisterState,
-        chunk: &[u8],
+        chunk: Vec<u8>,
         round_limits: &mut RoundLimits,
         subnet_size: usize,
         resource_saturation: &ResourceSaturation,
@@ -1190,15 +1188,46 @@ impl CanisterManager {
             validate_controller(canister, &sender)?
         }
 
-        canister
+        // Charge for the upload. We charge before checking if the chunk has already been uploaded
+        // since that check involves hash computation that we also want to charge for.
+        let instructions = self.config.upload_wasm_chunk_instructions;
+        self.cycles_account_manager
+            .consume_cycles_for_instructions(
+                &sender,
+                canister,
+                instructions,
+                subnet_size,
+                // For the `upload_chunk` operation, it does not matter if this is a Wasm64 or Wasm32 module
+                // since the number of instructions charged depends on a constant fee
+                // and Wasm64 does not bring any additional overhead for this operation.
+                // The only overhead is during execution time.
+                WasmExecutionMode::Wasm32,
+            )
+            .map_err(|err| CanisterManagerError::WasmChunkStoreError {
+                message: format!("Error charging for 'upload_chunk': {}", err),
+            })?;
+
+        let validated_chunk = match canister
             .system_state
             .wasm_chunk_store
             .can_insert_chunk(self.config.wasm_chunk_store_max_size, chunk)
-            .map_err(|err| CanisterManagerError::WasmChunkStoreError { message: err })?;
+        {
+            ChunkValidationResult::Insert(validated_chunk) => validated_chunk,
+            ChunkValidationResult::AlreadyExists(hash) => {
+                return Ok(UploadChunkResult {
+                    reply: UploadChunkReply {
+                        hash: hash.to_vec(),
+                    },
+                    heap_delta_increase: NumBytes::new(0),
+                });
+            }
+            ChunkValidationResult::ValidationError(err) => {
+                return Err(CanisterManagerError::WasmChunkStoreError { message: err });
+            }
+        };
 
         let chunk_bytes = wasm_chunk_store::chunk_size();
         let new_memory_usage = canister.memory_usage() + chunk_bytes;
-        let instructions = self.config.upload_wasm_chunk_instructions;
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
             && canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit
@@ -1212,45 +1241,6 @@ impl CanisterManager {
         }
 
         let memory_usage = canister.memory_usage();
-        let message_memory_usage = canister.message_memory_usage();
-        let compute_allocation = canister.compute_allocation();
-        let reveal_top_up = canister.controllers().contains(&sender);
-
-        // Charge for the upload.
-        let prepaid_cycles = self
-            .cycles_account_manager
-            .prepay_execution_cycles(
-                &mut canister.system_state,
-                memory_usage,
-                message_memory_usage,
-                compute_allocation,
-                instructions,
-                subnet_size,
-                reveal_top_up,
-                // For the upload chunk operation, it does not matter if this is a Wasm64 or Wasm32 module
-                // since the number of instructions charged is a constant set fee and Wasm64 does not bring
-                // any additional overhead for this operation. The only overhead is during execution time.
-                WasmExecutionMode::Wasm32,
-            )
-            .map_err(|err| CanisterManagerError::WasmChunkStoreError {
-                message: format!("Error charging for 'upload_chunk': {}", err),
-            })?;
-        // To keep the invariant that `prepay_execution_cycles` is always paired
-        // with `refund_unused_execution_cycles` we refund zero immediately.
-        self.cycles_account_manager.refund_unused_execution_cycles(
-            &mut canister.system_state,
-            NumInstructions::from(0),
-            instructions,
-            prepaid_cycles,
-            // This counter is incremented if we refund more
-            // instructions than initially charged, which is impossible
-            // here.
-            &IntCounter::new("no_op", "no_op").unwrap(),
-            subnet_size,
-            WasmExecutionMode::Wasm32,
-            &self.log,
-        );
-
         let validated_memory_usage = self.memory_usage_checks(
             subnet_size,
             canister,
@@ -1267,17 +1257,13 @@ impl CanisterManager {
 
         round_limits.instructions -= as_round_instructions(instructions);
 
-        // We initially checked that this chunk can be inserted, so the unwarp
-        // here is guaranteed to succeed.
-        let hash = canister
+        let hash = validated_chunk.hash().to_vec();
+        canister
             .system_state
             .wasm_chunk_store
-            .insert_chunk(self.config.wasm_chunk_store_max_size, chunk)
-            .expect("Error: Insert chunk cannot fail after checking `can_insert_chunk`");
+            .insert_chunk(validated_chunk);
         Ok(UploadChunkResult {
-            reply: UploadChunkReply {
-                hash: hash.to_vec(),
-            },
+            reply: UploadChunkReply { hash },
             heap_delta_increase: chunk_bytes,
         })
     }
@@ -1586,7 +1572,7 @@ impl CanisterManager {
 
         // Delete old snapshot identified by `replace_snapshot` ID.
         if let Some(replace_snapshot) = replace_snapshot {
-            state.canister_snapshots.remove(replace_snapshot);
+            state.delete_snapshot(replace_snapshot);
             canister.system_state.snapshots_memory_usage = canister
                 .system_state
                 .snapshots_memory_usage
@@ -1617,9 +1603,7 @@ impl CanisterManager {
 
         let snapshot_id =
             SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
-        state
-            .canister_snapshots
-            .push(snapshot_id, Arc::new(new_snapshot));
+        state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
         canister.system_state.snapshots_memory_usage = canister
             .system_state
             .snapshots_memory_usage
@@ -1826,8 +1810,9 @@ impl CanisterManager {
             ),
         );
         state
-            .canister_snapshots
-            .add_restore_operation(canister_id, snapshot_id);
+            .metadata
+            .unflushed_checkpoint_ops
+            .load_snapshot(canister_id, snapshot_id);
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
             new_canister.scheduler_state.heap_delta_debit = new_canister
@@ -1905,7 +1890,7 @@ impl CanisterManager {
                 }
             }
         }
-        let old_snapshot = state.canister_snapshots.remove(delete_snapshot_id);
+        let old_snapshot = state.delete_snapshot(delete_snapshot_id);
         // Already confirmed that `old_snapshot` exists.
         let old_snapshot_size = old_snapshot.unwrap().size();
         canister.system_state.snapshots_memory_usage = canister

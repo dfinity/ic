@@ -15,7 +15,7 @@ thread_local! {
 
     static REGISTRY_DATA_STORE_BTREE_MAP: RefCell<StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>>
         = RefCell::new(MEMORY_MANAGER.with_borrow(|mm|
-            StableBTreeMap::new(mm.get(REGISTRY_STORE_MEMORY_ID))
+            StableBTreeMap::init(mm.get(REGISTRY_STORE_MEMORY_ID))
         ));
 }
 

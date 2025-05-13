@@ -5,7 +5,8 @@ use ic_config::Config;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces_registry::RegistryClient;
 use ic_management_canister_types_private::{
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
+    VetKdKeyId,
 };
 use ic_nns_test_utils::{
     itest_helpers::{
@@ -286,7 +287,11 @@ fn test_recover_subnet_gets_chain_keys_when_needed(key_id: MasterPublicKeyId) {
         subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(ChainKeyConfig {
             key_configs: vec![KeyConfigInternal {
                 key_id: key_id.clone(),
-                pre_signatures_to_create_in_advance: 100,
+                pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
+                    100
+                } else {
+                    0
+                },
                 max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
             }],
             signature_request_timeout_ns: None,
@@ -446,6 +451,15 @@ fn test_recover_subnet_gets_schnorr_keys_when_needed() {
     test_recover_subnet_gets_chain_keys_when_needed(key_id);
 }
 
+#[test]
+fn test_recover_subnet_gets_vetkd_keys_when_needed() {
+    let key_id = MasterPublicKeyId::VetKd(VetKdKeyId {
+        curve: VetKdCurve::Bls12_381_G2,
+        name: "foo-bar".to_string(),
+    });
+    test_recover_subnet_gets_chain_keys_when_needed(key_id);
+}
+
 fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: MasterPublicKeyId) {
     let ic_config = get_ic_config();
     let (config, _tmpdir) = Config::temp_config();
@@ -506,7 +520,13 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
             let chain_key_config_pb = ChainKeyConfigPb {
                 key_configs: vec![KeyConfigPb {
                     key_id: Some(MasterPublicKeyIdPb::from(&key_id)),
-                    pre_signatures_to_create_in_advance: Some(1),
+                    pre_signatures_to_create_in_advance: Some(
+                        if key_id.requires_pre_signatures() {
+                            1
+                        } else {
+                            0
+                        },
+                    ),
                     max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                 }],
                 signature_request_timeout_ns: None,
@@ -661,6 +681,15 @@ fn test_recover_subnet_without_ecdsa_key_removes_it_from_signing_list() {
 fn test_recover_subnet_without_schnorr_removes_it_from_signing_list() {
     let key_id = MasterPublicKeyId::Schnorr(SchnorrKeyId {
         algorithm: SchnorrAlgorithm::Bip340Secp256k1,
+        name: "foo-bar".to_string(),
+    });
+    test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id)
+}
+
+#[test]
+fn test_recover_subnet_without_vetkd_removes_it_from_signing_list() {
+    let key_id = MasterPublicKeyId::VetKd(VetKdKeyId {
+        curve: VetKdCurve::Bls12_381_G2,
         name: "foo-bar".to_string(),
     });
     test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id)

@@ -662,7 +662,6 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
 }
 
 fn build_streams_with_best_effort_messages_impl(
-    best_effort_responses: &BestEffortResponsesFeature,
     local_subnet_type: SubnetType,
     remote_subnet_type: SubnetType,
 ) {
@@ -685,8 +684,7 @@ fn build_streams_with_best_effort_messages_impl(
                 .build(),
         ];
 
-        let (mut stream_builder, mut provided_state, _) = new_fixture(&log);
-        stream_builder.best_effort_responses = best_effort_responses.clone();
+        let (stream_builder, mut provided_state, _) = new_fixture(&log);
 
         // Set the subnet types of the local and remote subnets.
         provided_state.metadata.network_topology.subnets = btreemap! {
@@ -707,7 +705,7 @@ fn build_streams_with_best_effort_messages_impl(
 
         let result_state = stream_builder.build_streams(provided_state);
 
-        // Local best-effort requests are always routed, regardless.
+        // Local best-effort request was routed.
         assert!(
             !result_state
                 .streams()
@@ -715,85 +713,52 @@ fn build_streams_with_best_effort_messages_impl(
                 .unwrap()
                 .messages()
                 .is_empty(),
-            "Best-effort responses feature: {:?}, Local subnet type: {:?}, Remote subnet type: {:?}",
-            best_effort_responses,
+            "Local subnet type: {:?}, Remote subnet type: {:?}",
             local_subnet_type,
             remote_subnet_type,
         );
 
-        // Remote best-effort requests are only routed when enabled for the respective
-        // remote subnet type.
-        let remote_request_routed =
-            best_effort_responses.is_enabled_on(&REMOTE_SUBNET, remote_subnet_type);
-        assert_eq!(
-            remote_request_routed,
-            result_state.streams().contains_key(&REMOTE_SUBNET),
-            "Best-effort responses feature: {:?}, Local subnet type: {:?}, Remote subnet type: {:?}",
-            best_effort_responses,
+        // Remote best-effort request was routed.
+        assert!(
+            !result_state
+                .streams()
+                .get(&REMOTE_SUBNET)
+                .unwrap()
+                .messages()
+                .is_empty(),
+            "Local subnet type: {:?}, Remote subnet type: {:?}",
             local_subnet_type,
             remote_subnet_type,
         );
 
+        // No reject response was enqueued.
         let maybe_reject_response = result_state
             .canister_state(&local_canister_id)
             .unwrap()
             .clone()
             .pop_input();
-        // If the remote request was not routed, a reject response was enqueued.
-        assert_eq!(
-            !remote_request_routed,
-            maybe_reject_response.is_some(),
-            "Best-effort responses feature: {:?}, Local subnet type: {:?}, Remote subnet type: {:?}",
-            best_effort_responses,
+        assert!(
+            maybe_reject_response.is_none(),
+            "Local subnet type: {:?}, Remote subnet type: {:?}",
             local_subnet_type,
             remote_subnet_type,
         );
-        if let Some(reject_respomse) = maybe_reject_response {
-            let expected_reject_response: RequestOrResponse = Response {
-                originator: local_canister_id,
-                respondent: remote_canister_id,
-                originator_reply_callback: CallbackId::from(2),
-                refund: Cycles::zero(),
-                response_payload: Payload::Reject(RejectContext::new(
-                    RejectCode::DestinationInvalid,
-                    format!(
-                        "Best-effort call to unsupported subnet: {} -> {}",
-                        local_canister_id, remote_canister_id
-                    ),
-                )),
-                deadline: SOME_DEADLINE,
-            }
-            .into();
-            assert_eq!(reject_respomse, expected_reject_response.into());
-        }
     });
 }
 
 #[test]
 fn build_streams_with_best_effort_messages() {
-    for best_effort_responses in &[
-        BestEffortResponsesFeature::SpecificSubnets(vec![]),
-        BestEffortResponsesFeature::SpecificSubnets(vec![REMOTE_SUBNET]),
-        BestEffortResponsesFeature::SpecificSubnets(vec![LOCAL_SUBNET, REMOTE_SUBNET]),
-        BestEffortResponsesFeature::ApplicationSubnetsOnly,
-        BestEffortResponsesFeature::Enabled,
+    for local_subnet_type in &[
+        SubnetType::Application,
+        SubnetType::System,
+        SubnetType::VerifiedApplication,
     ] {
-        for local_subnet_type in &[
+        for remote_subnet_type in &[
             SubnetType::Application,
             SubnetType::System,
             SubnetType::VerifiedApplication,
         ] {
-            for remote_subnet_type in &[
-                SubnetType::Application,
-                SubnetType::System,
-                SubnetType::VerifiedApplication,
-            ] {
-                build_streams_with_best_effort_messages_impl(
-                    best_effort_responses,
-                    *local_subnet_type,
-                    *remote_subnet_type,
-                );
-            }
+            build_streams_with_best_effort_messages_impl(*local_subnet_type, *remote_subnet_type);
         }
     }
 }
@@ -802,19 +767,20 @@ fn build_streams_with_best_effort_messages() {
 #[test]
 fn build_streams_with_oversized_payloads() {
     with_test_replica_logger(|log| {
-        use std::iter::repeat;
         let local_canister = canister_test_id(0);
         let remote_canister = canister_test_id(1);
         let method_name: String = ['a'; 13].iter().collect();
 
         // Payloads/error message that result in `get_payload_size()` returning exactly
         // `MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 + 1`.
-        let oversized_request_payload: Vec<u8> = repeat(0u8)
-            .take(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize - method_name.len() + 1)
-            .collect();
-        let oversized_response_payload: Vec<u8> = repeat(0u8)
-            .take(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize + 1)
-            .collect();
+        let oversized_request_payload: Vec<u8> = std::iter::repeat_n(
+            0u8,
+            MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize - method_name.len() + 1,
+        )
+        .collect();
+        let oversized_response_payload: Vec<u8> =
+            std::iter::repeat_n(0u8, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize + 1)
+                .collect();
         let oversized_error_message: String =
             "x".repeat(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize);
 
@@ -1024,7 +990,6 @@ fn new_fixture_with_limits(
         Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
             &metrics_registry,
         ))),
-        BestEffortResponsesFeature::Enabled,
         log.clone(),
     );
 

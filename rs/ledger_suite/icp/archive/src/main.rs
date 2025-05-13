@@ -1,6 +1,5 @@
 use candid::{candid_method, Decode};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::{
     api::{
         call::{arg_data_raw, reply, reply_raw},
@@ -8,6 +7,7 @@ use ic_cdk::{
     },
     post_upgrade, query,
 };
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icp_archive::ArchiveUpgradeArgument;
 use ic_ledger_canister_core::range_utils;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;

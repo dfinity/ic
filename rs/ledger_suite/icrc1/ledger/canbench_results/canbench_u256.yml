@@ -1,8 +1,8 @@
 benches:
   bench_icrc1_transfers:
     total:
-      instructions: 53753252985
-      heap_increase: 263
+      instructions: 53966446709
+      heap_increase: 262
       stable_memory_increase: 256
     scopes:
       icrc103_get_allowances:
@@ -10,49 +10,49 @@ benches:
         heap_increase: 0
         stable_memory_increase: 0
       icrc1_transfer:
-        instructions: 12872486496
-        heap_increase: 32
+        instructions: 12874625176
+        heap_increase: 31
         stable_memory_increase: 0
       icrc2_approve:
-        instructions: 19097198201
+        instructions: 19145457605
         heap_increase: 28
         stable_memory_increase: 128
       icrc2_transfer_from:
-        instructions: 21078054971
+        instructions: 21239417759
         heap_increase: 3
         stable_memory_increase: 0
       icrc3_get_blocks:
-        instructions: 8116296
+        instructions: 8992813
         heap_increase: 0
         stable_memory_increase: 0
       post_upgrade:
-        instructions: 350099680
+        instructions: 354161810
         heap_increase: 71
         stable_memory_increase: 0
       pre_upgrade:
-        instructions: 149185683
+        instructions: 149065282
         heap_increase: 129
         stable_memory_increase: 128
       upgrade:
-        instructions: 499287585
+        instructions: 503229150
         heap_increase: 200
         stable_memory_increase: 128
   bench_upgrade_baseline:
     total:
-      instructions: 8682019
+      instructions: 8684566
       heap_increase: 258
       stable_memory_increase: 128
     scopes:
       post_upgrade:
-        instructions: 8604357
+        instructions: 8606897
         heap_increase: 129
         stable_memory_increase: 0
       pre_upgrade:
-        instructions: 75270
+        instructions: 75268
         heap_increase: 129
         stable_memory_increase: 128
       upgrade:
-        instructions: 8681330
+        instructions: 8683880
         heap_increase: 258
         stable_memory_increase: 128
 version: 0.1.9

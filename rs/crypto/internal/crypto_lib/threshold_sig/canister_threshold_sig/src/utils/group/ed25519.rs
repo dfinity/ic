@@ -38,7 +38,7 @@ fn hash_to_curve_ed25519(input: &[u8], dst: &[u8]) -> Point {
         const P_BITS: usize = FieldElement::BYTES * 8;
         const SECURITY_LEVEL: usize = P_BITS / 2;
 
-        const FIELD_BYTES: usize = (P_BITS + SECURITY_LEVEL + 7) / 8; // "L" in spec
+        const FIELD_BYTES: usize = (P_BITS + SECURITY_LEVEL).div_ceil(8); // "L" in spec
         const XMD_BYTES: usize = 2 * FIELD_BYTES;
         const WIDE_BYTES_OFFSET: usize = 2 * FieldElement::BYTES - FIELD_BYTES;
 

@@ -42,6 +42,7 @@ filegroup(
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-dummy-getrandom-for-wasm",
+    "//packages/ic-http-types",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
     "//rs/ledger_suite/common/ledger_core",
@@ -71,7 +72,6 @@ DEPENDENCIES = [
     "//rs/node_rewards/canister/api",
     "//rs/protobuf",
     "//rs/registry/canister",
-    "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/on_wire",
     "//rs/sns/init",
     "//rs/sns/root",
@@ -86,10 +86,10 @@ DEPENDENCIES = [
     "@crate_index//:comparable",
     "@crate_index//:dyn-clone",
     "@crate_index//:futures",
-    "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
+    "@crate_index//:ic_cdk_0_17_1",
     "@crate_index//:itertools",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
@@ -117,7 +117,7 @@ MACRO_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
     "@crate_index//:async-trait",
-    "@crate_index//:ic-cdk-macros",
+    "@crate_index//:ic_cdk_macros_0_17_1",
     "@crate_index//:rust_decimal_macros",
     "@crate_index//:strum_macros",
 ]

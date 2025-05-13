@@ -200,17 +200,13 @@ pub const DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS: u64 = 1725148800;
 // leave this here indefinitely, but it will just be clutter after a modest
 // amount of time.
 thread_local! {
-    static ALLOW_ACTIVE_NEURONS_IN_STABLE_MEMORY: Cell<bool> = const { Cell::new(true) };
-
-    static MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY: Cell<bool> = const { Cell::new(true) };
 
     static DISABLE_NF_FUND_PROPOSALS: Cell<bool>
         = const { Cell::new(cfg!(not(any(feature = "canbench-rs", feature = "test")))) };
 
-    static IS_DISBURSE_MATURITY_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+    static IS_DISBURSE_MATURITY_ENABLED: Cell<bool> = const { Cell::new(true) };
 
-    static USE_NODE_PROVIDER_REWARD_CANISTER: Cell<bool>
-        = const { Cell::new(cfg!(feature = "test")) };
+    static USE_NODE_PROVIDER_REWARD_CANISTER: Cell<bool> = const { Cell::new(true) };
 }
 
 thread_local! {
@@ -218,38 +214,6 @@ thread_local! {
     // begun. (This occurs in one of the prune_some_following functions.)
     static CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS: Cell<u64> =
         const { Cell::new(0) };
-}
-
-pub fn allow_active_neurons_in_stable_memory() -> bool {
-    ALLOW_ACTIVE_NEURONS_IN_STABLE_MEMORY.get()
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_allow_active_neurons_in_stable_memory() -> Temporary {
-    Temporary::new(&ALLOW_ACTIVE_NEURONS_IN_STABLE_MEMORY, true)
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_allow_active_neurons_in_stable_memory() -> Temporary {
-    Temporary::new(&ALLOW_ACTIVE_NEURONS_IN_STABLE_MEMORY, false)
-}
-
-pub fn migrate_active_neurons_to_stable_memory() -> bool {
-    MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY.get()
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_migrate_active_neurons_to_stable_memory() -> Temporary {
-    Temporary::new(&MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY, true)
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_migrate_active_neurons_to_stable_memory() -> Temporary {
-    Temporary::new(&MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY, false)
 }
 
 pub fn are_nf_fund_proposals_disabled() -> bool {
@@ -464,11 +428,6 @@ pub fn encode_metrics(
         "governance_locked_neurons_total",
         governance.heap_data.in_flight_commands.len() as f64,
         "Total number of neurons that have been locked for disburse operations.",
-    )?;
-    w.encode_gauge(
-        "governance_heap_neuron_count",
-        governance.neuron_store.heap_neuron_store_len() as f64,
-        "The number of neurons in NNS Governance canister's heap memory.",
     )?;
     w.encode_gauge(
         "governance_stable_memory_neuron_count",

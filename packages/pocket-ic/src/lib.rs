@@ -85,7 +85,7 @@ use std::{
     sync::{mpsc::channel, Arc},
     thread,
     thread::JoinHandle,
-    time::{Duration, SystemTime},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use strum_macros::EnumIter;
 use tempfile::TempDir;
@@ -98,7 +98,7 @@ use wslpath::windows_to_wsl;
 pub mod common;
 pub mod nonblocking;
 
-pub const EXPECTED_SERVER_VERSION: &str = "8.0.0";
+pub const EXPECTED_SERVER_VERSION: &str = "9.0.1";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
@@ -404,6 +404,63 @@ impl PocketIcBuilder {
     }
 }
 
+/// Representation of system time as duration since UNIX epoch
+/// with cross-platform nanosecond precision.
+#[derive(Copy, Clone, PartialEq, PartialOrd)]
+pub struct Time(Duration);
+
+impl Time {
+    /// Number of nanoseconds since UNIX EPOCH.
+    pub fn as_nanos_since_unix_epoch(&self) -> u64 {
+        self.0.as_nanos().try_into().unwrap()
+    }
+
+    pub const fn from_nanos_since_unix_epoch(nanos: u64) -> Self {
+        Time(Duration::from_nanos(nanos))
+    }
+}
+
+impl std::fmt::Debug for Time {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let nanos_since_unix_epoch = self.as_nanos_since_unix_epoch();
+        write!(f, "{}", nanos_since_unix_epoch)
+    }
+}
+
+impl std::ops::Add<Duration> for Time {
+    type Output = Time;
+    fn add(self, dur: Duration) -> Time {
+        Time(self.0 + dur)
+    }
+}
+
+impl From<SystemTime> for Time {
+    fn from(time: SystemTime) -> Self {
+        Self::from_nanos_since_unix_epoch(
+            time.duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+                .try_into()
+                .unwrap(),
+        )
+    }
+}
+
+impl TryFrom<Time> for SystemTime {
+    type Error = String;
+
+    fn try_from(time: Time) -> Result<SystemTime, String> {
+        let nanos = time.as_nanos_since_unix_epoch();
+        let system_time = UNIX_EPOCH + Duration::from_nanos(nanos);
+        let roundtrip: Time = system_time.into();
+        if roundtrip.as_nanos_since_unix_epoch() == nanos {
+            Ok(system_time)
+        } else {
+            Err(format!("Converting UNIX timestamp {} in nanoseconds to SystemTime failed due to losing precision", nanos))
+        }
+    }
+}
+
 /// Main entry point for interacting with PocketIC.
 pub struct PocketIc {
     pocket_ic: PocketIcAsync,
@@ -689,21 +746,21 @@ impl PocketIc {
 
     /// Get the current time of the IC.
     #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id))]
-    pub fn get_time(&self) -> SystemTime {
+    pub fn get_time(&self) -> Time {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.get_time().await })
     }
 
     /// Set the current time of the IC, on all subnets.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, time = ?time))]
-    pub fn set_time(&self, time: SystemTime) {
+    pub fn set_time(&self, time: Time) {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.set_time(time).await })
     }
 
     /// Set the current certified time of the IC, on all subnets.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, time = ?time))]
-    pub fn set_certified_time(&self, time: SystemTime) {
+    pub fn set_certified_time(&self, time: Time) {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.set_certified_time(time).await })
     }

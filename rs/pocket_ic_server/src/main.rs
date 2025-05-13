@@ -25,6 +25,7 @@ use ic_canister_sandbox_backend_lib::{
 use ic_crypto_iccsa::{public_key_bytes_from_der, types::SignatureBytes, verify};
 use ic_crypto_sha2::Sha256;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
+use libc::{getrlimit, rlimit, setrlimit, RLIMIT_NOFILE};
 use pocket_ic::common::rest::{BinaryBlob, BlobCompression, BlobId, RawVerifyCanisterSigArg};
 use pocket_ic_server::state_api::routes::handler_read_graph;
 use pocket_ic_server::state_api::{
@@ -35,6 +36,7 @@ use pocket_ic_server::BlobStore;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
+use std::io::{self, Error};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -43,7 +45,7 @@ use tokio::sync::mpsc::channel;
 use tokio::sync::RwLock;
 use tokio::time::{Duration, Instant};
 use tower_http::trace::TraceLayer;
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::filter::EnvFilter;
 
@@ -55,7 +57,7 @@ const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
 #[derive(Parser)]
-#[clap(version = "8.0.0")]
+#[clap(version = "9.0.1")]
 struct Args {
     /// The IP address to which the PocketIC server should bind (defaults to 127.0.0.1)
     #[clap(long, short)]
@@ -84,14 +86,37 @@ extern "C" {
     fn install_backtrace_handler();
 }
 
-fn main() {
-    // Set RUST_MIN_STACK if not yet set:
-    // the default value of 8192000 is set according to `ic-os/components/ic/ic-replica.service`.
-    std::env::set_var(
-        "RUST_MIN_STACK",
-        std::env::var("RUST_MIN_STACK").unwrap_or("8192000".to_string()),
-    );
+fn increase_nofile_limit(mut new_limit: u64) -> io::Result<()> {
+    unsafe {
+        let mut limit = rlimit {
+            rlim_cur: 0,
+            rlim_max: 0,
+        };
 
+        // Get current limits
+        if getrlimit(RLIMIT_NOFILE, &mut limit) != 0 {
+            return Err(Error::last_os_error());
+        }
+
+        // Set new limit
+        if new_limit > limit.rlim_max {
+            debug!(
+                "Setting the maximum number of open files to match the hard limit: {}",
+                limit.rlim_max
+            );
+            new_limit = limit.rlim_max;
+        }
+        limit.rlim_cur = new_limit;
+
+        if setrlimit(RLIMIT_NOFILE, &limit) != 0 {
+            return Err(Error::last_os_error());
+        }
+    }
+
+    Ok(())
+}
+
+fn main() {
     let current_binary_path = current_binary_path().unwrap();
     let current_binary_name = current_binary_path.file_name().unwrap().to_str().unwrap();
     if current_binary_name != "pocket-ic" && current_binary_name != "pocket-ic-server" {
@@ -139,13 +164,27 @@ async fn start(runtime: Arc<Runtime>) {
         None
     };
 
+    let _guard = setup_tracing(args.log_levels);
+
+    // Set RUST_MIN_STACK if not yet set:
+    // the value of 8192000 is set according to `ic-os/components/ic/ic-replica.service`.
+    std::env::set_var("RUST_MIN_STACK", "8192000");
+
+    // Set the maximum number of open files:
+    // the limit of 16777216 is set according to `ic-os/components/ic/ic-replica.service`.
+    if let Err(e) = increase_nofile_limit(16777216) {
+        error!(
+            "Failed to increase the maximum number of open files: {:?}",
+            e
+        );
+    }
+
     let ip_addr = args.ip_addr.unwrap_or("127.0.0.1".to_string());
     let addr = format!("{}:{}", ip_addr, args.port);
     let listener = std::net::TcpListener::bind(addr.clone())
         .unwrap_or_else(|_| panic!("Failed to bind PocketIC server to address {}", addr));
     let real_port = listener.local_addr().unwrap().port();
 
-    let _guard = setup_tracing(args.log_levels);
     // The shared, mutable state of the PocketIC process.
     let api_state = PocketIcApiStateBuilder::default()
         .with_port(real_port)

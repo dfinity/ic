@@ -32,7 +32,7 @@ use ic_ledger_canister_blocks_synchronizer::{
 };
 use ic_ledger_core::block::BlockType;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance_api::pb::v1::manage_neuron::NeuronIdOrSubaccount;
+use ic_nns_governance_api::manage_neuron::NeuronIdOrSubaccount;
 use ic_types::{crypto::DOMAIN_IC_REQUEST, messages::MessageId, CanisterId};
 use icp_ledger::{Block, BlockIndex};
 use rosetta_core::{
@@ -866,13 +866,13 @@ impl RosettaRequestHandler {
     ) -> Result<NeuronInfoResponse, ApiError> {
         let res = self.ledger.neuron_info(neuron_id, verified).await?;
 
-        use ic_nns_governance_api::pb::v1::NeuronState as PbNeuronState;
-        let state = match PbNeuronState::try_from(res.state).ok() {
-            Some(PbNeuronState::NotDissolving) => NeuronState::NotDissolving,
-            Some(PbNeuronState::Spawning) => NeuronState::Spawning,
-            Some(PbNeuronState::Dissolving) => NeuronState::Dissolving,
-            Some(PbNeuronState::Dissolved) => NeuronState::Dissolved,
-            Some(PbNeuronState::Unspecified) | None => {
+        use ic_nns_governance_api::NeuronState as GovernanceNeuronState;
+        let state = match GovernanceNeuronState::from_repr(res.state) {
+            Some(GovernanceNeuronState::NotDissolving) => NeuronState::NotDissolving,
+            Some(GovernanceNeuronState::Spawning) => NeuronState::Spawning,
+            Some(GovernanceNeuronState::Dissolving) => NeuronState::Dissolving,
+            Some(GovernanceNeuronState::Dissolved) => NeuronState::Dissolved,
+            Some(GovernanceNeuronState::Unspecified) | None => {
                 return Err(ApiError::internal_error(format!(
                     "unsupported neuron state code: {}",
                     res.state

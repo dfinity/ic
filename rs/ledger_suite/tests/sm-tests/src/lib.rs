@@ -3217,7 +3217,7 @@ pub fn test_metrics_while_migrating<T>(
         send_approval(&env, canister_id, account.owner, &approve_args).expect("approval failed");
     }
 
-    for i in 2..30 {
+    for i in 2..31 {
         let to = Account::from(PrincipalId::new_user_test_id(i).0);
         transfer(&env, canister_id, account, to, 100).expect("failed to transfer funds");
     }
@@ -3228,6 +3228,18 @@ pub fn test_metrics_while_migrating<T>(
         Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
     )
     .unwrap();
+
+    // The migration should not yet have completed - if this happens (e.g., due to a bump of some
+    // dependency, leading to more blocks being migrated within the configured instruction limits),
+    // consider adjusting the number of blocks stored in the ledger before starting the migration.
+    let is_ledger_ready = Decode!(
+        &env.query(canister_id, "is_ledger_ready", Encode!().unwrap())
+            .expect("failed to call is_ledger_ready")
+            .bytes(),
+        bool
+    )
+    .expect("failed to decode is_ledger_ready response");
+    assert!(!is_ledger_ready);
 
     let metrics = retrieve_metrics(&env, canister_id);
     assert!(
@@ -3242,15 +3254,6 @@ pub fn test_metrics_while_migrating<T>(
             .any(|line| line.contains("ledger_num_approvals")),
         "ledger_num_approvals should not be in metrics"
     );
-
-    let is_ledger_ready = Decode!(
-        &env.query(canister_id, "is_ledger_ready", Encode!().unwrap())
-            .expect("failed to call is_ledger_ready")
-            .bytes(),
-        bool
-    )
-    .expect("failed to decode is_ledger_ready response");
-    assert!(!is_ledger_ready);
 
     wait_ledger_ready(&env, canister_id, 20);
 
@@ -4799,9 +4802,9 @@ test_bytes";
     );
     // When the expected allowance is not set, a warning should be displayed.
     let expected_message = expected_approve_message.replace(
-    "\n\n**Current withdrawal allowance:**\n0.01 XTST",
-    "\n\u{26A0} The allowance will be set to 0.01 XTST independently of any previous allowance. Until this transaction has been executed the spender can still exercise the previous allowance (if any) to it's full amount.",
-);
+        "\n\n**Current withdrawal allowance:**\n0.01 XTST",
+        "\n\u{26A0} The allowance will be set to 0.01 XTST independently of any previous allowance. Until this transaction has been executed the spender can still exercise the previous allowance (if any) to it's full amount.",
+    );
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
@@ -4835,8 +4838,8 @@ test_bytes";
             .consent_message,
     );
     let expected_message = expected_approve_message
-.replace("\n\n**Transaction fees to be paid by:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Transaction fees to be paid by your subaccount:**\n101010101010101010101010101010101010101010101010101010101010101" )
-.replace("\n\n**Your account:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Your subaccount:**\n101010101010101010101010101010101010101010101010101010101010101");
+        .replace("\n\n**Transaction fees to be paid by:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Transaction fees to be paid by your subaccount:**\n101010101010101010101010101010101010101010101010101010101010101" )
+        .replace("\n\n**Your account:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Your subaccount:**\n101010101010101010101010101010101010101010101010101010101010101");
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
@@ -4874,7 +4877,7 @@ test_bytes";
     );
 
     let expected_message = expected_approve_message.replace("\n\n**Your account:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Your subaccount:**\n0000000000000000000000000000000000000000000000000000000000000000" )
-    .replace("\n\n**Transaction fees to be paid by:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Transaction fees to be paid by your subaccount:**\n0000000000000000000000000000000000000000000000000000000000000000" );
+        .replace("\n\n**Transaction fees to be paid by:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Transaction fees to be paid by your subaccount:**\n0000000000000000000000000000000000000000000000000000000000000000" );
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
@@ -4951,9 +4954,9 @@ test_bytes";
             .consent_message,
     );
     let expected_message = expected_transfer_from_message.replace(
-    "\n\n**Account sending the transfer request:**\ndjduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303",
-    "\n\n**Subaccount sending the transfer request:**\n303030303030303030303030303030303030303030303030303030303030303",
-);
+        "\n\n**Account sending the transfer request:**\ndjduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303",
+        "\n\n**Subaccount sending the transfer request:**\n303030303030303030303030303030303030303030303030303030303030303",
+    );
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
@@ -6242,4 +6245,38 @@ pub mod archiving {
             _ => None,
         }
     }
+}
+
+pub fn test_setting_fee_collector_to_minting_account<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let env = StateMachine::new();
+
+    let args = encode_init_args(InitArgs {
+        fee_collector_account: Some(MINTER),
+        ..init_args(vec![])
+    });
+    let args = Encode!(&args).unwrap();
+    match env.install_canister(ledger_wasm.clone(), args, None) {
+        Ok(_) => {
+            panic!("should not install ledger with minting account and fee collector set to the same account")
+        }
+        Err(err) => {
+            err.assert_contains(
+                ErrorCode::CanisterCalledTrap,
+                "The fee collector account cannot be the same as the minting account",
+            );
+        }
+    }
+
+    let args = encode_init_args(InitArgs {
+        fee_collector_account: Some(Account::from(PrincipalId::new_user_test_id(1).0)),
+        ..init_args(vec![])
+    });
+    let args = Encode!(&args).unwrap();
+    env.install_canister(ledger_wasm, args, None)
+        .expect("should successfully install ledger");
 }

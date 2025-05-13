@@ -522,6 +522,14 @@ fn test_archive_duplicate_controllers() {
 }
 
 #[test]
+fn test_setting_fee_collector_to_minting_account() {
+    ic_ledger_suite_state_machine_tests::test_setting_fee_collector_to_minting_account(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
 fn test_icrc21_standard() {
     ic_ledger_suite_state_machine_tests::test_icrc21_standard(ledger_wasm(), encode_init_args);
 }
