@@ -26,7 +26,7 @@ use pretty_assertions::assert_eq;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use std::{cell::RefCell, rc::Rc, time::SystemTime};
 
-fn get_state_machine_time_seconds<'a>(machine: &'a StateMachine) -> u64 {
+fn get_state_machine_time_seconds(machine: &StateMachine) -> u64 {
     machine
         .time()
         .duration_since(SystemTime::UNIX_EPOCH)
