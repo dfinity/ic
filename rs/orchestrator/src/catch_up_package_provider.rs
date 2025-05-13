@@ -265,6 +265,7 @@ impl CatchUpPackageProvider {
             .map_err(|e| format!("Querying CUP endpoint timed out: {:?}", e))?
             .map_err(|e| format!("Failed to query CUP endpoint: {:?}", e))?;
 
+        dbg!("??");
         let bytes = res
             .into_body()
             .collect()
@@ -557,6 +558,14 @@ mod tests {
             .unwrap();
     }
 
+    #[derive(Clone, Eq, PartialEq)]
+    enum MockResponse {
+        Empty,
+        Cup(pb::CatchUpPackage),
+        DoNotAccept,
+        DoNotRespond,
+    }
+
     async fn mock_server(mock_response: MockResponse) -> NodeRecord {
         let addr = get_free_localhost_socket_addr();
         let tcp_listener = tokio::net::TcpListener::bind(addr).await.unwrap();
@@ -584,13 +593,20 @@ mod tests {
                         Response::new(Body::new(Full::from(bytes)))
                     }
                     MockResponse::DoNotAccept => unreachable!(),
+                    MockResponse::DoNotRespond => {
+                        dbg!("?");
+                        tokio::time::sleep(tokio::time::Duration::from_secs(60 * 60)).await;
+                        dbg!("??");
+                        StatusCode::REQUEST_TIMEOUT.into_response()
+                    }
                 }),
             );
 
             let (stream, _remote_addr) = tcp_listener.accept().await.unwrap();
+            dbg!("???");
             let mut b = [0_u8; 1];
             stream.peek(&mut b).await.unwrap();
-            // TLS handshake
+            // TLS handshake.
             if b[0] == 22 {
                 let config = generate_self_signed_cert().await;
                 let tls_acceptor = tokio_rustls::TlsAcceptor::from(config.get_inner());
@@ -601,13 +617,6 @@ mod tests {
         });
 
         node_record
-    }
-
-    #[derive(Clone, Eq, PartialEq)]
-    enum MockResponse {
-        Empty,
-        Cup(pb::CatchUpPackage),
-        DoNotAccept,
     }
 
     async fn set_up_dependencies(
@@ -706,7 +715,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn time_out_test() {
+    async fn time_out_when_connection_not_accepted_test() {
         let (cup_provider, node_record) = set_up_dependencies(MockResponse::DoNotAccept).await;
 
         let response = cup_provider
@@ -722,6 +731,27 @@ mod tests {
             response
                 .as_ref()
                 .is_err_and(|err| err.contains("Querying CUP endpoint timed out")),
+            "{response:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn time_out_when_not_responding_test() {
+        let (cup_provider, node_record) = set_up_dependencies(MockResponse::DoNotRespond).await;
+
+        let response = cup_provider
+            .fetch_and_verify_catch_up_package(
+                &NODE_2,
+                &node_record,
+                /*param=*/ None,
+                SUBNET_1,
+            )
+            .await;
+
+        assert!(
+            response
+                .as_ref()
+                .is_err_and(|err| err.contains("Quersying CUP endpoint timed out")),
             "{response:?}"
         );
     }
