@@ -1173,7 +1173,7 @@ impl<T: HasTestEnv> HasIcDependencies for T {
 pub fn get_elasticsearch_hosts() -> Result<Vec<String>> {
     let dep_rel_path = "elasticsearch_hosts";
     let hosts = read_dependency_to_string(dep_rel_path)
-        .unwrap_or_else(|_| "elasticsearch.ch1-obsdev1.dfinity.network:443".to_string());
+        .unwrap_or_else(|_| "elasticsearch.testnet.dfinity.network:443".to_string());
     parse_elasticsearch_hosts(Some(hosts))
 }
 
