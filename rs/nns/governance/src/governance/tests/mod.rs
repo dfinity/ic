@@ -22,6 +22,7 @@ use maplit::{btreemap, hashmap};
 use std::{convert::TryFrom, time::Duration};
 
 mod list_neurons;
+mod list_proposals;
 mod neurons_fund;
 mod node_provider_rewards;
 mod stake_maturity;
