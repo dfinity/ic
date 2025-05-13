@@ -2,5 +2,5 @@ dnl We substitute EXTRA_BOOT_ARGS from the extra_boot_args target at build time 
 
 # Kernel cmdline parameters for launching the HostOS.
 # BOOT_ARGS_A targets partition set "A" while BOOT_ARGS_B targets partition set "B".
-BOOT_ARGS_A="root=/dev/hostlvm/A_root console=ttyS0,115200 console=tty0 nomodeset video=1024x768 EXTRA_BOOT_ARGS"
-BOOT_ARGS_B="root=/dev/hostlvm/B_root console=ttyS0,115200 console=tty0 nomodeset video=1024x768 EXTRA_BOOT_ARGS"
+BOOT_ARGS_A="root=/dev/hostlvm/A_root console=ttyS0,115200 console=tty0 nomodeset video=1024x768 dfinity.system=A EXTRA_BOOT_ARGS"
+BOOT_ARGS_B="root=/dev/hostlvm/B_root console=ttyS0,115200 console=tty0 nomodeset video=1024x768 dfinity.system=B EXTRA_BOOT_ARGS"
