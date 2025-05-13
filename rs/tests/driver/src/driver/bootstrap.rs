@@ -8,7 +8,7 @@ use crate::{
         driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
         farm::{AttachImageSpec, Farm, FarmResult, FileId},
         ic::{InternetComputer, Node},
-        nested::{NestedNode, NestedVms, NESTED_CONFIGURED_IMAGE_PATH},
+        nested::{NestedNode, NestedVms, NESTED_CONFIG_IMAGE_PATH},
         node_software_version::NodeSoftwareVersion,
         port_allocator::AddrType,
         resource::{AllocatedVm, HOSTOS_MEMORY_KIB_PER_VM, HOSTOS_VCPUS_PER_VM},
@@ -561,22 +561,25 @@ pub fn setup_nested_vms(
         for node in nodes {
             join_handles.push(s.spawn(|| {
                 let vm_name = &node.name;
-                let configured_image =
-                    configure_setupos_image(env, vm_name, nns_url, nns_public_key)?;
+                let url = Url::parse(&std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_URL")?)?;
+                let hash = std::env::var("ENV_DEPS__SETUPOS_DISK_IMG_HASH")?;
+                let setupos_image_spec = AttachImageSpec::via_url(url, hash);
 
-                let configured_image_spec = AttachImageSpec::new(farm.upload_file(
+                let config_image =
+                    create_setupos_config_image(env, vm_name, nns_url, nns_public_key)?;
+                let config_image_spec = AttachImageSpec::new(farm.upload_file(
                     group_name,
-                    configured_image,
-                    NESTED_CONFIGURED_IMAGE_PATH,
+                    config_image,
+                    NESTED_CONFIG_IMAGE_PATH,
                 )?);
+
                 farm.attach_disk_images(
                     group_name,
                     vm_name,
                     "usb-storage",
-                    vec![configured_image_spec],
-                )?;
-
-                Ok(())
+                    vec![setupos_image_spec, config_image_spec],
+                )
+                .map_err(|e| e.into())
             }));
         }
 
@@ -600,7 +603,7 @@ pub fn start_nested_vms(env: &TestEnv, farm: &Farm, group_name: &str) -> anyhow:
     Ok(())
 }
 
-pub fn configure_setupos_image(
+fn create_setupos_config_image(
     env: &TestEnv,
     name: &str,
     nns_url: &Url,
@@ -609,9 +612,7 @@ pub fn configure_setupos_image(
     let tmp_dir = env.get_path("setupos");
     fs::create_dir_all(&tmp_dir)?;
 
-    let setupos_image = get_dependency_path_from_env("ENV_DEPS__SETUPOS_IMG_PATH");
-    let setupos_inject_configs = get_dependency_path_from_env("ENV_DEPS__SETUPOS_INJECT_CONFIGS");
-    let setupos_disable_checks = get_dependency_path_from_env("ENV_DEPS__SETUPOS_DISABLE_CHECKS");
+    let build_setupos_config_image = get_dependency_path_from_env("ENV_DEPS__SETUPOS_BUILD_CONFIG");
 
     let nested_vm = env.get_nested_vm(name)?;
 
@@ -619,9 +620,6 @@ pub fn configure_setupos_image(
     let cpu = "kvm";
 
     let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
-    let admin_keys: Vec<_> = std::fs::read_to_string(ssh_authorized_pub_keys_dir.join("admin"))
-        .map(|v| v.lines().map(|v| v.to_owned()).collect())
-        .unwrap_or_default();
 
     // TODO: We transform the IPv6 to get this information, but it could be
     // passed natively.
@@ -636,71 +634,45 @@ pub fn configure_setupos_image(
         segments[0], segments[1], segments[2], segments[3]
     );
 
-    let uncompressed_image = tmp_dir.join("disk.img");
-
-    let output = Command::new("tar")
-        .arg("xaf")
-        .arg(&setupos_image)
-        .arg("-C")
-        .arg(tmp_dir)
-        .output()?;
-    std::io::stdout().write_all(&output.stdout)?;
-    std::io::stderr().write_all(&output.stderr)?;
-    if !output.status.success() {
-        bail!("could not extract image");
-    }
-
-    let path_key = "PATH";
-    let new_path = format!("{}:{}", "/usr/sbin", std::env::var(path_key)?);
-
-    let output = Command::new(setupos_disable_checks)
-        .arg("--image-path")
-        .arg(&uncompressed_image)
-        .env(path_key, &new_path)
-        .output()?;
-    std::io::stdout().write_all(&output.stdout)?;
-    std::io::stderr().write_all(&output.stderr)?;
-    if !output.status.success() {
-        bail!("could not disable checks on image");
-    }
-
-    let mut cmd = Command::new(setupos_inject_configs);
-    cmd.arg("--image-path")
-        .arg(&uncompressed_image)
-        .arg("--deployment-environment")
-        .arg("testnet")
-        .arg("--mgmt-mac")
-        .arg(&mac)
-        .arg("--ipv6-prefix")
-        .arg(&prefix)
-        .arg("--ipv6-gateway")
-        .arg(&gateway)
-        .arg("--memory-gb")
-        .arg((HOSTOS_MEMORY_KIB_PER_VM / 2 / 1024 / 1024).to_string())
-        .arg("--cpu")
-        .arg(cpu)
-        .arg("--nr-of-vcpus")
-        .arg((HOSTOS_VCPUS_PER_VM / 2).to_string())
-        .arg("--nns-url")
-        .arg(nns_url.to_string())
-        .arg("--nns-public-key")
-        .arg(nns_public_key)
-        .arg("--node-reward-type")
-        .arg("type3.1")
-        .env(path_key, &new_path);
-
+    // Prep config dir
+    let config_dir = tmp_dir.join("config");
+    std::fs::create_dir_all(config_dir.join("ssh_authorized_keys"))?;
+    let mut config_ini = std::fs::File::create(config_dir.join("config.ini"))?;
+    config_ini.write_all(
+        format!("node_reward_type=type3.1\nipv6_prefix={prefix}\nipv6_gateway={gateway}")
+            .as_bytes(),
+    )?;
+    std::fs::copy(
+        ssh_authorized_pub_keys_dir.join("admin"),
+        config_dir.join("ssh_authorized_keys/admin"),
+    )?;
     if let Ok(node_key) = std::env::var("NODE_OPERATOR_PRIV_KEY_PATH") {
         if !node_key.trim().is_empty() {
-            cmd.arg("--node-operator-private-key").arg(node_key);
+            let mut node_operator_private_key =
+                std::fs::File::create(config_dir.join("node_operator_private_key.pem"))?;
+            node_operator_private_key.write_all(node_key.as_bytes())?;
         }
     }
 
-    if !admin_keys.is_empty() {
-        cmd.arg("--public-keys");
-        for key in admin_keys {
-            cmd.arg(key);
-        }
-    }
+    // Prep data dir
+    let data_dir = tmp_dir.join("data");
+    std::fs::create_dir(&data_dir)?;
+    let mut deployment_json = std::fs::File::create(data_dir.join("deployment.json"))?;
+    let memory = HOSTOS_MEMORY_KIB_PER_VM / 2 / 1024 / 1024;
+    let nr_of_vcpus = (HOSTOS_VCPUS_PER_VM / 2).to_string();
+    deployment_json.write_all(&format!("{{\"deployment\":{{\"name\":\"testnet\",\"mgmt_mac\":\"{mac}\"}},\"logging\":{{\"hosts\":\"\"}},\"nns\":{{\"url\":\"{nns_url}\"}},\"resources\":{{\"memory\":\"{memory}\",\"cpu\":\"{cpu}\",\"nr_of_vcpus\":{nr_of_vcpus}}}}}").as_bytes())?;
+    let mut nns_public_key_pem = std::fs::File::create(data_dir.join("nns_public_key.pem"))?;
+    nns_public_key_pem.write_all(nns_public_key.as_bytes())?;
+
+    // Pack dirs into config image
+    let config_image = nested_vm.get_setupos_config_image_path()?;
+    let mut cmd = Command::new(build_setupos_config_image);
+    let path_key = "PATH";
+    let new_path = format!("{}:{}", "/usr/sbin", std::env::var(path_key)?);
+    cmd.arg(config_dir)
+        .arg(data_dir)
+        .arg(&config_image)
+        .env(path_key, &new_path);
 
     let output = cmd.output()?;
     std::io::stdout().write_all(&output.stdout)?;
@@ -709,14 +681,5 @@ pub fn configure_setupos_image(
         bail!("could not inject configs into image");
     }
 
-    let configured_image = nested_vm.get_configured_setupos_image_path()?;
-
-    let mut img_file = File::open(&uncompressed_image)?;
-    let configured_image_file = File::create(configured_image.clone())?;
-    let mut encoder = Encoder::new(configured_image_file, 0)?;
-    let _ = io::copy(&mut img_file, &mut encoder)?;
-    let mut write_stream = encoder.finish()?;
-    write_stream.flush()?;
-
-    Ok(configured_image)
+    Ok(config_image)
 }
