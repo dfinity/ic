@@ -287,7 +287,11 @@ fn test_recover_subnet_gets_chain_keys_when_needed(key_id: MasterPublicKeyId) {
         subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(ChainKeyConfig {
             key_configs: vec![KeyConfigInternal {
                 key_id: key_id.clone(),
-                pre_signatures_to_create_in_advance: 100,
+                pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
+                    100
+                } else {
+                    0
+                },
                 max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
             }],
             signature_request_timeout_ns: None,
@@ -516,7 +520,13 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
             let chain_key_config_pb = ChainKeyConfigPb {
                 key_configs: vec![KeyConfigPb {
                     key_id: Some(MasterPublicKeyIdPb::from(&key_id)),
-                    pre_signatures_to_create_in_advance: Some(1),
+                    pre_signatures_to_create_in_advance: Some(
+                        if key_id.requires_pre_signatures() {
+                            1
+                        } else {
+                            0
+                        },
+                    ),
                     max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                 }],
                 signature_request_timeout_ns: None,
