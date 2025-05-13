@@ -5,11 +5,11 @@ use std::cell::RefCell;
 use std::fmt::Formatter;
 use std::mem;
 use std::rc::Rc;
-
+use candid::CandidType;
 pub use tla_state::*;
 pub use tla_value::*;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, CandidType)]
 pub struct SourceLocation {
     pub file: String,
     pub line: String,
@@ -41,12 +41,31 @@ pub struct Update {
     pub post_process: fn(&mut Vec<ResolvedStatePair>) -> TlaConstantAssignment,
 }
 
+
 #[derive(Debug, Clone)]
 pub struct UpdateTrace {
     pub update: Update,
     pub state_pairs: Vec<ResolvedStatePair>,
     pub constants: TlaConstantAssignment,
 }
+
+#[derive(Debug, Clone, CandidType)]
+pub struct UpdateTraceReport {
+    pub model_name: String,
+    pub state_pairs: Vec<ResolvedStatePair>,
+    pub constants: TlaConstantAssignment,
+}
+
+impl From<UpdateTrace> for UpdateTraceReport {
+    fn from(trace: UpdateTrace) -> Self {
+        Self {
+            model_name: trace.update.process_id,
+            state_pairs: trace.state_pairs,
+            constants: trace.constants,
+        }
+    }
+}
+
 
 #[derive(Clone, Debug)]
 enum LocationStackElem {

@@ -415,6 +415,9 @@ fn test_neuron_disburse_maturity() {
         nns_governance_get_full_neuron(&state_machine, test_user_principal, test_neuron_id.id)
             .expect("Failed to get neuron");
     assert_eq!(neuron.maturity_disbursements_in_progress, Some(vec![]));
+
+    #[cfg(feature = "tla")]
+    check_state_machine_tla_traces(&state_machine, gov_canister_id);
 }
 
 /// If a neuron's controller is added as a hot key and then removed, assert that Governance

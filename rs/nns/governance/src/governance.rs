@@ -156,6 +156,7 @@ use crate::storage::with_voting_state_machines_mut;
 #[cfg(feature = "tla")]
 pub use tla::{
     tla_update_method, InstrumentationState, ToTla, CLAIM_NEURON_DESC, DISBURSE_NEURON_DESC,
+    DISBURSE_MATURITY_DESC,
     DISBURSE_TO_NEURON_DESC, MERGE_NEURONS_DESC, REFRESH_NEURON_DESC, SPAWN_NEURONS_DESC,
     SPAWN_NEURON_DESC, SPLIT_NEURON_DESC, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY,
     TLA_TRACES_MUTEX,
@@ -3316,6 +3317,7 @@ impl Governance {
         Ok(child_nid)
     }
 
+    #[cfg_attr(feature = "tla", tla_update_method(DISBURSE_MATURITY_DESC.clone()))]
     fn disburse_maturity(
         &mut self,
         id: &NeuronId,

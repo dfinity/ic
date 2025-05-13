@@ -18,6 +18,17 @@ use ic_nns_common::pb::v1::NeuronId;
 use ic_types::PrincipalId;
 use icrc_ledger_types::icrc1::account::Account as Icrc1Account;
 use std::{cell::RefCell, collections::HashMap, fmt::Display, thread::LocalKey, time::Duration};
+use std::collections::BTreeMap;
+use crate::{tla_log_locals};
+#[cfg(feature = "tla")]
+pub use crate::governance::{tla::{
+    account_to_tla,
+    tla_update_method, InstrumentationState, ToTla, TlaValue,
+    TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, FINALIZE_MATURITY_DISBURSEMENT_DESC,
+    TLA_TRACES_MUTEX,
+    get_tla_globals,
+    GlobalState
+}, tla};
 
 /// The delay in seconds between initiating a maturity disbursement and the actual disbursement.
 const DISBURSEMENT_DELAY_SECONDS: u64 = ONE_DAY_SECONDS * 7;
@@ -25,7 +36,7 @@ const DISBURSEMENT_DELAY_SECONDS: u64 = ONE_DAY_SECONDS * 7;
 /// disbursements after every reward event (as 10 > 7).
 const MAX_NUM_DISBURSEMENTS: usize = 10;
 /// The minimum amount of ICP to disburse in a single transaction.
-const MINIMUM_DISBURSEMENT_E8S: u64 = E8;
+pub const MINIMUM_DISBURSEMENT_E8S: u64 = E8;
 // We do not retry the task more frequently than once a minute, so that if there is anything wrong
 // with the task, we don't use too many resources. How this is chosen: assuming the task can max out
 // the 50B instruction limit and it takes 2B instructions per DTS slice, then the task can run for
@@ -393,7 +404,7 @@ impl Display for FinalizeMaturityDisbursementError {
                 write!(
                     f,
                     "Maturity disbursement was removed from the neuron {:?}, ICP minting failed \
-                    but the disbursement cannot be reversed because of {}. Neuron lock is retained.", 
+                    but the disbursement cannot be reversed because of {}. Neuron lock is retained.",
                     neuron_id,
                     reason
                 )
@@ -490,9 +501,27 @@ fn next_maturity_disbursement_to_finalize(
     }))
 }
 
+#[cfg(feature = "tla")]
+fn get_globals(governance: &'static LocalKey<RefCell<Governance>>) -> GlobalState {
+    let ptr: *const Governance = { governance.with(|g| g.as_ptr()) };
+
+    unsafe { get_tla_globals(&*ptr) }
+}
+
+#[cfg(feature = "tla")]
+fn get_snapshotter(governance: &'static LocalKey<RefCell<Governance>>) -> ::std::rc::Rc<dyn Fn() -> GlobalState> {
+    let ptr: *const Governance = { governance.with(|g| g.as_ptr()) };
+
+    // let raw_ptr = governance.with_borrow(|g| {&g as *const _});
+    // ::std::rc::Rc::new(move || unsafe { get_tla_globals(*raw_ptr) })
+    ::std::rc::Rc::new(move || unsafe { get_tla_globals(&*ptr) })
+}
+
 /// Finalizes the maturity disbursement for a neuron. See
 /// `ic_nns_governance::pb::v1::manage_neuron::DisburseMaturity` for more information. Returns the
 /// delay until the time when the finalization should be run again.
+// TODO: finish instrumenting this
+#[cfg_attr(feature = "tla", tla_update_method(FINALIZE_MATURITY_DISBURSEMENT_DESC.clone(), globals=get_globals, snapshotter=get_snapshotter))]
 pub async fn finalize_maturity_disbursement(
     governance: &'static LocalKey<RefCell<Governance>>,
 ) -> Duration {
@@ -572,8 +601,17 @@ async fn try_finalize_maturity_disbursement(
 
     // Step 3: call ledger to perform the minting. If this fails, the neuron mutation needs to
     // be reversed.
-    let mint_icp_operation = MintIcpOperation::new(account, amount_to_mint_e8s);
+    let mint_icp_operation = MintIcpOperation::new(account.clone(), amount_to_mint_e8s);
     let ledger = governance.with_borrow(|governance| governance.get_ledger());
+    tla_log_locals! {
+        neuron_id: neuron_id.id,
+        current_disbursement: TlaValue::Record(BTreeMap::from(
+            [
+                ("account_id".to_string(), account_to_tla(icp_ledger::AccountIdentifier::from(account))),
+                ("amount_e8s".to_string(), maturity_disbursement_in_progress.amount_e8s.to_tla_value()),
+            ]
+        ))
+    };
     let mint_result = mint_icp_operation
         .mint_icp_with_ledger(ledger.as_ref(), now_seconds)
         .await;

@@ -1,88 +1,26 @@
 use proc_macro::TokenStream;
-use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{parse_macro_input, AttributeArgs, ItemFn, Lit, Meta, NestedMeta};
 
-/// Used to annotate top-level methods (which de-facto start an update call)
-#[proc_macro_attribute]
-pub fn tla_update(attr: TokenStream, item: TokenStream) -> TokenStream {
-    // Parse the input tokens of the attribute and the function
-    let input_fn = parse_macro_input!(item as ItemFn);
-    // let arg = parse_macro_input!(attr as Expr);
-    // Convert proc_macro::TokenStream to proc_macro2::TokenStream
-    let attr2: TokenStream2 = attr.into();
+use syn::parse::{Parse, ParseStream};
+use syn::{Ident, Token, Expr};
 
-    let mut modified_fn = input_fn.clone();
-
-    // Deconstruct the function elements
-    let ItemFn {
-        attrs,
-        vis,
-        sig,
-        block: _,
-    } = input_fn;
-
-    let mangled_name = syn::Ident::new(&format!("_tla_impl_{}", sig.ident), sig.ident.span());
-    modified_fn.sig.ident = mangled_name.clone();
-
-    // Creating the modified original function which calls f_impl
-    let args: Vec<_> = sig
-        .inputs
-        .iter()
-        .map(|arg| match arg {
-            syn::FnArg::Typed(pat_type) => &*pat_type.pat,
-            _ => panic!("Expected typed arguments in function signature."),
-        })
-        .collect();
-
-    let asyncness = sig.asyncness;
-
-    let output = if asyncness.is_some() {
-        quote! {
-            #modified_fn
-
-            #(#attrs)* #vis #sig {
-                // Fail the compilation if we're not in debug mode
-                #[cfg(not(debug_assertions))]
-                let i:u32 = "abc";
-
-                let globals = tla_get_globals!();
-                tla_instrumentation::tla_log_method_call!(#attr2, globals);
-                let res = #mangled_name(#(#args),*).await;
-                let globals = tla_get_globals!();
-                tla_instrumentation::tla_log_method_return!(globals);
-                res
-            }
-        }
-    } else {
-        quote! {
-            #modified_fn
-
-            #(#attrs)* #vis #sig {
-                // Fail the compilation if we're not in debug mode
-                #[cfg(not(debug_assertions))]
-                let i:u32 = "abc";
-
-                let globals = tla_get_globals!();
-                tla_instrumentation::tla_log_method_call!(#attr2, globals);
-                let res = #mangled_name(#(#args),*);
-                let globals = tla_get_globals!();
-                tla_instrumentation::tla_log_method_return!(globals);
-                res
-            }
-        }
-    };
-
-    output.into()
+struct TlaUpdateArgs {
+    update_expr: Expr, // The positional argument
+    snapshotter_fn_arg_name: Option<Expr>, // Name of the function arg to use for snapshotter
+    globals_fn_arg_name: Option<Expr>,     // Name of the function arg to use for globals
 }
+
 
 /// Marks the method as the starting point of a TLA transition (or more concretely, a PlusCal process).
 /// Assumes that the following are in scope:
 /// 1. TLA_INSTRUMENTATION_STATE LocalKey storing a Rc<RefCell<InstrumentationState>>
 /// 2. TLA_TRACES_MUTEX Option<RwLock> storing a Vec<UpdateTrace>
 /// 3. TLA_TRACES_LKEY LocalKey storing a RefCell<Vec<UpdateTrace>>
-/// 4. tla_get_globals! a macro which takes a self parameter iff this is a method
-/// 5. tla_instrumentation crate
+/// 4. tla_instrumentation crate
+///
+/// It also requires the following keyword arguments:
+/// 1. globals, a macro or function which takes the arguments self parameter iff this is a method
 ///
 /// It records the trace (sequence of states) resulting from `tla_log_request!` and `tla_log_response!`
 /// macro calls in either:
@@ -94,7 +32,8 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
     let input_fn = parse_macro_input!(item as ItemFn);
     // let arg = parse_macro_input!(attr as Expr);
     // Convert proc_macro::TokenStream to proc_macro2::TokenStream
-    let attr2: TokenStream2 = attr.into();
+    // let attr2: TokenStream2 = attr.into();
+    let macro_args = parse_macro_input!(attr as TlaUpdateArgs);
 
     let mut modified_fn = input_fn.clone();
 
@@ -110,6 +49,11 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mangled_name = syn::Ident::new(&format!("_tla_impl_{}", sig.ident), sig.ident.span());
     modified_fn.sig.ident = mangled_name.clone();
 
+    let has_self = sig
+        .inputs
+        .iter()
+        .any(|arg| matches!(arg, syn::FnArg::Receiver(_)));
+
     // Creating the modified original function which calls f_impl
     let args: Vec<_> = sig
         .inputs
@@ -122,13 +66,99 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let asyncness = sig.asyncness;
 
-    let noninstrumented_invocation = if asyncness.is_some() {
-        quote! {
-            self.#mangled_name(#(#args),*).await
+    let noninstrumented_invocation =  match (has_self, asyncness.is_some()) {
+        (true, true) => {
+            quote! {
+                self.#mangled_name(#(#args),*).await
+            }
         }
-    } else {
-        quote! {
-            self.#mangled_name(#(#args),*)
+        (true, false) => {
+            quote! {
+                self.#mangled_name(#(#args),*)
+            }
+        }
+        (false, true) => {
+            quote! {
+                #mangled_name(#(#args),*).await
+            }
+        }
+        (false, false) => {
+            quote! {
+                #mangled_name(#(#args),*)
+            }
+        }
+    };
+
+    let globals_invocation = match &macro_args.globals_fn_arg_name {
+        None => {
+            // Default case: use tla_get_globals!(self) or appropriate fallback
+            if has_self {
+                quote! { tla_get_globals!(self) }
+            } else {
+                // If no 'self' and no explicit globals, what should happen? Error maybe?
+                // For now, assume tla_get_globals!() might exist for non-self cases
+                // Or require it explicitly if no self? Let's error for now.
+                return syn::Error::new(sig.ident.span(), "Default globals logic assumes a method that takes a 'self' parameter, and a `tla_get_globals` macro in scope. Provide `globals = ...` for non-method functions or define `tla_get_globals!()`.")
+                    .to_compile_error()
+                    .into();
+                // Alternatively: quote! { tla_get_globals!() }
+            }
+        }
+        Some(expr) => match expr {
+            Expr::Path(expr_path) => {
+                // User provided a path like `my_func`: call it as a function
+                quote! { #expr_path(#(#args),*) }
+            }
+            Expr::Macro(expr_macro) => {
+                // User provided a macro like `my_macro!()`: invoke the macro path with args
+                let mac_path = &expr_macro.mac.path;
+                quote! { #mac_path!(#(#args),*) }
+            }
+            _ => {
+                // User provided something else (a function call `my_func()`, literal, etc.)
+                return syn::Error::new_spanned(
+                    expr,
+                    "Expected 'globals' to be a function path (e.g., `my_func`) or a macro invocation ending in `!()` (e.g., `my_macro! A()`)",
+                )
+                    .to_compile_error()
+                    .into();
+            }
+        }
+    };
+
+    let set_snapshotter = match &macro_args.snapshotter_fn_arg_name {
+        None => {
+            // Default case: use raw pointer logic
+            if has_self {
+                quote! {
+                 let raw_ptr = self as *const _;
+                 let snapshotter = ::std::rc::Rc::new(move || { unsafe { tla_get_globals!(&*raw_ptr) } });
+                }
+            } else {
+                return syn::Error::new(sig.ident.span(), "Default snapshotter logic assumes a method that takes a 'self' parameter, and a `tla_get_globals` macro in scope. Provide `snapshotter = ...` for non-method functions.")
+                    .to_compile_error()
+                    .into();
+
+            }
+       }
+        Some(expr) => match expr {
+            Expr::Path(expr_path) => {
+                // User provided path: call it to get the snapshotter *value*
+                quote! { let snapshotter = #expr_path(#(#args),*); }
+            }
+            Expr::Macro(expr_macro) => {
+                // User provided macro: invoke it to get the snapshotter *value*
+                let mac_path = &expr_macro.mac.path;
+                quote! { let snapshotter = #mac_path!(#(#args),*); }
+            }
+            _ => {
+                return syn::Error::new_spanned(
+                    expr,
+                    "Expected 'snapshotter' to be a function path (e.g., `my_func`) or a macro invocation ending in `!()` (e.g., `my_macro! A()`)",
+                )
+                    .to_compile_error()
+                    .into();
+            }
         }
     };
 
@@ -137,8 +167,8 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
             let mut pinned = Box::pin(TLA_INSTRUMENTATION_STATE.scope(
                 tla_instrumentation::InstrumentationState::new(update.clone(), globals, snapshotter, start_location),
                 async move {
-                    let res = self.#mangled_name(#(#args),*).await;
-                    let globals = tla_get_globals!(self);
+                    let res = #noninstrumented_invocation;
+                    let globals = #globals_invocation;
                     let state: InstrumentationState = TLA_INSTRUMENTATION_STATE.get();
                     let mut handler_state = state.handler_state.borrow_mut();
                     let state_pair = tla_instrumentation::log_method_return(&mut handler_state, globals, end_location);
@@ -157,8 +187,8 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
             TLA_INSTRUMENTATION_STATE.sync_scope(
                 tla_instrumentation::InstrumentationState::new(update.clone(), globals, snapshotter, start_location),
                 || {
-                    let res = self.#mangled_name(#(#args),*);
-                    let globals = tla_get_globals!(self);
+                    let res = #noninstrumented_invocation;
+                    let globals = #globals_invocation;
                     let state: InstrumentationState = TLA_INSTRUMENTATION_STATE.get();
                     let mut handler_state = state.handler_state.borrow_mut();
                     let state_pair = tla_instrumentation::log_method_return(&mut handler_state, globals, end_location);
@@ -170,23 +200,21 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     };
 
+    let update = macro_args.update_expr;
+
     let output = {
         quote! {
             #modified_fn
 
             #(#attrs)* #vis #sig {
-                use std::cell::RefCell;
-                use std::rc::Rc;
-
                 let enabled = TLA_TRACES_LKEY.try_with(|_| ()).is_ok() || TLA_TRACES_MUTEX.is_some();
                 if !enabled {
                     return #noninstrumented_invocation;
                 }
 
-                let globals = tla_get_globals!(self);
-                let raw_ptr = self as *const _;
-                let snapshotter = Rc::new(move || { unsafe { tla_get_globals!(&*raw_ptr) } });
-                let update = #attr2;
+                let globals = #globals_invocation;
+                #set_snapshotter;
+                let update = #update;
                 let start_location = tla_instrumentation::SourceLocation { file: "Unknown file".to_string(), line: format!("Start of {}", #original_name) };
                 let end_location = tla_instrumentation::SourceLocation { file: "Unknown file".to_string(), line: format!("End of {}", #original_name) };
                 let (mut pairs, res) = #instrumented_invocation;
@@ -350,7 +378,7 @@ pub fn with_tla_trace_check(_attr: TokenStream, item: TokenStream) -> TokenStrea
         #modified_fn
 
         #(#attrs)* #vis #sig {
-            TLA_TRACES_LKEY.sync_scope(std::cell::RefCell::new(Vec::new()), || {
+            TLA_TRACES_LKEY.sync_scope(::std::cell::RefCell::new(Vec::new()), || {
                 let res = #mangled_name(#(#args),*);
                 tla_check_traces();
                 res
@@ -358,4 +386,41 @@ pub fn with_tla_trace_check(_attr: TokenStream, item: TokenStream) -> TokenStrea
         }
     };
     output.into()
+}
+impl Parse for TlaUpdateArgs {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let update_expr: Expr = input.parse()?;
+
+        let mut snapshotter_fn_arg_name = None;
+        let mut globals_fn_arg_name = None;
+
+        while !input.is_empty() {
+            input.parse::<Token![,]>()?;
+            if input.is_empty() { // Allow trailing comma
+                break;
+            }
+            let key: Ident = input.parse()?;
+            input.parse::<Token![=]>()?;
+            let value: Expr = input.parse()?; // Expecting an identifier for the function argument name
+
+            if key == "snapshotter" {
+                if snapshotter_fn_arg_name.is_some() {
+                    return Err(syn::Error::new(key.span(), "Duplicate 'snapshotter' argument"));
+                }
+                snapshotter_fn_arg_name = Some(value);
+            } else if key == "globals" {
+                if globals_fn_arg_name.is_some() {
+                    return Err(syn::Error::new(key.span(), "Duplicate 'globals' argument"));
+                }
+                globals_fn_arg_name = Some(value);
+            } else {
+                return Err(syn::Error::new(key.span(), "Unknown keyword argument"));
+            }
+        }
+        Ok(TlaUpdateArgs {
+            update_expr,
+            snapshotter_fn_arg_name,
+            globals_fn_arg_name,
+        })
+    }
 }

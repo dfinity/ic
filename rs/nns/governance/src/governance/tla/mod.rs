@@ -27,8 +27,10 @@ use common::{function_domain_union, function_range_union, governance_account_id}
 pub use store::{TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX};
 
 mod claim_neuron;
+mod disburse_maturity;
 mod disburse_neuron;
 mod disburse_to_neuron;
+mod finalize_maturity_disbursement;
 mod merge_neurons;
 mod refresh_neuron;
 mod spawn_neuron;
@@ -36,8 +38,10 @@ mod spawn_neurons;
 mod split_neuron;
 
 pub use claim_neuron::CLAIM_NEURON_DESC;
+pub use disburse_maturity::DISBURSE_MATURITY_DESC;
 pub use disburse_neuron::DISBURSE_NEURON_DESC;
 pub use disburse_to_neuron::DISBURSE_TO_NEURON_DESC;
+pub use finalize_maturity_disbursement::FINALIZE_MATURITY_DISBURSEMENT_DESC;
 pub use merge_neurons::MERGE_NEURONS_DESC;
 pub use refresh_neuron::REFRESH_NEURON_DESC;
 pub use spawn_neuron::SPAWN_NEURON_DESC;
@@ -103,7 +107,7 @@ fn neuron_global() -> TlaValue {
                 )
             })
             .collect()
-   });
+    });
     neuron_map.to_tla_value()
 }
 

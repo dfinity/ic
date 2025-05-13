@@ -66,7 +66,7 @@ and
     }
 }
 
-#[derive(Clone, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Default, PartialEq, Eq, Hash, CandidType)]
 pub struct GlobalState(pub VarAssignment);
 
 impl GlobalState {
@@ -106,7 +106,7 @@ impl std::fmt::Debug for GlobalState {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, CandidType)]
 pub struct Label(String);
 
 impl Label {
@@ -176,7 +176,7 @@ pub struct StatePair {
 }
 
 /// A pair of states with local variable names resolved to functions from the process ID
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, CandidType)]
 pub struct ResolvedStatePair {
     pub start: GlobalState,
     pub end: GlobalState,

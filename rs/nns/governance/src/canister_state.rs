@@ -35,6 +35,7 @@ thread_local! {
         Box::new(CanisterRandomnessGenerator::new()),
     ));
 }
+
 /*
 Recommendations for Using `unsafe` in the Governance canister:
 
