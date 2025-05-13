@@ -1,7 +1,6 @@
-use candid::{CandidType, Decode, Encode, Nat, Principal};
+use candid::{CandidType, Decode, Encode, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_management_canister_types::CanisterSettings;
-use ic_nns_constants::ALL_NNS_CANISTER_IDS;
 use pocket_ic::PocketIc;
 use serde::Deserialize;
 
