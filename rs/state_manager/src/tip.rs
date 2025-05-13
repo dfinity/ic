@@ -7,7 +7,7 @@ use crate::{
     CheckpointError, PageMapType, SharedState, StateManagerMetrics,
     CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS, NUMBER_OF_CHECKPOINT_THREADS,
 };
-use crossbeam_channel::{unbounded, Sender};
+use crossbeam_channel::{bounded, unbounded, Sender};
 use ic_base_types::subnet_id_into_protobuf;
 use ic_config::state_manager::LsmtConfig;
 use ic_logger::{error, fatal, info, warn, ReplicaLogger};
@@ -141,8 +141,7 @@ fn request_timer(metrics: &StateManagerMetrics, name: &str) -> HistogramTimer {
 }
 
 pub(crate) fn flush_tip_channel(tip_channel: &Sender<TipRequest>) {
-    #[allow(clippy::disallowed_methods)]
-    let (sender, recv) = unbounded();
+    let (sender, recv) = bounded(1);
     tip_channel
         .send(TipRequest::Wait { sender })
         .expect("failed to send TipHandler Wait message");
@@ -194,11 +193,14 @@ pub(crate) fn spawn_tip_thread(
                             debug_assert!(tip_state.latest_checkpoint_state.has_manifest);
                             debug_assert_eq!(tip_state.tip_folder_state.page_maps_height, height);
                             debug_assert!(tip_state.tip_folder_state.has_filtered_canisters);
+                            // Snapshots and other unflushed changed should have been handled earlier in `flush_page_delta`.
+                            debug_assert!(state.metadata.unflushed_checkpoint_ops.is_empty());
                             tip_state.latest_checkpoint_state = tip_state.tip_folder_state;
                             tip_state.tip_folder_state = Default::default();
                             {
-                                let _timer = request_timer(&metrics, "serialize_wasm_binaries");
-                                serialize_wasm_binaries(
+                                let _timer =
+                                    request_timer(&metrics, "serialize_wasm_binaries_and_pagemaps");
+                                serialize_wasm_binaries_and_pagemaps(
                                     &state,
                                     &tip_handler.tip(height).unwrap(),
                                     &mut thread_pool,
@@ -231,7 +233,8 @@ pub(crate) fn spawn_tip_thread(
                                         .expect("Failed to send TipToCheckpoint result");
                                     if let Some(checkpoint_readwrite) = result.checkpoint_readwrite
                                     {
-                                        let _timer = request_timer(&metrics, "serialize_protos_to_tip");
+                                        let _timer =
+                                            request_timer(&metrics, "serialize_protos_to_tip");
                                         serialize_protos_to_tip(
                                             &result.state,
                                             &checkpoint_readwrite,
@@ -448,6 +451,7 @@ pub(crate) fn spawn_tip_thread(
 struct TipToCheckpointResult<'a, T> {
     state: Arc<ReplicatedState>,
     checkpoint_readonly: CheckpointLayout<ReadOnly>,
+    // Checkpoint to serialize protos to. None if we don't need to serialize protos, i.e. in case of AlreadyExists
     checkpoint_readwrite: Option<CheckpointLayout<RwPolicy<'a, T>>>,
 }
 
@@ -990,9 +994,6 @@ fn serialize_protos_to_tip(
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     thread_pool: &mut scoped_threadpool::Pool,
 ) -> Result<(), CheckpointError> {
-    // Snapshots and other unflushed changed should have been handled earlier in `flush_page_delta`.
-    debug_assert!(state.metadata.unflushed_checkpoint_ops.is_empty());
-
     // Serialize ingress history separately. The `SystemMetadata` proto does not
     // encode it.
     //
@@ -1049,7 +1050,7 @@ fn serialize_protos_to_tip(
     Ok(())
 }
 
-fn serialize_wasm_binaries(
+fn serialize_wasm_binaries_and_pagemaps(
     state: &ReplicatedState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     thread_pool: &mut scoped_threadpool::Pool,
@@ -1057,7 +1058,7 @@ fn serialize_wasm_binaries(
     metrics: &StorageMetrics,
 ) -> Result<(), CheckpointError> {
     parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
-        serialize_canister_wasm_binary(canister_state, tip, metrics, lsmt_config)
+        serialize_canister_wasm_binary_and_pagemaps(canister_state, tip, metrics, lsmt_config)
     })
     .into_iter()
     .try_for_each(identity)?;
@@ -1065,7 +1066,13 @@ fn serialize_wasm_binaries(
         thread_pool,
         state.canister_snapshots.iter(),
         |(snapshot_id, snapshot)| {
-            serialize_snapshot_wasm_binary(snapshot_id, snapshot, tip, metrics, lsmt_config)
+            serialize_snapshot_wasm_binary_and_pagemaps(
+                snapshot_id,
+                snapshot,
+                tip,
+                metrics,
+                lsmt_config,
+            )
         },
     )
     .into_iter()
@@ -1090,7 +1097,7 @@ fn serialize_wasm_binary(
     Ok(())
 }
 
-fn serialize_canister_wasm_binary(
+fn serialize_canister_wasm_binary_and_pagemaps(
     canister_state: &CanisterState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     metrics: &StorageMetrics,
@@ -1136,7 +1143,7 @@ fn serialize_canister_wasm_binary(
     Ok(())
 }
 
-fn serialize_snapshot_wasm_binary(
+fn serialize_snapshot_wasm_binary_and_pagemaps(
     snapshot_id: &SnapshotId,
     snapshot: &CanisterSnapshot,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,

@@ -883,8 +883,9 @@ fn initialize_tip(
     // Since we initialize tip from checkpoint states, we expect a clean sandbox slate
     #[cfg(debug_assertions)]
     for canister in snapshot.state.canisters_iter() {
+        use ic_replicated_state::canister_state::execution_state::SandboxMemory;
         if let Some(canister_state) = &canister.execution_state {
-            if let ic_replicated_state::canister_state::execution_state::SandboxMemory::Synced(_) =
+            if let SandboxMemory::Synced(_) =
                 *canister_state.wasm_memory.sandbox_memory.lock().unwrap()
             {
                 panic!(
@@ -892,7 +893,7 @@ fn initialize_tip(
                     canister.canister_id()
                 );
             }
-            if let ic_replicated_state::canister_state::execution_state::SandboxMemory::Synced(_) =
+            if let SandboxMemory::Synced(_) =
                 *canister_state.stable_memory.sandbox_memory.lock().unwrap()
             {
                 panic!(
