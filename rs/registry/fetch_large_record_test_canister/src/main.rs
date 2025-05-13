@@ -1,3 +1,8 @@
+//! This is just used by a test (to wit, rs/nervous_system/canisters/tests/registry.rs).
+//!
+//! Our job is just to call the registry_get_changes_since method. For that
+//! test, this is the code under test.
+
 use ic_cdk::update;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_canisters::registry::{Registry, RegistryCanister};
