@@ -24,6 +24,8 @@ Success::
 
 end::catalog[] */
 
+use std::sync::Arc;
+
 use anyhow::Result;
 use assert_matches::assert_matches;
 use canister_test::{Canister, Wasm};
@@ -44,7 +46,7 @@ use ic_system_test_driver::{
     },
     systest,
 };
-use ic_types::CanisterId;
+use ic_types::{CanisterId, PrincipalId};
 use slog::info;
 use wabt_tests::with_custom_sections;
 
@@ -342,6 +344,53 @@ fn test_metadata(env: TestEnv) {
     }
 }
 
+fn test_canister(env: TestEnv) {
+    let identities = [
+        PrincipalId::from(random_ed25519_identity().sender().unwrap()),
+        PrincipalId::from(random_ed25519_identity().sender().unwrap()),
+    ];
+
+    let node = get_first_app_node(&env);
+    let runtime = runtime_from_url(node.get_public_url(), node.effective_canister_id());
+
+    let empty_canister: Canister<'_> =
+        block_on(runtime.create_canister_max_cycles_with_retries()).unwrap();
+    let empty_canister_id = empty_canister.canister_id();
+
+    let mut wasm_canister: Canister<'_> =
+        block_on(runtime.create_canister_max_cycles_with_retries()).unwrap();
+    let wasm_canister_id = wasm_canister.canister_id();
+    let wasm = wasm_with_custom_sections(vec![]);
+    block_on(wasm.install_with_retries_onto_canister(&mut wasm_canister, None, None)).unwrap();
+
+    for i in 0..=2 {
+        let controllers = identities[..i].to_vec();
+
+        info!(env.logger(), "Setting controllers to {:?}", controllers);
+        block_on(empty_canister.set_controllers(controllers.clone())).unwrap();
+        block_on(wasm_canister.set_controllers(controllers)).unwrap();
+
+        let module_hash_path_empty = vec![
+            "canister".into(),
+            empty_canister_id.get_ref().as_slice().into(),
+            "module_hash".into(),
+        ];
+        let module_hash_path_wasm = vec![
+            "canister".into(),
+            wasm_canister_id.get_ref().as_slice().into(),
+            "module_hash".into(),
+        ];
+
+        let cert = read_state(&env, vec![module_hash_path_empty.clone()]).unwrap();
+        let value = lookup_value(&cert, module_hash_path_empty);
+        assert_matches!(value, Err(AgentError::LookupPathAbsent(_)));
+
+        let cert = read_state(&env, vec![module_hash_path_wasm.clone()]).unwrap();
+        let value = lookup_value(&cert, module_hash_path_wasm).unwrap();
+        assert!(!value.is_empty());
+    }
+}
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
@@ -352,6 +401,7 @@ fn main() -> Result<()> {
         .add_test(systest!(test_absent_request))
         .add_test(systest!(test_invalid_path_rejected))
         .add_test(systest!(test_metadata))
+        .add_test(systest!(test_canister))
         .execute_from_args()?;
     Ok(())
 }
