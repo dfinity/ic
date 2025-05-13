@@ -52,10 +52,10 @@ run() {
 }
 
 for i in $(seq 1 "${REPEAT}"); do
-    # run "${i}" "Embedders Compilation" \
-    #     "//rs/embedders:compilation_bench" "EMBEDDERS_COMPILATION.min"
-    run "${i}" "Embedders Heap" \
-        "//rs/embedders:heap_bench" "EMBEDDERS_HEAP.min" "wasm32_"
+    run "${i}" "Embedders Compilation" \
+        "//rs/embedders:compilation_bench" "EMBEDDERS_COMPILATION.min"
+    # run "${i}" "Embedders Heap" \
+    #     "//rs/embedders:heap_bench" "EMBEDDERS_HEAP.min" "wasm32_"
     # run "${i}" "Embedders Stable Memory" \
     #     "//rs/embedders:stable_memory_bench" "EMBEDDERS_STABLE_MEMORY.min"
     # run "${i}" "System API Inspect Message" \
