@@ -1,5 +1,5 @@
 {
-  "checksum": "13de999b187fd51e9a87b0dd576f04471cbd718765e80626464ebf62694701e3",
+  "checksum": "9b3aa6053bd7c15d5fe27a8fc6b5152e72d1e633696255814cf40e43149f99ce",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -32870,7 +32870,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-bn-lib",
           "commitish": {
-            "Rev": "878756fe2b157096f4dcb7a635dd7ccb0149c729"
+            "Rev": "22fbe5cec35b25f8e0da17b344f4bc13c25401db"
           }
         }
       },
@@ -32896,6 +32896,7 @@
         "crate_features": {
           "common": [
             "acme_alpn",
+            "rustls-acme",
             "vector"
           ],
           "selects": {}

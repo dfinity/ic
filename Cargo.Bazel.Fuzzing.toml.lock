@@ -3516,7 +3516,7 @@ dependencies = [
  "hyper-socks2",
  "hyper-util",
  "ic-agent 0.39.3",
- "ic-bn-lib 0.1.0 (git+https://github.com/dfinity/ic-bn-lib?rev=878756fe2b157096f4dcb7a635dd7ccb0149c729)",
+ "ic-bn-lib 0.1.0 (git+https://github.com/dfinity/ic-bn-lib?rev=22fbe5cec35b25f8e0da17b344f4bc13c25401db)",
  "ic-btc-interface",
  "ic-canister-log",
  "ic-canister-sig-creation",
@@ -5695,7 +5695,7 @@ dependencies = [
 [[package]]
 name = "ic-bn-lib"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/ic-bn-lib?rev=878756fe2b157096f4dcb7a635dd7ccb0149c729#878756fe2b157096f4dcb7a635dd7ccb0149c729"
+source = "git+https://github.com/dfinity/ic-bn-lib?rev=22fbe5cec35b25f8e0da17b344f4bc13c25401db#22fbe5cec35b25f8e0da17b344f4bc13c25401db"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",

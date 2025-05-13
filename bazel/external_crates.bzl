@@ -602,7 +602,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-bn-lib": crate.spec(
                 git = "https://github.com/dfinity/ic-bn-lib",
-                rev = "878756fe2b157096f4dcb7a635dd7ccb0149c729",
+                rev = "22fbe5cec35b25f8e0da17b344f4bc13c25401db",
                 features = [
                     "acme_alpn",
                 ],

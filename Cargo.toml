@@ -576,7 +576,7 @@ hyper-rustls = { version = "0.27.3", default-features = false, features = [
 hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.10", features = ["full"] }
 ic-agent = { version = "0.39.2", features = ["pem", "ring"] }
-ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "878756fe2b157096f4dcb7a635dd7ccb0149c729", features = [
+ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "22fbe5cec35b25f8e0da17b344f4bc13c25401db", features = [
     "acme_alpn",
 ] }
 ic-btc-interface = "0.2.2"
