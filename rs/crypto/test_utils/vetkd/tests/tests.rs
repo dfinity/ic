@@ -1,5 +1,5 @@
 use ic_crypto_test_utils_vetkd::*;
-use ic_vetkd_utils::{MasterPublicKey, EncryptedVetKey, TransportSecretKey};
+use ic_vetkd_utils::{EncryptedVetKey, MasterPublicKey, TransportSecretKey};
 use rand::Rng;
 use rand_chacha::rand_core::SeedableRng;
 
