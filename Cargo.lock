@@ -10137,6 +10137,7 @@ dependencies = [
  "icrc-ledger-types",
  "icrc1-test-env",
  "icrc1-test-suite",
+ "num-bigint 0.4.6",
  "num-traits",
  "proptest 1.6.0",
 ]

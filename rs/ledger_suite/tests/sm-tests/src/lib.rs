@@ -53,6 +53,7 @@ use icrc_ledger_types::icrc3::transactions::GetTransactionsResponse;
 use icrc_ledger_types::icrc3::transactions::Transaction as Tx;
 use icrc_ledger_types::icrc3::transactions::TransactionRange;
 use icrc_ledger_types::icrc3::transactions::Transfer;
+use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use proptest::prelude::*;
 use proptest::test_runner::{Config as TestRunnerConfig, TestCaseResult, TestRunner};
@@ -4027,6 +4028,83 @@ pub fn test_allowance_listing_subaccount<T>(
     let allowances = list_allowances(&env, canister_id, approver_default.owner, args)
         .expect("failed to list allowances");
     assert_eq!(allowances.len(), 1);
+}
+
+// The test focuses on testing various values for the `take` parameter.
+pub fn test_allowance_listing_take<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    const MAX_RESULTS: usize = 500;
+    const NUM_SPENDERS: usize = MAX_RESULTS + 1;
+
+    let approver = Account {
+        owner: PrincipalId::new_user_test_id(1).0,
+        subaccount: None,
+    };
+
+    let mut spenders = vec![];
+    for i in 2..NUM_SPENDERS + 2 {
+        spenders.push(Account {
+            owner: PrincipalId::new_user_test_id(i as u64).0,
+            subaccount: None,
+        });
+    }
+    assert_eq!(spenders.len(), NUM_SPENDERS);
+
+    let (env, canister_id) = setup(
+        ledger_wasm,
+        encode_init_args,
+        vec![(approver, 1_000_000_000)],
+    );
+
+    for spender in &spenders {
+        let approve_args = ApproveArgs {
+            from_subaccount: None,
+            spender: *spender,
+            amount: Nat::from(10u64),
+            expected_allowance: None,
+            expires_at: None,
+            fee: Some(Nat::from(FEE)),
+            memo: None,
+            created_at_time: None,
+        };
+        let _ = send_approval(&env, canister_id, approver.owner, &approve_args)
+            .expect("approval failed");
+    }
+
+    let mut args = GetAllowancesArgs {
+        from_account: Some(approver),
+        prev_spender: None,
+        take: None,
+    };
+
+    let allowances = list_allowances(&env, canister_id, approver.owner, args.clone())
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), MAX_RESULTS);
+
+    args.take = Some(Nat::from(0u64));
+    let allowances = list_allowances(&env, canister_id, approver.owner, args.clone())
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), 0);
+
+    args.take = Some(Nat::from(5u64));
+    let allowances = list_allowances(&env, canister_id, approver.owner, args.clone())
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), 5);
+
+    args.take = Some(Nat::from(u64::MAX));
+    let allowances = list_allowances(&env, canister_id, approver.owner, args.clone())
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), MAX_RESULTS);
+
+    args.take = Some(Nat::from(
+        BigUint::parse_bytes(b"1000000000000000000000000000000000000000", 10).unwrap(),
+    ));
+    assert!(args.take.clone().unwrap().0.to_u64().is_none());
+    let allowances = list_allowances(&env, canister_id, approver.owner, args)
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), MAX_RESULTS);
 }
 
 pub fn expect_icrc2_disabled(
