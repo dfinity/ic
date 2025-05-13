@@ -77,7 +77,11 @@ fn setup_common() -> InternetComputer {
                     .into_iter()
                     .map(|key_id| KeyConfig {
                         max_queue_size: 20,
-                        pre_signatures_to_create_in_advance: 7,
+                        pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
+                            7
+                        } else {
+                            0
+                        },
                         key_id,
                     })
                     .collect(),

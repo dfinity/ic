@@ -105,7 +105,11 @@ pub fn setup(
         .map(|key_id| KeyConfig {
             key_id,
             max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
-            pre_signatures_to_create_in_advance: 3,
+            pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
+                3
+            } else {
+                0
+            },
         })
         .collect();
     nns = nns.with_chain_key_config(ChainKeyConfig {
