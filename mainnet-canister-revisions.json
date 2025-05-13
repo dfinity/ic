@@ -104,8 +104,8 @@
     "sha256": "28955c4f27d3de9be2c4f48ee90e9c0af67ffe52e41c4cd8e5ba1aceb5da83de"
   },
   "sns_governance": {
-    "rev": "7b3e386ff22599706bf7e1cbc98aea2e5b660b57",
-    "sha256": "e957e0edceb17f3b49e0d17cc7c482d0f9e57b0179b202c45ec98dca74769ab7"
+    "rev": "5639c29fd72de16d483be7fe6dedc86e9bec3b9e",
+    "sha256": "6d1c606a2a31109d5847d0f0e32fbb756deccea85ff60a0ec97518f4003a238d"
   },
   "sns_index": {
     "rev": "9dfa7825fc087deacccbed3985a502e0ec2276ff",
