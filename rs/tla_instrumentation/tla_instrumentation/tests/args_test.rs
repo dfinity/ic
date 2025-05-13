@@ -59,7 +59,7 @@ mod tla_stuff {
         ($first_arg:expr $(, $_rest:tt)* ) => {
             { // Use a block to potentially shadow variables and contain the logic
                 let raw_ptr = $first_arg as *const _;
-                Rc::new(move || { unsafe { my_get_globals(&*raw_ptr) } })
+                ::std::rc::Rc::new(move || { unsafe { my_get_globals(&*raw_ptr) } })
             }
         }
     }

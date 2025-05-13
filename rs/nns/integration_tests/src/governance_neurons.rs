@@ -3,7 +3,7 @@
 use canister_test::Runtime;
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common::{
     ledger::compute_neuron_staking_subaccount_bytes, ONE_DAY_SECONDS, ONE_YEAR_SECONDS,
@@ -39,6 +39,8 @@ use ic_nns_test_utils::{
 use icp_ledger::{tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Tokens};
 use icrc_ledger_types::icrc1::account::Account;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use ic_protobuf::state::ingress::v1::ingress_status_completed::WasmResult;
+use ic_state_machine_tests::StateMachine;
 
 #[test]
 fn test_merge_neurons_and_simulate_merge_neurons() {
@@ -418,6 +420,24 @@ fn test_neuron_disburse_maturity() {
 
     #[cfg(feature = "tla")]
     check_state_machine_tla_traces(&state_machine, gov_canister_id);
+}
+
+fn check_state_machine_tla_traces(sm: StateMachine, gov_canister_id: CanisterId) {
+    use ic_nns_governance::governance::tla::{UpdateTraceReport, check_traces};
+    let wasm_res = sm.query(
+        gov_canister_id,
+        "get_tla_traces",
+        vec![]
+    ).expect("Couldn't call get_tla_traces");
+    let traces = match wasm_res {
+        WasmResult::Reject(r) => panic!("get_tla_traces failed: {}", r),
+        WasmResult::Reply(r) => {
+            Decode!(&r, UpdateTraceReport).expect("Couldn't decode get_tla_traces response")
+        }
+    };
+    check_traces()
+
+
 }
 
 /// If a neuron's controller is added as a hot key and then removed, assert that Governance

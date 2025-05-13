@@ -18,6 +18,7 @@ use ic_nns_common::pb::v1::NeuronId;
 use ic_types::PrincipalId;
 use icrc_ledger_types::icrc1::account::Account as Icrc1Account;
 use std::{cell::RefCell, collections::HashMap, fmt::Display, thread::LocalKey, time::Duration};
+#[cfg(feature = "tla")]
 use std::collections::BTreeMap;
 use crate::{tla_log_locals};
 #[cfg(feature = "tla")]

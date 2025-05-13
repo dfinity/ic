@@ -20,7 +20,7 @@ impl SeedingTask {
 const SEEDING_INTERVAL: Duration = Duration::from_secs(3600);
 const RETRY_SEEDING_INTERVAL: Duration = Duration::from_secs(30);
 
-#[async_trait]
+#[async_trait(?Send)]
 impl RecurringAsyncTask for SeedingTask {
     async fn execute(self) -> (Duration, Self) {
         let env = self

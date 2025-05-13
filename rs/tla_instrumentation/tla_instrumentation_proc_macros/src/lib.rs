@@ -222,7 +222,7 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let constants = (update.post_process)(&mut pairs);
 
                 let trace = tla_instrumentation::UpdateTrace {
-                    update,
+                    model_name: update.process_id.clone(),
                     state_pairs: pairs,
                     constants,
                 };

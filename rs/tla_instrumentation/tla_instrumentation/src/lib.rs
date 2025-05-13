@@ -44,28 +44,10 @@ pub struct Update {
 
 #[derive(Debug, Clone)]
 pub struct UpdateTrace {
-    pub update: Update,
-    pub state_pairs: Vec<ResolvedStatePair>,
-    pub constants: TlaConstantAssignment,
-}
-
-#[derive(Debug, Clone, CandidType)]
-pub struct UpdateTraceReport {
     pub model_name: String,
     pub state_pairs: Vec<ResolvedStatePair>,
     pub constants: TlaConstantAssignment,
 }
-
-impl From<UpdateTrace> for UpdateTraceReport {
-    fn from(trace: UpdateTrace) -> Self {
-        Self {
-            model_name: trace.update.process_id,
-            state_pairs: trace.state_pairs,
-            constants: trace.constants,
-        }
-    }
-}
-
 
 #[derive(Clone, Debug)]
 enum LocationStackElem {

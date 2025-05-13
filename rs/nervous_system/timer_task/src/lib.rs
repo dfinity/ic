@@ -48,7 +48,7 @@
 //!         Err(_) => (RETRY_DELAY, self),
 //!    }
 //!   fn initial_delay(&self) -> Duration { Duration::from_secs(0) }
-//!   
+//!
 //!   const NAME: &'static str = "some_recurring_sync_task";
 //! }
 //!
@@ -199,7 +199,7 @@ pub trait RecurringSyncTask: Sized + 'static {
     const NAME: &'static str;
 }
 
-#[async_trait]
+#[async_trait(?Send)]
 pub trait RecurringAsyncTask: Sized + 'static {
     async fn execute(self) -> (Duration, Self);
     fn initial_delay(&self) -> Duration;

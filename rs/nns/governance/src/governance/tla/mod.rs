@@ -9,6 +9,7 @@ use crate::storage::{with_stable_neuron_indexes, with_stable_neuron_store};
 pub use tla_instrumentation::{
     Destination, GlobalState, InstrumentationState, Label, ResolvedStatePair,
     TlaConstantAssignment, TlaValue, ToTla, Update, UpdateTrace, VarAssignment,
+    UpdateTraceReport,
 };
 pub use tla_instrumentation_proc_macros::{tla_function, tla_update_method};
 
