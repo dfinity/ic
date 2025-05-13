@@ -115,11 +115,7 @@ fn test_neuron_into_api() {
             neuron_type: None,
             potential_voting_power,
             deciding_voting_power,
-            maturity_disbursements_in_progress: if cfg!(feature = "test") {
-                Some(vec![])
-            } else {
-                None
-            },
+            maturity_disbursements_in_progress: Some(vec![]),
         },
     );
 

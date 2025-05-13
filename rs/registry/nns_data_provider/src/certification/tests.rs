@@ -1,6 +1,7 @@
 use super::*;
 use futures_util::FutureExt;
 use ic_certification_test_utils::{CertificateBuilder, CertificateData};
+use ic_crypto_sha2::Sha256;
 use ic_crypto_tree_hash::{
     flatmap, Digest, FlatMap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree,
     WitnessGenerator,
@@ -9,10 +10,11 @@ use ic_interfaces_registry::RegistryTransportRecord;
 use ic_registry_transport::{
     delete,
     pb::v1::{
-        high_capacity_registry_mutation, registry_mutation, CertifiedResponse, LargeValueChunkKeys,
-        RegistryAtomicMutateRequest, RegistryMutation,
+        high_capacity_registry_mutation, registry_mutation, CertifiedResponse,
+        HighCapacityRegistryMutation, LargeValueChunkKeys, RegistryAtomicMutateRequest,
+        RegistryMutation,
     },
-    upsert,
+    upsert, MockGetChunk,
 };
 use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey, crypto::CombinedThresholdSig, CanisterId,
@@ -51,7 +53,7 @@ fn decode_certified_deltas_no_chunks(
         canister_id,
         nns_pk,
         payload,
-        &MockFetchLargeValue::new(),
+        &MockGetChunk::new(),
     )
     .now_or_never()
     .unwrap()
@@ -353,35 +355,14 @@ fn test_honest_chunked() {
         .map(|chunk_content| Sha256::hash(chunk_content).to_vec())
         .collect::<Vec<Vec<u8>>>();
 
-    let mut fetch_large_value = MockFetchLargeValue::new();
+    let mut get_chunk = MockGetChunk::new();
     for (content, content_sha256) in chunk_contents.iter().zip(chunk_content_sha256s.iter()) {
-        fetch_large_value
-            .expect_get_chunk_no_validation()
+        get_chunk
+            .expect_get_chunk_without_validation()
             .with(mockall::predicate::eq(content_sha256.clone()))
             .times(1)
             .return_const(Ok(content.clone()));
     }
-
-    // A wrapper around fetch_large_value. Unlike MockFetchLargeValue, this gets
-    // the default implementations of methods in FetchLargeValue. This means
-    // that this only implements get_chunk_no_validation, which just a wrapper
-    // around MockFetchLargeValue::get_chunk_no_validation.
-    struct SemiMockFetchLargeValue {
-        implementation: MockFetchLargeValue,
-    }
-
-    #[async_trait]
-    impl FetchLargeValue for SemiMockFetchLargeValue {
-        async fn get_chunk_no_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String> {
-            self.implementation
-                .get_chunk_no_validation(content_sha256)
-                .await
-        }
-    }
-
-    let fetch_large_value = SemiMockFetchLargeValue {
-        implementation: fetch_large_value,
-    };
 
     let (cid, pk, payload) = make_certified_delta(
         vec![HighCapacityRegistryAtomicMutateRequest {
@@ -404,7 +385,7 @@ fn test_honest_chunked() {
     );
 
     // Step 2: Call the code under test.
-    let result = decode_certified_deltas(0, &cid, &pk, &payload[..], &fetch_large_value)
+    let result = decode_certified_deltas(0, &cid, &pk, &payload[..], &get_chunk)
         .now_or_never()
         .unwrap()
         .unwrap();
@@ -433,30 +414,12 @@ fn test_evil_chunked() {
 
     let chunk_content_sha256 = Sha256::hash(&chunk_content).to_vec();
 
-    let mut fetch_large_value = MockFetchLargeValue::new();
-    fetch_large_value
-        .expect_get_chunk_no_validation()
+    let mut get_chunk = MockGetChunk::new();
+    get_chunk
+        .expect_get_chunk_without_validation()
         .with(mockall::predicate::eq(chunk_content_sha256.clone()))
         .times(1)
         .return_const(Ok(b"DO NOT BELIEVE THE LIES OF THIS EVIL NODE".to_vec()));
-
-    // Same as test_honest_chunked.
-    struct SemiMockFetchLargeValue {
-        implementation: MockFetchLargeValue,
-    }
-
-    #[async_trait]
-    impl FetchLargeValue for SemiMockFetchLargeValue {
-        async fn get_chunk_no_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String> {
-            self.implementation
-                .get_chunk_no_validation(content_sha256)
-                .await
-        }
-    }
-
-    let fetch_large_value = SemiMockFetchLargeValue {
-        implementation: fetch_large_value,
-    };
 
     // Same as test_honest_chunked.
     let (cid, pk, payload) = make_certified_delta(
@@ -480,13 +443,15 @@ fn test_evil_chunked() {
     );
 
     // Step 2: Call the code under test.
-    let result = decode_certified_deltas(0, &cid, &pk, &payload[..], &fetch_large_value)
+    let result = decode_certified_deltas(0, &cid, &pk, &payload[..], &get_chunk)
         .now_or_never()
         .unwrap();
 
     // Step 3: Verify result(s).
     match result {
-        Err(CertificationError::InvalidDeltas(err)) => {
+        Err(CertificationError::DechunkifyingFailed(
+            ic_registry_transport::Error::UnknownError(err),
+        )) => {
             let message = err.to_lowercase();
             for key_word in ["chunk", "hash", "match"] {
                 assert!(message.contains(key_word), "{} not in {}", key_word, err);

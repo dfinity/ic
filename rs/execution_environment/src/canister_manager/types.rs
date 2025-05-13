@@ -616,8 +616,8 @@ impl AsErrorHelp for CanisterManagerError {
                 }
             }
             CanisterManagerError::ReservedCyclesLimitIsTooLow { .. } => ErrorHelp::UserError {
-                suggestion: "".to_string(),
-                doc_link: "".to_string(),
+                suggestion: "Set the reserved cycles limit in the canister settings to a value that is at least the current reserved cycles balance.".to_string(),
+                doc_link: "reserved-cycles-limit-is-too-low".to_string(),
             },
             CanisterManagerError::WasmChunkStoreError { .. } => ErrorHelp::UserError {
                 suggestion: "Use the `stored_chunks` API to check which hashes are present \
@@ -648,8 +648,8 @@ impl AsErrorHelp for CanisterManagerError {
                 }
             }
             CanisterManagerError::CanisterSnapshotLimitExceeded { .. } => ErrorHelp::UserError {
-                suggestion: "".to_string(),
-                doc_link: "".to_string(),
+                suggestion: "Consider deleting an unnecessary snapshot of the specified canister before creating a new one.".to_string(),
+                doc_link: "canister-snapshot-limit-exceeded".to_string(),
             },
             CanisterManagerError::CanisterSnapshotNotEnoughCycles { .. } => ErrorHelp::UserError {
                 suggestion: "".to_string(),
