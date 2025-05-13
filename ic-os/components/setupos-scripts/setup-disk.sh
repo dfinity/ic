@@ -39,10 +39,6 @@ function purge_partitions() {
 
         # Remove any LVM metadata
         pvremove --force "/dev/${drive}"* 2>/dev/null || true
-        vgremove --force hostlvm 2>/dev/null || true
-
-        # Remove any device mappings
-        dmsetup remove_all 2>/dev/null || true
 
         # Wipe the partition table and filesystem signatures
         wipefs --all --force "/dev/${drive}"*
@@ -55,6 +51,9 @@ function purge_partitions() {
             log_and_halt_installation_on_error 1 "Partitions still exist after wipe on /dev/${drive}"
         fi
     done
+
+    # Remove all device mapper mappings
+    dmsetup remove_all 2>/dev/null || true
 }
 
 function setup_storage() {
