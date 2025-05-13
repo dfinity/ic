@@ -1,12 +1,12 @@
 benches:
   bench_icrc1_transfers:
     total:
-      instructions: 53753372601
+      instructions: 53753252985
       heap_increase: 263
       stable_memory_increase: 256
     scopes:
       icrc103_get_allowances:
-        instructions: 6599872
+        instructions: 6480256
         heap_increase: 0
         stable_memory_increase: 0
       icrc1_transfer:
