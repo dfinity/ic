@@ -40,8 +40,12 @@ impl Signer for Hsm {
     }
 }
 
+/// The sender is authenticated via an external HSM device and the signature mechanism is specified
+/// through the provided function reference.
 struct ExternalHsmSender {
+    /// DER encoded public key
     pub_key: Vec<u8>,
+    /// Function that abstracts the external HSM.
     sign: SignBytes,
 }
 
@@ -84,8 +88,11 @@ impl Signer for NodeProviderSigner {
     }
 }
 
+/// Signed from the node itself, with its key.
 pub struct NodeSender {
+    /// DER encoded public key
     pub_key: Vec<u8>,
+    /// Function that signs the message id
     sign: SignMessageId,
 }
 
