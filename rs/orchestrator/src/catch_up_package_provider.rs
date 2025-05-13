@@ -188,7 +188,7 @@ impl CatchUpPackageProvider {
             .http
             .as_ref()
             .ok_or_else(|| format!("Node record's http endpoint is None: {:?}", node_record))?;
-        let mut uri = http_endpoint_to_url(&http, &self.logger)
+        let mut uri = http_endpoint_to_url(http, &self.logger)
             .ok_or_else(|| format!("Failed to convert endpoint '{http:?}' to url"))?;
         uri.path_segments_mut()
             .map_err(|()| String::from("Invalid url"))?
@@ -643,7 +643,7 @@ mod tests {
             crypto: Arc::new(CryptoReturningOk::default()),
             crypto_tls_config: Arc::new(mock_tls_config()),
             logger: no_op_logger(),
-            node_id: node_id,
+            node_id,
         };
 
         (cup_provider, node_record)
