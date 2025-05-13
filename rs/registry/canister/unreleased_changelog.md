@@ -12,6 +12,8 @@ on the process that this file is part of, see
   the provided canisters when called so that requests will be routed to a different subnet. This will be used to support
   the broader canister migrations feature.
 
+* Started populating `timestamp_seconds` fields.
+
 ## Changed
 
 * The `create_subnet` and `recover_subnet` calls are using the `reshare_chain_key` endpoint rather than the old `compute_initial_i_dkg_dealings` endpoint. With this change, recovery of vetkeys is supported.

@@ -13,10 +13,11 @@ use ic_nns_test_utils::{
     registry::invariant_compliant_mutation_as_atomic_req,
 };
 use ic_nns_test_utils_macros::parameterized_upgrades;
-use ic_registry_nns_data_provider::certification::{decode_hash_tree, MockFetchLargeValue};
+use ic_registry_nns_data_provider::certification::decode_hash_tree;
 use ic_registry_transport::{
     insert,
     pb::v1::{CertifiedResponse, RegistryAtomicMutateRequest, RegistryGetChangesSinceRequest},
+    MockGetChunk,
 };
 use ic_types::RegistryVersion;
 use prost::Message;
@@ -67,7 +68,7 @@ async fn query_certified_changes_since(
             .expect("no hash tree in a certified response")
             .try_into()
             .expect("failed to decode hash tree from protobuf"),
-        &MockFetchLargeValue::new(),
+        &MockGetChunk::new(),
     )
     .await
     .expect("failed to decode registry deltas")
@@ -177,7 +178,7 @@ fn test_does_not_return_more_than_1000_certified_deltas() {
         assert!(has_delta(&tree, MAX_VERSIONS_PER_QUERY));
         let mixed_hash_tree =
             MixedHashTree::try_from(certified_response.hash_tree.unwrap()).unwrap();
-        decode_hash_tree(0, mixed_hash_tree, &MockFetchLargeValue::new())
+        decode_hash_tree(0, mixed_hash_tree, &MockGetChunk::new())
             .await
             .unwrap();
 
@@ -198,7 +199,7 @@ fn test_does_not_return_more_than_1000_certified_deltas() {
         decode_hash_tree(
             MAX_VERSIONS_PER_QUERY,
             certified_response.hash_tree.unwrap().try_into().unwrap(),
-            &MockFetchLargeValue::new(),
+            &MockGetChunk::new(),
         )
         .await
         .unwrap();

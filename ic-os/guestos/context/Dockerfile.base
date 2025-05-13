@@ -32,14 +32,14 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
 # Download and verify filebeat
 RUN cd /tmp/ && \
     curl -L -O https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-oss-8.9.1-linux-x86_64.tar.gz && \
-    echo "6c7efc9968ba224f44afb2f66bd21f45d29232e5bd2dc8b7631f52f552d882da95644c13c75cda44ed1ee81d4d5ee367247af8346cdcc330d01e6a45b22f9893  filebeat-oss-8.9.1-linux-x86_64.tar.gz" > filebeat.sha512 && \
-    shasum -c filebeat.sha512
+    echo "ce199f350704c21dbb23dc72ce2a4ecd2e6acb9ed7d4cc338489d72ddea5f3d7  filebeat-oss-8.9.1-linux-x86_64.tar.gz" > filebeat.sha256 && \
+    sha256sum -c filebeat.sha256
 
 # Download and verify node_exporter
 RUN cd /tmp/ && \
     curl -L -O https://github.com/prometheus/node_exporter/releases/download/v1.8.1/node_exporter-1.8.1.linux-amd64.tar.gz && \
     echo "fbadb376afa7c883f87f70795700a8a200f7fd45412532cc1938a24d41078011  node_exporter-1.8.1.linux-amd64.tar.gz" > node_exporter.sha256 && \
-    shasum -c node_exporter.sha256
+    sha256sum -c node_exporter.sha256
 
 #
 # Second build stage:

@@ -121,15 +121,17 @@ malicious_binary = rule(
     },
 )
 
-def _checksum_rule_impl(ctx):
+def _artifact_bundle_impl(ctx):
     # List of input files
     input_files = ctx.files.inputs
 
+    bundle_dir = "{}_bundle".format(ctx.attr.name)
+
     # Declare output files (NOTE: not windows friendly)
-    out_checksums = ctx.actions.declare_file("_checksums/SHA256SUMS")
+    out_checksums = ctx.actions.declare_file(bundle_dir + "/SHA256SUMS")
 
     def make_symlink(target):
-        symlink = ctx.actions.declare_file("_checksums/" + target.basename)
+        symlink = ctx.actions.declare_file(bundle_dir + "/" + target.basename)
         ctx.actions.symlink(output = symlink, target_file = target)
         return symlink
 
@@ -171,8 +173,8 @@ def _checksum_rule_impl(ctx):
 
 # A rule that re-exports symlinks to all the inputs as well
 # as an extra file 'SHA256SUMS' containing the checksums of inputs.
-checksum_rule = rule(
-    implementation = _checksum_rule_impl,
+artifact_bundle = rule(
+    implementation = _artifact_bundle_impl,
     attrs = {
         "inputs": attr.label_list(
             allow_files = True,

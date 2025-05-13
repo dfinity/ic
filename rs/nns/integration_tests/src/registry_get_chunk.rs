@@ -65,7 +65,7 @@ fn test_large_records() {
                 )
             ),
             version: new_version,
-            timestamp_seconds: 0,
+            timestamp_seconds: get_value_response.timestamp_seconds,
             error: None,
         },
     );
@@ -121,6 +121,7 @@ fn test_mutate_test_high_capacity_records() {
             operation: mutate_test_high_capacity_records::Operation::UpsertLarge,
         },
     );
+    let prior_small_response = registry_get_value(&state_machine, b"daniel_wong_42");
 
     let small_version = registry_mutate_test_high_capacity_records(
         &state_machine,
@@ -136,6 +137,8 @@ fn test_mutate_test_high_capacity_records() {
             operation: mutate_test_high_capacity_records::Operation::UpsertLarge,
         },
     );
+    let prior_red_herring_get_value_response =
+        registry_get_value(&state_machine, b"daniel_wong_999");
 
     let small_get_value_response = registry_get_value(&state_machine, b"daniel_wong_42");
 
@@ -169,7 +172,8 @@ fn test_mutate_test_high_capacity_records() {
                 b"small value".to_vec()
             )),
             version: small_version,
-            timestamp_seconds: 0,
+            // Will be checked later.
+            timestamp_seconds: small_get_value_response.timestamp_seconds,
             error: None,
         },
     );
@@ -196,7 +200,7 @@ fn test_mutate_test_high_capacity_records() {
                 b"small value".to_vec()
             )),
             version: final_red_herring_version,
-            timestamp_seconds: 0,
+            timestamp_seconds: red_herring_get_value_response.timestamp_seconds,
             error: None,
         },
     );
@@ -220,14 +224,15 @@ fn test_mutate_test_high_capacity_records() {
                             content: Some(high_capacity_registry_value::Content::DeletionMarker(
                                 true
                             )),
-                            timestamp_seconds: 0,
+                            // Cannot get the timestamp when it was deleted
+                            timestamp_seconds: changes.deltas[0].values[0].timestamp_seconds,
                         },
                         HighCapacityRegistryValue {
                             version: small_version,
                             content: Some(high_capacity_registry_value::Content::Value(
                                 b"small value".to_vec(),
                             )),
-                            timestamp_seconds: 0,
+                            timestamp_seconds: small_get_value_response.timestamp_seconds,
                         },
                         HighCapacityRegistryValue {
                             version: prior_small_version,
@@ -238,7 +243,7 @@ fn test_mutate_test_high_capacity_records() {
                                     }
                                 )
                             ),
-                            timestamp_seconds: 0,
+                            timestamp_seconds: prior_small_response.timestamp_seconds,
                         },
                     ],
                 },
@@ -250,7 +255,7 @@ fn test_mutate_test_high_capacity_records() {
                             content: Some(high_capacity_registry_value::Content::Value(
                                 b"small value".to_vec(),
                             )),
-                            timestamp_seconds: 0,
+                            timestamp_seconds: red_herring_get_value_response.timestamp_seconds,
                         },
                         HighCapacityRegistryValue {
                             version: prior_red_herring_version,
@@ -261,7 +266,8 @@ fn test_mutate_test_high_capacity_records() {
                                     }
                                 )
                             ),
-                            timestamp_seconds: 0,
+                            timestamp_seconds: prior_red_herring_get_value_response
+                                .timestamp_seconds,
                         },
                     ],
                 },

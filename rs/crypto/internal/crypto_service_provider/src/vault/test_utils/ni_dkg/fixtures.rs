@@ -118,16 +118,14 @@ impl MockNode {
                     KeyId::try_from(public_coefficients)
                         .expect("computing key id from public coefficients should not fail")
                 });
-        self.csp_vault
-            .create_dealing(
-                algorithm_id,
-                dealer_index,
-                threshold,
-                epoch,
-                receiver_keys,
-                maybe_reshared_secret_id,
-            )
-            .map_err(ni_dkg_errors::CspDkgCreateReshareDealingError::from)
+        self.csp_vault.create_dealing(
+            algorithm_id,
+            dealer_index,
+            threshold,
+            epoch,
+            receiver_keys,
+            maybe_reshared_secret_id,
+        )
     }
 }
 
