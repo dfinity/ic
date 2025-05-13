@@ -382,7 +382,6 @@ members = [
     "rs/test_utilities/types",
     "rs/test_utilities/tmpdir",
     "rs/tests/boundary_nodes",
-    "rs/tests/boundary_nodes/custom_domains",
     "rs/tests/boundary_nodes/integration_test_common",
     "rs/tests/boundary_nodes/performance_test_common",
     "rs/tests/boundary_nodes/utils",

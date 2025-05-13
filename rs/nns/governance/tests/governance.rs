@@ -137,7 +137,7 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
     convert::{TryFrom, TryInto},
     iter::{self, once},
-    ops::{Deref, Div},
+    ops::Div,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -8125,11 +8125,9 @@ fn test_manage_and_reward_node_providers() {
         ProposalStatus::Executed
     );
     // Find the neuron...
-    let neuron = gov.neuron_store.with_active_neurons_iter(|mut iter| {
-        iter.find(|x| x.controller() == np_pid)
-            .map(|n| n.deref().clone())
-            .unwrap()
-    });
+    let neuron = gov
+        .neuron_store
+        .with_active_neurons_iter(|mut iter| iter.find(|x| x.controller() == np_pid).unwrap());
     assert_eq!(neuron.stake_e8s(), 99_999_999);
     // Find the transaction in the ledger...
     driver.assert_account_contains(
@@ -8443,11 +8441,9 @@ fn test_manage_and_reward_multiple_node_providers() {
 
     // Check third reward
     // Find the neuron...
-    let neuron = gov.neuron_store.with_active_neurons_iter(|mut iter| {
-        iter.find(|x| x.controller() == np_pid_2)
-            .map(|n| n.deref().clone())
-            .unwrap()
-    });
+    let neuron = gov
+        .neuron_store
+        .with_active_neurons_iter(|mut iter| iter.find(|x| x.controller() == np_pid_2).unwrap());
     assert_eq!(neuron.stake_e8s(), 99_999_999);
     // Find the transaction in the ledger...
     driver.assert_account_contains(

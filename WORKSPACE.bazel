@@ -109,18 +109,21 @@ sol_register_toolchains(
 
 http_archive(
     name = "rules_rust",
-    integrity = "sha256-8TBqrAsli3kN8BrZq8arsN8LZUFsdLTvJ/Sqsph4CmQ=",
+    integrity = "sha256-U8G6x+xI985IxMHGqgBvJ1Fa3SrrBXJZNyJObgDsfOo=",
     patch_args = ["-p1"],
     patches = ["//bazel:rules_rust.patch"],
-    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.56.0/rules_rust-0.56.0.tar.gz"],
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.61.0/rules_rust-0.61.0.tar.gz"],
 )
 
+load("@rules_rust//crate_universe:repositories.bzl", "crate_universe_dependencies")
 load("@rules_rust//rust:repositories.bzl", "rules_rust_dependencies", "rust_register_toolchains")
 load("@rules_rust//tools/rust_analyzer:deps.bzl", "rust_analyzer_dependencies")
 
 rules_rust_dependencies()
 
 rust_analyzer_dependencies()
+
+crate_universe_dependencies()
 
 rust_register_toolchains(
     edition = "2021",
@@ -132,12 +135,9 @@ rust_register_toolchains(
     # The nightly version is required to compile fuzz tests from Bazel.
     # The version below is chosen so that it is in sync with the non-nightly version.
     versions = [
-        "1.84.0",
+        "1.85.1",
         # Use the nightly version from the day before the branch.
-        # -
-        # NB! Due to a regression in the compiler https://github.com/rust-lang/rust/issues/128895, that's
-        # only back-ported to stable, we use a more recent version.
-        "nightly/2024-11-21",
+        "nightly/2025-03-08",
     ],
 )
 
