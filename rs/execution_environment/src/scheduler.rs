@@ -1988,7 +1988,7 @@ fn observe_replicated_state_metrics(
                     .take_while(|stop_context| stop_context.call_id().is_none())
                     .count();
             }
-            CanisterStatus::Stopped { .. } => num_stopped_canisters += 1,
+            CanisterStatus::Stopped => num_stopped_canisters += 1,
         }
         match canister.next_task() {
             Some(&ExecutionTask::PausedExecution { .. }) => {

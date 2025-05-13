@@ -454,6 +454,7 @@ impl ConnectionManager {
         let quinn_client_config = QuicClientConfig::try_from(rustls_client_config).expect("Conversion from RustTls config to Quinn config must succeed as long as this library and quinn use the same RustTls versions.");
         let mut client_config = quinn::ClientConfig::new(Arc::new(quinn_client_config));
         client_config.transport_config(transport_config);
+        let logger = self.log.clone();
         let conn_fut = async move {
             // 'connect_with' is placed inside the async block so the event loop retries on failure.
             let connecting = endpoint
@@ -470,6 +471,7 @@ impl ConnectionManager {
                         cause,
                     })?;
 
+            info!(logger, "Connected to node {:?}", peer_id);
             Ok::<_, ConnectionEstablishError>(established)
         };
 

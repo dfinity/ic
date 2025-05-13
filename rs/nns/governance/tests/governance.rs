@@ -102,15 +102,12 @@ use ic_nns_governance::{
     DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
 };
 use ic_nns_governance_api::{
-    pb::v1::{
-        self as api,
-        manage_neuron_response::{self, Command as CommandResponse, ConfigureResponse},
-        proposal::Action as ApiAction,
-        Ballot as ApiBallot, CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
-        ListNeurons, ListNeuronsResponse, ListProposalInfoResponse, ManageNeuronResponse,
-        NeuronState,
-    },
+    self as api,
+    manage_neuron_response::{self, Command as CommandResponse, ConfigureResponse},
+    proposal::Action as ApiAction,
     proposal_validation::validate_proposal_title,
+    Ballot as ApiBallot, CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons,
+    ListNeuronsResponse, ListProposalInfoResponse, ManageNeuronResponse, NeuronState,
 };
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_sns_init::pb::v1::SnsInitPayload;
@@ -139,8 +136,8 @@ use std::{
     cmp::Ordering,
     collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
     convert::{TryFrom, TryInto},
-    iter::{self, once},
-    ops::{Deref, Div},
+    iter::once,
+    ops::Div,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -8128,11 +8125,9 @@ fn test_manage_and_reward_node_providers() {
         ProposalStatus::Executed
     );
     // Find the neuron...
-    let neuron = gov.neuron_store.with_active_neurons_iter(|mut iter| {
-        iter.find(|x| x.controller() == np_pid)
-            .map(|n| n.deref().clone())
-            .unwrap()
-    });
+    let neuron = gov
+        .neuron_store
+        .with_active_neurons_iter(|mut iter| iter.find(|x| x.controller() == np_pid).unwrap());
     assert_eq!(neuron.stake_e8s(), 99_999_999);
     // Find the transaction in the ledger...
     driver.assert_account_contains(
@@ -8446,11 +8441,9 @@ fn test_manage_and_reward_multiple_node_providers() {
 
     // Check third reward
     // Find the neuron...
-    let neuron = gov.neuron_store.with_active_neurons_iter(|mut iter| {
-        iter.find(|x| x.controller() == np_pid_2)
-            .map(|n| n.deref().clone())
-            .unwrap()
-    });
+    let neuron = gov
+        .neuron_store
+        .with_active_neurons_iter(|mut iter| iter.find(|x| x.controller() == np_pid_2).unwrap());
     assert_eq!(neuron.stake_e8s(), 99_999_999);
     // Find the transaction in the ledger...
     driver.assert_account_contains(
@@ -8763,9 +8756,8 @@ fn test_get_proposal_info() {
 fn test_list_proposals_removes_execute_nns_function_payload() {
     // ARRANGE
     let proposal_id = ProposalId { id: 2 };
-    let payload = iter::repeat(42)
-        .take(EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX + 1)
-        .collect();
+    let payload =
+        std::iter::repeat_n(42, EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX + 1).collect();
     let driver = fake::FakeDriver::default();
     let gov = Governance::new(
         fixture_for_proposals(proposal_id, payload),
@@ -8802,9 +8794,7 @@ fn test_list_proposals_removes_execute_nns_function_payload() {
 fn test_list_proposals_retains_execute_nns_function_payload() {
     // ARRANGE
     let proposal_id = ProposalId { id: 2 };
-    let payload = iter::repeat(42)
-        .take(EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX)
-        .collect();
+    let payload = std::iter::repeat_n(42, EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX).collect();
     let driver = fake::FakeDriver::default();
     let gov = Governance::new(
         fixture_for_proposals(proposal_id, payload),
@@ -8843,9 +8833,8 @@ fn test_list_proposals_retains_execute_nns_function_payload() {
 fn test_get_pending_proposals_removes_execute_nns_function_payload() {
     // ARRANGE
     let proposal_id = ProposalId { id: 2 };
-    let payload = iter::repeat(42)
-        .take(EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX + 1)
-        .collect();
+    let payload =
+        std::iter::repeat_n(42, EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX + 1).collect();
     let driver = fake::FakeDriver::default();
     let gov = Governance::new(
         fixture_for_proposals(proposal_id, payload),

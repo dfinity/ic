@@ -24,13 +24,34 @@ BUILD_INFO_REV = "701a696844fba5c87df162fbbc1ccef96f27c9d7"
 
 def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enabled):
     CRATE_ANNOTATIONS = {
+        "openssl-sys": [crate.annotation(
+            build_script_data = [
+                "@openssl//:gen_dir",
+            ],
+            build_script_env = {
+                "OPENSSL_NO_VENDOR": "1",
+                "OPENSSL_LIB_DIR": "$(location @openssl//:gen_dir)/lib64",
+                "OPENSSL_INCLUDE_DIR": "$(location @openssl//:gen_dir)/include",
+                "OPENSSL_STATIC": "1",
+            },
+        )],
         "canbench": [crate.annotation(
             gen_binaries = True,
+        )],
+        "cc": [crate.annotation(
+            patch_args = ["-p1"],
+            patches = ["@@//bazel:cc_rs.patch"],
         )],
         "libssh2-sys": [crate.annotation(
             # Patch for determinism issues
             patch_args = ["-p1"],
             patches = ["@@//bazel:libssh2-sys.patch"],
+            build_script_data = [
+                "@openssl//:gen_dir",
+            ],
+        )],
+        "libz-sys": [crate.annotation(
+            crate_features = ["static"],
         )],
         "curve25519-dalek": [crate.annotation(
             rustc_flags = [
@@ -89,19 +110,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             patch_args = ["-p4"],
             patches = ["@@//bazel:cranelift-isle.patch"],
         )],
-        "cranelift-codegen-meta": [crate.annotation(
-            patch_args = ["-p4"],
-            patches = [
-                "@@//bazel:cranelift-codegen-meta-isle.patch",  # Patch for issue: https://github.com/bytecodealliance/wasmtime/pull/10334
-            ],
-        )],
         "cranelift-assembler-x64": [crate.annotation(
-            # Patch for issue: https://github.com/bytecodealliance/wasmtime/pull/10334
+            # Patch for determinism issues
             patch_args = ["-p3"],
-            patches = [
-                "@@//bazel:cranelift-assembler-lib.patch",
-                "@@//bazel:cranelift-assembler-main.patch",
-            ],
+            patches = ["@@//bazel:cranelift-assembler-lib.patch"],
         )],
         "secp256k1-sys": [crate.annotation(
             # This specific version is used by ic-btc-kyt canister, which
@@ -1483,7 +1495,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.228.0",
             ),
             "wasmtime": crate.spec(
-                version = "^31.0.0",
+                version = "^32.0.0",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1494,7 +1506,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^31.0.0",
+                version = "^32.0.0",
             ),
             "wast": crate.spec(
                 version = "^228.0.0",

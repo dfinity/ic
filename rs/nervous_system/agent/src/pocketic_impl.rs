@@ -158,7 +158,7 @@ impl CallCanisters for PocketIcAgent<'_> {
             vec![]
         };
 
-        let Some(controller) = controllers.into_iter().last() else {
+        let Some(controller) = controllers.into_iter().next_back() else {
             return Err(Self::Error::BlackHole);
         };
 

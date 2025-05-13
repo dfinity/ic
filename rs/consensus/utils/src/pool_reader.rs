@@ -751,15 +751,16 @@ pub mod test {
             let rounds = 30;
             let replicas = 10;
             let f = 3;
+            let block_proposals_per_round = f + 1;
             let Dependencies { mut pool, .. } = dependencies(pool_config, replicas);
 
             // Because `TestConsensusPool::advance_round` alternates between
             // putting blocks in validated and unvalidated pools for each rank,
-            // we expect (f+1)/2 blocks in the unvalidated pool per round.
+            // we expect `block_proposals_per_round`/2 blocks in the unvalidated pool per round.
             let mut round = pool
                 .prepare_round()
                 .with_replicas(replicas as u32)
-                .with_new_block_proposals(f + 1)
+                .with_new_block_proposals(block_proposals_per_round)
                 .with_random_beacon_shares(replicas as u32)
                 .with_notarization_shares(replicas as u32)
                 .with_finalization_shares(replicas as u32);
@@ -788,9 +789,12 @@ pub mod test {
                     Height::from((rounds * 2) as u64),
                 ))
                 .collect::<Vec<_>>();
-            // We expect to see `rounds * ((f+1)/2)` unvalidated block proposals sorted by
+            // We expect to see `rounds * (block_proposals_per_round/2)` unvalidated block proposals sorted by
             // height in ascending order.
-            assert_eq!(artifacts.len(), rounds * ((f as usize + 1) / 2));
+            assert_eq!(
+                artifacts.len(),
+                rounds * ((block_proposals_per_round as usize) / 2)
+            );
             for i in 0..artifacts.len() - 1 {
                 // Heights are ascending, but NOT unique.
                 assert!(artifacts[i].content.height() <= artifacts[i + 1].content.height());
