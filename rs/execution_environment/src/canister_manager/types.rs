@@ -984,7 +984,7 @@ impl From<CanisterManagerError> for UserError {
             CanisterSnapshotImmutable => {
                 Self::new(
                 ErrorCode::CanisterSnapshotImmutable,
-                    format!("Only canister snapshots created by metadata upload can be mutated."),
+                    "Only canister snapshots created by metadata upload can be mutated.".to_string(),
                 )
             }
             LongExecutionAlreadyInProgress { canister_id } => {
