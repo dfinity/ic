@@ -117,6 +117,7 @@ async fn test_registry_get_changes_since() {
     assert_eq!(
         large_content_summary,
         ContentSummary {
+            key: b"daniel_wong_42".to_vec(),
             len: MEGA_BLOB.len() as u64,
             sha256: Sha256::hash(&MEGA_BLOB).to_vec(),
         },
@@ -125,6 +126,7 @@ async fn test_registry_get_changes_since() {
     assert_eq!(
         small_content_summary,
         ContentSummary {
+            key: b"daniel_wong_42".to_vec(),
             len: "small value".len() as u64,
             sha256: Sha256::hash(b"small value").to_vec(),
         },

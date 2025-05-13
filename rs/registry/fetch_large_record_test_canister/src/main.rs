@@ -28,7 +28,6 @@ async fn call_registry_get_changes_since(
     assert_eq!(deltas.len(), 1);
     let RegistryDelta { key, mut values } = deltas.pop().unwrap();
 
-    assert_eq!(key, b"daniel_wong_42");
     assert_eq!(values.len(), 1);
     let value = values.pop().unwrap();
     if value.deletion_marker {
@@ -37,6 +36,7 @@ async fn call_registry_get_changes_since(
 
     let value = value.value;
     let result = ContentSummary {
+        key,
         len: u64::try_from(value.len()).unwrap(),
         sha256: Sha256::hash(&value).to_vec(),
     };

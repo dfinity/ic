@@ -9,6 +9,7 @@ pub struct CallRegistryGetChangesSinceRequest {}
 
 #[derive(Clone, Debug, PartialEq, Eq, CandidType, Deserialize)]
 pub struct ContentSummary {
+    pub key: Vec<u8>,
     pub len: u64,
     pub sha256: Vec<u8>,
 }
