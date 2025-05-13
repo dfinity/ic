@@ -25,6 +25,7 @@ LEDGER_CANISTER_RUSTC_ENV = {
 
 LEDGER_CANISTER_DEPS = [
     # Keep sorted.
+    "//packages/ic-http-types",
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/ledger_suite/common/ledger_canister_core",
@@ -34,16 +35,15 @@ LEDGER_CANISTER_DEPS = [
     "//rs/rust_canisters/canister_log",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
-    "//rs/rust_canisters/dfn_http_metrics",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
-    "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
+    "@crate_index//:ic_cdk_0_17_1",
     "@crate_index//:num-traits",
     "@crate_index//:serde_bytes",
 ]
@@ -60,6 +60,6 @@ def rust_ledger_canister(name, extra_deps = [":ledger"], crate_features = None):
         crate_features = crate_features if crate_features else [],
         proc_macro_deps = [
             # Keep sorted.
-            "@crate_index//:ic-cdk-macros",
+            "@crate_index//:ic_cdk_macros_0_17_1",
         ],
     )

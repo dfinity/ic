@@ -1,6 +1,6 @@
 use crate::pb::v1 as pb;
 use ic_crypto_sha2::Sha256;
-use ic_nns_governance_api::pb::v1 as pb_api;
+use ic_nns_governance_api as pb_api;
 
 use crate::pb::proposal_conversions::convert_proposal;
 
@@ -112,6 +112,8 @@ impl From<pb_api::Neuron> for pb::Neuron {
             voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
             // This field is internal only and should not be read from API types.
             recent_ballots_next_entry_index: None,
+            // TODO(NNS1-3607): Expose this field in the API.
+            maturity_disbursements_in_progress: vec![],
         }
     }
 }
@@ -2673,11 +2675,6 @@ impl From<pb_api::Governance> for pb::Governance {
                 .maturity_modulation_last_updated_at_timestamp_seconds,
             spawning_neurons: item.spawning_neurons,
             making_sns_proposal: item.making_sns_proposal.map(|x| x.into()),
-            topic_followee_index: item
-                .topic_followee_index
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
             xdr_conversion_rate: item.xdr_conversion_rate.map(|x| x.into()),
             restore_aging_summary: item.restore_aging_summary.map(|x| x.into()),
             // This is not intended to be initialized from outside of canister.
@@ -2686,14 +2683,6 @@ impl From<pb_api::Governance> for pb::Governance {
     }
 }
 
-impl From<pb::governance::NeuronInFlightCommand> for pb_api::governance::NeuronInFlightCommand {
-    fn from(item: pb::governance::NeuronInFlightCommand) -> Self {
-        Self {
-            timestamp: item.timestamp,
-            command: item.command.map(|x| x.into()),
-        }
-    }
-}
 impl From<pb_api::governance::NeuronInFlightCommand> for pb::governance::NeuronInFlightCommand {
     fn from(item: pb_api::governance::NeuronInFlightCommand) -> Self {
         Self {
@@ -2718,43 +2707,6 @@ impl From<pb_api::governance::neuron_in_flight_command::SyncCommand>
     }
 }
 
-impl From<pb::governance::neuron_in_flight_command::Command>
-    for pb_api::governance::neuron_in_flight_command::Command
-{
-    fn from(item: pb::governance::neuron_in_flight_command::Command) -> Self {
-        match item {
-            pb::governance::neuron_in_flight_command::Command::Disburse(v) => {
-                pb_api::governance::neuron_in_flight_command::Command::Disburse(v.into())
-            }
-            pb::governance::neuron_in_flight_command::Command::Split(v) => {
-                pb_api::governance::neuron_in_flight_command::Command::Split(v.into())
-            }
-            pb::governance::neuron_in_flight_command::Command::DisburseToNeuron(v) => {
-                pb_api::governance::neuron_in_flight_command::Command::DisburseToNeuron(v.into())
-            }
-            pb::governance::neuron_in_flight_command::Command::MergeMaturity(v) => {
-                pb_api::governance::neuron_in_flight_command::Command::MergeMaturity(v.into())
-            }
-            pb::governance::neuron_in_flight_command::Command::ClaimOrRefreshNeuron(v) => {
-                pb_api::governance::neuron_in_flight_command::Command::ClaimOrRefreshNeuron(
-                    v.into(),
-                )
-            }
-            pb::governance::neuron_in_flight_command::Command::Configure(v) => {
-                pb_api::governance::neuron_in_flight_command::Command::Configure(v.into())
-            }
-            pb::governance::neuron_in_flight_command::Command::Merge(v) => {
-                pb_api::governance::neuron_in_flight_command::Command::Merge(v.into())
-            }
-            pb::governance::neuron_in_flight_command::Command::Spawn(v) => {
-                pb_api::governance::neuron_in_flight_command::Command::Spawn(v)
-            }
-            pb::governance::neuron_in_flight_command::Command::SyncCommand(v) => {
-                pb_api::governance::neuron_in_flight_command::Command::SyncCommand(v.into())
-            }
-        }
-    }
-}
 impl From<pb_api::governance::neuron_in_flight_command::Command>
     for pb::governance::neuron_in_flight_command::Command
 {
@@ -2979,48 +2931,6 @@ impl From<pb_api::governance::MakingSnsProposal> for pb::governance::MakingSnsPr
             proposer_id: item.proposer_id,
             caller: item.caller,
             proposal: item.proposal.map(|x| x.into()),
-        }
-    }
-}
-
-impl From<pb::governance::FollowersMap> for pb_api::governance::FollowersMap {
-    fn from(item: pb::governance::FollowersMap) -> Self {
-        Self {
-            followers_map: item
-                .followers_map
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-        }
-    }
-}
-impl From<pb_api::governance::FollowersMap> for pb::governance::FollowersMap {
-    fn from(item: pb_api::governance::FollowersMap) -> Self {
-        Self {
-            followers_map: item
-                .followers_map
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-        }
-    }
-}
-
-impl From<pb::governance::followers_map::Followers>
-    for pb_api::governance::followers_map::Followers
-{
-    fn from(item: pb::governance::followers_map::Followers) -> Self {
-        Self {
-            followers: item.followers,
-        }
-    }
-}
-impl From<pb_api::governance::followers_map::Followers>
-    for pb::governance::followers_map::Followers
-{
-    fn from(item: pb_api::governance::followers_map::Followers) -> Self {
-        Self {
-            followers: item.followers,
         }
     }
 }
@@ -4087,6 +3997,19 @@ impl From<ic_nns_governance_api::test_api::TimeWarp> for crate::TimeWarp {
     fn from(value: ic_nns_governance_api::test_api::TimeWarp) -> Self {
         Self {
             delta_s: value.delta_s,
+        }
+    }
+}
+
+impl From<pb::MaturityDisbursement> for pb_api::MaturityDisbursement {
+    fn from(item: pb::MaturityDisbursement) -> Self {
+        Self {
+            amount_e8s: Some(item.amount_e8s),
+            account_to_disburse_to: item.account_to_disburse_to.map(|x| x.into()),
+            timestamp_of_disbursement_seconds: Some(item.timestamp_of_disbursement_seconds),
+            finalize_disbursement_timestamp_seconds: Some(
+                item.finalize_disbursement_timestamp_seconds,
+            ),
         }
     }
 }

@@ -11,6 +11,23 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-05-02: Proposal 136430
+
+https://dashboard.internetcomputer.org/proposal/136430
+
+No behavior change. This is just a "maintenance" upgrade; that is, this is to
+avoid too much unreleased code piling up.
+
+# 2025-03-13: Proposal 135773
+
+https://dashboard.internetcomputer.org/proposal/135773
+
+## Removed
+
+* Remove (previously deprecated) airdrop neurons from initial SNS configuration.
+
+  `SnsInitPayload.initial_token_distribution` must not specify `airdrop_distribution`.
+
 # 2025-03-01: Proposal 135614
 
 http://dashboard.internetcomputer.org/proposal/135614

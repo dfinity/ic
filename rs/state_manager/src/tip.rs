@@ -16,10 +16,12 @@ use ic_protobuf::state::{
     system_metadata::v1::{SplitFrom, SystemMetadata},
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
-    canister_snapshots::{CanisterSnapshot, SnapshotOperation},
+    canister_snapshots::CanisterSnapshot,
     page_map::{MergeCandidate, StorageMetrics, StorageResult, MAX_NUMBER_OF_FILES},
+};
+use ic_replicated_state::{
+    metadata_state::UnflushedCheckpointOp, page_map::PageAllocatorFileDescriptor,
 };
 use ic_replicated_state::{
     page_map::{StorageLayout, PAGE_SIZE},
@@ -86,7 +88,7 @@ pub(crate) enum TipRequest {
     FlushPageMapDelta {
         height: Height,
         pagemaps: Vec<PageMapToFlush>,
-        snapshot_operations: Vec<SnapshotOperation>,
+        unflushed_checkpoint_ops: Vec<UnflushedCheckpointOp>,
     },
     /// Reset tip folder to the checkpoint with given height.
     /// Merge overlays in tip folder if necessary.
@@ -213,7 +215,7 @@ pub(crate) fn spawn_tip_thread(
                         TipRequest::FlushPageMapDelta {
                             height,
                             pagemaps,
-                            snapshot_operations,
+                            unflushed_checkpoint_ops,
                         } => {
                             let _timer = request_timer(&metrics, "flush_unflushed_delta");
                             debug_assert!(tip_state.tip_folder_state.page_maps_height <= height);
@@ -227,8 +229,8 @@ pub(crate) fn spawn_tip_thread(
                                 );
                             });
 
-                            // We flush snapshots to disk first.
-                            flush_snapshot_changes(&log, layout, snapshot_operations)
+                            // We flush snapshots and canister renamings to disk first.
+                            flush_unflushed_checkpoint_ops(&log, layout, unflushed_checkpoint_ops)
                                 .unwrap_or_else(|err| {
                                     fatal!(log, "Failed to flush snapshot changes: {}", err);
                                 });
@@ -291,7 +293,6 @@ pub(crate) fn spawn_tip_thread(
                             debug_assert!(tip_state.tip_folder_state.has_protos.is_none());
                             tip_state.tip_folder_state.has_protos = Some(height);
                             serialize_to_tip(
-                                &log,
                                 &replicated_state,
                                 &tip_handler.tip(height).unwrap_or_else(|err| {
                                     fatal!(
@@ -364,6 +365,21 @@ pub(crate) fn spawn_tip_thread(
                             persist_metadata_guard,
                         } => {
                             let _timer = request_timer(&metrics, "compute_manifest");
+                            if let Some(manifest_delta) = &manifest_delta {
+                                info!(
+                                    log,
+                                    "Computing manifest for checkpoint @{} incrementally from checkpoint @{}",
+                                    checkpoint_layout.height(),
+                                    manifest_delta.base_height
+                                );
+                            } else {
+                                info!(
+                                    log,
+                                    "Computing manifest for checkpoint @{} from scratch",
+                                    checkpoint_layout.height()
+                                );
+                            }
+
                             tip_state.latest_checkpoint_state.has_manifest = true;
                             handle_compute_manifest_request(
                                 &mut thread_pool,
@@ -422,23 +438,23 @@ pub(crate) fn spawn_tip_thread(
     (tip_handle, tip_sender)
 }
 
-/// Update the tip directory files with the most recent snapshot operations.
-/// `snapshot_operations` is an ordered list of all created/restores/deleted snapshots since the last flush.
-fn flush_snapshot_changes<T>(
+/// Update the tip directory files with the most recent checkpoint operations.
+/// `operations` is an ordered list of all created/restores/deleted snapshots and renamed canisters since the last flush.
+fn flush_unflushed_checkpoint_ops<T>(
     log: &ReplicaLogger,
     layout: &CheckpointLayout<RwPolicy<T>>,
-    snapshot_operations: Vec<SnapshotOperation>,
+    operations: Vec<UnflushedCheckpointOp>,
 ) -> Result<(), LayoutError> {
     // This loop is not parallelized as there are combinations such as creating then restoring from a snapshot within the same flush.
-    for op in snapshot_operations {
+    for op in operations {
         match op {
-            SnapshotOperation::Delete(snapshot_id) => {
+            UnflushedCheckpointOp::DeleteSnapshot(snapshot_id) => {
                 layout.snapshot(&snapshot_id)?.delete_dir()?;
             }
-            SnapshotOperation::Backup(canister_id, snapshot_id) => {
+            UnflushedCheckpointOp::TakeSnapshot(canister_id, snapshot_id) => {
                 backup(log, layout, canister_id, snapshot_id)?;
             }
-            SnapshotOperation::Restore(canister_id, snapshot_id) => {
+            UnflushedCheckpointOp::LoadSnapshot(canister_id, snapshot_id) => {
                 restore(log, layout, canister_id, snapshot_id)?;
             }
         }
@@ -763,15 +779,14 @@ fn merge(
 }
 
 fn serialize_to_tip(
-    log: &ReplicaLogger,
     state: &ReplicatedState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     thread_pool: &mut scoped_threadpool::Pool,
     metrics: &StorageMetrics,
     lsmt_config: &LsmtConfig,
 ) -> Result<(), CheckpointError> {
-    // Snapshots should have been handled earlier in `flush_page_delta`.
-    debug_assert!(state.canister_snapshots.is_unflushed_changes_empty());
+    // Snapshots and other unflushed changed should have been handled earlier in `flush_page_delta`.
+    debug_assert!(state.metadata.unflushed_checkpoint_ops.is_empty());
 
     // Serialize ingress history separately. The `SystemMetadata` proto does not
     // encode it.
@@ -807,7 +822,7 @@ fn serialize_to_tip(
     })?;
 
     let results = parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
-        serialize_canister_to_tip(log, canister_state, tip, metrics, lsmt_config)
+        serialize_canister_to_tip(canister_state, tip, metrics, lsmt_config)
     });
 
     for result in results.into_iter() {
@@ -836,7 +851,6 @@ fn serialize_to_tip(
 }
 
 fn serialize_canister_to_tip(
-    log: &ReplicaLogger,
     canister_state: &CanisterState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     metrics: &StorageMetrics,
@@ -851,26 +865,18 @@ fn serialize_canister_to_tip(
     let execution_state_bits = match &canister_state.execution_state {
         Some(execution_state) => {
             let wasm_binary = &execution_state.wasm_binary.binary;
-            match wasm_binary.file() {
-                Some(path) => {
-                    let wasm = canister_layout.wasm();
-                    // This if should always be false, as we reflink copy the entire checkpoint to the tip
-                    // It is left in mainly as defensive programming
-                    if !wasm.raw_path().exists() {
-                        ic_state_layout::utils::do_copy(log, path, wasm.raw_path()).map_err(
-                            |io_err| CheckpointError::IoError {
-                                path: path.to_path_buf(),
-                                message: "failed to copy Wasm file".to_string(),
-                                io_err: io_err.to_string(),
-                            },
-                        )?;
-                    }
-                }
-                None => {
-                    // Canister was installed/upgraded. Persist the new wasm binary.
-                    canister_layout
-                        .wasm()
-                        .serialize(&execution_state.wasm_binary.binary)?;
+            if !wasm_binary.is_file() {
+                // Canister was installed/upgraded. Persist the new wasm binary.
+                canister_layout
+                    .wasm()
+                    .serialize(&execution_state.wasm_binary.binary)?;
+            } else {
+                let wasm = canister_layout.wasm();
+                // This if should always be false, as we hardlink the entire checkpoint to the tip
+                // It is left in mainly as defensive programming
+                if !wasm.raw_path().exists() {
+                    debug_assert!(false);
+                    wasm.serialize(wasm_binary)?;
                 }
             }
             execution_state.wasm_memory.page_map.persist_delta(
@@ -892,7 +898,7 @@ fn serialize_canister_to_tip(
                 exports: execution_state.exports.clone(),
                 last_executed_round: execution_state.last_executed_round,
                 metadata: execution_state.metadata.clone(),
-                binary_hash: Some(execution_state.wasm_binary.binary.module_hash().into()),
+                binary_hash: execution_state.wasm_binary.binary.module_hash().into(),
                 next_scheduled_method: execution_state.next_scheduled_method,
                 is_wasm64: execution_state.wasm_execution_mode.is_wasm64(),
             })
@@ -960,7 +966,7 @@ fn serialize_canister_to_tip(
                 .scheduler_state
                 .time_of_last_allocation_charge
                 .as_nanos_since_unix_epoch(),
-            task_queue: canister_state.system_state.task_queue.get_queue().into(),
+            task_queue: canister_state.system_state.task_queue.clone(),
             global_timer_nanos: canister_state
                 .system_state
                 .global_timer
@@ -983,10 +989,6 @@ fn serialize_canister_to_tip(
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
             next_snapshot_id: canister_state.system_state.next_snapshot_id,
             snapshots_memory_usage: canister_state.system_state.snapshots_memory_usage,
-            on_low_wasm_memory_hook_status: canister_state
-                .system_state
-                .task_queue
-                .peek_hook_status(),
         }
         .into(),
     )?;
@@ -1010,20 +1012,25 @@ fn serialize_snapshot_to_tip(
             canister_id: canister_snapshot.canister_id(),
             taken_at_timestamp: *canister_snapshot.taken_at_timestamp(),
             canister_version: canister_snapshot.canister_version(),
-            binary_hash: Some(canister_snapshot.canister_module().module_hash().into()),
+            binary_hash: canister_snapshot.canister_module().module_hash().into(),
             certified_data: canister_snapshot.certified_data().clone(),
             wasm_chunk_store_metadata: canister_snapshot.chunk_store().metadata().clone(),
             stable_memory_size: canister_snapshot.stable_memory().size,
             wasm_memory_size: canister_snapshot.wasm_memory().size,
             total_size: canister_snapshot.size(),
             exported_globals: canister_snapshot.exported_globals().clone(),
+            source: canister_snapshot.source(),
+            global_timer: canister_snapshot.execution_snapshot().global_timer,
+            on_low_wasm_memory_hook_status: canister_snapshot
+                .execution_snapshot()
+                .on_low_wasm_memory_hook_status,
         }
         .into(),
     )?;
 
     // Like for canisters, the wasm binary is either already present on disk, or it is new and needs to be written.
     let wasm_binary = canister_snapshot.canister_module();
-    if wasm_binary.file().is_none() {
+    if !wasm_binary.is_file() {
         snapshot_layout.wasm().serialize(wasm_binary)?;
     } else {
         // During `flush_page_maps` we created copied this file from the canister directory.

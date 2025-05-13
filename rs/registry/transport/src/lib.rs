@@ -1,11 +1,13 @@
 // Include the prost-build generated registry protos.
 pub mod pb;
 
+mod high_capacity;
+
 use std::{fmt, str};
 
 use crate::pb::v1::{
-    registry_error::Code, registry_mutation::Type, Precondition, RegistryDelta, RegistryError,
-    RegistryGetChangesSinceResponse, RegistryMutation,
+    registry_error::Code, registry_mutation, registry_mutation::Type, Precondition, RegistryDelta,
+    RegistryError, RegistryGetChangesSinceResponse, RegistryMutation,
 };
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -111,6 +113,65 @@ impl From<Error> for RegistryError {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PresenceRequirement {
+    MustBePresent,
+    MustBeAbsent,
+    NoRequirement,
+}
+
+impl PresenceRequirement {
+    /// The second argument does NOT determine whether the result is Ok or Err;
+    /// rather, it is only used to populate Error.
+    pub fn verify(self, is_currently_present: bool, key: &[u8]) -> Result<(), Error> {
+        match self {
+            Self::MustBePresent => {
+                if !is_currently_present {
+                    return Err(Error::KeyNotPresent(key.to_vec()));
+                }
+            }
+
+            Self::MustBeAbsent => {
+                if is_currently_present {
+                    return Err(Error::KeyAlreadyPresent(key.to_vec()));
+                }
+            }
+
+            Self::NoRequirement => (),
+        };
+
+        Ok(())
+    }
+}
+
+impl registry_mutation::Type {
+    pub fn is_delete(self) -> bool {
+        // Do not simply replace this with self == Delete, because that assumes
+        // the reader knows that all other mutation types are not some other
+        // flavor of deletion. Whereas, this match proves (in writing) that we
+        // really individually considered every single mutation types.
+        match self {
+            registry_mutation::Type::Delete => true,
+
+            registry_mutation::Type::Insert
+            | registry_mutation::Type::Update
+            | registry_mutation::Type::Upsert => false,
+        }
+    }
+
+    /// Returns whether record being modified must already be present, absent,
+    /// or there is no presence/absence requiremnt.
+    pub fn presence_requirement(self) -> PresenceRequirement {
+        match self {
+            registry_mutation::Type::Upsert => PresenceRequirement::NoRequirement,
+            registry_mutation::Type::Delete | registry_mutation::Type::Update => {
+                PresenceRequirement::MustBePresent
+            }
+            registry_mutation::Type::Insert => PresenceRequirement::MustBeAbsent,
+        }
+    }
+}
+
 /// Serializes the arguments for a request to the get_value() function in the
 /// registry canister, into protobuf.
 pub fn serialize_get_value_request(
@@ -147,7 +208,7 @@ pub fn deserialize_get_value_request(request: Vec<u8>) -> Result<(Vec<u8>, Optio
 // be used in the registry canister only and thus there is no problem with
 // leaking the PB structs to the rest of the code base.
 pub fn serialize_get_value_response(
-    response: pb::v1::RegistryGetValueResponse,
+    response: pb::v1::HighCapacityRegistryGetValueResponse,
 ) -> Result<Vec<u8>, Error> {
     let mut buf = Vec::new();
     match response.encode(&mut buf) {
@@ -210,7 +271,7 @@ pub fn deserialize_get_changes_since_request(request: Vec<u8>) -> Result<u64, Er
 // be used in the registry canister only and thus there is no problem with
 // leaking the PB structs to the rest of the code base.
 pub fn serialize_get_changes_since_response(
-    response: pb::v1::RegistryGetChangesSinceResponse,
+    response: pb::v1::HighCapacityRegistryGetChangesSinceResponse,
 ) -> Result<Vec<u8>, Error> {
     let mut buf = Vec::new();
     match response.encode(&mut buf) {
@@ -367,7 +428,15 @@ pub fn precondition(key: impl AsRef<[u8]>, version: u64) -> Precondition {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pb::v1::RegistryAtomicMutateRequest;
+    use crate::pb::v1::{
+        high_capacity_registry_get_value_response, high_capacity_registry_mutation,
+        high_capacity_registry_value, registry_mutation, HighCapacityRegistryAtomicMutateRequest,
+        HighCapacityRegistryDelta, HighCapacityRegistryGetChangesSinceResponse,
+        HighCapacityRegistryGetValueResponse, HighCapacityRegistryMutation,
+        HighCapacityRegistryValue, RegistryAtomicMutateRequest, RegistryDelta,
+        RegistryGetChangesSinceResponse, RegistryGetValueResponse, RegistryValue,
+    };
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn test_serde_get_value_request() {
@@ -393,9 +462,11 @@ mod tests {
     fn test_serde_get_value_response() {
         let value = vec![1, 2, 3, 4];
         let version = 10;
-        let response = pb::v1::RegistryGetValueResponse {
+        let response = pb::v1::HighCapacityRegistryGetValueResponse {
             version,
-            value: value.clone(),
+            content: Some(high_capacity_registry_get_value_response::Content::Value(
+                value.clone(),
+            )),
             ..Default::default()
         };
 
@@ -408,7 +479,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_serde_get_value_response_with_error() {
-        let mut response = pb::v1::RegistryGetValueResponse::default();
+        let mut response = pb::v1::HighCapacityRegistryGetValueResponse::default();
         let error = RegistryError {
             code: 1,
             ..Default::default()
@@ -481,5 +552,285 @@ mod tests {
                 "5: You are not welcome here.".to_string()
             )),
         );
+    }
+
+    #[test]
+    fn test_get_changes_since_responses_compatible_happy() {
+        let value = b"Daniel".to_vec();
+        let version = 42;
+        let deletion_marker = false;
+
+        let legacy_registry_value = {
+            let value = value.clone();
+
+            RegistryValue {
+                value,
+                version,
+                deletion_marker,
+            }
+        };
+
+        // If (or when) we decide to backport `timestamp` field to
+        // the legacy types, we should add "real" timestamp data
+        // to the tests
+        let high_capacity_registry_value = HighCapacityRegistryValue {
+            content: Some(high_capacity_registry_value::Content::Value(value)),
+            version,
+            timestamp_seconds: 0,
+        };
+
+        let version = 43;
+        let deletion_marker = true;
+
+        let legacy_delete = RegistryValue {
+            value: vec![],
+            version,
+            deletion_marker,
+        };
+
+        let high_capacity_delete = HighCapacityRegistryValue {
+            content: Some(high_capacity_registry_value::Content::DeletionMarker(
+                deletion_marker,
+            )),
+            version,
+            timestamp_seconds: 0,
+        };
+
+        let key = b"name".to_vec();
+        let error = None;
+
+        let legacy_response = {
+            let error = error.clone();
+            let key = key.clone();
+
+            RegistryGetChangesSinceResponse {
+                version,
+                error,
+                deltas: vec![RegistryDelta {
+                    key,
+                    values: vec![legacy_registry_value, legacy_delete],
+                }],
+            }
+        };
+
+        let high_capacity_response = HighCapacityRegistryGetChangesSinceResponse {
+            version,
+            error,
+            deltas: vec![HighCapacityRegistryDelta {
+                key,
+                values: vec![high_capacity_registry_value, high_capacity_delete],
+            }],
+        };
+
+        // OK if client starts using HighCapacity before server.
+        let upgraded = {
+            let encoded: &[u8] = &legacy_response.encode_to_vec();
+            HighCapacityRegistryGetChangesSinceResponse::decode(encoded).unwrap()
+        };
+        assert_eq!(upgraded, high_capacity_response);
+
+        // OK if server starts using HighCapacity before client
+        // (as long as large_value_chunk_keys is not used, ofc).
+        let downgraded = {
+            let encoded: &[u8] = &high_capacity_response.encode_to_vec();
+            RegistryGetChangesSinceResponse::decode(encoded).unwrap()
+        };
+        assert_eq!(downgraded, legacy_response);
+    }
+
+    #[test]
+    fn test_get_changes_since_responses_compatible_sad() {
+        let error = Some(RegistryError {
+            code: 57,
+            key: b"Derp".to_vec(),
+            reason: "You fool!".to_string(),
+        });
+
+        let legacy_response = {
+            let error = error.clone();
+
+            RegistryGetChangesSinceResponse {
+                error,
+                ..Default::default()
+            }
+        };
+
+        let high_capacity_response = HighCapacityRegistryGetChangesSinceResponse {
+            error,
+            ..Default::default()
+        };
+
+        // OK if client starts using HighCapacity before server.
+        let upgraded = {
+            let encoded: &[u8] = &legacy_response.encode_to_vec();
+            HighCapacityRegistryGetChangesSinceResponse::decode(encoded).unwrap()
+        };
+        assert_eq!(upgraded, high_capacity_response);
+
+        // OK if server starts using HighCapacity before client
+        // (as long as large_value_chunk_keys is not used, ofc).
+        let downgraded = {
+            let encoded: &[u8] = &high_capacity_response.encode_to_vec();
+            RegistryGetChangesSinceResponse::decode(encoded).unwrap()
+        };
+        assert_eq!(downgraded, legacy_response);
+    }
+
+    #[test]
+    fn test_get_value_responses_compatible_happy() {
+        let error = None;
+        let version = 42;
+        let value = b"Daniel".to_vec();
+
+        let legacy_response = {
+            let error = error.clone();
+            let value = value.clone();
+
+            RegistryGetValueResponse {
+                error,
+                version,
+                value,
+            }
+        };
+
+        // If (or when) we decide to backport `timestamp` field to
+        // the legacy types, we should add "real" timestamp data
+        // to the tests
+        let high_capacity_response = HighCapacityRegistryGetValueResponse {
+            error,
+            version,
+            content: Some(high_capacity_registry_get_value_response::Content::Value(
+                value,
+            )),
+            timestamp_seconds: 0,
+        };
+
+        // Ok if client starts using HighCapacity before server.
+        let upgraded = {
+            let encoded: &[u8] = &legacy_response.encode_to_vec();
+            HighCapacityRegistryGetValueResponse::decode(encoded).unwrap()
+        };
+        assert_eq!(upgraded, high_capacity_response);
+
+        // OK if server starts using HighCapacity before client.
+        let downgraded = {
+            let encoded: &[u8] = &high_capacity_response.encode_to_vec();
+            RegistryGetValueResponse::decode(encoded).unwrap()
+        };
+        assert_eq!(downgraded, legacy_response);
+    }
+
+    #[test]
+    fn test_get_value_responses_compatible_sad() {
+        let error = Some(RegistryError {
+            code: 57,
+            key: b"Derp".to_vec(),
+            reason: "You fool!".to_string(),
+        });
+
+        let legacy_response = {
+            let error = error.clone();
+
+            RegistryGetValueResponse {
+                error,
+                ..Default::default()
+            }
+        };
+
+        let high_capacity_response = HighCapacityRegistryGetValueResponse {
+            error,
+            ..Default::default()
+        };
+
+        // Ok if client starts using HighCapacity before server.
+        let upgraded = {
+            let encoded: &[u8] = &legacy_response.encode_to_vec();
+            HighCapacityRegistryGetValueResponse::decode(encoded).unwrap()
+        };
+        assert_eq!(upgraded, high_capacity_response);
+
+        // OK if server starts using HighCapacity before client.
+        let downgraded = {
+            let encoded: &[u8] = &high_capacity_response.encode_to_vec();
+            RegistryGetValueResponse::decode(encoded).unwrap()
+        };
+        assert_eq!(downgraded, legacy_response);
+    }
+
+    #[test]
+    fn test_atomic_mutate_requests_compatible() {
+        let mutation_types = [
+            registry_mutation::Type::Insert,
+            registry_mutation::Type::Update,
+            registry_mutation::Type::Delete,
+            registry_mutation::Type::Upsert,
+        ];
+
+        let preconditions = vec![
+            Precondition {
+                expected_version: 147,
+                key: b"herp".to_vec(),
+            },
+            Precondition {
+                expected_version: 950,
+                key: b"derp".to_vec(),
+            },
+        ];
+
+        let legacy_response = {
+            let preconditions = preconditions.clone();
+
+            RegistryAtomicMutateRequest {
+                preconditions,
+                mutations: mutation_types
+                    .iter()
+                    .map(|mutation_type| {
+                        let mutation_type = *mutation_type as i32;
+                        let key = format!("key_{}", mutation_type).into_bytes();
+                        let value = format!("value {}", mutation_type).into_bytes();
+
+                        RegistryMutation {
+                            mutation_type,
+                            key,
+                            value,
+                        }
+                    })
+                    .collect(),
+            }
+        };
+
+        let high_capacity_response = HighCapacityRegistryAtomicMutateRequest {
+            preconditions,
+            mutations: mutation_types
+                .iter()
+                .map(|mutation_type| {
+                    let mutation_type = *mutation_type as i32;
+                    let key = format!("key_{}", mutation_type).into_bytes();
+                    let value = format!("value {}", mutation_type).into_bytes();
+                    let content = Some(high_capacity_registry_mutation::Content::Value(value));
+
+                    HighCapacityRegistryMutation {
+                        mutation_type,
+                        key,
+                        content,
+                    }
+                })
+                .collect(),
+            timestamp_seconds: 0,
+        };
+
+        // Ok if client starts using HighCapacity before server.
+        let upgraded = {
+            let encoded: &[u8] = &legacy_response.encode_to_vec();
+            HighCapacityRegistryAtomicMutateRequest::decode(encoded).unwrap()
+        };
+        assert_eq!(upgraded, high_capacity_response);
+
+        // OK if server starts using HighCapacity before client.
+        let downgraded = {
+            let encoded: &[u8] = &high_capacity_response.encode_to_vec();
+            RegistryAtomicMutateRequest::decode(encoded).unwrap()
+        };
+        assert_eq!(downgraded, legacy_response);
     }
 }

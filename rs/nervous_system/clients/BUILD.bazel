@@ -8,6 +8,7 @@ DEPENDENCIES = [
     "//packages/icrc-ledger-client:icrc_ledger_client",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/ledger_suite/common/ledger_core",
+    "//rs/nervous_system/canisters",
     "//rs/nervous_system/common",
     "//rs/nervous_system/proxied_canister_calls_tracker",
     "//rs/nervous_system/runtime",

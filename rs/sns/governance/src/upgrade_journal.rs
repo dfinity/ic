@@ -217,8 +217,8 @@ impl From<upgrade_journal_entry::TargetVersionReset> for upgrade_journal_entry::
     }
 }
 
-pub fn serve_journal(journal: UpgradeJournal) -> ic_canisters_http_types::HttpResponse {
-    use ic_canisters_http_types::HttpResponseBuilder;
+pub fn serve_journal(journal: UpgradeJournal) -> ic_http_types::HttpResponse {
+    use ic_http_types::HttpResponseBuilder;
 
     let journal = ic_sns_governance_api::pb::v1::UpgradeJournal::from(journal);
 

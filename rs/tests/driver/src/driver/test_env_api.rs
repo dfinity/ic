@@ -163,7 +163,7 @@ use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::Neuron;
+use ic_nns_governance_api::Neuron;
 use ic_nns_init::read_initial_mutations_from_local_store_dir;
 use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
@@ -203,7 +203,7 @@ use std::{
     fs,
     future::Future,
     io::{Read, Write},
-    net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream},
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
@@ -871,6 +871,14 @@ impl IcNodeSnapshot {
             })
     }
 
+    pub fn is_api_boundary_node(&self) -> bool {
+        let registry_version = self.registry_version;
+        self.local_registry
+            .get_api_boundary_node_ids(registry_version)
+            .unwrap()
+            .contains(&self.node_id)
+    }
+
     pub fn effective_canister_id(&self) -> PrincipalId {
         match self.subnet_id() {
             Some(subnet_id) => {
@@ -930,6 +938,30 @@ impl IcNodeSnapshot {
         arg: Option<Vec<u8>>,
     ) -> Principal {
         self.create_and_install_canister_with_arg_and_cycles(name, arg, None)
+    }
+
+    pub fn install_canister_with_arg(
+        &self,
+        canister_id: Principal,
+        name: &str,
+        arg: Option<Vec<u8>>,
+    ) {
+        let canister_bytes = load_wasm(name);
+        self.with_default_agent(move |agent| async move {
+            // Create a canister.
+            let mgr = ManagementCanister::create(&agent);
+
+            let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
+            if let Some(arg) = arg {
+                install_code = install_code.with_raw_arg(arg)
+            }
+            install_code
+                .call_and_wait()
+                .await
+                .map_err(|err| format!("Couldn't install canister: {}", err))?;
+            Ok::<_, String>(canister_id)
+        })
+        .expect("Could not install canister");
     }
 
     pub fn create_and_install_canister_with_arg_and_cycles(
@@ -1232,6 +1264,15 @@ pub fn get_hostos_update_img_test_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_HASH")?)
 }
 
+pub fn get_empty_disk_img_url() -> Result<Url> {
+    let url = std::env::var("ENV_DEPS__EMPTY_DISK_IMG_URL")?;
+    Ok(Url::parse(&url)?)
+}
+
+pub fn get_empty_disk_img_sha256() -> Result<String> {
+    Ok(std::env::var("ENV_DEPS__EMPTY_DISK_IMG_HASH")?)
+}
+
 pub const FETCH_SHA256SUMS_RETRY_TIMEOUT: Duration = Duration::from_secs(120);
 pub const FETCH_SHA256SUMS_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 
@@ -1525,6 +1566,7 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     fn status(&self) -> Result<HttpStatusResponse> {
         let url = self.get_public_url();
         let addr = self.get_public_addr();
+
         let client = reqwest::blocking::Client::builder()
             .danger_accept_invalid_certs(self.uses_snake_oil_certs())
             .timeout(READY_RESPONSE_TIMEOUT);
@@ -1598,6 +1640,34 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
         )
     }
 
+    /// Checks if the Orchestrator dashboard endpoint is accessible
+    fn is_orchestrator_dashboard_accessible(ip: Ipv6Addr, timeout_secs: u64) -> bool {
+        let dashboard_endpoint = format!("http://[{}]:7070", ip);
+
+        let client = reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(timeout_secs))
+            .build()
+            .expect("Failed to build HTTP client");
+
+        let resp = match client.get(&dashboard_endpoint).send() {
+            Ok(resp) => resp,
+            Err(e) => {
+                eprintln!("Failed to send request: {}", e);
+                return false;
+            }
+        };
+
+        if !resp.status().is_success() {
+            eprintln!(
+                "Orchestrator dashboard returned non-success status: {}",
+                resp.status()
+            );
+            return false;
+        }
+
+        resp.text().is_ok()
+    }
+
     /// Waits until the is_healthy() returns an error three times in a row
     fn await_status_is_unavailable(&self) -> Result<()> {
         let mut count = 0;
@@ -1618,6 +1688,34 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
                 Ok(_) => {
                     count = 0;
                     Err(anyhow!("Status is still available"))
+                }
+            }
+        )
+    }
+
+    /// Waits until the Orchestrator dashboard endpoint is accessible
+    fn await_orchestrator_dashboard_accessible(&self) -> anyhow::Result<()> {
+        let mut count = 0;
+        retry_with_msg!(
+            &format!(
+                "await_orchestrator_dashboard_accessible for {}",
+                self.get_public_addr().ip()
+            ),
+            self.test_env().logger(),
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || {
+                let ip = match self.get_public_addr().ip() {
+                    IpAddr::V6(ip) => ip,
+                    IpAddr::V4(_) => panic!("Expected IPv6 address"),
+                };
+                if Self::is_orchestrator_dashboard_accessible(ip, 5) {
+                    Ok(())
+                } else {
+                    count += 1;
+                    Err(anyhow::anyhow!(
+                        "Orchestrator dashboard not available, attempt {count}"
+                    ))
                 }
             }
         )
@@ -1653,7 +1751,16 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
 impl HasPublicApiUrl for IcNodeSnapshot {
     fn get_public_url(&self) -> Url {
         let node_record = self.raw_node_record();
-        IcNodeSnapshot::http_endpoint_to_url(&node_record.http.expect("Node doesn't have URL"))
+
+        // API boundary nodes listen on port 443, while replicas listen on port 8080
+        if self.is_api_boundary_node() {
+            match self.get_ip_addr() {
+                IpAddr::V4(ipv4) => Url::parse(&format!("https://{}", ipv4)).unwrap(),
+                IpAddr::V6(ipv6) => Url::parse(&format!("https://[{}]", ipv6)).unwrap(),
+            }
+        } else {
+            IcNodeSnapshot::http_endpoint_to_url(&node_record.http.expect("Node doesn't have URL"))
+        }
     }
 
     fn get_public_addr(&self) -> SocketAddr {
@@ -1661,8 +1768,13 @@ impl HasPublicApiUrl for IcNodeSnapshot {
         let connection_endpoint = node_record.http.expect("Node doesn't have URL");
         SocketAddr::new(
             IpAddr::from_str(&connection_endpoint.ip_addr).expect("Missing IP address in the node"),
-            connection_endpoint.port as u16,
+            0,
         )
+    }
+
+    fn uses_snake_oil_certs(&self) -> bool {
+        let node_record = self.raw_node_record();
+        node_record.domain.is_some()
     }
 
     async fn try_build_default_agent_async(&self) -> Result<Agent, AgentError> {

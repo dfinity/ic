@@ -17,6 +17,7 @@ use crate::Memory;
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types_private::Global;
 use ic_management_canister_types_private::{
     BoundedAllowedViewers, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin,
     CanisterLogRecord, LogVisibilityV2,
@@ -784,27 +785,6 @@ fn canister_state_push_output_response_mismatched_respondent() {
             .build()
             .into(),
     );
-}
-
-#[test]
-fn wasm_can_be_loaded_from_a_file() {
-    use std::io::Write;
-
-    let mut tmp = tempfile::NamedTempFile::new().expect("failed to create a temporary file");
-    let wasm_in_memory = CanisterModule::new(vec![0x00, 0x61, 0x73, 0x6d]);
-    tmp.write_all(wasm_in_memory.as_slice())
-        .expect("failed to write Wasm to a temporary file");
-    let wasm_on_disk = CanisterModule::new_from_file(tmp.path().to_owned(), None)
-        .expect("failed to read Wasm from disk");
-    let wasm_hash = wasm_in_memory.module_hash();
-    let wasm_on_disk_with_hash =
-        CanisterModule::new_from_file(tmp.path().to_owned(), Some(wasm_hash.into()))
-            .expect("failed to read Wasm from disk");
-
-    assert_eq!(wasm_in_memory.file(), None);
-    assert_eq!(wasm_on_disk.file(), Some(tmp.path()));
-    assert_eq!(wasm_in_memory, wasm_on_disk);
-    assert_eq!(wasm_in_memory, wasm_on_disk_with_hash);
 }
 
 #[test]

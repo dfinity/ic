@@ -7,16 +7,23 @@ module(
 )
 
 # General Bazel helpers
-
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
 bazel_dep(name = "aspect_bazel_lib", version = "2.9.0")
 
 # CC dependencies (for C libs like miracl-core, etc)
 bazel_dep(name = "rules_cc", version = "0.0.13")
-bazel_dep(name = "platforms", version = "0.0.10")
+bazel_dep(name = "platforms", version = "0.0.11")
+bazel_dep(name = "hermetic_cc_toolchain", version = "3.1.1")
+archive_override(
+    module_name = "hermetic_cc_toolchain",
+    integrity = "sha256-kHdFv5FVX3foI0wLlTNx5srFunFdHPEv9kFJbdG86dE=",
+    patch_strip = 1,
+    patches = ["//bazel:hermetic_cc_toolchain.patch"],
+    urls = ["https://github.com/uber/hermetic_cc_toolchain/releases/download/v3.1.1/hermetic_cc_toolchain-v3.1.1.tar.gz"],
+)
 
 # configure/make dependencies
-bazel_dep(name = "rules_foreign_cc", version = "0.12.0")
+bazel_dep(name = "rules_foreign_cc", version = "0.14.0")
 
 register_toolchains(
     "@rules_foreign_cc//toolchains:preinstalled_pkgconfig_toolchain",
@@ -86,62 +93,17 @@ go_deps.module(
     version = "v1.13.0",
 )
 go_deps.module(
-    path = "github.com/golang/protobuf",
-    sum = "h1:ROPKBNFfQgOUMifHyP+KYbvpjbdoFNs+aK7DXlji0Tw=",
-    version = "v1.5.2",
-)
-go_deps.module(
-    path = "github.com/google/go-cmp",
-    sum = "h1:O2Tfq5qg4qc4AmwVlvv0oLiVAGB7enBSJ2x2DqQFi38=",
-    version = "v0.5.9",
-)
-go_deps.module(
-    path = "github.com/honeycombio/beeline-go",
-    sum = "h1:cyrfwgxM32DKzUhZFJ0KLbPkoyf5lHOyn+7GISwEVZQ=",
-    version = "v1.11.1",
-)
-go_deps.module(
-    path = "github.com/schollz/closestmatch",
-    sum = "h1:Uel2GXEpJqOWBrlyI+oY9LTiyyjYS17cCYRqP13/SHk=",
-    version = "v2.1.0+incompatible",
-)
-go_deps.module(
     path = "github.com/spf13/cobra",
     sum = "h1:o94oiPyS4KD1mPy2fmcYYHHfCxLqYjJOhGsCHFZtEzA=",
     version = "v1.6.1",
 )
-go_deps.module(
-    path = "github.com/stretchr/testify",
-    sum = "h1:w7B6lhMri9wdJUVmEZPGGhZzrYTPvgJArz7wNPgYKsk=",
-    version = "v1.8.1",
-)
-go_deps.module(
-    path = "google.golang.org/genproto",
-    sum = "h1:wtujag7C+4D6KMoulW9YauvK2lgdvCMS260jsqqBXr0=",
-    version = "v0.0.0-20210602131652-f16073e35f0c",
-)
-go_deps.module(
-    path = "google.golang.org/grpc",
-    sum = "h1:WTLtQzmQori5FUH25Pq4WT22oCsv8USpQ+F6rqtsmxw=",
-    version = "v1.49.0",
-)
-go_deps.module(
-    path = "google.golang.org/protobuf",
-    sum = "h1:d0NfwRgPtno5B1Wa6L2DAG+KivqkdutMf1UhdNx175w=",
-    version = "v1.28.1",
-)
 use_repo(
     go_deps,
     "com_github_fatih_color",
-    "com_github_golang_protobuf",
     "com_github_google_go_cmp",
-    "com_github_honeycombio_beeline_go",
     "com_github_schollz_closestmatch",
     "com_github_spf13_cobra",
     "com_github_stretchr_testify",
-    "org_golang_google_genproto",
-    "org_golang_google_grpc",
-    "org_golang_google_protobuf",
 )
 
 # Docker/OCI & archive rules with image definitions
@@ -177,7 +139,7 @@ use_repo(oci, "bitcoind", "bitcoind_linux_amd64")
 # foundry container used in test
 oci.pull(
     name = "foundry",
-    image = "ghcr.io/foundry-rs/foundry@sha256:d2d6a8064db8659ab4d835bd36ee4ba19a781cbe62a9729a261d7cedf3774cdd",
+    image = "ghcr.io/foundry-rs/foundry@sha256:8f9dd6d4c498538b3aa3999758520bca24a41273163b0c7295ed53b1a6062f30",  # v0.3.0 https://github.com/foundry-rs/foundry/pkgs/container/foundry/391862899?tag=v0.3.0
     platforms = [
         "linux/amd64",
     ],
@@ -872,9 +834,38 @@ http_file(
     url = "https://curl.se/ca/cacert-2024-11-26.pem",
 )
 
-mainnet_versions = use_repo_rule("//bazel:mainnet-versions.bzl", "mainnet_versions")
+mainnet_icos_versions = use_repo_rule("//bazel:mainnet-icos-versions.bzl", "mainnet_icos_versions")
 
-mainnet_versions(
-    name = "mainnet_versions",
-    path = "//:mainnet-subnet-revisions.json",
+mainnet_icos_versions(
+    name = "mainnet_icos_versions",
+    path = "//:mainnet-icos-revisions.json",
+)
+
+os_info = use_repo_rule("//bazel:os_info.bzl", "os_info")
+
+os_info(name = "os_info")
+
+# Set up hermetic cc toolchains for binaries and canisters
+toolchains = use_extension("@hermetic_cc_toolchain//toolchain:ext.bzl", "toolchains")
+
+# The use_hermetic_cc setting is added to each toolchain to allow us to opt out
+# in favor of system toolchains, when needed.
+toolchains.extra_settings(settings = ["//bazel:use_hermetic_cc"])
+use_repo(toolchains, "zig_sdk")
+
+register_toolchains(
+    # Linux toolchains
+    "@zig_sdk//toolchain:linux_amd64_gnu.2.28",
+
+    # macOS toolchains
+    # Do not use hermetic toolchains for macOS until we have had a chance to
+    # wrap the various system libraries.
+    # "@zig_sdk//toolchain:darwin_amd64",
+    # "@zig_sdk//toolchain:darwin_arm64",
+
+    # wasm toolchains
+    "@zig_sdk//toolchain:none_wasm",
+
+    # These toolchains are only registered locally.
+    dev_dependency = True,
 )

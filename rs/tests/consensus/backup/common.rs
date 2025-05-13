@@ -40,7 +40,7 @@ use ic_consensus_system_test_utils::{
     },
 };
 use ic_consensus_threshold_sig_system_test_utils::{
-    get_master_public_key, make_key_ids_for_all_idkg_schemes, run_chain_key_signature_test,
+    get_master_public_key, make_key_ids_for_all_schemes, run_chain_key_signature_test,
 };
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
@@ -73,7 +73,7 @@ fn setup_common() -> InternetComputer {
         Subnet::new(SubnetType::System)
             .add_nodes(SUBNET_SIZE)
             .with_chain_key_config(ChainKeyConfig {
-                key_configs: make_key_ids_for_all_idkg_schemes()
+                key_configs: make_key_ids_for_all_schemes()
                     .into_iter()
                     .map(|key_id| KeyConfig {
                         max_queue_size: 20,
@@ -139,8 +139,6 @@ pub fn test_downgrade(env: TestEnv) {
     block_on(bless_public_replica_version(
         &nns_node,
         &mainnet_version,
-        UpdateImageType::Image,
-        UpdateImageType::Image,
         &log,
     ));
     test(env, initial_version, mainnet_version);
@@ -228,7 +226,7 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
         nns_node.effective_canister_id(),
     ));
 
-    for key_id in make_key_ids_for_all_idkg_schemes() {
+    for key_id in make_key_ids_for_all_schemes() {
         let public_key = get_master_public_key(&nns_canister, &key_id, &log);
         run_chain_key_signature_test(&nns_canister, &log, &key_id, public_key);
     }

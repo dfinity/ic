@@ -9,7 +9,6 @@ system_test_nns(
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
     extra_head_nns_tags = ["manual"],  # Let's not run this expensive test against the HEAD NNS canisters to save resources.
-    flaky = False,
     tags = [
         #TODO: enable k8s when there's enough capacity
         # "k8s",
@@ -31,7 +30,6 @@ system_test_nns(
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
     extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
-    flaky = False,
     tags = [
         "k8s",
         "system_test_hotfix",
@@ -52,7 +50,6 @@ system_test_nns(
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
     extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
-    flaky = False,
     tags = [
         "k8s",
         "system_test_nightly",
@@ -73,7 +70,6 @@ system_test_nns(
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
     extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
-    flaky = False,
     tags = [
         #TODO: enable k8s when there's enough capacity
         # "k8s",
@@ -94,7 +90,6 @@ system_test(
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
-    flaky = False,
     malicious = True,
     tags = [
         "system_test_nightly",

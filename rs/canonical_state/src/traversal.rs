@@ -48,13 +48,14 @@ mod tests {
     };
     use ic_base_types::{NumBytes, NumSeconds};
     use ic_certification_version::all_supported_versions;
+    use ic_management_canister_types_private::Global;
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_registry_subnet_features::SubnetFeatures;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
         canister_state::{
             execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
-            ExecutionState, ExportedFunctions, Global, NumWasmPages,
+            ExecutionState, ExportedFunctions, NumWasmPages,
         },
         metadata_state::{ApiBoundaryNodeEntry, SubnetTopology},
         page_map::PageMap,

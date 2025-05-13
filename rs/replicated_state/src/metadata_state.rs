@@ -5,7 +5,7 @@ mod tests;
 use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
 use crate::CanisterQueues;
 use crate::{canister_state::system_state::CyclesUseCase, CheckpointLoadingMetrics};
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, SnapshotId};
 use ic_btc_replica_types::BlockBlob;
 use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
@@ -175,6 +175,10 @@ pub struct SystemMetadata {
     /// by aggregating them and storing a running total over multiple days by node id and
     /// timestamp. Observations of blockmaker stats are performed each time a batch is processed.
     pub blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries,
+
+    /// Modifications to the state that have not been applied yet to the next checkpoint.
+    /// This field is transient and is emptied before writing the next checkpoint.
+    pub unflushed_checkpoint_ops: UnflushedCheckpointOps,
 }
 
 /// Full description of the IC network toplogy.
@@ -437,6 +441,9 @@ impl SubnetMetrics {
         use_case: CyclesUseCase,
         cycles: NominalCycles,
     ) {
+        if cycles.get() == 0 {
+            return;
+        }
         *self
             .consumed_cycles_by_use_case
             .entry(use_case)
@@ -760,6 +767,7 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
                 Some(blockmaker_metrics) => (blockmaker_metrics, metrics).try_into()?,
                 None => BlockmakerMetricsTimeSeries::default(),
             },
+            unflushed_checkpoint_ops: Default::default(),
         })
     }
 }
@@ -791,6 +799,7 @@ impl SystemMetadata {
             expected_compiled_wasms: BTreeSet::new(),
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
+            unflushed_checkpoint_ops: Default::default(),
         }
     }
 
@@ -1060,6 +1069,7 @@ impl SystemMetadata {
             ref expected_compiled_wasms,
             bitcoin_get_successors_follow_up_responses: _,
             blockmaker_metrics_time_series: _,
+            unflushed_checkpoint_ops: _,
         } = self;
 
         let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");
@@ -1229,6 +1239,9 @@ pub struct Stream {
 
     /// Stream flags observed in the header of the reverse stream.
     reverse_stream_flags: StreamFlags,
+
+    /// Number of guaranteed responses per responding canister.
+    guaranteed_response_counts: BTreeMap<CanisterId, usize>,
 }
 
 impl Default for Stream {
@@ -1240,12 +1253,14 @@ impl Default for Stream {
         let reverse_stream_flags = StreamFlags {
             deprecated_responses_only: false,
         };
+        let guaranteed_response_counts = BTreeMap::default();
         Self {
             messages,
             signals_end,
             reject_signals,
             messages_size_bytes,
             reverse_stream_flags,
+            guaranteed_response_counts,
         }
     }
 }
@@ -1284,6 +1299,7 @@ impl TryFrom<pb_queues::Stream> for Stream {
         for req_or_resp in item.messages {
             messages.push(req_or_resp.try_into()?);
         }
+        let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
         let messages_size_bytes = Self::size_bytes(&messages);
 
         let signals_end = item.signals_end.into();
@@ -1325,6 +1341,7 @@ impl TryFrom<pb_queues::Stream> for Stream {
                     deprecated_responses_only: flags.deprecated_responses_only,
                 })
                 .unwrap_or_default(),
+            guaranteed_response_counts,
         })
     }
 }
@@ -1333,12 +1350,14 @@ impl Stream {
     /// Creates a new `Stream` with the given `messages` and `signals_end`.
     pub fn new(messages: StreamIndexedQueue<RequestOrResponse>, signals_end: StreamIndex) -> Self {
         let messages_size_bytes = Self::size_bytes(&messages);
+        let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
         Self {
             messages,
             signals_end,
             reject_signals: VecDeque::new(),
             messages_size_bytes,
             reverse_stream_flags: Default::default(),
+            guaranteed_response_counts,
         }
     }
 
@@ -1349,12 +1368,14 @@ impl Stream {
         reject_signals: VecDeque<RejectSignal>,
     ) -> Self {
         let messages_size_bytes = Self::size_bytes(&messages);
+        let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
         Self {
             messages,
             signals_end,
             reject_signals,
             messages_size_bytes,
             reverse_stream_flags: Default::default(),
+            guaranteed_response_counts,
         }
     }
 
@@ -1391,11 +1412,28 @@ impl Stream {
         self.messages.end()
     }
 
+    /// Returns the number of guaranteed responses in the stream for each responding canister.
+    pub fn guaranteed_response_counts(&self) -> &BTreeMap<CanisterId, usize> {
+        &self.guaranteed_response_counts
+    }
+
     /// Appends the given message to the tail of the stream.
     pub fn push(&mut self, message: RequestOrResponse) {
         self.messages_size_bytes += message.count_bytes();
+        if let RequestOrResponse::Response(response) = &message {
+            if !response.is_best_effort() {
+                *self
+                    .guaranteed_response_counts
+                    .entry(response.respondent)
+                    .or_insert(0) += 1;
+            }
+        }
         self.messages.push(message);
         debug_assert_eq!(Self::size_bytes(&self.messages), self.messages_size_bytes);
+        debug_assert_eq!(
+            Self::calculate_guaranteed_response_counts(&self.messages),
+            self.guaranteed_response_counts
+        );
     }
 
     /// Garbage collects messages before `new_begin`, collecting and returning all
@@ -1436,6 +1474,28 @@ impl Stream {
             // Deduct every discarded message from the stream's byte size.
             self.messages_size_bytes -= msg.count_bytes();
             debug_assert_eq!(Self::size_bytes(&self.messages), self.messages_size_bytes);
+
+            if let RequestOrResponse::Response(response) = &msg {
+                if !response.is_best_effort() {
+                    match self
+                        .guaranteed_response_counts
+                        .get_mut(&response.respondent)
+                    {
+                        Some(0) | None => {
+                            debug_assert!(false);
+                            self.guaranteed_response_counts.remove(&response.respondent);
+                        }
+                        Some(1) => {
+                            self.guaranteed_response_counts.remove(&response.respondent);
+                        }
+                        Some(count) => *count -= 1,
+                    }
+                }
+            }
+            debug_assert_eq!(
+                Self::calculate_guaranteed_response_counts(&self.messages),
+                self.guaranteed_response_counts
+            );
 
             // If we received a reject signal for this message, collect it in
             // `rejected_messages`.
@@ -1487,6 +1547,21 @@ impl Stream {
     /// Calculates the estimated byte size of the given messages.
     fn size_bytes(messages: &StreamIndexedQueue<RequestOrResponse>) -> usize {
         messages.iter().map(|(_, m)| m.count_bytes()).sum()
+    }
+
+    fn calculate_guaranteed_response_counts(
+        messages: &StreamIndexedQueue<RequestOrResponse>,
+    ) -> BTreeMap<CanisterId, usize> {
+        let mut result = BTreeMap::new();
+        for (_, msg) in messages.iter() {
+            if let RequestOrResponse::Response(response) = msg {
+                // We only count guaranteed responses
+                if !response.is_best_effort() {
+                    *result.entry(response.respondent).or_insert(0) += 1;
+                }
+            }
+        }
+        result
     }
 
     /// Returns a reference to the reverse stream flags.
@@ -2102,6 +2177,58 @@ impl
     }
 }
 
+/// Modifications to the state that require explicit tracking in order to be correctly applied
+/// by the checkpointing logic.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum UnflushedCheckpointOp {
+    /// A snapshot was deleted.
+    DeleteSnapshot(SnapshotId),
+    /// A new snapshot was taken from a canister.
+    TakeSnapshot(CanisterId, SnapshotId),
+    /// A snapshot was loaded to a canister.
+    LoadSnapshot(CanisterId, SnapshotId),
+}
+
+/// A collection of unflushed checkpoint operations in the order that they were applied to the state.
+/// Entries are added by the execution code and read by the checkpointing logic.
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
+pub struct UnflushedCheckpointOps {
+    operations: Vec<UnflushedCheckpointOp>,
+}
+
+impl UnflushedCheckpointOps {
+    pub fn take(&mut self) -> Vec<UnflushedCheckpointOp> {
+        std::mem::take(&mut self.operations)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.operations.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.operations.len()
+    }
+
+    pub fn delete_snapshot(&mut self, snapshot_id: SnapshotId) {
+        self.operations
+            .push(UnflushedCheckpointOp::DeleteSnapshot(snapshot_id));
+    }
+
+    pub fn take_snapshot(&mut self, canister_id: CanisterId, snapshot_id: SnapshotId) {
+        self.operations.push(UnflushedCheckpointOp::TakeSnapshot(
+            canister_id,
+            snapshot_id,
+        ));
+    }
+
+    pub fn load_snapshot(&mut self, canister_id: CanisterId, snapshot_id: SnapshotId) {
+        self.operations.push(UnflushedCheckpointOp::LoadSnapshot(
+            canister_id,
+            snapshot_id,
+        ));
+    }
+}
+
 pub(crate) mod testing {
     use super::*;
 
@@ -2156,6 +2283,7 @@ pub(crate) mod testing {
             expected_compiled_wasms: Default::default(),
             bitcoin_get_successors_follow_up_responses: Default::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
+            unflushed_checkpoint_ops: Default::default(),
         };
     }
 }

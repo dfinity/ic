@@ -233,6 +233,7 @@ pub fn main() -> Result<()> {
                     .cpu
                     .clone()
                     .unwrap_or("kvm".to_string()),
+                vm_nr_of_vcpus: deployment_json_settings.resources.nr_of_vcpus.unwrap_or(64),
                 verbose,
             };
 

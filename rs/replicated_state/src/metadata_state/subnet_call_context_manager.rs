@@ -292,8 +292,9 @@ impl SubnetCallContextManager {
                     .map(|context| {
                         info!(
                             logger,
-                            "Received the response for ComputeInitialIDkgDealings request with key_id {:?} from {:?}",
+                            "Received the response for ReshareChainKey request with key_id {:?} and callback id {:?} from {:?}",
                             context.key_id,
+                            context.request.sender_reply_callback,
                             context.request.sender
                         );
                         SubnetCallContext::ReshareChainKey(context)
@@ -455,6 +456,14 @@ impl SubnetCallContextManager {
         self.sign_with_threshold_contexts
             .iter()
             .filter(|(_, context)| context.is_schnorr())
+            .map(|(cid, context)| (*cid, context.clone()))
+            .collect()
+    }
+
+    pub fn vetkd_derive_key_contexts(&self) -> BTreeMap<CallbackId, SignWithThresholdContext> {
+        self.sign_with_threshold_contexts
+            .iter()
+            .filter(|(_, context)| context.is_vetkd())
             .map(|(cid, context)| (*cid, context.clone()))
             .collect()
     }
@@ -813,8 +822,8 @@ impl TryFrom<pb_metadata::SchnorrArguments> for SchnorrArguments {
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct VetKdArguments {
     pub key_id: VetKdKeyId,
-    pub derivation_id: Vec<u8>,
-    pub encryption_public_key: Vec<u8>,
+    pub input: Arc<Vec<u8>>,
+    pub transport_public_key: Vec<u8>,
     pub ni_dkg_id: NiDkgId,
     pub height: Height,
 }
@@ -823,8 +832,8 @@ impl From<&VetKdArguments> for pb_metadata::VetKdArguments {
     fn from(args: &VetKdArguments) -> Self {
         Self {
             key_id: Some((&args.key_id).into()),
-            derivation_id: args.derivation_id.to_vec(),
-            encryption_public_key: args.encryption_public_key.to_vec(),
+            input: args.input.to_vec(),
+            transport_public_key: args.transport_public_key.to_vec(),
             ni_dkg_id: Some((args.ni_dkg_id.clone()).into()),
             height: args.height.get(),
         }
@@ -836,8 +845,8 @@ impl TryFrom<pb_metadata::VetKdArguments> for VetKdArguments {
     fn try_from(context: pb_metadata::VetKdArguments) -> Result<Self, Self::Error> {
         Ok(VetKdArguments {
             key_id: try_from_option_field(context.key_id, "VetKdArguments::key_id")?,
-            derivation_id: context.derivation_id.to_vec(),
-            encryption_public_key: context.encryption_public_key.to_vec(),
+            input: Arc::new(context.input),
+            transport_public_key: context.transport_public_key,
             ni_dkg_id: try_from_option_field(context.ni_dkg_id, "VetKdArguments::ni_dkg_id")?,
             height: Height::from(context.height),
         })
@@ -947,7 +956,7 @@ impl std::borrow::Borrow<SignWithThresholdContext> for IDkgSignWithThresholdCont
 pub struct SignWithThresholdContext {
     pub request: Request,
     pub args: ThresholdArguments,
-    pub derivation_path: Vec<Vec<u8>>,
+    pub derivation_path: Arc<Vec<Vec<u8>>>,
     pub pseudo_random_id: [u8; PSEUDO_RANDOM_ID_SIZE],
     pub batch_time: Time,
     pub matched_pre_signature: Option<(PreSigId, Height)>,
@@ -1023,7 +1032,7 @@ impl From<&SignWithThresholdContext> for pb_metadata::SignWithThresholdContext {
         Self {
             request: Some((&context.request).into()),
             args: Some((&context.args).into()),
-            derivation_path_vec: context.derivation_path.clone(),
+            derivation_path_vec: context.derivation_path.to_vec(),
             pseudo_random_id: context.pseudo_random_id.to_vec(),
             batch_time: context.batch_time.as_nanos_since_unix_epoch(),
             pre_signature_id: context.matched_pre_signature.as_ref().map(|q| q.0.id()),
@@ -1043,7 +1052,7 @@ impl TryFrom<pb_metadata::SignWithThresholdContext> for SignWithThresholdContext
         Ok(SignWithThresholdContext {
             request,
             args,
-            derivation_path: context.derivation_path_vec,
+            derivation_path: Arc::new(context.derivation_path_vec),
             pseudo_random_id: try_into_array_pseudo_random_id(context.pseudo_random_id)?,
             batch_time: Time::from_nanos_since_unix_epoch(context.batch_time),
             matched_pre_signature: context
@@ -1063,6 +1072,7 @@ pub struct ReshareChainKeyContext {
     pub nodes: BTreeSet<NodeId>,
     pub registry_version: RegistryVersion,
     pub time: Time,
+    pub target_id: NiDkgTargetId,
 }
 
 impl From<&ReshareChainKeyContext> for pb_metadata::ReshareChainKeyContext {
@@ -1079,6 +1089,7 @@ impl From<&ReshareChainKeyContext> for pb_metadata::ReshareChainKeyContext {
             time: Some(pb_metadata::Time {
                 time_nanos: context.time.as_nanos_since_unix_epoch(),
             }),
+            target_id: context.target_id.to_vec(),
         }
     }
 }
@@ -1103,6 +1114,23 @@ impl TryFrom<(Time, pb_metadata::ReshareChainKeyContext)> for ReshareChainKeyCon
             time: context
                 .time
                 .map_or(time, |t| Time::from_nanos_since_unix_epoch(t.time_nanos)),
+            target_id: {
+                // The target id is empty, if we have a legacy IDkgDealingContext
+                // Since we don't need the target id for Idkg, this is safe
+                // TODO(CRP-2613): remove this case
+                if context.target_id.is_empty() {
+                    NiDkgTargetId::new([0; 32])
+                } else {
+                    match ni_dkg_target_id(context.target_id.as_slice()) {
+                        Ok(target_id) => target_id,
+                        Err(_) => {
+                            return Err(Self::Error::Other(
+                                "target_id is not 32 bytes.".to_string(),
+                            ))
+                        }
+                    }
+                }
+            },
         })
     }
 }

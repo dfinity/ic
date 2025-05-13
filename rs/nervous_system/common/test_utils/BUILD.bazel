@@ -18,6 +18,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/nervous_system/canisters",
     "//rs/nervous_system/common",
     "//rs/rust_canisters/dfn_core",
     "@crate_index//:futures",

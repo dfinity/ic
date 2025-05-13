@@ -106,9 +106,9 @@ pub struct VetKdArguments {
     #[prost(message, optional, tag = "1")]
     pub key_id: ::core::option::Option<super::super::super::types::v1::VetKdKeyId>,
     #[prost(bytes = "vec", tag = "2")]
-    pub derivation_id: ::prost::alloc::vec::Vec<u8>,
+    pub input: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "3")]
-    pub encryption_public_key: ::prost::alloc::vec::Vec<u8>,
+    pub transport_public_key: ::prost::alloc::vec::Vec<u8>,
     #[prost(message, optional, tag = "4")]
     pub ni_dkg_id: ::core::option::Option<super::super::super::types::v1::NiDkgId>,
     #[prost(uint64, tag = "5")]
@@ -204,6 +204,8 @@ pub struct ReshareChainKeyContext {
     pub registry_version: u64,
     #[prost(message, optional, tag = "5")]
     pub time: ::core::option::Option<Time>,
+    #[prost(bytes = "vec", tag = "6")]
+    pub target_id: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReshareChainKeyContextTree {

@@ -16,7 +16,7 @@ use pocket_ic::common::rest::{
     CreateHttpGatewayResponse, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
     HttpsConfig, InstanceConfig, SubnetConfigSet, SubnetKind, Topology,
 };
-use pocket_ic::{update_candid, PocketIc, PocketIcBuilder};
+use pocket_ic::{update_candid, PocketIc, PocketIcBuilder, PocketIcState};
 use rcgen::{CertificateParams, KeyPair};
 use registry_canister::init::RegistryCanisterInitPayload;
 use reqwest::blocking::Client;
@@ -79,6 +79,92 @@ fn start_server_helper(
 pub fn start_server() -> Url {
     let test_driver_pid = std::process::id();
     start_server_helper(Some(test_driver_pid), None, false, false).0
+}
+
+const COUNTER_WAT: &str = r#"
+;; Counter with global variable ;;
+(module
+  (import "ic0" "msg_reply" (func $msg_reply))
+  (import "ic0" "msg_reply_data_append"
+    (func $msg_reply_data_append (param i32 i32)))
+
+  (func $read
+    (i32.store
+      (i32.const 0)
+      (global.get 0)
+    )
+    (call $msg_reply_data_append
+      (i32.const 0)
+      (i32.const 4))
+    (call $msg_reply))
+
+  (func $write
+    (global.set 0
+      (i32.add
+        (global.get 0)
+        (i32.const 1)
+      )
+    )
+    (call $read)
+  )
+
+  (memory $memory 1)
+  (export "memory" (memory $memory))
+  (global (export "counter_global") (mut i32) (i32.const 0))
+  (export "canister_query read" (func $read))
+  (export "canister_query inc_read" (func $write))
+  (export "canister_update write" (func $write))
+)
+    "#;
+
+fn check_counter(pic: &PocketIc, canister_id: Principal, expected_ctr: u32) {
+    let res = pic
+        .query_call(canister_id, Principal::anonymous(), "read", vec![])
+        .unwrap();
+    assert_eq!(u32::from_le_bytes(res.try_into().unwrap()), expected_ctr);
+}
+
+fn deploy_counter_canister(pic: &PocketIc, canister_id: Principal, counter: u32) {
+    const INIT_CYCLES: u128 = 2_000_000_000_000;
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    let counter_wasm = wat::parse_str(COUNTER_WAT).unwrap();
+    pic.install_canister(canister_id, counter_wasm, vec![], None);
+
+    // Bump the counter and check the counter value.
+    for _ in 0..counter {
+        pic.update_call(canister_id, Principal::anonymous(), "write", vec![])
+            .unwrap();
+    }
+    check_counter(pic, canister_id, counter);
+}
+
+fn deploy_counter_canister_to_any_subnet(pic: &PocketIc) -> Principal {
+    let canister_id = pic.create_canister();
+
+    deploy_counter_canister(pic, canister_id, 0);
+
+    canister_id
+}
+
+fn deploy_counter_canister_to_id(pic: &PocketIc, canister_id: Principal, counter: u32) {
+    let actual_canister_id = pic
+        .create_canister_with_id(None, None, canister_id)
+        .unwrap();
+    assert_eq!(actual_canister_id, canister_id);
+
+    deploy_counter_canister(pic, canister_id, counter);
+}
+
+fn deploy_counter_canister_to_subnet(
+    pic: &PocketIc,
+    subnet_id: Principal,
+    counter: u32,
+) -> Principal {
+    let canister_id = pic.create_canister_on_subnet(None, None, subnet_id);
+
+    deploy_counter_canister(pic, canister_id, counter);
+
+    canister_id
 }
 
 #[test]
@@ -263,7 +349,12 @@ async fn test_gateway(server_url: Url, https: bool) {
         None
     };
     let port = pic
-        .make_live_with_params(None, domains.clone(), https_config.clone())
+        .make_live_with_params(
+            Some(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))),
+            None,
+            domains.clone(),
+            https_config.clone(),
+        )
         .await
         .port_or_known_default()
         .unwrap();
@@ -391,6 +482,8 @@ async fn test_gateway(server_url: Url, https: bool) {
         }
         std::thread::sleep(Duration::from_millis(20));
     }
+
+    pic.drop().await;
 }
 
 #[tokio::test]
@@ -588,49 +681,6 @@ fn canister_and_no_replica_logs() {
     assert!(stderr.contains("Logging works!"));
 }
 
-const COUNTER_WAT: &str = r#"
-;; Counter with global variable ;;
-(module
-  (import "ic0" "msg_reply" (func $msg_reply))
-  (import "ic0" "msg_reply_data_append"
-    (func $msg_reply_data_append (param i32 i32)))
-
-  (func $read
-    (i32.store
-      (i32.const 0)
-      (global.get 0)
-    )
-    (call $msg_reply_data_append
-      (i32.const 0)
-      (i32.const 4))
-    (call $msg_reply))
-
-  (func $write
-    (global.set 0
-      (i32.add
-        (global.get 0)
-        (i32.const 1)
-      )
-    )
-    (call $read)
-  )
-
-  (memory $memory 1)
-  (export "memory" (memory $memory))
-  (global (export "counter_global") (mut i32) (i32.const 0))
-  (export "canister_query read" (func $read))
-  (export "canister_query inc_read" (func $write))
-  (export "canister_update write" (func $write))
-)
-    "#;
-
-fn check_counter(pic: &PocketIc, canister_id: Principal, expected_ctr: u32) {
-    let res = pic
-        .query_call(canister_id, Principal::anonymous(), "read", vec![])
-        .unwrap();
-    assert_eq!(u32::from_le_bytes(res.try_into().unwrap()), expected_ctr);
-}
-
 /// Tests that the PocketIC topology and canister states
 /// can be successfully restored from a `state_dir`
 /// if a PocketIC instance is created with that `state_dir`,
@@ -703,8 +753,6 @@ fn kill_gateway_with_sigterm() {
 }
 
 fn canister_state_dir(shutdown_signal: Option<Signal>) {
-    const INIT_CYCLES: u128 = 2_000_000_000_000;
-
     // Create a temporary state directory persisted throughout the test.
     let state_dir = TempDir::new().unwrap();
     let state_dir_path_buf = state_dir.path().to_path_buf();
@@ -719,69 +767,41 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
         .build();
 
     // Check the registry version.
-    // The registry version should be 2 as we have two subnets on the PocketIC instance
-    // and every subnet creation bumps the registry version.
+    // The registry version should be 5 as we have two subnets on the PocketIC instance,
+    // every subnet creation bumps the registry version twice, and initial registry records
+    // are added at a separate registry version.
     let registry_proto_path = state_dir_path_buf.join("registry.proto");
     let registry_data_provider = ProtoRegistryDataProvider::load_from_file(registry_proto_path);
-    assert_eq!(registry_data_provider.latest_version(), 2.into());
+    assert_eq!(registry_data_provider.latest_version(), 5.into());
 
-    // Retrieve the NNS and app subnets from the topology.
-    let topology = pic.topology();
-    let nns_subnet = topology.get_nns().unwrap();
-    let app_subnet = topology.get_app_subnets()[0];
-    let default_effective_canister_id = topology.default_effective_canister_id;
+    // There is one application subnet in the initial topology.
+    let initial_topology = pic.topology();
+    assert_eq!(initial_topology.get_app_subnets().len(), 1);
 
     // We create a counter canister on the NNS subnet.
-    let nns_canister_id = pic.create_canister_on_subnet(None, None, nns_subnet);
-    pic.add_cycles(nns_canister_id, INIT_CYCLES);
-    let counter_wasm = wat::parse_str(COUNTER_WAT).unwrap();
-    pic.install_canister(nns_canister_id, counter_wasm, vec![], None);
-
-    // Bump the counter twice and check the counter value.
-    pic.update_call(nns_canister_id, Principal::anonymous(), "write", vec![])
-        .unwrap();
-    pic.update_call(nns_canister_id, Principal::anonymous(), "write", vec![])
-        .unwrap();
-    check_counter(&pic, nns_canister_id, 2);
+    let nns_subnet = initial_topology.get_nns().unwrap();
+    let nns_canister_id = deploy_counter_canister_to_subnet(&pic, nns_subnet, 2);
 
     // We create a counter canister on the application subnet.
-    let app_canister_id = pic.create_canister_on_subnet(None, None, app_subnet);
-    pic.add_cycles(app_canister_id, INIT_CYCLES);
-    let counter_wasm = wat::parse_str(COUNTER_WAT).unwrap();
-    pic.install_canister(app_canister_id, counter_wasm, vec![], None);
-
-    // Bump the counter once and check the counter value.
-    pic.update_call(app_canister_id, Principal::anonymous(), "write", vec![])
-        .unwrap();
-    check_counter(&pic, app_canister_id, 1);
+    let app_subnet = initial_topology.get_app_subnets()[0];
+    let app_canister_id = deploy_counter_canister_to_subnet(&pic, app_subnet, 1);
 
     // We create a counter canister with a "specified" canister ID that exists on the IC mainnet,
     // but belongs to the canister ranges of no subnet on the PocketIC instance.
-    let specified_id = Principal::from_text("rimrc-piaaa-aaaao-aaljq-cai").unwrap();
-    assert!(pic.get_subnet(specified_id).is_none());
-    let spec_canister_id = pic
-        .create_canister_with_id(None, None, specified_id)
-        .unwrap();
-    assert_eq!(spec_canister_id, specified_id);
-    pic.add_cycles(spec_canister_id, INIT_CYCLES);
-    let counter_wasm = wat::parse_str(COUNTER_WAT).unwrap();
-    pic.install_canister(spec_canister_id, counter_wasm, vec![], None);
+    let spec_canister_id = Principal::from_text("rimrc-piaaa-aaaao-aaljq-cai").unwrap();
+    assert!(pic.get_subnet(spec_canister_id).is_none());
+    deploy_counter_canister_to_id(&pic, spec_canister_id, 3);
 
     // Check the registry version.
-    // The registry version should be 3 as we have three subnets on the PocketIC instance now
-    // and every subnet creation bumps the registry version.
+    // The registry version should be 7 as a new subnet has been created and
+    // every subnet creation bumps the registry version twice.
     let registry_proto_path = state_dir_path_buf.join("registry.proto");
     let registry_data_provider = ProtoRegistryDataProvider::load_from_file(registry_proto_path);
-    assert_eq!(registry_data_provider.latest_version(), 3.into());
+    assert_eq!(registry_data_provider.latest_version(), 7.into());
 
-    // Bump the counter three times and check the counter value.
-    pic.update_call(spec_canister_id, Principal::anonymous(), "write", vec![])
-        .unwrap();
-    pic.update_call(spec_canister_id, Principal::anonymous(), "write", vec![])
-        .unwrap();
-    pic.update_call(spec_canister_id, Principal::anonymous(), "write", vec![])
-        .unwrap();
-    check_counter(&pic, spec_canister_id, 3);
+    // There are two application subnets in the final topology.
+    let final_topology = pic.topology();
+    assert_eq!(final_topology.get_app_subnets().len(), 2);
 
     send_signal_to_pic(pic, child, shutdown_signal);
 
@@ -795,16 +815,8 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
         .build();
 
     // Check that the topology has been properly restored.
-    let topology = pic.topology();
-    assert_eq!(topology.get_nns().unwrap(), nns_subnet);
-    assert_eq!(topology.get_app_subnets()[0], app_subnet);
-    // We created one app subnet and another one was created dynamically
-    // to host the canister with the "specified" canister ID.
-    assert_eq!(topology.get_app_subnets().len(), 2);
-    assert_eq!(
-        topology.default_effective_canister_id,
-        default_effective_canister_id
-    );
+    let restored_topology = pic.topology();
+    assert_eq!(restored_topology, final_topology);
 
     // Check that the canister states have been properly restored.
     check_counter(&pic, nns_canister_id, 2);
@@ -827,16 +839,16 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     send_signal_to_pic(pic, child, shutdown_signal);
 
     // Start a new PocketIC server.
-    let (newest_server_url, _) = start_server_helper(None, None, false, false);
+    let (newest_server_url, child) = start_server_helper(None, None, false, false);
 
     // Create a PocketIC instance mounting the NNS and app state created so far.
-    let nns_subnet_seed = topology
+    let nns_subnet_seed = initial_topology
         .subnet_configs
         .get(&nns_subnet)
         .unwrap()
         .subnet_seed;
     let nns_state_dir = state_dir.path().join(hex::encode(nns_subnet_seed));
-    let app_subnet_seed = topology
+    let app_subnet_seed = initial_topology
         .subnet_configs
         .get(&app_subnet)
         .unwrap()
@@ -844,15 +856,21 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     let app_state_dir = state_dir.path().join(hex::encode(app_subnet_seed));
     let pic = PocketIcBuilder::new()
         .with_server_url(newest_server_url)
-        .with_nns_state(nns_subnet, nns_state_dir)
-        .with_subnet_state(SubnetKind::Application, app_subnet, app_state_dir)
+        .with_nns_state(nns_state_dir)
+        .with_subnet_state(SubnetKind::Application, app_state_dir)
         .build();
 
-    // Check that the topology has been properly restored.
-    let topology = pic.topology();
-    assert_eq!(topology.get_nns().unwrap(), nns_subnet);
     // We only specified to restore one app subnet.
-    assert_eq!(topology.get_app_subnets().len(), 1);
+    let restored_topology = pic.topology();
+    assert_eq!(restored_topology.get_app_subnets().len(), 1);
+
+    // Check that the topology has been properly restored.
+    let mut updated_final_topology = final_topology.clone();
+    // We remove the subnet that was not restored from the final topology.
+    updated_final_topology
+        .subnet_configs
+        .retain(|subnet_id, _| *subnet_id == nns_subnet || *subnet_id == app_subnet);
+    assert_eq!(restored_topology, updated_final_topology);
 
     // Check that the canister states have been properly restored.
     check_counter(&pic, nns_canister_id, 3);
@@ -867,6 +885,284 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     // Check that the counters have been properly updated.
     check_counter(&pic, nns_canister_id, 4);
     check_counter(&pic, app_canister_id, 3);
+
+    send_signal_to_pic(pic, child, shutdown_signal);
+
+    // Start a new PocketIC server.
+    let (new_server_url, child) = start_server_helper(None, None, false, false);
+
+    // Create a temporary state directory persisted throughout the rest of the test.
+    let write_state_dir = TempDir::new().unwrap();
+    let write_state_dir_path_buf = write_state_dir.path().to_path_buf();
+
+    // Create a PocketIC instance mounting the (read-only) state created so far
+    // and persisting the state in a separate (write) state.
+    let pic = PocketIcBuilder::new()
+        .with_server_url(new_server_url)
+        .with_read_only_state(&PocketIcState::new_from_path(state_dir_path_buf.clone()))
+        .with_state_dir(write_state_dir_path_buf.clone())
+        .build();
+
+    // Check that the topology has been properly restored.
+    let restored_topology = pic.topology();
+    assert_eq!(restored_topology, final_topology);
+
+    // Check that the canister states have not changed
+    // after mounting selected subnets individually.
+    check_counter(&pic, nns_canister_id, 3);
+    check_counter(&pic, app_canister_id, 2);
+    check_counter(&pic, spec_canister_id, 4);
+
+    // Bump the counters on all subnets.
+    pic.update_call(nns_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+    pic.update_call(app_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+    pic.update_call(spec_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+
+    // Check that the counters have been properly updated.
+    check_counter(&pic, nns_canister_id, 4);
+    check_counter(&pic, app_canister_id, 3);
+    check_counter(&pic, spec_canister_id, 5);
+
+    send_signal_to_pic(pic, child, shutdown_signal);
+
+    // Start a new PocketIC server.
+    let (new_server_url, child) = start_server_helper(None, None, false, false);
+
+    // Create a PocketIC instance mounting the (read-only) state.
+    let pic = PocketIcBuilder::new()
+        .with_server_url(new_server_url)
+        .with_read_only_state(&PocketIcState::new_from_path(state_dir_path_buf.clone()))
+        .build();
+
+    // Check that the canister states have not changed
+    // after mounting read-only state and making state changes.
+    check_counter(&pic, nns_canister_id, 3);
+    check_counter(&pic, app_canister_id, 2);
+    check_counter(&pic, spec_canister_id, 4);
+
+    // Bump the counters on all subnets.
+    pic.update_call(nns_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+    pic.update_call(app_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+    pic.update_call(spec_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+
+    // Check that the counters have been properly updated.
+    check_counter(&pic, nns_canister_id, 4);
+    check_counter(&pic, app_canister_id, 3);
+    check_counter(&pic, spec_canister_id, 5);
+
+    send_signal_to_pic(pic, child, shutdown_signal);
+
+    // Start a new PocketIC server.
+    let (new_server_url, child) = start_server_helper(None, None, false, false);
+
+    // Create a PocketIC instance mounting the (read-only) state.
+    let pic = PocketIcBuilder::new()
+        .with_server_url(new_server_url)
+        .with_read_only_state(&PocketIcState::new_from_path(state_dir_path_buf.clone()))
+        .build();
+
+    // Check that the canister states have not changed
+    // after mounting read-only state and making state changes.
+    check_counter(&pic, nns_canister_id, 3);
+    check_counter(&pic, app_canister_id, 2);
+    check_counter(&pic, spec_canister_id, 4);
+
+    send_signal_to_pic(pic, child, shutdown_signal);
+
+    // Start a new PocketIC server.
+    let (new_server_url, child) = start_server_helper(None, None, false, false);
+
+    // Create a PocketIC instance mounting the persisted state created so far.
+    let pic = PocketIcBuilder::new()
+        .with_server_url(new_server_url)
+        .with_read_only_state(&PocketIcState::new_from_path(
+            write_state_dir_path_buf.clone(),
+        ))
+        .build();
+
+    // Check that the canister states have been changed in the persisted state
+    // when initializing that state from a read-only state.
+    check_counter(&pic, nns_canister_id, 4);
+    check_counter(&pic, app_canister_id, 3);
+    check_counter(&pic, spec_canister_id, 5);
+
+    send_signal_to_pic(pic, child, shutdown_signal);
+}
+
+/// The following test is similar to `canister_state_dir`,
+/// but creates two app subnets on the original PocketIC instance
+/// and then checks that each of the two app subnets
+/// can be separately restored from its state
+/// along with creating a new empty subnet.
+/// This way, the test ensures that PocketIC properly retrieves
+/// the subnet configuration from the state of the subnet
+/// (since using the default configuration won't work
+/// for at least one of the two subnets) and creates new empty subnets
+/// with disjoint canister ranges.
+#[test]
+fn with_subnet_state() {
+    // Create a temporary state directory persisted throughout the test.
+    let state_dir = TempDir::new().unwrap();
+    let state_dir_path_buf = state_dir.path().to_path_buf();
+
+    // Create a PocketIC instance with NNS and app subnets.
+    let (server_url, _) = start_server_helper(None, None, false, false);
+    let pic = PocketIcBuilder::new()
+        .with_state_dir(state_dir_path_buf.clone())
+        .with_server_url(server_url.clone())
+        .with_nns_subnet()
+        .with_application_subnet()
+        .with_application_subnet()
+        .build();
+
+    // Retrieve the NNS and app subnets from the topology.
+    let topology = pic.topology();
+    let nns_subnet = topology.get_nns().unwrap();
+    let first_app_subnet = topology.get_app_subnets()[0];
+    let second_app_subnet = topology.get_app_subnets()[1];
+
+    // We create a counter canister on each of the two app subnets.
+    let first_app_canister_id = deploy_counter_canister_to_subnet(&pic, first_app_subnet, 1);
+    let second_app_canister_id = deploy_counter_canister_to_subnet(&pic, second_app_subnet, 2);
+
+    drop(pic);
+
+    for (app_subnet, app_canister_id, counter) in [
+        (first_app_subnet, first_app_canister_id, 1),
+        (second_app_subnet, second_app_canister_id, 2),
+    ] {
+        // Create a PocketIC instance mounting the NNS and app state created so far.
+        let nns_subnet_seed = topology
+            .subnet_configs
+            .get(&nns_subnet)
+            .unwrap()
+            .subnet_seed;
+        let nns_state_dir = state_dir.path().join(hex::encode(nns_subnet_seed));
+        let app_subnet_seed = topology
+            .subnet_configs
+            .get(&app_subnet)
+            .unwrap()
+            .subnet_seed;
+        let app_state_dir = state_dir.path().join(hex::encode(app_subnet_seed));
+        let pic = PocketIcBuilder::new()
+            .with_server_url(server_url.clone())
+            .with_nns_state(nns_state_dir)
+            .with_subnet_state(SubnetKind::Application, app_state_dir)
+            .with_application_subnet()
+            .build();
+
+        // We specified to restore one app subnet and create a new empty app subnet.
+        let restored_topology = pic.topology();
+        assert_eq!(restored_topology.get_app_subnets().len(), 2);
+
+        // Check that the topology has been properly restored.
+        assert_eq!(
+            restored_topology.subnet_configs.get(&nns_subnet).unwrap(),
+            topology.subnet_configs.get(&nns_subnet).unwrap()
+        );
+        assert_eq!(
+            restored_topology.subnet_configs.get(&app_subnet).unwrap(),
+            topology.subnet_configs.get(&app_subnet).unwrap()
+        );
+
+        check_counter(&pic, app_canister_id, counter);
+    }
+}
+
+fn create_nns_subnet_state() -> (TempDir, PathBuf) {
+    // Create a temporary state directory persisted throughout the test.
+    let state_dir = TempDir::new().unwrap();
+    let state_dir_path_buf = state_dir.path().to_path_buf();
+
+    // Create a PocketIC instance with a single NNS subnet.
+    let pic = PocketIcBuilder::new()
+        .with_state_dir(state_dir_path_buf.clone())
+        .with_nns_subnet()
+        .build();
+
+    // Retrieve the NNS subnet from the topology.
+    let topology = pic.topology();
+    let nns_subnet = topology.get_nns().unwrap();
+
+    drop(pic);
+
+    let nns_subnet_seed = topology
+        .subnet_configs
+        .get(&nns_subnet)
+        .unwrap()
+        .subnet_seed;
+    let nns_state_dir = state_dir.path().join(hex::encode(nns_subnet_seed));
+    (state_dir, nns_state_dir)
+}
+
+fn create_app_subnet_state() -> (TempDir, PathBuf) {
+    // Create a temporary state directory persisted throughout the test.
+    let state_dir = TempDir::new().unwrap();
+    let state_dir_path_buf = state_dir.path().to_path_buf();
+
+    // Create a PocketIC instance with a single app subnet.
+    let pic = PocketIcBuilder::new()
+        .with_state_dir(state_dir_path_buf.clone())
+        .with_application_subnet()
+        .build();
+
+    // Retrieve the app subnet from the topology.
+    let topology = pic.topology();
+    let app_subnet = topology.get_app_subnets()[0];
+
+    drop(pic);
+
+    let app_subnet_seed = topology
+        .subnet_configs
+        .get(&app_subnet)
+        .unwrap()
+        .subnet_seed;
+    let app_state_dir = state_dir.path().join(hex::encode(app_subnet_seed));
+    (state_dir, app_state_dir)
+}
+
+#[test]
+#[should_panic(expected = "Invalid canister ranges.")]
+fn with_app_subnet_state_twice() {
+    let (_state_dir, app_state_dir) = create_app_subnet_state();
+
+    // Create a PocketIC instance mounting the app state twice.
+    let _pic = PocketIcBuilder::new()
+        .with_subnet_state(SubnetKind::Application, app_state_dir.clone())
+        .with_subnet_state(SubnetKind::Application, app_state_dir)
+        .build();
+}
+
+#[test]
+#[should_panic(
+    expected = "The actual subnet canister ranges [CanisterIdRange { start: CanisterId(rwlgt-iiaaa-aaaaa-aaaaa-cai), end: CanisterId(renrk-eyaaa-aaaaa-aaada-cai) }, CanisterIdRange { start: CanisterId(qoctq-giaaa-aaaaa-aaaea-cai), end: CanisterId(n5n4y-3aaaa-aaaaa-p777q-cai) }, CanisterIdRange { start: CanisterId(lxzze-o7777-77777-aaaaa-cai), end: CanisterId(x47dp-5x777-77777-p777q-cai) }] for the subnet kind Application are not disjoint from the canister ranges [CanisterIdRange { start: CanisterId(rwlgt-iiaaa-aaaaa-aaaaa-cai), end: CanisterId(renrk-eyaaa-aaaaa-aaada-cai) }, CanisterIdRange { start: CanisterId(qoctq-giaaa-aaaaa-aaaea-cai), end: CanisterId(n5n4y-3aaaa-aaaaa-p777q-cai) }] for a different subnet kind NNS."
+)]
+fn with_nns_as_app_subnet_state() {
+    let (_state_dir, nns_state_dir) = create_nns_subnet_state();
+
+    // Create a PocketIC instance mounting the NNS state as app state.
+    let _pic = PocketIcBuilder::new()
+        .with_subnet_state(SubnetKind::Application, nns_state_dir)
+        .build();
+}
+
+#[test]
+#[should_panic(
+    expected = "The actual subnet canister ranges [CanisterIdRange { start: CanisterId(lxzze-o7777-77777-aaaaa-cai), end: CanisterId(x47dp-5x777-77777-p777q-cai) }] do not contain the canister ranges [CanisterIdRange { start: CanisterId(rwlgt-iiaaa-aaaaa-aaaaa-cai), end: CanisterId(renrk-eyaaa-aaaaa-aaada-cai) }, CanisterIdRange { start: CanisterId(qoctq-giaaa-aaaaa-aaaea-cai), end: CanisterId(n5n4y-3aaaa-aaaaa-p777q-cai) }] expected for the subnet kind NNS."
+)]
+fn with_app_as_nns_subnet_state() {
+    let (_state_dir, app_state_dir) = create_app_subnet_state();
+
+    // Create a PocketIC instance mounting the app state as NNS state.
+    let _pic = PocketIcBuilder::new()
+        .with_subnet_state(SubnetKind::NNS, app_state_dir)
+        .build();
 }
 
 /// Test that PocketIC can handle synchronous update calls, i.e. `/api/v3/.../call`.
@@ -931,16 +1227,11 @@ fn test_specified_id_call_v3() {
 /// Test that query stats are available via the management canister.
 #[test]
 fn test_query_stats() {
-    const INIT_CYCLES: u128 = 2_000_000_000_000;
-
     // Create PocketIC instance with a single app subnet.
     let pic = PocketIcBuilder::new().with_application_subnet().build();
 
     // We create a counter canister on the app subnet.
-    let canister_id = pic.create_canister();
-    pic.add_cycles(canister_id, INIT_CYCLES);
-    let counter_wasm = wat::parse_str(COUNTER_WAT).unwrap();
-    pic.install_canister(canister_id, counter_wasm, vec![], None);
+    let canister_id = deploy_counter_canister_to_any_subnet(&pic);
 
     // The query stats are still at zero.
     let query_stats = pic.canister_status(canister_id, None).unwrap().query_stats;
@@ -987,8 +1278,6 @@ fn test_query_stats() {
 /// Test that query stats are available via the management canister in the live mode of PocketIC.
 #[test]
 fn test_query_stats_live() {
-    const INIT_CYCLES: u128 = 2_000_000_000_000;
-
     // Create PocketIC instance with one NNS subnet and one app subnet.
     let mut pic = PocketIcBuilder::new()
         .with_nns_subnet()
@@ -1000,10 +1289,7 @@ fn test_query_stats_live() {
     let app_subnet = topology.get_app_subnets()[0];
 
     // We create a counter canister on the app subnet.
-    let canister_id = pic.create_canister_on_subnet(None, None, app_subnet);
-    pic.add_cycles(canister_id, INIT_CYCLES);
-    let counter_wasm = wat::parse_str(COUNTER_WAT).unwrap();
-    pic.install_canister(canister_id, counter_wasm, vec![], None);
+    let canister_id = deploy_counter_canister_to_subnet(&pic, app_subnet, 0);
 
     // Query stats should be collected in the live mode.
     let endpoint = pic.make_live(None);
@@ -1058,8 +1344,6 @@ fn test_query_stats_live() {
 /// Tests subnet read state requests.
 #[test]
 fn test_subnet_read_state() {
-    const INIT_CYCLES: u128 = 2_000_000_000_000;
-
     // Create PocketIC instance with one NNS subnet and one app subnet.
     let mut pic = PocketIcBuilder::new()
         .with_nns_subnet()
@@ -1071,10 +1355,7 @@ fn test_subnet_read_state() {
     let app_subnet = topology.get_app_subnets()[0];
 
     // We create a counter canister on the app subnet.
-    let canister_id = pic.create_canister_on_subnet(None, None, app_subnet);
-    pic.add_cycles(canister_id, INIT_CYCLES);
-    let counter_wasm = wat::parse_str(COUNTER_WAT).unwrap();
-    pic.install_canister(canister_id, counter_wasm, vec![], None);
+    deploy_counter_canister_to_subnet(&pic, app_subnet, 0);
 
     let endpoint = pic.make_live(None);
 
@@ -1386,8 +1667,12 @@ fn auto_progress() {
 
     let t0 = pic.get_time();
 
+    assert!(!pic.auto_progress_enabled());
+
     // Starting auto progress on the IC => a corresponding log should be made and time should start incresing automatically now.
     pic.auto_progress();
+
+    assert!(pic.auto_progress_enabled());
 
     loop {
         let mut bytes = [0; 1000];
@@ -1409,6 +1694,8 @@ fn auto_progress() {
 
     // Stopping auto progress on the IC => a corresponding log should be made.
     pic.stop_progress();
+
+    assert!(!pic.auto_progress_enabled());
 
     loop {
         let mut bytes = [0; 1000];

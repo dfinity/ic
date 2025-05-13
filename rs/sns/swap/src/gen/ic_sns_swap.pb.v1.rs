@@ -896,8 +896,7 @@ pub mod sns_neuron_recipe {
         /// be retried in the future.
         Failed = 3,
         /// The Neuron is invalid and was not created in SNS Governance. This neuron
-        /// cannot be retried without manual intervention to update its
-        /// `NeuronParameters`.
+        /// cannot be retried without manual intervention to update its `NeuronRecipe`.
         Invalid = 4,
     }
     impl ClaimedStatus {

@@ -1069,9 +1069,9 @@ pub fn execute_update_bench(c: &mut Criterion) {
             523000006,
         ),
         common::Benchmark(
-            "wasm32/ic0_cost_vetkd_derive_encrypted_key()".into(),
+            "wasm32/ic0_cost_vetkd_derive_key()".into(),
             Module::Test.from_ic0(
-                "cost_vetkd_derive_encrypted_key",
+                "cost_vetkd_derive_key",
                 Params4(1_i32, 2_i32, 3_i32, 3_i32),
                 Result::I32,
                 Wasm64::Disabled,
@@ -1079,9 +1079,9 @@ pub fn execute_update_bench(c: &mut Criterion) {
             523000006,
         ),
         common::Benchmark(
-            "wasm64/ic0_cost_vetkd_derive_encrypted_key()".into(),
+            "wasm64/ic0_cost_vetkd_derive_key()".into(),
             Module::Test.from_ic0(
-                "cost_vetkd_derive_encrypted_key",
+                "cost_vetkd_derive_key",
                 Params4(1_i64, 2_i64, 3_i32, 3_i64),
                 Result::I32,
                 Wasm64::Enabled,
@@ -1092,7 +1092,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
 
     common::run_benchmarks(
         c,
-        "update",
+        "execution_environment:update",
         &benchmarks,
         |id: &str,
          exec_env: &ExecutionEnvironment,
@@ -1152,5 +1152,9 @@ pub fn execute_update_bench(c: &mut Criterion) {
     );
 }
 
-criterion_group!(benchmarks, execute_update_bench);
+criterion_group! {
+    name = benchmarks;
+    config = Criterion::default().sample_size(10);
+    targets = execute_update_bench
+}
 criterion_main!(benchmarks);

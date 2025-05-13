@@ -14,12 +14,12 @@ load("//bazel:defs.bzl", "gzip_compress", "zstd_compress")
 load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:boundary-guestos.bzl", boundary_component_files = "component_files")
+load("//ic-os/components:defs.bzl", "tree_hash")
 load("//ic-os/components/conformance_tests:defs.bzl", "component_file_references_test")
-load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "disk_image_no_tar", "ext4_image", "sha256sum", "tar_extract", "tree_hash", "upgrade_image")
+load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "disk_image_no_tar", "ext4_image", "upgrade_image")
 
 def icos_build(
         name,
-        upload_prefix,
         image_deps_func,
         mode = None,
         malicious = False,
@@ -35,7 +35,6 @@ def icos_build(
 
     Args:
       name: Name for the generated filegroup.
-      upload_prefix: Prefix to be used as the target when uploading
       image_deps_func: Function to be used to generate image manifest
       mode: dev or prod. If not specified, will use the value of `name`
       malicious: if True, bundle the `malicious_replica`
@@ -46,6 +45,10 @@ def icos_build(
       build_local_base_image: if True, build the base images from scratch. Do not download the docker.io base image.
       installable: if True, create install and debug targets, else create launch ones.
       ic_version: the label pointing to the target that returns IC version
+
+
+    Returns:
+      A struct containing the labels of the images that were built.
     """
 
     if mode == None:
@@ -234,9 +237,9 @@ def icos_build(
             testonly = malicious,
             srcs = ["partition-root-unsigned.tzst"],
             outs = ["partition-root.tzst", "partition-root-hash"],
-            cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
+            cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
             executable = False,
-            tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/build_tools/dflate"],
+            tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign", "//rs/ic_os/build_tools/dflate"],
             tags = ["manual", "no-cache"],
         )
 
@@ -257,8 +260,8 @@ def icos_build(
                 testonly = malicious,
                 srcs = ["partition-root-test-unsigned.tzst"],
                 outs = ["partition-root-test.tzst", "partition-root-test-hash"],
-                cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root-test.tzst) -r $(location partition-root-test-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
-                tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/build_tools/dflate"],
+                cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign) -i $< -o $(location :partition-root-test.tzst) -r $(location partition-root-test-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
+                tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign", "//rs/ic_os/build_tools/dflate"],
                 tags = ["manual", "no-cache"],
             )
 
@@ -365,14 +368,19 @@ def icos_build(
         ],
     )
 
+    disk_img_tar_zst = "disk-img.tar.zst"
+
     zstd_compress(
-        name = "disk-img.tar.zst",
+        name = disk_img_tar_zst,
         srcs = [":disk-img.tar"],
         visibility = visibility,
         tags = ["manual"],
     )
 
     # -------------------- Assemble upgrade image --------------------
+
+    update_image_tar_zst = "update-img.tar.zst"  # final output file
+    update_image_test_tar_zst = "update-img-test.tar.zst"  # final output file
 
     if upgrades:
         upgrade_image(
@@ -387,7 +395,7 @@ def icos_build(
         )
 
         zstd_compress(
-            name = "update-img.tar.zst",
+            name = update_image_tar_zst,
             srcs = [":update-img.tar"],
             visibility = visibility,
             tags = ["manual"],
@@ -405,42 +413,11 @@ def icos_build(
         )
 
         zstd_compress(
-            name = "update-img-test.tar.zst",
+            name = update_image_test_tar_zst,
             srcs = [":update-img-test.tar"],
             visibility = visibility,
             tags = ["manual"],
         )
-
-    # -------------------- Upload artifacts --------------------
-
-    upload_suffix = ""
-    if mode == "dev":
-        upload_suffix = "-dev"
-    if malicious:
-        upload_suffix += "-malicious"
-
-    if upload_prefix != None:
-        upload_artifacts(
-            name = "upload_disk-img",
-            inputs = [
-                ":disk-img.tar.zst",
-            ],
-            remote_subdir = upload_prefix + "/disk-img" + upload_suffix,
-            visibility = visibility,
-        )
-
-        if upgrades:
-            upload_artifacts(
-                name = "upload_update-img",
-                inputs = [
-                    ":update-img.tar.zst",
-                    ":update-img-test.tar.zst",
-                ],
-                remote_subdir = upload_prefix + "/update-img" + upload_suffix,
-                visibility = visibility,
-            )
-
-    # end if upload_prefix != None
 
     # -------------------- Vulnerability Scanning Tool ------------
 
@@ -497,6 +474,7 @@ EOF
             "//rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm",
             "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
             ":disk-img.tar.zst",
+            "//rs/tests/nested:empty-disk-img.tar.zst",
             ":version.txt",
             "//bazel:upload_systest_dep",
         ],
@@ -506,6 +484,7 @@ EOF
             "SCRIPT": "$(location //ic-os/components:hostos-scripts/build-bootstrap-config-image.sh)",
             "VERSION_FILE": "$(location :version.txt)",
             "DISK_IMG": "$(location :disk-img.tar.zst)",
+            "EMPTY_DISK_IMG_PATH": "$(location //rs/tests/nested:empty-disk-img.tar.zst)",
         },
         testonly = True,
         tags = ["manual"],
@@ -612,14 +591,21 @@ EOF
         name = name,
         testonly = malicious,
         srcs = [
-            ":disk-img.tar.zst",
+            ":" + disk_img_tar_zst,
         ] + ([
-            ":update-img.tar.zst",
-            ":update-img-test.tar.zst",
+            ":" + update_image_tar_zst,
+            ":" + update_image_test_tar_zst,
         ] if upgrades else []),
         visibility = visibility,
         tags = tags,
     )
+
+    icos_images = struct(
+        disk_image = disk_img_tar_zst,
+        update_image = update_image_tar_zst,
+        update_image_test = update_image_test_tar_zst,
+    )
+    return icos_images
 
 # end def icos_build
 
@@ -757,9 +743,9 @@ EOF
         name = "partition-root-sign",
         srcs = ["partition-root-unsigned.tzst"],
         outs = ["partition-root.tzst", "partition-root-hash"],
-        cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
+        cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
         executable = False,
-        tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/build_tools/dflate"],
+        tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign", "//rs/ic_os/build_tools/dflate"],
         tags = ["manual", "no-cache"],
     )
 
@@ -831,3 +817,62 @@ EOF
         srcs = [":disk-img.tar.zst", ":disk-img.tar.gz"],
         visibility = visibility,
     )
+
+# Only used by boundary_node_icos_build
+def _tar_extract_impl(ctx):
+    in_tar = ctx.files.src[0]
+    out = ctx.actions.declare_file(ctx.label.name)
+
+    ctx.actions.run_shell(
+        inputs = [in_tar],
+        outputs = [out],
+        command = "tar xOf %s --occurrence=1 %s > %s" % (
+            in_tar.path,
+            ctx.attr.path,
+            out.path,
+        ),
+    )
+
+    return [DefaultInfo(files = depset([out]))]
+
+tar_extract = rule(
+    implementation = _tar_extract_impl,
+    attrs = {
+        "src": attr.label(
+            allow_files = True,
+            mandatory = True,
+        ),
+        "path": attr.string(
+            mandatory = True,
+        ),
+    },
+)
+
+# Only used by boundary_node_icos_build
+def _sha256sum_impl(ctx):
+    out = ctx.actions.declare_file(ctx.label.name)
+    input_paths = []
+    for src in ctx.files.srcs:
+        input_paths.append(src.path)
+    input_paths = " ".join(input_paths)
+
+    ctx.actions.run_shell(
+        inputs = ctx.files.srcs,
+        outputs = [out],
+        command = "cat {} | sha256sum | sed -e 's/ \\+-/{}/' > {}".format(input_paths, ctx.attr.suffix, out.path),
+    )
+
+    return [DefaultInfo(files = depset([out]))]
+
+sha256sum = rule(
+    implementation = _sha256sum_impl,
+    attrs = {
+        "srcs": attr.label_list(
+            allow_files = True,
+            mandatory = True,
+        ),
+        "suffix": attr.string(
+            default = "",
+        ),
+    },
+)

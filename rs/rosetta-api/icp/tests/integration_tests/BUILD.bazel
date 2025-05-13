@@ -59,7 +59,7 @@ rust_test_suite(
     },
     # The test is critical to get resources timely and therefore fails sometimes when run on heavily loaded node.
     # TODO(IDX-2225): reconsider when we will use Remote Execution.
-    flaky = True,
+    flaky = True,  # flakiness rate of over 2% over the month from 2025-02-11 till 2025-03-11.
     proc_macro_deps = [
     ],
     tags = ["cpu:4"],

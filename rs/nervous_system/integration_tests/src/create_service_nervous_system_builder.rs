@@ -1,8 +1,8 @@
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1::{Canister, Duration as DurationPb, Tokens as TokensPb};
-use ic_nns_governance::governance::test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING;
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance::governance::test_data::CREATE_SERVICE_NERVOUS_SYSTEM;
+use ic_nns_governance_api::{
     create_service_nervous_system::{
         initial_token_distribution::developer_distribution::NeuronDistribution, SwapParameters,
     },
@@ -15,7 +15,7 @@ pub struct CreateServiceNervousSystemBuilder(CreateServiceNervousSystem);
 #[cfg(not(target_arch = "wasm32"))]
 impl Default for CreateServiceNervousSystemBuilder {
     fn default() -> Self {
-        let swap_parameters = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
+        let swap_parameters = CREATE_SERVICE_NERVOUS_SYSTEM
             .swap_parameters
             .clone()
             .map(|x| x.into())
@@ -36,9 +36,7 @@ impl Default for CreateServiceNervousSystemBuilder {
         CreateServiceNervousSystemBuilder(CreateServiceNervousSystem {
             dapp_canisters: vec![],
             swap_parameters: Some(swap_parameters),
-            ..CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
-                .clone()
-                .into()
+            ..CREATE_SERVICE_NERVOUS_SYSTEM.clone().into()
         })
     }
 }
@@ -97,6 +95,28 @@ impl CreateServiceNervousSystemBuilder {
         let governance_parameters = self.0.governance_parameters.as_mut().unwrap();
         governance_parameters.neuron_minimum_dissolve_delay_to_vote = Some(DurationPb {
             seconds: Some(neuron_minimum_dissolve_delay_to_vote_seconds),
+        });
+        self
+    }
+
+    pub fn with_governance_parameters_proposal_initial_voting_period(
+        mut self,
+        initial_voting_period_seconds: u64,
+    ) -> Self {
+        let governance_parameters = self.0.governance_parameters.as_mut().unwrap();
+        governance_parameters.proposal_initial_voting_period = Some(DurationPb {
+            seconds: Some(initial_voting_period_seconds),
+        });
+        self
+    }
+
+    pub fn with_governance_parameters_proposal_wait_for_quiet_deadline_increase(
+        mut self,
+        wait_for_quiet_deadline_increase_seconds: u64,
+    ) -> Self {
+        let governance_parameters = self.0.governance_parameters.as_mut().unwrap();
+        governance_parameters.proposal_wait_for_quiet_deadline_increase = Some(DurationPb {
+            seconds: Some(wait_for_quiet_deadline_increase_seconds),
         });
         self
     }

@@ -18,7 +18,6 @@ env:
   CI_PROJECT_DIR: ${{ github.workspace }}
   BRANCH_NAME: ${{ github.event.workflow_run.head_branch || github.ref_name }}
   CI_RUN_ID: ${{ github.run_id }}
-  BUILDEVENT_DATASET: "github-ci-dfinity"
 jobs:
   ci-main:
     name: CI Main
@@ -30,7 +29,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:908c9b2abe0647cd54a2485117c263b0dae4a8aba8f25bc073813b09be9b1d59
+      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 180 # 3 hours
@@ -43,31 +42,16 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: >-
-            test --config=ci --keep_going --test_tag_filters=system_test_nightly
+          BAZEL_COMMAND: test --config=ci --keep_going --test_tag_filters=system_test_nightly
           BAZEL_TARGETS: //rs/tests/...
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      - name: Upload bazel-bep
-        # runs only if previous step succeeded or failed;
-        # we avoid collecting artifacts of jobs that were cancelled
-        if: success() || failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb.gpg
-            profile.json
   bazel-system-test-staging:
     name: Bazel System Test Staging
     runs-on:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:908c9b2abe0647cd54a2485117c263b0dae4a8aba8f25bc073813b09be9b1d59
+      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 180 # 3 hours
@@ -80,31 +64,16 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: >-
-            test --config=ci --keep_going --test_tag_filters=system_test_staging
+          BAZEL_COMMAND: test --config=ci --keep_going --test_tag_filters=system_test_staging
           BAZEL_TARGETS: //rs/tests/...
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      - name: Upload bazel-bep
-        # runs only if previous step succeeded or failed;
-        # we avoid collecting artifacts of jobs that were cancelled
-        if: success() || failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb.gpg
-            profile.json
   bazel-system-test-hotfix:
     name: Bazel System Test Hotfix
     runs-on:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:908c9b2abe0647cd54a2485117c263b0dae4a8aba8f25bc073813b09be9b1d59
+      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 90
@@ -117,31 +86,16 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: >-
-            test --config=ci --keep_going --test_tag_filters=system_test_hotfix
+          BAZEL_COMMAND: test --config=ci --keep_going --test_tag_filters=system_test_hotfix
           BAZEL_TARGETS: //rs/tests/...
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      - name: Upload bazel-bep
-        # runs only if previous step succeeded or failed;
-        # we avoid collecting artifacts of jobs that were cancelled
-        if: success() || failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb.gpg
-            profile.json
   dependency-scan-release-cut:
     name: Dependency Scan for Release
     runs-on:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:908c9b2abe0647cd54a2485117c263b0dae4a8aba8f25bc073813b09be9b1d59
+      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 60
@@ -183,7 +137,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:908c9b2abe0647cd54a2485117c263b0dae4a8aba8f25bc073813b09be9b1d59
+      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 180 # 3 hours
@@ -211,7 +165,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:908c9b2abe0647cd54a2485117c263b0dae4a8aba8f25bc073813b09be9b1d59
+      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 180 # 3 hours
@@ -223,21 +177,6 @@ jobs:
       - name: Run qualification for version ${{ matrix.version }} from the tip of the branch
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: |
-            test --config=ci --config=systest --keep_going --test_timeout=7200 --test_env=OLD_VERSION=${{ matrix.version }}
+          BAZEL_COMMAND: test --config=ci --config=systest --keep_going --test_timeout=7200 --test_env=OLD_VERSION=${{ matrix.version }}
           BAZEL_TARGETS: "//rs/tests/dre:guest_os_qualification"
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      - # runs only if previous step succeeded or failed;
-        # we avoid collecting artifacts of jobs that were cancelled
-        if: success() || failure()
-        uses: actions/upload-artifact@v4
-        name: Upload bazel bep for version ${{ matrix.version }}
-        with:
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb.gpg
-            profile.json
-          name: ${{ github.job }}-${{ matrix.version }}-bep

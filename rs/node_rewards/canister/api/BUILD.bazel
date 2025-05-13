@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:candid",
-    "@crate_index//:ic-cdk",
+    "@crate_index//:ic_cdk_0_17_1",
     "@crate_index//:serde",
 ]
 
@@ -23,7 +23,7 @@ LIB_SRCS = glob(
 rust_library(
     name = "api",
     srcs = LIB_SRCS,
-    crate_name = "node_rewards_canister_api",
+    crate_name = "ic_node_rewards_canister_api",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES,

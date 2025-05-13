@@ -11,6 +11,7 @@ import argparse
 import os
 import subprocess
 import sys
+import tempfile
 import datetime
 
 
@@ -180,9 +181,7 @@ def main():
     if limit_prefix and limit_prefix[0] == "/":
         limit_prefix = limit_prefix[1:]
 
-    tmpdir = os.getenv("ICOS_TMPDIR")
-    if not tmpdir:
-        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
+    tmpdir = tempfile.mkdtemp()
 
     if file_contexts_file:
         original_file_contexts = open(file_contexts_file, "r").read()
@@ -309,6 +308,7 @@ def main():
     with open("/tmp/build_ext4.log", "a") as f:
         print(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} end zstd", file=f, flush=True)
 
+    # tempfile cleanup is handled by proc_wrapper.sh
 
 if __name__ == "__main__":
     main()

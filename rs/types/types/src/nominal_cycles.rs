@@ -32,7 +32,7 @@ impl NominalCycles {
     }
 
     pub fn from_parts(high: u64, low: u64) -> Self {
-        Self((high as u128) << 64 | low as u128)
+        Self(((high as u128) << 64) | low as u128)
     }
 
     pub fn get(&self) -> u128 {

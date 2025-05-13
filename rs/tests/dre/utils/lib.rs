@@ -1,7 +1,6 @@
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
-    boundary_node::BoundaryNode,
     ic::{InternetComputer, Node, Subnet},
     node_software_version::NodeSoftwareVersion,
     prometheus_vm::{HasPrometheus, PrometheusVm},
@@ -66,6 +65,14 @@ pub fn setup(env: TestEnv, config: IcConfig) {
                 .for_each(|un| ic = ic.clone().with_unassigned_node(un)),
         }
     }
+    if let Some(u) = config.api_boundary_nodes {
+        match u {
+            ConfigurableApiBoundaryNodes::Simple(un) => ic = ic.clone().with_api_boundary_nodes(un),
+            ConfigurableApiBoundaryNodes::Complex(uns) => uns
+                .into_iter()
+                .for_each(|un| ic = ic.clone().with_api_boundary_node(un)),
+        }
+    }
 
     PrometheusVm::default()
         .start(&env)
@@ -77,21 +84,6 @@ pub fn setup(env: TestEnv, config: IcConfig) {
         env.topology_snapshot(),
         NnsCustomizations::default(),
     );
-
-    if let Some(boundary_nodes) = config.boundary_nodes {
-        boundary_nodes.iter().for_each(|bn| {
-            match bn {
-                ConfigurableBoundaryNode::Simple(bn) => BoundaryNode::new(bn.name.clone()),
-                ConfigurableBoundaryNode::Complex(b) => *b.to_owned(),
-            }
-            .allocate_vm(&env)
-            .expect("Allocation of BoundaryNode failed.")
-            .for_ic(&env, "")
-            .use_real_certs_and_dns()
-            .start(&env)
-            .expect("Failed to setup BoundaryNode VM")
-        })
-    }
 
     env.sync_with_prometheus();
 }
@@ -110,7 +102,7 @@ fn update_env_variables(env: &TestEnv, pairs: Vec<(String, &str)>) {
 pub struct IcConfig {
     pub subnets: Option<Vec<ConfigurableSubnet>>,
     pub unassigned_nodes: Option<ConfigurableUnassignedNodes>,
-    pub boundary_nodes: Option<Vec<ConfigurableBoundaryNode>>,
+    pub api_boundary_nodes: Option<ConfigurableApiBoundaryNodes>,
     pub initial_version: Option<String>,
 }
 
@@ -129,14 +121,9 @@ pub struct SubnetSimple {
 
 #[derive(Deserialize, Debug)]
 #[serde(untagged)]
-pub enum ConfigurableBoundaryNode {
-    Simple(BoundaryNodeSimple),
-    Complex(Box<BoundaryNode>),
-}
-
-#[derive(Deserialize, Debug)]
-pub struct BoundaryNodeSimple {
-    pub name: String,
+pub enum ConfigurableApiBoundaryNodes {
+    Simple(usize),
+    Complex(Vec<Node>),
 }
 
 #[derive(Deserialize, Debug)]

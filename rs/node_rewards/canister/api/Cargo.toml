@@ -1,5 +1,5 @@
 [package]
-name = "node-rewards-canister-api"
+name = "ic-node-rewards-canister-api"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -11,5 +11,5 @@ path = "src/lib.rs"
 
 [dependencies]
 candid = { workspace = true }
-ic-cdk = { workspace = true }
+ic-cdk = "0.17.1"
 serde = { workspace = true }

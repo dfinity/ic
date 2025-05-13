@@ -1,5 +1,5 @@
 use crate::{errors::ApiError, ledger_client::OperationOutput};
-use ic_nns_governance_api::pb::v1::{manage_neuron_response::Command, ManageNeuronResponse};
+use ic_nns_governance_api::{manage_neuron_response::Command, ManageNeuronResponse};
 
 pub fn handle_set_dissolve_timestamp(
     bytes: Vec<u8>,

@@ -18,7 +18,6 @@ system_test(
     },
     env = NNS_CANISTER_ENV | MAINNET_ENV,
     env_inherit = ["SSH_AUTH_SOCK"],
-    flaky = True,
     # TODO: replace 'experimental_system_test_colocation' with 'k8s' once everything is on k8s
     tags = [
         "experimental_system_test_colocation",
@@ -45,7 +44,6 @@ system_test_nns(
         "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
         "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
     },
-    flaky = False,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + [
         "//rs/ledger_suite/icrc1/ledger:ledger_canister",
@@ -69,7 +67,6 @@ system_test_nns(
 system_test(
     name = "create_subnet_pre_master_test",
     env = NNS_CANISTER_ENV | UNIVERSAL_CANISTER_ENV,
-    flaky = True,
     tags = [
         "k8s",
     ],
@@ -90,7 +87,6 @@ system_test(
 system_test(
     name = "nns_token_balance_test",
     env = NNS_CANISTER_ENV | UNIVERSAL_CANISTER_ENV,
-    flaky = True,
     tags = [
         "k8s",
     ],
@@ -119,7 +115,6 @@ system_test(
 system_test(
     name = "nns_cycles_minting_test",
     env = NNS_CANISTER_ENV,
-    flaky = True,
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -165,7 +160,6 @@ system_test(
 system_test(
     name = "nns_cycles_minting_multi_app_subnets_test",
     env = NNS_CANISTER_ENV,
-    flaky = True,
     tags = [
         "k8s",
     ],
@@ -196,7 +190,6 @@ system_test(
 system_test(
     name = "node_removal_from_registry_test",
     env = NNS_CANISTER_ENV,
-    flaky = True,
     tags = [
         "k8s",
     ],
@@ -222,7 +215,6 @@ system_test(
     env = dict(NNS_CANISTER_ENV.items() + {
         "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
     }.items()),
-    flaky = True,
     tags = [
         "k8s",
     ],
@@ -253,7 +245,6 @@ system_test(
 system_test(
     name = "certified_registry_test",
     env = NNS_CANISTER_ENV | UNIVERSAL_CANISTER_ENV,
-    flaky = True,
     tags = [
         "k8s",
     ],

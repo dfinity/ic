@@ -7,7 +7,7 @@ use core::{
 use dfn_core::api::time_nanos;
 use ic_base_types::CanisterId;
 use ic_canister_log::{export, GlobalBuffer, LogBuffer, LogEntry};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_ledger_core::{
     tokens::{CheckedAdd, CheckedSub},
     Tokens,
@@ -26,7 +26,6 @@ use std::{
 };
 
 pub mod binary_search;
-pub mod cmc;
 pub mod dfn_core_stable_mem_utils;
 pub mod ledger;
 pub mod ledger_validation;
@@ -168,6 +167,12 @@ impl NervousSystemError {
         NervousSystemError {
             error_message: message.to_string(),
         }
+    }
+}
+
+impl From<NervousSystemError> for String {
+    fn from(value: NervousSystemError) -> Self {
+        value.error_message
     }
 }
 

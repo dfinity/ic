@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -17,7 +17,7 @@ CANISTER_HTTP_BASE_DEPS = [
     "//rs/types/management_canister_types",
     "@crate_index//:anyhow",
     "@crate_index//:candid",
-    "@crate_index//:ic-cdk",
+    "@crate_index//:ic_cdk_0_17_1",
     "@crate_index//:slog",
 ]
 
@@ -27,9 +27,18 @@ COMMON_DEPS = [
     "//rs/registry/subnet_type",
     "//rs/tests/driver:ic-system-test-driver",
     "@crate_index//:anyhow",
+    "@crate_index//:itertools",
+    "@crate_index//:reqwest",
     "@crate_index//:slog",
     "@crate_index//:slog-async",
     "@crate_index//:slog-term",
+]
+
+HTTP_ENDPOINTS_DEPS = [
+    # Keep sorted.
+    "//rs/crypto/tree_hash",
+    "//rs/http_endpoints/test_agent",
+    "//rs/types/types",
 ]
 
 system_test_nns(
@@ -38,7 +47,6 @@ system_test_nns(
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -52,11 +60,66 @@ system_test_nns(
 )
 
 system_test_nns(
+    name = "canister_http_stress_test",
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
+    tags = [
+        "long_testasdfasdf",
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "eternal",
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
+    deps = CANISTER_HTTP_BASE_DEPS + [
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/types/types",
+        "@crate_index//:futures",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test_nns(
+    name = "canister_http_soak_test",
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "eternal",
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
+    deps = CANISTER_HTTP_BASE_DEPS + [
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/types/types",
+        "@crate_index//:futures",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test_nns(
     name = "canister_http_socks_test",
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
-    flaky = True,
     tags = [
         # TODO(NET-1710): enable on CI again when the problematic firewall rule in the IC node has been removed.
         #"long_test",
@@ -80,7 +143,6 @@ system_test_nns(
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
-    flaky = True,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -106,7 +168,6 @@ system_test_nns(
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
-    flaky = True,
     tags = [
         "k8s",
         "manual",
@@ -131,7 +192,6 @@ system_test_nns(
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
-    flaky = True,
     tags = [
         "k8s",
         "long_test",
@@ -145,8 +205,61 @@ system_test_nns(
 )
 
 system_test_nns(
+    name = "read_state_test",
+    env = UNIVERSAL_CANISTER_ENV,
+    tags = [
+        "k8s",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/limits",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/idx/wabt-tests",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "//rs/universal_canister/lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:assert_matches",
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:ic-agent",
+        "@crate_index//:leb128",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test_nns(
+    name = "nns_delegation_test",
+    tags = [
+        "long_test",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/tree_hash",
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:ic-agent",
+        "@crate_index//:leb128",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test_nns(
     name = "firewall_max_connections_test",
-    flaky = True,
+    flaky = True,  # flakiness rate of 5% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "long_test",
     ],
@@ -160,7 +273,6 @@ system_test_nns(
 
 system_test_nns(
     name = "firewall_priority_test",
-    flaky = True,
     tags = [
         "long_test",
     ],
@@ -173,15 +285,27 @@ system_test_nns(
         "//rs/registry/keys",
         "//rs/types/types",
         "@crate_index//:candid",
-        "@crate_index//:reqwest",
         "@crate_index//:url",
+    ],
+)
+
+system_test(
+    name = "http_endpoints_public_spec_test",
+    env = UNIVERSAL_CANISTER_ENV,
+    flaky = False,
+    target_compatible_with = ["@platforms//os:linux"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = COMMON_DEPS + HTTP_ENDPOINTS_DEPS + [
+        "@crate_index//:ic-agent",
+        "@crate_index//:tokio",
+        "@crate_index//:tokio-util",
     ],
 )
 
 system_test_nns(
     name = "network_large_test",
     extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
-    flaky = True,
+    flaky = True,  # flakiness rate of 20% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "k8s",
         "system_test_nightly",
@@ -199,7 +323,7 @@ system_test_nns(
 system_test_nns(
     name = "network_reliability_test",
     extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
-    flaky = True,
+    flaky = True,  # flakiness rate of 3.45% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -216,7 +340,6 @@ system_test_nns(
 
 system_test_nns(
     name = "p2p_performance_test",
-    flaky = True,
     tags = [
         "k8s",
         "manual",
@@ -233,7 +356,7 @@ system_test_nns(
 
 system_test_nns(
     name = "query_workload_long_test",
-    flaky = True,
+    flaky = True,  # flakiness rate of over 1.1% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -249,7 +372,7 @@ system_test_nns(
 
 system_test_nns(
     name = "update_workload_large_payload",
-    flaky = True,
+    flaky = True,  # flakiness rate of 1.83% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "experimental_system_test_colocation",
         "system_test_hourly",

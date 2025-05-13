@@ -10,7 +10,9 @@ use async_trait::async_trait;
 use candid::{Decode, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError, E8};
+use ic_nervous_system_canisters::cmc::CMC;
+use ic_nervous_system_canisters::ledger::IcpLedger;
+use ic_nervous_system_common::{NervousSystemError, E8};
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_sns_swap::pb::{
     v1 as sns_swap_pb,

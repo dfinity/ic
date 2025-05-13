@@ -88,11 +88,10 @@ impl Node {
 }
 
 #[derive(Clone, Debug)]
-#[allow(dead_code)]
 pub struct ApiBoundaryNode {
-    pub id: Principal,
-    pub addr: IpAddr,
-    pub port: u16,
+    pub _id: Principal,
+    pub _addr: IpAddr,
+    pub _port: u16,
 }
 
 #[derive(Clone, Debug)]
@@ -223,10 +222,10 @@ impl Snapshotter {
                 let http_endpoint = node.http.context("http endpoint not available")?;
 
                 Ok(ApiBoundaryNode {
-                    id: x.get().0,
-                    addr: IpAddr::from_str(http_endpoint.ip_addr.as_str())
+                    _id: x.get().0,
+                    _addr: IpAddr::from_str(http_endpoint.ip_addr.as_str())
                         .context("unable to parse IP address")?,
-                    port: http_endpoint.port as u16,
+                    _port: http_endpoint.port as u16,
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;

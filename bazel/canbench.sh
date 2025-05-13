@@ -30,6 +30,22 @@ if [ -s "${REPO_RESULTS_PATH}" ]; then
     echo "  ${REPO_RESULTS_PATH}" >>${CANBENCH_YML}
 fi
 
+if [ -n "${CANBENCH_INIT_ARGS_HEX:-}" ]; then
+    echo "init_args:" >>${CANBENCH_YML}
+    echo "  hex: ${CANBENCH_INIT_ARGS_HEX}" >>${CANBENCH_YML}
+fi
+
+if [ -s "${CANBENCH_STABLE_MEMORY_FILE:-}" ]; then
+    TMP_MEMORY_FILE=$(mktemp -p . XXXXXXX.mem)
+    if [[ "${CANBENCH_STABLE_MEMORY_FILE}" =~ [.]gz$ ]]; then
+        gunzip -c "${CANBENCH_STABLE_MEMORY_FILE}" >"$TMP_MEMORY_FILE"
+    else
+        cp "${CANBENCH_STABLE_MEMORY_FILE}" "$TMP_MEMORY_FILE"
+    fi
+    echo "stable_memory:" >>${CANBENCH_YML}
+    echo "  file: ${TMP_MEMORY_FILE}" >>${CANBENCH_YML}
+fi
+
 if [ $# -eq 0 ]; then
     # Runs the benchmark without updating the results file.
     ${CANBENCH_BIN} --no-runtime-integrity-check --runtime-path ${POCKET_IC_BIN}

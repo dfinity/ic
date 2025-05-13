@@ -153,12 +153,10 @@ lazy_static! {
                 seconds: Some(604_800),
             }),
 
-            neurons_fund_investment_icp: Some(pb::Tokens {
-                e8s: Some(6_100_000_000),
-            }),
             neurons_fund_participation: Some(false),
 
             // Deprecated fields must not be set.
+            neurons_fund_investment_icp: None,
             minimum_icp: None,
             maximum_icp: None,
         })

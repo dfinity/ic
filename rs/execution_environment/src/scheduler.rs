@@ -4,6 +4,7 @@ use crate::{
         as_num_instructions, as_round_instructions, execute_canister, ExecuteCanisterResult,
         ExecutionEnvironment, RoundInstructions, RoundLimits,
     },
+    ic00_permissions::Ic00MethodPermissions,
     metrics::MeasurementScope,
     util::process_responses,
 };
@@ -11,6 +12,7 @@ use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
+use ic_embedders::wasmtime_embedder::system_api::InstructionLimits;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     ChainKeyData, ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings,
@@ -33,7 +35,6 @@ use ic_replicated_state::{
     CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology, NumWasmPages,
     ReplicatedState,
 };
-use ic_system_api::InstructionLimits;
 use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::{CanisterMessage, Ingress, MessageId, Response, NO_DEADLINE},
@@ -99,7 +100,7 @@ struct SchedulerRoundLimits {
     /// the subnet before canisters are limited to their own callback quota only.
     subnet_available_callbacks: i64,
 
-    // Keeps track of the compute allocation limit.
+    /// Keeps track of the compute allocation limit.
     compute_allocation_used: u64,
 }
 
@@ -265,7 +266,12 @@ impl SchedulerImpl {
             let mut available_subnet_messages = false;
             let mut loop_detector = state.subnet_queues_loop_detector();
             while let Some(msg) = state.peek_subnet_input() {
-                if can_execute_subnet_msg(&msg, ongoing_long_install_code, &state.canister_states) {
+                if can_execute_subnet_msg(
+                    &msg,
+                    ongoing_long_install_code,
+                    &state.canister_states,
+                    round_limits,
+                ) {
                     available_subnet_messages = true;
                     break;
                 }
@@ -452,19 +458,17 @@ impl SchedulerImpl {
 
                 // TODO(EXC-1517): Improve inner loop preparation.
                 let mut subnet_round_limits = scheduler_round_limits.subnet_round_limits();
-                if !subnet_round_limits.instructions_reached() {
-                    state = self.drain_subnet_queues(
-                        state,
-                        csprng,
-                        current_round,
-                        &mut subnet_round_limits,
-                        &subnet_measurement_scope,
-                        registry_settings,
-                        replica_version,
-                        chain_key_data,
-                    );
-                    scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
-                }
+                state = self.drain_subnet_queues(
+                    state,
+                    csprng,
+                    current_round,
+                    &mut subnet_round_limits,
+                    &subnet_measurement_scope,
+                    registry_settings,
+                    replica_version,
+                    chain_key_data,
+                );
+                scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
             }
 
             let measurement_scope =
@@ -955,7 +959,7 @@ impl SchedulerImpl {
         // Delete any snapshots associated with the canister
         // that ran out of cycles.
         for canister_id in uninstalled_canisters {
-            state.canister_snapshots.delete_snapshots(canister_id);
+            state.delete_snapshots(canister_id);
         }
 
         // Send rejects to any requests that were forcibly closed while uninstalling.
@@ -1471,13 +1475,13 @@ impl Scheduler for SchedulerImpl {
             );
 
             // If we have executed a long-running install code above, then it is
-            // very likely that `round_limits.instructions <= 0` at this point.
+            // very likely that `round_limits.instructions < 0` at this point.
             // However, we would like to make progress with other subnet
             // messages that do not consume instructions. To allow that, we set
-            // the number available instructions to 1 if it is not positive.
+            // the number available instructions to 0 if it is not positive.
             subnet_round_limits.instructions = subnet_round_limits
                 .instructions
-                .max(RoundInstructions::from(1));
+                .max(RoundInstructions::from(0));
             scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
         };
 
@@ -1799,7 +1803,7 @@ fn execute_canisters_on_thread(
         }
 
         // Process all messages of the canister until
-        // - it has not tasks and input messages to execute
+        // - it has no tasks or input messages to execute
         // - or the canister is blocked by a long-running install code.
         // - or the instruction limit is reached.
         // - or the canister finishes a long execution
@@ -2168,6 +2172,7 @@ fn can_execute_subnet_msg(
     msg: &CanisterMessage,
     ongoing_long_install_code: bool,
     canister_states: &BTreeMap<CanisterId, CanisterState>,
+    round_limits: &mut RoundLimits,
 ) -> bool {
     let Some(effective_canister_id) = msg.effective_canister_id() else {
         // If there is no effective canister ID, we can execute the subnet message.
@@ -2210,55 +2215,15 @@ fn can_execute_subnet_msg(
         return false;
     }
 
-    match method {
-        // Only one install code message allowed at a time.
-        Ic00Method::InstallCode | Ic00Method::InstallChunkedCode => {
-            !ongoing_long_install_code && !effective_canister_is_aborted
-        }
-        // Deleting an aborted canister requires to stop it first.
-        Ic00Method::DeleteCanister => !effective_canister_is_aborted,
-        // Stopping an aborted canister does not generate a reply.
-        Ic00Method::StopCanister => !effective_canister_is_aborted,
-        // Loading a snapshot is similar to the install code.
-        Ic00Method::LoadCanisterSnapshot => !effective_canister_is_aborted,
-        // It's safe to allow other subnet messages on aborted canisters.
-        Ic00Method::CanisterStatus
-        | Ic00Method::CanisterInfo
-        | Ic00Method::CreateCanister
-        | Ic00Method::DepositCycles
-        | Ic00Method::HttpRequest
-        | Ic00Method::ECDSAPublicKey
-        | Ic00Method::RawRand
-        | Ic00Method::SetupInitialDKG
-        | Ic00Method::SignWithECDSA
-        | Ic00Method::StartCanister
-        | Ic00Method::UninstallCode
-        | Ic00Method::UpdateSettings
-        | Ic00Method::ComputeInitialIDkgDealings
-        | Ic00Method::ReshareChainKey
-        | Ic00Method::SchnorrPublicKey
-        | Ic00Method::SignWithSchnorr
-        | Ic00Method::VetKdPublicKey
-        | Ic00Method::VetKdDeriveEncryptedKey
-        | Ic00Method::BitcoinGetBalance
-        | Ic00Method::BitcoinGetUtxos
-        | Ic00Method::BitcoinGetBlockHeaders
-        | Ic00Method::BitcoinSendTransaction
-        | Ic00Method::BitcoinGetCurrentFeePercentiles
-        | Ic00Method::BitcoinSendTransactionInternal
-        | Ic00Method::BitcoinGetSuccessors
-        | Ic00Method::NodeMetricsHistory
-        | Ic00Method::SubnetInfo
-        | Ic00Method::FetchCanisterLogs
-        | Ic00Method::ProvisionalCreateCanisterWithCycles
-        | Ic00Method::ProvisionalTopUpCanister
-        | Ic00Method::UploadChunk
-        | Ic00Method::StoredChunks
-        | Ic00Method::ClearChunkStore
-        | Ic00Method::TakeCanisterSnapshot
-        | Ic00Method::ListCanisterSnapshots
-        | Ic00Method::DeleteCanisterSnapshot => true,
-    }
+    // Some heavy methods use round instructions.
+    let instructions_reached = round_limits.instructions_reached();
+
+    let permissions = Ic00MethodPermissions::new(method);
+    permissions.can_be_executed(
+        instructions_reached,
+        ongoing_long_install_code,
+        effective_canister_is_aborted,
+    )
 }
 
 /// Based on the type of the subnet message to execute, figure out its
@@ -2302,7 +2267,7 @@ fn get_instructions_limits_for_subnet_message(
             | SchnorrPublicKey
             | SignWithSchnorr
             | VetKdPublicKey
-            | VetKdDeriveEncryptedKey
+            | VetKdDeriveKey
             | StartCanister
             | StopCanister
             | UninstallCode
@@ -2325,7 +2290,11 @@ fn get_instructions_limits_for_subnet_message(
             | TakeCanisterSnapshot
             | LoadCanisterSnapshot
             | ListCanisterSnapshots
-            | DeleteCanisterSnapshot => default_limits,
+            | DeleteCanisterSnapshot
+            | ReadCanisterSnapshotMetadata
+            | ReadCanisterSnapshotData
+            | UploadCanisterSnapshotMetadata
+            | UploadCanisterSnapshotData => default_limits,
             InstallCode | InstallChunkedCode => InstructionLimits::new(
                 dts,
                 config.max_instructions_per_install_code,

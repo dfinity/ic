@@ -4,15 +4,17 @@ use cycles_minting_canister::{IcpXdrConversionRate, IcpXdrConversionRateCertifie
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::tokens::CheckedSub;
-use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError};
+use ic_nervous_system_canisters::cmc::CMC;
+use ic_nervous_system_canisters::ledger::IcpLedger;
+use ic_nervous_system_common::NervousSystemError;
 use ic_nervous_system_timers::test::{advance_time_for_timers, set_time_for_timers};
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
     types::UpdateIcpXdrConversionRatePayload,
 };
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID,
-    SNS_WASM_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID,
+    NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance::{
     governance::{Environment, Governance, HeapGrowthPotential, RngError},
@@ -21,14 +23,15 @@ use ic_nns_governance::{
         GovernanceError, ManageNeuron, Motion, NetworkEconomics, Neuron, NnsFunction, Proposal,
         Vote,
     },
+    use_node_provider_reward_canister,
 };
-use ic_nns_governance_api::pb::v1::{manage_neuron_response, ManageNeuronResponse};
+use ic_nns_governance_api::{manage_neuron_response, ManageNeuronResponse};
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_swap::pb::v1 as sns_swap_pb;
 use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use lazy_static::lazy_static;
-use maplit::hashmap;
+use maplit::{btreemap, hashmap};
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use registry_canister::pb::v1::NodeProvidersMonthlyXdrRewards;
@@ -48,6 +51,7 @@ use ic_nns_governance::governance::tla::{
 };
 use ic_nns_governance::governance::RandomnessGenerator;
 use ic_nns_governance::{tla_log_request, tla_log_response};
+use ic_node_rewards_canister_api::monthly_rewards::GetNodeProvidersMonthlyXdrRewardsResponse;
 
 lazy_static! {
     pub(crate) static ref SNS_ROOT_CANISTER_ID: PrincipalId = PrincipalId::new_user_test_id(213599);
@@ -564,17 +568,32 @@ impl Environment for FakeDriver {
         }
 
         if method_name == "get_node_providers_monthly_xdr_rewards" {
-            assert_eq!(PrincipalId::from(target), REGISTRY_CANISTER_ID.get());
+            if use_node_provider_reward_canister() {
+                assert_eq!(PrincipalId::from(target), NODE_REWARDS_CANISTER_ID.get());
 
-            return Ok(Encode!(&Ok::<NodeProvidersMonthlyXdrRewards, String>(
-                NodeProvidersMonthlyXdrRewards {
-                    rewards: hashmap! {
-                        PrincipalId::new_user_test_id(1).to_string() => NODE_PROVIDER_REWARD,
-                    },
-                    registry_version: Some(5)
-                }
-            ))
-            .unwrap());
+                return Ok(Encode!(&GetNodeProvidersMonthlyXdrRewardsResponse {
+                    rewards: Some(ic_node_rewards_canister_api::monthly_rewards::NodeProvidersMonthlyXdrRewards {
+                        rewards: btreemap! {
+                            PrincipalId::new_user_test_id(1).0 => NODE_PROVIDER_REWARD,
+                        },
+                        registry_version: Some(5)
+                    }),
+                    error: None
+                })
+                .unwrap());
+            } else {
+                assert_eq!(PrincipalId::from(target), REGISTRY_CANISTER_ID.get());
+
+                return Ok(Encode!(&Ok::<NodeProvidersMonthlyXdrRewards, String>(
+                    NodeProvidersMonthlyXdrRewards {
+                        rewards: hashmap! {
+                            PrincipalId::new_user_test_id(1).to_string() => NODE_PROVIDER_REWARD,
+                        },
+                        registry_version: Some(5)
+                    }
+                ))
+                .unwrap());
+            }
         }
 
         if method_name == "get_average_icp_xdr_conversion_rate" {

@@ -7,13 +7,12 @@ package(default_visibility = ["//visibility:public"])
 # WARNING! .git is the directory, not a regular file! only consume it in your rules if you know how exactly bazel works and understand implications!
 exports_files([
     ".git",
-    ".rclone.conf",
-    ".rclone-anon.conf",
     "buf.yaml",
     "clippy.toml",
     "rustfmt.toml",
     "WORKSPACE.bazel",
     "mainnet-canister-revisions.json",
+    "mainnet-icos-images.bzl",
 ])
 
 alias(

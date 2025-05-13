@@ -42,6 +42,8 @@ filegroup(
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-dummy-getrandom-for-wasm",
+    "//packages/ic-http-types",
+    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
@@ -67,9 +69,9 @@ DEPENDENCIES = [
     "//rs/nns/gtc_accounts",
     "//rs/nns/handlers/root/interface",
     "//rs/nns/sns-wasm",
+    "//rs/node_rewards/canister/api",
     "//rs/protobuf",
     "//rs/registry/canister",
-    "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/on_wire",
     "//rs/sns/init",
     "//rs/sns/root",
@@ -84,10 +86,10 @@ DEPENDENCIES = [
     "@crate_index//:comparable",
     "@crate_index//:dyn-clone",
     "@crate_index//:futures",
-    "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
+    "@crate_index//:ic_cdk_0_17_1",
     "@crate_index//:itertools",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
@@ -115,7 +117,7 @@ MACRO_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
     "@crate_index//:async-trait",
-    "@crate_index//:ic-cdk-macros",
+    "@crate_index//:ic_cdk_macros_0_17_1",
     "@crate_index//:rust_decimal_macros",
     "@crate_index//:strum_macros",
 ]
@@ -235,6 +237,21 @@ rust_canbench(
     ],
 )
 
+# Used for benchmarking compilation/instrumentation/execution changes in the
+# embedders crate.
+rust_canister(
+    name = "governance-bench-canister",
+    srcs = ["canbench/main.rs"],
+    aliases = ALIASES,
+    compile_data = ["canbench/bench.did"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":canbench/bench.did",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":governance--canbench_feature",
+    ],
+)
+
 rust_canister(
     name = "governance-canister",
     srcs = ["canister/canister.rs"],
@@ -344,6 +361,7 @@ rust_bench(
         # Keep sorted.
         ":governance",
         "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/nervous_system/canisters",
         "//rs/nervous_system/common",
         "//rs/nns/common",
         "//rs/types/base_types",

@@ -31,9 +31,6 @@ mod cycles_minting_canister_with_exchange_rate_canister;
 mod node_provider_remuneration;
 
 #[cfg(test)]
-mod governance_mem_test;
-
-#[cfg(test)]
 mod governance_get_build_metadata_test;
 
 #[cfg(test)]
@@ -100,9 +97,6 @@ mod update_unassigned_nodes_config;
 mod wait_for_quiet;
 
 #[cfg(test)]
-mod governance_migrations;
-
-#[cfg(test)]
 mod governance_neurons;
 
 #[cfg(test)]
@@ -143,3 +137,6 @@ mod api_boundary_node_queries;
 
 #[cfg(test)]
 mod upgrade_canisters_with_golden_nns_state;
+
+#[cfg(test)]
+mod create_service_nervous_system;

@@ -55,9 +55,21 @@ async fn test_deployment_with_only_nns_upgrades() {
 }
 
 #[tokio::test]
+async fn test_deployment_with_only_nns_governnace_upgrade() {
+    test_sns_deployment(vec![GOVERNANCE_CANISTER_ID], vec![]).await;
+}
+
+#[tokio::test]
+async fn test_deployment_with_only_sns_wasm_upgrade() {
+    test_sns_deployment(vec![SNS_WASM_CANISTER_ID], vec![]).await;
+}
+
+#[tokio::test]
 async fn test_deployment_with_only_sns_upgrades() {
+    let nns_canisters_to_upgrade = vec![];
+
     test_sns_deployment(
-        vec![],
+        nns_canisters_to_upgrade,
         vec![
             SnsCanisterType::Root,
             SnsCanisterType::Governance,
@@ -71,8 +83,10 @@ async fn test_deployment_with_only_sns_upgrades() {
 
 #[tokio::test]
 async fn test_deployment_with_sns_root_and_governance_upgrade() {
+    let nns_canisters_to_upgrade = vec![];
+
     test_sns_deployment(
-        vec![],
+        nns_canisters_to_upgrade,
         vec![SnsCanisterType::Root, SnsCanisterType::Governance],
     )
     .await;
@@ -80,7 +94,9 @@ async fn test_deployment_with_sns_root_and_governance_upgrade() {
 
 #[tokio::test]
 async fn test_deployment_swap_upgrade() {
-    test_sns_deployment(vec![], vec![SnsCanisterType::Swap]).await;
+    let nns_canisters_to_upgrade = vec![];
+
+    test_sns_deployment(nns_canisters_to_upgrade, vec![SnsCanisterType::Swap]).await;
 }
 
 /// Upgrade Tests

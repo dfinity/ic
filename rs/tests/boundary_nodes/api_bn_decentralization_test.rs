@@ -12,11 +12,10 @@ use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_nns_governance_api::pb::v1::NnsFunction;
+use ic_nns_governance_api::NnsFunction;
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_system_test_driver::{
     driver::{
-        boundary_node::BoundaryNodeVm,
         group::SystemTestGroup,
         test_env::TestEnv,
         test_env_api::{
@@ -45,7 +44,7 @@ use ic_agent::{
     Agent,
 };
 use ic_boundary_nodes_system_test_utils::{
-    constants::{BOUNDARY_NODE_NAME, COUNTER_CANISTER_WAT},
+    constants::COUNTER_CANISTER_WAT,
     helpers::{
         install_canisters, read_counters_on_counter_canisters, set_counters_on_counter_canisters,
     },
@@ -332,29 +331,6 @@ async fn test(env: TestEnv) {
     assert_eq!(counters, vec![2, 6]);
 }
 
-pub fn read_state_via_subnet_path_test(env: TestEnv) {
-    let log = env.logger();
-    let bn_agent = {
-        let boundary_node = env
-            .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
-            .unwrap()
-            .get_snapshot()
-            .unwrap();
-        boundary_node.build_default_agent()
-    };
-    let subnet_id: Principal = env
-        .topology_snapshot()
-        .subnets()
-        .next()
-        .expect("no subnets found")
-        .subnet_id
-        .get()
-        .0;
-    let metrics = block_on(bn_agent.read_state_subnet_metrics(subnet_id))
-        .expect("Call to read_state via /api/v2/subnet/{subnet_id}/read_state failed.");
-    info!(log, "subnet metrics are {:?}", metrics);
-}
-
 async fn remove_api_boundary_nodes_via_proposal(
     log: &slog::Logger,
     nns_node: IcNodeSnapshot,
@@ -574,8 +550,9 @@ async fn _assert_routing_via_domains(
 }
 
 fn main() -> Result<()> {
+    let setup = |env| setup_ic(env, 0);
     SystemTestGroup::new()
-        .with_setup(setup_ic)
+        .with_setup(setup)
         .add_test(systest!(decentralization_test))
         .execute_from_args()?;
     Ok(())

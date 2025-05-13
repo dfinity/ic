@@ -9,6 +9,7 @@ BASE_DEPENDENCIES = [
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/limits",
+    "//rs/nervous_system/chunks",  # TODO(NNS1-3682): Delete.
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
@@ -16,8 +17,11 @@ BASE_DEPENDENCIES = [
     "//rs/nns/common",
     "//rs/nns/governance/api",
     "//rs/nns/governance/init",
+    "//rs/nns/gtc",
     "//rs/nns/handlers/lifeline/impl:lifeline",
     "//rs/nns/sns-wasm",
+    "//rs/node_rewards/canister/api",
+    "//rs/registry/canister/api",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_json",
@@ -29,9 +33,9 @@ BASE_DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:fs_extra",
     "@crate_index//:futures",
-    "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-stable-structures",
+    "@crate_index//:ic_cdk_0_17_1",
     "@crate_index//:lazy_static",
     "@crate_index//:prometheus-parse",
     "@crate_index//:prost",
@@ -40,6 +44,7 @@ BASE_DEPENDENCIES = [
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
         "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/ic-http-types",
         "//rs/canister_client/sender",
         "//rs/config",
         "//rs/crypto",
@@ -55,7 +60,6 @@ BASE_DEPENDENCIES = [
         "//rs/registry/transport",
         "//rs/rosetta-api/tvl/xrc_mock",
         "//rs/rust_canisters/canister_test",
-        "//rs/rust_canisters/http_types",
         "//rs/rust_canisters/on_wire",
         "//rs/state_machine_tests",
         "//rs/test_utilities",
@@ -85,7 +89,6 @@ DEPENDENCIES = BASE_DEPENDENCIES + [
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
         "//rs/nns/test_utils",
-        "//rs/nns/gtc",
     ],
 })
 
@@ -105,7 +108,7 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:async-trait",
-    "@crate_index//:ic-cdk-macros",
+    "@crate_index//:ic_cdk_macros_0_17_1",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [
     ],
@@ -138,7 +141,6 @@ DEV_DATA = [
     # Keep sorted.
     "src/neurons.csv",
     ":canister-playground-canister",
-    ":governance-mem-test-canister",
     ":mem-utils-test-canister",
     ":unstoppable-canister",
     "//rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm",
@@ -154,8 +156,10 @@ DEV_DATA = [
     "//rs/nns/handlers/lifeline/impl:lifeline_canister",
     "//rs/nns/handlers/root/impl:root-canister",
     "//rs/nns/sns-wasm:sns-wasm-canister",
+    "//rs/node_rewards/canister:node-rewards-canister",
     "//rs/pocket_ic_server:pocket-ic-server",
     "//rs/registry/canister:registry-canister",
+    "//rs/registry/canister:registry-canister-test",
     "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
     "//rs/sns/governance:sns-governance-canister",
     "//rs/sns/root:sns-root-canister",
@@ -172,6 +176,7 @@ DEV_ENV = {
     "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister)",
     "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
+    "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister-test)",
     "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
     "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
     "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm)",
@@ -182,8 +187,8 @@ DEV_ENV = {
     "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
     "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
     "MEM_UTILS_TEST_CANISTER_WASM_PATH": "$(rootpath :mem-utils-test-canister)",
+    "NODE_REWARDS_CANISTER_WASM_PATH": "$(rootpath //rs/node_rewards/canister:node-rewards-canister)",
     "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
-    "GOVERNANCE_MEM_TEST_CANISTER_WASM_PATH": "$(rootpath :governance-mem-test-canister)",
     "CANISTER_PLAYGROUND_CANISTER_WASM_PATH": "$(rootpath :canister-playground-canister)",
     "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
     "UNSTOPPABLE_CANISTER_WASM_PATH": "$(rootpath :unstoppable-canister)",
@@ -210,16 +215,6 @@ rust_canister(
     name = "canister-playground-canister",
     testonly = True,
     srcs = ["test_canisters/canister_playground_canister.rs"],
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    service_file = ":test_canisters/empty.did",
-    deps = DEPENDENCIES,
-)
-
-rust_canister(
-    name = "governance-mem-test-canister",
-    testonly = True,
-    srcs = ["test_canisters/governance_mem_test_canister.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":test_canisters/empty.did",
@@ -259,7 +254,6 @@ rust_ic_test_suite_with_extra_srcs(
             # Tests that are broken out into their own rules below,
             # mostly due to long running times.
             "src/canister_playground.rs",
-            "src/governance_mem_test.rs",
             "src/upgrade_canisters_with_golden_nns_state.rs",
         ],
     ),
@@ -267,27 +261,9 @@ rust_ic_test_suite_with_extra_srcs(
     data = DEV_DATA,
     env = DEV_ENV,
     extra_srcs = ["src/lib.rs"],
-    flaky = True,
+    flaky = True,  # flakiness rate of 1.29% over the month from 2025-02-11 till 2025-03-11 for the "governance_time_warp" test
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
-)
-
-# To run this test use `bazel test --config=alltests //rs/nns/integration_tests:governance_mem_test`
-# See the .bazelrc for more configuration information.
-rust_ic_test(
-    name = "governance_mem_test",
-    size = "large",
-    srcs = [
-        "src/governance_mem_test.rs",
-        "src/lib.rs",
-    ],
-    aliases = ALIASES,
-    crate_root = "src/governance_mem_test.rs",
-    data = DEV_DATA,
-    env = DEV_ENV,
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    tags = ["manual"],
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 # To run this test use `bazel test --config=alltests //rs/nns/integration_tests:canister_playground` --test_output=all

@@ -4,8 +4,8 @@ mod benches;
 use candid::types::number::Nat;
 use candid::{candid_method, Principal};
 use ic_canister_log::{declare_log_buffer, export, log};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::stable::StableReader;
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 
 use ic_cdk::api::instruction_counter;
 #[cfg(not(feature = "canbench-rs"))]
@@ -84,6 +84,9 @@ thread_local! {
     static PRE_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
     static POST_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
     static STABLE_UPGRADE_MIGRATION_STEPS: RefCell<u64> = const { RefCell::new(0) };
+    static TOTAL_VOLUME: RefCell<f64> = const { RefCell::new(0f64) };
+    static TOTAL_VOLUME_DENOMINATOR: RefCell<f64> = const { RefCell::new(1f64) };
+    static TOTAL_VOLUME_FEE_IN_DECIMALS: RefCell<f64> = const { RefCell::new(0f64) };
 }
 
 declare_log_buffer!(name = LOG, capacity = 1000);
@@ -126,7 +129,8 @@ fn init(args: LedgerArgument) {
 
 fn init_state(init_args: InitArgs) {
     let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
-    LEDGER.with(|cell| *cell.borrow_mut() = Some(Ledger::from_init_args(&LOG, init_args, now)))
+    LEDGER.with(|cell| *cell.borrow_mut() = Some(Ledger::from_init_args(&LOG, init_args, now)));
+    initialize_total_volume();
 }
 
 // We use 8MiB buffer
@@ -172,6 +176,17 @@ const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 500_000;
 
 #[post_upgrade]
 fn post_upgrade(args: Option<LedgerArgument>) {
+    post_upgrade_internal(args);
+    if is_ready() {
+        // Set the certified data to the root hash of the ledger state, using the correct ICRC-3 labels.
+        // This cannot be called in `post_upgrade_internal`, since that is benchmarked using
+        // canbench, and canbench calls functions as non-replicated queries, and `set_certified_data`
+        // cannot be called in non-replicated queries.
+        ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    }
+}
+
+fn post_upgrade_internal(args: Option<LedgerArgument>) {
     #[cfg(feature = "canbench-rs")]
     let _p = canbench_rs::bench_scope("post_upgrade");
 
@@ -239,6 +254,8 @@ fn post_upgrade(args: Option<LedgerArgument>) {
 
     PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
 
+    initialize_total_volume();
+
     if upgrade_from_version < 3 {
         set_ledger_state(LedgerState::Migrating(LedgerField::Blocks));
         log_message(format!("Upgrading from version {upgrade_from_version} which does not store blocks in stable structures, clearing stable blocks data.").as_str());
@@ -270,6 +287,15 @@ fn post_upgrade(args: Option<LedgerArgument>) {
     let end = ic_cdk::api::instruction_counter();
     let instructions_consumed = end - start;
     POST_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = instructions_consumed);
+}
+
+fn initialize_total_volume() {
+    let denominator = 10f64.powf(Access::with_ledger(|ledger| ledger.decimals()) as f64);
+    let fee = Access::with_ledger(|ledger| ledger.transfer_fee());
+    TOTAL_VOLUME_DENOMINATOR.with(|n| *n.borrow_mut() = denominator);
+    if fee != Tokens::ZERO {
+        TOTAL_VOLUME_FEE_IN_DECIMALS.with(|n| *n.borrow_mut() = tokens_to_f64(fee) / denominator);
+    }
 }
 
 fn migrate_next_part(instruction_limit: u64) {
@@ -333,6 +359,8 @@ fn migrate_next_part(instruction_limit: u64) {
             });
         } else {
             log_message(format!("Migration completed! {msg}").as_str());
+            // Set the certified data to the root hash of the ledger state, using the correct ICRC-3 labels.
+            ic_cdk::api::set_certified_data(&ledger.root_hash());
         }
     });
 }
@@ -389,6 +417,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "ledger_stable_upgrade_migration_steps",
         stable_upgrade_migration_steps as f64,
         "Number of steps used to migrate data to stable structures.",
+    )?;
+    w.encode_counter(
+        "total_volume",
+        TOTAL_VOLUME.with(|n| *n.borrow()),
+        "Total volume of ledger transactions.",
     )?;
 
     Access::with_ledger(|ledger| {
@@ -473,6 +506,50 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         }
         Ok(())
     })
+}
+
+/// Update the total volume of token transactions. Since the total volume counter is an `f64`, it
+/// can handle large amounts, but the accuracy may suffer. Only the rate of increase of the counter
+/// should be used, since the total amount will be reset to zero each time the canister is upgraded.
+fn update_total_volume(amount: Tokens, with_fee: bool) {
+    let mut total_volume = TOTAL_VOLUME.with(|n| *n.borrow());
+    let denominator = TOTAL_VOLUME_DENOMINATOR.with(|n| *n.borrow());
+    if amount != Tokens::ZERO {
+        let amount = tokens_to_f64(amount) / denominator;
+        total_volume = f64_saturating_add(total_volume, amount);
+    }
+    if with_fee {
+        total_volume = f64_saturating_add(
+            total_volume,
+            TOTAL_VOLUME_FEE_IN_DECIMALS.with(|n| *n.borrow()),
+        );
+    }
+    TOTAL_VOLUME.with(|n| *n.borrow_mut() = total_volume);
+}
+
+fn f64_saturating_add(a: f64, b: f64) -> f64 {
+    let sum = a + b;
+
+    if sum.is_infinite() && sum.is_sign_positive() {
+        // If positive infinity, clamp to f64::MAX
+        f64::MAX
+    } else if sum.is_infinite() && sum.is_sign_negative() {
+        // If negative infinity, clamp to f64::MIN
+        f64::MIN
+    } else {
+        // Otherwise, return the regular sum
+        sum
+    }
+}
+
+#[cfg(not(feature = "u256-tokens"))]
+fn tokens_to_f64(tokens: Tokens) -> f64 {
+    tokens.to_u64() as f64
+}
+
+#[cfg(feature = "u256-tokens")]
+fn tokens_to_f64(tokens: Tokens) -> f64 {
+    tokens.to_u256().as_f64()
 }
 
 #[query(hidden = true, decoding_quota = 10000)]
@@ -685,6 +762,7 @@ fn execute_transfer_not_async(
         };
 
         let (block_idx, _) = apply_transaction(ledger, tx, now, effective_fee)?;
+        update_total_volume(amount, effective_fee != Tokens::zero());
         Ok(block_idx)
     })
 }
@@ -899,6 +977,8 @@ fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<u64, A
             })?;
         Ok(block_idx)
     })?;
+
+    update_total_volume(Tokens::zero(), true);
 
     Ok(block_idx)
 }

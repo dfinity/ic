@@ -109,6 +109,8 @@ pub struct SetupOSSettings;
 pub struct HostOSSettings {
     pub vm_memory: u32,
     pub vm_cpu: String,
+    #[serde(default = "default_vm_nr_of_vcpus")]
+    pub vm_nr_of_vcpus: u32,
     pub verbose: bool,
 }
 
@@ -123,7 +125,6 @@ pub struct GuestOSUpgradeConfig {
     #[serde(default)]
     pub peer_guestos_address: Option<Ipv6Addr>,
 }
-
 /// GuestOS-specific settings.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Default, Clone)]
 pub struct GuestOSSettings {

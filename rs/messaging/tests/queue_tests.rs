@@ -1046,7 +1046,7 @@ fn state_machine_subnet_splitting_test() {
         (&new_subnets_proxy.local_env, &new_subnets_proxy.remote_env),
         (&new_subnets_proxy.remote_env, &new_subnets_proxy.local_env),
     ] {
-        assert!(stream_snapshot(from_env, into_env).map_or(true, |(_, stream)| stream.is_empty()));
+        assert!(stream_snapshot(from_env, into_env).is_none_or(|(_, stream)| stream.is_empty()));
     }
 
     // No messages in the system must imply empty callback id trackers because of

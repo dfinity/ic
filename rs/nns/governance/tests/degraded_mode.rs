@@ -5,7 +5,9 @@ use async_trait::async_trait;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
-use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError};
+use ic_nervous_system_canisters::cmc::CMC;
+use ic_nervous_system_canisters::ledger::IcpLedger;
+use ic_nervous_system_common::NervousSystemError;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::canister_state::CanisterRandomnessGenerator;
@@ -24,7 +26,7 @@ use ic_nns_governance::{
         InstallCode, ManageNeuron, Motion, NetworkEconomics, Neuron, Proposal,
     },
 };
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     manage_neuron_response::Command as CommandResponse, ManageNeuronResponse,
 };
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
