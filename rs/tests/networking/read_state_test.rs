@@ -429,7 +429,7 @@ fn test_module_hash_and_controllers<F>(
         "module_hash".into(),
     ];
     let cert =
-        read_state_with_canister_id(&env, vec![module_hash_path.clone()], canister_id).unwrap();
+        read_state_with_canister_id(env, vec![module_hash_path.clone()], canister_id).unwrap();
     let value = lookup_value(&cert, module_hash_path);
     assert!(assert_module_hash(value));
 
@@ -439,7 +439,7 @@ fn test_module_hash_and_controllers<F>(
         "controllers".into(),
     ];
     let cert =
-        read_state_with_canister_id(&env, vec![controllers_path.clone()], canister_id).unwrap();
+        read_state_with_canister_id(env, vec![controllers_path.clone()], canister_id).unwrap();
     let value = lookup_value(&cert, controllers_path).unwrap();
     let controllers_read_state: Vec<PrincipalId> =
         serde_cbor::from_slice(value).expect("Failed to decode CBOR");
