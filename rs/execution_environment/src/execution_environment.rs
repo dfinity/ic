@@ -2258,7 +2258,7 @@ impl ExecutionEnvironment {
             .upload_chunk(
                 sender,
                 canister,
-                &args.chunk,
+                args.chunk,
                 round_limits,
                 subnet_size,
                 resource_saturation,
