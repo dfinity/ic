@@ -5,8 +5,8 @@ use crate::{
     signer::{Hsm, NodeProviderSigner, NodeSender, Signer},
     utils::http_endpoint_to_url,
 };
-use candid::{Encode, Principal};
-use ic_agent::{agent::AgentBuilder, NonceGenerator};
+use candid::Encode;
+use ic_agent::{agent::AgentBuilder, export::Principal, NonceGenerator};
 use ic_config::{
     http_handler::Config as HttpConfig,
     initial_ipv4_config::IPv4Config as InitialIPv4Config,
