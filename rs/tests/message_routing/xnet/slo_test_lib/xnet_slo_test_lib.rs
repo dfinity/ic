@@ -183,7 +183,7 @@ fn setup(env: TestEnv, config: Config) {
     assert_eq!(config.subnets, 2);
     for machine in [
         "dm1-dll45.dm1.dfinity.network",
-        "dm1-dll46.dm1.dfinity.network",
+        "dm1-dll29.dm1.dfinity.network",
     ] {
         ic = ic.add_subnet(
             Subnet::new(SubnetType::Application)
