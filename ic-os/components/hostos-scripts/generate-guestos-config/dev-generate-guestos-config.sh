@@ -127,6 +127,10 @@ EOF
   <topology sockets='2' cores='${CORE_COUNT}' threads='2'/>
   <feature policy="require" name="topoext"/>
 </cpu>
+<commandline xmlns="http://libvirt.org/schemas/domain/qemu/1.0">
+  <arg value='-cpu'/>
+  <arg value='EPYC-v4,topoext=on,l3-cache=off'/>
+</commandline>
 EOF
     fi
 
