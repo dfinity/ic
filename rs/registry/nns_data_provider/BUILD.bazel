@@ -6,7 +6,6 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/canister_client",
     "//rs/certification",
-    "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",
     "//rs/interfaces/registry",
     "//rs/nns/constants",
@@ -26,6 +25,7 @@ DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/certification/test-utils",
+    "//rs/crypto/sha2",
     "@crate_index//:futures-util",
     "@crate_index//:leb128",
     "@crate_index//:pretty_assertions",

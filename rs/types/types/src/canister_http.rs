@@ -166,8 +166,8 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
         let request: Request =
             try_from_option_field(context.request, "CanisterHttpRequestContext::request")?;
 
-        let transform_method_name = context.transform_method_name.map(From::from);
-        let transform_context = context.transform_context.map(From::from);
+        let transform_method_name = context.transform_method_name;
+        let transform_context = context.transform_context;
         let transform = match (transform_method_name, transform_context) {
             (Some(method_name), Some(context)) => Some(Transform {
                 method_name,

@@ -35,15 +35,11 @@ impl RosettaRequestHandler {
 
 /// Return the last transaction identifier if any or a pseudo one otherwise.
 fn transaction_identifier(results: &TransactionResults) -> TransactionIdentifier {
-    results
-        .last_transaction_id()
-        .cloned()
-        .map(From::from)
-        .unwrap_or_else(|| {
-            assert!(results
-                .operations
-                .iter()
-                .all(|r| r._type.is_neuron_management()));
-            TransactionIdentifier::from(transaction_id::NEURON_MANAGEMENT_PSEUDO_HASH.to_owned())
-        })
+    results.last_transaction_id().cloned().unwrap_or_else(|| {
+        assert!(results
+            .operations
+            .iter()
+            .all(|r| r._type.is_neuron_management()));
+        TransactionIdentifier::from(transaction_id::NEURON_MANAGEMENT_PSEUDO_HASH.to_owned())
+    })
 }

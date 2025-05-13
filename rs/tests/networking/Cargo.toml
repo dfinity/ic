@@ -47,6 +47,7 @@ serde_json = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
+wabt-tests = { path = "../idx/wabt-tests" }
 
 [[bin]]
 name = "ic-systest-canister-http-correctness"
@@ -75,6 +76,10 @@ path = "canister_http_test.rs"
 [[bin]]
 name = "ic-systest-canister-http-time-out"
 path = "canister_http_time_out_test.rs"
+
+[[bin]]
+name = "ic-systest-read-state-test"
+path = "read_state_test.rs"
 
 [[bin]]
 name = "ic-systest-firewall-max-connections-test"
