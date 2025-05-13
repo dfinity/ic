@@ -64,7 +64,7 @@ rust_library(
 
 rust_test(
     name = "registry_integration_test",
-    srcs = glob(["tests/registry.rs"]),
+    srcs = ["tests/registry.rs"],
     data = DEV_DATA,
     env = DEV_ENV,
     proc_macro_deps = MACRO_DEPENDENCIES,
