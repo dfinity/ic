@@ -36,6 +36,30 @@ struct ChunkInfo {
     length: u64,
 }
 
+/// Struct wrapping a validated chunk with its hash to be inserted into the chunk store.
+#[derive(Debug)]
+pub struct ValidatedChunk {
+    chunk: Vec<u8>,
+    hash: WasmChunkHash,
+}
+
+impl ValidatedChunk {
+    pub fn hash(&self) -> WasmChunkHash {
+        self.hash
+    }
+}
+
+/// The result of validating a chunk before it is inserted into the chunk store:
+/// - the chunk is validated and supposed to be inserted later (after further checks, e.g., subnet available memory);
+/// - the chunk already exists (its hash is returned to be included in the management canister call response);
+/// - a validation error.
+#[derive(Debug)]
+pub enum ChunkValidationResult {
+    Insert(ValidatedChunk),
+    AlreadyExists(WasmChunkHash),
+    ValidationError(String),
+}
+
 /// Uploaded chunks which can be assembled to create a Wasm module.
 /// It is cheap to clone because the data is stored in a [`PageMap`].
 #[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
@@ -115,40 +139,32 @@ impl WasmChunkStore {
         })
     }
 
-    /// Check all conditions for inserting this chunk are satisfied.  Invariant:
-    /// If this returns [`Ok`], then [`Self::insert_chunk`] is guaranteed to
-    /// succeed.
-    pub fn can_insert_chunk(&self, max_size: NumBytes, chunk: &[u8]) -> Result<(), String> {
-        if chunk.len() > CHUNK_SIZE as usize {
-            return Err(format!(
+    /// Check all conditions for inserting this chunk are satisfied.
+    pub fn can_insert_chunk(&self, max_size: NumBytes, chunk: Vec<u8>) -> ChunkValidationResult {
+        let hash = ic_crypto_sha2::Sha256::hash(&chunk);
+        if self.metadata.chunks.contains_key(&hash) {
+            ChunkValidationResult::AlreadyExists(hash)
+        } else if chunk.len() > CHUNK_SIZE as usize {
+            ChunkValidationResult::ValidationError(format!(
                 "Wasm chunk size {} exceeds the maximum chunk size of {}",
                 chunk.len(),
                 CHUNK_SIZE
-            ));
-        }
-        if self.metadata.chunks.len() as u64 * CHUNK_SIZE >= max_size.get() {
-            return Err(format!(
+            ))
+        } else if self.metadata.chunks.len() as u64 * CHUNK_SIZE >= max_size.get() {
+            ChunkValidationResult::ValidationError(format!(
                 "Wasm chunk store has already reached maximum capacity of {} bytes or the maximum number of entries, {}",
                 max_size, max_size.get() / CHUNK_SIZE
-            ));
+            ))
+        } else {
+            ChunkValidationResult::Insert(ValidatedChunk { chunk, hash })
         }
-        Ok(())
     }
 
-    pub fn insert_chunk(&mut self, max_size: NumBytes, chunk: &[u8]) -> Result<[u8; 32], String> {
-        let hash = ic_crypto_sha2::Sha256::hash(chunk);
-
-        // No changes needed if we already have the chunk
-        if self.metadata.chunks.contains_key(&hash) {
-            return Ok(hash);
-        }
-
-        self.can_insert_chunk(max_size, chunk)?;
-
+    pub fn insert_chunk(&mut self, validated_chunk: ValidatedChunk) {
         let index = self.metadata.chunks.len() as u64;
         let start_page = Self::page_index(index);
 
-        let mut pages = chunk.chunks(PAGE_SIZE);
+        let mut pages = validated_chunk.chunk.chunks(PAGE_SIZE);
         let last_page = pages.next_back().unwrap_or_default();
 
         // The last page in the chunk may be less than `PAGE_SIZE`, so we need
@@ -174,14 +190,12 @@ impl WasmChunkStore {
         self.metadata.size += NumOsPages::from(PAGES_PER_CHUNK);
         self.data.update(&pages_to_insert);
         self.metadata.chunks.insert(
-            hash,
+            validated_chunk.hash,
             ChunkInfo {
                 index,
-                length: chunk.len() as u64,
+                length: validated_chunk.chunk.len() as u64,
             },
         );
-
-        Ok(hash)
     }
 
     pub fn from_checkpoint(data: PageMap, metadata: WasmChunkStoreMetadata) -> Self {
@@ -256,7 +270,6 @@ impl TryFrom<pb::WasmChunkStoreMetadata> for WasmChunkStoreMetadata {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use assert_matches::assert_matches;
     use ic_config::embedders::Config;
 
     fn get_chunk_as_vec(store: &WasmChunkStore, hash: WasmChunkHash) -> Vec<u8> {
@@ -280,11 +293,25 @@ mod tests {
         Config::default().wasm_max_size
     }
 
+    fn insert_chunk(
+        store: &mut WasmChunkStore,
+        max_size: NumBytes,
+        chunk: Vec<u8>,
+    ) -> WasmChunkHash {
+        let validated_chunk = match store.can_insert_chunk(max_size, chunk) {
+            ChunkValidationResult::Insert(validated_chunk) => validated_chunk,
+            res => panic!("Unexpected chunk validation result: {:?}", res),
+        };
+        let hash = validated_chunk.hash;
+        store.insert_chunk(validated_chunk);
+        hash
+    }
+
     #[test]
     fn store_and_retrieve_chunk() {
         let mut store = WasmChunkStore::new_for_testing();
         let contents = [1, 2, 3].repeat(10_000);
-        let hash = store.insert_chunk(default_max_size(), &contents).unwrap();
+        let hash = insert_chunk(&mut store, default_max_size(), contents.clone());
         let round_trip_contents = get_chunk_as_vec(&store, hash);
         assert_eq!(contents, round_trip_contents);
     }
@@ -293,37 +320,39 @@ mod tests {
     fn store_and_retrieve_empty_chunk() {
         let mut store = WasmChunkStore::new_for_testing();
         let contents = vec![];
-        let hash = store.insert_chunk(default_max_size(), &contents).unwrap();
+        let hash = insert_chunk(&mut store, default_max_size(), contents.clone());
         let round_trip_contents = get_chunk_as_vec(&store, hash);
         assert_eq!(contents, round_trip_contents);
     }
 
     #[test]
     fn error_when_chunk_exceeds_size_limit() {
-        let mut store = WasmChunkStore::new_for_testing();
+        let store = WasmChunkStore::new_for_testing();
         let contents = vec![0xab; chunk_size().get() as usize + 1];
-        let result = store.insert_chunk(default_max_size(), &contents);
-        assert_eq!(
-            result,
-            Err("Wasm chunk size 1048577 exceeds the maximum chunk size of 1048576".to_string())
-        );
+        let result = store.can_insert_chunk(default_max_size(), contents);
+        match result {
+            ChunkValidationResult::ValidationError(err) => assert_eq!(
+                err,
+                "Wasm chunk size 1048577 exceeds the maximum chunk size of 1048576".to_string()
+            ),
+            res => panic!("Unexpected chunk validation result: {:?}", res),
+        };
     }
 
     #[test]
     fn can_insert_chunk_up_to_max_size() {
         let mut store = WasmChunkStore::new_for_testing();
         let contents = vec![0xab; chunk_size().get() as usize];
-        let result = store.insert_chunk(default_max_size(), &contents);
-        assert_matches!(result, Ok(_));
+        insert_chunk(&mut store, default_max_size(), contents);
     }
 
     #[test]
     fn can_insert_and_retrieve_multiple_chunks() {
         let mut store = WasmChunkStore::new_for_testing();
         let contents1 = vec![0xab; 1024];
-        let hash1 = store.insert_chunk(default_max_size(), &contents1).unwrap();
+        let hash1 = insert_chunk(&mut store, default_max_size(), contents1.clone());
         let contents2 = vec![0x41; 1024];
-        let hash2 = store.insert_chunk(default_max_size(), &contents2).unwrap();
+        let hash2 = insert_chunk(&mut store, default_max_size(), contents2.clone());
 
         let round_trip_contents1 = get_chunk_as_vec(&store, hash1);
         assert_eq!(contents1, round_trip_contents1);
@@ -340,75 +369,25 @@ mod tests {
     fn cant_grow_beyond_max_size() {
         let mut store = WasmChunkStore::new_for_testing();
         let contents = vec![0xab; 1024];
-        let _hash = store.insert_chunk(two_chunk_max_size(), &contents).unwrap();
+        insert_chunk(&mut store, two_chunk_max_size(), contents);
         let contents = vec![0xbc; 1024];
-        let _hash = store.insert_chunk(two_chunk_max_size(), &contents).unwrap();
+        insert_chunk(&mut store, two_chunk_max_size(), contents);
         let contents = vec![0xcd; 1024];
-        store
-            .insert_chunk(two_chunk_max_size(), &contents)
-            .unwrap_err();
+        let result = store.can_insert_chunk(two_chunk_max_size(), contents);
+        assert!(matches!(result, ChunkValidationResult::ValidationError(_)));
     }
 
     #[test]
-    fn inserting_same_chunk_doesnt_increase_size() {
-        // Store only has space for two chunks
+    fn contains_chunk() {
         let mut store = WasmChunkStore::new_for_testing();
         let contents = vec![0xab; 1024];
 
-        // We can insert the same chunk many times because it doesn't take up
-        // new space in the store since it is already present.
-        let _hash = store.insert_chunk(two_chunk_max_size(), &contents).unwrap();
-        let _hash = store.insert_chunk(two_chunk_max_size(), &contents).unwrap();
-        let _hash = store.insert_chunk(two_chunk_max_size(), &contents).unwrap();
-        let _hash = store.insert_chunk(two_chunk_max_size(), &contents).unwrap();
-    }
-
-    #[test]
-    fn inserting_existing_chunk_succeeds_when_full() {
-        // Store only has space for two chunks
-        let mut store = WasmChunkStore::new_for_testing();
-
-        // We can insert the same chunk many times because it doesn't take up
-        // new space in the store since it is already present.
-        let _hash = store
-            .insert_chunk(two_chunk_max_size(), &[0xab; 10])
-            .unwrap();
-        let _hash = store
-            .insert_chunk(two_chunk_max_size(), &[0xcd; 10])
-            .unwrap();
-        // Store is now full, but inserting the same chunk again succeeds.
-        let _hash = store
-            .insert_chunk(two_chunk_max_size(), &[0xab; 10])
-            .unwrap();
-    }
-
-    mod proptest_tests {
-        use super::*;
-        use proptest::collection::vec as prop_vec;
-        use proptest::prelude::*;
-
-        const MB: usize = 1024 * 1024;
-        const MAX_SIZE: NumBytes = NumBytes::new(20 * MB as u64);
-
-        #[test_strategy::proptest]
-        // Try chunks 2x as big as the size limit.
-        // If all inserts below the size limit succeeded, we'd expect 50 *
-        // .5 MiB = 25 MiB total. So set the max size below that to
-        // evenutally hit the size limit.
-        fn insert_result_matches_can_insert(
-            #[strategy(prop_vec((any::<u8>(), 0..2 * MB), 100))] vecs: Vec<(u8, usize)>,
-        ) {
-            let mut store = WasmChunkStore::new_for_testing();
-            for (byte, length) in vecs {
-                let chunk = vec![byte; length];
-                let check = store.can_insert_chunk(MAX_SIZE, &chunk);
-                let hash = store.insert_chunk(MAX_SIZE, &chunk);
-                if hash.is_ok() {
-                    prop_assert_eq!(check, Ok(()));
-                } else {
-                    prop_assert_eq!(check.unwrap_err(), hash.unwrap_err());
-                }
+        let hash = insert_chunk(&mut store, default_max_size(), contents.clone());
+        match store.can_insert_chunk(default_max_size(), contents) {
+            ChunkValidationResult::AlreadyExists(hash_from_validation) => {
+                assert_eq!(hash_from_validation, hash)
             }
+            res => panic!("Unexpected chunk validation result: {:?}", res),
         }
     }
 }

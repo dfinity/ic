@@ -172,7 +172,10 @@ for artifact in $(bazel cquery "${BAZEL_COMMON_ARGS[@]}" --output=files "$query"
     esac
 
     mkdir -p "$target_dir"
-    cp "$artifact" "$target_dir"
+
+    # We use -L so that find dereferences symlinks (artifacts are not
+    # necessarily duplicated in the build)
+    find -L "$artifact" -type f -exec cp {} "$target_dir" \;
 done
 
 if "$BUILD_BIN"; then
