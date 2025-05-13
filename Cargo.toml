@@ -576,7 +576,7 @@ hyper-rustls = { version = "0.27.3", default-features = false, features = [
 hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.10", features = ["full"] }
 ic-agent = { version = "0.39.2", features = ["pem", "ring"] }
-ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "22fbe5cec35b25f8e0da17b344f4bc13c25401db", features = [
+ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "eef90dd1a2f9a22a0a94ca9c40e4f266a3479522", features = [
     "acme_alpn",
 ] }
 ic-btc-interface = "0.2.2"
@@ -587,7 +587,7 @@ ic-cdk-macros = "0.18.0"
 ic-cdk-timers = "0.11.0"
 ic-certificate-verification = "3"
 ic-certification = "3"
-ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "c0d496dee8ae23764f13b5fc56efb37fcbca4568" }
+ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "f35b9b7374b6490eb6883407677fb02cb219f19e" }
 ic-http-certification = "3.0.3"
 ic-http-gateway = "0.2.0"
 ic-management-canister-types = "0.3.0"
@@ -765,7 +765,7 @@ tracing-subscriber = { version = "0.3.19", features = [
 ] }
 turmoil = "0.6.4"
 url = { version = "2.5.3", features = ["serde"] }
-uuid = { version = "1.11.0", features = ["v4", "serde"] }
+uuid = { version = "1.16.0", features = ["v4", "serde", "rng-rand"] }
 walkdir = "2.3.3"
 walrus = "0.23.3"
 wasm-encoder = { version = "0.228.0", features = ["wasmparser"] }

@@ -1,5 +1,5 @@
 {
-  "checksum": "9206228262ee01ee4260c740d975c8e547e6381304cb26dcfedc381520b9b3f1",
+  "checksum": "f27fa87c27ad77f6fb839222c7a785383de90af201e5ef4aa4481e44c29b3184",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -32870,7 +32870,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-bn-lib",
           "commitish": {
-            "Rev": "22fbe5cec35b25f8e0da17b344f4bc13c25401db"
+            "Rev": "eef90dd1a2f9a22a0a94ca9c40e4f266a3479522"
           }
         }
       },
@@ -32896,7 +32896,6 @@
         "crate_features": {
           "common": [
             "acme_alpn",
-            "rustls-acme",
             "vector"
           ],
           "selects": {}
@@ -33014,6 +33013,10 @@
             {
               "id": "rustls 0.23.27",
               "target": "rustls"
+            },
+            {
+              "id": "rustls-acme 0.13.0",
+              "target": "rustls_acme"
             },
             {
               "id": "rustls-pemfile 2.2.0",
@@ -34215,7 +34218,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-gateway",
           "commitish": {
-            "Rev": "c0d496dee8ae23764f13b5fc56efb37fcbca4568"
+            "Rev": "f35b9b7374b6490eb6883407677fb02cb219f19e"
           }
         }
       },
@@ -82785,8 +82788,10 @@
           "common": [
             "default",
             "rng",
+            "rng-rand",
             "serde",
             "std",
+            "uuid-rng-internal-lib",
             "v4",
             "v7"
           ],
@@ -82804,36 +82809,67 @@
               {
                 "id": "getrandom 0.3.1",
                 "target": "getrandom"
+              },
+              {
+                "id": "rand 0.9.0",
+                "target": "rand"
               }
             ],
             "aarch64-unknown-linux-gnu": [
               {
                 "id": "getrandom 0.3.1",
                 "target": "getrandom"
+              },
+              {
+                "id": "rand 0.9.0",
+                "target": "rand"
+              }
+            ],
+            "wasm32-unknown-unknown": [
+              {
+                "id": "uuid-rng-internal 1.16.0",
+                "target": "uuid_rng_internal",
+                "alias": "uuid_rng_internal_lib"
               }
             ],
             "wasm32-wasip1": [
               {
                 "id": "getrandom 0.3.1",
                 "target": "getrandom"
+              },
+              {
+                "id": "rand 0.9.0",
+                "target": "rand"
               }
             ],
             "x86_64-pc-windows-msvc": [
               {
                 "id": "getrandom 0.3.1",
                 "target": "getrandom"
+              },
+              {
+                "id": "rand 0.9.0",
+                "target": "rand"
               }
             ],
             "x86_64-unknown-linux-gnu": [
               {
                 "id": "getrandom 0.3.1",
                 "target": "getrandom"
+              },
+              {
+                "id": "rand 0.9.0",
+                "target": "rand"
               }
             ],
             "x86_64-unknown-nixos-gnu": [
               {
                 "id": "getrandom 0.3.1",
                 "target": "getrandom"
+              },
+              {
+                "id": "rand 0.9.0",
+                "target": "rand"
               }
             ]
           }
@@ -82847,6 +82883,60 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "uuid-rng-internal 1.16.0": {
+      "name": "uuid-rng-internal",
+      "version": "1.16.0",
+      "package_url": "https://github.com/uuid-rs/uuid",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/uuid-rng-internal/1.16.0/download",
+          "sha256": "9376f53b15ed85851c10175b5e45f0af556b4853ff3fe335080b337e3828981e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "uuid_rng_internal",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "uuid_rng_internal",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "rand"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "rand 0.9.0",
+              "target": "rand"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "1.16.0"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
     },
     "valuable 0.1.0": {
       "name": "valuable",

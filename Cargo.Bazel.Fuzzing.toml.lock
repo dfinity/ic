@@ -3516,7 +3516,7 @@ dependencies = [
  "hyper-socks2",
  "hyper-util",
  "ic-agent 0.39.3",
- "ic-bn-lib 0.1.0 (git+https://github.com/dfinity/ic-bn-lib?rev=22fbe5cec35b25f8e0da17b344f4bc13c25401db)",
+ "ic-bn-lib",
  "ic-btc-interface",
  "ic-canister-log",
  "ic-canister-sig-creation",
@@ -5695,65 +5695,7 @@ dependencies = [
 [[package]]
 name = "ic-bn-lib"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/ic-bn-lib?rev=22fbe5cec35b25f8e0da17b344f4bc13c25401db#22fbe5cec35b25f8e0da17b344f4bc13c25401db"
-dependencies = [
- "ahash 0.8.11",
- "anyhow",
- "arc-swap",
- "async-trait",
- "axum 0.8.1",
- "base64 0.22.1",
- "bytes",
- "candid",
- "chacha20poly1305",
- "clap 4.5.20",
- "derive-new",
- "fqdn 0.4.5",
- "futures",
- "futures-util",
- "hickory-proto 0.25.2",
- "hickory-resolver 0.25.2",
- "http 1.3.1",
- "http-body 1.0.1",
- "http-body-util",
- "humantime",
- "hyper 1.6.0",
- "hyper-util",
- "moka",
- "parse-size",
- "prometheus 0.14.0",
- "rand 0.8.5",
- "reqwest 0.12.12",
- "rustls 0.23.27",
- "rustls-acme",
- "rustls-pemfile 2.2.0",
- "rustls-platform-verifier",
- "scopeguard",
- "serde",
- "serde_json",
- "sha1",
- "strum 0.27.1",
- "strum_macros 0.27.1",
- "systemstat",
- "thiserror 2.0.12",
- "tokio",
- "tokio-io-timeout",
- "tokio-rustls 0.26.0",
- "tokio-util",
- "tower 0.5.2",
- "tower-service",
- "tracing",
- "url",
- "uuid",
- "webpki-root-certs",
- "x509-parser 0.17.0",
- "zeroize",
-]
-
-[[package]]
-name = "ic-bn-lib"
-version = "0.1.0"
-source = "git+https://github.com/dfinity/ic-bn-lib?rev=be42842697dd0b0a50557e508b308a25403e6851#be42842697dd0b0a50557e508b308a25403e6851"
+source = "git+https://github.com/dfinity/ic-bn-lib?rev=eef90dd1a2f9a22a0a94ca9c40e4f266a3479522#eef90dd1a2f9a22a0a94ca9c40e4f266a3479522"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -5785,6 +5727,7 @@ dependencies = [
  "rand 0.8.5",
  "reqwest 0.12.12",
  "rustls 0.23.27",
+ "rustls-acme",
  "rustls-pemfile 2.2.0",
  "rustls-platform-verifier",
  "scopeguard",
@@ -6028,7 +5971,7 @@ dependencies = [
 [[package]]
 name = "ic-gateway"
 version = "0.2.0"
-source = "git+https://github.com/dfinity/ic-gateway?rev=c0d496dee8ae23764f13b5fc56efb37fcbca4568#c0d496dee8ae23764f13b5fc56efb37fcbca4568"
+source = "git+https://github.com/dfinity/ic-gateway?rev=f35b9b7374b6490eb6883407677fb02cb219f19e#f35b9b7374b6490eb6883407677fb02cb219f19e"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -6052,7 +5995,7 @@ dependencies = [
  "http-body-util",
  "humantime",
  "ic-agent 0.40.0",
- "ic-bn-lib 0.1.0 (git+https://github.com/dfinity/ic-bn-lib?rev=be42842697dd0b0a50557e508b308a25403e6851)",
+ "ic-bn-lib",
  "ic-http-gateway 0.3.0",
  "ic-transport-types 0.40.0",
  "itertools 0.14.0",
@@ -13926,7 +13869,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "458f7a779bf54acc9f347480ac654f68407d3aab21269a6e3c9f922acd9e2da9"
 dependencies = [
  "getrandom 0.3.1",
+ "rand 0.9.0",
  "serde",
+ "uuid-rng-internal",
+]
+
+[[package]]
+name = "uuid-rng-internal"
+version = "1.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9376f53b15ed85851c10175b5e45f0af556b4853ff3fe335080b337e3828981e"
+dependencies = [
+ "rand 0.9.0",
 ]
 
 [[package]]
