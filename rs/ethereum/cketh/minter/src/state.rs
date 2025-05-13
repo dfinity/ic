@@ -598,11 +598,10 @@ impl State {
     }
 
     pub fn evm_rpc_id(&self) -> Principal {
-        self.evm_rpc_id
-            .unwrap_or_else(|| match self.ethereum_network {
-                EthereumNetwork::Mainnet => EVM_RPC_ID_MAINNET.parse().unwrap(),
-                EthereumNetwork::Sepolia => EVM_RPC_ID_STAGING.parse().unwrap(),
-            })
+        self.evm_rpc_id.unwrap_or(match self.ethereum_network {
+            EthereumNetwork::Mainnet => EVM_RPC_ID_MAINNET,
+            EthereumNetwork::Sepolia => EVM_RPC_ID_STAGING,
+        })
     }
 }
 

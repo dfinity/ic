@@ -1040,7 +1040,7 @@ fn state_equivalence() {
         skipped_blocks: Default::default(),
         last_transaction_price_estimate: None,
         ledger_suite_orchestrator_id: Some("2s5qh-7aaaa-aaaar-qadya-cai".parse().unwrap()),
-        evm_rpc_id: Some(EVM_RPC_ID_MAINNET.parse().unwrap()),
+        evm_rpc_id: Some(EVM_RPC_ID_MAINNET),
         ckerc20_tokens,
     };
 
