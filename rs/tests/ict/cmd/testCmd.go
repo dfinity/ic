@@ -41,7 +41,7 @@ func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) 
 				return err
 			}
 		}
-		command := []string{"bazel", "test", target, "--config=systest"}
+		command := []string{"bazel", "test", "--test_timeout=7000", target, "--config=systest"}
 		command = append(command, "--cache_test_results=no")
 		// Try and sync k8s dashboards
 		cmd.Println(GREEN + "Will try to sync dashboards from k8s branch: " + cfg.k8sBranch)
