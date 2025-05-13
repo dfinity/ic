@@ -68,8 +68,8 @@
     "sha256": "fd25a4e2e283b498c3be1aaf63cc9b2726264d78a12b12f43ad453ceeb575e7c"
   },
   "governance": {
-    "rev": "9dfa7825fc087deacccbed3985a502e0ec2276ff",
-    "sha256": "713333b2b4a1847c225aee3927d515f97524ffddade773e6e3027189b127b46d"
+    "rev": "5639c29fd72de16d483be7fe6dedc86e9bec3b9e",
+    "sha256": "b23b637e524abae565ac7847f5d38d3a0c4f85c2737f8910c78e48fc7813e40d"
   },
   "index": {
     "rev": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
@@ -88,8 +88,8 @@
     "sha256": "f249444b64a3ddb59b2a1a93d778488ea2bfaca9bc029901a2c906d5f18449b8"
   },
   "registry": {
-    "rev": "9dfa7825fc087deacccbed3985a502e0ec2276ff",
-    "sha256": "1d36373e3294b4cf38fa5b1361e476baf49aefbbf636eae137d6d5b0572d3b50"
+    "rev": "5639c29fd72de16d483be7fe6dedc86e9bec3b9e",
+    "sha256": "efc7a74c5309eded50e53e9d9eda77ebc47843c84012537f30548bc20c89bcd1"
   },
   "root": {
     "rev": "9dfa7825fc087deacccbed3985a502e0ec2276ff",
