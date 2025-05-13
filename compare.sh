@@ -49,7 +49,7 @@ while read min_bench; do
         case "${diff_ms}" in
             0/0) printf "?%7s%% ${name}\n" "${diff_pct}" ;;
             0*) printf "%7s%% ${name} (no change %s ns -> %s ns)\n" "${diff_pct}" \
-                "${baseline_result_ns}" "${new_result_ns}" ;;
+                ${baseline_result_ns} ${new_result_ns} ;;
             -*) printf "%7s%% ${name} (improved %s ms -> %s ms)\n" \
                 "${diff_pct}" \
                 "${baseline_result_ms}" "${new_result_ms}" ;;
