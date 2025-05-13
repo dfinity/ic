@@ -53,10 +53,10 @@ impl DerivationContext {
     pub fn new(canister_id: &[u8], context: &[u8]) -> Self {
         Self {
             canister_id: canister_id.to_vec(),
-            context: if context.len() > 0 {
-                Some(context.to_vec())
-            } else {
+            context: if context.is_empty() {
                 None
+            } else {
+                Some(context.to_vec())
             },
         }
     }
@@ -89,7 +89,7 @@ impl DerivationContext {
             DERIVATION_CANISTER_DST,
         );
 
-        let canister_key = G2Affine::from(G2Affine::generator() * &offset + master_pk);
+        let canister_key = G2Affine::from(G2Affine::generator() * offset + master_pk);
 
         if let Some(context) = &self.context {
             let context_offset = Self::hash_to_scalar(
@@ -97,11 +97,11 @@ impl DerivationContext {
                 context,
                 DERIVATION_CONTEXT_DST,
             );
-            let canister_key_with_context = G2Affine::generator() * &context_offset + canister_key;
+            let canister_key_with_context = G2Affine::generator() * context_offset + canister_key;
             offset += context_offset;
             (G2Affine::from(canister_key_with_context), offset)
         } else {
-            (G2Affine::from(canister_key), offset)
+            (canister_key, offset)
         }
     }
 }
