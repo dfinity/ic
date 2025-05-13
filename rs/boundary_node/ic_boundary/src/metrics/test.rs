@@ -111,14 +111,14 @@ fn test_remove_stale_metrics() -> Result<(), Error> {
             let node_id = m
                 .get_label()
                 .iter()
-                .find(|&v| v.get_name() == NODE_ID_LABEL)
-                .map(|x| x.get_value());
+                .find(|&v| v.name() == NODE_ID_LABEL)
+                .map(|x| x.value());
 
             let subnet_id = m
                 .get_label()
                 .iter()
-                .find(|&v| v.get_name() == SUBNET_ID_LABEL)
-                .map(|x| x.get_value());
+                .find(|&v| v.name() == SUBNET_ID_LABEL)
+                .map(|x| x.value());
 
             match (node_id, subnet_id) {
                 (Some(node_id), Some(subnet_id)) => assert!(snapshot
