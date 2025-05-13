@@ -305,7 +305,8 @@ def icos_build(
                 echo "EXTRA_BOOT_ARGS is not set in $(location :extra_boot_args)"
                 exit 1
             fi
-            sed "s/EXTRA_BOOT_ARGS/$${EXTRA_BOOT_ARGS}/" "$(location :boot_args_template)" > $@
+            echo "define(EXTRA_BOOT_ARGS, $${EXTRA_BOOT_ARGS})dnl" > m4_defs.m4
+            m4 m4_defs.m4 "$(location :boot_args_template)" > $@
         """,
         tags = ["manual"],
     )
