@@ -37,7 +37,7 @@ use ic_nervous_system_root::change_canister::{
     AddCanisterRequest, CanisterAction, ChangeCanisterRequest, StopOrStartCanisterRequest,
 };
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
-use ic_nns_constants::{memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::{
     add_or_remove_node_provider::Change,
     bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
@@ -6188,7 +6188,6 @@ impl RootCanisterClient {
         .await;
         let change_canister_request =
             ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
-                .with_memory_allocation(memory_allocation_of(GOVERNANCE_CANISTER_ID))
                 .with_wasm(wasm_module);
 
         let serialized = Encode!(&CanisterIdRecord::from(GOVERNANCE_CANISTER_ID)).unwrap();

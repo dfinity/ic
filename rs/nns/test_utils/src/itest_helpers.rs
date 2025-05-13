@@ -417,7 +417,7 @@ pub async fn install_rust_canister(
         binary_name,
         cargo_features,
         canister_init_payload,
-        memory_allocation_of(canister.canister_id()),
+        0, // DO NOT MERGE - is this equivalent to None?
     )
     .await
 }
@@ -433,7 +433,7 @@ pub async fn install_rust_canister_from_path<P: AsRef<Path>>(
         canister,
         path_to_wasm,
         canister_init_payload,
-        memory_allocation_of(canister.canister_id()),
+        0,
     )
     .await
 }
@@ -567,11 +567,7 @@ pub async fn install_lifeline_canister(
     // Use the env var if we have one, otherwise use the embedded binary.
     Wasm::from_location_specified_by_env_var("lifeline_canister", &[])
         .unwrap_or_else(|| Wasm::from_bytes(LIFELINE_CANISTER_WASM))
-        .install_with_retries_onto_canister(
-            canister,
-            None,
-            Some(memory_allocation_of(canister.canister_id())),
-        )
+        .install_with_retries_onto_canister(canister, None, None)
         .await
         .unwrap();
     println!(

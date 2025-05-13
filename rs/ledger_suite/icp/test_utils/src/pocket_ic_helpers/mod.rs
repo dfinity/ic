@@ -19,14 +19,7 @@ pub fn install_canister(
     controller: Option<PrincipalId>,
 ) {
     let controller_principal = controller.map(|c| c.0);
-    let memory_allocation = if ALL_NNS_CANISTER_IDS.contains(&&canister_id) {
-        let memory_allocation_bytes = ic_nns_constants::memory_allocation_of(canister_id);
-        Some(Nat::from(memory_allocation_bytes))
-    } else {
-        None
-    };
     let settings = Some(CanisterSettings {
-        memory_allocation,
         ..Default::default()
     });
     let canister_id = pocket_ic

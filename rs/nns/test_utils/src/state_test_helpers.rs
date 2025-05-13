@@ -27,10 +27,9 @@ use ic_nervous_system_common::{
 use ic_nns_common::init::LifelineCanisterInitPayload;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
-    canister_id_to_nns_canister_name, memory_allocation_of, CYCLES_LEDGER_CANISTER_ID,
-    CYCLES_MINTING_CANISTER_ID, CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET,
-    GENESIS_TOKEN_CANISTER_INDEX_IN_NNS_SUBNET, GOVERNANCE_CANISTER_ID,
-    GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, LEDGER_CANISTER_ID,
+    canister_id_to_nns_canister_name, CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET, GENESIS_TOKEN_CANISTER_INDEX_IN_NNS_SUBNET,
+    GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, LEDGER_CANISTER_ID,
     LEDGER_CANISTER_INDEX_IN_NNS_SUBNET, LIFELINE_CANISTER_ID,
     LIFELINE_CANISTER_INDEX_IN_NNS_SUBNET, NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET,
     REGISTRY_CANISTER_ID, REGISTRY_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
@@ -654,7 +653,6 @@ fn setup_nns_canister_at_position(
         vec![ROOT_CANISTER_ID.get()]
     };
     let args = CanisterSettingsArgsBuilder::new()
-        .with_memory_allocation(memory_allocation_of(CanisterId::from_u64(index)))
         .with_controllers(controllers)
         .build();
 
@@ -2295,7 +2293,6 @@ pub fn setup_subnet_rental_canister_with_correct_canister_id(state_machine: &Sta
         Some(
             CanisterSettingsArgsBuilder::new()
                 .with_controllers(vec![ROOT_CANISTER_ID.get()])
-                .with_memory_allocation(memory_allocation_of(SUBNET_RENTAL_CANISTER_ID))
                 .build(),
         ),
     );

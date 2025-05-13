@@ -167,17 +167,6 @@ pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 17] = [
     &NODE_REWARDS_CANISTER_ID,
 ];
 
-// The memory allocation for the ledger, governance and registry canisters
-// (4GiB)
-const NNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES: u64 = 4 * 1024 * 1024 * 1024;
-
-// We preallocate 10GB stable memory for NNS governance so that pre_upgrade never fails trying to
-// grow stable memory, and we might also have some other data occupying stable memory.
-const NNS_GOVERNANCE_CANISTER_MEMORY_ALLOCATION_IN_BYTES: u64 = 10 * 1024 * 1024 * 1024;
-
-// The default memory allocation to set for the remaining NNS canister (1GiB)
-const NNS_DEFAULT_CANISTER_MEMORY_ALLOCATION_IN_BYTES: u64 = 1024 * 1024 * 1024;
-
 /// The current value is 4 GiB, s.t. the SNS governance canister never hits the soft memory limit.
 /// This mitigates the risk that an SNS Governance canister runs out of memory and proposals cannot
 /// be passed anymore.
@@ -185,17 +174,6 @@ pub const DEFAULT_SNS_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT: u64 = 1 << 32;
 
 /// This value is 3GiB, which will leave a comfortable buffer in the situation when a canister runs out of memory
 pub const DEFAULT_SNS_NON_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT: u64 = 3 * (1 << 30);
-
-/// Returns the memory allocation of the given nns canister.
-pub fn memory_allocation_of(canister_id: CanisterId) -> u64 {
-    if canister_id == GOVERNANCE_CANISTER_ID {
-        NNS_GOVERNANCE_CANISTER_MEMORY_ALLOCATION_IN_BYTES
-    } else if [LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID].contains(&canister_id) {
-        NNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES
-    } else {
-        NNS_DEFAULT_CANISTER_MEMORY_ALLOCATION_IN_BYTES
-    }
-}
 
 pub fn canister_id_to_nns_canister_name(canister_id: CanisterId) -> String {
     let id_to_name = btreemap! { // TODO: Make this const. btreemap does not support this.

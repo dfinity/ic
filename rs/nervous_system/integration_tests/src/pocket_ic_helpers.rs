@@ -157,14 +157,7 @@ pub async fn install_canister_with_controllers(
 ) {
     let controllers = controllers.into_iter().map(|c| c.0).collect::<Vec<_>>();
     let controller_principal = controllers.first().cloned();
-    let memory_allocation = if ALL_NNS_CANISTER_IDS.contains(&&canister_id) {
-        let memory_allocation_bytes = ic_nns_constants::memory_allocation_of(canister_id);
-        Some(Nat::from(memory_allocation_bytes))
-    } else {
-        None
-    };
     let settings = Some(CanisterSettings {
-        memory_allocation,
         controllers: Some(controllers),
         ..Default::default()
     });
