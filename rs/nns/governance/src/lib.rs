@@ -204,7 +204,7 @@ thread_local! {
     static DISABLE_NF_FUND_PROPOSALS: Cell<bool>
         = const { Cell::new(cfg!(not(any(feature = "canbench-rs", feature = "test")))) };
 
-    static IS_DISBURSE_MATURITY_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+    static IS_DISBURSE_MATURITY_ENABLED: Cell<bool> = const { Cell::new(true) };
 
     static USE_NODE_PROVIDER_REWARD_CANISTER: Cell<bool> = const { Cell::new(true) };
 }
@@ -428,11 +428,6 @@ pub fn encode_metrics(
         "governance_locked_neurons_total",
         governance.heap_data.in_flight_commands.len() as f64,
         "Total number of neurons that have been locked for disburse operations.",
-    )?;
-    w.encode_gauge(
-        "governance_heap_neuron_count",
-        governance.neuron_store.heap_neuron_store_len() as f64,
-        "The number of neurons in NNS Governance canister's heap memory.",
     )?;
     w.encode_gauge(
         "governance_stable_memory_neuron_count",

@@ -107,7 +107,7 @@ fn init_logging(level: Level) -> std::io::Result<WorkerGuard> {
             || module.starts_with("rosetta_core")
     }
     let rosetta_filter =
-        FilterFn::new(|metadata| metadata.module_path().map_or(true, rosetta_filter));
+        FilterFn::new(|metadata| metadata.module_path().is_none_or(rosetta_filter));
     let stdout_filter = LevelFilter::from_level(level).and(rosetta_filter);
     let stdout_layer = tracing_subscriber::fmt::Layer::default()
         .with_target(false) // instead include file and lines in the next lines
