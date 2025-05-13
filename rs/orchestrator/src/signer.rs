@@ -16,23 +16,6 @@ type SignBytes = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>
 type SignMessageId =
     Arc<dyn Fn(&MessageId) -> Result<Vec<u8>, Box<dyn std::error::Error>> + Send + Sync>;
 
-pub struct NodeProviderSigner {
-    identity: Secp256k1Identity,
-}
-
-impl NodeProviderSigner {
-    pub fn new(path: &Path) -> Option<Self> {
-        let identity = Secp256k1Identity::from_pem_file(path).ok()?;
-        Some(Self { identity })
-    }
-}
-
-impl Signer for NodeProviderSigner {
-    fn get(&self) -> UtilityCommandResult<Box<dyn Identity>> {
-        Ok(Box::new(self.identity.clone()))
-    }
-}
-
 pub struct Hsm;
 
 impl Signer for Hsm {
@@ -50,19 +33,19 @@ impl Signer for Hsm {
             UtilityCommand::try_to_detach_hsm();
             res
         }
-        Ok(Box::new(HsmIdentity {
+        Ok(Box::new(ExternalHsmSender {
             pub_key,
             sign: Arc::new(get_sign_command),
         }))
     }
 }
 
-pub struct HsmIdentity {
+struct ExternalHsmSender {
     pub_key: Vec<u8>,
     sign: SignBytes,
 }
 
-impl Identity for HsmIdentity {
+impl Identity for ExternalHsmSender {
     fn sender(&self) -> Result<Principal, String> {
         Ok(Principal::self_authenticating(self.pub_key.as_slice()))
     }
@@ -84,12 +67,29 @@ impl Identity for HsmIdentity {
     }
 }
 
-pub struct NodeIdentity {
+pub struct NodeProviderSigner {
+    identity: Secp256k1Identity,
+}
+
+impl NodeProviderSigner {
+    pub fn new(path: &Path) -> Option<Self> {
+        let identity = Secp256k1Identity::from_pem_file(path).ok()?;
+        Some(Self { identity })
+    }
+}
+
+impl Signer for NodeProviderSigner {
+    fn get(&self) -> UtilityCommandResult<Box<dyn Identity>> {
+        Ok(Box::new(self.identity.clone()))
+    }
+}
+
+pub struct NodeSender {
     pub_key: Vec<u8>,
     sign: SignMessageId,
 }
 
-impl NodeIdentity {
+impl NodeSender {
     pub fn new(mut pub_key: Vec<u8>, sign: SignMessageId) -> Self {
         // The constant is the prefix of the DER encoding of the ASN.1
         // SubjectPublicKeyInfo data structure. It can be read as follows:
@@ -111,7 +111,7 @@ impl NodeIdentity {
     }
 }
 
-impl Identity for NodeIdentity {
+impl Identity for NodeSender {
     fn sender(&self) -> Result<Principal, String> {
         Ok(Principal::self_authenticating(self.pub_key.as_slice()))
     }

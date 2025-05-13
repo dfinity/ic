@@ -2,7 +2,7 @@
 use crate::{
     error::{OrchestratorError, OrchestratorResult},
     metrics::{KeyRotationStatus, OrchestratorMetrics},
-    signer::{Hsm, NodeIdentity, NodeProviderSigner, Signer},
+    signer::{Hsm, NodeProviderSigner, NodeSender, Signer},
     utils::http_endpoint_to_url,
 };
 use candid::{Encode, Principal};
@@ -442,7 +442,7 @@ impl NodeRegistration {
             })
         };
 
-        let signer = NodeIdentity::new(node_pub_key.key_value, Arc::new(sign_cmd));
+        let signer = NodeSender::new(node_pub_key.key_value, Arc::new(sign_cmd));
         let agent = Agent::builder()
             .with_url(nns_url)
             .with_identity(signer)
