@@ -1,6 +1,5 @@
 use crate::endpoints::CandidBlockTag;
 use crate::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent};
-use crate::eth_rpc::BlockTag;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::init::InitArg;
 use crate::lifecycle::upgrade::UpgradeArg;
@@ -284,7 +283,6 @@ fn received_erc20_event() -> ReceivedErc20Event {
 }
 
 mod upgrade {
-    use crate::eth_rpc::BlockTag;
     use crate::lifecycle::upgrade::UpgradeArg;
     use crate::lifecycle::EthereumNetwork;
     use crate::numeric::{TransactionNonce, Wei};
@@ -390,7 +388,7 @@ mod upgrade {
                 .contract_address(LogScrapingId::EthDepositWithoutSubaccount),
             Some(&Address::from_str("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34").unwrap())
         );
-        assert_eq!(state.ethereum_block_height, BlockTag::Safe);
+        assert_eq!(state.ethereum_block_height, CandidBlockTag::Safe);
     }
 }
 
@@ -997,7 +995,7 @@ fn state_equivalence() {
             chain_code: vec![2; 32],
         }),
         cketh_minimum_withdrawal_amount: Wei::new(1_000_000_000_000_000),
-        ethereum_block_height: BlockTag::Finalized,
+        ethereum_block_height: CandidBlockTag::Finalized,
         first_scraped_block_number: BlockNumber::new(1_000_001),
         last_observed_block_number: Some(BlockNumber::new(2_000_000)),
         events_to_mint: btreemap! {
@@ -1100,7 +1098,7 @@ fn state_equivalence() {
     assert_ne!(
         Ok(()),
         state.is_equivalent_to(&State {
-            ethereum_block_height: BlockTag::Latest,
+            ethereum_block_height: CandidBlockTag::Latest,
             ..state.clone()
         }),
         "changing essential fields should break equivalence",

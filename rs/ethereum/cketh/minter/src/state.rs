@@ -1,7 +1,7 @@
 use crate::address::ecdsa_public_key_to_address;
+use crate::endpoints::CandidBlockTag;
 use crate::erc20::{CkErc20Token, CkTokenSymbol};
 use crate::eth_logs::{EventSource, ReceivedEvent};
-use crate::eth_rpc::BlockTag;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::upgrade::UpgradeArg;
 use crate::lifecycle::EthereumNetwork;
@@ -58,7 +58,7 @@ pub struct State {
     pub log_scrapings: LogScrapings,
     pub ecdsa_public_key: Option<EcdsaPublicKeyResponse>,
     pub cketh_minimum_withdrawal_amount: Wei,
-    pub ethereum_block_height: BlockTag,
+    pub ethereum_block_height: CandidBlockTag,
     pub first_scraped_block_number: BlockNumber,
     pub last_observed_block_number: Option<BlockNumber>,
     pub events_to_mint: BTreeMap<EventSource, ReceivedEvent>,
@@ -445,8 +445,8 @@ impl State {
         self.ethereum_network
     }
 
-    pub const fn ethereum_block_height(&self) -> BlockTag {
-        self.ethereum_block_height
+    pub fn ethereum_block_height(&self) -> CandidBlockTag {
+        self.ethereum_block_height.clone()
     }
 
     fn upgrade(&mut self, upgrade_args: UpgradeArg) -> Result<(), InvalidStateError> {
@@ -528,7 +528,7 @@ impl State {
             );
         }
         if let Some(block_height) = ethereum_block_height {
-            self.ethereum_block_height = block_height.into();
+            self.ethereum_block_height = block_height;
         }
         if let Some(orchestrator_id) = ledger_suite_orchestrator_id {
             self.ledger_suite_orchestrator_id = Some(orchestrator_id);

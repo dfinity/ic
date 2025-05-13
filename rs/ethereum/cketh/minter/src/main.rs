@@ -241,7 +241,7 @@ async fn get_minter_info() -> MinterInfo {
             deposit_with_subaccount_helper_contract_address,
             supported_ckerc20_tokens,
             minimum_withdrawal_amount: Some(s.cketh_minimum_withdrawal_amount.into()),
-            ethereum_block_height: Some(s.ethereum_block_height.into()),
+            ethereum_block_height: Some(s.ethereum_block_height.clone()),
             last_observed_block_number: s.last_observed_block_number.map(|n| n.into()),
             eth_balance: Some(s.eth_balance.eth_balance().into()),
             last_gas_fee_estimate: s.last_transaction_price_estimate.as_ref().map(

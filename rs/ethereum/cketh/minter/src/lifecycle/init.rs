@@ -1,5 +1,4 @@
 use crate::endpoints::CandidBlockTag;
-use crate::eth_rpc::BlockTag;
 use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{BlockNumber, TransactionNonce, Wei};
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
@@ -85,7 +84,7 @@ impl TryFrom<InitArg> for State {
             eth_transactions: EthTransactions::new(initial_nonce),
             cketh_ledger_id: ledger_id,
             cketh_minimum_withdrawal_amount: minimum_withdrawal_amount,
-            ethereum_block_height: BlockTag::from(ethereum_block_height),
+            ethereum_block_height,
             first_scraped_block_number,
             last_observed_block_number: None,
             events_to_mint: Default::default(),

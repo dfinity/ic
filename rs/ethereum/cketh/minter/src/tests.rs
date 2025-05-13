@@ -1,29 +1,5 @@
 use crate::address::ecdsa_public_key_to_address;
 
-#[test]
-fn deserialize_block_spec() {
-    use crate::eth_rpc::*;
-    use crate::numeric::BlockNumber;
-
-    assert_eq!(
-        BlockSpec::Number(BlockNumber::new(0xffff)),
-        serde_json::from_str("\"0xffff\"").unwrap()
-    );
-
-    assert_eq!(
-        BlockSpec::Tag(BlockTag::Latest),
-        serde_json::from_str("\"latest\"").unwrap()
-    );
-    assert_eq!(
-        BlockSpec::Tag(BlockTag::Safe),
-        serde_json::from_str("\"safe\"").unwrap()
-    );
-    assert_eq!(
-        BlockSpec::Tag(BlockTag::Finalized),
-        serde_json::from_str("\"finalized\"").unwrap()
-    );
-}
-
 mod eth_get_logs {
     use crate::numeric::{BlockNumber, LogIndex};
     use ic_ethereum_types::Address;
@@ -229,7 +205,7 @@ mod rlp_encoding {
 }
 
 mod eth_fee_history {
-    use crate::eth_rpc::{into_nat, BlockSpec, BlockTag, FeeHistory, FeeHistoryParams, Quantity};
+    use crate::eth_rpc::{into_nat, FeeHistory, Quantity};
     use crate::numeric::{BlockNumber, WeiPerGas};
 
     #[test]
@@ -237,17 +213,6 @@ mod eth_fee_history {
         let quantity = Quantity::new(0x4b85a0fcd); //20_272_779_213 wei
         let nat = into_nat(quantity);
         assert_eq!(nat.to_string(), "20_272_779_213")
-    }
-
-    #[test]
-    fn should_serialize_fee_history_params_as_tuple() {
-        let params = FeeHistoryParams {
-            block_count: Quantity::from(5_u8),
-            highest_block: BlockSpec::Tag(BlockTag::Finalized),
-            reward_percentiles: vec![10, 20, 30],
-        };
-        let serialized_params = serde_json::to_string(&params).unwrap();
-        assert_eq!(serialized_params, r#"["0x5","finalized",[10,20,30]]"#);
     }
 
     #[test]

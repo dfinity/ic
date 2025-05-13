@@ -155,18 +155,18 @@ pub async fn scrape_logs() {
 pub async fn update_last_observed_block_number() -> Option<BlockNumber> {
     let block_height = read_state(State::ethereum_block_height);
     match read_state(EthRpcClient::from_state)
-        .eth_get_block_by_number(block_height)
+        .eth_get_block_by_number(BlockTag::from(block_height.clone()))
         .await
     {
         Ok(latest_block) => {
-            let block_number = Some(latest_block.number);
+            let block_number = Some(BlockNumber::from(latest_block.number));
             mutate_state(|s| s.last_observed_block_number = block_number);
             block_number
         }
         Err(e) => {
             log!(
                 INFO,
-                "Failed to get the latest {block_height} block number: {e:?}"
+                "Failed to get the latest {block_height:?} block number: {e:?}"
             );
             read_state(|s| s.last_observed_block_number)
         }
