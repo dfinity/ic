@@ -10625,6 +10625,7 @@ dependencies = [
  "parking_lot",
  "procfs 0.9.1",
  "prometheus",
+ "protobuf",
  "slog",
  "tokio",
  "tokio-metrics",

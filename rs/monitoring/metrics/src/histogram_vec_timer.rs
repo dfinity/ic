@@ -83,6 +83,7 @@ impl<const LABEL_COUNT: usize> Drop for HistogramVecTimer<'_, LABEL_COUNT> {
 #[cfg(test)]
 mod tests {
     use prometheus::core::Metric;
+    use protobuf::MessageField;
 
     use super::*;
     use crate::{buckets::decimal_buckets, MetricsRegistry};
@@ -177,7 +178,7 @@ mod tests {
     fn get_proto_histogram(
         hist: &HistogramVec,
         label_values: &[&str],
-    ) -> prometheus::proto::Histogram {
+    ) -> MessageField<prometheus::proto::Histogram> {
         let metric = hist.with_label_values(label_values).metric();
         metric.get_histogram().clone()
     }

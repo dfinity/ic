@@ -1,5 +1,5 @@
 {
-  "checksum": "345249d548adb48a1c2e0263edc95c94106aa9f581d01369924f503a2fcea9d3",
+  "checksum": "13de999b187fd51e9a87b0dd576f04471cbd718765e80626464ebf62694701e3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -4077,6 +4077,161 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "async-http-codec 0.8.0": {
+      "name": "async-http-codec",
+      "version": "0.8.0",
+      "package_url": null,
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/async-http-codec/0.8.0/download",
+          "sha256": "096146020b08dbc4587685b0730a7ba905625af13c65f8028035cdfd69573c91"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "async_http_codec",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "async_http_codec",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "anyhow 1.0.93",
+              "target": "anyhow"
+            },
+            {
+              "id": "futures 0.3.31",
+              "target": "futures"
+            },
+            {
+              "id": "http 1.3.1",
+              "target": "http"
+            },
+            {
+              "id": "httparse 1.10.1",
+              "target": "httparse"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.8.0"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "async-io 2.4.0": {
+      "name": "async-io",
+      "version": "2.4.0",
+      "package_url": "https://github.com/smol-rs/async-io",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/async-io/2.4.0/download",
+          "sha256": "43a2b323ccce0a1d90b449fd71f2a06ca7faa7c54c2751f06c9bd851fc061059"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "async_io",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "async_io",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "async-lock 3.3.0",
+              "target": "async_lock"
+            },
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "concurrent-queue 2.5.0",
+              "target": "concurrent_queue"
+            },
+            {
+              "id": "futures-io 0.3.31",
+              "target": "futures_io"
+            },
+            {
+              "id": "futures-lite 2.0.0",
+              "target": "futures_lite"
+            },
+            {
+              "id": "parking 2.1.0",
+              "target": "parking"
+            },
+            {
+              "id": "polling 3.7.4",
+              "target": "polling"
+            },
+            {
+              "id": "rustix 0.38.44",
+              "target": "rustix"
+            },
+            {
+              "id": "slab 0.4.8",
+              "target": "slab"
+            },
+            {
+              "id": "tracing 0.1.41",
+              "target": "tracing"
+            }
+          ],
+          "selects": {
+            "cfg(windows)": [
+              {
+                "id": "windows-sys 0.59.0",
+                "target": "windows_sys"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "version": "2.4.0"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "async-lock 3.3.0": {
       "name": "async-lock",
       "version": "3.3.0",
@@ -4132,6 +4287,62 @@
         },
         "edition": "2021",
         "version": "3.3.0"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "async-net 2.0.0": {
+      "name": "async-net",
+      "version": "2.0.0",
+      "package_url": "https://github.com/smol-rs/async-net",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/async-net/2.0.0/download",
+          "sha256": "b948000fad4873c1c9339d60f2623323a0cfd3816e5181033c6a5cb68b2accf7"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "async_net",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "async_net",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "async-io 2.4.0",
+              "target": "async_io"
+            },
+            {
+              "id": "blocking 1.6.1",
+              "target": "blocking"
+            },
+            {
+              "id": "futures-lite 2.0.0",
+              "target": "futures_lite"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "2.0.0"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -4426,6 +4637,52 @@
       ],
       "license_file": "LICENSE"
     },
+    "async-task 4.7.1": {
+      "name": "async-task",
+      "version": "4.7.1",
+      "package_url": "https://github.com/smol-rs/async-task",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/async-task/4.7.1/download",
+          "sha256": "8b75356056920673b02621b35afd0f7dda9306d03c79a30f5c56c44cf256e3de"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "async_task",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "async_task",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "4.7.1"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "async-trait 0.1.83": {
       "name": "async-trait",
       "version": "0.1.83",
@@ -4522,6 +4779,136 @@
         },
         "edition": "2018",
         "version": "0.3.1"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "async-web-client 0.6.2": {
+      "name": "async-web-client",
+      "version": "0.6.2",
+      "package_url": "https://github.com/FlorianUekermann/async-web-client",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/async-web-client/0.6.2/download",
+          "sha256": "37381fb4fad3cd9b579628c21a58f528ef029d1f072d10f16cb9431aa2236d29"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "async_web_client",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "async_web_client",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "ring",
+            "tls12"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "async-http-codec 0.8.0",
+              "target": "async_http_codec"
+            },
+            {
+              "id": "async-net 2.0.0",
+              "target": "async_net"
+            },
+            {
+              "id": "futures 0.3.31",
+              "target": "futures"
+            },
+            {
+              "id": "futures-rustls 0.26.0",
+              "target": "futures_rustls"
+            },
+            {
+              "id": "http 1.3.1",
+              "target": "http"
+            },
+            {
+              "id": "lazy_static 1.5.0",
+              "target": "lazy_static"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "rustls-pki-types 1.12.0",
+              "target": "rustls_pki_types"
+            },
+            {
+              "id": "thiserror 1.0.68",
+              "target": "thiserror"
+            },
+            {
+              "id": "webpki-roots 0.26.8",
+              "target": "webpki_roots"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.6.2"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "atomic-waker 1.1.2": {
+      "name": "atomic-waker",
+      "version": "1.1.2",
+      "package_url": "https://github.com/smol-rs/atomic-waker",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/atomic-waker/1.1.2/download",
+          "sha256": "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "atomic_waker",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "atomic_waker",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "1.1.2"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -8678,24 +9065,10 @@
           "**"
         ],
         "crate_features": {
-          "common": [],
-          "selects": {
-            "aarch64-apple-darwin": [
-              "std"
-            ],
-            "aarch64-unknown-linux-gnu": [
-              "std"
-            ],
-            "wasm32-wasip1": [
-              "std"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "std"
-            ],
-            "x86_64-unknown-nixos-gnu": [
-              "std"
-            ]
-          }
+          "common": [
+            "std"
+          ],
+          "selects": {}
         },
         "edition": "2021",
         "version": "2.9.0"
@@ -8968,6 +9341,70 @@
         "version": "0.10.4"
       },
       "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "blocking 1.6.1": {
+      "name": "blocking",
+      "version": "1.6.1",
+      "package_url": "https://github.com/smol-rs/blocking",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/blocking/1.6.1/download",
+          "sha256": "703f41c54fc768e63e091340b424302bb1c29ef4aa0c7f10fe849dfb114d29ea"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "blocking",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "blocking",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "async-channel 2.3.1",
+              "target": "async_channel"
+            },
+            {
+              "id": "async-task 4.7.1",
+              "target": "async_task"
+            },
+            {
+              "id": "futures-io 0.3.31",
+              "target": "futures_io"
+            },
+            {
+              "id": "futures-lite 2.0.0",
+              "target": "futures_lite"
+            },
+            {
+              "id": "piper 0.2.4",
+              "target": "piper"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.6.1"
+      },
+      "license": "Apache-2.0 OR MIT",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -26607,6 +27044,92 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "futures-lite 2.0.0": {
+      "name": "futures-lite",
+      "version": "2.0.0",
+      "package_url": "https://github.com/smol-rs/futures-lite",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/futures-lite/2.0.0/download",
+          "sha256": "9c1155db57329dca6d018b61e76b1488ce9a2e5e44028cac420a5898f4fcef63"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "futures_lite",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "futures_lite",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "default",
+            "fastrand",
+            "futures-io",
+            "memchr",
+            "parking",
+            "race",
+            "std",
+            "waker-fn"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "fastrand 2.1.0",
+              "target": "fastrand"
+            },
+            {
+              "id": "futures-core 0.3.31",
+              "target": "futures_core"
+            },
+            {
+              "id": "futures-io 0.3.31",
+              "target": "futures_io"
+            },
+            {
+              "id": "memchr 2.7.4",
+              "target": "memchr"
+            },
+            {
+              "id": "parking 2.1.0",
+              "target": "parking"
+            },
+            {
+              "id": "pin-project-lite 0.2.13",
+              "target": "pin_project_lite"
+            },
+            {
+              "id": "waker-fn 1.2.0",
+              "target": "waker_fn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "2.0.0"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "futures-macro 0.3.31": {
       "name": "futures-macro",
       "version": "0.3.31",
@@ -26657,6 +27180,70 @@
         "version": "0.3.31"
       },
       "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "futures-rustls 0.26.0": {
+      "name": "futures-rustls",
+      "version": "0.26.0",
+      "package_url": "https://github.com/quininer/futures-rustls",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/futures-rustls/0.26.0/download",
+          "sha256": "a8f2f12607f92c69b12ed746fabf9ca4f5c482cba46679c1a75b874ed7c26adb"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "futures_rustls",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "futures_rustls",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "ring",
+            "tls12"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "futures-io 0.3.31",
+              "target": "futures_io"
+            },
+            {
+              "id": "rustls 0.23.27",
+              "target": "rustls"
+            },
+            {
+              "id": "rustls-pki-types 1.12.0",
+              "target": "rustls_pki_types",
+              "alias": "pki_types"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.26.0"
+      },
+      "license": "MIT/Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -29015,6 +29602,45 @@
         ],
         "edition": "2021",
         "version": "0.3.9"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "hermit-abi 0.4.0": {
+      "name": "hermit-abi",
+      "version": "0.4.0",
+      "package_url": "https://github.com/hermit-os/hermit-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/hermit-abi/0.4.0/download",
+          "sha256": "fbf6a919d6cf397374f7dfeeea91d974c7c0a7221d0d0f4f20d859d329e53fcc"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "hermit_abi",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "hermit_abi",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "version": "0.4.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -32269,6 +32895,7 @@
         ],
         "crate_features": {
           "common": [
+            "acme_alpn",
             "vector"
           ],
           "selects": {}
@@ -42828,10 +43455,14 @@
             "elf",
             "errno",
             "general",
+            "if_ether",
             "ioctl",
+            "net",
+            "netlink",
             "no_std",
             "prctl",
-            "system"
+            "system",
+            "xdp"
           ],
           "selects": {}
         },
@@ -53955,6 +54586,70 @@
       ],
       "license_file": "LICENSE"
     },
+    "piper 0.2.4": {
+      "name": "piper",
+      "version": "0.2.4",
+      "package_url": "https://github.com/smol-rs/piper",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/piper/0.2.4/download",
+          "sha256": "96c8c490f422ef9a4efd2cb5b42b76c8613d7e7dfc1caf667b8a3350a5acc066"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "piper",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "piper",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "futures-io",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "atomic-waker 1.1.2",
+              "target": "atomic_waker"
+            },
+            {
+              "id": "fastrand 2.1.0",
+              "target": "fastrand"
+            },
+            {
+              "id": "futures-io 0.3.31",
+              "target": "futures_io"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.2.4"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "pkcs1 0.7.5": {
       "name": "pkcs1",
       "version": "0.7.5",
@@ -54524,6 +55219,85 @@
         "Apache-2.0"
       ],
       "license_file": "LICENSE"
+    },
+    "polling 3.7.4": {
+      "name": "polling",
+      "version": "3.7.4",
+      "package_url": "https://github.com/smol-rs/polling",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/polling/3.7.4/download",
+          "sha256": "a604568c3202727d1507653cb121dbd627a58684eb09a820fd746bee38b4442f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "polling",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "polling",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "tracing 0.1.41",
+              "target": "tracing"
+            }
+          ],
+          "selects": {
+            "cfg(any(unix, target_os = \"fuchsia\", target_os = \"vxworks\"))": [
+              {
+                "id": "rustix 0.38.44",
+                "target": "rustix"
+              }
+            ],
+            "cfg(target_os = \"hermit\")": [
+              {
+                "id": "hermit-abi 0.4.0",
+                "target": "hermit_abi"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "concurrent-queue 2.5.0",
+                "target": "concurrent_queue"
+              },
+              {
+                "id": "pin-project-lite 0.2.13",
+                "target": "pin_project_lite"
+              },
+              {
+                "id": "windows-sys 0.59.0",
+                "target": "windows_sys"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "version": "3.7.4"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
     },
     "poly1305 0.8.0": {
       "name": "poly1305",
@@ -64473,31 +65247,61 @@
         "crate_features": {
           "common": [
             "alloc",
-            "default",
             "fs",
             "libc-extra-traits",
-            "std",
-            "termios",
-            "use-libc-auxv"
+            "net",
+            "std"
           ],
           "selects": {
+            "aarch64-apple-darwin": [
+              "default",
+              "event",
+              "pipe",
+              "process",
+              "termios",
+              "time",
+              "use-libc-auxv"
+            ],
             "aarch64-unknown-linux-gnu": [
+              "default",
+              "event",
               "param",
+              "pipe",
               "process",
               "system",
-              "thread"
+              "termios",
+              "thread",
+              "time",
+              "use-libc-auxv"
+            ],
+            "wasm32-wasip1": [
+              "default",
+              "termios",
+              "use-libc-auxv"
             ],
             "x86_64-unknown-linux-gnu": [
+              "default",
+              "event",
               "param",
+              "pipe",
               "process",
               "system",
-              "thread"
+              "termios",
+              "thread",
+              "time",
+              "use-libc-auxv"
             ],
             "x86_64-unknown-nixos-gnu": [
+              "default",
+              "event",
               "param",
+              "pipe",
               "process",
               "system",
-              "thread"
+              "termios",
+              "thread",
+              "time",
+              "use-libc-auxv"
             ]
           }
         },
@@ -64558,6 +65362,17 @@
                 "target": "windows_sys"
               }
             ],
+            "wasm32-unknown-unknown": [
+              {
+                "id": "errno 0.3.10",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.170",
+                "target": "libc"
+              }
+            ],
             "wasm32-wasip1": [
               {
                 "id": "errno 0.3.10",
@@ -64567,6 +65382,13 @@
               {
                 "id": "libc 0.2.170",
                 "target": "libc"
+              }
+            ],
+            "x86_64-pc-windows-msvc": [
+              {
+                "id": "errno 0.3.10",
+                "target": "errno",
+                "alias": "libc_errno"
               }
             ]
           }
@@ -65084,6 +65906,134 @@
       "license_ids": [
         "Apache-2.0",
         "ISC",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "rustls-acme 0.13.0": {
+      "name": "rustls-acme",
+      "version": "0.13.0",
+      "package_url": "https://github.com/FlorianUekermann/rustls-acme",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/rustls-acme/0.13.0/download",
+          "sha256": "230907c587e32543b0b0b4a41db582dd9acd29775862d400dd799904dedcf4f8"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rustls_acme",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "rustls_acme",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "ring",
+            "tls12"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "async-io 2.4.0",
+              "target": "async_io"
+            },
+            {
+              "id": "async-web-client 0.6.2",
+              "target": "async_web_client"
+            },
+            {
+              "id": "base64 0.22.1",
+              "target": "base64"
+            },
+            {
+              "id": "blocking 1.6.1",
+              "target": "blocking"
+            },
+            {
+              "id": "chrono 0.4.38",
+              "target": "chrono"
+            },
+            {
+              "id": "futures 0.3.31",
+              "target": "futures"
+            },
+            {
+              "id": "futures-rustls 0.26.0",
+              "target": "futures_rustls"
+            },
+            {
+              "id": "http 1.3.1",
+              "target": "http"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "pem 3.0.3",
+              "target": "pem"
+            },
+            {
+              "id": "rcgen 0.13.1",
+              "target": "rcgen"
+            },
+            {
+              "id": "ring 0.17.7",
+              "target": "ring"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            },
+            {
+              "id": "serde_json 1.0.132",
+              "target": "serde_json"
+            },
+            {
+              "id": "thiserror 2.0.12",
+              "target": "thiserror"
+            },
+            {
+              "id": "webpki-roots 0.26.8",
+              "target": "webpki_roots"
+            },
+            {
+              "id": "x509-parser 0.16.0",
+              "target": "x509_parser"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "async-trait 0.1.83",
+              "target": "async_trait"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.13.0"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
@@ -82292,6 +83242,45 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "waker-fn 1.2.0": {
+      "name": "waker-fn",
+      "version": "1.2.0",
+      "package_url": "https://github.com/smol-rs/waker-fn",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/waker-fn/1.2.0/download",
+          "sha256": "317211a0dc0ceedd78fb2ca9a44aed3d7b9b26f81870d485c07122b4350673b7"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "waker_fn",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "waker_fn",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "1.2.0"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "walkdir 2.5.0": {
       "name": "walkdir",
       "version": "2.5.0",
@@ -86578,9 +87567,15 @@
         ],
         "crate_features": {
           "common": [
+            "Wdk",
+            "Wdk_Foundation",
+            "Wdk_Storage",
+            "Wdk_Storage_FileSystem",
             "Win32",
             "Win32_Foundation",
             "Win32_Globalization",
+            "Win32_NetworkManagement",
+            "Win32_NetworkManagement_IpHelper",
             "Win32_Networking",
             "Win32_Networking_WinSock",
             "Win32_Security",
@@ -86595,9 +87590,11 @@
             "Win32_System_Diagnostics_Debug",
             "Win32_System_IO",
             "Win32_System_Kernel",
+            "Win32_System_LibraryLoader",
             "Win32_System_Memory",
             "Win32_System_SystemInformation",
             "Win32_System_Threading",
+            "Win32_System_WindowsProgramming",
             "Win32_UI",
             "Win32_UI_Shell",
             "default"
@@ -90761,6 +91758,12 @@
     ],
     "cfg(any(target_vendor = \"apple\"))": [
       "aarch64-apple-darwin"
+    ],
+    "cfg(any(unix, target_os = \"fuchsia\", target_os = \"vxworks\"))": [
+      "aarch64-apple-darwin",
+      "aarch64-unknown-linux-gnu",
+      "x86_64-unknown-linux-gnu",
+      "x86_64-unknown-nixos-gnu"
     ],
     "cfg(any(unix, target_os = \"redox\"))": [
       "aarch64-apple-darwin",
