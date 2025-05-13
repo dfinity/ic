@@ -141,8 +141,8 @@ pub struct MasterPublicKey {
 impl MasterPublicKey {
     const BYTES: usize = G2AFFINE_BYTES;
 
-    /// TODO(CRP-2797) add
-    /// pub fn production_key(key_id: SomeEnum) -> Self
+    // TODO(CRP-2797) add
+    // pub fn production_key(key_id: SomeEnum) -> Self
 
     /// Deserializes a (derived) public key.
     ///
