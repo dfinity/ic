@@ -178,10 +178,27 @@ jobs:
           execlogs-artifact-name: execlogs-bazel-test-all
           diff-only: ${{ needs.config.outputs.diff_only }}
           release-build: ${{ needs.config.outputs.release_build }}
-          BAZEL_COMMAND: test --config=ci ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
-          BAZEL_TARGETS: //...
+          BAZEL_COMMAND: build --config=ci ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
+          BAZEL_TARGETS: //publish/binaries:bundle
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      - name: Upload artifacts
+        uses: ./.github/actions/bazel
+        # if: ${{ needs.config.outputs.release_build }}
+        with:
+          run: |
+            set -euo pipefail
+
+            for uploadable in $(bazel query "attr(tags, '\\buploadable\\b', //...)"); do
+              echo "Uploading: $uploadable"
+              bundle=$(bazel cquery "$uploadable" --output=files)
+              if ! [ -d "$bundle" ]; then
+                echo "expected $bundle to exist, check if it was built"
+                exit 1
+              fi
+
+              ls "$bundle/**/*"
+            done
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
     needs: [config]
