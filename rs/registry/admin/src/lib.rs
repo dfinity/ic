@@ -7,6 +7,23 @@ use prost::Message;
 use std::path::Path;
 use std::str::FromStr;
 
+/// Populates a directory so that `ic-admin update-registry-local-store` can
+/// populate it with data from the Registry canister.
+///
+/// # Arguments
+///
+/// `path` - Should be an empty directory, or a path that doesn't exist yet.
+/// (Otherwise, behavior is not defined.)
+///
+/// `root_public_key` - For an example of a possible value that could be used
+/// here, see [this code].
+///
+/// [this code]: https://github.com/dfinity/ic/pull/5029/files#r2086304186
+///
+/// # Misc Remarks
+///
+/// Currently, this is only used by test(s). Regardless, calling this from
+/// non-test code is also acceptable.
 pub fn initialize_registry_local_store(path: &Path, root_public_key: Vec<u8>) {
     let local_store = LocalStoreImpl::new(path);
 
