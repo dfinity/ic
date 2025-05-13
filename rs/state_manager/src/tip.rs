@@ -75,7 +75,7 @@ pub(crate) enum TipRequest {
     /// Create checkpoint from the current tip for the given height.
     /// Sends the created checkpoint and the ReplicatedState switched to the
     /// checkpoint or error into the sender.
-    /// Serializes protos to the newly created checkpoint aftger sending to `sender`
+    /// Serializes protos to the newly created checkpoint after sending to `sender`
     /// State: latest_checkpoint_state = tip_folder_state
     ///        tip_folder_state = default
     TipToCheckpoint {
@@ -231,7 +231,7 @@ pub(crate) fn spawn_tip_thread(
                                         .expect("Failed to send TipToCheckpoint result");
                                     if let Some(checkpoint_readwrite) = result.checkpoint_readwrite
                                     {
-                                        let _timer = request_timer(&metrics, "serialize_to_tip");
+                                        let _timer = request_timer(&metrics, "serialize_protos_to_tip");
                                         serialize_protos_to_tip(
                                             &result.state,
                                             &checkpoint_readwrite,
