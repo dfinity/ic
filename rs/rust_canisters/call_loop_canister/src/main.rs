@@ -4,6 +4,8 @@ use ic_cdk_macros::update;
 use ic_principal::Principal;
 use std::future::IntoFuture;
 
+const MB: usize = 1024 * 1024;
+
 /// Takes the total number of bytes to send in a single message (in megabytes).
 #[candid_method(update)]
 #[update]
@@ -14,7 +16,7 @@ async fn send_calls(megabytes_to_send: u32) {
             slice[..4].copy_from_slice(&i.to_le_bytes());
             let canister = Principal::from_slice(&slice);
             Call::unbounded_wait(canister, "")
-                .with_raw_args(&[5; 1024 * 1024])
+                .with_raw_args(&[5; MB])
                 .into_future()
         })
         .collect::<Vec<_>>();

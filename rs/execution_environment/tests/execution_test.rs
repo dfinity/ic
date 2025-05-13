@@ -3122,7 +3122,14 @@ fn test_canister_liquid_cycle_balance() {
 #[test]
 fn large_ipc_call_fails() {
     let wasm = canister_test::Project::cargo_bin_maybe_from_env("call_loop_canister", &[]);
-    let env = StateMachine::new();
+    let subnet_config = SubnetConfig::new(SubnetType::System);
+    let instruction_limit = subnet_config.scheduler_config.max_instructions_per_message;
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            subnet_config,
+            HypervisorConfig::default(),
+        )))
+        .build();
 
     let canister_id = env
         .install_canister_with_cycles(wasm.bytes(), vec![], None, INITIAL_CYCLES_BALANCE)
@@ -3133,7 +3140,8 @@ fn large_ipc_call_fails() {
     let err = env
         .execute_ingress(canister_id, "send_calls", Encode!(&(2 * 1024_u32)).unwrap())
         .unwrap_err();
-    err.assert_contains(ErrorCode::CanisterInstructionLimitExceeded, "Error from Canister \
-        rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister exceeded the limit of 50000000000 instructions for single message \
-        execution.");
+    let expected_error = format!("Error from Canister \
+        rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister exceeded the limit of {instruction_limit} instructions \
+        for single message execution.");
+    err.assert_contains(ErrorCode::CanisterInstructionLimitExceeded, &expected_error);
 }
