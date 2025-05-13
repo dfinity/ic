@@ -45,7 +45,10 @@ use ic_types::{
     canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_REQUEST_BYTES},
     time::UNIX_EPOCH,
 };
-use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse, UnvalidatedCanisterHttpRequestArgs};
+use proxy_canister::{
+    RemoteHttpRequest, RemoteHttpResponse, ResponseWithRefundedCycles,
+    UnvalidatedCanisterHttpRequestArgs,
+};
 use serde_json::Value;
 use std::{collections::HashSet, convert::TryFrom};
 
@@ -58,6 +61,7 @@ const MAX_HEADER_VALUE_LENGTH: usize = 8 * 1024;
 const TOTAL_HEADER_NAME_AND_VALUE_LENGTH: usize = 48 * 1024;
 const HTTP_HEADERS_MAX_NUMBER: usize = 64;
 const RESPONSE_OVERHEAD: u64 = 256;
+const HTTP_REQUEST_CYCLE_PAYMENT: u64 = 500_000_000_000;
 
 // httpbin-rs returns 5 headers in addition to the requested headers:
 // content-type, access-control-allow-origin, access-control-allow-credentials, date, content-length.
@@ -194,7 +198,7 @@ fn test_enforce_https(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let response = block_on(submit_outcall(
+    let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -211,7 +215,7 @@ fn test_enforce_https(env: TestEnv) {
                 }),
                 max_response_bytes: None,
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -230,7 +234,7 @@ fn test_transform_function_is_executed(env: TestEnv) {
 
     let transform_context = "transform_context".as_bytes().to_vec();
 
-    let response = block_on(submit_outcall(
+    let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -247,7 +251,7 @@ fn test_transform_function_is_executed(env: TestEnv) {
                 }),
                 max_response_bytes: None,
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -272,7 +276,7 @@ fn test_non_existent_transform_function(env: TestEnv) {
 
     let transform_context = "transform_context".as_bytes().to_vec();
 
-    let response = block_on(submit_outcall(
+    let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -289,7 +293,7 @@ fn test_non_existent_transform_function(env: TestEnv) {
                 }),
                 max_response_bytes: None,
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -300,13 +304,17 @@ fn test_non_existent_transform_function(env: TestEnv) {
             ..
         })
     );
+    assert_matches!(
+        refunded_cycles,
+        RefundedCycles::Cycles(refunded) if refunded < HTTP_REQUEST_CYCLE_PAYMENT
+    );
 }
 
 fn test_composite_transform_function_is_executed(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let response = block_on(submit_outcall(
+    let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -323,7 +331,7 @@ fn test_composite_transform_function_is_executed(env: TestEnv) {
                 }),
                 max_response_bytes: None,
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -340,7 +348,7 @@ fn test_no_cycles_attached(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let response = block_on(submit_outcall(
+    let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -390,7 +398,7 @@ fn test_max_possible_request_size(env: TestEnv) {
 
     let body = vec![0; MAX_REQUEST_BYTES_LIMIT - header_list_size];
 
-    let response = block_on(submit_outcall(
+    let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -407,7 +415,7 @@ fn test_max_possible_request_size(env: TestEnv) {
                 }),
                 max_response_bytes: None,
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -434,7 +442,7 @@ fn test_max_possible_request_size_exceeded(env: TestEnv) {
 
     let body = vec![0; MAX_REQUEST_BYTES_LIMIT - header_list_size + 1];
 
-    let response = block_on(submit_outcall(
+    let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -451,7 +459,7 @@ fn test_max_possible_request_size_exceeded(env: TestEnv) {
                 }),
                 max_response_bytes: None,
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -461,6 +469,10 @@ fn test_max_possible_request_size_exceeded(env: TestEnv) {
             reject_code: RejectCode::CanisterReject,
             ..
         })
+    );
+    assert_matches!(
+        refunded_cycles,
+        RefundedCycles::Cycles(refunded) if refunded == HTTP_REQUEST_CYCLE_PAYMENT
     );
 }
 
@@ -483,7 +495,7 @@ fn test_2mb_response_cycle_for_rejection_path(env: TestEnv) {
         max_response_bytes: None,
     };
 
-    let response = block_on(async move {
+    let (response, _) = block_on(async move {
         submit_outcall(
             &handlers,
             RemoteHttpRequest {
@@ -526,7 +538,7 @@ fn test_4096_max_response_cycle_case_1(env: TestEnv) {
         max_response_bytes: Some(16384),
     };
 
-    let response = block_on(async move {
+    let (response, _) = block_on(async move {
         submit_outcall(
             &handlers,
             RemoteHttpRequest {
@@ -563,7 +575,7 @@ fn test_4096_max_response_cycle_case_2(env: TestEnv) {
         max_response_bytes: Some(16384),
     };
 
-    let response = block_on(async move {
+    let (response, _) = block_on(async move {
         submit_outcall(
             &handlers,
             RemoteHttpRequest {
@@ -590,7 +602,7 @@ fn test_max_response_bytes_2_mb_returns_ok(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let response = block_on(submit_outcall(
+    let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -607,7 +619,7 @@ fn test_max_response_bytes_2_mb_returns_ok(env: TestEnv) {
                 }),
                 max_response_bytes: Some((MAX_MAX_RESPONSE_BYTES) as u64),
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -618,7 +630,7 @@ fn test_max_response_bytes_too_large(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let response = block_on(submit_outcall(
+    let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -635,7 +647,7 @@ fn test_max_response_bytes_too_large(env: TestEnv) {
                 }),
                 max_response_bytes: Some((MAX_MAX_RESPONSE_BYTES + 1) as u64),
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -646,13 +658,17 @@ fn test_max_response_bytes_too_large(env: TestEnv) {
             ..
         })
     );
+    assert_matches!(
+        refunded_cycles,
+        RefundedCycles::Cycles(refunded) if refunded == HTTP_REQUEST_CYCLE_PAYMENT
+    );
 }
 
 fn test_transform_that_bloats_on_the_2mb_limit(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let response = block_on(submit_outcall(
+    let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -669,7 +685,7 @@ fn test_transform_that_bloats_on_the_2mb_limit(env: TestEnv) {
                 }),
                 max_response_bytes: None,
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -680,7 +696,7 @@ fn test_transform_that_bloats_response_above_2mb_limit(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let response = block_on(submit_outcall(
+    let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -697,7 +713,7 @@ fn test_transform_that_bloats_response_above_2mb_limit(env: TestEnv) {
                 }),
                 max_response_bytes: None,
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -708,13 +724,17 @@ fn test_transform_that_bloats_response_above_2mb_limit(env: TestEnv) {
             ..
         })
     );
+    assert_matches!(
+        refunded_cycles,
+        RefundedCycles::Cycles(refunded) if refunded < HTTP_REQUEST_CYCLE_PAYMENT
+    );
 }
 
 fn test_post_request(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let response = block_on(submit_outcall(
+    let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -734,7 +754,7 @@ fn test_post_request(env: TestEnv) {
                 }),
                 max_response_bytes: None,
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -746,7 +766,7 @@ fn test_http_endpoint_response_is_within_limits_with_custom_max_response_bytes(e
     let webserver_ipv6 = get_universal_vm_address(&env);
     let max_response_bytes: u64 = 1_000_000;
 
-    let response = block_on(submit_outcall(
+    let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -768,10 +788,10 @@ fn test_http_endpoint_response_is_within_limits_with_custom_max_response_bytes(e
                 // a 256B leeway is decent..
                 max_response_bytes: Some(max_response_bytes + RESPONSE_OVERHEAD),
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
-    ))
-    .expect("Request is successful.");
+    ));
+    let response = response.expect("Request is successful.");
 
     assert_matches!(&response, RemoteHttpResponse { status: 200, .. });
 }
@@ -781,7 +801,7 @@ fn test_http_endpoint_response_is_too_large_with_custom_max_response_bytes(env: 
     let webserver_ipv6 = get_universal_vm_address(&env);
     let max_response_bytes = 1_000_000;
 
-    let response = block_on(submit_outcall(
+    let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -801,7 +821,7 @@ fn test_http_endpoint_response_is_too_large_with_custom_max_response_bytes(env: 
                 }),
                 max_response_bytes: Some(max_response_bytes),
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -818,7 +838,7 @@ fn test_http_endpoint_response_is_within_limits_with_default_max_response_bytes(
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let response = block_on(submit_outcall(
+    let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -840,10 +860,10 @@ fn test_http_endpoint_response_is_within_limits_with_default_max_response_bytes(
                 }),
                 max_response_bytes: None,
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
-    ))
-    .expect("Request is successful.");
+    ));
+    let response = response.expect("Request is successful.");
 
     assert_matches!(&response, RemoteHttpResponse { status: 200, .. });
 }
@@ -852,7 +872,7 @@ fn test_http_endpoint_response_is_too_large_with_default_max_response_bytes(env:
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let response = block_on(submit_outcall(
+    let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -872,7 +892,7 @@ fn test_http_endpoint_response_is_too_large_with_default_max_response_bytes(env:
                 }),
                 max_response_bytes: None,
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -889,7 +909,7 @@ fn test_http_endpoint_with_delayed_response_is_rejected(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let response = block_on(submit_outcall(
+    let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -906,7 +926,7 @@ fn test_http_endpoint_with_delayed_response_is_rejected(env: TestEnv) {
                 }),
                 max_response_bytes: None,
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -924,7 +944,7 @@ fn test_that_redirects_are_not_followed(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let response = block_on(submit_outcall(
+    let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -941,7 +961,7 @@ fn test_that_redirects_are_not_followed(env: TestEnv) {
                 }),
                 max_response_bytes: None,
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -953,7 +973,7 @@ fn test_http_calls_to_ic_fails(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let response = block_on(submit_outcall(
+    let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -970,7 +990,7 @@ fn test_http_calls_to_ic_fails(env: TestEnv) {
                 }),
                 max_response_bytes: None,
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -987,11 +1007,10 @@ fn test_http_calls_to_ic_fails(env: TestEnv) {
     );
 }
 
-// ---- BEGIN SPEC COMPLIANCE TESTS ----
 fn test_invalid_domain_name(env: TestEnv) {
     let handlers = Handlers::new(&env);
 
-    let response = block_on(submit_outcall(
+    let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -1008,7 +1027,7 @@ fn test_invalid_domain_name(env: TestEnv) {
                 }),
                 max_response_bytes: None,
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -1019,12 +1038,16 @@ fn test_invalid_domain_name(env: TestEnv) {
             ..
         })
     );
+    assert_matches!(
+        refunded_cycles,
+        RefundedCycles::Cycles(refunded) if refunded < HTTP_REQUEST_CYCLE_PAYMENT
+    );
 }
 
 fn test_invalid_ip(env: TestEnv) {
     let handlers = Handlers::new(&env);
 
-    let response = block_on(submit_outcall(
+    let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -1041,7 +1064,7 @@ fn test_invalid_ip(env: TestEnv) {
                 }),
                 max_response_bytes: None,
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -1051,6 +1074,10 @@ fn test_invalid_ip(env: TestEnv) {
             reject_code: RejectCode::SysTransient,
             ..
         })
+    );
+    assert_matches!(
+        refunded_cycles,
+        RefundedCycles::Cycles(refunded) if refunded < HTTP_REQUEST_CYCLE_PAYMENT
     );
 }
 
@@ -1076,16 +1103,20 @@ fn test_get_hello_world_call(env: TestEnv) {
         max_response_bytes: Some(max_response_bytes),
     };
 
-    let response = block_on(submit_outcall(
+    let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: request.clone(),
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
-    ))
-    .expect("Request is successful.");
+    ));
+    let response = response.expect("Request is successful.");
 
     assert_matches!(&response, RemoteHttpResponse {body, status: 200, ..} if body == expected_body);
+    assert_matches!(
+        refunded_cycles,
+        RefundedCycles::Cycles(refunded) if refunded < HTTP_REQUEST_CYCLE_PAYMENT
+    );
     assert_http_response(&response);
 }
 
@@ -1114,16 +1145,20 @@ fn test_request_header_total_size_within_the_48_kib_limit(env: TestEnv) {
         max_response_bytes: None,
     };
 
-    let response = block_on(submit_outcall(
+    let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: request.clone(),
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
-    ))
-    .expect("Request succeeds.");
+    ));
+    let response = response.expect("Request succeeds.");
 
     assert_matches!(&response, RemoteHttpResponse { status: 200, .. });
+    assert_matches!(
+        refunded_cycles,
+        RefundedCycles::Cycles(refunded) if refunded < HTTP_REQUEST_CYCLE_PAYMENT
+    );
 }
 
 fn test_request_header_total_size_over_the_48_kib_limit(env: TestEnv) {
@@ -1156,11 +1191,11 @@ fn test_request_header_total_size_over_the_48_kib_limit(env: TestEnv) {
         max_response_bytes: None,
     };
 
-    let response = block_on(submit_outcall(
+    let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: request.clone(),
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -1170,6 +1205,10 @@ fn test_request_header_total_size_over_the_48_kib_limit(env: TestEnv) {
             reject_code: RejectCode::CanisterReject,
             ..
         })
+    );
+    assert_matches!(
+        refunded_cycles,
+        RefundedCycles::Cycles(refunded) if refunded == HTTP_REQUEST_CYCLE_PAYMENT
     );
 }
 
@@ -1185,7 +1224,7 @@ fn test_response_header_total_size_within_the_48_kib_limit(env: TestEnv) {
         webserver_ipv6, MAX_HEADER_NAME_LENGTH, TOTAL_HEADER_NAME_AND_VALUE_LENGTH,
     );
 
-    let response = block_on(submit_outcall(
+    let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -1196,11 +1235,15 @@ fn test_response_header_total_size_within_the_48_kib_limit(env: TestEnv) {
                 transform: None,
                 max_response_bytes: Some(DEFAULT_MAX_RESPONSE_BYTES),
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
     assert_matches!(&response, Ok(RemoteHttpResponse { status: 200, .. }));
+    assert_matches!(
+        refunded_cycles,
+        RefundedCycles::Cycles(refunded) if refunded < HTTP_REQUEST_CYCLE_PAYMENT
+    );
 
     // Compute exactly the size of the response headers to account also for overhead.
     let total_header_size: usize = response
@@ -1232,7 +1275,7 @@ fn test_response_header_total_size_over_the_48_kib_limit(env: TestEnv) {
         TOTAL_HEADER_NAME_AND_VALUE_LENGTH + 1,
     );
 
-    let response = block_on(submit_outcall(
+    let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -1243,7 +1286,7 @@ fn test_response_header_total_size_over_the_48_kib_limit(env: TestEnv) {
                 transform: None,
                 max_response_bytes: Some(DEFAULT_MAX_RESPONSE_BYTES),
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -1253,6 +1296,10 @@ fn test_response_header_total_size_over_the_48_kib_limit(env: TestEnv) {
             reject_code: RejectCode::SysFatal,
             ..
         })
+    );
+    assert_matches!(
+        refunded_cycles,
+        RefundedCycles::Cycles(refunded) if refunded < HTTP_REQUEST_CYCLE_PAYMENT
     );
 }
 
@@ -1274,14 +1321,14 @@ fn test_request_header_name_and_value_within_limits(env: TestEnv) {
         max_response_bytes: None,
     };
 
-    let response = block_on(submit_outcall(
+    let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: request.clone(),
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
-    ))
-    .expect("Request succeeds.");
+    ));
+    let response = response.expect("Request succeeds.");
 
     assert_matches!(&response, RemoteHttpResponse { status: 200, .. });
 }
@@ -1304,11 +1351,11 @@ fn test_request_header_name_too_long(env: TestEnv) {
         max_response_bytes: None,
     };
 
-    let response = block_on(submit_outcall(
+    let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: request.clone(),
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -1318,6 +1365,10 @@ fn test_request_header_name_too_long(env: TestEnv) {
             reject_code: RejectCode::CanisterReject,
             ..
         })
+    );
+    assert_matches!(
+        refunded_cycles,
+        RefundedCycles::Cycles(refunded) if refunded == HTTP_REQUEST_CYCLE_PAYMENT
     );
 }
 
@@ -1339,11 +1390,11 @@ fn test_request_header_value_too_long(env: TestEnv) {
         max_response_bytes: None,
     };
 
-    let response = block_on(submit_outcall(
+    let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: request.clone(),
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -1353,6 +1404,10 @@ fn test_request_header_value_too_long(env: TestEnv) {
             reject_code: RejectCode::CanisterReject,
             ..
         })
+    );
+    assert_matches!(
+        refunded_cycles,
+        RefundedCycles::Cycles(refunded) if refunded == HTTP_REQUEST_CYCLE_PAYMENT
     );
 }
 
@@ -1365,7 +1420,7 @@ fn test_response_header_name_within_limit(env: TestEnv) {
         webserver_ipv6, MAX_HEADER_NAME_LENGTH,
     );
 
-    let response = block_on(submit_outcall(
+    let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -1376,7 +1431,7 @@ fn test_response_header_name_within_limit(env: TestEnv) {
                 transform: None,
                 max_response_bytes: None,
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -1393,7 +1448,7 @@ fn test_response_header_name_over_limit(env: TestEnv) {
         MAX_HEADER_NAME_LENGTH + 1,
     );
 
-    let response = block_on(submit_outcall(
+    let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -1404,7 +1459,7 @@ fn test_response_header_name_over_limit(env: TestEnv) {
                 transform: None,
                 max_response_bytes: None,
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -1414,6 +1469,11 @@ fn test_response_header_name_over_limit(env: TestEnv) {
             reject_code: RejectCode::SysFatal,
             ..
         })
+    );
+
+    assert_matches!(
+        refunded_cycles,
+        RefundedCycles::Cycles(refunded) if refunded < HTTP_REQUEST_CYCLE_PAYMENT
     );
 }
 
@@ -1435,11 +1495,11 @@ fn test_response_header_value_within_limit(env: TestEnv) {
         max_response_bytes: None,
     };
 
-    let response = block_on(submit_outcall(
+    let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: request.clone(),
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -1465,11 +1525,11 @@ fn test_response_header_value_over_limit(env: TestEnv) {
         max_response_bytes: None,
     };
 
-    let response = block_on(submit_outcall(
+    let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: request.clone(),
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -1479,6 +1539,10 @@ fn test_response_header_value_over_limit(env: TestEnv) {
             reject_code: RejectCode::SysFatal,
             ..
         })
+    );
+    assert_matches!(
+        refunded_cycles,
+        RefundedCycles::Cycles(refunded) if refunded < HTTP_REQUEST_CYCLE_PAYMENT
     );
 }
 
@@ -1510,14 +1574,14 @@ fn test_post_call(env: TestEnv) {
         max_response_bytes,
     };
 
-    let response = block_on(submit_outcall(
+    let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: request.clone(),
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
-    ))
-    .expect("Request succeeds.");
+    ));
+    let response = response.expect("Request succeeds.");
 
     assert_matches!(&response, RemoteHttpResponse {body, status: 200, ..} if body.contains(expected_body));
     assert_distinct_headers(&response);
@@ -1558,14 +1622,14 @@ fn test_head_call(env: TestEnv) {
         max_response_bytes,
     };
 
-    let response = block_on(submit_outcall(
+    let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: request.clone(),
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
-    ))
-    .expect("Request succeeds.");
+    ));
+    let response = response.expect("Request succeeds.");
 
     assert_matches!(&response, RemoteHttpResponse { status: 200, .. });
     assert_distinct_headers(&response);
@@ -1599,7 +1663,7 @@ fn test_only_headers_with_custom_max_response_bytes(env: TestEnv) {
     let header_size = 142;
     let max_response_bytes = Some(header_size + n);
 
-    let response = block_on(submit_outcall(
+    let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -1610,10 +1674,10 @@ fn test_only_headers_with_custom_max_response_bytes(env: TestEnv) {
                 transform: None,
                 max_response_bytes,
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
-    ))
-    .expect("Request is successful.");
+    ));
+    let response = response.expect("Request is successful.");
 
     assert_matches!(&response, RemoteHttpResponse { status: 200, .. });
     assert_http_response(&response);
@@ -1637,7 +1701,7 @@ fn test_only_headers_with_custom_max_response_bytes_exceeded(env: TestEnv) {
     let header_size = 142;
     let max_response_bytes = Some(header_size + n - 1);
 
-    let response = block_on(submit_outcall(
+    let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -1648,7 +1712,7 @@ fn test_only_headers_with_custom_max_response_bytes_exceeded(env: TestEnv) {
                 transform: None,
                 max_response_bytes,
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -1658,6 +1722,10 @@ fn test_only_headers_with_custom_max_response_bytes_exceeded(env: TestEnv) {
             reject_code: RejectCode::SysFatal,
             ..
         })
+    );
+    assert_matches!(
+        refunded_cycles,
+        RefundedCycles::Cycles(refunded) if refunded < HTTP_REQUEST_CYCLE_PAYMENT
     );
 }
 
@@ -1682,11 +1750,11 @@ fn test_non_ascii_url_is_rejected(env: TestEnv) {
         max_response_bytes: Some(max_response_bytes),
     };
 
-    let response = block_on(submit_outcall(
+    let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: request.clone(),
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -1696,6 +1764,11 @@ fn test_non_ascii_url_is_rejected(env: TestEnv) {
             reject_code: RejectCode::SysFatal,
             ..
         })
+    );
+
+    assert_matches!(
+        refunded_cycles,
+        RefundedCycles::Cycles(refunded) if refunded < HTTP_REQUEST_CYCLE_PAYMENT
     );
 }
 
@@ -1719,14 +1792,14 @@ fn test_max_url_length(env: TestEnv) {
         max_response_bytes: None,
     };
 
-    let response = block_on(submit_outcall(
+    let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: request.clone(),
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
-    ))
-    .expect("Request is successful.");
+    ));
+    let response = response.expect("Request is successful.");
 
     assert_matches!(&response, RemoteHttpResponse {body, status: 200, ..} if *body == expected_body);
     assert_http_response(&response);
@@ -1752,11 +1825,11 @@ fn test_max_url_length_exceeded(env: TestEnv) {
         max_response_bytes: None,
     };
 
-    let response = block_on(submit_outcall(
+    let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: request.clone(),
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -1766,6 +1839,10 @@ fn test_max_url_length_exceeded(env: TestEnv) {
             reject_code: RejectCode::CanisterReject,
             ..
         })
+    );
+    assert_matches!(
+        refunded_cycles,
+        RefundedCycles::Cycles(refunded) if refunded == HTTP_REQUEST_CYCLE_PAYMENT
     );
 }
 
@@ -1806,11 +1883,11 @@ fn reference_transform_function_exposed_by_different_canister(env: TestEnv) {
         }),
     };
 
-    let response = block_on(submit_outcall(
+    let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: request.clone(),
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -1833,7 +1910,7 @@ fn test_max_number_of_response_headers(env: TestEnv) {
         webserver_ipv6, "many_response_headers", response_headers
     );
 
-    let response = block_on(submit_outcall(
+    let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -1844,10 +1921,10 @@ fn test_max_number_of_response_headers(env: TestEnv) {
                 transform: None,
                 max_response_bytes: None,
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
-    ))
-    .expect("Request is successful.");
+    ));
+    let response = response.expect("Request is successful.");
 
     assert_matches!(&response, RemoteHttpResponse { status: 200, .. });
     assert_http_response(&response);
@@ -1870,7 +1947,7 @@ fn test_max_number_of_response_headers_exceeded(env: TestEnv) {
         webserver_ipv6, "many_response_headers", response_headers
     );
 
-    let response = block_on(submit_outcall(
+    let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -1881,7 +1958,7 @@ fn test_max_number_of_response_headers_exceeded(env: TestEnv) {
                 transform: None,
                 max_response_bytes: None,
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
     assert_matches!(
@@ -1890,6 +1967,10 @@ fn test_max_number_of_response_headers_exceeded(env: TestEnv) {
             reject_code: RejectCode::SysFatal,
             ..
         })
+    );
+    assert_matches!(
+        refunded_cycles,
+        RefundedCycles::Cycles(refunded) if refunded < HTTP_REQUEST_CYCLE_PAYMENT
     );
 }
 
@@ -1913,10 +1994,10 @@ fn test_max_number_of_request_headers(env: TestEnv) {
             transform: None,
             max_response_bytes: None,
         },
-        cycles: 500_000_000_000,
+        cycles: HTTP_REQUEST_CYCLE_PAYMENT,
     };
-    let response =
-        block_on(submit_outcall(&handlers, request.clone())).expect("Request is successful.");
+    let (response, _) = block_on(submit_outcall(&handlers, request.clone()));
+    let response = response.expect("Request is successful.");
 
     assert_matches!(&response, RemoteHttpResponse { status: 200, .. });
     assert_http_response(&response);
@@ -1948,7 +2029,7 @@ fn test_max_number_of_request_headers_exceeded(env: TestEnv) {
         pub cycles: u64,
     }
 
-    let response = block_on(submit_outcall(
+    let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         TestRemoteHttpRequest {
             request: TestRequest {
@@ -1956,7 +2037,7 @@ fn test_max_number_of_request_headers_exceeded(env: TestEnv) {
                 headers,
                 method: HttpMethod::POST,
             },
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
 
@@ -1966,6 +2047,10 @@ fn test_max_number_of_request_headers_exceeded(env: TestEnv) {
             reject_code: RejectCode::CanisterReject,
             ..
         })
+    );
+    assert_matches!(
+        refunded_cycles,
+        RefundedCycles::Cycles(refunded) if refunded == HTTP_REQUEST_CYCLE_PAYMENT
     );
 }
 
@@ -1992,14 +2077,14 @@ fn check_caller_id_on_transform_function(env: TestEnv) {
         }),
     };
 
-    let response = block_on(submit_outcall(
+    let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: request.clone(),
-            cycles: 500_000_000_000,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
-    ))
-    .expect("Request is successful.");
+    ));
+    let response = response.expect("Request is successful.");
 
     // Check caller id injected into header.
     let caller_id = &response
@@ -2012,7 +2097,7 @@ fn check_caller_id_on_transform_function(env: TestEnv) {
     assert_eq!(caller_id, "aaaaa-aa");
 }
 
-// ---- END SPEC COMPLIANCE TESTS -------
+// ---- HELPER FUNCTIONS -------
 
 /// Case insensitive header names are distinct.
 fn assert_distinct_headers(http_response: &RemoteHttpResponse) {
@@ -2146,10 +2231,20 @@ fn assert_http_json_response(
         "4. HTTP bin server received body does not match the outcall sent body."
     );
 }
-type ProxyCanisterResponse = Result<RemoteHttpResponse, (RejectionCode, String)>;
-type OutcallsResponse = Result<RemoteHttpResponse, RejectResponse>;
 
-async fn submit_outcall<Request>(handlers: &Handlers<'_>, request: Request) -> OutcallsResponse
+#[derive(Debug)]
+enum RefundedCycles {
+    NotApplicable,
+    Cycles(u64),
+}
+
+type ProxyCanisterResponseWithRefund = ResponseWithRefundedCycles;
+type OutcallsResponseWithRefund = (Result<RemoteHttpResponse, RejectResponse>, RefundedCycles);
+
+async fn submit_outcall<Request>(
+    handlers: &Handlers<'_>,
+    request: Request,
+) -> OutcallsResponseWithRefund
 where
     Request: Clone + CandidType,
 {
@@ -2159,20 +2254,30 @@ where
     let principal_id: PrincipalId = handlers.proxy_canister().effective_canister_id();
     let principal: Principal = principal_id.into();
 
-    agent
-        .update(&principal, "send_request")
+    let canister_response = agent
+        .update(&principal, "send_request_and_retrieve_refund")
         .with_arg(args)
         .call_and_wait()
-        .await
-        .map_err(|agent_error| match agent_error {
-            AgentError::CertifiedReject(response) | AgentError::UncertifiedReject(response) => {
-                response
-            }
-            _ => panic!("Unexpected error: {:?}", agent_error),
-        })
-        .and_then(|response| {
-            decode_one::<ProxyCanisterResponse>(&response)
-                .unwrap()
+        .await;
+
+    match canister_response {
+        Err(agent_error) => {
+            let err_resp = match agent_error {
+                AgentError::CertifiedReject(response) | AgentError::UncertifiedReject(response) => {
+                    response
+                }
+                _ => panic!("Unexpected error: {:?}", agent_error),
+            };
+            (Err(err_resp), RefundedCycles::NotApplicable)
+        }
+        Ok(serialized_bytes) => {
+            let response_with_refund =
+                decode_one::<ProxyCanisterResponseWithRefund>(&serialized_bytes)
+                    .expect("Decoding the canister serialized response should succeed.");
+
+            let refunded_cycles = response_with_refund.refunded_cycles;
+            let result = response_with_refund
+                .result
                 .map_err(|(reject_code, reject_message)| {
                     let reject_code = match reject_code {
                         RejectionCode::SysFatal => RejectCode::SysFatal,
@@ -2190,8 +2295,10 @@ where
                         reject_message,
                         error_code: None,
                     }
-                })
-        })
+                });
+            (result, RefundedCycles::Cycles(refunded_cycles))
+        }
+    }
 }
 
 /// Pricing function of canister http requests.
