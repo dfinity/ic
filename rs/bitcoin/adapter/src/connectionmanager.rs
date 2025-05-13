@@ -266,10 +266,10 @@ impl ConnectionManager {
         let mut disconnects = vec![];
         for (addr, conn) in self.connections.iter() {
             match conn.state() {
-                ConnectionState::AdapterDiscarded { .. } => {
+                ConnectionState::AdapterDiscarded => {
                     self.address_book.discard(conn.address_entry());
                 }
-                ConnectionState::NodeDisconnected { .. } => {
+                ConnectionState::NodeDisconnected => {
                     self.address_book.remove_from_active(conn.address_entry());
                 }
                 _ => {}
@@ -969,10 +969,7 @@ mod test {
             let conn = manager
                 .get_connection(&addr)
                 .expect("The connection should be there");
-            assert!(matches!(
-                conn.state(),
-                ConnectionState::AdapterDiscarded { .. }
-            ));
+            assert!(matches!(conn.state(), ConnectionState::AdapterDiscarded));
         });
     }
 
@@ -1031,10 +1028,7 @@ mod test {
             let conn = manager
                 .get_connection(&addr)
                 .expect("The connection should be there");
-            assert!(matches!(
-                conn.state(),
-                ConnectionState::AdapterDiscarded { .. }
-            ));
+            assert!(matches!(conn.state(), ConnectionState::AdapterDiscarded));
 
             let conn = manager
                 .get_connection(&addr2)

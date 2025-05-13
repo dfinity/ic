@@ -2258,7 +2258,7 @@ impl ExecutionEnvironment {
             .upload_chunk(
                 sender,
                 canister,
-                &args.chunk,
+                args.chunk,
                 round_limits,
                 subnet_size,
                 resource_saturation,
@@ -3048,7 +3048,7 @@ impl ExecutionEnvironment {
             let alg = schnorr.key_id.algorithm;
             match (alg, &schnorr.taproot_tree_root) {
                 (SchnorrAlgorithm::Bip340Secp256k1, Some(aux)) => {
-                    if aux.len() != 0 && aux.len() != 32 {
+                    if !aux.is_empty() && aux.len() != 32 {
                         return Err(UserError::new(
                             ErrorCode::CanisterRejectedMessage,
                             format!("Invalid aux field for {}", alg),
@@ -3280,10 +3280,10 @@ impl ExecutionEnvironment {
     /// - The given message is an `install_code` message.
     /// - The canister does not have any paused execution in its task queue.
     /// - A call id will be present for an install code message to ensure that
-    ///     potentially long-running messages are exposed to the subnet.
-    ///     During a subnet split, the original subnet knows which
-    ///     aborted install code message must be rejected if the targeted
-    ///     canister has been moved to another subnet.
+    ///   potentially long-running messages are exposed to the subnet.
+    ///   During a subnet split, the original subnet knows which
+    ///   aborted install code message must be rejected if the targeted
+    ///   canister has been moved to another subnet.
     ///
     /// Postcondition:
     /// - If the execution is finished, then it outputs the subnet response.
