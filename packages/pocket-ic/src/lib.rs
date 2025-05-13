@@ -1546,6 +1546,7 @@ pub enum ErrorCode {
     // 3xx -- `RejectCode::DestinationInvalid`
     CanisterNotFound = 301,
     CanisterSnapshotNotFound = 305,
+    CanisterSnapshotImmutable = 306,
     // 4xx -- `RejectCode::CanisterReject`
     InsufficientMemoryAllocation = 402,
     InsufficientCyclesForCreateCanister = 403,
