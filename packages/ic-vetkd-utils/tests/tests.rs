@@ -49,7 +49,7 @@ fn protocol_flow_with_emulated_server_side() {
 
     let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(seed);
 
-    let derivation_path = DerivationContext::new(b"canister-id", b"context");
+    let derivation_context = DerivationContext::new(b"canister-id", b"context");
     let identity = rng.gen::<[u8; 32]>();
 
     let tsk_seed = rng.gen::<[u8; 32]>().to_vec();
@@ -66,15 +66,14 @@ fn protocol_flow_with_emulated_server_side() {
     let master_sk = random_scalar(&mut rng);
     let master_pk = G2Affine::from(G2Affine::generator() * master_sk);
 
-    let derived_public_key =
-        G2Affine::from(master_pk + G2Affine::generator() * derivation_path.delta());
+    let (derived_public_key, _delta) = derivation_context.derive_key(&master_pk);
 
     let ek_bytes = create_encrypted_key(
         &mut rng,
         &master_pk,
         &master_sk,
         &tpk,
-        &derivation_path,
+        &derivation_context,
         &identity,
     );
 

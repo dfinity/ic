@@ -23,7 +23,7 @@ pub struct DerivationContext {
 
 // Prefix-freeness is not required, as the domain separator is used with XMD,
 // which includes the domain separator's length as a distinct input.
-const DERIVATION_CANISTER_DST: &[u8; 30] = b"ic-vetkd-bls12-381-g2-canister";
+const DERIVATION_CANISTER_DST: &[u8; 33] = b"ic-vetkd-bls12-381-g2-canister-id";
 
 const DERIVATION_CONTEXT_DST: &[u8; 29] = b"ic-vetkd-bls12-381-g2-context";
 
@@ -110,7 +110,7 @@ impl TransportPublicKey {
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 /// Error indicating that deserializing a derived public key failed
-pub enum DerivedPublicKeyDeserializationError {
+pub enum PublicKeyDeserializationError {
     /// The public point was not a valid encoding
     InvalidPublicKey,
 }
@@ -142,9 +142,9 @@ impl DerivedPublicKey {
     }
 
     /// Deserialize a previously serialized derived public key
-    pub fn deserialize(bytes: &[u8]) -> Result<Self, DerivedPublicKeyDeserializationError> {
+    pub fn deserialize(bytes: &[u8]) -> Result<Self, PublicKeyDeserializationError> {
         let pt = G2Affine::deserialize(&bytes)
-            .map_err(|_| DerivedPublicKeyDeserializationError::InvalidPublicKey)?;
+            .map_err(|_| PublicKeyDeserializationError::InvalidPublicKey)?;
         Ok(Self { pt })
     }
 }
@@ -324,7 +324,7 @@ impl EncryptedKey {
         input: &[u8],
         tpk: &TransportPublicKey,
     ) -> bool {
-        let dpk = DerivedPublicKey::compute_derived_key(master_pk, context);
+        let dpk = DerivedPublicKey::derive_sub_key(master_pk, context);
         let msg = G1Affine::augmented_hash(&dpk.pt, input);
         check_validity(&self.c1, &self.c2, &self.c3, tpk, &dpk.pt, &msg)
     }

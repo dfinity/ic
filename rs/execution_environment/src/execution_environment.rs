@@ -2953,7 +2953,7 @@ impl ExecutionEnvironment {
             ));
         }
 
-        let dpk = ic_vetkd_utils::DerivedPublicKey::deserialize(&subnet_public_key.public_key)
+        let dpk = ic_vetkd_utils::MasterPublicKey::deserialize(&subnet_public_key.public_key)
             .map_err(|err| {
                 UserError::new(
                     ErrorCode::CanisterRejectedMessage,
