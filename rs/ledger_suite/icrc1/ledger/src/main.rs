@@ -1113,11 +1113,11 @@ fn icrc103_get_allowances(arg: GetAllowancesArgs) -> Result<Allowances, GetAllow
         subaccount: None,
     });
     let max_take_allowances = Access::with_ledger(|ledger| ledger.max_take_allowances());
-    let max_results = arg.take.unwrap_or(Nat::from(u64::MAX));
-    let max_results = std::cmp::min(
-        max_results.0.to_u64().unwrap_or(max_take_allowances),
-        max_take_allowances,
-    );
+    let max_results = arg
+        .take
+        .map(|take| take.0.to_u64().unwrap_or(max_take_allowances))
+        .map(|take| std::cmp::min(take, max_take_allowances))
+        .unwrap_or(max_take_allowances);
     Ok(get_allowances(
         from_account,
         arg.prev_spender,
