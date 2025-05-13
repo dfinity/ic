@@ -21,6 +21,11 @@ Success::
     . The anonymous identity
     . An Identity that isn't the canister controller
 . A canister's private metadata sections can only be read by the canister controller.
+. Requests for the paths /canister/C/module_hash and /canister/C/controllers succeed for
+  both empty and non-empty canisters (with zero, one, and two controllers) and return correct values:
+    . module_hash is absent for empty canisters;
+    . module_hash is a blob for non-empty canisters;
+    . controllers are always present for existing canisters and consist of a list of principals
 
 end::catalog[] */
 
