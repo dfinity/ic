@@ -1,5 +1,5 @@
 {
-  "checksum": "896f66e7fd062ad2e186efc74456d398421323a4f62f969ac8f90f39a9a65564",
+  "checksum": "2550873e7914bc0e59e113f3e9becc6a3d8d605756058010d6403b86c86af372",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1092,14 +1092,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "actix-web-prom 0.9.0": {
+    "actix-web-prom 0.10.0": {
       "name": "actix-web-prom",
-      "version": "0.9.0",
+      "version": "0.10.0",
       "package_url": "https://github.com/nlopes/actix-web-prom.git",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/actix-web-prom/0.9.0/download",
-          "sha256": "56a34f1825c3ae06567a9d632466809bbf34963c86002e8921b64f32d48d289d"
+          "url": "https://static.crates.io/crates/actix-web-prom/0.10.0/download",
+          "sha256": "a7eb266b4c692a4a7e68429fcbe4eb3bd55c053f6d84c0522dc83df22395edf6"
         }
       },
       "targets": [
@@ -1140,7 +1140,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "prometheus 0.13.4",
+              "id": "prometheus 0.14.0",
               "target": "prometheus"
             },
             {
@@ -1155,7 +1155,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.9.0"
+        "version": "0.10.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -19811,7 +19811,7 @@
               "target": "actix_web"
             },
             {
-              "id": "actix-web-prom 0.9.0",
+              "id": "actix-web-prom 0.10.0",
               "target": "actix_web_prom"
             },
             {
@@ -90971,7 +90971,7 @@
   "direct_deps": [
     "actix-rt 2.10.0",
     "actix-web 4.9.0",
-    "actix-web-prom 0.9.0",
+    "actix-web-prom 0.10.0",
     "addr 0.15.6",
     "aide 0.14.1",
     "anyhow 1.0.93",
