@@ -209,7 +209,7 @@ pub trait IDkgProtocol {
     ///
     /// # Errors
     /// * [`IDkgVerifyDealingPublicError::TranscriptIdMismatch`] if the transcript ID in the `params`
-    ///    is different from the one included in the dealing.
+    ///   is different from the one included in the dealing.
     /// * [`IDkgVerifyDealingPublicError::InvalidDealing`] if the internal dealing is invalid.
     /// * [`IDkgVerifyDealingPublicError::InvalidSignature`] if the signature on the dealing is invalid.
     fn verify_dealing_public(
@@ -234,15 +234,15 @@ pub trait IDkgProtocol {
     /// * [`IDkgVerifyDealingPrivateError::NotAReceiver`] if the caller isn't in the
     ///   dealing's receivers. Only receivers can perform private verification of dealings.
     /// * [`IDkgVerifyDealingPrivateError::InvalidDealing`] if the decrypted shares are not consistent
-    ///    with polynomial commitment.
+    ///   with polynomial commitment.
     /// * [`IDkgVerifyDealingPrivateError::InvalidArgument`] if some argument cannot be parsed correctly.
     /// * [`IDkgVerifyDealingPrivateError::PrivateKeyNotFound`] if the secret key store of the node
-    ///    does not contain the secret key necessary to decrypt the ciphertext.
+    ///   does not contain the secret key necessary to decrypt the ciphertext.
     /// * [`IDkgVerifyDealingPrivateError::RegistryError`] if the registry client returned an error.
     /// * [`IDkgVerifyDealingPrivateError::PublicKeyNotInRegistry`] if the encryption key of the
-    ///    receiver is not in the registry.
+    ///   receiver is not in the registry.
     /// * [`IDkgVerifyDealingPrivateError::MalformedPublicKey`] if the public key of one of the receivers
-    ///    is not well formed.
+    ///   is not well formed.
     /// * [`IDkgVerifyDealingPrivateError::UnsupportedAlgorithm`] if the `params.algorithm_id` is not supported
     /// * [`IDkgVerifyDealingPrivateError::InternalError`] if the an internal error occurs.
     /// * [`IDkgVerifyDealingPrivateError::TransientInternalError`] if there was a transient internal
