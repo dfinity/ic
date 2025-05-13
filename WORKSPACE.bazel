@@ -235,7 +235,7 @@ load("//bazel:rclone.bzl", "rclone_repository")
 
 rclone_repository(name = "rclone")
 
-# trivy binary for upload_artifacts
+# trivy binary for vulnerability scanning
 load("//bazel:trivy.bzl", "trivy_scan")
 
 trivy_scan(name = "trivy")
