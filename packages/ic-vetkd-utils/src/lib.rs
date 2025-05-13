@@ -166,12 +166,15 @@ impl DerivedPublicKey {
         Ok(Self { point: dpk })
     }
 
-    /// Perform first-stage derivation of a public key
+    /// Perform first-stage derivation of a canister public key from the master public key
     ///
+    /// To create the derived public key in VetKD, a two step derivation is performed;
+    /// - The first step creates a canister public key, sometimes called canister master key. This step is implemented  by the `derive_public_key` method.
+    /// - The second step derives a canister sub-key which incorporates the "context" value provided to the `vetkd_public_key` management canister interface. This step is implemented by the `derive_sub_key` method.
     /// This function is only effective/useful if the DerivedPublicKey struct is holding
-    /// the master public key. It then derives the canister public key
+    /// the master public key. It then derives the canister public key.
     pub fn derive_canister_key(&self, canister_id: &[u8]) -> Self {
-        let dst = "ic-vetkd-bls12-381-g2-canister";
+        let dst = "ic-vetkd-bls12-381-g2-canister-id";
 
         let offset = hash_to_scalar_two_inputs(&self.serialize(), canister_id, dst);
 
@@ -179,9 +182,16 @@ impl DerivedPublicKey {
         Self { point: derived_key }
     }
 
-    /// Perform second-stage derivation of a public key
+    /// Perform second-stage derivation of a public key from a canister public key
     ///
-    /// To create the derived public key in VetKD, a two step derivation is performed. The first step
+    /// To create the derived public key in VetKD, a two step derivation is performed;
+    /// - The first step creates a canister public key, sometimes called canister master key. This step is implemented  by the `derive_public_key` method.
+    /// - The second step derives a canister sub-key which incorporates the "context" value provided to the `vetkd_public_key` management canister interface. This step is implemented by the `derive_sub_key` method.
+    ///
+    /// If `vetkd_public_key` is invoked with an empty derivation context, it simply returns the
+    /// canister master key. Then the second derivation step can be done offline, using this
+    /// function. This is useful if you wish to derive multiple keys without having to interact with
+    /// the IC each time.
     /// creates a key that is specific to the canister that is making VetKD requests to the
     /// management canister, sometimes called canister master key. The second step incorporates the
     /// "derivation context" value provided to the `vetkd_public_key` management canister interface.

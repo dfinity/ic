@@ -126,7 +126,7 @@ impl DerivedPublicKey {
     pub const BYTES: usize = G2Affine::BYTES;
 
     /// Derive a public key relative to another public key and a derivation context
-    pub fn compute_derived_key(pk: &G2Affine, context: &DerivationContext) -> Self {
+    pub fn derive_sub_key(pk: &G2Affine, context: &DerivationContext) -> Self {
         let (pt, _delta) = context.derive_key(pk);
         Self { pt }
     }
