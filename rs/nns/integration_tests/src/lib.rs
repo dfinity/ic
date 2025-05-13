@@ -140,3 +140,6 @@ mod upgrade_canisters_with_golden_nns_state;
 
 #[cfg(test)]
 mod create_service_nervous_system;
+
+#[cfg(test)]
+mod registry_get_chunk;
