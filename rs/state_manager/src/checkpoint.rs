@@ -89,7 +89,7 @@ pub(crate) fn make_unvalidated_checkpoint(
         #[allow(clippy::disallowed_methods)]
         let (send, recv) = unbounded();
         tip_channel
-            .send(TipRequest::TipToCheckpoint {
+            .send(TipRequest::TipToCheckpointAndSwitch {
                 height,
                 state,
                 fd_factory,

@@ -78,7 +78,7 @@ pub(crate) enum TipRequest {
     /// Serializes protos to the newly created checkpoint after sending to `sender`
     /// State: latest_checkpoint_state = tip_folder_state
     ///        tip_folder_state = default
-    TipToCheckpoint {
+    TipToCheckpointAndSwitch {
         height: Height,
         state: ReplicatedState,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
@@ -184,7 +184,7 @@ pub(crate) fn spawn_tip_thread(
                                 });
                         }
 
-                        TipRequest::TipToCheckpoint {
+                        TipRequest::TipToCheckpointAndSwitch {
                             height,
                             state,
                             fd_factory,
@@ -211,18 +211,23 @@ pub(crate) fn spawn_tip_thread(
                                     fatal!(log, "Failed to serialize to tip @{}: {}", height, err);
                                 });
                             }
-                            match tip_to_checkpoint(
-                                &log,
-                                &mut tip_handler,
-                                &state_layout,
-                                height,
-                                state,
-                                &fd_factory,
-                            ) {
+                            let tip_to_checkpoint_result = {
+                                let _timer =
+                                    request_timer(&metrics, "tip_to_checkpoint_and_switch");
+                                tip_to_checkpoint_and_switch(
+                                    &log,
+                                    &mut tip_handler,
+                                    &state_layout,
+                                    height,
+                                    state,
+                                    &fd_factory,
+                                )
+                            };
+                            match tip_to_checkpoint_result {
                                 Err(err) => {
                                     sender
                                         .send(Err(err))
-                                        .expect("Failed to send TipToCheckpoint result");
+                                        .expect("Failed to send TipToCheckpointAndSwitch result");
                                 }
                                 Ok(result) => {
                                     sender
@@ -230,7 +235,7 @@ pub(crate) fn spawn_tip_thread(
                                             Arc::clone(&result.state),
                                             result.checkpoint_readonly,
                                         )))
-                                        .expect("Failed to send TipToCheckpoint result");
+                                        .expect("Failed to send TipToCheckpointAndSwitch result");
                                     if let Some(checkpoint_readwrite) = result.checkpoint_readwrite
                                     {
                                         let _timer =
@@ -455,7 +460,7 @@ struct TipToCheckpointResult<'a, T> {
     checkpoint_readwrite: Option<CheckpointLayout<RwPolicy<'a, T>>>,
 }
 
-fn tip_to_checkpoint<'a>(
+fn tip_to_checkpoint_and_switch<'a>(
     log: &ReplicaLogger,
     tip_handler: &'a mut TipHandler,
     state_layout: &'a StateLayout,
