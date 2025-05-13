@@ -108,10 +108,10 @@ DEV_ENV = {
 
 ALIASES = {}
 
-# TODO: Make main the only binary src. For other code, make it part of the
-# library, and make the binary depend on the library. (This is normally how
-# things are done, but we didn't do that here, and a library was later added for
-# sharing.)
+# Warning: In general, to avoid confusion, it is best that libraries and
+# binaries NOT share the same source files. Explicitly listing BINARY_SRC
+# (instead of glob) and making LIBRARY_SRCS exclude BINARY_SRCS ensures that
+# such sharing does not occur.
 BINARY_SRCS = [
     "src/create_subnet.rs",
     "src/helpers.rs",
