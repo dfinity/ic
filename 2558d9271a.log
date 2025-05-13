@@ -1,0 +1,106 @@
+> bench: embedders:compilation/compilation/minimal 1 ms/iter
+> bench: embedders:compilation/compilation/many_adds 87 ms/iter
+> bench: embedders:compilation/compilation/many_funcs 597 ms/iter
+> bench: embedders:compilation/compilation/open_chat 3096 ms/iter
+> bench: embedders:compilation/compilation/qrcode 106 ms/iter
+> bench: embedders:compilation/compilation/motoko 110 ms/iter
+> bench: embedders:compilation/compilation/governance 450 ms/iter
+> bench: embedders:compilation/deserialization/minimal 42 µs/iter
+> bench: embedders:compilation/deserialization/many_adds 43 µs/iter
+> bench: embedders:compilation/deserialization/many_funcs 11 ms/iter
+> bench: embedders:compilation/deserialization/open_chat 28 ms/iter
+> bench: embedders:compilation/deserialization/qrcode 1 ms/iter
+> bench: embedders:compilation/deserialization/motoko 1 ms/iter
+> bench: embedders:compilation/deserialization/governance 6 ms/iter
+> bench: embedders:compilation/validation-instrumentation/minimal 121 µs/iter
+> bench: embedders:compilation/validation-instrumentation/many_adds 20 ms/iter
+> bench: embedders:compilation/validation-instrumentation/many_funcs 111 ms/iter
+> bench: embedders:compilation/validation-instrumentation/open_chat 764 ms/iter
+> bench: embedders:compilation/validation-instrumentation/qrcode 50 ms/iter
+> bench: embedders:compilation/validation-instrumentation/motoko 53 ms/iter
+> bench: embedders:compilation/validation-instrumentation/governance 194 ms/iter
+> bench: embedders:compilation/query/minimal 159 µs/iter
+> bench: embedders:compilation/query/many_adds 153 µs/iter
+> bench: embedders:compilation/query/many_funcs 160 µs/iter
+> bench: embedders:compilation/query/open_chat 73 ms/iter
+> bench: embedders:compilation/query/qrcode 200 ms/iter
+> bench: embedders:compilation/query/motoko 22 ms/iter
+> bench: embedders:compilation/query/governance 228 ms/iter
+= bca356a352..2558d9271a: Embedders Compilation total time: 6220 ms (new)
+> bench: embedders:compilation/compilation/minimal 985 µs/iter
+> bench: embedders:compilation/compilation/many_adds 88 ms/iter
+> bench: embedders:compilation/compilation/many_funcs 605 ms/iter
+> bench: embedders:compilation/compilation/open_chat 3142 ms/iter
+> bench: embedders:compilation/compilation/qrcode 109 ms/iter
+> bench: embedders:compilation/compilation/motoko 112 ms/iter
+> bench: embedders:compilation/compilation/governance 459 ms/iter
+> bench: embedders:compilation/deserialization/minimal 42 µs/iter
+> bench: embedders:compilation/deserialization/many_adds 41 µs/iter
+> bench: embedders:compilation/deserialization/many_funcs 11 ms/iter
+> bench: embedders:compilation/deserialization/open_chat 27 ms/iter
+> bench: embedders:compilation/deserialization/qrcode 1 ms/iter
+> bench: embedders:compilation/deserialization/motoko 1 ms/iter
+> bench: embedders:compilation/deserialization/governance 6 ms/iter
+> bench: embedders:compilation/validation-instrumentation/minimal 119 µs/iter
+> bench: embedders:compilation/validation-instrumentation/many_adds 20 ms/iter
+> bench: embedders:compilation/validation-instrumentation/many_funcs 125 ms/iter
+> bench: embedders:compilation/validation-instrumentation/open_chat 790 ms/iter
+> bench: embedders:compilation/validation-instrumentation/qrcode 52 ms/iter
+> bench: embedders:compilation/validation-instrumentation/motoko 55 ms/iter
+> bench: embedders:compilation/validation-instrumentation/governance 197 ms/iter
+> bench: embedders:compilation/query/minimal 159 µs/iter
+> bench: embedders:compilation/query/many_adds 157 µs/iter
+> bench: embedders:compilation/query/many_funcs 171 µs/iter
+> bench: embedders:compilation/query/open_chat 73 ms/iter
+> bench: embedders:compilation/query/qrcode 201 ms/iter
+> bench: embedders:compilation/query/motoko 22 ms/iter
+> bench: embedders:compilation/query/governance 235 ms/iter
+^ improved: embedders:compilation/compilation/minimal time: 1 -> 0 ms
+^ improved: embedders:compilation/deserialization/many_adds time: 0 -> 0 ms
+^ improved: embedders:compilation/deserialization/many_funcs time: 11 -> 11 ms
+^ improved: embedders:compilation/deserialization/open_chat time: 28 -> 27 ms
+^ improved: embedders:compilation/deserialization/qrcode time: 1 -> 1 ms
+^ improved: embedders:compilation/deserialization/motoko time: 1 -> 1 ms
+^ improved: embedders:compilation/deserialization/governance time: 6 -> 6 ms
+^ improved: embedders:compilation/validation-instrumentation/minimal time: 0 -> 0 ms
+^ improved: embedders:compilation/validation-instrumentation/many_adds time: 20 -> 20 ms
+^ improved: embedders:compilation/query/minimal time: 0 -> 0 ms
+^ improved: embedders:compilation/query/open_chat time: 73 -> 73 ms
+= bca356a352..2558d9271a: Embedders Compilation total time: 6218 ms (new)
+> bench: embedders:compilation/compilation/minimal 1 ms/iter
+> bench: embedders:compilation/compilation/many_adds 90 ms/iter
+> bench: embedders:compilation/compilation/many_funcs 619 ms/iter
+> bench: embedders:compilation/compilation/open_chat 3121 ms/iter
+> bench: embedders:compilation/compilation/qrcode 109 ms/iter
+> bench: embedders:compilation/compilation/motoko 112 ms/iter
+> bench: embedders:compilation/compilation/governance 458 ms/iter
+> bench: embedders:compilation/deserialization/minimal 41 µs/iter
+> bench: embedders:compilation/deserialization/many_adds 41 µs/iter
+> bench: embedders:compilation/deserialization/many_funcs 11 ms/iter
+> bench: embedders:compilation/deserialization/open_chat 27 ms/iter
+> bench: embedders:compilation/deserialization/qrcode 1 ms/iter
+> bench: embedders:compilation/deserialization/motoko 1 ms/iter
+> bench: embedders:compilation/deserialization/governance 6 ms/iter
+> bench: embedders:compilation/validation-instrumentation/minimal 123 µs/iter
+> bench: embedders:compilation/validation-instrumentation/many_adds 21 ms/iter
+> bench: embedders:compilation/validation-instrumentation/many_funcs 121 ms/iter
+> bench: embedders:compilation/validation-instrumentation/open_chat 777 ms/iter
+> bench: embedders:compilation/validation-instrumentation/qrcode 52 ms/iter
+> bench: embedders:compilation/validation-instrumentation/motoko 55 ms/iter
+> bench: embedders:compilation/validation-instrumentation/governance 200 ms/iter
+> bench: embedders:compilation/query/minimal 167 µs/iter
+> bench: embedders:compilation/query/many_adds 162 µs/iter
+> bench: embedders:compilation/query/many_funcs 157 µs/iter
+> bench: embedders:compilation/query/open_chat 73 ms/iter
+> bench: embedders:compilation/query/qrcode 201 ms/iter
+> bench: embedders:compilation/query/motoko 22 ms/iter
+> bench: embedders:compilation/query/governance 229 ms/iter
+^ improved: embedders:compilation/deserialization/minimal time: 0 -> 0 ms
+^ improved: embedders:compilation/deserialization/many_adds time: 0 -> 0 ms
+^ improved: embedders:compilation/deserialization/open_chat time: 27 -> 27 ms
+^ improved: embedders:compilation/deserialization/governance time: 6 -> 6 ms
+^ improved: embedders:compilation/query/many_funcs time: 0 -> 0 ms
+= bca356a352..2558d9271a: Embedders Compilation total time: 6218 ms (new)
+> bench: embedders:compilation/compilation/minimal 1 ms/iter
+> bench: embedders:compilation/compilation/many_adds 91 ms/iter
+> bench: embedders:compilation/compilation/many_funcs 611 ms/iter
