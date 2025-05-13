@@ -648,7 +648,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-gateway": crate.spec(
                 git = "https://github.com/dfinity/ic-gateway",
-                rev = "b7b13cf340148140c837006b778f9cfa6f832008",
+                rev = "c0d496dee8ae23764f13b5fc56efb37fcbca4568",
             ),
             "ic-http-certification": crate.spec(
                 version = "3.0.3",

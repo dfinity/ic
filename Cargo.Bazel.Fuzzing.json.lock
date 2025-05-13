@@ -1,5 +1,5 @@
 {
-  "checksum": "c91fc55fd8b84582cdf8d53bed49591c1629fa5864f407e3ef0ba8f804a0001c",
+  "checksum": "3b39155342dc3489d62b4d6b5d0cbd32fba1cc873b6de71c56c8ca1bf41e60c6",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -34367,7 +34367,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-gateway",
           "commitish": {
-            "Rev": "b7b13cf340148140c837006b778f9cfa6f832008"
+            "Rev": "c0d496dee8ae23764f13b5fc56efb37fcbca4568"
           }
         }
       },

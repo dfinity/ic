@@ -9205,7 +9205,7 @@ dependencies = [
 [[package]]
 name = "ic-gateway"
 version = "0.2.0"
-source = "git+https://github.com/dfinity/ic-gateway?rev=b7b13cf340148140c837006b778f9cfa6f832008#b7b13cf340148140c837006b778f9cfa6f832008"
+source = "git+https://github.com/dfinity/ic-gateway?rev=c0d496dee8ae23764f13b5fc56efb37fcbca4568#c0d496dee8ae23764f13b5fc56efb37fcbca4568"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
