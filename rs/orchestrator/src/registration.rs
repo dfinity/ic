@@ -5,7 +5,7 @@ use crate::{
     signer::{Hsm, NodeIdentity, NodeProviderSigner, Signer},
     utils::http_endpoint_to_url,
 };
-use candid::Encode;
+use candid::{Encode, Principal};
 use ic_agent::{agent::AgentBuilder, NonceGenerator};
 use ic_config::{
     http_handler::Config as HttpConfig,
@@ -158,7 +158,7 @@ impl NodeRegistration {
                         .expect("Could not encode payload for the registration request");
 
                     if let Err(e) = agent
-                        .update(&REGISTRY_CANISTER_ID.get_ref().0, "add_node")
+                        .update(&Principal::from(REGISTRY_CANISTER_ID), "add_node")
                         .with_arg(add_node_encoded)
                         .call_and_wait()
                         .await
@@ -455,7 +455,10 @@ impl NodeRegistration {
             Encode!(&update_node_payload).expect("Could not encode payload for update_node-call.");
 
         agent
-            .update(&REGISTRY_CANISTER_ID.get_ref().0, "update_node_directly")
+            .update(
+                &Principal::from(REGISTRY_CANISTER_ID),
+                "update_node_directly",
+            )
             .with_arg(update_node_encoded)
             .call_and_wait()
             .await

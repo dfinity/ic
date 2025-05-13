@@ -64,7 +64,7 @@ pub struct HsmIdentity {
 
 impl Identity for HsmIdentity {
     fn sender(&self) -> Result<Principal, String> {
-        Ok(Principal::self_authenticating(self.pub_key.clone()))
+        Ok(Principal::self_authenticating(self.pub_key.as_slice()))
     }
 
     fn public_key(&self) -> Option<Vec<u8>> {
@@ -113,7 +113,7 @@ impl NodeIdentity {
 
 impl Identity for NodeIdentity {
     fn sender(&self) -> Result<Principal, String> {
-        Ok(Principal::self_authenticating(self.pub_key.clone()))
+        Ok(Principal::self_authenticating(self.pub_key.as_slice()))
     }
 
     fn public_key(&self) -> Option<Vec<u8>> {
@@ -121,8 +121,7 @@ impl Identity for NodeIdentity {
     }
 
     fn sign(&self, content: &EnvelopeContent) -> Result<Signature, String> {
-        let msg = MessageId::try_from(content.to_request_id().as_ref())
-            .expect("Cannot fail, RequestId is a MessageId");
+        let msg = MessageId::from(*content.to_request_id());
         let signature =
             Some((self.sign)(&msg).map_err(|err| format!("Cannot create node signature: {err}"))?);
         let public_key = self.public_key();
