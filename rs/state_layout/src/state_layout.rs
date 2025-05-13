@@ -1829,7 +1829,9 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         }
         Ok(())
     }
+}
 
+impl CheckpointLayout<ReadOnly> {
     /// Removes the unverified checkpoint marker.
     /// If the marker does not exist, this function does nothing and returns `Ok(())`.
     ///

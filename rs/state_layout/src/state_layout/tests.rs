@@ -290,7 +290,8 @@ fn test_removal_when_last_dropped() {
                 .unwrap(),
                 Height::new(1),
             )
-            .unwrap();
+            .unwrap()
+            .as_readonly();
         cp1.finalize_and_remove_unverified_marker(None).unwrap();
         let cp2 = state_layout
             .promote_scratchpad_to_unverified_checkpoint(
@@ -301,7 +302,8 @@ fn test_removal_when_last_dropped() {
                 .unwrap(),
                 Height::new(2),
             )
-            .unwrap();
+            .unwrap()
+            .as_readonly();
         cp2.finalize_and_remove_unverified_marker(None).unwrap();
         // Add one checkpoint so that we never remove the last one and crash
         let cp3 = state_layout
@@ -313,7 +315,8 @@ fn test_removal_when_last_dropped() {
                 .unwrap(),
                 Height::new(3),
             )
-            .unwrap();
+            .unwrap()
+            .as_readonly();
         cp3.finalize_and_remove_unverified_marker(None).unwrap();
         assert_eq!(
             vec![Height::new(1), Height::new(2), Height::new(3)],
@@ -362,9 +365,10 @@ fn checkpoints_files_are_removed_after_flushing_removal_channel() {
             }
             let cp = state_layout
                 .promote_scratchpad_to_unverified_checkpoint(scratchpad_layout, h)
-                .unwrap();
+                .unwrap()
+                .as_readonly();
             cp.finalize_and_remove_unverified_marker(None).unwrap();
-            cp.as_readonly()
+            cp
         };
 
         let mut checkpoints = vec![];
@@ -411,7 +415,8 @@ fn test_last_removal_panics_in_debug() {
                 .unwrap(),
                 Height::new(1),
             )
-            .unwrap();
+            .unwrap()
+            .as_readonly();
         cp1.finalize_and_remove_unverified_marker(None).unwrap();
         state_layout.remove_checkpoint_when_unused(Height::new(1));
         std::mem::drop(cp1);
@@ -451,7 +456,8 @@ fn test_can_remove_unverified_marker_file_twice() {
 
         let checkpoint = state_layout
             .promote_scratchpad_to_unverified_checkpoint(scratchpad_layout, height)
-            .unwrap();
+            .unwrap()
+            .as_readonly();
         checkpoint
             .finalize_and_remove_unverified_marker(None)
             .unwrap();
@@ -774,7 +780,8 @@ fn wasm_file_can_hold_checkpoint_for_lazy_loading() {
                 .unwrap(),
                 Height::new(2),
             )
-            .unwrap();
+            .unwrap()
+            .as_readonly();
         cp2.finalize_and_remove_unverified_marker(None).unwrap();
 
         // Create a `CanisterModule` that holds the checkpoint layout at height 1.
