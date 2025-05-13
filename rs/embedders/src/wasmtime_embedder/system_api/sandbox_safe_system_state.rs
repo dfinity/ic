@@ -47,8 +47,8 @@ pub enum CanisterStatusView {
 impl CanisterStatusView {
     pub fn from_canister_status_type(status: CanisterStatusType) -> Self {
         match status {
-            CanisterStatusType::Running { .. } => Self::Running,
-            CanisterStatusType::Stopping { .. } => Self::Stopping,
+            CanisterStatusType::Running => Self::Running,
+            CanisterStatusType::Stopping => Self::Stopping,
             CanisterStatusType::Stopped => Self::Stopped,
         }
     }
@@ -1320,9 +1320,9 @@ impl SandboxSafeSystemState {
     /// Condition for `OnLowWasmMemoryHook` is satisfied if the following holds:
     ///
     /// 1. In the case of `memory_allocation`
-    ///     `wasm_memory_threshold >= min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit) - wasm_memory_usage`
+    ///    `wasm_memory_threshold >= min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit) - wasm_memory_usage`
     /// 2. Without memory allocation
-    ///     `wasm_memory_threshold >= wasm_memory_limit - wasm_memory_usage`
+    ///    `wasm_memory_threshold >= wasm_memory_limit - wasm_memory_usage`
     ///
     /// Note: if `wasm_memory_limit` is not set, its default value is 4 GiB.
     pub fn update_status_of_low_wasm_memory_hook_condition(

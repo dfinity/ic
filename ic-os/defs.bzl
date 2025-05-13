@@ -220,7 +220,7 @@ def icos_build(
         )
 
     # When boot_args are fixed, don't bother signing
-    if "boot_args_template" not in image_deps:
+    if "extra_boot_args_template" not in image_deps:
         native.alias(name = "partition-root.tzst", actual = ":partition-root-unsigned.tzst", tags = ["manual", "no-cache"])
         native.alias(name = "extra_boot_args", actual = image_deps["extra_boot_args"], tags = ["manual"])
 
@@ -228,7 +228,7 @@ def icos_build(
             native.alias(name = "partition-root-test.tzst", actual = ":partition-root-test-unsigned.tzst", tags = ["manual", "no-cache"])
             native.alias(name = "extra_boot_test_args", actual = image_deps["extra_boot_args"], tags = ["manual"])
     else:
-        native.alias(name = "extra_boot_args_template", actual = image_deps["boot_args_template"], tags = ["manual"])
+        native.alias(name = "extra_boot_args_template", actual = image_deps["extra_boot_args_template"], tags = ["manual"])
 
         native.genrule(
             name = "partition-root-sign",

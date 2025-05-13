@@ -166,7 +166,7 @@ impl RsaPublicKey {
         //
         // There is an updated version of the crate but upgrading
         // requires significant changes, see CRP-2038
-        let modulus_bytes = (self.key.n().bits() + 7) / 8; // rounding up
+        let modulus_bytes = self.key.n().bits().div_ceil(8); // rounding up
 
         if signature.len() > modulus_bytes {
             return Err(CryptoError::SignatureVerification {

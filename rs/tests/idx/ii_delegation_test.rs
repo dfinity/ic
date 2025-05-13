@@ -1,5 +1,3 @@
-#[rustfmt::skip]
-
 use anyhow::Result;
 use candid::Principal;
 use ic_agent::Identity;

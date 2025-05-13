@@ -4,8 +4,8 @@
 //! The Histogram struct in this crate does two things:
 //!
 //! 1. Groups events based on
-//!     a) the real number associated with the event
-//!     b) binning scheme
+//!    a) the real number associated with the event
+//!    b) binning scheme
 //! 2. Counts how many events there are in each group.
 //!
 //! This is designed to plug into ic_metrics_encoder::MetricsEncoder::histogram_vec.

@@ -111,7 +111,7 @@ jobs:
     needs: [config]
     runs-on: ${{ (github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-24-large') || 'dind-large' }}
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -236,7 +236,7 @@ jobs:
     name: Bazel Build Fuzzers
     runs-on: ${{ (github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-24-large') || 'dind-large' }}
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -256,7 +256,7 @@ jobs:
     name: Bazel Build Fuzzers AFL
     runs-on: ${{ (github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-24-large') || 'dind-large' }}
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -313,7 +313,7 @@ jobs:
     name: Build IC
     runs-on: ${{ (github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-24-large') || 'dind-large' }}
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -390,7 +390,7 @@ jobs:
     name: Cargo Clippy Linux
     runs-on: ${{ (github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-24-large') || 'dind-large' }}
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -424,7 +424,7 @@ jobs:
     name: Cargo Build Release Linux
     runs-on: ${{ (github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-24-large') || 'dind-large' }}
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
     timeout-minutes: 30
     steps:
       - name: Checkout
