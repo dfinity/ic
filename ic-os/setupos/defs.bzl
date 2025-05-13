@@ -42,6 +42,7 @@ def image_deps(mode, _malicious = False):
         "bootfs_size": "100M",
         "grub_config": Label("//ic-os/setupos:grub.cfg"),
         "extra_boot_args": Label("//ic-os/setupos/context:extra_boot_args"),
+        "boot_args_template": Label("//ic-os/setupos/context:boot_args.template"),
 
         # Add any custom partitions to the manifest
         "custom_partitions": _custom_partitions,
