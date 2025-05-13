@@ -55,6 +55,11 @@ use ic_types::{
 use prost::Message;
 use std::{convert::TryFrom, fs::File, path::PathBuf, sync::Arc};
 
+#[cfg(not(test))]
+const TIMEOUT: tokio::time::Duration = tokio::time::Duration::from_secs(10);
+#[cfg(test)]
+const TIMEOUT: tokio::time::Duration = tokio::time::Duration::from_secs(1);
+
 /// Fetches catch-up packages from peers and local storage.
 ///
 /// CUPs are used to determine which version of the IC peers are running
@@ -246,17 +251,14 @@ impl CatchUpPackageProvider {
             .pool_max_idle_per_host(1)
             .build::<_, Full<Bytes>>(https);
 
-        let req = tokio::time::timeout(
-            tokio::time::Duration::from_secs(10),
-            client.request(
-                Request::builder()
-                    .method(Method::POST)
-                    .header(hyper::header::CONTENT_TYPE, "application/cbor")
-                    .uri(url)
-                    .body(Full::from(body))
-                    .map_err(|e| format!("Failed to create request: {:?}", e))?,
-            ),
-        );
+        let request = Request::builder()
+            .method(Method::POST)
+            .header(hyper::header::CONTENT_TYPE, "application/cbor")
+            .uri(url)
+            .body(Full::from(body))
+            .map_err(|e| format!("Failed to create request: {:?}", e))?;
+
+        let req = tokio::time::timeout(TIMEOUT, client.request(request));
 
         let res = req
             .await
@@ -425,4 +427,302 @@ fn get_cup_proto_height(cup: &pb::CatchUpPackage) -> Option<Height> {
         .ok()
         .and_then(|content| content.block)
         .map(|block| Height::from(block.height))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::net::SocketAddr;
+
+    use super::*;
+    use axum::{body::Body, response::IntoResponse, Router};
+    use axum_server::tls_rustls::RustlsConfig;
+    use hyper::{body::Incoming, Response, StatusCode};
+    use hyper_util::rt::TokioIo;
+    use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
+    use ic_logger::no_op_logger;
+    use ic_protobuf::types::v1 as pb;
+    use ic_registry_client_fake::FakeRegistryClient;
+    use ic_registry_client_helpers::node::ConnectionEndpoint;
+    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+    use ic_test_utilities::crypto::CryptoReturningOk;
+    use ic_test_utilities_consensus::fake::{Fake, FakeContent};
+    use ic_test_utilities_types::ids::{NODE_1, NODE_2, SUBNET_1};
+    use ic_types::{
+        batch::ValidationContext,
+        consensus::{
+            Block, BlockPayload, CatchUpContent, HashedBlock, HashedRandomBeacon, Payload,
+            RandomBeacon, RandomBeaconContent, Rank, SummaryPayload,
+        },
+        signature::ThresholdSignature,
+        time::UNIX_EPOCH,
+        ReplicaVersion,
+    };
+    use rcgen::{generate_simple_self_signed, CertifiedKey};
+    use rustls::{
+        client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
+        pki_types::{CertificateDer, ServerName, UnixTime},
+        ClientConfig, DigitallySignedStruct, SignatureScheme,
+    };
+    use tokio::io::{AsyncRead, AsyncWrite};
+    use tower::Service;
+
+    // TODO: export this to some test utilities crate as the same function is used in
+    // http_endpoints_public crate.
+    async fn generate_self_signed_cert() -> RustlsConfig {
+        let CertifiedKey { cert, key_pair } =
+            generate_simple_self_signed(vec!["127.0.0.1".to_string()]).unwrap();
+
+        let cert_der = CertificateDer::from(cert);
+
+        RustlsConfig::from_der(vec![cert_der.as_ref().to_vec()], key_pair.serialize_der())
+            .await
+            .unwrap()
+    }
+
+    /// Get a free port on this host to which we can connect transport to.
+    // TODO: export this to some test utilities crate as the same function is used in
+    // http_endpoints_public crate.
+    fn get_free_localhost_socket_addr() -> SocketAddr {
+        let socket = tokio::net::TcpSocket::new_v4().unwrap();
+        socket.set_reuseport(false).unwrap();
+        socket.set_reuseaddr(false).unwrap();
+        socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
+        socket.local_addr().unwrap()
+    }
+
+    // TODO: export this to some test utilities crate as the same function is used in
+    // http_endpoints_public crate.
+    fn mock_tls_config() -> MockTlsConfig {
+        #[derive(Debug)]
+        struct NoVerify;
+        impl ServerCertVerifier for NoVerify {
+            fn verify_server_cert(
+                &self,
+                _end_entity: &CertificateDer,
+                _intermediates: &[CertificateDer],
+                _server_name: &ServerName,
+                _ocsp_response: &[u8],
+                _now: UnixTime,
+            ) -> Result<ServerCertVerified, rustls::Error> {
+                Ok(ServerCertVerified::assertion())
+            }
+            fn verify_tls12_signature(
+                &self,
+                _: &[u8],
+                _: &CertificateDer<'_>,
+                _: &DigitallySignedStruct,
+            ) -> Result<HandshakeSignatureValid, rustls::Error> {
+                Ok(HandshakeSignatureValid::assertion())
+            }
+            fn verify_tls13_signature(
+                &self,
+                _: &[u8],
+                _: &CertificateDer<'_>,
+                _: &DigitallySignedStruct,
+            ) -> Result<HandshakeSignatureValid, rustls::Error> {
+                Ok(HandshakeSignatureValid::assertion())
+            }
+            fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+                rustls::crypto::ring::default_provider()
+                    .signature_verification_algorithms
+                    .supported_schemes()
+            }
+        }
+
+        let accept_any_config = ClientConfig::builder()
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(NoVerify))
+            .with_no_client_auth();
+
+        let mut tls_config = MockTlsConfig::new();
+        tls_config
+            .expect_client_config()
+            .returning(move |_, _| Ok(accept_any_config.clone()));
+
+        tls_config
+    }
+
+    async fn serve_http<S: AsyncRead + AsyncWrite + Send + Unpin + 'static>(
+        stream: S,
+        router: Router,
+    ) {
+        let stream = TokioIo::new(stream);
+        let hyper_service = hyper::service::service_fn(move |request: Request<Incoming>| {
+            router.clone().call(request)
+        });
+        hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
+            .http2()
+            .serve_connection_with_upgrades(stream, hyper_service)
+            .await
+            .unwrap();
+    }
+
+    async fn mock_server(mock_response: MockResponse) -> NodeRecord {
+        let addr = get_free_localhost_socket_addr();
+        let tcp_listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+
+        let node_record = NodeRecord {
+            http: Some(ConnectionEndpoint {
+                ip_addr: addr.ip().to_string(),
+                port: addr.port() as u32,
+            }),
+            ..Default::default()
+        };
+
+        tokio::spawn(async move {
+            if mock_response == MockResponse::DoNotAccept {
+                tokio::time::sleep(tokio::time::Duration::from_secs(60 * 60)).await;
+                return;
+            }
+
+            let router = Router::new().route(
+                "/_/catch_up_package",
+                axum::routing::any(async move || match mock_response {
+                    MockResponse::Empty => StatusCode::NO_CONTENT.into_response(),
+                    MockResponse::Cup(catch_up_package) => {
+                        let bytes = catch_up_package.encode_to_vec();
+                        Response::new(Body::new(Full::from(bytes)))
+                    }
+                    MockResponse::DoNotAccept => unreachable!(),
+                }),
+            );
+
+            let (stream, _remote_addr) = tcp_listener.accept().await.unwrap();
+            let mut b = [0_u8; 1];
+            stream.peek(&mut b).await.unwrap();
+            // TLS handshake
+            if b[0] == 22 {
+                let config = generate_self_signed_cert().await;
+                let tls_acceptor = tokio_rustls::TlsAcceptor::from(config.get_inner());
+                serve_http(tls_acceptor.accept(stream).await.unwrap(), router).await;
+            } else {
+                serve_http(stream, router).await;
+            }
+        });
+
+        node_record
+    }
+
+    #[derive(Clone, Eq, PartialEq)]
+    enum MockResponse {
+        Empty,
+        Cup(pb::CatchUpPackage),
+        DoNotAccept,
+    }
+
+    async fn set_up_dependencies(
+        mock_response: MockResponse,
+    ) -> (CatchUpPackageProvider, NodeRecord) {
+        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
+        let registry_client =
+            Arc::new(FakeRegistryClient::new(Arc::clone(&data_provider) as Arc<_>));
+        let node_id = NODE_1;
+
+        let node_record = mock_server(mock_response).await;
+
+        let cup_provider = CatchUpPackageProvider {
+            registry: Arc::new(RegistryHelper::new(
+                node_id,
+                registry_client,
+                no_op_logger(),
+            )),
+            cup_dir: PathBuf::from("/tmp"),
+            crypto: Arc::new(CryptoReturningOk::default()),
+            crypto_tls_config: Arc::new(mock_tls_config()),
+            logger: no_op_logger(),
+            node_id: node_id,
+        };
+
+        (cup_provider, node_record)
+    }
+
+    fn fake_cup() -> CatchUpPackage {
+        CatchUpPackage {
+            content: CatchUpContent::new(
+                HashedBlock::new(
+                    crypto_hash,
+                    Block::new(
+                        CryptoHashOf::from(CryptoHash(vec![])),
+                        Payload::new(crypto_hash, BlockPayload::Summary(SummaryPayload::fake())),
+                        Height::new(0),
+                        Rank(0),
+                        ValidationContext {
+                            registry_version: RegistryVersion::from(99),
+                            certified_height: Height::new(0),
+                            time: UNIX_EPOCH,
+                        },
+                    ),
+                ),
+                HashedRandomBeacon::new(
+                    crypto_hash,
+                    RandomBeacon::fake(RandomBeaconContent {
+                        version: ReplicaVersion::default(),
+                        height: Height::new(0),
+                        parent: CryptoHashOf::from(CryptoHash(vec![])),
+                    }),
+                ),
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+                None,
+            ),
+            signature: ThresholdSignature::fake(),
+        }
+    }
+
+    #[tokio::test]
+    async fn empty_response_is_accepted_test() {
+        let (cup_provider, node_record) = set_up_dependencies(MockResponse::Empty).await;
+
+        assert_eq!(
+            cup_provider
+                .fetch_and_verify_catch_up_package(
+                    &NODE_2,
+                    &node_record,
+                    /*param=*/ None,
+                    SUBNET_1,
+                )
+                .await,
+            Ok(None)
+        );
+    }
+
+    #[tokio::test]
+    async fn valid_cup_is_returned_test() {
+        let cup = fake_cup();
+        let cup_proto = pb::CatchUpPackage::from(&cup);
+        let (cup_provider, node_record) =
+            set_up_dependencies(MockResponse::Cup(cup_proto.clone())).await;
+
+        assert_eq!(
+            cup_provider
+                .fetch_and_verify_catch_up_package(
+                    &NODE_2,
+                    &node_record,
+                    /*param=*/ None,
+                    SUBNET_1,
+                )
+                .await,
+            Ok(Some((cup_proto, cup)))
+        );
+    }
+
+    #[tokio::test]
+    async fn time_out_test() {
+        let (cup_provider, node_record) = set_up_dependencies(MockResponse::DoNotAccept).await;
+
+        let response = cup_provider
+            .fetch_and_verify_catch_up_package(
+                &NODE_2,
+                &node_record,
+                /*param=*/ None,
+                SUBNET_1,
+            )
+            .await;
+
+        assert!(
+            response
+                .as_ref()
+                .is_err_and(|err| err.contains("Querying CUP endpoint timed out")),
+            "{response:?}"
+        );
+    }
 }
