@@ -119,8 +119,8 @@ rust_ic_test(
         ":ledger-canister-wasm",
         ":ledger-canister-wasm-allowance-getter",
         ":ledger-canister-wasm-next-version",
-        ":ledger-canister-wasm-prev-version",
         ":ledger-canister-wasm-notify-method",
+        ":ledger-canister-wasm-prev-version",
         "@mainnet_icp_ledger_canister//file",
     ],
     env = {
