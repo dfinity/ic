@@ -1017,7 +1017,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.13.3",
             ),
             "protobuf": crate.spec(
-                version = "^2.28.0",
+                version = "^3.7.2",
             ),
             "publicsuffix": crate.spec(
                 version = "^2.2.3",

@@ -3537,7 +3537,7 @@ dependencies = [
  "prost 0.12.2",
  "prost 0.13.3",
  "prost-build 0.13.3",
- "protobuf 2.28.0",
+ "protobuf 3.7.2",
  "publicsuffix",
  "quickcheck",
  "quinn",
