@@ -3,6 +3,7 @@ load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = [
     "//rs/nervous_system/agent:__pkg__",
+    "//rs/nervous_system/canisters:__pkg__",
     "//rs/registry/admin:__pkg__",
 ])
 
