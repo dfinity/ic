@@ -37,6 +37,7 @@ file_size_check(
 artifact_bundle(
     name = "bundle",
     inputs = [":prod"],
+    prefix = "host-os/update-img",
 )
 
 # This image is used for HostOS upgrades
