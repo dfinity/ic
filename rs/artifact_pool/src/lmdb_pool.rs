@@ -1833,7 +1833,7 @@ impl IDkgMessageDb {
     }
 
     /// Iterate over the pool for a given optional pattern. Start at the first key that matches the
-    /// pattern and stop at the first that does not. If not present, return all elements.
+    /// pattern and stop at the first that does not. If no pattern is given, return all elements.
     fn iter<T: TryFrom<IDkgMessage>>(
         &self,
         pattern: Option<IterationPattern>,
