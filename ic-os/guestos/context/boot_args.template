@@ -1,0 +1,6 @@
+# Kernel cmdline parameters for launching the GuestOS. For backwards
+# compatibility, we reuse EXTRA_BOOT_ARGS (found in extra_boot_args.template).
+# BOOT_ARGS_A targets partition set "A" while BOOT_ARGS_B targets partition
+# set "B" when booting the GuestOS.
+BOOT_ARGS_A="root=/dev/vda5 console=ttyS0 nomodeset EXTRA_BOOT_ARGS"
+BOOT_ARGS_B="root=/dev/vda8 console=ttyS0 nomodeset EXTRA_BOOT_ARGS"

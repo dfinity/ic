@@ -76,6 +76,8 @@ def image_deps(mode, malicious = False):
         # reflected in the overall version hash (the root_hash must include the
         # version hash, it cannot be the other way around).
         "extra_boot_args_template": Label("//ic-os/guestos/context:extra_boot_args.template"),
+        # In the GuestOS, we save the entire kernel cmdline on the boot partition.
+        "boot_args_template": Label("//ic-os/guestos/context:boot_args.template"),
     }
 
     dev_build_args = ["BUILD_TYPE=dev", "ROOT_PASSWORD=root"]
