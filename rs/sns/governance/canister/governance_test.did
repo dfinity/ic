@@ -257,6 +257,15 @@ type GetMetadataResponse = record {
   description : opt text;
 };
 
+type GetSnsStatusRequest = record {
+  time_window : opt nat64;
+}
+
+type GetSnsStatusResponse = record {
+  recent_proposals : opt nat64;
+  recent_transactions : opt nat64;
+}
+
 type GetModeResponse = record {
   mode : opt int32;
 };
@@ -913,6 +922,7 @@ service : (Governance) -> {
   get_latest_reward_event : () -> (RewardEvent) query;
   get_maturity_modulation : (record {}) -> (GetMaturityModulationResponse);
   get_metadata : (record {}) -> (GetMetadataResponse) query;
+  get_sns_status : (GetSnsStatusRequest) -> (GetSnsStatusResponse) query;
   get_mode : (record {}) -> (GetModeResponse) query;
   get_nervous_system_parameters : (null) -> (NervousSystemParameters) query;
   get_neuron : (GetNeuron) -> (GetNeuronResponse) query;

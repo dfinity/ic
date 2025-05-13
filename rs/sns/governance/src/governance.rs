@@ -55,15 +55,16 @@ use crate::{
             GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
             GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse,
             GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
-            GetSnsInitializationParametersResponse, Governance as GovernanceProto, GovernanceError,
-            ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
-            ListProposalsResponse, ManageDappCanisterSettings, ManageLedgerParameters,
-            ManageNeuron, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens,
-            MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
-            Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
-            Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-            RegisterDappCanisters, RewardEvent, SetTopicsForCustomProposals, Tally, Topic,
-            TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, Vote, WaitForQuietState,
+            GetSnsInitializationParametersResponse, GetSnsStatusRequest, GetSnsStatusResponse,
+            Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
+            ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
+            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
+            ManageSnsMetadata, MintSnsTokens, MintTokensRequest, MintTokensResponse,
+            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
+            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
+            ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
+            RewardEvent, SetTopicsForCustomProposals, Tally, Topic, TransferSnsTreasuryFunds,
+            UpgradeSnsControlledCanister, Vote, WaitForQuietState,
         },
     },
     proposal::{
@@ -159,10 +160,6 @@ pub const HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES: usize =
     MAX_HEAP_SIZE_IN_KIB / WASM32_PAGE_SIZE_IN_KIB * 7 / 8;
 
 pub const MAX_UPGRADE_JOURNAL_ENTRIES_PER_REQUEST: u64 = 100;
-
-/// Two months in seconds. For an SNS to be considered inactive,
-/// there should be no proposals submitted to it in the last 2 months.
-pub const TWO_MONTHS_SECS: u64 = 2 * 30 * 24 * 3600;
 
 /// Prefixes each log line for this canister.
 pub fn log_prefix() -> String {
@@ -2016,14 +2013,18 @@ impl Governance {
             .unwrap_or(u64::MAX);
     }
 
-    fn get_proposals_last_two_months(&self) -> u64 {
+    pub fn get_sns_status(&self, _request: GetSnsStatusRequest) -> GetSnsStatusResponse {
+        unimplemented!()
+    }
+
+    fn get_proposals_last_two_months(&self, time_window: u64) -> u64 {
         self.proto
             .proposals
             .values()
             .filter(|proposal_data| {
                 self.env.now() >= proposal_data.proposal_creation_timestamp_seconds
                     && self.env.now() - proposal_data.proposal_creation_timestamp_seconds
-                        <= TWO_MONTHS_SECS
+                        <= time_window
             })
             .count() as u64
     }
@@ -6074,7 +6075,6 @@ impl Governance {
             url: sns_metadata.url.clone(),
             name: sns_metadata.name.clone(),
             description: sns_metadata.description.clone(),
-            num_submitted_proposals_past_2_months: self.get_proposals_last_two_months(),
         }
     }
 
