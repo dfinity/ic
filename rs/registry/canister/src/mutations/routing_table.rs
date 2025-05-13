@@ -338,7 +338,10 @@ mod tests {
     use crate::common::test_helpers::invariant_compliant_registry;
 
     use super::*;
-    use crate::flags::temporarily_enable_canister_ranges_routing_map_storage;
+    use crate::flags::{
+        temporarily_disable_canister_ranges_routing_map_storage,
+        temporarily_enable_canister_ranges_routing_map_storage,
+    };
     use crate::mutations::node_management::common::get_key_family_iter;
     use assert_matches::assert_matches;
     use ic_base_types::CanisterId;
@@ -389,6 +392,54 @@ mod tests {
         );
 
         // GetSubnetForCanisterError::CanisterIdConversion currently not reachable - CanisterId::try_from() always succeeds
+    }
+
+    #[test]
+    fn test_routing_table_saves_as_canister_range_records_on_first_invocation_correctly() {
+        // First disable the feature
+        let _feat = temporarily_disable_canister_ranges_routing_map_storage();
+
+        let mut registry = invariant_compliant_registry(0);
+        let system_subnet =
+            PrincipalId::try_from(registry.get_subnet_list_record().subnets.first().unwrap())
+                .unwrap();
+
+        let mut rt = RoutingTable::new();
+        rt.insert(
+            CanisterIdRange {
+                start: CanisterId::from(5000),
+                end: CanisterId::from(6000),
+            },
+            system_subnet.into(),
+        )
+        .unwrap();
+        rt.insert(
+            CanisterIdRange {
+                start: CanisterId::from(6001),
+                end: CanisterId::from(7000),
+            },
+            system_subnet.into(),
+        )
+        .unwrap();
+        let mutations = routing_table_into_registry_mutation(&registry, rt.clone());
+        registry.maybe_apply_mutation_internal(mutations);
+
+        let recovered = registry
+            .get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
+
+        assert_eq!(recovered, RoutingTable::new());
+
+        drop(_feat);
+        let _feat = temporarily_enable_canister_ranges_routing_map_storage();
+        // Now we are in a situation where there is no difference between what's stored in routing_table
+        // and what's being saved BUT we should still generate canister_range_* records b/c they're empty
+        let mutations = routing_table_into_registry_mutation(&registry, rt.clone());
+        registry.maybe_apply_mutation_internal(mutations);
+
+        let recovered = registry
+            .get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
+
+        assert_eq!(recovered, rt);
     }
 
     #[test]
