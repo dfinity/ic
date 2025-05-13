@@ -1,5 +1,5 @@
 use prometheus::HistogramVec;
-use std::{collections::HashMap, time::Instant};
+use std::time::Instant;
 
 /// `HistogramTimer` alternative that allows setting label values incrementally.
 ///
@@ -36,7 +36,7 @@ impl<'a, const LABEL_COUNT: usize> HistogramVecTimer<'a, LABEL_COUNT> {
             .iter()
             .cloned()
             .zip(label_values.iter().cloned())
-            .collect::<HashMap<_, _>>();
+            .collect::<std::collections::HashMap<_, _>>();
 
         let timer = Self {
             hist,
