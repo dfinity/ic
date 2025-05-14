@@ -52,7 +52,7 @@ fn test_convert_to_high_capacity_registry_atomic_mutate_request() {
                 },
             ],
             preconditions,
-            timestamp_seconds: 0,
+            timestamp_nanoseconds: 0,
         }
     );
 }

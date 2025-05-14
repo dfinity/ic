@@ -80,7 +80,7 @@ mod downgrade_get_changes_since_response {
                 content,
 
                 // This gets dropped.
-                timestamp_seconds: _,
+                timestamp_nanoseconds: _,
             } = original;
 
             let (value, deletion_marker) = match content {
@@ -119,12 +119,12 @@ impl From<RegistryAtomicMutateRequest> for HighCapacityRegistryAtomicMutateReque
             .map(HighCapacityRegistryMutation::from)
             .collect::<Vec<_>>();
 
-        let timestamp_seconds = 0;
+        let timestamp_nanoseconds = 0;
 
         HighCapacityRegistryAtomicMutateRequest {
             mutations,
             preconditions,
-            timestamp_seconds,
+            timestamp_nanoseconds,
         }
     }
 }
