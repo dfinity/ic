@@ -12,10 +12,12 @@ use async_trait::async_trait;
 use axum::{body::Body, extract::State, middleware::Next, response::IntoResponse};
 use dashmap::DashMap;
 use http::Request;
-use ic_bn_lib::http::ConnInfo;
-use prometheus::{
-    register_histogram_with_registry, register_int_gauge_vec_with_registry, Histogram, IntGaugeVec,
-    Registry,
+use ic_bn_lib::{
+    http::ConnInfo,
+    prometheus::{
+        register_histogram_with_registry, register_int_gauge_vec_with_registry, Histogram,
+        IntGaugeVec, Registry,
+    },
 };
 use tracing::{debug, error, info, warn};
 

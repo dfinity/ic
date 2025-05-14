@@ -1,7 +1,7 @@
 use super::*;
 
 use crate::check::test::generate_custom_registry_snapshot;
-use prometheus::proto::{LabelPair, Metric};
+use ic_bn_lib::prometheus::proto::{LabelPair, Metric};
 
 // node_id, subnet_id
 const NODES: &[(&str, &str)] = &[
@@ -111,14 +111,14 @@ fn test_remove_stale_metrics() -> Result<(), Error> {
             let node_id = m
                 .get_label()
                 .iter()
-                .find(|&v| v.get_name() == NODE_ID_LABEL)
-                .map(|x| x.get_value());
+                .find(|&v| v.name() == NODE_ID_LABEL)
+                .map(|x| x.value());
 
             let subnet_id = m
                 .get_label()
                 .iter()
-                .find(|&v| v.get_name() == SUBNET_ID_LABEL)
-                .map(|x| x.get_value());
+                .find(|&v| v.name() == SUBNET_ID_LABEL)
+                .map(|x| x.value());
 
             match (node_id, subnet_id) {
                 (Some(node_id), Some(subnet_id)) => assert!(snapshot

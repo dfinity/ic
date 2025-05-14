@@ -26,10 +26,12 @@ use http::{
     },
     HeaderName, Method, StatusCode,
 };
-use ic_bn_lib::http::body::buffer_body;
-use ic_bn_lib::http::headers::{X_IC_CANISTER_ID, X_REQUESTED_WITH, X_REQUEST_ID};
-use ic_bn_lib::http::proxy::proxy;
-use ic_bn_lib::http::{Client, Error as IcBnError};
+use ic_gateway::ic_bn_lib::http::{
+    body::buffer_body,
+    headers::{X_IC_CANISTER_ID, X_REQUESTED_WITH, X_REQUEST_ID},
+    proxy::proxy,
+    Client, Error as IcBnError,
+};
 use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
 use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, NodeId, PrincipalId, SubnetId};
 use itertools::Itertools;

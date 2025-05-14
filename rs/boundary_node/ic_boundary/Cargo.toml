@@ -67,7 +67,6 @@ mockall = { workspace = true }
 moka = { version = "0.12.8", features = ["sync", "future"] }
 nftables = { workspace = true }
 nix = { workspace = true }
-prometheus = { workspace = true }
 rand = { workspace = true }
 ratelimit = "0.9.1"
 rate-limits-api = { path = "../rate_limits/api" }

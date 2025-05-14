@@ -548,7 +548,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.12",
             ),
             "http": crate.spec(
-                version = "^1.2.0",
+                version = "^1.3.1",
             ),
             "http-body": crate.spec(
                 version = "^1.0.1",
@@ -602,7 +602,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-bn-lib": crate.spec(
                 git = "https://github.com/dfinity/ic-bn-lib",
-                rev = "686cff6ccd422716d48767a299ab33044a27d4ad",
+                rev = "aac42c09c13d23d6f22526f718a842f48d72bf67",
             ),
             "ic-btc-interface": crate.spec(
                 version = "^0.2.2",
@@ -645,7 +645,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-gateway": crate.spec(
                 git = "https://github.com/dfinity/ic-gateway",
-                rev = "469d2daee8b44aadb46400bcb2832d560baf7272",
+                rev = "09ad186acdb118641a3e67baddbbf742c37237af",
+                default_features = False,
             ),
             "ic-http-certification": crate.spec(
                 version = "3.0.3",

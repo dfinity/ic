@@ -59,7 +59,6 @@ DEPENDENCIES = [
     "@crate_index//:moka",
     "@crate_index//:nftables",
     "@crate_index//:nix",
-    "@crate_index//:prometheus",
     "@crate_index//:rand",
     "@crate_index//:ratelimit",
     "@crate_index//:rcgen",

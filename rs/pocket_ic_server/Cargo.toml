@@ -27,7 +27,6 @@ http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
 ic-agent = { workspace = true }
-ic-bn-lib = { workspace = true }
 ic-boundary = { path = "../boundary_node/ic_boundary" }
 ic-btc-adapter = { path = "../bitcoin/adapter" }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
@@ -38,6 +37,7 @@ ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-ed25519 = { path = "../../packages/ic-ed25519" }
 ic-error-types = { path = "../../packages/ic-error-types" }
+ic-gateway = { workspace = true }
 ic-http-gateway = { workspace = true }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }
 ic-https-outcalls-adapter = { path = "../https_outcalls/adapter" }
@@ -90,7 +90,6 @@ wat = { workspace = true }
 bitcoincore-rpc = { workspace = true }
 ic-btc-interface = { workspace = true }
 ic-config = { path = "../config" }
-ic-gateway = { workspace = true }
 ic-registry-transport = { path = "../registry/transport" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-nns-constants = { path = "../nns/constants" }
