@@ -90,8 +90,9 @@ def main():
                 id_to_entry[exec_log_entry.id] = exec_log_entry
             elif entry_type == "spawn":
                 label = exec_log_entry.spawn.target_label
-                if (args.whitelist_pat is not None and not re.match(args.whitelist_pat, label)) or \
-                   (args.blacklist_pat is not None and     re.match(args.blacklist_pat, label)):
+                if (args.whitelist_pat is not None and not re.match(args.whitelist_pat, label)) or (
+                    args.blacklist_pat is not None and re.match(args.blacklist_pat, label)
+                ):
                     continue
                 for output in exec_log_entry.spawn.outputs:
                     output_type = output.WhichOneof("type")
