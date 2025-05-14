@@ -726,7 +726,7 @@ fn get_dkg_interval_length(
 ///
 /// An Ok return value contains:
 /// - configs grouped by subnet, either low and high threshold configs for `setup_initial_dkg` or
-///     a high threshold for a vetkey for `reshare_chain_key`
+///   a high threshold for a vetkey for `reshare_chain_key`
 /// - errors produced while generating the configs
 #[allow(clippy::type_complexity)]
 fn process_subnet_call_context(

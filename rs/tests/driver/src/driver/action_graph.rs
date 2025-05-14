@@ -340,7 +340,7 @@ impl Node {
             (r @ Running { .. }, Decrease)                          => (r.clone(), None),
             (Running { active, message: _ }, Fail) if *active > 0   => {(Failed { reason: None }, failed)}
             (f @ Running { .. }, Fail)                              => (f.clone(), None),
-            (f @ Failed { .. }, Start { .. })                       => (f.clone(), None),
+            (f @ Failed { .. }, Start)                              => (f.clone(), None),
             (f @ Failed { .. }, Decrease)                           => (f.clone(), None),
             (f @ Failed { .. }, Fail)                               => (f.clone(), None),
         }

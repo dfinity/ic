@@ -16,6 +16,8 @@ Success::
 . The calls succeed with the expected values.
 end::catalog[] */
 
+use anyhow::{anyhow, bail, Error};
+use ic_agent::{export::Principal, Agent};
 use ic_boundary_nodes_system_test_utils::{
     constants::COUNTER_CANISTER_WAT,
     helpers::{create_canister, get_install_url},
@@ -29,13 +31,10 @@ use ic_system_test_driver::{
     util::{agent_observes_canister_module, assert_create_agent, block_on},
 };
 use ic_types::PrincipalId;
-use std::net::SocketAddr;
-
-use anyhow::{anyhow, bail, Error};
-use ic_agent::{export::Principal, Agent};
 use reqwest::{redirect::Policy, ClientBuilder, StatusCode};
 use serde::Deserialize;
 use slog::{info, Logger};
+use std::net::SocketAddr;
 use v2_call_transport::V2CallAgent;
 
 mod v2_call_transport;

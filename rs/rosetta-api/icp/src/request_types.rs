@@ -115,7 +115,7 @@ pub enum RequestType {
 impl RequestType {
     pub fn into_str(self) -> &'static str {
         match self {
-            RequestType::Send { .. } => TRANSACTION,
+            RequestType::Send => TRANSACTION,
             RequestType::Stake { .. } => STAKE,
             RequestType::SetDissolveTimestamp { .. } => SET_DISSOLVE_TIMESTAMP,
             RequestType::ChangeAutoStakeMaturity { .. } => CHANGE_AUTO_STAKE_MATURITY,
