@@ -3,7 +3,9 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use crate::flags::is_canister_ranges_routing_map_storage_enabled;
-use crate::mutations::node_management::common::get_key_family_iter;
+use crate::mutations::node_management::common::{
+    get_key_family_iter, get_key_family_iter_at_version,
+};
 use dfn_core::CanisterId;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_protobuf::registry::routing_table::v1 as pb;
@@ -176,7 +178,7 @@ impl Registry {
             );
         }
 
-        let entries = get_key_family_iter(self, CANISTER_RANGE_PREFIX)
+        let entries = get_key_family_iter_at_version(self, CANISTER_RANGE_PREFIX, version)
             .map(|(_, v)| v)
             .collect::<Vec<pb::routing_table::Entry>>();
 
