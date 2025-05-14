@@ -113,7 +113,6 @@ package(default_visibility = ["//visibility:public"])
         opt = "z",
         proc_macro_deps = [
             # Keep sorted.
-            "@crate_index//:ic_cdk_macros_0_17_1",
         ],
         service_file = ":ledger.did",
         deps = [
@@ -387,7 +386,6 @@ rust_test(
         crate_features = features,
         proc_macro_deps = [
             # Keep sorted.
-            "@crate_index//:ic_cdk_macros_0_17_1",
         ],
         results_file = "canbench_results/canbench" + name_suffix + ".yml",
         deps = [
