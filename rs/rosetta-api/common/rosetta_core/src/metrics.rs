@@ -306,6 +306,7 @@ where
             // Build response
             let response = Response::builder()
                 .header("Content-Type", "text/plain; version=0.0.4")
+                .header("Cache-Control", "no-store")
                 .body(Body::from(buffer))
                 .unwrap();
 
