@@ -143,7 +143,7 @@ impl HasVersion for DealingContent {
 #[serde_as]
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct Summary {
+pub struct DkgSummary {
     /// The registry version used to create this summary.
     pub registry_version: RegistryVersion,
     /// The crypto configs of the currently computed DKGs, indexed by DKG Ids.
@@ -172,7 +172,7 @@ pub struct Summary {
     pub initial_dkg_attempts: BTreeMap<NiDkgTargetId, u32>,
 }
 
-impl Summary {
+impl DkgSummary {
     /// Create a new Summary
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -329,8 +329,8 @@ fn build_initial_dkg_attempts_vec(
         .collect()
 }
 
-impl From<&Summary> for pb::Summary {
-    fn from(summary: &Summary) -> Self {
+impl From<&DkgSummary> for pb::Summary {
+    fn from(summary: &DkgSummary) -> Self {
         Self {
             registry_version: summary.registry_version.get(),
             configs: summary
@@ -422,7 +422,7 @@ fn build_transcript_result(
     }
 }
 
-impl TryFrom<pb::Summary> for Summary {
+impl TryFrom<pb::Summary> for DkgSummary {
     type Error = ProxyDecodeError;
 
     fn try_from(summary: pb::Summary) -> Result<Self, Self::Error> {
@@ -452,9 +452,9 @@ impl TryFrom<pb::Summary> for Summary {
 /// start block of a new DKG interval, or a tuple containing the start height
 /// and the set of valid dealings corresponding to the current interval.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
-pub enum Payload {
+pub enum DkgPayload {
     /// DKG Summary payload
-    Summary(Summary),
+    Summary(DkgSummary),
     /// DKG Dealings payload
     Data(DkgDataPayload),
 }
@@ -525,8 +525,8 @@ impl NiDkgTag {
     }
 }
 
-impl From<&Summary> for pb::DkgPayload {
-    fn from(summary: &Summary) -> Self {
+impl From<&DkgSummary> for pb::DkgPayload {
+    fn from(summary: &DkgSummary) -> Self {
         Self {
             val: Some(pb::dkg_payload::Val::Summary(pb::Summary::from(summary))),
         }
@@ -550,7 +550,7 @@ impl From<&DkgDataPayload> for pb::DkgPayload {
     }
 }
 
-impl TryFrom<pb::DkgPayload> for Payload {
+impl TryFrom<pb::DkgPayload> for DkgPayload {
     type Error = ProxyDecodeError;
 
     fn try_from(summary: pb::DkgPayload) -> Result<Self, Self::Error> {
@@ -559,10 +559,10 @@ impl TryFrom<pb::DkgPayload> for Payload {
             .ok_or(ProxyDecodeError::MissingField("DkgPayload::val"))?
         {
             pb::dkg_payload::Val::Summary(summary) => {
-                Ok(Payload::Summary(Summary::try_from(summary)?))
+                Ok(DkgPayload::Summary(DkgSummary::try_from(summary)?))
             }
             pb::dkg_payload::Val::DataPayload(data_payload) => {
-                Ok(Payload::Data(DkgDataPayload::try_from(data_payload)?))
+                Ok(DkgPayload::Data(DkgDataPayload::try_from(data_payload)?))
             }
         }
     }
@@ -585,7 +585,7 @@ pub enum DkgPayloadCreationError {
 pub enum InvalidDkgPayloadReason {
     CryptoError(CryptoError),
     DkgVerifyDealingError(DkgVerifyDealingError),
-    MismatchedDkgSummary(dkg::Summary, dkg::Summary),
+    MismatchedDkgSummary(dkg::DkgSummary, dkg::DkgSummary),
     MissingDkgConfigForDealing,
     DkgStartHeightDoesNotMatchParentBlock,
     DkgSummaryAtNonStartHeight(Height),

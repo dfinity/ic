@@ -7,8 +7,8 @@ use ic_types::{
     batch::ValidationContext,
     consensus::{
         dkg::{
-            self, DkgPayloadCreationError, DkgPayloadValidationFailure, InvalidDkgPayloadReason,
-            Payload,
+            self, DkgPayload, DkgPayloadCreationError, DkgPayloadValidationFailure,
+            InvalidDkgPayloadReason,
         },
         Block, BlockPayload,
     },
@@ -47,7 +47,7 @@ pub trait DkgPayloadBuilder: Send + Sync {
         parent: &Block,
         context: &ValidationContext,
         max_dealings_per_block: usize,
-    ) -> Result<Payload, DkgPayloadCreationError>;
+    ) -> Result<DkgPayload, DkgPayloadCreationError>;
 
     fn validate_payload(
         &self,

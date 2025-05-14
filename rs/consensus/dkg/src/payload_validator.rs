@@ -1,7 +1,7 @@
 use crate::{crypto_validate_dealing, payload_builder, utils};
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{
-    dkg::{DkgPool, DkgPayloadValidationError},
+    dkg::{DkgPayloadValidationError, DkgPool},
     validation::ValidationResult,
 };
 use ic_interfaces_registry::RegistryClient;
@@ -12,7 +12,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        dkg::{DkgDataPayload, DkgPayloadValidationFailure, InvalidDkgPayloadReason, Summary},
+        dkg::{DkgDataPayload, DkgPayloadValidationFailure, DkgSummary, InvalidDkgPayloadReason},
         Block, BlockPayload,
     },
     SubnetId,
@@ -134,7 +134,7 @@ fn validate_dealings_payload(
     crypto: &dyn ConsensusCrypto,
     pool_reader: &PoolReader<'_>,
     dkg_pool: &dyn DkgPool,
-    last_summary: &Summary,
+    last_summary: &DkgSummary,
     dealings: &DkgDataPayload,
     max_dealings_per_payload: usize,
     parent: &Block,

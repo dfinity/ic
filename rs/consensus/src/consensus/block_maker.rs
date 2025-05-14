@@ -324,7 +324,7 @@ impl BlockMaker {
         let payload = Payload::new(
             ic_types::crypto::crypto_hash,
             match dkg_payload {
-                dkg::Payload::Summary(summary) => {
+                dkg::DkgPayload::Summary(summary) => {
                     // Summary block does not have batch payload.
                     self.metrics.report_byte_estimate_metrics(0, 0);
                     let idkg_summary = idkg::create_summary_payload(
@@ -345,7 +345,7 @@ impl BlockMaker {
                         idkg: idkg_summary,
                     })
                 }
-                dkg::Payload::Data(dkg) => {
+                dkg::DkgPayload::Data(dkg) => {
                     let (batch_payload, dkg, idkg_data) = match status::get_status(
                         height,
                         self.registry_client.as_ref(),
@@ -708,7 +708,7 @@ mod tests {
             let expected_payloads = PoolReader::new(&pool)
                 .get_payloads_from_height(certified_height.increment(), start.as_ref().clone());
             let returned_payload =
-                dkg::Payload::Data(dkg::DkgDataPayload::new_empty(Height::from(0)));
+                dkg::DkgPayload::Data(dkg::DkgDataPayload::new_empty(Height::from(0)));
             let pool_reader = PoolReader::new(&pool);
             let expected_time = expected_payloads[0].1
                 + get_block_maker_delay(

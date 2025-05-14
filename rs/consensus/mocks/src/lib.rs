@@ -25,7 +25,7 @@ use ic_types::{
     batch::{BatchPayload, ValidationContext},
     consensus::{
         block_maker::SubnetRecords,
-        dkg::{DkgPayloadCreationError, Payload as DkgPayload},
+        dkg::{DkgPayload, DkgPayloadCreationError},
         Block, BlockPayload, Payload,
     },
     replica_config::ReplicaConfig,
