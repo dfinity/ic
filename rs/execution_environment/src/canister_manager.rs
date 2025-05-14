@@ -2053,14 +2053,14 @@ impl CanisterManager {
         res.map(ReadCanisterSnapshotDataResponse::new)
     }
 
-    /// Creates a new snapshot from the provided metadata and returns the new snapshot id.
+    /// Creates a new snapshot based on the provided metadata and returns the new snapshot ID.
     /// The main/stable memory and the wasm chunk store are initialized empty, and the
     /// wasm module is initialized as an all-zero blob.
     ///
     /// The content of these memories has to be uploaded in slices via `write_snapshot_data`.
     ///
-    /// The memory size of the new snapshot is given by the metadata, so the canister is charged
-    /// the full snapshot memory use from the beginning, i.e., as if it had a wasm module and
+    /// The new snapshot's memory size is determined by the metadata, and the canister is charged
+    /// for the full snapshot memory usage from the beginning, as if it had the wasm module and
     /// main/stable memories as described in the metadata.
     pub(crate) fn create_snapshot_from_metadata(
         &self,
@@ -2206,9 +2206,9 @@ impl CanisterManager {
             });
         }
 
-        // Write data where it belongs, as indicated by the `CanisterSnapshotDataOffset` variant.
-        // The memory has already been paid for in `create_snapshot_from_metadata`,
-        // but the instructions used have to be accounted for.
+        // Write data to the appropriate location, as specified by the `CanisterSnapshotDataOffset` variant.
+        // Memory has already been paid for by `create_snapshot_from_metadata`,
+        // but the instructions used to copy the data still need to be accounted for.
         let snapshot_inner = Arc::make_mut(snapshot);
         let num_bytes = match args.kind {
             CanisterSnapshotDataOffset::WasmModule { offset } => {
