@@ -52,9 +52,13 @@ fn setup(subnet_memory_capacity: u64, initial_cycles: Option<u128>) -> (StateMac
         subnet_memory_capacity: NumBytes::new(subnet_memory_capacity),
         ..Default::default()
     };
-    // `subnet_memory_reservation` is subtracted in `ExecutionEnvironment::subnet_available_memory`
-    // and then a division by `scheduler_cores` is performed in
-    // `SchedulerImpl::execute_canisters_in_inner_round`.
+    // We want storage reservation to trigger upon every large enough memory allocation
+    // performed after deploying the universal canister.
+    // Because a division by `scheduler_cores` is performed in
+    // `SchedulerImpl::execute_canisters_in_inner_round` and
+    // `subnet_memory_reservation` is subtracted in
+    // `ExecutionEnvironment::subnet_available_memory`,
+    // we need to set the subnet memory threshold as follows:
     let subnet_memory_threshold = execution_config.subnet_memory_reservation
         + NumBytes::new(UNIVERSAL_CANISTER_DEFAULT_MEMORY_USAGE)
             * subnet_config
