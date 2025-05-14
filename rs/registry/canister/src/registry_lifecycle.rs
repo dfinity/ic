@@ -64,7 +64,7 @@ pub fn canister_post_upgrade(
 }
 
 // TODO(NNS1-3781): Delete this migration before removing routing_table key from registry.
-fn maybe_write_routing_table_to_canister_ranges(registry: &mut Registry) -> Vec<RegistryMutation> {
+fn maybe_write_routing_table_to_canister_ranges(registry: &Registry) -> Vec<RegistryMutation> {
     let ranges_rt =
         registry.get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
     let active_rt = registry.get_routing_table_or_panic(registry.latest_version());
