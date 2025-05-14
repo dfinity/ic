@@ -1,17 +1,12 @@
 use crate::{
     blockchainstate::{AddHeaderError, BlockchainState},
     common::{BlockHeight, MINIMUM_VERSION_NUMBER},
+    import::{
+        Block, BlockHash, BlockHeader, GetHeadersMessage, Hash, Inventory, NetworkMessage,
+        MAX_INV_SIZE,
+    },
     metrics::RouterMetrics,
     Channel, Command, ProcessBitcoinNetworkMessageError,
-};
-use bitcoin::{
-    block::Header as BlockHeader,
-    hashes::Hash as _,
-    p2p::{
-        message::{NetworkMessage, MAX_INV_SIZE},
-        message_blockdata::{GetHeadersMessage, Inventory},
-    },
-    Block, BlockHash,
 };
 use hashlink::{LinkedHashMap, LinkedHashSet};
 use ic_btc_validation::ValidateHeaderError;
@@ -764,11 +759,8 @@ pub mod test {
     use crate::{
         common::test_common::{TestChannel, TestState},
         config::{test::ConfigBuilder, Config},
+        import::{deserialize, genesis_block, BlockHash, Network, NetworkMessage},
     };
-    use bitcoin::blockdata::constants::genesis_block;
-    use bitcoin::consensus::deserialize;
-    use bitcoin::Network;
-    use bitcoin::{p2p::message::NetworkMessage, BlockHash};
     use hex::FromHex;
     use ic_btc_adapter_test_utils::{
         generate_headers, generate_large_block_blockchain, BLOCK_1_ENCODED, BLOCK_2_ENCODED,

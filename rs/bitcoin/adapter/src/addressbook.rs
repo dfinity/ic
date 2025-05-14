@@ -1,6 +1,5 @@
 use crate::config::Config;
-use bitcoin::p2p::Address;
-use bitcoin::p2p::ServiceFlags;
+use crate::import::{NetworkAddress as Address, ServiceFlags};
 use ic_logger::{info, ReplicaLogger};
 use rand::{
     prelude::{IteratorRandom, SliceRandom, StdRng},
@@ -308,7 +307,7 @@ fn format_addr(seed: &str, port: u16) -> String {
 mod test {
     use super::*;
     use crate::config::test::ConfigBuilder;
-    use bitcoin::Network;
+    use crate::import::Network;
     use ic_logger::replica_logger::no_op_logger;
     use std::str::FromStr;
 

@@ -5,20 +5,11 @@ use std::{
     sync::Arc,
 };
 
-use bitcoin::p2p::{Magic, ServiceFlags};
-
-use bitcoin::{
-    block::Header as BlockHeader,
-    consensus::{deserialize_partial, encode, serialize},
-    p2p::{
-        message::{NetworkMessage, RawNetworkMessage},
-        message_blockdata::{GetHeadersMessage, Inventory},
-        message_network::VersionMessage,
-    },
-    Block, BlockHash,
+use ic_btc_adapter::import::{
+    bitcoin_io, deserialize_partial, encode, serialize, Block, BlockHash, BlockHeader,
+    GetHeadersMessage, Inventory, Magic, NetworkMessage, RawNetworkMessage, ServiceFlags,
+    VersionMessage,
 };
-
-use bitcoin::io as bitcoin_io;
 
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},

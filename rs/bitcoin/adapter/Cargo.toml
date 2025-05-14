@@ -57,3 +57,8 @@ harness = false
 name = "adapter-stress-test"
 path = "src/stress_test.rs"
 required-features = ["tower"]
+
+[features]
+default = [ "bitcoin" ]
+bitcoin = []
+dogecoin = [ "nintondo-dogecoin" ]

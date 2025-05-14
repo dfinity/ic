@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use bitcoin::{block::Header as BlockHeader, BlockHash, Network};
+use crate::import::{BlockHash, BlockHeader, Network};
 use ic_metrics::MetricsRegistry;
 use static_assertions::const_assert_eq;
 use tokio::sync::mpsc::Sender;
@@ -301,7 +301,7 @@ mod test {
 
     use std::sync::{Arc, Mutex};
 
-    use bitcoin::{consensus::Decodable, Block, Network};
+    use crate::import::{Block, Decodable, Network};
     use ic_metrics::MetricsRegistry;
     use tokio::sync::mpsc::channel;
 

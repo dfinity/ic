@@ -1,11 +1,11 @@
 use crate::{
     blockchainstate::BlockchainState,
     get_successors_handler::{GetSuccessorsRequest, GetSuccessorsResponse},
+    import::{BlockHash, Encodable, Hash},
     metrics::{ServiceMetrics, LABEL_GET_SUCCESSOR, LABEL_SEND_TRANSACTION},
     BlockchainManagerRequest, Config, GetSuccessorsHandler, IncomingSource,
     TransactionManagerRequest,
 };
-use bitcoin::{consensus::Encodable, hashes::Hash, BlockHash};
 use ic_btc_service::{
     btc_service_server::{BtcService, BtcServiceServer},
     BtcServiceGetSuccessorsRequest, BtcServiceGetSuccessorsResponse,

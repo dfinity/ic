@@ -1,12 +1,9 @@
 use std::collections::HashSet;
 
-use bitcoin::{
-    block::{Header as BlockHeader, Version},
-    consensus::deserialize,
-    hashes::Hash,
-    Block, BlockHash, Target, Transaction, TxMerkleNode,
-};
 use hex::FromHex;
+use ic_btc_adapter::import::{
+    deserialize, Block, BlockHash, BlockHeader, Hash, Target, Transaction, TxMerkleNode, Version,
+};
 use rand::{prelude::StdRng, Rng, SeedableRng};
 
 pub mod bitcoind;

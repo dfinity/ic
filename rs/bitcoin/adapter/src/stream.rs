@@ -1,10 +1,4 @@
-use bitcoin::io as bitcoin_io;
-use bitcoin::{
-    consensus::serialize,
-    p2p::message::RawNetworkMessage,
-    p2p::Magic,
-    {consensus::encode, p2p::message::NetworkMessage},
-};
+use crate::import::{bitcoin_io, encode, serialize, Magic, NetworkMessage, RawNetworkMessage};
 use futures::TryFutureExt;
 use http::Uri;
 use ic_logger::{debug, error, info, ReplicaLogger};
@@ -377,7 +371,7 @@ pub mod test {
     use crate::common::DEFAULT_CHANNEL_BUFFER_SIZE;
 
     use super::*;
-    use bitcoin::{consensus::Encodable, Network};
+    use crate::import::{Encodable, Network};
     use ic_logger::replica_logger::no_op_logger;
 
     /// Test that large messages get rejected and we disconnect as a consequence.

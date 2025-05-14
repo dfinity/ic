@@ -2,12 +2,11 @@
 //! to the correct component.
 use crate::{
     blockchainmanager::BlockchainManager, common::DEFAULT_CHANNEL_BUFFER_SIZE, config::Config,
-    connectionmanager::ConnectionManager, metrics::RouterMetrics, stream::handle_stream,
-    transaction_store::TransactionStore, AdapterState, BlockchainManagerRequest, BlockchainState,
-    Channel, ProcessBitcoinNetworkMessage, ProcessBitcoinNetworkMessageError, ProcessEvent,
-    TransactionManagerRequest,
+    connectionmanager::ConnectionManager, import::NetworkMessage, metrics::RouterMetrics,
+    stream::handle_stream, transaction_store::TransactionStore, AdapterState,
+    BlockchainManagerRequest, BlockchainState, Channel, ProcessBitcoinNetworkMessage,
+    ProcessBitcoinNetworkMessageError, ProcessEvent, TransactionManagerRequest,
 };
-use bitcoin::p2p::message::NetworkMessage;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use std::net::SocketAddr;

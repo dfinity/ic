@@ -24,7 +24,7 @@ pub mod test_common {
         net::SocketAddr,
     };
 
-    use bitcoin::{consensus::deserialize, Block};
+    use crate::import::{deserialize, Block};
     use hex::FromHex;
 
     use crate::{Channel, ChannelError, Command};

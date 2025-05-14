@@ -55,7 +55,7 @@ impl Cli {
 pub mod test {
     use super::*;
     use crate::IncomingSource;
-    use bitcoin::Network;
+    use ic_btc_adapter::import::Network;
     use std::io::Write;
     use std::path::PathBuf;
     use std::str::FromStr;
