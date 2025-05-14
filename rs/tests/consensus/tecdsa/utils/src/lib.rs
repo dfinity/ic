@@ -251,7 +251,7 @@ pub fn run_chain_key_signature_test(
             .unwrap();
         // TODO(CRP-2789): Re-enable vetKD public key equality check as soon as
         // https://github.com/dfinity/ic/pull/5088 is deployed on the NNS subnet.
-        if let MasterPublicKeyId::VetKd(vetkd_key_id) = key_id {
+        if let MasterPublicKeyId::VetKd(_vetkd_key_id) = key_id {
             // skip canister public key equality check because of https://github.com/dfinity/ic/pull/5088
         } else {
             assert_eq!(existing_key, public_key);
