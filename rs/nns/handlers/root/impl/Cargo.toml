@@ -21,7 +21,7 @@ path = "src/lib.rs"
 build-info = { workspace = true }
 candid = { workspace = true }
 ic-base-types = { path = "../../../../types/base_types" }
-ic-cdk = "0.17.1"
+ic-cdk = "0.17.2"
 ic-cdk-macros = "0.17.1"
 ic-crypto-sha2 = { path = "../../../../crypto/sha2" }
 ic-http-types = { path = "../../../../../packages/ic-http-types" }

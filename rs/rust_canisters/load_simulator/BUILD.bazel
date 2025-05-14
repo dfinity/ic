@@ -7,12 +7,12 @@ DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:candid",
     "@crate_index//:ic-cdk-timers",
-    "@crate_index//:ic_cdk_0_17_1",
+    "@crate_index//:ic_cdk_0_17",
 ]
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
-    "@crate_index//:ic_cdk_macros_0_17_1",
+    "@crate_index//:ic_cdk_macros_0_17",
 ]
 
 DEV_DEPENDENCIES = []

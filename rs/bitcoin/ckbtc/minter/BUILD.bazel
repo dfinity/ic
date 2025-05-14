@@ -29,7 +29,7 @@ LIB_DEPS = [
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:ic0",
-    "@crate_index//:ic_cdk_0_17_1",
+    "@crate_index//:ic_cdk_0_17",
     "@crate_index//:lazy_static",
     "@crate_index//:minicbor",
     "@crate_index//:num-traits",
@@ -42,7 +42,7 @@ LIB_DEPS = [
 LIB_PROC_MACRO_DEPS = [
     # Keep sorted.
     "@crate_index//:async-trait",
-    "@crate_index//:ic_cdk_macros_0_17_1",
+    "@crate_index//:ic_cdk_macros_0_17",
     "@crate_index//:minicbor-derive",
 ]
 
@@ -87,7 +87,7 @@ alias(
         crate_name = "ic_ckbtc_minter_canister",
         proc_macro_deps = [
             # Keep sorted.
-            "@crate_index//:ic_cdk_macros_0_17_1",
+            "@crate_index//:ic_cdk_macros_0_17",
         ],
         rustc_env = {
             "CKBTC_MINTER_DID_PATH": "$(execpath :ckbtc_minter.did)",
@@ -103,7 +103,7 @@ alias(
             "@crate_index//:candid",
             "@crate_index//:ic-btc-interface",
             "@crate_index//:ic-metrics-encoder",
-            "@crate_index//:ic_cdk_0_17_1",
+            "@crate_index//:ic_cdk_0_17",
             "@crate_index//:serde_json",
         ],
     )
@@ -224,7 +224,7 @@ rust_ic_test(
         "@crate_index//:bitcoin_0_28",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
-        "@crate_index//:ic_cdk_0_17_1",
+        "@crate_index//:ic_cdk_0_17",
         "@crate_index//:minicbor",
         "@crate_index//:regex",
         "@crate_index//:serde_bytes",
@@ -301,7 +301,7 @@ rust_canbench(
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-metrics-encoder",
-        "@crate_index//:ic_cdk_0_17_1",
+        "@crate_index//:ic_cdk_0_17",
         "@crate_index//:serde_json",
     ],
 )
