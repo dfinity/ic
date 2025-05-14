@@ -1,7 +1,6 @@
 use crate::{common::LOG_PREFIX, pb::v1::SubnetForCanister, registry::Registry};
 use std::cmp::Ordering;
 
-use crate::flags::is_canister_ranges_routing_map_storage_enabled;
 use crate::mutations::node_management::common::get_key_family_iter_at_version;
 use dfn_core::CanisterId;
 use ic_base_types::{PrincipalId, SubnetId};
@@ -38,7 +37,8 @@ impl std::fmt::Display for GetSubnetForCanisterError {
 }
 
 /// Complexity O(n)
-fn mutations_for_canister_ranges(
+// TODO after migration runs in registry_lifecycle.rs, make this function private to this module again.
+pub(crate) fn mutations_for_canister_ranges(
     old_rt: &RoutingTable,
     new_rt: &RoutingTable,
 ) -> Vec<RegistryMutation> {
@@ -117,11 +117,11 @@ pub(crate) fn routing_table_into_registry_mutation(
 ) -> Vec<RegistryMutation> {
     let mut mutations = vec![];
 
-    if is_canister_ranges_routing_map_storage_enabled() {
-        let old = registry
-            .get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
-        mutations.append(&mut mutations_for_canister_ranges(&old, &routing_table));
-    }
+    // We have to use the old routing table (in canister_range_* form) in order to create the
+    // diff here.
+    let old =
+        registry.get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
+    mutations.append(&mut mutations_for_canister_ranges(&old, &routing_table));
 
     let new_routing_table = pb::RoutingTable::from(routing_table);
     mutations.push(upsert(
@@ -166,13 +166,6 @@ impl Registry {
         &self,
         version: u64,
     ) -> RoutingTable {
-        if !is_canister_ranges_routing_map_storage_enabled() {
-            panic!(
-                "{}canister ranges routing map storage is not enabled",
-                LOG_PREFIX
-            );
-        }
-
         let entries = get_key_family_iter_at_version(self, CANISTER_RANGE_PREFIX, version)
             .map(|(_, v)| v)
             .collect::<Vec<pb::routing_table::Entry>>();
@@ -335,10 +328,6 @@ mod tests {
     use crate::common::test_helpers::invariant_compliant_registry;
 
     use super::*;
-    use crate::flags::{
-        temporarily_disable_canister_ranges_routing_map_storage,
-        temporarily_enable_canister_ranges_routing_map_storage,
-    };
     use crate::mutations::node_management::common::get_key_family_iter;
     use assert_matches::assert_matches;
     use ic_base_types::CanisterId;
@@ -393,9 +382,6 @@ mod tests {
 
     #[test]
     fn test_routing_table_saves_as_canister_range_records_on_first_invocation_correctly() {
-        // First disable the feature
-        let _feat = temporarily_disable_canister_ranges_routing_map_storage();
-
         let mut registry = invariant_compliant_registry(0);
         let system_subnet =
             PrincipalId::try_from(registry.get_subnet_list_record().subnets.first().unwrap())
@@ -418,11 +404,13 @@ mod tests {
             system_subnet.into(),
         )
         .unwrap();
-        let mutations = routing_table_into_registry_mutation(&registry, rt.clone());
-        registry.maybe_apply_mutation_internal(mutations);
 
-        drop(_feat);
-        let _feat = temporarily_enable_canister_ranges_routing_map_storage();
+        let new_routing_table = pb::RoutingTable::from(routing_table);
+        let mutations = vec![upsert(
+            make_routing_table_record_key().as_bytes(),
+            new_routing_table.encode_to_vec(),
+        )];
+        registry.maybe_apply_mutation_internal(mutations);
 
         let recovered = registry
             .get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
@@ -442,8 +430,6 @@ mod tests {
 
     #[test]
     fn test_routing_table_saves_as_canister_range_records_correctly() {
-        let _feat = temporarily_enable_canister_ranges_routing_map_storage();
-
         let mut registry = invariant_compliant_registry(0);
         let system_subnet =
             PrincipalId::try_from(registry.get_subnet_list_record().subnets.first().unwrap())
@@ -477,8 +463,6 @@ mod tests {
 
     #[test]
     fn test_routing_table_updates_and_deletes_canister_ranges_as_expected() {
-        let _feat = temporarily_enable_canister_ranges_routing_map_storage();
-
         let mut registry = invariant_compliant_registry(0);
         let system_subnet =
             PrincipalId::try_from(registry.get_subnet_list_record().subnets.first().unwrap())
