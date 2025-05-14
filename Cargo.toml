@@ -270,6 +270,7 @@ members = [
     "rs/registry/client",
     "rs/registry/canister-client",
     "rs/registry/fake",
+    "rs/registry/fetch_large_record_test_canister",
     "rs/registry/helpers",
     "rs/registry/local_registry",
     "rs/registry/local_store",
