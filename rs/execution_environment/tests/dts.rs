@@ -170,6 +170,8 @@ fn dts_env(
             slice_instruction_limit,
         ))))
         .with_subnet_type(SubnetType::Application)
+        .with_snapshot_download_enabled(true)
+        .with_snapshot_upload_enabled(true)
         .build()
 }
 

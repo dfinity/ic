@@ -1554,6 +1554,7 @@ pub enum ErrorCode {
     CanisterRejectedMessage = 406,
     UnknownManagementMessage = 407,
     InvalidManagementPayload = 408,
+    CanisterSnapshotImmutable = 409,
     // 5xx -- `RejectCode::CanisterError`
     CanisterTrapped = 502,
     CanisterCalledTrap = 503,
