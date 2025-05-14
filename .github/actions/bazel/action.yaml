@@ -16,6 +16,14 @@ inputs:
 runs:
   using: "composite"
   steps:
+    # Freshly deployed k8s machines require ownership correctly set
+    # Avoiding: 'Failed to fetch registry file ... /cache/bazel/content_addressable/sha256 (Permission denied)'
+    - name: Prepare worker cache
+      shell: bash
+      run: |
+        if [ -e /cache ]; then
+          sudo find /cache \( -not -user 1001 -or -not -group 1001 \) -exec chown 1001:1001 {} +
+        fi
 
     # Create a known tempdir where build events will be written
     - id: metrics-tmpdir
