@@ -906,6 +906,10 @@ impl Ledger {
             METADATA_MAX_TAKE_ALLOWANCES,
             Nat::from(self.max_take_allowances()),
         ));
+        // When adding new entries that cannot be set by the user
+        // (e.g. because they are fixed or computed dynamically)
+        // please also add them to `map_metadata_or_trap` to prevent
+        // the entry being set using init or upgrade arguments.
         records
     }
 
