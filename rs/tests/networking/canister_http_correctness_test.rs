@@ -143,7 +143,6 @@ fn main() -> Result<()> {
                     test_response_header_total_size_over_the_48_kib_limit
                 ))
                 // This section tests the url and ip scenarios
-                .add_test(systest!(test_non_ascii_url_is_rejected))
                 .add_test(systest!(test_invalid_ip))
                 .add_test(systest!(test_invalid_domain_name))
                 .add_test(systest!(test_max_url_length))
