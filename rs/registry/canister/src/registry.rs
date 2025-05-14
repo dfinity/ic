@@ -488,12 +488,17 @@ impl Registry {
                     }
                     // End code to fix ICSUP-2589
 
-                    let mutation = HighCapacityRegistryAtomicMutateRequest::decode(
+                    let mut mutation = HighCapacityRegistryAtomicMutateRequest::decode(
                         &entry.encoded_mutation[..],
                     )
                     .unwrap_or_else(|err| {
                         panic!("Failed to decode mutation@{}: {}", entry.version, err)
                     });
+                    // TODO: Remove this once the timestamps have been converted to seconds.
+                    // This code should be safe to stay in here for quite some time as the difference
+                    // between nanoseconds and seconds is quite big.
+                    Self::ensure_mutation_timestamp_unit_seconds(&mut mutation);
+
                     self.apply_mutations_as_version(mutation, entry.version);
                     self.version = entry.version;
                     current_version = self.version;
@@ -511,6 +516,27 @@ impl Registry {
             }
         }
     }
+
+    /// Ensure that timestamps of mutations are in seconds.
+    fn ensure_mutation_timestamp_unit_seconds(
+        mutation_request: &mut HighCapacityRegistryAtomicMutateRequest,
+    ) {
+        // We use the beginning of the year in nanoseconds to determine if the
+        // current mutation has a timestamp in nanoseconds or in seconds.
+        //
+        // We know that the faulty mutations that were created, got created
+        // after this timestamp (in nanoseconds) and will convert them back
+        // to seconds.
+        //
+        // If the timestamp was already once converted back, it will not be
+        // done again.
+        const BEGINNING_OF_2025_NANOSECONDS: u64 = 1_735_693_261_000_000_000;
+
+        if mutation_request.timestamp_seconds > BEGINNING_OF_2025_NANOSECONDS {
+            // Downscale nanoseconds to seconds
+            mutation_request.timestamp_seconds /= 1_000_000_000;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -519,6 +545,7 @@ mod tests {
     use crate::flags::{
         temporarily_disable_chunkifying_large_values, temporarily_enable_chunkifying_large_values,
     };
+    use ic_nervous_system_time_helpers::now_nanoseconds;
     use ic_registry_canister_chunkify::dechunkify;
     use ic_registry_transport::{delete, insert, update, upsert};
     use rand::{Rng, SeedableRng};
@@ -1497,5 +1524,80 @@ Average length of the values: {} (desired: {})",
 
         // Step 3: Verify result(s): Verify that upgrade resulted in no data loss.
         assert_eq!(upgraded_registry, original_registry);
+    }
+
+    #[test]
+    fn test_ensuring_timestamp_seconds() {
+        let now_nanoseconds = now_nanoseconds();
+        let now_seconds = now_nanoseconds / 1_000_000_000;
+
+        // Step 1: Create a mutation request that has the timestamp in nanoseconds.
+        let mut mutation = HighCapacityRegistryAtomicMutateRequest {
+            mutations: vec![],
+            preconditions: vec![],
+            timestamp_seconds: now_nanoseconds,
+        };
+
+        // Step 2: Run the conversion code.
+        Registry::ensure_mutation_timestamp_unit_seconds(&mut mutation);
+
+        // Step 3: Verify that the timestamp changed.
+        assert!(mutation.timestamp_seconds == now_seconds);
+
+        // Step 4: Rerun the code again to simulate another upgrade.
+        Registry::ensure_mutation_timestamp_unit_seconds(&mut mutation);
+
+        assert!(mutation.timestamp_seconds == now_seconds);
+    }
+
+    #[test]
+    fn test_upgrade_conversion_of_timestamps() {
+        let mut registry = Registry::new();
+
+        let now_nanoseconds = now_nanoseconds();
+        let now_seconds = now_nanoseconds / 1_000_000_000;
+
+        // Step 1: Create a mutation request that has its timestamp in nanoseconds.
+        let mutation_request = HighCapacityRegistryAtomicMutateRequest {
+            mutations: vec![HighCapacityRegistryMutation::from(upsert(
+                "mutation",
+                vec![],
+            ))],
+            preconditions: vec![],
+            timestamp_seconds: now_nanoseconds,
+        };
+
+        // Step 2: Apply the mutation as is, bypassing the current timestamp setting.
+        registry.apply_mutations_as_version(mutation_request, 1);
+
+        // Step 3: Get the key and assert that the timestamp still in nanos.
+        let changes = registry.get_changes_since(0, None);
+        let delta = changes.first().unwrap();
+        let value = delta.values.first().unwrap();
+
+        // Step 4: Check that this mutation has wrong timestamp.
+        assert_eq!(value.timestamp_seconds, now_nanoseconds);
+
+        // Step 5: Serialize and deserialize the registry.
+        let mut upgraded_registry = Registry::new();
+        upgraded_registry.from_serializable_form(registry.serializable_form());
+
+        // Step 6: Refetch the key and assert that the timestamp is now in seconds.
+        let changes = upgraded_registry.get_changes_since(0, None);
+        let delta = changes.first().unwrap();
+        let value = delta.values.first().unwrap();
+
+        assert_eq!(value.timestamp_seconds, now_seconds);
+
+        // Step 7: Serialize and deserialize the registry again.
+        let mut again_upgraded_registry = Registry::new();
+        again_upgraded_registry.from_serializable_form(upgraded_registry.serializable_form());
+
+        // Step 8: Refetch the key and assert that the timestamp is now in seconds.
+        let changes = again_upgraded_registry.get_changes_since(0, None);
+        let delta = changes.first().unwrap();
+        let value = delta.values.first().unwrap();
+
+        assert_eq!(value.timestamp_seconds, now_seconds);
     }
 }
