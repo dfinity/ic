@@ -83,7 +83,6 @@ impl From<ErrorCode> for RejectCode {
             // Invalid destination errors.
             CanisterNotFound => DestinationInvalid,
             CanisterSnapshotNotFound => DestinationInvalid,
-            CanisterSnapshotImmutable => DestinationInvalid,
             // Explicit reject errors.
             InsufficientCyclesForCreateCanister => CanisterReject,
             InsufficientMemoryAllocation => CanisterReject,
@@ -92,6 +91,7 @@ impl From<ErrorCode> for RejectCode {
             UnknownManagementMessage => CanisterReject,
             InvalidManagementPayload => CanisterReject,
             CanisterNotHostedBySubnet => CanisterReject,
+            CanisterSnapshotImmutable => CanisterReject,
             // Canister errors.
             CanisterInvalidController => CanisterError,
             CanisterFunctionNotFound => CanisterError,
@@ -161,7 +161,6 @@ pub enum ErrorCode {
     // 3xx -- `RejectCode::DestinationInvalid`
     CanisterNotFound = 301,
     CanisterSnapshotNotFound = 305,
-    CanisterSnapshotImmutable = 306,
     // 4xx -- `RejectCode::CanisterReject`
     // 401
     InsufficientMemoryAllocation = 402,
@@ -171,6 +170,7 @@ pub enum ErrorCode {
     CanisterRejectedMessage = 406,
     UnknownManagementMessage = 407,
     InvalidManagementPayload = 408,
+    CanisterSnapshotImmutable = 409,
     // 5xx -- `RejectCode::CanisterError`
     CanisterTrapped = 502,
     CanisterCalledTrap = 503,

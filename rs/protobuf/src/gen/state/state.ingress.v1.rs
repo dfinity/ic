@@ -150,7 +150,6 @@ pub enum ErrorCode {
     /// 3xx -- `RejectCode::DestinationInvalid`
     CanisterNotFound = 301,
     CanisterSnapshotNotFound = 305,
-    CanisterSnapshotImmutable = 306,
     /// 4xx -- `RejectCode::CanisterReject`
     InsufficientMemoryAllocation = 402,
     InsufficientCyclesForCreateCanister = 403,
@@ -159,6 +158,7 @@ pub enum ErrorCode {
     CanisterRejectedMessage = 406,
     UnknownManagementMessage = 407,
     InvalidManagementPayload = 408,
+    CanisterSnapshotImmutable = 409,
     CanisterTrapped = 502,
     CanisterCalledTrap = 503,
     CanisterContractViolation = 504,
@@ -219,7 +219,6 @@ impl ErrorCode {
             Self::CanisterHeapDeltaRateLimited => "ERROR_CODE_CANISTER_HEAP_DELTA_RATE_LIMITED",
             Self::CanisterNotFound => "ERROR_CODE_CANISTER_NOT_FOUND",
             Self::CanisterSnapshotNotFound => "ERROR_CODE_CANISTER_SNAPSHOT_NOT_FOUND",
-            Self::CanisterSnapshotImmutable => "ERROR_CODE_CANISTER_SNAPSHOT_IMMUTABLE",
             Self::InsufficientMemoryAllocation => "ERROR_CODE_INSUFFICIENT_MEMORY_ALLOCATION",
             Self::InsufficientCyclesForCreateCanister => {
                 "ERROR_CODE_INSUFFICIENT_CYCLES_FOR_CREATE_CANISTER"
@@ -229,6 +228,7 @@ impl ErrorCode {
             Self::CanisterRejectedMessage => "ERROR_CODE_CANISTER_REJECTED_MESSAGE",
             Self::UnknownManagementMessage => "ERROR_CODE_UNKNOWN_MANAGEMENT_MESSAGE",
             Self::InvalidManagementPayload => "ERROR_CODE_INVALID_MANAGEMENT_PAYLOAD",
+            Self::CanisterSnapshotImmutable => "ERROR_CODE_CANISTER_SNAPSHOT_IMMUTABLE",
             Self::CanisterTrapped => "ERROR_CODE_CANISTER_TRAPPED",
             Self::CanisterCalledTrap => "ERROR_CODE_CANISTER_CALLED_TRAP",
             Self::CanisterContractViolation => "ERROR_CODE_CANISTER_CONTRACT_VIOLATION",
@@ -309,7 +309,6 @@ impl ErrorCode {
             }
             "ERROR_CODE_CANISTER_NOT_FOUND" => Some(Self::CanisterNotFound),
             "ERROR_CODE_CANISTER_SNAPSHOT_NOT_FOUND" => Some(Self::CanisterSnapshotNotFound),
-            "ERROR_CODE_CANISTER_SNAPSHOT_IMMUTABLE" => Some(Self::CanisterSnapshotImmutable),
             "ERROR_CODE_INSUFFICIENT_MEMORY_ALLOCATION" => Some(Self::InsufficientMemoryAllocation),
             "ERROR_CODE_INSUFFICIENT_CYCLES_FOR_CREATE_CANISTER" => {
                 Some(Self::InsufficientCyclesForCreateCanister)
@@ -319,6 +318,7 @@ impl ErrorCode {
             "ERROR_CODE_CANISTER_REJECTED_MESSAGE" => Some(Self::CanisterRejectedMessage),
             "ERROR_CODE_UNKNOWN_MANAGEMENT_MESSAGE" => Some(Self::UnknownManagementMessage),
             "ERROR_CODE_INVALID_MANAGEMENT_PAYLOAD" => Some(Self::InvalidManagementPayload),
+            "ERROR_CODE_CANISTER_SNAPSHOT_IMMUTABLE" => Some(Self::CanisterSnapshotImmutable),
             "ERROR_CODE_CANISTER_TRAPPED" => Some(Self::CanisterTrapped),
             "ERROR_CODE_CANISTER_CALLED_TRAP" => Some(Self::CanisterCalledTrap),
             "ERROR_CODE_CANISTER_CONTRACT_VIOLATION" => Some(Self::CanisterContractViolation),
