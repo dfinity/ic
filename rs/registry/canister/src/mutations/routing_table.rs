@@ -121,7 +121,8 @@ pub(crate) fn routing_table_into_registry_mutation(
     let mut mutations = vec![];
 
     if is_canister_ranges_routing_map_storage_enabled() {
-        let old = registry.get_routing_table_or_panic(registry.latest_version());
+        let old = registry
+            .get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
         mutations.append(&mut mutations_for_canister_ranges(&old, &routing_table));
     }
 
@@ -164,7 +165,6 @@ impl Registry {
             .expect("failed to decode the routing table from protobuf")
     }
 
-    #[cfg(any(test, feature = "test"))]
     pub fn get_routing_table_from_canister_range_records_or_panic(
         &self,
         version: u64,
@@ -424,13 +424,14 @@ mod tests {
         let mutations = routing_table_into_registry_mutation(&registry, rt.clone());
         registry.maybe_apply_mutation_internal(mutations);
 
+        drop(_feat);
+        let _feat = temporarily_enable_canister_ranges_routing_map_storage();
+
         let recovered = registry
             .get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
 
         assert_eq!(recovered, RoutingTable::new());
 
-        drop(_feat);
-        let _feat = temporarily_enable_canister_ranges_routing_map_storage();
         // Now we are in a situation where there is no difference between what's stored in routing_table
         // and what's being saved BUT we should still generate canister_range_* records b/c they're empty
         let mutations = routing_table_into_registry_mutation(&registry, rt.clone());
