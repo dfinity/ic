@@ -10496,6 +10496,7 @@ dependencies = [
  "mockall",
  "pocket-ic",
  "prost 0.13.4",
+ "tokio",
 ]
 
 [[package]]
