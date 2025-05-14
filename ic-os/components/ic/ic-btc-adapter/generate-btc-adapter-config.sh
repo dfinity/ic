@@ -13,41 +13,24 @@ function read_bitcoind_addr_variables() {
     done <"$1"
 }
 
-# Reads the socks proxy config file. The file must be of the form "key=value".
-# The file should only contain the key `socks_proxy`. All other keys are ignored.
-#
-# Arguments:
-# - $1: Name of the file to be read.
-function read_socks_proxy() {
-    while IFS="=" read -r key value; do
-        case "$key" in
-            "socks_proxy") SOCKS_PROXY="${value}" ;;
-        esac
-    done <"$1"
-}
-
 function usage() {
     cat <<EOF
 Usage:
-  generate-btc-adapter-config [-b bitcoind_addr.conf] [-s socks_proxy.conf] -o ic-btc-adapter.json5
+  generate-btc-adapter-config [-b bitcoind_addr.conf] -o ic-btc-adapter.json5
 
   Generate the bitcoin adapter config.
 
   -b bitcoind_addr.conf: Optional, bitcoind address
-  -s socks_proxy.conf: Optional, socks proxy url
-  -m If set, we will use bitcoin mainnet dns seeds 
+  -m If set, we will use bitcoin mainnet dns seeds
   -o outfile: output ic-btc-adapter.json5 file
 EOF
 }
 
 MAINNET=false
-while getopts "b:mo:s:" OPT; do
+while getopts "b:mo:" OPT; do
     case "${OPT}" in
         b)
             BITCOIND_ADDR_FILE="${OPTARG}"
-            ;;
-        s)
-            SOCKS_FILE="${OPTARG}"
             ;;
         o)
             OUT_FILE="${OPTARG}"
@@ -61,13 +44,6 @@ while getopts "b:mo:s:" OPT; do
             ;;
     esac
 done
-
-# Production socks5 proxy url needs to include schema, host and port to be accepted by the adapters.
-# Testnets deploy with a 'socks_proxy.conf' file to overwrite the production socks proxy with the testnet proxy.
-SOCKS_PROXY="socks5://socks5.ic0.app:1080"
-if [ "${SOCKS_FILE}" != "" -a -e "${SOCKS_FILE}" ]; then
-    read_socks_proxy "${SOCKS_FILE}"
-fi
 
 BITCOIN_NETWORK='"testnet4"'
 DNS_SEEDS='"seed.testnet4.bitcoin.sprovoost.nl",
@@ -91,7 +67,7 @@ if [ "${OUT_FILE}" == "" ]; then
     exit 1
 fi
 
-# BITCOIND_ADDR indicates that we are in system test environment. No socks proxy needed.
+# BITCOIND_ADDR indicates that we are in system test environment.
 # bitcoin_addr.conf should be formatted like this: key 'bitcoind_addr', comma separated values, NO "" around addresses, NO trailing ',' AND spaces
 # Example: bitcoind_addr=seed.bitcoin.sipa.be,regtest.random.me,regtest.random.org
 #
