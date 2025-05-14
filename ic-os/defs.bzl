@@ -159,7 +159,8 @@ def icos_build(
         partition_root_signed_tzst = partition_root + ".tzst"
         partition_root_hash = partition_root + "-hash"
         partition_boot_tzst = "partition-boot" + test_suffix + ".tzst"
-        version_txt = ":version" + test_suffix + ".txt"
+        version_txt = "version" + test_suffix + ".txt"
+        boot_args = "boot" + test_suffix + "_args"
         extra_boot_args = "extra_boot" + test_suffix + "_args"
 
         ext4_image(
@@ -190,12 +191,39 @@ def icos_build(
                     image_deps["bootfs"].items() + [
                         (version_txt, "/version.txt:0644"),
                         (extra_boot_args, "/extra_boot_args:0644"),
-                    (":boot_args", "/boot_args:0644"),
-                ]
-            )
-
+                        (boot_args, "/boot_args:0644"),
+                    ]
+                )
             },
             tags = ["manual", "no-cache"],
+        )
+
+        # The kernel command line (boot args) was previously split into two parts:
+        # 1. Dynamic args calculated at boot time in grub.cfg
+        # 2. Static args stored in EXTRA_BOOT_ARGS on the boot partition
+        #
+        # For stable and predicatable measurements with AMD SEV, we now precalculate and combine both parts
+        # into a single complete kernel command line that is:
+        # - Generated during image build
+        # - Stored statically on the boot partition
+        # - Measured as part of the SEV launch measurement
+        #
+        # For backwards compatibility in the GuestOS and compatibility with the HostOS and SetupOS, we continue
+        # to support the old way of calculating the dynamic args (see :extra_boot_args) and we derive boot_args
+        # from it.
+        native.genrule(
+            name = "generate-" + boot_args,
+            outs = [boot_args],
+            srcs = [extra_boot_args, ":boot_args_template"],
+            cmd = """
+                source "$(location """ + extra_boot_args + """)"
+                if [ ! -v EXTRA_BOOT_ARGS ]; then
+                    echo "EXTRA_BOOT_ARGS is not set in $(location """ + extra_boot_args + """)"
+                    exit 1
+                fi
+                m4 --define=EXTRA_BOOT_ARGS="$${EXTRA_BOOT_ARGS}" "$(location :boot_args_template)" > $@
+            """,
+            tags = ["manual"],
         )
 
         # Sign only if extra_boot_args_template is provided
@@ -244,55 +272,6 @@ def icos_build(
         actual = image_deps["boot_args_template"],
     )
 
-    # The kernel command line (boot args) was previously split into two parts:
-    # 1. Dynamic args calculated at boot time in grub.cfg
-    # 2. Static args stored in EXTRA_BOOT_ARGS on the boot partition
-    #
-    # For stable and predicatable measurements with AMD SEV, we now precalculate and combine both parts
-    # into a single complete kernel command line that is:
-    # - Generated during image build
-    # - Stored statically on the boot partition
-    # - Measured as part of the SEV launch measurement
-    #
-    # For backwards compatibility in the GuestOS and compatibility with the HostOS and SetupOS, we continue
-    # to support the old way of calculating the dynamic args (see :extra_boot_args) and we derive boot_args
-    # from it.
-    native.genrule(
-        name = "generate_boot_args",
-        outs = ["boot_args"],
-        srcs = [":extra_boot_args", ":boot_args_template"],
-        cmd = """
-            source "$(location :extra_boot_args)"
-            if [ ! -v EXTRA_BOOT_ARGS ]; then
-                echo "EXTRA_BOOT_ARGS is not set in $(location :extra_boot_args)"
-                exit 1
-            fi
-            m4 --define=EXTRA_BOOT_ARGS="$${EXTRA_BOOT_ARGS}" "$(location :boot_args_template)" > $@
-        """,
-        tags = ["manual"],
-    )
-    if upgrades:
-        ext4_image(
-            name = "partition-boot-test.tzst",
-            src = ":rootfs-tree.tar",
-            file_contexts = ":file_contexts",
-            partition_size = image_deps["bootfs_size"],
-            subdir = "boot",
-            target_compatible_with = [
-                "@platforms//os:linux",
-            ],
-            extra_files = {
-                k: v
-                for k, v in (
-                    image_deps["bootfs"].items() + [
-                        (":version-test.txt", "/version.txt:0644"),
-                        (":extra_boot_test_args", "/extra_boot_args:0644"),
-                        (":boot_test_args", "/boot_args:0644"),
-                    ]
-                )
-            },
-            tags = ["manual", "no-cache"],
-        )
     # -------------------- Assemble disk partitions ---------------
 
     # Build a list of custom partitions to allow "injecting" variant-specific partition logic.
