@@ -36,7 +36,7 @@ fn gen_metric(node_id: Option<String>, subnet_id: Option<String>) -> Metric {
         lbls.push(lbl);
     }
 
-    m.set_label(lbls.into());
+    m.set_label(lbls);
 
     m
 }
@@ -67,7 +67,7 @@ fn gen_metric_family(
 
     let mut mf = MetricFamily::new();
     mf.set_name(name);
-    mf.set_metric(metrics.into());
+    mf.set_metric(metrics);
     mf
 }
 
