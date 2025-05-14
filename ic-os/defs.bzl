@@ -159,7 +159,7 @@ def icos_build(
         partition_root_signed_tzst = partition_root + ".tzst"
         partition_root_hash = partition_root + "-hash"
         partition_boot_tzst = "partition-boot" + test_suffix + ".tzst"
-        version_txt = ":version" + test_suffix + ".txt"
+        version_txt = "version" + test_suffix + ".txt"
         extra_boot_args = "extra_boot" + test_suffix + "_args"
 
         ext4_image(
