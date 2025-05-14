@@ -9,10 +9,10 @@ use ic_ledger_core::{block::BlockType, Tokens};
 use ic_ledger_suite_state_machine_tests::archiving::icp_archives;
 use ic_ledger_suite_state_machine_tests::{
     balance_of, default_approve_args, default_transfer_from_args, expect_icrc2_disabled,
-    send_approval, send_transfer_from, setup, supported_standards, total_supply, transfer,
-    AllowanceProvider, FEE, MINTER,
+    send_approval, send_transfer, send_transfer_from, setup, supported_standards, total_supply,
+    transfer, AllowanceProvider, FEE, MINTER,
 };
-use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
+use ic_state_machine_tests::{ErrorCode, StateMachine, UserError, WasmResult};
 use icp_ledger::{
     AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, ArchiveOptions,
     ArchivedBlocksRange, Block, CandidBlock, CandidOperation, CandidTransaction, FeatureFlags,
@@ -59,6 +59,14 @@ fn ledger_wasm_prev_version() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
         std::env::var("CARGO_MANIFEST_DIR").unwrap(),
         "ledger-canister-prev-version",
+        &[],
+    )
+}
+
+fn ledger_wasm_notify_method() -> Vec<u8> {
+    ic_test_utilities_load_wasm::load_wasm(
+        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
+        "ledger-canister_notify-method",
         &[],
     )
 }
@@ -1647,6 +1655,86 @@ fn test_query_blocks_large_length() {
     if MAX_BLOCKS_PER_REQUEST == 0 {
         panic!("MAX_BLOCKS_PER_REQUEST should be larger than 0");
     }
+}
+
+#[test]
+fn test_notify_caller_logging() {
+    let env = StateMachine::new();
+    let user1 = PrincipalId::new_user_test_id(1);
+    let user2 = PrincipalId::new_user_test_id(2);
+    // Only whitelisted canisters can be notified
+    let mut send_whitelist = HashSet::new();
+    send_whitelist.insert(CanisterId::unchecked_from_principal(user2));
+    let mut initial_balances = HashMap::new();
+    initial_balances.insert(Account::from(user1.0).into(), Tokens::from_e8s(100_000));
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .send_whitelist(send_whitelist)
+        .initial_values(initial_balances)
+        .build()
+        .unwrap();
+    let canister_id = env
+        .install_canister(
+            ledger_wasm_notify_method(),
+            Encode!(&payload).unwrap(),
+            None,
+        )
+        .expect("Unable to install the Ledger canister");
+
+    // Make a transfer that we can notify about
+    let transfer_block_id = send_transfer(
+        &env,
+        canister_id,
+        user1.0,
+        &TransferArg {
+            from_subaccount: None,
+            to: Account::from(user2.0),
+            fee: None,
+            created_at_time: None,
+            memo: None,
+            amount: Tokens::from_e8s(10_000).into(),
+        },
+    )
+    .expect("transfer failed");
+
+    // Send the notification
+    match &env
+        .execute_ingress_as(
+            user1,
+            canister_id,
+            "notify_dfx",
+            Encode!(&icp_ledger::NotifyCanisterArgs {
+                block_height: transfer_block_id,
+                max_fee: DEFAULT_TRANSFER_FEE,
+                from_subaccount: None,
+                to_canister: CanisterId::unchecked_from_principal(user2),
+                to_subaccount: None,
+            })
+            .unwrap(),
+        )
+        .expect("failed to query blocks")
+    {
+        // Since we didn't install a canister that can receive the notify,
+        // we should get a reject.
+        WasmResult::Reply(reply) => {
+            panic!("unexpected reply: {:?}", reply);
+        }
+        WasmResult::Reject(reject) => {
+            assert!(reject.contains("No route to canister"))
+        }
+    }
+
+    // Verify that the ledger logged the caller of the notify method.
+    let log = env.canister_log(canister_id);
+    let expected_log_entry = format!("notify method called by [{}]", user1);
+    for record in log.records().iter() {
+        let entry =
+            String::from_utf8(record.content.clone()).expect("log entry should be a string");
+        if entry.contains(&expected_log_entry) {
+            return;
+        }
+    }
+    panic!("notify method was not logged");
 }
 
 #[test]

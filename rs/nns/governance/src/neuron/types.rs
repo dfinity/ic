@@ -1778,6 +1778,32 @@ impl NeuronBuilder {
         }
     }
 
+    /// In tests, we often don't care about the subaccount, controller or creation timestamp, so we
+    /// provide a constructor that allows to set only the ID and the dissolve state and age.
+    #[cfg(test)]
+    pub fn new_for_test(id: u64, dissolve_state_and_age: DissolveStateAndAge) -> Self {
+        let neuron_id = NeuronId::from_u64(id);
+
+        let mut account = vec![0; 32];
+        // Populate account so that it's not all zeros.
+        for (destination, data) in account.iter_mut().zip(id.to_le_bytes().iter().cycle()) {
+            *destination = *data;
+        }
+        let subaccount = Subaccount::try_from(account.as_slice()).unwrap();
+
+        let controller = PrincipalId::new_self_authenticating(&id.to_le_bytes());
+
+        let created_timestamp_seconds = 0;
+
+        Self::new(
+            neuron_id,
+            subaccount,
+            controller,
+            dissolve_state_and_age,
+            created_timestamp_seconds,
+        )
+    }
+
     #[cfg(test)]
     pub fn with_subaccount(mut self, subaccount: Subaccount) -> Self {
         self.subaccount = subaccount;
