@@ -1,5 +1,5 @@
 [package]
-name = "setupos-inject-configuration"
+name = "setupos-image-config"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,10 +7,16 @@ edition = "2021"
 anyhow = { workspace = true }
 clap = { workspace = true }
 partition_tools = { path = "../../build_tools/partition_tools" }
-serde = { workspace = true }
 serde_json = { workspace = true }
-serde_with = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
 config = { path = "../../config"}
+
+[[bin]]
+name = "setupos-create-config"
+path = "src/bin/create.rs"
+
+[[bin]]
+name = "setupos-inject-config"
+path = "src/bin/inject.rs"
