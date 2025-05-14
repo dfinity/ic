@@ -14,10 +14,13 @@ const T: u128 = 1_000_000_000_000;
 const KIB: u64 = 1024;
 const MIB: u64 = 1024 * KIB;
 const GIB: u64 = 1024 * MIB;
-const UNIVERSAL_CANISTER_DEFAULT_MEMORY_USAGE: u64 = 10 * MIB;
 const SUBNET_MEMORY_CAPACITY: u64 = 20 * GIB;
 
 const PAGE_SIZE: usize = 64 * KIB as usize;
+
+/// Upper bound for the default total memory usage of the universal canister
+/// after deployment.
+const UNIVERSAL_CANISTER_DEFAULT_MEMORY_USAGE: u64 = 10 * MIB;
 
 #[test]
 fn test_universal_canister_default_memory_usage() {
@@ -44,14 +47,23 @@ fn test_universal_canister_default_memory_usage() {
 
 fn setup(subnet_memory_capacity: u64, initial_cycles: Option<u128>) -> (StateMachine, CanisterId) {
     let subnet_type = SubnetType::Application;
-    let subnet_memory_threshold = ExecutionConfig::default().subnet_memory_reservation
-        + NumBytes::new(UNIVERSAL_CANISTER_DEFAULT_MEMORY_USAGE);
-    let execution_config = ExecutionConfig {
+    let subnet_config = SubnetConfig::new(subnet_type);
+    let mut execution_config = ExecutionConfig {
         subnet_memory_capacity: NumBytes::new(subnet_memory_capacity),
-        subnet_memory_threshold,
         ..Default::default()
     };
-    let config = StateMachineConfig::new(SubnetConfig::new(subnet_type), execution_config);
+    // `subnet_memory_reservation` is subtracted in `ExecutionEnvironment::subnet_available_memory`
+    // and then a division by `scheduler_cores` is performed in
+    // `SchedulerImpl::execute_canisters_in_inner_round`.
+    let subnet_memory_threshold = execution_config.subnet_memory_reservation
+        + NumBytes::new(UNIVERSAL_CANISTER_DEFAULT_MEMORY_USAGE)
+            * subnet_config
+                .scheduler_config
+                .scheduler_cores
+                .try_into()
+                .unwrap();
+    execution_config.subnet_memory_threshold = subnet_memory_threshold;
+    let config = StateMachineConfig::new(subnet_config, execution_config);
     let env = StateMachineBuilder::new()
         .with_config(Some(config))
         .with_subnet_type(subnet_type)
@@ -102,7 +114,7 @@ fn test_storage_reservation_triggered_in_update_by_stable_grow() {
     let (env, canister_id) = setup(SUBNET_MEMORY_CAPACITY, None);
     assert_eq!(reserved_balance(&env, canister_id), 0);
 
-    let _ = env.execute_ingress(canister_id, "update", wasm().stable_grow(100).build());
+    let _ = env.execute_ingress(canister_id, "update", wasm().stable_grow(1000).build());
 
     assert_gt!(reserved_balance(&env, canister_id), 0); // Storage reservation is triggered.
 }
@@ -137,7 +149,7 @@ fn test_storage_reservation_triggered_in_response() {
                 ic00::Method::RawRand,
                 call_args()
                     .other_side(EmptyBlob.encode())
-                    .on_reply(wasm().stable_grow(100)),
+                    .on_reply(wasm().stable_grow(1000)),
                 Cycles::new(0),
             )
             .build(),
@@ -162,7 +174,7 @@ fn test_storage_reservation_triggered_in_cleanup() {
                 call_args()
                     .other_side(EmptyBlob.encode())
                     .on_reply(wasm().trap())
-                    .on_cleanup(wasm().stable_grow(100)),
+                    .on_cleanup(wasm().stable_grow(1000)),
                 Cycles::new(0),
             )
             .build(),
@@ -177,7 +189,7 @@ fn test_storage_reservation_triggered_in_canister_snapshot_with_enough_cycles_av
     assert_eq!(reserved_balance(&env, canister_id), 0);
 
     // Grow memory in update call, should trigger storage reservation.
-    let _ = env.execute_ingress(canister_id, "update", wasm().stable_grow(100).build());
+    let _ = env.execute_ingress(canister_id, "update", wasm().stable_grow(1000).build());
     let reserved_balance_before_snapshot = reserved_balance(&env, canister_id);
     assert_gt!(reserved_balance_before_snapshot, 0); // Storage reservation is triggered.
 
