@@ -1531,13 +1531,7 @@ impl CanisterManager {
         };
 
         if let Some(replace_snapshot) = replace_snapshot {
-            self.remove_snapshot(
-                canister,
-                replace_snapshot,
-                state,
-                round_limits,
-                replace_snapshot_size,
-            );
+            self.remove_snapshot(canister, replace_snapshot, state, replace_snapshot_size);
         }
 
         self.memory_usage_updates(canister, round_limits, validated_memory_usage);
@@ -2138,13 +2132,7 @@ impl CanisterManager {
         );
 
         if let Some(replace_snapshot) = args.replace_snapshot() {
-            self.remove_snapshot(
-                canister,
-                replace_snapshot,
-                state,
-                round_limits,
-                replace_snapshot_size,
-            );
+            self.remove_snapshot(canister, replace_snapshot, state, replace_snapshot_size);
         }
 
         self.memory_usage_updates(canister, round_limits, validated_memory_usage);
@@ -2312,7 +2300,6 @@ impl CanisterManager {
         canister: &mut CanisterState,
         replace_snapshot: SnapshotId,
         state: &mut ReplicatedState,
-        round_limits: &mut RoundLimits,
         replace_snapshot_size: NumBytes,
     ) {
         // Delete old snapshot identified by `replace_snapshot` ID.
@@ -2329,11 +2316,6 @@ impl CanisterManager {
             state
                 .canister_snapshots
                 .compute_memory_usage_by_canister(canister.canister_id()),
-        );
-        round_limits.subnet_available_memory.increment(
-            replace_snapshot_size,
-            NumBytes::from(0),
-            NumBytes::from(0),
         );
     }
 }

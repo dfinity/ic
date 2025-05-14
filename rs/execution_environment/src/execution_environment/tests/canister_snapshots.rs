@@ -642,7 +642,6 @@ fn canister_snapshot_reserves_cycles_difference() {
             .system_state
             .reserved_balance();
         // Make sure the reserved cycles are increased even more than before.
-        println!("{reserved_cycles_after_a_new_snapshot}, {reserved_cycles_after_snapshot_1}, {reserved_cycles_after_snapshot_2}");
         assert!(
             reserved_cycles_after_a_new_snapshot
                 > reserved_cycles_after_snapshot_1 + reserved_cycles_after_snapshot_1
