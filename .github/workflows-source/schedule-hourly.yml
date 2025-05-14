@@ -23,7 +23,7 @@ anchors:
       options: >-
         -e NODE_NAME
         --privileged --cgroupns host
-        --mount type=tmpfs,destination=/tmp/tmpfs,tmpfs-size=8G
+        --mount type=tmpfs,destination=/tmp/tmpfs,tmpfs-size=16G
         -v /cache:/cache
     timeout-minutes: 120
   checkout: &checkout
