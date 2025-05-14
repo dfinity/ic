@@ -135,7 +135,7 @@ pub fn mint_cycles128_not_supported_on_application_subnet(env: TestEnv) {
             RejectResponse {
                 reject_code: RejectCode::CanisterError,
                 reject_message: format!(
-                    "Error from Canister {}: Canister violated contract: ic0.mint_cycles cannot be executed on non Cycles Minting Canister: {} != {}.\nThis is likely an error with the compiler/CDK toolchain being used to build the canister. Please report the error to IC devs on the forum: https://forum.dfinity.org and include which language/CDK was used to create the canister.",
+                    "Error from Canister {}: Canister violated contract: ic0.mint_cycles cannot be executed on non Cycles Minting Canister: {} != {}.\nIf you are running this canister in a test environment (e.g., dfx), make sure the test environment is up to date. Otherwise, this is likely an error with the compiler/CDK toolchain being used to build the canister. Please report the error to IC devs on the forum: https://forum.dfinity.org and include which language/CDK was used to create the canister.",
                     canister_id, canister_id,
                     CYCLES_MINTING_CANISTER_ID),
                 error_code: Some("IC0504".to_string())})
