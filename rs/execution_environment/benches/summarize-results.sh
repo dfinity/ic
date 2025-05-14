@@ -8,8 +8,8 @@ set -ue
 DEPENDENCIES="awk rg sed"
 which ${DEPENDENCIES} >/dev/null || (echo "Error checking dependencies: ${DEPENDENCIES}" >&2 && exit 1)
 
-NOISE_THRESHOLD_PCT="2"
-TOP_N="10"
+NOISE_THRESHOLD_PCT="${NOISE_THRESHOLD_PCT:-2}"
+TOP_N="${TOP_N:-10}"
 
 printf "    %-12s := %s\n" \
     "MIN_FILE" "${MIN_FILE:=${0##*/}.min}" \
@@ -22,6 +22,11 @@ if [ ! -s "${MIN_FILE}" ]; then
     echo "    No results to summarize in ${MIN_FILE} (quick run?)" >&2 && exit 0
 fi
 BASELINE_FILE="${BASELINE_DIR}/${MIN_FILE##*/}"
+# Remove the commit id from the baseline file name.
+# This is needed to compare the baseline file with the current one.
+# The baseline file name is expected to be in the format:
+#   <name>.<flavor>@<commit_id>.min
+BASELINE_FILE="${BASELINE_FILE%@*.min}.min"
 if [ ! -s "${BASELINE_FILE}" ]; then
     # Return an error, so the calling script can retry.
     echo "    No baseline found in ${BASELINE_FILE}" >&2 && exit 1
@@ -65,8 +70,12 @@ while read min_bench; do
     if [ -n "${new_result_ns}" -a -n "${baseline_result_ns}" ]; then
         total_baseline_ns=$((total_baseline_ns + baseline_result_ns))
         total_new_ns=$((total_new_ns + new_result_ns))
+        read baseline_ms new_ms < <(awk "BEGIN {
+            printf \"%.1f %.1f\n\",
+                ${baseline_result_ns} / 1000 / 1000, ${new_result_ns} / 1000 / 1000
+        }")
         diff_ms_pct=$(echo_diff_ms_pct "${baseline_result_ns}" "${new_result_ns}")
-        echo "${diff_ms_pct} ${name}" >>"${TMP_FILE}"
+        echo "${diff_ms_pct} ${baseline_ms} ${new_ms} ${name}" >>"${TMP_FILE}"
     fi
 done <"${MIN_FILE}"
 
@@ -86,21 +95,21 @@ esac
 if [ "${total_diff_pct}" != "0" ]; then
     echo "  Top ${TOP_N} by time:"
     cat "${TMP_FILE}" | sort -rn | rg '^[1-9]' | head -${TOP_N} \
-        | while read diff_ms diff_pct name; do
-            echo "  + ${name} time regressed by ${diff_ms} ms (${diff_pct}%)"
+        | while read diff_ms diff_pct baseline_ms new_ms name; do
+            echo "  + ${name} time regressed by ${diff_ms} ms (${baseline_ms} -> ${new_ms} ms)"
         done
     cat "${TMP_FILE}" | sort -n | rg '^-' | head -${TOP_N} \
-        | while read diff_ms diff_pct name; do
-            echo "  - ${name} time improved by ${diff_ms} ms (${diff_pct}%)"
+        | while read diff_ms diff_pct baseline_ms new_ms name; do
+            echo "  - ${name} time improved by ${diff_ms} ms (${baseline_ms} -> ${new_ms} ms)"
         done
     echo "  Top ${TOP_N} by percentage:"
     cat "${TMP_FILE}" | sort -rnk 2 | rg '^[1-9]' | head -${TOP_N} \
-        | while read diff_ms diff_pct name; do
-            echo "  + ${name} time regressed by ${diff_pct}% (${diff_ms} ms)"
+        | while read diff_ms diff_pct baseline_ms new_ms name; do
+            echo "  + ${name} time regressed by ${diff_pct}% (${baseline_ms} -> ${new_ms} ms)"
         done
     cat "${TMP_FILE}" | sort -nk 2 | rg '^-' | head -${TOP_N} \
-        | while read diff_ms diff_pct name; do
-            echo "  - ${name} time improved by ${diff_pct}% (${diff_ms} ms)"
+        | while read diff_ms diff_pct baseline_ms new_ms name; do
+            echo "  - ${name} time improved by ${diff_pct}% (${baseline_ms} -> ${new_ms} ms)"
         done
 fi
 rm -f "${TMP_FILE}"
