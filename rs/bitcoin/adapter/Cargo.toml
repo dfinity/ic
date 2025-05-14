@@ -7,7 +7,8 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-bitcoin = { workspace = true }
+bitcoin = { workspace = true , optional = true }
+nintondo-dogecoin = { git = "https://github.com/Nintondo/rust-dogecoin", optional = true }
 clap = { workspace = true }
 futures = { workspace = true }
 hashlink = "0.8.0"
@@ -60,5 +61,4 @@ required-features = ["tower"]
 
 [features]
 default = [ "bitcoin" ]
-bitcoin = []
 dogecoin = [ "nintondo-dogecoin" ]

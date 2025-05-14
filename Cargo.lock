@@ -1306,7 +1306,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1945a5048598e4189e239d3f809b19bdad4845c4b2ba400d304d2dcf26d2c462"
 dependencies = [
  "bech32 0.9.1",
- "bitcoin-private",
+ "bitcoin-private 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "bitcoin_hashes 0.12.0",
  "hex_lit",
  "secp256k1 0.27.0",
@@ -1353,6 +1353,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73290177011694f38ec25e165d0387ab7ea749a4b81cd4c80dae5988229f7a57"
 
 [[package]]
+name = "bitcoin-private"
+version = "0.1.0"
+source = "git+https://github.com/Nintondo/rust-dogecoin#c7d9bb5439b1b5c6b0133b8e7d08a6d3a92444d7"
+
+[[package]]
 name = "bitcoin-units"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1374,7 +1379,7 @@ version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d7066118b13d4b20b23645932dfb3a81ce7e29f95726c2036fa33cd7b092501"
 dependencies = [
- "bitcoin-private",
+ "bitcoin-private 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
 ]
 
@@ -2867,7 +2872,7 @@ version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "26d77079e1b71c2778d6e1daf191adadcd4ff5ec3ccad8298a79061d865b235b"
 dependencies = [
- "bitcoin-private",
+ "bitcoin-private 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "core-rpc-json",
  "jsonrpc 0.13.0",
  "log",
@@ -2882,7 +2887,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "581898ed9a83f31c64731b1d8ca2dfffcfec14edf1635afacd5234cddbde3a41"
 dependencies = [
  "bitcoin 0.30.2",
- "bitcoin-private",
+ "bitcoin-private 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
  "serde_json",
 ]
@@ -6383,6 +6388,7 @@ dependencies = [
  "ic-logger",
  "ic-metrics",
  "ic-test-utilities-logger",
+ "nintondo-dogecoin",
  "parking_lot",
  "primitive-types",
  "prometheus",
@@ -6428,9 +6434,9 @@ dependencies = [
 name = "ic-btc-adapter-test-utils"
 version = "0.9.0"
 dependencies = [
- "bitcoin 0.32.5",
  "flate2",
  "hex",
+ "ic-btc-adapter",
  "rand 0.8.5",
  "serde_json",
  "tokio",
@@ -16993,6 +16999,19 @@ dependencies = [
  "strum",
  "strum_macros",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "nintondo-dogecoin"
+version = "0.30.6"
+source = "git+https://github.com/Nintondo/rust-dogecoin#c7d9bb5439b1b5c6b0133b8e7d08a6d3a92444d7"
+dependencies = [
+ "bech32 0.9.1",
+ "bitcoin-private 0.1.0 (git+https://github.com/Nintondo/rust-dogecoin)",
+ "bitcoin_hashes 0.12.0",
+ "hex-conservative",
+ "hex_lit",
+ "secp256k1 0.27.0",
 ]
 
 [[package]]
