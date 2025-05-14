@@ -1255,7 +1255,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             Method::UploadCanisterSnapshotData => test_supported(|aborted_canister_id| {
                 let args = UploadCanisterSnapshotDataArgs::new(
                     aborted_canister_id,
-                    vec![],
+                    (aborted_canister_id, 0).into(),
                     CanisterSnapshotDataOffset::WasmChunk,
                     vec![],
                 )
