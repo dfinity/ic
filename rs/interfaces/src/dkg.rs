@@ -16,24 +16,24 @@ use ic_types::{
 };
 
 /// Dkg errors.
-pub type PayloadValidationError =
+pub type DkgPayloadValidationError =
     ValidationError<InvalidDkgPayloadReason, DkgPayloadValidationFailure>;
 
-impl From<InvalidDkgPayloadReason> for PayloadValidationError {
+impl From<InvalidDkgPayloadReason> for DkgPayloadValidationError {
     fn from(err: InvalidDkgPayloadReason) -> Self {
-        PayloadValidationError::InvalidArtifact(err)
+        DkgPayloadValidationError::InvalidArtifact(err)
     }
 }
 
-impl From<DkgPayloadValidationFailure> for PayloadValidationError {
+impl From<DkgPayloadValidationFailure> for DkgPayloadValidationError {
     fn from(err: DkgPayloadValidationFailure) -> Self {
-        PayloadValidationError::ValidationFailed(err)
+        DkgPayloadValidationError::ValidationFailed(err)
     }
 }
 
-impl From<DkgPayloadCreationError> for PayloadValidationError {
+impl From<DkgPayloadCreationError> for DkgPayloadValidationError {
     fn from(err: DkgPayloadCreationError) -> Self {
-        PayloadValidationError::ValidationFailed(
+        DkgPayloadValidationError::ValidationFailed(
             DkgPayloadValidationFailure::PayloadCreationFailed(err),
         )
     }
@@ -55,7 +55,7 @@ pub trait DkgPayloadBuilder: Send + Sync {
         pool: &dyn ConsensusPool,
         parent: &Block,
         context: &ValidationContext,
-    ) -> ValidationResult<PayloadValidationError>;
+    ) -> ValidationResult<DkgPayloadValidationError>;
 }
 
 /// The DkgPool is used to store messages that are exchanged between nodes in
