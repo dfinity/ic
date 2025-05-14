@@ -16,7 +16,7 @@ rust_library(
     name = "ic-error-types",
     srcs = glob(["src/**"]),
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.1.0",
+    version = "0.2.0",
     deps = DEPENDENCIES,
 )
 
