@@ -1336,7 +1336,6 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                             &self.state_layout,
                         ) {
                             self.state = DownloadState::Complete;
-
                             return Ok(());
                         }
 
@@ -1347,7 +1346,6 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                             Arc::new(meta_manifest.clone()),
                         );
                         self.state = DownloadState::Complete;
-
                         self.state_sync_refs
                             .cache
                             .write()
