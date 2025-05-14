@@ -4,7 +4,6 @@ use crate::consensus::{
     status::{self, Status},
     ConsensusCrypto,
 };
-use ic_consensus_dkg::payload_builder::create_payload as create_dkg_payload;
 use ic_consensus_idkg::{self as idkg, metrics::IDkgPayloadMetrics};
 use ic_consensus_utils::{
     find_lowest_ranked_non_disqualified_proposals, get_notarization_delay_settings,
@@ -298,18 +297,6 @@ impl BlockMaker {
         let max_dealings_per_block =
             subnet_records.membership_version.dkg_dealings_per_block as usize;
 
-        // let dkg_payload = create_dkg_payload(
-        //     self.replica_config.subnet_id,
-        //     &*self.registry_client,
-        //     &*self.crypto,
-        //     pool,
-        //     Arc::clone(&self.dkg_pool),
-        //     parent.as_ref(),
-        //     &*self.state_manager,
-        //     &context,
-        //     self.log.clone(),
-        //     max_dealings_per_block,
-        // )
         let dkg_payload = self
             .dkg_payload_builder
             .create_payload(
@@ -615,7 +602,10 @@ pub(super) fn is_time_to_make_block(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies, MockPayloadBuilder};
+    use ic_consensus_dkg::payload_builder::DkgPayloadBuilderImpl;
+    use ic_consensus_mocks::{
+        dependencies_with_subnet_params, Dependencies, MockDkgPayloadBuilder, MockPayloadBuilder,
+    };
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
@@ -623,7 +613,10 @@ mod tests {
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        consensus::{dkg, HasHeight, HasVersion},
+        consensus::{
+            dkg::{self, DkgPayload, DkgSummary},
+            HasHeight, HasVersion,
+        },
         crypto::CryptoHash,
         *,
     };
@@ -669,6 +662,15 @@ mod tests {
             pool.advance_round_normal_operation_n(4);
 
             let payload_builder = MockPayloadBuilder::new();
+            let mut dkg_payload_builder = MockDkgPayloadBuilder::new();
+            dkg_payload_builder
+                .expect_create_payload()
+                .return_const(Ok(DkgPayload::Data(DkgDataPayload {
+                    start_height: Height::from(0),
+                    messages: vec![],
+                })));
+            let dkg_payload_builder = Arc::new(dkg_payload_builder);
+
             let certified_height = Height::from(1);
             state_manager
                 .get_mut()
@@ -682,7 +684,7 @@ mod tests {
                 membership.clone(),
                 crypto.clone(),
                 Arc::new(payload_builder),
-                todo!(),
+                dkg_payload_builder.clone(),
                 dkg_pool.clone(),
                 idkg_pool.clone(),
                 state_manager.clone(),
@@ -764,7 +766,7 @@ mod tests {
                 membership,
                 Arc::clone(&crypto) as Arc<_>,
                 Arc::new(payload_builder),
-                todo!(),
+                dkg_payload_builder,
                 dkg_pool,
                 idkg_pool,
                 state_manager,
@@ -885,6 +887,17 @@ mod tests {
             payload_builder
                 .expect_get_payload()
                 .return_const(BatchPayload::default());
+
+            let dkg_payload_builder = Arc::new(DkgPayloadBuilderImpl::new(
+                subnet_test_id(0),
+                Arc::clone(&registry) as Arc<dyn RegistryClient>,
+                crypto.clone(),
+                dkg_pool.clone(),
+                state_manager.clone(),
+                &MetricsRegistry::new(),
+                no_op_logger(),
+            ));
+
             let membership =
                 Membership::new(pool.get_cache(), registry.clone(), replica_config.subnet_id);
             let membership = Arc::new(membership);
@@ -896,7 +909,7 @@ mod tests {
                 membership.clone(),
                 crypto.clone(),
                 Arc::new(payload_builder),
-                todo!(),
+                dkg_payload_builder.clone(),
                 dkg_pool.clone(),
                 idkg_pool.clone(),
                 state_manager.clone(),
@@ -936,7 +949,7 @@ mod tests {
                 membership,
                 crypto,
                 Arc::new(payload_builder),
-                todo!(),
+                dkg_payload_builder,
                 dkg_pool,
                 idkg_pool,
                 state_manager,
@@ -1005,6 +1018,11 @@ mod tests {
                 replica_config.subnet_id,
             ));
 
+            let mut dkg_payload_builder = MockDkgPayloadBuilder::new();
+            // dkg_payload_builder
+            //     .expect_create_payload()
+            //     .return_const(DkgPayload::default());
+
             let mut block_maker = BlockMaker::new(
                 Arc::clone(&time_source) as Arc<_>,
                 replica_config,
@@ -1012,7 +1030,7 @@ mod tests {
                 membership,
                 crypto,
                 Arc::new(payload_builder),
-                todo!(),
+                Arc::new(dkg_payload_builder),
                 dkg_pool,
                 idkg_pool,
                 state_manager,
