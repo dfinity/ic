@@ -11,7 +11,7 @@ build-info = { workspace = true }
 
 candid = { workspace = true }
 ic-cdk = "0.17.2"
-ic-cdk-macros = "0.17.1"
+ic-cdk-macros = "0.17.2"
 ic-types = { path = "../../../types/types" }
 ic-validator-ingress-message = { path = ".." }
 

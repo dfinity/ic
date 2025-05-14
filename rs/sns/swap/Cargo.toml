@@ -29,7 +29,7 @@ ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-cdk = "0.17.2"
-ic-cdk-macros = "0.17.1"
+ic-cdk-macros = "0.17.2"
 ic-cdk-timers = { workspace = true }
 ic-metrics-encoder = "1"
 ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
