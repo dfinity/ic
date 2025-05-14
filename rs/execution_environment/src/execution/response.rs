@@ -49,10 +49,10 @@ const RESERVED_CLEANUP_INSTRUCTIONS_IN_PERCENT: u64 = 5;
 
 /// The algorithm for executing the response callback works with two canisters:
 /// - `clean_canister`: the canister state from the current replicated state
-///    without any changes by the ongoing execution.
+///   without any changes by the ongoing execution.
 /// - `helper.canister()`: the canister state that contains changes done by
-///    the ongoing execution. This state is re-created in each entry point of
-///    the algorithm by applying the state changes to `clean_canister`.
+///   the ongoing execution. This state is re-created in each entry point of
+///   the algorithm by applying the state changes to `clean_canister`.
 ///
 /// Summary of the algorithm:
 /// 1. The main entry point is `execute_response()` that takes `clean_canister`

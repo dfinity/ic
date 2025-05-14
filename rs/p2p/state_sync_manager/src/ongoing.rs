@@ -4,9 +4,10 @@
 //! Mechanism:
 //!  - Ask State sync for which chunks to download
 //!  - Download this batch of chunk in parallel with a concurrency limiter per peer.
-//!    Note: - We randomly chose a peer from the set of peers advertised this state.
-//!          - We don't retry failed downloads immediately. Failed downloads are retried
-//!            in the next batch download.
+//!    Note:
+//!      - We randomly chose a peer from the set of peers advertised this state.
+//!      - We don't retry failed downloads immediately. Failed downloads are retried
+//!        in the next batch download.
 //!  - Add downloaded chunk to state.
 //!  - Repeat until state sync reports completed or we hit the state sync timeout or
 //!    this object is dropped.

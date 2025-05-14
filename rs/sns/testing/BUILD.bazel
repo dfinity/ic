@@ -1,3 +1,4 @@
+load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 
@@ -151,5 +152,56 @@ rust_canister(
         "@crate_index//:candid",
         "@crate_index//:ic_cdk_0_17_1",
         "@crate_index//:serde",
+    ],
+)
+
+genrule(
+    name = "_sns_testing_env",
+    testonly = True,
+    srcs = DEV_DATA,  # Include the dependencies to be resolved by rootpath in DEV_ENV.
+    outs = ["sns_testing_env.sh"],
+    cmd = "\n".join([
+        'echo \'export %s="%s"\' >> $@' % (key, value)
+        for key, value in DEV_ENV.items()
+    ]),
+)
+
+pkg_tar(
+    name = "sns_testing_env",
+    testonly = True,
+    srcs = ["_sns_testing_env"],
+    extension = "tar",
+)
+
+pkg_tar(
+    name = "sns_testing_dependencies",
+    testonly = True,
+    srcs = DEV_DATA,
+    extension = "tar",
+    strip_prefix = "/",
+)
+
+pkg_tar(
+    name = "sns_testing_bin",
+    testonly = True,
+    srcs = [
+        ":sns-testing",
+        ":sns-testing-init",
+        "dfx.json",
+        # TODO: Add the README.md file to the tarball once if is re-written in terms of the bundle.
+        # "README.md",
+    ],
+    extension = "tar",
+)
+
+pkg_tar(
+    name = "sns_testing_bundle",
+    testonly = True,
+    extension = "tar.gz",
+    strip_prefix = "/",
+    deps = [
+        ":sns_testing_bin",
+        ":sns_testing_dependencies",
+        ":sns_testing_env",
     ],
 )

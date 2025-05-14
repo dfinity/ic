@@ -136,7 +136,7 @@ use std::{
     cmp::Ordering,
     collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
     convert::{TryFrom, TryInto},
-    iter::{self, once},
+    iter::once,
     ops::Div,
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -8756,9 +8756,8 @@ fn test_get_proposal_info() {
 fn test_list_proposals_removes_execute_nns_function_payload() {
     // ARRANGE
     let proposal_id = ProposalId { id: 2 };
-    let payload = iter::repeat(42)
-        .take(EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX + 1)
-        .collect();
+    let payload =
+        std::iter::repeat_n(42, EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX + 1).collect();
     let driver = fake::FakeDriver::default();
     let gov = Governance::new(
         fixture_for_proposals(proposal_id, payload),
@@ -8795,9 +8794,7 @@ fn test_list_proposals_removes_execute_nns_function_payload() {
 fn test_list_proposals_retains_execute_nns_function_payload() {
     // ARRANGE
     let proposal_id = ProposalId { id: 2 };
-    let payload = iter::repeat(42)
-        .take(EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX)
-        .collect();
+    let payload = std::iter::repeat_n(42, EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX).collect();
     let driver = fake::FakeDriver::default();
     let gov = Governance::new(
         fixture_for_proposals(proposal_id, payload),
@@ -8836,9 +8833,8 @@ fn test_list_proposals_retains_execute_nns_function_payload() {
 fn test_get_pending_proposals_removes_execute_nns_function_payload() {
     // ARRANGE
     let proposal_id = ProposalId { id: 2 };
-    let payload = iter::repeat(42)
-        .take(EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX + 1)
-        .collect();
+    let payload =
+        std::iter::repeat_n(42, EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX + 1).collect();
     let driver = fake::FakeDriver::default();
     let gov = Governance::new(
         fixture_for_proposals(proposal_id, payload),

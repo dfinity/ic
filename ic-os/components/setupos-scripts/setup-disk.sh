@@ -37,11 +37,23 @@ function purge_partitions() {
     for drive in "${large_drives[@]}"; do
         echo "Wiping partitions on drive: /dev/${drive}."
 
+        # Remove any LVM metadata
+        pvremove --force "/dev/${drive}"* 2>/dev/null || true
+
+        # Wipe the partition table and filesystem signatures
         wipefs --all --force "/dev/${drive}"*
         if [ "${?}" -ne 0 ]; then
-            echo "Unable to purge partitions on drive: /dev/${drive}"
+            log_and_halt_installation_on_error 1 "Failed to wipe partitions on /dev/${drive}"
+        fi
+
+        # Verify the wipe was successful
+        if [ -e "/dev/${drive}1" ] || [ -e "/dev/${drive}2" ] || [ -e "/dev/${drive}3" ]; then
+            log_and_halt_installation_on_error 1 "Partitions still exist after wipe on /dev/${drive}"
         fi
     done
+
+    # Remove all device mapper mappings
+    dmsetup remove_all 2>/dev/null || true
 }
 
 function setup_storage() {

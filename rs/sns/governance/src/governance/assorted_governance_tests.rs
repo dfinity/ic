@@ -647,7 +647,7 @@ proptest! {
 ) {
         // To make the math easy, we'll do the same trick we did in the previous test, where increase the `adjusted_wait_for_quiet_deadline_increase_seconds`
         // by the smallest time where any flip in the vote will cause a deadline increase.
-        let adjusted_wait_for_quiet_deadline_increase_seconds = wait_for_quiet_deadline_increase_seconds + (initial_voting_period_seconds + 1) / 2;
+        let adjusted_wait_for_quiet_deadline_increase_seconds = wait_for_quiet_deadline_increase_seconds + initial_voting_period_seconds.div_ceil(2);
         // We'll also use the `time` parameter to tell us what fraction of the `initial_voting_period_seconds` to test at.
         let now_seconds = (time * initial_voting_period_seconds as f32) as u64;
         let mut proposal = ProposalData {
@@ -680,8 +680,8 @@ proptest! {
             .wait_for_quiet_state
             .unwrap()
             .current_deadline_timestamp_seconds;
-        dbg!(new_deadline , initial_voting_period_seconds + wait_for_quiet_deadline_increase_seconds + (now_seconds + 1) / 2);
-        prop_assert!(new_deadline == initial_voting_period_seconds + wait_for_quiet_deadline_increase_seconds + (now_seconds + 1) / 2);
+        dbg!(new_deadline , initial_voting_period_seconds + wait_for_quiet_deadline_increase_seconds + now_seconds.div_ceil(2));
+        prop_assert!(new_deadline == initial_voting_period_seconds + wait_for_quiet_deadline_increase_seconds + now_seconds.div_ceil(2));
     }
 }
 
