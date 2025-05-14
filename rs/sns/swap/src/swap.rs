@@ -1295,9 +1295,9 @@ impl Swap {
         self.buyers
             .entry(buyer.to_string())
             .or_insert_with(|| BuyerState::new(0))
-            .set_amount_icp_e8s(new_balance_e8s); // Shah-TODO redundant; could've set it in new()
-                                                  // We compute the current participation amounts once and store the result in Swap's state,
-                                                  // for efficiency reasons.
+            .set_amount_icp_e8s(new_balance_e8s);
+        // We compute the current participation amounts once and store the result in Swap's state,
+        // for efficiency reasons.
         self.update_total_participation_amounts();
 
         log!(
