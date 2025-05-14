@@ -1328,9 +1328,7 @@ fn get_changes_since(
                 // Dechunkify deltas.
                 let mut inlined_deltas = vec![];
                 for delta in high_capacity_deltas {
-                    let get_chunk = GetChunkImpl {
-                        perform_query,
-                    };
+                    let get_chunk = GetChunkImpl { perform_query };
 
                     let delta = runtime
                         .block_on(dechunkify_delta(delta, &get_chunk))
@@ -1448,7 +1446,9 @@ async fn deserialize_and_dechunkify_get_value_response(
 
     // Dechunkify.
     let query_handler = Arc::new(Mutex::new(query_handler.clone()));
-    let get_chunk = GetChunkImpl { perform_query: &query_handler };
+    let get_chunk = GetChunkImpl {
+        perform_query: &query_handler,
+    };
     dechunkify_get_value_response_content(content, &get_chunk).await
 }
 
