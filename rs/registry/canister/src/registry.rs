@@ -494,10 +494,10 @@ impl Registry {
                     .unwrap_or_else(|err| {
                         panic!("Failed to decode mutation@{}: {}", entry.version, err)
                     });
-                    // TODO: Remove this once the timestamps have been converted to seconds.
+                    // TODO(NNS1-3809): Remove this once the timestamps have been converted to seconds.
                     // This code should be safe to stay in here for quite some time as the difference
                     // between nanoseconds and seconds is quite big.
-                    Self::ensure_mutation_timestamp_unit_seconds(&mut mutation);
+                    ensure_mutation_timestamp_unit_seconds(&mut mutation);
 
                     self.apply_mutations_as_version(mutation, entry.version);
                     self.version = entry.version;
@@ -516,26 +516,26 @@ impl Registry {
             }
         }
     }
+}
 
-    /// Ensure that timestamps of mutations are in seconds.
-    fn ensure_mutation_timestamp_unit_seconds(
-        mutation_request: &mut HighCapacityRegistryAtomicMutateRequest,
-    ) {
-        // We use the beginning of the year in nanoseconds to determine if the
-        // current mutation has a timestamp in nanoseconds or in seconds.
-        //
-        // We know that the faulty mutations that were created, got created
-        // after this timestamp (in nanoseconds) and will convert them back
-        // to seconds.
-        //
-        // If the timestamp was already once converted back, it will not be
-        // done again.
-        const BEGINNING_OF_2025_NANOSECONDS: u64 = 1_735_693_261_000_000_000;
+/// Ensure that timestamps of mutations are in seconds.
+fn ensure_mutation_timestamp_unit_seconds(
+    mutation_request: &mut HighCapacityRegistryAtomicMutateRequest,
+) {
+    // We use the beginning of the year in nanoseconds to determine if the
+    // current mutation has a timestamp in nanoseconds or in seconds.
+    //
+    // We know that the faulty mutations that were created, got created
+    // after this timestamp (in nanoseconds) and will convert them back
+    // to seconds.
+    //
+    // If the timestamp was already once converted back, it will not be
+    // done again.
+    const BEGINNING_OF_2025_NANOSECONDS: u64 = 1_735_693_261_000_000_000;
 
-        if mutation_request.timestamp_seconds > BEGINNING_OF_2025_NANOSECONDS {
-            // Downscale nanoseconds to seconds
-            mutation_request.timestamp_seconds /= 1_000_000_000;
-        }
+    if mutation_request.timestamp_seconds > BEGINNING_OF_2025_NANOSECONDS {
+        // Downscale nanoseconds to seconds
+        mutation_request.timestamp_seconds /= 1_000_000_000;
     }
 }
 
@@ -1539,13 +1539,13 @@ Average length of the values: {} (desired: {})",
         };
 
         // Step 2: Run the conversion code.
-        Registry::ensure_mutation_timestamp_unit_seconds(&mut mutation);
+        ensure_mutation_timestamp_unit_seconds(&mut mutation);
 
         // Step 3: Verify that the timestamp changed.
         assert!(mutation.timestamp_seconds == now_seconds);
 
         // Step 4: Rerun the code again to simulate another upgrade.
-        Registry::ensure_mutation_timestamp_unit_seconds(&mut mutation);
+        ensure_mutation_timestamp_unit_seconds(&mut mutation);
 
         assert!(mutation.timestamp_seconds == now_seconds);
     }
