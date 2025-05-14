@@ -2249,10 +2249,23 @@ impl CanisterManager {
             CanisterSnapshotDataOffset::WasmChunk => {
                 // The chunk store is initialized as empty, and no memory cost has been charged yet.
                 // So we charge for both memory and instructions here.
-                snapshot_inner
+                let validated_chunk = match snapshot_inner
                     .chunk_store_mut()
-                    .can_insert_chunk(self.config.wasm_chunk_store_max_size, &args.chunk)
-                    .map_err(|err| CanisterManagerError::WasmChunkStoreError { message: err })?;
+                    .can_insert_chunk(self.config.wasm_chunk_store_max_size, args.chunk.clone())
+                {
+                    ChunkValidationResult::Insert(validated_chunk) => validated_chunk,
+                    ChunkValidationResult::AlreadyExists(hash) => {
+                        return Err(CanisterManagerError::WasmChunkStoreError {
+                            message: format!(
+                                "Chunk with hash {:02x?} already present in chunk store.",
+                                hash
+                            ),
+                        })
+                    }
+                    ChunkValidationResult::ValidationError(err) => {
+                        return Err(CanisterManagerError::WasmChunkStoreError { message: err })
+                    }
+                };
 
                 let memory_usage = canister.memory_usage();
                 let chunk_bytes = wasm_chunk_store::chunk_size();
@@ -2278,11 +2291,9 @@ impl CanisterManager {
                 )?;
                 self.memory_usage_updates(canister, round_limits, validated_memory_usage);
 
-                // We don't have to return the hash, because the user already knows it.
-                let _hash = snapshot_inner
+                snapshot_inner
                     .chunk_store_mut()
-                    .insert_chunk(self.config.wasm_chunk_store_max_size, &args.chunk)
-                    .expect("Error: Insert chunk cannot fail after checking `can_insert_chunk`");
+                    .insert_chunk(validated_chunk);
                 chunk_bytes.get()
             }
         };
