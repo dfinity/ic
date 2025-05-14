@@ -80,7 +80,7 @@ fn convert_from_u32_succeeds_for_all_supported_certification_versions() {
         Err(UnsupportedCertificationVersion(v))
     );
     // Non-existent version should fail.
-    let v = CertificationVersion::iter().last().unwrap() as u32 + 1;
+    let v = CertificationVersion::iter().next_back().unwrap() as u32 + 1;
     assert_eq!(
         CertificationVersion::try_from(v),
         Err(UnsupportedCertificationVersion(v))

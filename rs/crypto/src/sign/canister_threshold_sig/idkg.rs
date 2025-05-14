@@ -470,7 +470,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
         );
         if let Err(error) = &result {
             match error {
-                IDkgLoadTranscriptError::PrivateKeyNotFound { .. }
+                IDkgLoadTranscriptError::PrivateKeyNotFound
                 | IDkgLoadTranscriptError::InvalidArguments { .. }
                 | IDkgLoadTranscriptError::MalformedPublicKey { .. }
                 | IDkgLoadTranscriptError::SerializationError { .. }

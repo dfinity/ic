@@ -9,13 +9,13 @@ on the process that this file is part of, see
 
 ## Added
 
+* The `DisburseMaturity` neuron command is enabled. See https://forum.dfinity.org/t/disburse-maturity-in-nns/43228 for more details.
+
 ## Changed
 
 ## Deprecated
 
 ## Removed
-
-* The `governance_heap_neuron_count` metric is removed as there are no neurons in the heap anymore.
 
 ## Fixed
 
