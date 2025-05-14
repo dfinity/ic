@@ -7,6 +7,8 @@ use ic_consensus_utils::membership::Membership;
 use ic_interfaces::{
     batch_payload::ProposalContext,
     consensus::{PayloadBuilder, PayloadValidationError},
+    consensus_pool::ConsensusPool,
+    dkg::{DkgPayloadBuilder, DkgPayloadValidationError},
     validation::ValidationResult,
 };
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
@@ -21,7 +23,11 @@ use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
     batch::{BatchPayload, ValidationContext},
-    consensus::{block_maker::SubnetRecords, Payload},
+    consensus::{
+        block_maker::SubnetRecords,
+        dkg::{DkgPayloadCreationError, Payload as DkgPayload},
+        Block, BlockPayload, Payload,
+    },
     replica_config::ReplicaConfig,
     Height, RegistryVersion, SubnetId, Time,
 };
@@ -48,6 +54,28 @@ mock! {
             payload: &Payload,
             past_payloads: &[(Height, Time, Payload)],
         ) -> ValidationResult<PayloadValidationError>;
+    }
+}
+
+mock! {
+    pub DkgPayloadBuilder {}
+
+    impl DkgPayloadBuilder for DkgPayloadBuilder {
+        fn create_payload(
+            &self,
+            pool: &dyn ConsensusPool,
+            parent: &Block,
+            context: &ValidationContext,
+            max_dealings_per_block: usize,
+        ) -> Result<DkgPayload, DkgPayloadCreationError>;
+
+        fn validate_payload(
+            &self,
+            payload: &BlockPayload,
+            pool: &dyn ConsensusPool,
+            parent: &Block,
+            context: &ValidationContext,
+        ) -> ValidationResult<DkgPayloadValidationError>;
     }
 }
 

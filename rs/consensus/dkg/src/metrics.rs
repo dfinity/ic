@@ -9,7 +9,8 @@ impl DkgPayloadBuilderMetrics {
     pub(crate) fn new(registry: &MetricsRegistry) -> Self {
         Self {
             dkg_validator: registry.int_counter_vec(
-                "consensus_dkg_validator",
+                // TODO: Remove the _new end before merging
+                "consensus_dkg_validator_new",
                 "DKG validator counter",
                 &["type"],
             ),

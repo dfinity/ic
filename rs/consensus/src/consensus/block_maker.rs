@@ -11,7 +11,10 @@ use ic_consensus_utils::{
     get_subnet_record, membership::Membership, pool_reader::PoolReader,
 };
 use ic_interfaces::{
-    consensus::PayloadBuilder, dkg::DkgPool, idkg::IDkgPool, time_source::TimeSource,
+    consensus::PayloadBuilder,
+    dkg::{DkgPayloadBuilder, DkgPool},
+    idkg::IDkgPool,
+    time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
@@ -67,6 +70,7 @@ pub struct BlockMaker {
     pub(crate) membership: Arc<Membership>,
     pub(crate) crypto: Arc<dyn ConsensusCrypto>,
     payload_builder: Arc<dyn PayloadBuilder>,
+    dkg_payload_builder: Arc<dyn DkgPayloadBuilder>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
     idkg_pool: Arc<RwLock<dyn IDkgPool>>,
     pub(crate) state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
@@ -89,6 +93,7 @@ impl BlockMaker {
         membership: Arc<Membership>,
         crypto: Arc<dyn ConsensusCrypto>,
         payload_builder: Arc<dyn PayloadBuilder>,
+        dkg_payload_builder: Arc<dyn DkgPayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         idkg_pool: Arc<RwLock<dyn IDkgPool>>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
@@ -103,6 +108,7 @@ impl BlockMaker {
             membership,
             crypto,
             payload_builder,
+            dkg_payload_builder,
             dkg_pool,
             idkg_pool,
             state_manager,
@@ -292,20 +298,28 @@ impl BlockMaker {
         let max_dealings_per_block =
             subnet_records.membership_version.dkg_dealings_per_block as usize;
 
-        let dkg_payload = create_dkg_payload(
-            self.replica_config.subnet_id,
-            &*self.registry_client,
-            &*self.crypto,
-            pool,
-            Arc::clone(&self.dkg_pool),
-            parent.as_ref(),
-            &*self.state_manager,
-            &context,
-            self.log.clone(),
-            max_dealings_per_block,
-        )
-        .map_err(|err| warn!(self.log, "Payload construction has failed: {:?}", err))
-        .ok()?;
+        // let dkg_payload = create_dkg_payload(
+        //     self.replica_config.subnet_id,
+        //     &*self.registry_client,
+        //     &*self.crypto,
+        //     pool,
+        //     Arc::clone(&self.dkg_pool),
+        //     parent.as_ref(),
+        //     &*self.state_manager,
+        //     &context,
+        //     self.log.clone(),
+        //     max_dealings_per_block,
+        // )
+        let dkg_payload = self
+            .dkg_payload_builder
+            .create_payload(
+                pool.pool(),
+                parent.as_ref(),
+                &context,
+                max_dealings_per_block,
+            )
+            .map_err(|err| warn!(self.log, "Payload construction has failed: {:?}", err))
+            .ok()?;
 
         let payload = Payload::new(
             ic_types::crypto::crypto_hash,
@@ -668,6 +682,7 @@ mod tests {
                 membership.clone(),
                 crypto.clone(),
                 Arc::new(payload_builder),
+                todo!(),
                 dkg_pool.clone(),
                 idkg_pool.clone(),
                 state_manager.clone(),
@@ -749,6 +764,7 @@ mod tests {
                 membership,
                 Arc::clone(&crypto) as Arc<_>,
                 Arc::new(payload_builder),
+                todo!(),
                 dkg_pool,
                 idkg_pool,
                 state_manager,
@@ -880,6 +896,7 @@ mod tests {
                 membership.clone(),
                 crypto.clone(),
                 Arc::new(payload_builder),
+                todo!(),
                 dkg_pool.clone(),
                 idkg_pool.clone(),
                 state_manager.clone(),
@@ -919,6 +936,7 @@ mod tests {
                 membership,
                 crypto,
                 Arc::new(payload_builder),
+                todo!(),
                 dkg_pool,
                 idkg_pool,
                 state_manager,
@@ -994,6 +1012,7 @@ mod tests {
                 membership,
                 crypto,
                 Arc::new(payload_builder),
+                todo!(),
                 dkg_pool,
                 idkg_pool,
                 state_manager,

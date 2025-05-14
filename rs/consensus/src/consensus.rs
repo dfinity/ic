@@ -28,7 +28,7 @@ use crate::consensus::{
     priority::new_bouncer, purger::Purger, random_beacon_maker::RandomBeaconMaker,
     random_tape_maker::RandomTapeMaker, share_aggregator::ShareAggregator, validator::Validator,
 };
-use ic_consensus_dkg::DkgKeyManager;
+use ic_consensus_dkg::{payload_builder::DkgPayloadBuilderImpl, DkgKeyManager};
 use ic_consensus_utils::{
     bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto, get_notarization_delay_settings,
     membership::Membership, pool_reader::PoolReader, RoundRobin,
@@ -185,6 +185,16 @@ impl ConsensusImpl {
         last_invoked.insert(ConsensusSubcomponent::Aggregator, current_time);
         last_invoked.insert(ConsensusSubcomponent::Purger, current_time);
 
+        let dkg_payload_builder = Arc::new(DkgPayloadBuilderImpl::new(
+            replica_config.subnet_id,
+            registry_client.clone(),
+            crypto.clone(),
+            dkg_pool.clone(),
+            state_manager.clone(),
+            &metrics_registry,
+            logger.clone(),
+        ));
+
         ConsensusImpl {
             dkg_key_manager,
             notary: Notary::new(
@@ -234,6 +244,7 @@ impl ConsensusImpl {
                 membership.clone(),
                 crypto.clone(),
                 payload_builder.clone(),
+                dkg_payload_builder,
                 dkg_pool.clone(),
                 idkg_pool.clone(),
                 state_manager.clone(),

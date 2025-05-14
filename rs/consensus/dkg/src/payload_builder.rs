@@ -8,7 +8,7 @@ use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{
     consensus_pool::ConsensusPool,
     crypto::ErrorReproducibility,
-    dkg::{DkgPayloadBuilder, DkgPool, PayloadValidationError},
+    dkg::{DkgPayloadBuilder, DkgPayloadValidationError, DkgPool},
     validation::ValidationResult,
 };
 use ic_interfaces_registry::RegistryClient;
@@ -84,7 +84,7 @@ impl DkgPayloadBuilder for DkgPayloadBuilderImpl {
         pool: &dyn ConsensusPool,
         parent: &Block,
         context: &ValidationContext,
-    ) -> ValidationResult<PayloadValidationError> {
+    ) -> ValidationResult<DkgPayloadValidationError> {
         let pool_reader = PoolReader::new(pool);
 
         validate_payload(
