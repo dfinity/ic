@@ -24,4 +24,6 @@ on the process that this file is part of, see
 
 ## Fixed
 
+* Added ensurance and converstion to seconds for the timestamps that are in nanoseconds.
+
 ## Security
