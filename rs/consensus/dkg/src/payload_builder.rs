@@ -17,7 +17,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        dkg::{self, DkgPayloadCreationError, Summary},
+        dkg::{self, DkgDataPayload, DkgPayload, DkgPayloadCreationError, DkgSummary},
         get_faults_tolerated, Block,
     },
     crypto::threshold_sig::ni_dkg::{
@@ -50,7 +50,7 @@ pub fn create_payload(
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
     max_dealings_per_block: usize,
-) -> Result<dkg::Payload, DkgPayloadCreationError> {
+) -> Result<DkgPayload, DkgPayloadCreationError> {
     let height = parent.height.increment();
     // Get the last summary from the chain.
     let last_summary_block = pool_reader
@@ -73,7 +73,7 @@ pub fn create_payload(
             validation_context,
             logger,
         )
-        .map(dkg::Payload::Summary)
+        .map(DkgPayload::Summary)
     } else {
         // If the height is not a start height, create a payload with new dealings.
         create_data_payload(
@@ -84,7 +84,7 @@ pub fn create_payload(
             &last_summary_block,
             last_dkg_summary,
         )
-        .map(dkg::Payload::Data)
+        .map(DkgPayload::Data)
     }
 }
 
@@ -94,8 +94,8 @@ fn create_data_payload(
     parent: &Block,
     max_dealings_per_block: usize,
     last_summary_block: &Block,
-    last_dkg_summary: &Summary,
-) -> Result<dkg::DkgDataPayload, DkgPayloadCreationError> {
+    last_dkg_summary: &DkgSummary,
+) -> Result<DkgDataPayload, DkgPayloadCreationError> {
     // Get all dealer ids from the chain.
     let dealers_from_chain = utils::get_dealers_from_chain(pool_reader, parent);
     // Filter from the validated pool all dealings whose dealer has no dealing on
@@ -113,7 +113,7 @@ fn create_data_payload(
         .take(max_dealings_per_block)
         .cloned()
         .collect();
-    Ok(dkg::DkgDataPayload::new(
+    Ok(DkgDataPayload::new(
         last_summary_block.height,
         new_validated_dealings,
     ))
@@ -150,13 +150,13 @@ pub(super) fn create_summary_payload(
     registry_client: &dyn RegistryClient,
     crypto: &dyn ConsensusCrypto,
     pool_reader: &PoolReader<'_>,
-    last_summary: &Summary,
+    last_summary: &DkgSummary,
     parent: &Block,
     registry_version: RegistryVersion,
     state_manager: &dyn StateManager<State = ReplicatedState>,
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
-) -> Result<dkg::Summary, DkgPayloadCreationError> {
+) -> Result<dkg::DkgSummary, DkgPayloadCreationError> {
     let all_dealings = utils::get_dkg_dealings(pool_reader, parent);
     let mut transcripts_for_remote_subnets = BTreeMap::new();
     let mut next_transcripts = BTreeMap::new();
@@ -269,7 +269,7 @@ pub(super) fn create_summary_payload(
         &vet_key_ids,
     )?);
 
-    Ok(Summary::new(
+    Ok(DkgSummary::new(
         configs,
         current_transcripts,
         next_transcripts,
@@ -297,7 +297,7 @@ fn create_transcript(
 /// Return the set of next transcripts for all tags. If for some tag
 /// the next transcript is not available, the current transcript is used.
 fn as_next_transcripts(
-    summary: &Summary,
+    summary: &DkgSummary,
     logger: &ReplicaLogger,
 ) -> BTreeMap<NiDkgTag, NiDkgTranscript> {
     let mut next_transcripts = summary.next_transcripts().clone();
@@ -452,7 +452,7 @@ pub fn get_dkg_summary_from_cup_contents(
     subnet_id: SubnetId,
     registry: &dyn RegistryClient,
     registry_version: RegistryVersion,
-) -> Result<Summary, String> {
+) -> Result<DkgSummary, String> {
     // If we're in a NNS subnet recovery case with failover nodes, we extract the registry of the
     // NNS we're recovering.
     let registry_version_of_original_registry = cup_contents
@@ -545,7 +545,7 @@ pub fn get_dkg_summary_from_cup_contents(
             format!("Could not retrieve the interval length for the genesis summary: {err:?}")
         })?;
     let next_interval_length = interval_length;
-    Ok(Summary::new(
+    Ok(DkgSummary::new(
         configs,
         transcripts,
         BTreeMap::new(), // next transcripts
@@ -1333,7 +1333,7 @@ mod tests {
             }
 
             let latest_block = pool.get_cache().finalized_block();
-            let create_summary_payload = |last_summary: &Summary| {
+            let create_summary_payload = |last_summary: &DkgSummary| {
                 create_summary_payload(
                     subnet_test_id(222),
                     registry.as_ref(),

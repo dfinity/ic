@@ -5,7 +5,7 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     consensus::{
-        dkg::{DkgPayloadCreationError, Summary},
+        dkg::{DkgPayloadCreationError, DkgSummary},
         Block,
     },
     crypto::{
@@ -25,7 +25,7 @@ use std::collections::{BTreeMap, HashSet};
 /// active on the subnet.
 #[allow(clippy::type_complexity)]
 pub fn get_vetkey_public_keys(
-    summary: &Summary,
+    summary: &DkgSummary,
     logger: &ReplicaLogger,
 ) -> (
     BTreeMap<MasterPublicKeyId, MasterPublicKey>,

@@ -5,7 +5,7 @@
 use ic_consensus_utils::{bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto};
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
-    dkg::{ChangeAction, DkgPool, Mutations, PayloadValidationError},
+    dkg::{ChangeAction, DkgPayloadValidationError, DkgPool, Mutations},
     p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer},
     validation::ValidationResult,
 };
@@ -242,12 +242,14 @@ impl DkgImpl {
         // reject, if it was rejected, or skip, if there was an error.
         match crypto_validate_dealing(&*self.crypto, config, message) {
             Ok(()) => ChangeAction::MoveToValidated((*message).clone()).into(),
-            Err(PayloadValidationError::InvalidArtifact(err)) => get_handle_invalid_change_action(
-                message,
-                format!("Dealing verification failed: {:?}", err),
-            )
-            .into(),
-            Err(PayloadValidationError::ValidationFailed(err)) => {
+            Err(DkgPayloadValidationError::InvalidArtifact(err)) => {
+                get_handle_invalid_change_action(
+                    message,
+                    format!("Dealing verification failed: {:?}", err),
+                )
+                .into()
+            }
+            Err(DkgPayloadValidationError::ValidationFailed(err)) => {
                 error!(
                     self.logger,
                     "Couldn't verify a DKG dealing from the pool: {:?}", err
@@ -263,7 +265,7 @@ pub(crate) fn crypto_validate_dealing(
     crypto: &dyn ConsensusCrypto,
     config: &NiDkgConfig,
     message: &Message,
-) -> ValidationResult<PayloadValidationError> {
+) -> ValidationResult<DkgPayloadValidationError> {
     let dealer = message.signature.signer;
     if !config.dealers().get().contains(&dealer) {
         return Err(InvalidDkgPayloadReason::InvalidDealer(dealer).into());

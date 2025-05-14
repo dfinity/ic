@@ -110,7 +110,7 @@ where
             IngressHistoryReaderImpl::new(Arc::clone(&state_manager) as Arc<_>);
 
         let committee = vec![node_test_id(0)];
-        let summary = dkg::Summary::fake();
+        let summary = dkg::DkgSummary::fake();
         let mut consensus_pool = ConsensusPoolImpl::new(
             node_test_id(0),
             subnet_test_id(0),

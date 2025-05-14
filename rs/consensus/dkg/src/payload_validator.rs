@@ -1,7 +1,7 @@
 use crate::{crypto_validate_dealing, payload_builder, utils};
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{
-    dkg::{DkgPool, PayloadValidationError},
+    dkg::{DkgPayloadValidationError, DkgPool},
     validation::ValidationResult,
 };
 use ic_interfaces_registry::RegistryClient;
@@ -12,7 +12,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        dkg::{DkgDataPayload, DkgPayloadValidationFailure, InvalidDkgPayloadReason, Summary},
+        dkg::{DkgDataPayload, DkgPayloadValidationFailure, DkgSummary, InvalidDkgPayloadReason},
         Block, BlockPayload,
     },
     SubnetId,
@@ -34,7 +34,7 @@ pub fn validate_payload(
     validation_context: &ValidationContext,
     metrics: &IntCounterVec,
     log: &ReplicaLogger,
-) -> ValidationResult<PayloadValidationError> {
+) -> ValidationResult<DkgPayloadValidationError> {
     let current_height = parent.height.increment();
     let registry_version = pool_reader
         .registry_version(current_height)
@@ -134,12 +134,12 @@ fn validate_dealings_payload(
     crypto: &dyn ConsensusCrypto,
     pool_reader: &PoolReader<'_>,
     dkg_pool: &dyn DkgPool,
-    last_summary: &Summary,
+    last_summary: &DkgSummary,
     dealings: &DkgDataPayload,
     max_dealings_per_payload: usize,
     parent: &Block,
     metrics: &IntCounterVec,
-) -> ValidationResult<PayloadValidationError> {
+) -> ValidationResult<DkgPayloadValidationError> {
     if dealings.start_height != parent.payload.as_ref().dkg_interval_start_height() {
         return Err(InvalidDkgPayloadReason::DkgStartHeightDoesNotMatchParentBlock.into());
     }
@@ -344,7 +344,7 @@ mod tests {
                 SUBNET_1,
                 /*committee=*/ &[NODE_1],
             ),
-            Err(PayloadValidationError::InvalidArtifact(
+            Err(DkgPayloadValidationError::InvalidArtifact(
                 InvalidDkgPayloadReason::MissingDkgConfigForDealing
             ))
         );
@@ -360,7 +360,7 @@ mod tests {
                 SUBNET_1,
                 /*committee=*/ &[NODE_1],
             ),
-            Err(PayloadValidationError::InvalidArtifact(
+            Err(DkgPayloadValidationError::InvalidArtifact(
                 InvalidDkgPayloadReason::InvalidDealer(NODE_2)
             ))
         );
@@ -384,7 +384,7 @@ mod tests {
                 SUBNET_1,
                 /*committee=*/ &[NODE_1, NODE_2, NODE_3],
             ),
-            Err(PayloadValidationError::InvalidArtifact(
+            Err(DkgPayloadValidationError::InvalidArtifact(
                 InvalidDkgPayloadReason::DealerAlreadyDealt(NODE_2)
             ))
         );
@@ -405,7 +405,7 @@ mod tests {
                 SUBNET_1,
                 /*committee=*/ &[NODE_1, NODE_2, NODE_3],
             ),
-            Err(PayloadValidationError::InvalidArtifact(
+            Err(DkgPayloadValidationError::InvalidArtifact(
                 InvalidDkgPayloadReason::DuplicateDealers
             ))
         );
@@ -427,7 +427,7 @@ mod tests {
                 SUBNET_1,
                 /*committee=*/ &[NODE_1, NODE_2, NODE_3],
             ),
-            Err(PayloadValidationError::InvalidArtifact(
+            Err(DkgPayloadValidationError::InvalidArtifact(
                 InvalidDkgPayloadReason::TooManyDealings {
                     limit: 2,
                     actual: 3
@@ -444,7 +444,7 @@ mod tests {
         max_dealings_per_payload: u64,
         subnet_id: SubnetId,
         committee: &[NodeId],
-    ) -> ValidationResult<PayloadValidationError> {
+    ) -> ValidationResult<DkgPayloadValidationError> {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let registry_version = 1;
 
