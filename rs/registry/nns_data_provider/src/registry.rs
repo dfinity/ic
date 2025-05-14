@@ -356,8 +356,8 @@ async fn deserialize_and_dechunk_get_value_result(
     result: Result<Option<Vec<u8>>, String>,
     // This is used if dechunkification is needed.
     registry_canister_id: CanisterId,
-    // The following arguments are just so that error messages will contain
-    // breadcrumbs, and otherwise, do not determine the result.
+    // The following arguments are mostly so that error messages will contain
+    // breadcrumbs.
     key: &[u8],
     version: Option<u64>,
     agent: &Agent,
