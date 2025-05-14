@@ -287,14 +287,14 @@ def system_test(
         _env_deps["ENV_DEPS__SETUPOS_IMG_PATH"] = "@mainnet_setupos_disk_image//file"
 
         _env_deps["ENV_DEPS__SETUPOS_DISABLE_CHECKS"] = "//rs/ic_os/dev_test_tools/setupos-disable-checks"
-        _env_deps["ENV_DEPS__SETUPOS_INJECT_CONFIGS"] = "//rs/ic_os/dev_test_tools/setupos-inject-configuration"
+        _env_deps["ENV_DEPS__SETUPOS_INJECT_CONFIGS"] = "//rs/ic_os/dev_test_tools/setupos-image-config:setupos-inject-config"
 
     if uses_setupos_dev:
         # Note: SetupOS is still passed directly by path, as it needs some local processing.
         _env_deps["ENV_DEPS__SETUPOS_IMG_PATH"] = "//ic-os/setupos/envs/dev:disk-img.tar.zst"
 
         _env_deps["ENV_DEPS__SETUPOS_DISABLE_CHECKS"] = "//rs/ic_os/dev_test_tools/setupos-disable-checks"
-        _env_deps["ENV_DEPS__SETUPOS_INJECT_CONFIGS"] = "//rs/ic_os/dev_test_tools/setupos-inject-configuration"
+        _env_deps["ENV_DEPS__SETUPOS_INJECT_CONFIGS"] = "//rs/ic_os/dev_test_tools/setupos-image-config:setupos-inject-config"
 
     if uses_guestos_dev_test:
         icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG_TEST"] = _guestos + "update-img-test.tar.zst"
