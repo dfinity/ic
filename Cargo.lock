@@ -17304,11 +17304,11 @@ dependencies = [
 [[package]]
 name = "num-traits"
 version = "0.2.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
+source = "git+https://github.com/basvandijk/num-traits?rev=8cb9d01e4f44e617ef8a94d4c1543559364e4e5d#8cb9d01e4f44e617ef8a94d4c1543559364e4e5d"
 dependencies = [
  "autocfg 1.4.0",
  "libm",
+ "tempfile",
 ]
 
 [[package]]

@@ -634,7 +634,9 @@ nftables = "0.4"
 nix = { version = "0.24.3", features = ["ptrace"] }
 num_cpus = "1.16.0"
 num-bigint = "0.4.6"
-num-traits = { version = "0.2.12", features = ["libm"] }
+num-traits = { git = "https://github.com/basvandijk/num-traits", rev = "8cb9d01e4f44e617ef8a94d4c1543559364e4e5d", features = [
+    "libm",
+] }
 opentelemetry = { version = "0.27.0", features = ["metrics", "trace"] }
 opentelemetry-otlp = { version = "0.27.0", features = ["grpc-tonic"] }
 opentelemetry_sdk = { version = "0.27.0", features = ["trace", "rt-tokio"] }
@@ -781,3 +783,6 @@ zstd = "0.13.2"
 default-features = false
 features = ["exe"]
 version = "^0.8.1"
+
+[patch.crates-io]
+num-traits = { git = "https://github.com/basvandijk/num-traits", rev = "8cb9d01e4f44e617ef8a94d4c1543559364e4e5d" }
