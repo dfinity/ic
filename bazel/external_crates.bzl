@@ -617,7 +617,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ic-cbor": crate.spec(
                 version = "3.0.3",
             ),
-            "ic-cdk": crate.spec(
+            "ic-cdk-next": crate.spec(
+                package = "ic-cdk",
                 version = "^0.18.0",
             ),
             "ic-cdk-0-17-1": crate.spec(
@@ -627,7 +628,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ic-cdk-timers": crate.spec(
                 version = "^0.11.0",
             ),
-            "ic-cdk-macros": crate.spec(
+            "ic-cdk-macros-next": crate.spec(
+                package = "ic-cdk-macros",
                 version = "^0.18.0",
             ),
             "ic-cdk-macros-0-17-1": crate.spec(
