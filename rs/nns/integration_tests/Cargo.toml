@@ -36,7 +36,7 @@ dfn_json = { path = "../../rust_canisters/dfn_json" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic-cdk = "0.17.1"
+ic-cdk = "0.18.2-alpha.1"
 ic-cdk-macros = "0.17.1"
 ic-cdk-timers = { workspace = true }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }

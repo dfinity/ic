@@ -35,7 +35,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:futures",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-stable-structures",
-    "@crate_index//:ic_cdk_0_17_1",
+    "@crate_index//:ic-cdk",
     "@crate_index//:lazy_static",
     "@crate_index//:prometheus-parse",
     "@crate_index//:prost",
@@ -218,7 +218,9 @@ rust_canister(
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":test_canisters/empty.did",
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + [
+        "//rs/nervous_system/runtime",
+    ],
 )
 
 rust_canister(

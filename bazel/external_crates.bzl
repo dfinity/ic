@@ -618,7 +618,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "3.0.3",
             ),
             "ic-cdk": crate.spec(
-                version = "^0.18.0",
+                package = "ic-cdk",
+                version = "0.18.2-alpha.1",
             ),
             "ic-cdk-0-17-1": crate.spec(
                 package = "ic-cdk",
