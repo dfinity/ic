@@ -1,3 +1,4 @@
+use crate::mutations::routing_table::mutations_for_canister_ranges;
 use crate::{
     certification::recertify_registry, missing_node_types_map::MISSING_NODE_TYPES_MAP,
     mutations::node_management::common::get_key_family, pb::v1::RegistryCanisterStableStorage,
@@ -26,7 +27,7 @@ pub fn canister_post_upgrade(
 
     // Registry data migrations should be implemented as follows:
     let mutation_batches_due_to_data_migrations = {
-        let mutations = add_missing_node_types_to_nodes(registry);
+        let mutations = maybe_write_routing_table_to_canister_ranges(registry);
         if mutations.is_empty() {
             0 // No mutations required for this data migration.
         } else {
@@ -62,6 +63,18 @@ pub fn canister_post_upgrade(
     }
 }
 
+fn maybe_write_routing_table_to_canister_ranges(registry: &mut Registry) -> Vec<RegistryMutation> {
+    let ranges_rt =
+        registry.get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
+    let active_rt = registry.get_routing_table_or_panic(registry.latest_version());
+
+    // If there are no differences, this will not generate any mutations
+    mutations_for_canister_ranges(&ranges_rt, &active_rt)
+}
+
+// This will be used one additional time before being removed, after node_reward_type is enforced
+// for newly added nodes, therefore we are allowing dead code here.
+#[allow(dead_code)]
 fn add_missing_node_types_to_nodes(registry: &Registry) -> Vec<RegistryMutation> {
     let missing_node_types_map = &MISSING_NODE_TYPES_MAP;
 
@@ -93,14 +106,16 @@ fn add_missing_node_types_to_nodes(registry: &Registry) -> Vec<RegistryMutation>
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::mutations::routing_table::routing_table_into_registry_mutation;
     use crate::{
         common::test_helpers::{empty_mutation, invariant_compliant_registry},
         registry::{EncodedVersion, Version},
         registry_lifecycle::Registry,
     };
-    use ic_base_types::{NodeId, PrincipalId};
-    use ic_registry_keys::make_node_record_key;
-    use ic_registry_transport::insert;
+    use ic_base_types::{CanisterId, NodeId, PrincipalId};
+    use ic_registry_keys::{make_node_record_key, make_routing_table_record_key};
+    use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+    use ic_registry_transport::{insert, upsert};
 
     fn stable_storage_from_registry(
         registry: &Registry,
@@ -271,5 +286,54 @@ mod test {
                 id
             );
         }
+    }
+
+    #[test]
+    #[test]
+    fn test_migration_for_routing_table() {
+        let mut registry = invariant_compliant_registry(0);
+        let system_subnet =
+            PrincipalId::try_from(registry.get_subnet_list_record().subnets.first().unwrap())
+                .unwrap();
+
+        let mut rt = RoutingTable::new();
+        rt.insert(
+            CanisterIdRange {
+                start: CanisterId::from(5000),
+                end: CanisterId::from(6000),
+            },
+            system_subnet.into(),
+        )
+        .unwrap();
+        rt.insert(
+            CanisterIdRange {
+                start: CanisterId::from(6001),
+                end: CanisterId::from(7000),
+            },
+            system_subnet.into(),
+        )
+        .unwrap();
+
+        let new_routing_table = pb::RoutingTable::from(routing_table);
+        let mutations = vec![upsert(
+            make_routing_table_record_key().as_bytes(),
+            new_routing_table.encode_to_vec(),
+        )];
+        registry.maybe_apply_mutation_internal(mutations);
+
+        let recovered = registry
+            .get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
+
+        assert_eq!(recovered, RoutingTable::new());
+
+        // Now we are in a situation where there is no difference between what's stored in routing_table
+        // and what's being saved BUT we should still generate canister_range_* records b/c they're empty
+        let mutations = maybe_write_routing_table_to_canister_ranges(&registry);
+        registry.maybe_apply_mutation_internal(mutations);
+
+        let recovered = registry
+            .get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
+
+        assert_eq!(recovered, rt);
     }
 }
