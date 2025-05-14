@@ -11,5 +11,4 @@ path = "src/main.rs"
 candid = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
-ic-cdk-macros = { workspace = true }
 serde = { workspace = true }
