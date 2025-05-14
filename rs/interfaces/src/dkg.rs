@@ -40,7 +40,7 @@ impl From<DkgPayloadCreationError> for PayloadValidationError {
 }
 
 // TODO: Document trait
-pub trait DkgPayloadBuilder {
+pub trait DkgPayloadBuilder: Send + Sync {
     fn create_payload(
         &self,
         pool: &dyn ConsensusPool,
@@ -55,7 +55,6 @@ pub trait DkgPayloadBuilder {
         pool: &dyn ConsensusPool,
         parent: &Block,
         context: &ValidationContext,
-        max_dealings_per_block: usize,
     ) -> ValidationResult<PayloadValidationError>;
 }
 

@@ -52,7 +52,6 @@ pub struct DkgPayloadBuilderImpl {
     log: ReplicaLogger,
 }
 
-// TODO: Impl a new fn
 // TODO: Create an instance during initialization and pass to Block maker and Validator
 
 impl DkgPayloadBuilder for DkgPayloadBuilderImpl {
@@ -85,7 +84,6 @@ impl DkgPayloadBuilder for DkgPayloadBuilderImpl {
         pool: &dyn ConsensusPool,
         parent: &Block,
         context: &ValidationContext,
-        max_dealings_per_block: usize,
     ) -> ValidationResult<PayloadValidationError> {
         let pool_reader = PoolReader::new(pool);
 
@@ -94,11 +92,11 @@ impl DkgPayloadBuilder for DkgPayloadBuilderImpl {
             &*self.registry_client,
             &*self.crypto,
             &pool_reader,
-            self.dkg_pool.clone(),
-            parent,
+            &*self.dkg_pool.read().unwrap(),
+            parent.clone(),
             payload,
             &*self.state_manager,
-            validation_context,
+            context,
             &self.metrics.dkg_validator,
             &self.log,
         )

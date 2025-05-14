@@ -1,4 +1,5 @@
 use ic_metrics::MetricsRegistry;
+use prometheus::IntCounterVec;
 
 pub(crate) struct DkgPayloadBuilderMetrics {
     pub(crate) dkg_validator: IntCounterVec,
@@ -7,7 +8,7 @@ pub(crate) struct DkgPayloadBuilderMetrics {
 impl DkgPayloadBuilderMetrics {
     pub(crate) fn new(registry: &MetricsRegistry) -> Self {
         Self {
-            dkg_validator: metrics_registry.int_counter_vec(
+            dkg_validator: registry.int_counter_vec(
                 "consensus_dkg_validator",
                 "DKG validator counter",
                 &["type"],
