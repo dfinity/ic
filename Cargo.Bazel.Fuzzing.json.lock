@@ -1,5 +1,5 @@
 {
-  "checksum": "488f0222c72273d6f166d44db41c662d7c7a0e71bcb18a52d7939b92e3dc37fb",
+  "checksum": "daeba94c8f0b00586c413ce5a6cf00457d88dd46ad97476d8115cc7c036bc6d9",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -20463,6 +20463,11 @@
             {
               "id": "getrandom 0.2.10",
               "target": "getrandom"
+            },
+            {
+              "id": "getrandom 0.3.1",
+              "target": "getrandom",
+              "alias": "getrandom03"
             },
             {
               "id": "group 0.13.0",
@@ -82183,7 +82188,7 @@
           "common": [
             "default",
             "rng",
-            "rng-rand",
+            "rng-getrandom",
             "serde",
             "std",
             "uuid-rng-internal-lib",
@@ -82204,20 +82209,12 @@
               {
                 "id": "getrandom 0.3.1",
                 "target": "getrandom"
-              },
-              {
-                "id": "rand 0.9.0",
-                "target": "rand"
               }
             ],
             "aarch64-unknown-linux-gnu": [
               {
                 "id": "getrandom 0.3.1",
                 "target": "getrandom"
-              },
-              {
-                "id": "rand 0.9.0",
-                "target": "rand"
               }
             ],
             "wasm32-unknown-unknown": [
@@ -82231,40 +82228,24 @@
               {
                 "id": "getrandom 0.3.1",
                 "target": "getrandom"
-              },
-              {
-                "id": "rand 0.9.0",
-                "target": "rand"
               }
             ],
             "x86_64-pc-windows-msvc": [
               {
                 "id": "getrandom 0.3.1",
                 "target": "getrandom"
-              },
-              {
-                "id": "rand 0.9.0",
-                "target": "rand"
               }
             ],
             "x86_64-unknown-linux-gnu": [
               {
                 "id": "getrandom 0.3.1",
                 "target": "getrandom"
-              },
-              {
-                "id": "rand 0.9.0",
-                "target": "rand"
               }
             ],
             "x86_64-unknown-nixos-gnu": [
               {
                 "id": "getrandom 0.3.1",
                 "target": "getrandom"
-              },
-              {
-                "id": "rand 0.9.0",
-                "target": "rand"
               }
             ]
           }
@@ -82310,15 +82291,15 @@
         ],
         "crate_features": {
           "common": [
-            "rand"
+            "getrandom"
           ],
           "selects": {}
         },
         "deps": {
           "common": [
             {
-              "id": "rand 0.9.0",
-              "target": "rand"
+              "id": "getrandom 0.3.1",
+              "target": "getrandom"
             }
           ],
           "selects": {}
@@ -91393,6 +91374,7 @@
     "futures-util 0.3.31",
     "get_if_addrs 0.5.3",
     "getrandom 0.2.10",
+    "getrandom 0.3.1",
     "group 0.13.0",
     "hashlink 0.8.4",
     "hex 0.4.3",

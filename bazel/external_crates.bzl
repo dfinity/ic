@@ -529,6 +529,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "custom",
                 ],
             ),
+            "getrandom03": crate.spec(
+                package = "getrandom",
+                version = "^0.3",
+            ),
             "group": crate.spec(
                 version = "^0.13",
             ),
@@ -1464,7 +1468,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = [
                     "v4",
                     "serde",
-                    "rng-rand",
+                    "rng-getrandom",
                 ],
             ),
             "vsock": crate.spec(
