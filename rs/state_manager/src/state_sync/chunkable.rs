@@ -770,6 +770,8 @@ impl IncompleteState {
         metrics.remaining.sub(1);
     }
 
+    // Return wether a checkpoint has been created; otherwise we must ignore state sync and proceed execution as usual.
+    #[must_use]
     fn make_checkpoint(
         log: &ReplicaLogger,
         metrics: &StateManagerMetrics,
@@ -822,6 +824,7 @@ impl IncompleteState {
                     height,
                     elapsed,
                 );
+
                 false
             }
             Err(LayoutError::IoError {
@@ -1332,6 +1335,8 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                             self.height,
                             &self.state_layout,
                         ) {
+                            self.state = DownloadState::Complete;
+
                             return Ok(());
                         }
 
@@ -1342,6 +1347,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                             Arc::new(meta_manifest.clone()),
                         );
                         self.state = DownloadState::Complete;
+
                         self.state_sync_refs
                             .cache
                             .write()
@@ -1502,14 +1508,17 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                         )
                     }
 
-                    Self::make_checkpoint(
+                    if !Self::make_checkpoint(
                         &self.log,
                         &self.metrics,
                         self.started_at,
                         &self.root,
                         self.height,
                         &self.state_layout,
-                    );
+                    ) {
+                        self.state = DownloadState::Complete;
+                        return Ok(());
+                    }
 
                     self.state_sync.deliver_state_sync(
                         self.height,
@@ -1518,6 +1527,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                         Arc::new(meta_manifest.clone()),
                     );
                     self.state = DownloadState::Complete;
+
                     self.state_sync_refs
                         .cache
                         .write()
