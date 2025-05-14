@@ -254,7 +254,7 @@ type GetSnsStatusRequest = record {
 
 type GetSnsStatusResponse = record {
   num_recent_proposals : opt nat64;
-  recent_transactions : opt nat64;
+  num_recent_ledger_transactions : opt nat64;
 }
 
 type GetModeResponse = record {
