@@ -21415,16 +21415,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "setupos-inject-configuration"
+name = "setupos-image-config"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap 4.5.27",
  "config",
  "partition_tools",
- "serde",
  "serde_json",
- "serde_with 1.14.0",
  "tempfile",
  "tokio",
  "url",

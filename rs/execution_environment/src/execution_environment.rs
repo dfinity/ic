@@ -2953,7 +2953,7 @@ impl ExecutionEnvironment {
             ));
         }
 
-        let dpk = ic_vetkd_utils::DerivedPublicKey::deserialize(&subnet_public_key.public_key)
+        let dpk = ic_vetkd_utils::MasterPublicKey::deserialize(&subnet_public_key.public_key)
             .map_err(|err| {
                 UserError::new(
                     ErrorCode::CanisterRejectedMessage,
@@ -2962,7 +2962,7 @@ impl ExecutionEnvironment {
             })?;
 
         Ok(dpk
-            .derive_sub_key(caller.as_slice())
+            .derive_canister_key(caller.as_slice())
             .derive_sub_key(&context)
             .serialize())
     }

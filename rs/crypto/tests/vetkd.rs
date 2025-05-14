@@ -36,11 +36,11 @@ fn should_consistently_derive_the_same_vetkey_given_sufficient_shares() {
         .expect("invalid transcript")
         .into_bytes();
 
-    let transcript_key = ic_vetkd_utils::DerivedPublicKey::deserialize(&transcript_key)
+    let transcript_key = ic_vetkd_utils::MasterPublicKey::deserialize(&transcript_key)
         .expect("failed to deserialize transcript public key");
 
     let derived_public_key = transcript_key
-        .derive_sub_key(caller.as_slice())
+        .derive_canister_key(caller.as_slice())
         .derive_sub_key(context)
         .serialize();
 
