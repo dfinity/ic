@@ -249,7 +249,7 @@ type GetMetadataResponse = record {
 };
 
 type GetSnsStatusRequest = record {
-  time_window : opt nat64;
+  time_window_seconds : opt nat64;
 }
 
 type GetSnsStatusResponse = record {
