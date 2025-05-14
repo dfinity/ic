@@ -54,6 +54,9 @@ py_binary(
 py_binary(
     name = "build_ext4_image",
     srcs = ["build_ext4_image.py"],
+    deps = [
+        requirement("loguru"),
+    ],
 )
 
 py_binary(
@@ -82,4 +85,7 @@ py_binary(
 py_binary(
     name = "verity_sign",
     srcs = ["verity_sign.py"],
+    deps = [
+        requirement("loguru"),
+    ],
 )

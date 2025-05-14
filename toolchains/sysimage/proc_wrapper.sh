@@ -6,11 +6,18 @@
 
 set -euo pipefail
 
-# Temporary shim to create tmpfs on demand, until we have userspace overlayfs,
-# or tmpfs natively available on CI.
-tmpfs_tmpdir=$(mktemp -d --tmpdir "icosbuildXXXX")
-sudo mount -t tmpfs none "${tmpfs_tmpdir}"
+if [ "${USE_TMPFS:-}" = "true" ]; then
+    while [ "$(ls /tmp/tmpfs | wc -l)" -gt 3 ]; do
+        echo "Waiting..."
+        sleep 1
+    done
 
-tmpdir=$(mktemp -d --tmpdir "icosbuildXXXX")
-trap 'sudo umount "${tmpfs_tmpdir}"; sudo rm -rf "$tmpdir" "${tmpfs_tmpdir}"' INT TERM EXIT
-TMPDIR="$tmpdir" TMPFS_TMPDIR="${tmpfs_tmpdir}" "$@"
+    tmpdir=$(mktemp -d --tmpdir "icosbuildXXXX")
+    tmpfs_tmpdir=$(mktemp -d --tmpdir=/tmp/tmpfs "icosbuildXXXX")
+    trap 'sudo rm -rf "$tmpdir" "$tmpfs_tmpdir"' INT TERM EXIT
+    TMPDIR="$tmpdir" TMPFS_TMPDIR="$tmpfs_tmpdir" "$@"
+else
+    tmpdir=$(mktemp -d --tmpdir "icosbuildXXXX")
+    trap 'sudo rm -rf "$tmpdir"' INT TERM EXIT
+    TMPDIR="$tmpdir" "$@"
+fi

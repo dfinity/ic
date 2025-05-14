@@ -10,6 +10,8 @@ import subprocess
 import sys
 import tempfile
 
+from loguru import logger as log
+
 root_hash_re = re.compile("Root hash:[ \t]+([a-f0-9]+).*")
 
 
@@ -39,7 +41,13 @@ def main():
 
     args = parser.parse_args(sys.argv[1:])
 
-    tmpdir = tempfile.mkdtemp()
+    if "TMPFS_TMPDIR" in os.environ:
+        tmpdir = os.environ.get("TMPFS_TMPDIR")
+    else:
+        log.info("TMPFS_TMPDIR env variable not available, this may be slower than expected")
+        tmpdir = os.environ.get("TMPDIR")
+
+    tmpdir = tempfile.mkdtemp(dir=tmpdir)
     partition = os.path.join(tmpdir, "partition.img")
 
     subprocess.run(
