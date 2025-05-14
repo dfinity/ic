@@ -777,7 +777,7 @@ impl IncompleteState {
         root: &Path,
         height: Height,
         state_layout: &StateLayout,
-    ) {
+    ) -> bool {
         let _timer = metrics
             .state_sync_metrics
             .step_duration
@@ -806,6 +806,7 @@ impl IncompleteState {
                     log,
                     "Successfully completed sync of state {} in {:?}", height, elapsed
                 );
+                true
             }
             Err(LayoutError::AlreadyExists(_)) => {
                 let elapsed = started_at.elapsed();
@@ -821,6 +822,7 @@ impl IncompleteState {
                     height,
                     elapsed,
                 );
+                false
             }
             Err(LayoutError::IoError {
                 path,
@@ -1322,14 +1324,16 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                             "No chunks need to be fetched for state {}", self.height
                         );
 
-                        Self::make_checkpoint(
+                        if !Self::make_checkpoint(
                             &self.log,
                             &self.metrics,
                             self.started_at,
                             &self.root,
                             self.height,
                             &self.state_layout,
-                        );
+                        ) {
+                            return Ok(());
+                        }
 
                         self.state_sync.deliver_state_sync(
                             self.height,
