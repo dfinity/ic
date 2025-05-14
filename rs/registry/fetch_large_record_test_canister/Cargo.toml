@@ -10,5 +10,5 @@ ic-registry-transport = { path = "../transport" }
 ic-types = { path = "../../types/types" }
 
 candid = { workspace = true }
-ic-cdk = { workspace = true }
+ic-cdk = "0.17.1"
 serde = { workspace = true }

@@ -14,7 +14,7 @@ DEPENDENCIES = [
     "//rs/registry/transport",
     "//rs/types/types",
     "@crate_index//:candid",
-    "@crate_index//:ic-cdk",
+    "@crate_index//:ic-cdk-0.17.1",
     "@crate_index//:serde",
 ]
 

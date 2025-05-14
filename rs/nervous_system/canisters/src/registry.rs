@@ -1,8 +1,8 @@
 use async_trait::async_trait;
-use candid::Principal;
+use candid::{Decode, Encode};
 use ic_base_types::{CanisterId, RegistryVersion};
-use ic_cdk::call::Call;
 use ic_nervous_system_common::NervousSystemError;
+use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_transport::{
@@ -42,22 +42,23 @@ impl Default for RegistryCanister {
 #[async_trait]
 impl Registry for RegistryCanister {
     async fn get_latest_version(&self) -> Result<RegistryVersion, NervousSystemError> {
-        let reply: Vec<u8> = Call::unbounded_wait(self.canister_id.into(), "get_latest_version")
-            .with_raw_args(&[])
-            .await
-            .map_err(|err| {
+        let response: Result<Vec<u8>, (i32, String)> =
+            CdkRuntime::call_bytes_with_cleanup(self.canister_id, "get_latest_version", &[]).await;
+        response
+            .map_err(|(code, msg)| {
                 NervousSystemError::new_with_message(format!(
-                    "Request to get_latest_version failed: {}",
-                    err,
+                    "Request to get_latest_version failed with code {code} and message: {msg}",
                 ))
-            })?
-            .into_bytes();
-
-        let version = deserialize_get_latest_version_response(reply).map_err(|err| {
-            NervousSystemError::new_with_message(format!("Could not decode response {:?}", err,))
-        })?;
-
-        Ok(RegistryVersion::new(version))
+            })
+            .and_then(|r| {
+                deserialize_get_latest_version_response(r)
+                    .map_err(|e| {
+                        NervousSystemError::new_with_message(format!(
+                            "Could not decode response {e:?}"
+                        ))
+                    })
+                    .map(RegistryVersion::new)
+            })
     }
 
     async fn registry_changes_since(
@@ -71,16 +72,14 @@ impl Registry for RegistryCanister {
             ))
         })?;
 
-        let result = Call::unbounded_wait(Principal::from(self.canister_id), "get_changes_since")
-            .with_raw_args(&bytes)
-            .await
-            .map_err(|err| {
-                NervousSystemError::new_with_message(format!(
-                    "Request to get_changes_since failed: {}",
-                    err,
-                ))
-            })?
-            .into_bytes();
+        let result =
+            CdkRuntime::call_bytes_with_cleanup(self.canister_id, "get_changes_since", &bytes)
+                .await
+                .map_err(|(code, msg)| {
+                    NervousSystemError::new_with_message(format!(
+                        "Request to get_changes_since failed with code {code} and message: {msg}",
+                    ))
+                })?;
 
         let (high_capacity_deltas, _version) = deserialize_get_changes_since_response(result)
             .map_err(|err| {
@@ -114,32 +113,34 @@ impl GetChunk for RegistryCanister {
         let request = GetChunkRequest {
             content_sha256: Some(chunk_content_sha256.to_vec()),
         };
+        let request = Encode!(&request)
+            .map_err(|err| format!("Unable to encode GetChunkRequest: {}", err,))?;
 
         // Call get_chunk.
         let callee = self.canister_id;
-        let result = Call::unbounded_wait(Principal::from(callee), "get_chunk")
-            .with_arg(request)
-            .await;
+        let result = CdkRuntime::call_bytes_with_cleanup(callee, "get_chunk", &request).await;
 
         // Handle failure to even call get_chunk (e.g. out of cycles, maybe?).
-        let reply = result.map_err(|err| {
+        let reply = result.map_err(|(code, message)| {
             format!(
                 "It seems we are not able to reach the registry canister ({}) \
-                 to perform a get_chunk call: {}",
-                callee, err,
+                 to perform a get_chunk call: {:?}",
+                callee,
+                (code, message),
             )
         })?;
 
         // Decode reply.
-        let reply: Result<Chunk, String> = reply.candid().map_err(|err| {
-            format!(
-                "Registry ({}) replied to our get_chunk call, \
-                 but we failed to decode the reply (len = {}): {}",
-                callee,
-                reply.len(),
-                err,
-            )
-        })?;
+        let reply: Result<Chunk, String> =
+            Decode!(&reply, Result<Chunk, String>).map_err(|err| {
+                format!(
+                    "Registry ({}) replied to our get_chunk call, \
+                     but we failed to decode the reply (len = {}): {}",
+                    callee,
+                    reply.len(),
+                    err,
+                )
+            })?;
 
         // Handle canister does not like the call.
         let chunk: Chunk =

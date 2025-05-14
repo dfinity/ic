@@ -15,7 +15,6 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_core",
     "//rs/types/base_types",
     "@crate_index//:candid",
-    "@crate_index//:ic-cdk",
     "@crate_index//:mockall",
     "@crate_index//:prost",
 ]

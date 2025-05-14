@@ -10478,7 +10478,7 @@ dependencies = [
  "canister-test",
  "dfn_core",
  "ic-base-types",
- "ic-cdk 0.18.0",
+ "ic-cdk 0.17.1",
  "ic-crypto-sha2",
  "ic-ledger-core",
  "ic-nervous-system-agent",
@@ -11975,7 +11975,7 @@ name = "ic-registry-fetch-large-record-test-canister"
 version = "0.0.1"
 dependencies = [
  "candid",
- "ic-cdk 0.18.0",
+ "ic-cdk 0.17.1",
  "ic-crypto-sha2",
  "ic-nervous-system-canisters",
  "ic-registry-transport",
