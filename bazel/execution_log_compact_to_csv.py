@@ -1,6 +1,7 @@
 # This Python script converts bazel's compact execution log (--execution_log_compact_file)
 # to a CSV file that contains a row per output file for every bazel target matching the given
-# --whitelist_pat regular expression. Each row contains the columns: target, path, and hash.
+# --whitelist_pat regular expression and not matching the --blacklist_pat.
+# Each row contains the columns: target, path, and hash.
 #
 # Example usage:
 #
