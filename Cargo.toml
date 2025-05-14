@@ -765,7 +765,7 @@ tracing-subscriber = { version = "0.3.19", features = [
 ] }
 turmoil = "0.6.4"
 url = { version = "2.5.3", features = ["serde"] }
-uuid = { version = "1.16.0", features = ["v4", "serde", "js"] }
+uuid = { version = "1.16.0", features = ["v4", "serde", "rng-rand"] }
 walkdir = "2.3.3"
 walrus = "0.23.3"
 wasm-encoder = { version = "0.228.0", features = ["wasmparser"] }
