@@ -165,6 +165,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
         "metrics-proxy": [crate.annotation(
             gen_binaries = True,
         )],
+        "num-traits": [crate.annotation(
+            patch_args = ["-p1"],
+            patches = ["@@//bazel:num-traits.patch"],
+        )],
     }
     CRATE_ANNOTATIONS.update(sanitize_external_crates(sanitizers_enabled = sanitizers_enabled))
     crates_repository(
