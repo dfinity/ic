@@ -190,7 +190,7 @@ impl RosettaClient {
             .with_transaction_identifier(submit_response.transaction_identifier.clone())
             .build();
         let start = Instant::now();
-        const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
+        const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
         let timeout = self.timeout.unwrap_or(DEFAULT_TIMEOUT);
         while start.elapsed() < timeout {
             let transaction = self.search_transactions(&request).await?;
