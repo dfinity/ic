@@ -378,8 +378,6 @@ pub fn make_canister_range_key(range_start: CanisterId, subnet_id: SubnetId) -> 
         panic!("Non-routable CanisterId being used as a key");
     }
 
-    // TODO DO NOT MERGE - should we flip the range + subnet id?  This makes lookups easier
-    // but is not the original design...
     let encoded_range_start = hex::encode(range_start.get().to_vec());
     format!(
         "{}{}_{}",
