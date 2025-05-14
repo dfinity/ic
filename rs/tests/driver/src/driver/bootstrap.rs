@@ -486,17 +486,17 @@ fn create_config_disk_image(
         config.elasticsearch_hosts = Some(elasticsearch_hosts.join(" "));
     }
 
-    // --bitcoind_addr indicates the local bitcoin node that the bitcoin adapter should be connected to in the system test environment.
+    // The bitcoin_addr specifies the local bitcoin node that the bitcoin adapter should connect to in the system test environment.
     if let Ok(bitcoin_addr) = test_env.read_json_object::<String, _>(BITCOIND_ADDR_PATH) {
         config.bitcoind_addr = Some(bitcoin_addr);
     }
 
-    // --jaeger_addr indicates the local Jaeger node that the nodes should be connected to in the system test environment.
+    // The jaeger_addr specifies the local Jaeger node that the nodes should connect to in the system test environment.
     if let Ok(jaeger_addr) = test_env.read_json_object::<String, _>(JAEGER_ADDR_PATH) {
         config.jaeger_addr = Some(jaeger_addr);
     }
 
-    // --socks_proxy indicates that a socks proxy is available to the system test environment.
+    // The socks_proxy configuration indicates that a socks proxy is available to the system test environment.
     if let Ok(socks_proxy) = test_env.read_json_object::<String, _>(SOCKS_PROXY_PATH) {
         config.socks_proxy = Some(socks_proxy);
     }
@@ -572,15 +572,15 @@ fn create_config_disk_image(
             .arg(elasticsearch_hosts.join(" "));
     }
 
-    // --bitcoind_addr indicates the local bitcoin node that the bitcoin adapter should be connected to in the system test environment.
+    // The bitcoind address specifies the local bitcoin node that the bitcoin adapter should connect to in the system test environment.
     if let Ok(arg) = test_env.read_json_object::<String, _>(BITCOIND_ADDR_PATH) {
         cmd.arg("--bitcoind_addr").arg(arg);
     }
-    // --jaeger_addr indicates the local Jaeger node that the nodes should be connected to in the system test environment.
+    // The jaeger address specifies the local Jaeger node that the nodes should connect to in the system test environment.
     if let Ok(arg) = test_env.read_json_object::<String, _>(JAEGER_ADDR_PATH) {
         cmd.arg("--jaeger_addr").arg(arg);
     }
-    // --socks_proxy indicates that a socks proxy is available to the system test environment.
+    // The socks proxy configuration indicates that a socks proxy is available to the system test environment.
     if let Ok(arg) = test_env.read_json_object::<String, _>(SOCKS_PROXY_PATH) {
         cmd.arg("--socks_proxy").arg(arg);
     }
