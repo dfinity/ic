@@ -577,7 +577,7 @@ hyper-rustls = { version = "0.27.3", default-features = false, features = [
 hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.10", features = ["full"] }
 ic-agent = { version = "0.39.2", features = ["pem", "ring"] }
-ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "aac42c09c13d23d6f22526f718a842f48d72bf67", features = [
+ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "f85fc84e1e608cdea7d60763cf202d74a7fd5050", features = [
     "acme_alpn",
 ] }
 ic-btc-interface = "0.2.2"
@@ -588,7 +588,7 @@ ic-cdk-macros = "0.18.0"
 ic-cdk-timers = "0.11.0"
 ic-certificate-verification = "3"
 ic-certification = "3"
-ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "45239402e9dc1f72b8d9e5e33a77cef531a923b9", default-features = false }
+ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "8248267091e8f3306808355d5556701ed15d777f", default-features = false }
 ic-http-certification = "3.0.3"
 ic-http-gateway = "0.2.0"
 ic-management-canister-types = "0.3.0"
@@ -766,7 +766,10 @@ tracing-subscriber = { version = "0.3.19", features = [
 ] }
 turmoil = "0.6.4"
 url = { version = "2.5.3", features = ["serde"] }
-uuid = { version = "1.16.0", features = ["v4", "serde", "rng-getrandom"] }
+# DO NOT upgrade to >=1.13 unless you are ready to deal with problems.
+# This breaks `wasm32-unknown-unknown` compatibility.
+# Read https://github.com/uuid-rs/uuid/releases/tag/1.13.0
+uuid = { version = "=1.12.1", features = ["v4", "serde"] }
 walkdir = "2.3.3"
 walrus = "0.23.3"
 wasm-encoder = { version = "0.228.0", features = ["wasmparser"] }

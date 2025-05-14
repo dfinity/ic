@@ -6229,7 +6229,7 @@ dependencies = [
 [[package]]
 name = "ic-bn-lib"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/ic-bn-lib?rev=aac42c09c13d23d6f22526f718a842f48d72bf67#aac42c09c13d23d6f22526f718a842f48d72bf67"
+source = "git+https://github.com/dfinity/ic-bn-lib?rev=f85fc84e1e608cdea7d60763cf202d74a7fd5050#f85fc84e1e608cdea7d60763cf202d74a7fd5050"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -9100,7 +9100,7 @@ dependencies = [
 [[package]]
 name = "ic-gateway"
 version = "0.2.0"
-source = "git+https://github.com/dfinity/ic-gateway?rev=45239402e9dc1f72b8d9e5e33a77cef531a923b9#45239402e9dc1f72b8d9e5e33a77cef531a923b9"
+source = "git+https://github.com/dfinity/ic-gateway?rev=8248267091e8f3306808355d5556701ed15d777f#8248267091e8f3306808355d5556701ed15d777f"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -19700,7 +19700,7 @@ dependencies = [
  "anyhow",
  "candid",
  "candid_parser",
- "getrandom 0.3.1",
+ "getrandom 0.2.15",
  "ic-canister-log 0.2.0",
  "ic-cdk 0.17.1",
  "ic-cdk-macros 0.17.1",
@@ -23669,22 +23669,12 @@ dependencies = [
 
 [[package]]
 name = "uuid"
-version = "1.16.0"
+version = "1.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "458f7a779bf54acc9f347480ac654f68407d3aab21269a6e3c9f922acd9e2da9"
+checksum = "b3758f5e68192bb96cc8f9b7e2c2cfdabb435499a28499a42f8f984092adad4b"
 dependencies = [
- "getrandom 0.3.1",
+ "getrandom 0.2.15",
  "serde",
- "uuid-rng-internal",
-]
-
-[[package]]
-name = "uuid-rng-internal"
-version = "1.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9376f53b15ed85851c10175b5e45f0af556b4853ff3fe335080b337e3828981e"
-dependencies = [
- "getrandom 0.3.1",
 ]
 
 [[package]]

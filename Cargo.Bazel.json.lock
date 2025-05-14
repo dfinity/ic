@@ -1,5 +1,5 @@
 {
-  "checksum": "e7664c9910d0c67fc9bb1659031962deba8eab9b6fff69f4e54d382994771021",
+  "checksum": "314707c1e2d355ac14837800b0ea02433d129ed2f80eb0fb769b263c5e353201",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13928,7 +13928,7 @@
               "target": "url"
             },
             {
-              "id": "uuid 1.16.0",
+              "id": "uuid 1.12.1",
               "target": "uuid"
             }
           ],
@@ -18780,7 +18780,7 @@
         "deps": {
           "common": [
             {
-              "id": "uuid 1.16.0",
+              "id": "uuid 1.12.1",
               "target": "uuid"
             }
           ],
@@ -20283,11 +20283,6 @@
               "target": "getrandom"
             },
             {
-              "id": "getrandom 0.3.1",
-              "target": "getrandom",
-              "alias": "getrandom03"
-            },
-            {
               "id": "group 0.13.0",
               "target": "group"
             },
@@ -21187,7 +21182,7 @@
               "target": "url"
             },
             {
-              "id": "uuid 1.16.0",
+              "id": "uuid 1.12.1",
               "target": "uuid"
             },
             {
@@ -32618,7 +32613,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-bn-lib",
           "commitish": {
-            "Rev": "aac42c09c13d23d6f22526f718a842f48d72bf67"
+            "Rev": "f85fc84e1e608cdea7d60763cf202d74a7fd5050"
           }
         }
       },
@@ -32835,7 +32830,7 @@
               "target": "url"
             },
             {
-              "id": "uuid 1.16.0",
+              "id": "uuid 1.12.1",
               "target": "uuid"
             },
             {
@@ -33966,7 +33961,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-gateway",
           "commitish": {
-            "Rev": "45239402e9dc1f72b8d9e5e33a77cef531a923b9"
+            "Rev": "8248267091e8f3306808355d5556701ed15d777f"
           }
         }
       },
@@ -34196,7 +34191,7 @@
               "target": "url"
             },
             {
-              "id": "uuid 1.16.0",
+              "id": "uuid 1.12.1",
               "target": "uuid"
             },
             {
@@ -38912,11 +38907,30 @@
         ],
         "crate_features": {
           "common": [
-            "default",
-            "use_alloc",
-            "use_std"
+            "use_alloc"
           ],
-          "selects": {}
+          "selects": {
+            "aarch64-apple-darwin": [
+              "default",
+              "use_std"
+            ],
+            "aarch64-unknown-linux-gnu": [
+              "default",
+              "use_std"
+            ],
+            "x86_64-pc-windows-msvc": [
+              "default",
+              "use_std"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "default",
+              "use_std"
+            ],
+            "x86_64-unknown-nixos-gnu": [
+              "default",
+              "use_std"
+            ]
+          }
         },
         "deps": {
           "common": [
@@ -46707,7 +46721,7 @@
               "target": "triomphe"
             },
             {
-              "id": "uuid 1.16.0",
+              "id": "uuid 1.12.1",
               "target": "uuid"
             }
           ],
@@ -57574,7 +57588,7 @@
               "target": "heck"
             },
             {
-              "id": "itertools 0.10.5",
+              "id": "itertools 0.13.0",
               "target": "itertools"
             },
             {
@@ -57728,7 +57742,7 @@
               "target": "anyhow"
             },
             {
-              "id": "itertools 0.10.5",
+              "id": "itertools 0.13.0",
               "target": "itertools"
             },
             {
@@ -60524,7 +60538,7 @@
               "target": "syn"
             },
             {
-              "id": "uuid 1.16.0",
+              "id": "uuid 1.12.1",
               "target": "uuid"
             }
           ],
@@ -73448,7 +73462,7 @@
               "target": "stable_deref_trait"
             },
             {
-              "id": "uuid 1.16.0",
+              "id": "uuid 1.12.1",
               "target": "uuid"
             }
           ],
@@ -78821,7 +78835,7 @@
               "target": "tracing"
             },
             {
-              "id": "uuid 1.16.0",
+              "id": "uuid 1.12.1",
               "target": "uuid"
             }
           ],
@@ -80610,7 +80624,7 @@
         "deps": {
           "common": [
             {
-              "id": "cfg-if 0.1.10",
+              "id": "cfg-if 1.0.0",
               "target": "cfg_if"
             },
             {
@@ -82025,14 +82039,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "uuid 1.16.0": {
+    "uuid 1.12.1": {
       "name": "uuid",
-      "version": "1.16.0",
+      "version": "1.12.1",
       "package_url": "https://github.com/uuid-rs/uuid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/uuid/1.16.0/download",
-          "sha256": "458f7a779bf54acc9f347480ac654f68407d3aab21269a6e3c9f922acd9e2da9"
+          "url": "https://static.crates.io/crates/uuid/1.12.1/download",
+          "sha256": "b3758f5e68192bb96cc8f9b7e2c2cfdabb435499a28499a42f8f984092adad4b"
         }
       },
       "targets": [
@@ -82058,10 +82072,8 @@
           "common": [
             "default",
             "rng",
-            "rng-getrandom",
             "serde",
             "std",
-            "uuid-rng-internal-lib",
             "v4",
             "v7"
           ],
@@ -82070,58 +82082,18 @@
         "deps": {
           "common": [
             {
+              "id": "getrandom 0.2.10",
+              "target": "getrandom"
+            },
+            {
               "id": "serde 1.0.217",
               "target": "serde"
             }
           ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              {
-                "id": "getrandom 0.3.1",
-                "target": "getrandom"
-              }
-            ],
-            "aarch64-unknown-linux-gnu": [
-              {
-                "id": "getrandom 0.3.1",
-                "target": "getrandom"
-              }
-            ],
-            "wasm32-unknown-unknown": [
-              {
-                "id": "uuid-rng-internal 1.16.0",
-                "target": "uuid_rng_internal",
-                "alias": "uuid_rng_internal_lib"
-              }
-            ],
-            "wasm32-wasip1": [
-              {
-                "id": "getrandom 0.3.1",
-                "target": "getrandom"
-              }
-            ],
-            "x86_64-pc-windows-msvc": [
-              {
-                "id": "getrandom 0.3.1",
-                "target": "getrandom"
-              }
-            ],
-            "x86_64-unknown-linux-gnu": [
-              {
-                "id": "getrandom 0.3.1",
-                "target": "getrandom"
-              }
-            ],
-            "x86_64-unknown-nixos-gnu": [
-              {
-                "id": "getrandom 0.3.1",
-                "target": "getrandom"
-              }
-            ]
-          }
+          "selects": {}
         },
         "edition": "2018",
-        "version": "1.16.0"
+        "version": "1.12.1"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -82129,60 +82101,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "uuid-rng-internal 1.16.0": {
-      "name": "uuid-rng-internal",
-      "version": "1.16.0",
-      "package_url": "https://github.com/uuid-rs/uuid",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/uuid-rng-internal/1.16.0/download",
-          "sha256": "9376f53b15ed85851c10175b5e45f0af556b4853ff3fe335080b337e3828981e"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "uuid_rng_internal",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "uuid_rng_internal",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "getrandom"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "getrandom 0.3.1",
-              "target": "getrandom"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "1.16.0"
-      },
-      "license": "Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
     },
     "valuable 0.1.0": {
       "name": "valuable",
@@ -91337,7 +91255,6 @@
     "futures-util 0.3.31",
     "get_if_addrs 0.5.3",
     "getrandom 0.2.10",
-    "getrandom 0.3.1",
     "group 0.13.0",
     "hashlink 0.8.3",
     "hex 0.4.3",
@@ -91572,7 +91489,7 @@
     "trust-dns-resolver 0.22.0",
     "turmoil 0.6.4",
     "url 2.5.4",
-    "uuid 1.16.0",
+    "uuid 1.12.1",
     "vsock 0.4.0",
     "walkdir 2.5.0",
     "warp 0.3.7",

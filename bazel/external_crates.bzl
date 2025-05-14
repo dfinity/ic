@@ -529,10 +529,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "custom",
                 ],
             ),
-            "getrandom03": crate.spec(
-                package = "getrandom",
-                version = "^0.3",
-            ),
             "group": crate.spec(
                 version = "^0.13",
             ),
@@ -606,7 +602,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-bn-lib": crate.spec(
                 git = "https://github.com/dfinity/ic-bn-lib",
-                rev = "aac42c09c13d23d6f22526f718a842f48d72bf67",
+                rev = "f85fc84e1e608cdea7d60763cf202d74a7fd5050",
                 features = [
                     "acme_alpn",
                 ],
@@ -652,7 +648,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-gateway": crate.spec(
                 git = "https://github.com/dfinity/ic-gateway",
-                rev = "45239402e9dc1f72b8d9e5e33a77cef531a923b9",
+                rev = "8248267091e8f3306808355d5556701ed15d777f",
                 default_features = False,
             ),
             "ic-http-certification": crate.spec(
@@ -1463,12 +1459,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "serde",
                 ],
             ),
+            # DO NOT upgrade to >=1.13 unless you are ready to deal with problems.
+            # This breaks `wasm32-unknown-unknown` compatibility.
+            # Read https://github.com/uuid-rs/uuid/releases/tag/1.13.0
             "uuid": crate.spec(
-                version = "1.16.0",
+                version = "=1.12.1",
                 features = [
                     "v4",
                     "serde",
-                    "rng-getrandom",
                 ],
             ),
             "vsock": crate.spec(

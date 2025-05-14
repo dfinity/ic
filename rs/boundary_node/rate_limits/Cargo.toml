@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 candid = { workspace = true }
-getrandom = { version = "0.3" }
+getrandom = { workspace = true }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-cdk = "0.17.1"
 ic-cdk-macros = "0.17.1"

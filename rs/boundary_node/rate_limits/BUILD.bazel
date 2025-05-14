@@ -11,7 +11,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/canister_log",
     "@crate_index//:anyhow",
     "@crate_index//:candid",
-    "@crate_index//:getrandom03",
+    "@crate_index//:getrandom",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:ic_cdk_0_17_1",
