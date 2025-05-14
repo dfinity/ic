@@ -22,7 +22,7 @@ use candid::DecoderConfig;
 use futures::TryFutureExt;
 use ic_bn_lib::{
     http::{
-        self,
+        self as bnhttp,
         shed::{
             sharded::{ShardedLittleLoadShedderLayer, ShardedOptions, TypeExtractor},
             system::{SystemInfo, SystemLoadShedderLayer},
@@ -30,6 +30,7 @@ use ic_bn_lib::{
         },
     },
     prometheus::Registry,
+    tls::verify::NoopServerCertVerifier,
     types::RequestType,
 };
 use ic_canister_client::{Agent, Sender};
@@ -44,6 +45,7 @@ use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, messages::MessageId};
 use nix::unistd::{getpgid, setpgid, Pid};
+use rustls::client::danger::ServerCertVerifier;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tower::{limit::ConcurrencyLimitLayer, util::MapResponseLayer, ServiceBuilder};
@@ -61,7 +63,7 @@ use crate::{
     metrics::{
         self, HttpMetricParams, HttpMetricParamsStatus, MetricParams, MetricParamsCheck,
         MetricParamsPersist, MetricParamsSnapshot, MetricsCache, MetricsRunner, WithMetrics,
-        WithMetricsCheck, WithMetricsPersist, WithMetricsSnapshot, HTTP_DURATION_BUCKETS,
+        WithMetricsCheck, WithMetricsPersist, WithMetricsSnapshot,
     },
     persist::{Persist, Persister, Routes},
     rate_limiting::{generic, RateLimit},
@@ -142,10 +144,11 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let dns_resolver = DnsResolver::new(Arc::clone(&registry_snapshot));
 
     // TLS client
-    let tls_verifier = Arc::new(TlsVerifier::new(
-        Arc::clone(&registry_snapshot),
-        cli.misc.skip_replica_tls_verification,
-    ));
+    let tls_verifier: Arc<dyn ServerCertVerifier> = if cli.misc.skip_replica_tls_verification {
+        Arc::new(NoopServerCertVerifier::default())
+    } else {
+        Arc::new(TlsVerifier::new(Arc::clone(&registry_snapshot)))
+    };
 
     let mut tls_config_client =
         rustls::ClientConfig::builder_with_protocol_versions(&[&rustls::version::TLS13])
@@ -166,33 +169,25 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         4096 * cli.network.network_http_client_count as usize,
     );
 
-    let mut http_client_opts: http::client::Options<DnsResolver> = (&cli.http_client).into();
+    let mut http_client_opts: bnhttp::client::Options<DnsResolver> = (&cli.http_client).into();
     http_client_opts.user_agent = SERVICE_NAME.into();
     http_client_opts.tls_config = Some(tls_config_client);
     http_client_opts.dns_resolver = Some(dns_resolver);
 
     // HTTP client for health checks
-    let http_client_check = http::ReqwestClient::new(http_client_opts.clone())
+    let http_client_check = bnhttp::ReqwestClient::new(http_client_opts.clone())
         .context("unable to create HTTP client for checks")?;
     let http_client_check = Arc::new(http_client_check);
 
     // HTTP client for normal requests
-    let http_client = http::ReqwestClientLeastLoaded::new(
-        http_client_opts,
-        cli.network.network_http_client_count as usize,
-        Some(&metrics_registry),
-    )
-    .context("unable to create HTTP client")?;
-    let http_client = WithMetrics(
-        http_client,
-        MetricParams::new_with_opts(
-            &metrics_registry,
-            "http_client",
-            &["success", "status", "http_ver"],
-            Some(HTTP_DURATION_BUCKETS),
-        ),
+    let http_client = Arc::new(
+        bnhttp::ReqwestClientLeastLoaded::new(
+            http_client_opts,
+            cli.network.network_http_client_count as usize,
+            Some(&metrics_registry),
+        )
+        .context("unable to create HTTP client")?,
     );
-    let http_client = Arc::new(http_client);
 
     // Setup registry-related stuff
     let persister = Persister::new(Arc::clone(&routing_table));
@@ -327,31 +322,31 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     );
 
     // HTTP server metrics
-    let http_metrics = http::server::Metrics::new(&metrics_registry);
+    let http_metrics = bnhttp::server::Metrics::new(&metrics_registry);
 
     // HTTP server options
-    let server_opts: http::server::Options = (&cli.http_server).into();
+    let server_opts: bnhttp::server::Options = (&cli.http_server).into();
 
     // HTTP
     let server_http = cli.listen.listen_http_port.map(|x| {
-        http::Server::new(
-            http::server::Addr::Tcp(SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), x)),
-            router.clone(),
-            server_opts,
-            http_metrics.clone(),
-            None,
-        )
+        bnhttp::ServerBuilder::new(router.clone())
+            .listen_tcp(SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), x))
+            .with_options(server_opts)
+            .with_metrics(http_metrics.clone())
+            .build()
+            .context("unable to build HTTP TCP server")
+            .unwrap()
     });
 
     // HTTP Unix Socket
     let server_http_unix = cli.listen.listen_http_unix_socket.as_ref().map(|x| {
-        http::Server::new(
-            http::server::Addr::Unix(x.clone()),
-            router.clone(),
-            server_opts,
-            http_metrics.clone(),
-            None,
-        )
+        bnhttp::ServerBuilder::new(router.clone())
+            .listen_unix(x.clone())
+            .with_options(server_opts)
+            .with_metrics(http_metrics.clone())
+            .build()
+            .context("unable to build HTTP Unix Socket server")
+            .unwrap()
     });
 
     // HTTP loopback server.
@@ -359,16 +354,16 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     // Probably we can find some way of working w/o a dedicated port (e.g. over memory) but it would be hard
     // to adapt HTTP clients for it.
     let server_http_loopback = agent.is_some().then(|| {
-        http::Server::new(
-            http::server::Addr::Tcp(SocketAddr::new(
+        bnhttp::ServerBuilder::new(router.clone())
+            .listen_tcp(SocketAddr::new(
                 Ipv4Addr::LOCALHOST.into(),
                 cli.listen.listen_http_port_loopback,
-            )),
-            router.clone(),
-            server_opts,
-            http_metrics.clone(),
-            None,
-        )
+            ))
+            .with_options(server_opts)
+            .with_metrics(http_metrics.clone())
+            .build()
+            .context("unable to build HTTP Loopback server")
+            .unwrap()
     });
 
     // HTTPS
@@ -414,13 +409,13 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             cache: metrics_cache.clone(),
         });
 
-    let metrics_server = http::Server::new(
-        http::server::Addr::Tcp(cli.obs.obs_metrics_addr),
-        metrics_router,
-        server_opts,
-        http_metrics,
-        None,
-    );
+    let metrics_server = bnhttp::ServerBuilder::new(metrics_router)
+        .listen_tcp(cli.obs.obs_metrics_addr)
+        .with_options(server_opts)
+        .with_metrics(http_metrics)
+        .build()
+        .context("unable to build HTTP Metrics server")
+        .unwrap();
 
     let metrics_runner = WithThrottle(
         WithMetrics(
@@ -601,7 +596,7 @@ fn setup_registry(
     registry_client: Arc<dyn RegistryClient>,
     registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     persister: WithMetricsPersist<Persister>,
-    http_client_check: Arc<dyn http::Client>,
+    http_client_check: Arc<dyn bnhttp::Client>,
     metrics_registry: &Registry,
     channel_snapshot_send: watch::Sender<Option<Arc<RegistrySnapshot>>>,
     channel_snapshot_recv: watch::Receiver<Option<Arc<RegistrySnapshot>>>,
@@ -776,17 +771,17 @@ fn setup_tls_resolver(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Err
 #[cfg(feature = "tls")]
 fn setup_https(
     router: Router,
-    opts: http::server::Options,
+    opts: bnhttp::server::Options,
     cli: &Cli,
     registry: &Registry,
-    metrics: http::server::Metrics,
-) -> Result<http::Server, Error> {
+    metrics: bnhttp::server::Metrics,
+) -> Result<bnhttp::Server, Error> {
     use ic_bn_lib::tls;
 
     let resolver = setup_tls_resolver(&cli.tls).context("unable to setup TLS resolver")?;
 
     let tls_opts = tls::Options {
-        additional_alpn: vec![http::ALPN_ACME.to_vec()],
+        additional_alpn: vec![bnhttp::ALPN_ACME.to_vec()],
         sessions_count: cli.http_server.http_server_tls_session_cache_size,
         sessions_tti: cli.http_server.http_server_tls_session_cache_tti,
         ticket_lifetime: cli.http_server.http_server_tls_ticket_lifetime,
@@ -795,16 +790,16 @@ fn setup_https(
 
     let rustls_config = tls::prepare_server_config(tls_opts, resolver, registry);
 
-    let server_https = http::Server::new(
-        http::server::Addr::Tcp(SocketAddr::new(
+    let server_https = bnhttp::ServerBuilder::new(router)
+        .listen_tcp(SocketAddr::new(
             Ipv6Addr::UNSPECIFIED.into(),
             cli.listen.listen_https_port.unwrap(),
-        )),
-        router,
-        opts,
-        metrics,
-        Some(rustls_config),
-    );
+        ))
+        .with_options(opts)
+        .with_metrics(metrics)
+        .with_rustls_config(rustls_config)
+        .build()
+        .context("unable to build HTTP TLS server")?;
 
     Ok(server_https)
 }
@@ -823,7 +818,7 @@ impl TypeExtractor for RequestTypeExtractor {
 pub fn setup_router(
     registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     routing_table: Arc<ArcSwapOption<Routes>>,
-    http_client: Arc<dyn http::Client>,
+    http_client: Arc<dyn bnhttp::Client>,
     bouncer: Option<Arc<bouncer::Bouncer>>,
     generic_limiter: Option<Arc<generic::GenericLimiter>>,
     cli: &Cli,

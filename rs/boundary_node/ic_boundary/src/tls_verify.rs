@@ -19,15 +19,11 @@ use crate::snapshot::RegistrySnapshot;
 #[derive(Debug)]
 pub struct TlsVerifier {
     rs: Arc<ArcSwapOption<RegistrySnapshot>>,
-    skip_verification: bool,
 }
 
 impl TlsVerifier {
-    pub fn new(rs: Arc<ArcSwapOption<RegistrySnapshot>>, skip_verification: bool) -> Self {
-        Self {
-            rs,
-            skip_verification,
-        }
+    pub fn new(rs: Arc<ArcSwapOption<RegistrySnapshot>>) -> Self {
+        Self { rs }
     }
 }
 
@@ -43,10 +39,6 @@ impl ServerCertVerifier for TlsVerifier {
         _ocsp_response: &[u8],
         now: UnixTime,
     ) -> Result<ServerCertVerified, RustlsError> {
-        if self.skip_verification {
-            return Ok(ServerCertVerified::assertion());
-        }
-
         if !intermediates.is_empty() {
             return Err(RustlsError::General(format!(
                 "The peer must send exactly one self signed certificate, but it sent {} certificates.",

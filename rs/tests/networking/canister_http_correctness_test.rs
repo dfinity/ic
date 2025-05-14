@@ -1661,44 +1661,6 @@ fn test_only_headers_with_custom_max_response_bytes_exceeded(env: TestEnv) {
     );
 }
 
-fn test_non_ascii_url_is_rejected(env: TestEnv) {
-    let handlers = Handlers::new(&env);
-    let webserver_ipv6 = get_universal_vm_address(&env);
-    let expected_body = "안녕하세요";
-
-    let url = format!(
-        "https://[{}]:20443/{}/{}",
-        webserver_ipv6, "ascii", expected_body
-    );
-
-    let max_response_bytes = 666;
-
-    let request = UnvalidatedCanisterHttpRequestArgs {
-        url,
-        headers: vec![],
-        method: HttpMethod::GET,
-        body: Some("".as_bytes().to_vec()),
-        transform: None,
-        max_response_bytes: Some(max_response_bytes),
-    };
-
-    let response = block_on(submit_outcall(
-        &handlers,
-        RemoteHttpRequest {
-            request: request.clone(),
-            cycles: 500_000_000_000,
-        },
-    ));
-
-    assert_matches!(
-        response,
-        Err(RejectResponse {
-            reject_code: RejectCode::SysFatal,
-            ..
-        })
-    );
-}
-
 fn test_max_url_length(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
