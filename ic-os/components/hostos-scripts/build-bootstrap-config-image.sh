@@ -112,10 +112,6 @@ options may be specified:
   --socks_proxy url
     The URL of the socks proxy to use. To be used in
     systems tests only.
-
-  --generate_ic_boundary_tls_cert domain_name
-    Generate and inject a self-signed TLS certificate and key for ic-boundary
-    for the given domain name. To be used in system tests only.
 EOF
 }
 
@@ -217,9 +213,6 @@ function build_ic_bootstrap_tar() {
             --socks_proxy)
                 SOCKS_PROXY="$2"
                 ;;
-            --generate_ic_boundary_tls_cert)
-                IC_BOUNDARY_TLS_CERT_DOMAIN_NAME="$2"
-                ;;
             *)
                 echo "Unrecognized option: $1"
                 usage
@@ -299,12 +292,6 @@ EOF
     fi
     if [ "${SOCKS_PROXY}" != "" ]; then
         echo "socks_proxy=${SOCKS_PROXY}" >"${BOOTSTRAP_TMPDIR}/socks_proxy.conf"
-    fi
-    if [[ -n "$IC_BOUNDARY_TLS_CERT_DOMAIN_NAME" ]]; then
-        openssl req -x509 -newkey rsa:2048 \
-            -keyout ${BOOTSTRAP_TMPDIR}/ic-boundary-tls.key \
-            -out ${BOOTSTRAP_TMPDIR}/ic-boundary-tls.crt -sha256 -days 3650 -nodes \
-            -subj /C=CH/ST=Zurich/L=Zurich/O=InternetComputer/OU=ApiBoundaryNodes/CN=${IC_BOUNDARY_TLS_CERT_DOMAIN_NAME}
     fi
 
     tar cf "${OUT_FILE}" \
