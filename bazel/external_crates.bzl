@@ -603,6 +603,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ic-bn-lib": crate.spec(
                 git = "https://github.com/dfinity/ic-bn-lib",
                 rev = "aac42c09c13d23d6f22526f718a842f48d72bf67",
+                features = [
+                    "acme_alpn",
+                ],
             ),
             "ic-btc-interface": crate.spec(
                 version = "^0.2.2",
@@ -1457,10 +1460,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "uuid": crate.spec(
-                version = "^1.11.0",
+                version = "1.16.0",
                 features = [
                     "v4",
                     "serde",
+                    "js",
                 ],
             ),
             "vsock": crate.spec(
