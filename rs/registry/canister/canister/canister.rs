@@ -311,7 +311,7 @@ fn get_value() {
                     let HighCapacityRegistryValue {
                         version,
                         content,
-                        timestamp_seconds,
+                        timestamp_nanoseconds,
                     } = result;
 
                     let content = content.map(|content| {
@@ -328,7 +328,7 @@ fn get_value() {
                     HighCapacityRegistryGetValueResponse {
                         version,
                         content,
-                        timestamp_seconds,
+                        timestamp_nanoseconds,
 
                         error: None,
                     }
@@ -348,7 +348,7 @@ fn get_value() {
                     // since the moment we did this read.
                     version,
                     content: None,
-                    timestamp_seconds: 0,
+                    timestamp_nanoseconds: 0,
                 },
             }
         }
@@ -360,7 +360,7 @@ fn get_value() {
             }),
             version: 0,
             content: None,
-            timestamp_seconds: 0,
+            timestamp_nanoseconds: 0,
         },
     };
     let bytes = serialize_get_value_response(response_pb).expect("Error serializing response");

@@ -397,7 +397,7 @@ fn test_honest_chunked() {
                 ),
             }],
             preconditions: vec![],
-            timestamp_seconds: 1735689600, // Jan 1, 2025 midnight UTC
+            timestamp_nanoseconds: 1735689600000000000, // Jan 1, 2025 midnight UTC
         }],
         1..=1,
         GarbleResponse::LeaveAsIs,
@@ -473,7 +473,7 @@ fn test_evil_chunked() {
                 ),
             }],
             preconditions: vec![],
-            timestamp_seconds: 1735689600, // Jan 1, 2025 midnight UTC
+            timestamp_nanoseconds: 1735689600000000000, // Jan 1, 2025 midnight UTC
         }],
         1..=1,
         GarbleResponse::LeaveAsIs,

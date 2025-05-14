@@ -39,12 +39,12 @@ pub fn chunkify_composite_mutation<M: Memory>(
         .map(|mutation| chunkify_prime_mutation(mutation, chunks))
         .collect::<Vec<_>>();
 
-    let timestamp_seconds = 0;
+    let timestamp_nanoseconds = 0;
 
     HighCapacityRegistryAtomicMutateRequest {
         mutations,
         preconditions,
-        timestamp_seconds,
+        timestamp_nanoseconds,
     }
 }
 
