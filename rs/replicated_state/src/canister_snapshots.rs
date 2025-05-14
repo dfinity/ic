@@ -59,7 +59,11 @@ impl CanisterSnapshots {
     /// Adds new snapshot in the collection and assigns a `SnapshotId`.
     ///
     /// External callers should call `ReplicatedState::take_snapshot` instead.
-    pub fn push(&mut self, snapshot_id: SnapshotId, snapshot: Arc<CanisterSnapshot>) -> SnapshotId {
+    pub(crate) fn push(
+        &mut self,
+        snapshot_id: SnapshotId,
+        snapshot: Arc<CanisterSnapshot>,
+    ) -> SnapshotId {
         let canister_id = snapshot.canister_id();
         self.memory_usage += snapshot.size();
         self.snapshots.insert(snapshot_id, snapshot);
@@ -91,7 +95,7 @@ impl CanisterSnapshots {
     /// Remove snapshot identified by `snapshot_id` from the collection of snapshots.
     ///
     /// External callers should call `ReplicatedState::delete_snapshot` instead.
-    pub fn remove(&mut self, snapshot_id: SnapshotId) -> Option<Arc<CanisterSnapshot>> {
+    pub(crate) fn remove(&mut self, snapshot_id: SnapshotId) -> Option<Arc<CanisterSnapshot>> {
         let removed_snapshot = self.snapshots.remove(&snapshot_id);
         match removed_snapshot {
             Some(snapshot) => {

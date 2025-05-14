@@ -2698,7 +2698,7 @@ fn canister_snapshot_data_upload_fails_out_of_bounds() {
     // attempt to write beyond the wasm module size
     let args = UploadCanisterSnapshotDataArgs::new(
         canister_id,
-        snapshot_id.to_vec(),
+        snapshot_id,
         CanisterSnapshotDataOffset::WasmModule {
             offset: wasm_module_size - 5,
         },
@@ -2867,7 +2867,7 @@ fn canister_snapshot_roundtrip_succeeds() {
     // wasm module
     let args_module = UploadCanisterSnapshotDataArgs::new(
         canister_id,
-        new_snapshot_id.to_vec(),
+        new_snapshot_id,
         CanisterSnapshotDataOffset::WasmModule { offset: 0 },
         snapshot_wasm_module,
     );
@@ -2879,7 +2879,7 @@ fn canister_snapshot_roundtrip_succeeds() {
     // main memory
     let args_heap = UploadCanisterSnapshotDataArgs::new(
         canister_id,
-        new_snapshot_id.to_vec(),
+        new_snapshot_id,
         CanisterSnapshotDataOffset::MainMemory { offset: 0 },
         snapshot_wasm_heap,
     );
@@ -2891,7 +2891,7 @@ fn canister_snapshot_roundtrip_succeeds() {
     // stable memory
     let args_stable = UploadCanisterSnapshotDataArgs::new(
         canister_id,
-        new_snapshot_id.to_vec(),
+        new_snapshot_id,
         CanisterSnapshotDataOffset::StableMemory { offset: 0 },
         snapshot_stable_memory.clone(),
     );
@@ -2903,7 +2903,7 @@ fn canister_snapshot_roundtrip_succeeds() {
     // chunk store
     let args_chunk1 = UploadCanisterSnapshotDataArgs::new(
         canister_id,
-        new_snapshot_id.to_vec(),
+        new_snapshot_id,
         CanisterSnapshotDataOffset::WasmChunk,
         chunk1_res,
     );
@@ -2914,7 +2914,7 @@ fn canister_snapshot_roundtrip_succeeds() {
     .unwrap();
     let args_chunk2 = UploadCanisterSnapshotDataArgs::new(
         canister_id,
-        new_snapshot_id.to_vec(),
+        new_snapshot_id,
         CanisterSnapshotDataOffset::WasmChunk,
         chunk2_res,
     );

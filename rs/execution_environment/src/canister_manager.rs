@@ -2303,7 +2303,7 @@ impl CanisterManager {
         replace_snapshot_size: NumBytes,
     ) {
         // Delete old snapshot identified by `replace_snapshot` ID.
-        state.canister_snapshots.remove(replace_snapshot);
+        state.delete_snapshot(replace_snapshot);
         canister.system_state.snapshots_memory_usage = canister
             .system_state
             .snapshots_memory_usage

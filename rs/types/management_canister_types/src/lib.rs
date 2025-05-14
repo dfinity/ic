@@ -4186,13 +4186,13 @@ impl Payload<'_> for UploadCanisterSnapshotDataArgs {}
 impl UploadCanisterSnapshotDataArgs {
     pub fn new(
         canister_id: CanisterId,
-        snapshot_id: Vec<u8>,
+        snapshot_id: SnapshotId,
         kind: CanisterSnapshotDataOffset,
         chunk: Vec<u8>,
     ) -> Self {
         Self {
             canister_id: canister_id.get(),
-            snapshot_id,
+            snapshot_id: snapshot_id.to_vec(),
             kind,
             chunk,
         }
