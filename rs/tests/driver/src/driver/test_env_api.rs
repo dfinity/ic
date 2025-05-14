@@ -1642,10 +1642,9 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     }
 
     async fn await_status_is_healthy_async(&self) -> Result<()> {
-        let logger = self.test_env().logger().clone();
         retry_with_msg_async!(
             &format!("await_status_is_healthy of {}", self.get_public_url()),
-            &logger,
+            &self.test_env().logger(),
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
             || async {
