@@ -245,7 +245,6 @@ impl ConsensusImpl {
                 crypto.clone(),
                 payload_builder.clone(),
                 dkg_payload_builder,
-                dkg_pool.clone(),
                 idkg_pool.clone(),
                 state_manager.clone(),
                 stable_registry_version_age,
