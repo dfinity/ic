@@ -32,6 +32,7 @@ LIBRARY_SRCS = glob(
 
 rust_library(
     name = "fetch_large_record_test_canister",
+    testonly = True,
     srcs = LIBRARY_SRCS,
     crate_name = "ic_registry_fetch_large_record_test_canister",
     proc_macro_deps = MACRO_DEPENDENCIES,

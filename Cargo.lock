@@ -10450,7 +10450,6 @@ dependencies = [
  "ic-nns-governance-api",
  "ic-node-rewards-canister-api",
  "ic-registry-canister-api",
- "ic-registry-fetch-large-record-test-canister",
  "ic-sns-governance-api",
  "ic-sns-root",
  "ic-sns-swap",
@@ -10496,6 +10495,7 @@ dependencies = [
  "mockall",
  "pocket-ic",
  "prost 0.13.4",
+ "serde",
  "tokio",
 ]
 

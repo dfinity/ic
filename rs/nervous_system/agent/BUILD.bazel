@@ -17,7 +17,6 @@ DEPENDENCIES = [
     "//rs/node_rewards/canister/api",
     "//rs/registry/canister",
     "//rs/registry/canister/api",
-    "//rs/registry/fetch_large_record_test_canister",
     "//rs/sns/governance/api",
     "//rs/sns/root",
     "//rs/sns/swap",

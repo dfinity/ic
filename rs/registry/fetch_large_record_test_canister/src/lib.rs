@@ -1,4 +1,4 @@
-use candid::CandidType;
+use candid::{CandidType, Encode};
 use serde::Deserialize;
 
 // Normally, we'd put these sorts of thing in a separate API crate, but since

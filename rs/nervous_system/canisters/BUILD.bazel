@@ -35,6 +35,7 @@ DEV_DEPENDENCIES = [
     "//rs/nns/test_utils",
     "//rs/registry/fetch_large_record_test_canister",
     "//rs/rust_canisters/canister_test",
+    "@crate_index//:serde",
     "@crate_index//:tokio",
 ]
 

@@ -1,17 +1,55 @@
-use candid::Encode;
+use candid::{CandidType, Encode};
 use canister_test::Project;
 use ic_base_types::CanisterId;
 use ic_crypto_sha2::Sha256;
-use ic_nervous_system_agent::{pocketic_impl::PocketIcAgent, CallCanisters};
+use ic_nervous_system_agent::{pocketic_impl::PocketIcAgent, CallCanisters, Request};
 use ic_nervous_system_chunks::test_data::MEGA_BLOB;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_nns_test_utils::common::{build_test_registry_wasm, NnsInitPayloadsBuilder};
 use ic_registry_canister_api::mutate_test_high_capacity_records;
-use ic_registry_fetch_large_record_test_canister::{
-    CallRegistryGetChangesSinceRequest, ContentSummary,
-};
+use ic_registry_fetch_large_record_test_canister::ContentSummary;
 use pocket_ic::PocketIcBuilder;
+use serde::Deserialize;
+
+// This is copied from fetch_large_record_test_canister. We do this so that we
+// can make it implement the `Request` trait (from `nervous_system/agent`).
+// There are a couple of alternatives locations where such an implementation
+// might want to live:
+//
+//     1. agent (where the trait is defined) - This has the disadvantage that
+//        agent must then depend on fetch_large_record_test_canister. This is
+//        not good, because that prevents fetch_large_record_test_canister from
+//        being testonly.
+//
+//     2. fetch_large_record_test_canister - This would require that
+//        fetch_large_record_test_canister depends on agent. This breaks the
+//        build, because a canister (namely fetch_large_record_test_canister)
+//        then depends on agent. This is not allowed, because agent requires
+//        that the platform support TCP, and WASM does not support TCP.
+//
+// It was deemed that this is the least bad option. Another way is to chop up
+// agent so that it does not require the platform support TCP. This is probably
+// the best way, but such a change would seriously inflate the scope of the
+// change where this test was added.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, CandidType, Deserialize)]
+pub struct CallRegistryGetChangesSinceRequest {}
+
+impl Request for CallRegistryGetChangesSinceRequest {
+    fn method(&self) -> &'static str {
+        "call_registry_get_changes_since"
+    }
+
+    fn update(&self) -> bool {
+        true
+    }
+
+    fn payload(&self) -> Result<Vec<u8>, candid::Error> {
+        Encode!(self)
+    }
+
+    type Response = Option<ContentSummary>;
+}
 
 #[tokio::test]
 async fn test_registry_get_changes_since() {

@@ -36,4 +36,5 @@ ic-nervous-system-chunks = { path = "../chunks" }
 ic-nervous-system-integration-tests = { path = "../integration_tests" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-registry-fetch-large-record-test-canister = { path = "../../registry/fetch_large_record_test_canister" }
+serde = { workspace = true }
 tokio = { workspace = true }

@@ -5,7 +5,6 @@ use std::time::Duration;
 use std::{fmt::Display, future::Future};
 
 pub mod agent_impl;
-mod fetch_large_record_test_canister;
 pub mod helpers;
 pub mod ledger;
 pub mod management_canister;
