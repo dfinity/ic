@@ -613,6 +613,7 @@ fn create_setupos_config_image(
     fs::create_dir_all(&tmp_dir)?;
 
     let build_setupos_config_image = get_dependency_path_from_env("ENV_DEPS__SETUPOS_BUILD_CONFIG");
+    let create_setupos_config = get_dependency_path_from_env("ENV_DEPS__SETUPOS_CREATE_CONFIG");
 
     let nested_vm = env.get_nested_vm(name)?;
 
@@ -637,32 +638,52 @@ fn create_setupos_config_image(
     // Prep config dir
     let config_dir = tmp_dir.join("config");
     std::fs::create_dir_all(config_dir.join("ssh_authorized_keys"))?;
-    let mut config_ini = std::fs::File::create(config_dir.join("config.ini"))?;
-    config_ini.write_all(
-        format!("node_reward_type=type3.1\nipv6_prefix={prefix}\nipv6_gateway={gateway}")
-            .as_bytes(),
-    )?;
-    std::fs::copy(
-        ssh_authorized_pub_keys_dir.join("admin"),
-        config_dir.join("ssh_authorized_keys/admin"),
-    )?;
-    if let Ok(node_key) = std::env::var("NODE_OPERATOR_PRIV_KEY_PATH") {
-        if !node_key.trim().is_empty() {
-            let mut node_operator_private_key =
-                std::fs::File::create(config_dir.join("node_operator_private_key.pem"))?;
-            node_operator_private_key.write_all(node_key.as_bytes())?;
-        }
-    }
 
     // Prep data dir
     let data_dir = tmp_dir.join("data");
     std::fs::create_dir(&data_dir)?;
-    let mut deployment_json = std::fs::File::create(data_dir.join("deployment.json"))?;
-    let memory = HOSTOS_MEMORY_KIB_PER_VM / 2 / 1024 / 1024;
-    let nr_of_vcpus = (HOSTOS_VCPUS_PER_VM / 2).to_string();
-    deployment_json.write_all(&format!("{{\"deployment\":{{\"name\":\"testnet\",\"mgmt_mac\":\"{mac}\"}},\"logging\":{{\"hosts\":\"\"}},\"nns\":{{\"url\":\"{nns_url}\"}},\"resources\":{{\"memory\":\"{memory}\",\"cpu\":\"{cpu}\",\"nr_of_vcpus\":{nr_of_vcpus}}}}}").as_bytes())?;
-    let mut nns_public_key_pem = std::fs::File::create(data_dir.join("nns_public_key.pem"))?;
-    nns_public_key_pem.write_all(nns_public_key.as_bytes())?;
+
+    // Prep config contents
+    let mut cmd = Command::new(create_setupos_config);
+    cmd.arg("--config-dir")
+        .arg(&config_dir)
+        .arg("--data-dir")
+        .arg(&data_dir)
+        .arg("--deployment-environment")
+        .arg("testnet")
+        .arg("--mgmt-mac")
+        .arg(&mac)
+        .arg("--ipv6-prefix")
+        .arg(&prefix)
+        .arg("--ipv6-gateway")
+        .arg(&gateway)
+        .arg("--memory-gb")
+        .arg((HOSTOS_MEMORY_KIB_PER_VM / 2 / 1024 / 1024).to_string())
+        .arg("--cpu")
+        .arg(cpu)
+        .arg("--nr-of-vcpus")
+        .arg((HOSTOS_VCPUS_PER_VM / 2).to_string())
+        .arg("--nns-url")
+        .arg(nns_url.to_string())
+        .arg("--nns-public-key")
+        .arg(nns_public_key)
+        .arg("--node-reward-type")
+        .arg("type3.1")
+        .arg("--admin-keys")
+        .arg(ssh_authorized_pub_keys_dir.join("admin"));
+
+    if let Ok(node_key) = std::env::var("NODE_OPERATOR_PRIV_KEY_PATH") {
+        if !node_key.trim().is_empty() {
+            cmd.arg("--node-operator-private-key").arg(node_key);
+        }
+    }
+
+    let output = cmd.output()?;
+    std::io::stdout().write_all(&output.stdout)?;
+    std::io::stderr().write_all(&output.stderr)?;
+    if !output.status.success() {
+        bail!("could not create SetupOS config");
+    }
 
     // Pack dirs into config image
     let config_image = nested_vm.get_setupos_config_image_path()?;
