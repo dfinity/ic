@@ -1,11 +1,8 @@
 use crate::{common::LOG_PREFIX, pb::v1::SubnetForCanister, registry::Registry};
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
 
 use crate::flags::is_canister_ranges_routing_map_storage_enabled;
-use crate::mutations::node_management::common::{
-    get_key_family_iter, get_key_family_iter_at_version,
-};
+use crate::mutations::node_management::common::get_key_family_iter_at_version;
 use dfn_core::CanisterId;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_protobuf::registry::routing_table::v1 as pb;
@@ -14,14 +11,12 @@ use ic_registry_keys::{
     CANISTER_RANGE_PREFIX,
 };
 use ic_registry_routing_table::{
-    routing_table_insert_subnet, CanisterIdRange, CanisterIdRanges, CanisterMigrations,
-    RoutingTable,
+    routing_table_insert_subnet, CanisterIdRanges, CanisterMigrations, RoutingTable,
 };
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
 use ic_registry_transport::{delete, upsert};
 use prost::Message;
 use std::convert::TryFrom;
-use std::str::FromStr;
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum GetSubnetForCanisterError {
