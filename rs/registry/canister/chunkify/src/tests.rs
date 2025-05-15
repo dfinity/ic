@@ -8,7 +8,6 @@ use ic_registry_transport::pb::v1::{
 use prost::Message;
 use std::{
     cell::{RefCell, RefMut},
-    iter::repeat,
     rc::Rc,
 };
 
@@ -161,8 +160,7 @@ fn test_decode_high_capacity_registry_value() {
         small_value.encode_to_vec(),
     ));
 
-    let key = repeat(b"hello ")
-        .take(500_000)
+    let key = std::iter::repeat_n(b"hello ", 500_000)
         .flatten()
         .cloned()
         .collect::<Vec<u8>>();

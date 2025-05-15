@@ -10,7 +10,7 @@ use futures::future::join_all;
 use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::time;
 use ic_cdk::{caller, spawn};
-use ic_cdk_macros::{query, update};
+use ic_cdk::{query, update};
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs,
 };
