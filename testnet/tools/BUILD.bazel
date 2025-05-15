@@ -7,15 +7,8 @@ genrule(
     name = "icos_deploy",
     testonly = True,
     srcs = [
-        "//ic-os/guestos/envs/dev:version.txt",
-        "//ic-os/guestos/envs/dev:upload_disk-img",
-        "//ic-os/guestos/envs/dev:upload_update-img",
-        "//ic-os/guestos/envs/prod:upload_update-img",
-        "//ic-os/boundary-guestos/envs/dev:upload_disk-img",
-        "//ic-os/boundary-guestos/envs/prod:upload_disk-img",
+        "//:upload-artifacts",
         "build-guestos-configs.sh",
-        "//publish/binaries:legacy_upload",
-        "//publish/canisters:upload",
     ],
     outs = ["icos_deploy_script"],
     cmd = """
