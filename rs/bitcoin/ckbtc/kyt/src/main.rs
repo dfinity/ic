@@ -1,6 +1,6 @@
 use candid::Principal;
 use ic_cdk::api::management_canister::http_request::{HttpMethod, HttpResponse, TransformArgs};
-use ic_cdk_macros::{init, post_upgrade, query, update};
+use ic_cdk::{init, post_upgrade, query, update};
 use ic_ckbtc_kyt::SetApiKeyArg;
 use ic_ckbtc_kyt::{
     Alert, AlertLevel, DepositRequest, Error, ExposureType, FetchAlertsResponse, KytMode,
