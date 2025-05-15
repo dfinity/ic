@@ -42,19 +42,7 @@ pub(crate) fn mutations_for_canister_ranges(
     old_rt: &RoutingTable,
     new_rt: &RoutingTable,
 ) -> Vec<RegistryMutation> {
-    // These two iterators are both sorted in the same way - by start of the range. If the sort
-    // were not guaranteed the same, the below algorithm would produce incorrect results.
-    let mut old_it = old_rt
-        .iter()
-        .map(|(range, &subnet)| ((range.start, subnet), range.end))
-        .peekable();
-    let mut new_it = new_rt
-        .iter()
-        .map(|(range, &subnet)| ((range.start, subnet), range.end))
-        .peekable();
-
-    let mut mutations = vec![];
-
+    // Helper functions
     let range_key = |key: (CanisterId, SubnetId)| -> Vec<u8> {
         make_canister_range_key(key.0, key.1).as_bytes().to_vec()
     };
@@ -70,6 +58,18 @@ pub(crate) fn mutations_for_canister_ranges(
         .encode_to_vec()
     };
 
+    // These two iterators are both sorted in the same way - by start of the range. If the sort
+    // were not guaranteed the same, the below algorithm would produce incorrect results.
+    let mut old_it = old_rt
+        .iter()
+        .map(|(range, &subnet)| ((range.start, subnet), range.end))
+        .peekable();
+    let mut new_it = new_rt
+        .iter()
+        .map(|(range, &subnet)| ((range.start, subnet), range.end))
+        .peekable();
+
+    let mut mutations = vec![];
     loop {
         // Every branch advances one or both of the iterators, so that the loop eventually terminates
         // on (None, None).
