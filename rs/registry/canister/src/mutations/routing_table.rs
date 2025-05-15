@@ -68,7 +68,9 @@ pub(crate) fn mutations_for_canister_ranges(
         .encode_to_vec()
     };
 
-    while old_it.peek().is_some() || new_it.peek().is_some() {
+    loop {
+        // Every branch advances one or both of the iterators, so that the loop eventually terminates
+        // on (None, None).
         match (old_it.peek(), new_it.peek()) {
             (Some(&(o_key, o_end)), Some(&(n_key, n_end))) => match o_key.cmp(&n_key) {
                 Ordering::Less => {
@@ -80,7 +82,8 @@ pub(crate) fn mutations_for_canister_ranges(
                     new_it.next();
                 }
                 Ordering::Equal => {
-                    // only change differences, these mutations take space.
+                    // Only produce mutations for differences, since every mutation will take space
+                    // in the registry even if the values are equivalent.
                     if o_end != n_end {
                         mutations.push(upsert(range_key(n_key), create_entry(n_key, n_end)));
                     }
@@ -96,7 +99,7 @@ pub(crate) fn mutations_for_canister_ranges(
                 mutations.push(upsert(range_key(n_key), create_entry(n_key, n_end)));
                 new_it.next();
             }
-            (None, None) => unreachable!(),
+            (None, None) => break,
         }
     }
 
@@ -333,7 +336,6 @@ mod tests {
     use ic_base_types::CanisterId;
     use ic_registry_keys::CANISTER_RANGE_PREFIX;
     use ic_registry_routing_table::CanisterIdRange;
-    use std::str::FromStr;
 
     #[test]
     fn test_get_subnet_for_canister() {
@@ -405,7 +407,7 @@ mod tests {
         )
         .unwrap();
 
-        let new_routing_table = pb::RoutingTable::from(routing_table);
+        let new_routing_table = pb::RoutingTable::from(rt.clone());
         let mutations = vec![upsert(
             make_routing_table_record_key().as_bytes(),
             new_routing_table.encode_to_vec(),
