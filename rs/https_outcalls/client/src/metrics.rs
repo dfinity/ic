@@ -25,12 +25,12 @@ impl Metrics {
                 "Execution time of remote http call by adapter.",
                 // 100ms, 200ms, 500ms, …, 10s, 20s, 50s
                 decimal_buckets(-1, 1),
-                &["status_code"],
+                &["status_code", "http_method"],
             ),
             request_total: metrics_registry.int_counter_vec(
                 "canister_http_requests_total",
                 "Canister http request results returned to consensus.",
-                &["status"],
+                &["status", "http_method"],
             ),
         }
     }

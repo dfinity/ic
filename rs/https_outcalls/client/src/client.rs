@@ -155,6 +155,12 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 socks_proxy_addrs,
             } = canister_http_request;
 
+            let http_method_label = match request_http_method {
+                CanisterHttpMethod::GET => "GET",
+                CanisterHttpMethod::POST => "POST",
+                CanisterHttpMethod::HEAD => "HEAD",
+            };
+
             let adapter_req_timer = Instant::now();
             let max_response_size_bytes = request_max_response_bytes.unwrap_or(NumBytes::new(MAX_CANISTER_HTTP_RESPONSE_BYTES)).get();
             // Build future that sends and transforms request.
@@ -198,7 +204,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     };
 
                     metrics.http_request_duration
-                        .with_label_values(&[&status.to_string()])
+                        .with_label_values(&[&status.to_string(), http_method_label])
                         .observe(adapter_req_timer.elapsed().as_secs_f64());
 
                     validate_http_headers_and_body(&canister_http_payload.headers, &canister_http_payload.body).map_err(|e| (RejectCode::SysFatal, UserError::from(e).description().to_string()))?;
@@ -264,15 +270,16 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 canister_id: request_sender,
                 content: match adapter_canister_http_response.await {
                     Ok(resp) => {
-                        metrics.request_total.with_label_values(&["success"]).inc();
+                        metrics.request_total.with_label_values(&["success", http_method_label]).inc();
                         CanisterHttpResponseContent::Success(resp)
                     },
                     Err((reject_code, message)) => {
-                        metrics.request_total.with_label_values(&[&reject_code.to_string()]).inc();
+                        metrics.request_total.with_label_values(&[&reject_code.to_string(), http_method_label]).inc();
                         CanisterHttpResponseContent::Reject(CanisterHttpReject {
-                        reject_code,
-                        message,
-                    })},
+                            reject_code,
+                            message,
+                        })
+                    },
                 }
             });
         });
