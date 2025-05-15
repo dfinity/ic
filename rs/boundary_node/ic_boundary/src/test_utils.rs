@@ -36,8 +36,8 @@ use ic_types::{
 };
 use reqwest;
 
+use crate::cache::CacheState;
 use crate::{
-    cache::Cache,
     cli::Cli,
     core::setup_router,
     persist::{Persist, Persister, Routes},
@@ -293,6 +293,11 @@ pub fn setup_test_router(
         args.push(rate_limit_subnet.as_str());
     }
 
+    if enable_cache {
+        args.push("--cache-size");
+        args.push("1048576");
+    }
+
     #[cfg(not(feature = "tls"))]
     let cli = Cli::parse_from(args);
     #[cfg(feature = "tls")]
@@ -332,7 +337,7 @@ pub fn setup_test_router(
         &cli,
         &metrics_registry,
         enable_cache.then_some(Arc::new(
-            Cache::new(10485760, 262144, Duration::from_secs(1), false).unwrap(),
+            CacheState::new(&cli.cache, &Registry::new()).unwrap(),
         )),
         salt,
     );
