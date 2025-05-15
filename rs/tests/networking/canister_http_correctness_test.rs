@@ -297,16 +297,7 @@ fn test_non_existent_transform_function(env: TestEnv) {
         },
     ));
 
-    assert_matches!(
-        response,
-        Err(RejectResponse {
-            reject_code: RejectCode::CanisterError,
-            ..
-        })
-    );
-    assert_ne!(
-        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
-    );
+    assert_canister_error_response_and_cycles_not_refund(&response, HTTP_REQUEST_CYCLE_PAYMENT, &refunded_cycles);
 }
 
 fn test_composite_transform_function_is_executed(env: TestEnv) {
@@ -347,7 +338,7 @@ fn test_no_cycles_attached(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let (response, _) = block_on(submit_outcall(
+    let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
@@ -368,13 +359,7 @@ fn test_no_cycles_attached(env: TestEnv) {
         },
     ));
 
-    assert_matches!(
-        response,
-        Err(RejectResponse {
-            reject_code: RejectCode::CanisterReject,
-            ..
-        })
-    );
+    assert_canister_reject_response_and_cycles_refund(&response, 0, &refunded_cycles);
 }
 
 fn test_max_possible_request_size(env: TestEnv) {
@@ -462,16 +447,7 @@ fn test_max_possible_request_size_exceeded(env: TestEnv) {
         },
     ));
 
-    assert_matches!(
-        response,
-        Err(RejectResponse {
-            reject_code: RejectCode::CanisterReject,
-            ..
-        })
-    );
-    assert_eq!(
-        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
-    );
+    assert_canister_reject_response_and_cycles_refund(&response, HTTP_REQUEST_CYCLE_PAYMENT, &refunded_cycles);
 }
 
 fn test_2mb_response_cycle_for_rejection_path(env: TestEnv) {
@@ -493,28 +469,23 @@ fn test_2mb_response_cycle_for_rejection_path(env: TestEnv) {
         max_response_bytes: None,
     };
 
-    let (response, _) = block_on(async move {
+    let expected_cycle_cost = expected_cycle_cost(
+        handlers.proxy_canister().canister_id(),
+        request.clone(),
+        handlers.subnet_size,
+    );
+    let (response, refunded_cycles) = block_on(async move {
         submit_outcall(
             &handlers,
             RemoteHttpRequest {
                 request: request.clone(),
-                cycles: expected_cycle_cost(
-                    handlers.proxy_canister().canister_id(),
-                    request,
-                    handlers.subnet_size,
-                ) - 1,
+                cycles: expected_cycle_cost - 1,
             },
         )
         .await
     });
 
-    assert_matches!(
-        response,
-        Err(RejectResponse {
-            reject_code: RejectCode::CanisterReject,
-            ..
-        })
-    );
+    assert_canister_reject_response_and_cycles_refund(&response, expected_cycle_cost - 1, &refunded_cycles);
 }
 
 fn test_4096_max_response_cycle_case_1(env: TestEnv) {
@@ -573,27 +544,24 @@ fn test_4096_max_response_cycle_case_2(env: TestEnv) {
         max_response_bytes: Some(16384),
     };
 
-    let (response, _) = block_on(async move {
+    let expected_cycle_cost = expected_cycle_cost(
+        handlers.proxy_canister().canister_id(),
+        request.clone(),
+        handlers.subnet_size,
+    );
+
+    let (response, refunded_cycles) = block_on(async move {
         submit_outcall(
             &handlers,
             RemoteHttpRequest {
                 request: request.clone(),
-                cycles: expected_cycle_cost(
-                    handlers.proxy_canister().canister_id(),
-                    request.clone(),
-                    handlers.subnet_size,
-                ) - 1,
+                cycles: expected_cycle_cost - 1,
             },
         )
         .await
     });
-    assert_matches!(
-        response,
-        Err(RejectResponse {
-            reject_code: RejectCode::CanisterReject,
-            ..
-        })
-    );
+
+    assert_canister_reject_response_and_cycles_refund(&response, expected_cycle_cost - 1, &refunded_cycles);
 }
 
 fn test_max_response_bytes_2_mb_returns_ok(env: TestEnv) {
@@ -649,16 +617,7 @@ fn test_max_response_bytes_too_large(env: TestEnv) {
         },
     ));
 
-    assert_matches!(
-        response,
-        Err(RejectResponse {
-            reject_code: RejectCode::CanisterReject,
-            ..
-        })
-    );
-    assert_eq!(
-        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
-    );
+    assert_canister_reject_response_and_cycles_refund(&response, HTTP_REQUEST_CYCLE_PAYMENT, &refunded_cycles);
 }
 
 fn test_transform_that_bloats_on_the_2mb_limit(env: TestEnv) {
@@ -1191,16 +1150,7 @@ fn test_request_header_total_size_over_the_48_kib_limit(env: TestEnv) {
         },
     ));
 
-    assert_matches!(
-        response,
-        Err(RejectResponse {
-            reject_code: RejectCode::CanisterReject,
-            ..
-        })
-    );
-    assert_eq!(
-        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
-    );
+    assert_canister_reject_response_and_cycles_refund(&response, HTTP_REQUEST_CYCLE_PAYMENT, &refunded_cycles);
 }
 
 fn test_response_header_total_size_within_the_48_kib_limit(env: TestEnv) {
@@ -1348,16 +1298,7 @@ fn test_request_header_name_too_long(env: TestEnv) {
         },
     ));
 
-    assert_matches!(
-        response,
-        Err(RejectResponse {
-            reject_code: RejectCode::CanisterReject,
-            ..
-        })
-    );
-    assert_eq!(
-        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
-    );
+    assert_canister_reject_response_and_cycles_refund(&response, HTTP_REQUEST_CYCLE_PAYMENT, &refunded_cycles);
 }
 
 fn test_request_header_value_too_long(env: TestEnv) {
@@ -1386,16 +1327,7 @@ fn test_request_header_value_too_long(env: TestEnv) {
         },
     ));
 
-    assert_matches!(
-        response,
-        Err(RejectResponse {
-            reject_code: RejectCode::CanisterReject,
-            ..
-        })
-    );
-    assert_eq!(
-        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
-    );
+    assert_canister_reject_response_and_cycles_refund(&response, HTTP_REQUEST_CYCLE_PAYMENT, &refunded_cycles);
 }
 
 fn test_response_header_name_within_limit(env: TestEnv) {
@@ -1816,16 +1748,7 @@ fn test_max_url_length_exceeded(env: TestEnv) {
         },
     ));
 
-    assert_matches!(
-        response,
-        Err(RejectResponse {
-            reject_code: RejectCode::CanisterReject,
-            ..
-        })
-    );
-    assert_eq!(
-        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
-    );
+    assert_canister_reject_response_and_cycles_refund(&response, HTTP_REQUEST_CYCLE_PAYMENT, &refunded_cycles);
 }
 
 fn reference_transform_function_exposed_by_different_canister(env: TestEnv) {
@@ -1865,7 +1788,7 @@ fn reference_transform_function_exposed_by_different_canister(env: TestEnv) {
         }),
     };
 
-    let (response, _) = block_on(submit_outcall(
+    let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: request.clone(),
@@ -1873,13 +1796,7 @@ fn reference_transform_function_exposed_by_different_canister(env: TestEnv) {
         },
     ));
 
-    assert_matches!(
-        response,
-        Err(RejectResponse {
-            reject_code: RejectCode::CanisterReject,
-            ..
-        })
-    );
+    assert_canister_reject_response_and_cycles_refund(&response, HTTP_REQUEST_CYCLE_PAYMENT, &refunded_cycles);
 }
 
 fn test_max_number_of_response_headers(env: TestEnv) {
@@ -2022,16 +1939,7 @@ fn test_max_number_of_request_headers_exceeded(env: TestEnv) {
         },
     ));
 
-    assert_matches!(
-        response,
-        Err(RejectResponse {
-            reject_code: RejectCode::CanisterReject,
-            ..
-        })
-    );
-    assert_eq!(
-        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
-    );
+    assert_canister_reject_response_and_cycles_refund(&response, HTTP_REQUEST_CYCLE_PAYMENT, &refunded_cycles);
 }
 
 fn check_caller_id_on_transform_function(env: TestEnv) {
@@ -2078,6 +1986,42 @@ fn check_caller_id_on_transform_function(env: TestEnv) {
 }
 
 // ---- HELPER FUNCTIONS -------
+
+fn assert_canister_reject_response_and_cycles_refund(
+    response: &Result<RemoteHttpResponse, RejectResponse>,
+    cycles_paid: u64,
+    refunded_cycles: &RefundedCycles,
+) {
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::CanisterReject,
+            ..
+        })
+    );
+    assert_eq!(
+        *refunded_cycles, RefundedCycles::Cycles(cycles_paid),
+        "Refunded cycles do not match the paid cycles."
+    );
+}
+
+fn assert_canister_error_response_and_cycles_not_refund(
+    response: &Result<RemoteHttpResponse, RejectResponse>,
+    cycles_paid: u64,
+    cycles_refunded: &RefundedCycles,
+) {
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::CanisterError,
+            ..
+        })
+    );
+    assert_ne!(
+        *cycles_refunded, RefundedCycles::Cycles(cycles_paid),
+        "Refunded cycles do not match the paid cycles."
+    );
+}
 
 /// Case insensitive header names are distinct.
 fn assert_distinct_headers(http_response: &RemoteHttpResponse) {
