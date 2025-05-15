@@ -117,12 +117,8 @@ impl Registry {
             .transpose()?
             .map(|node_reward_type| node_reward_type as i32);
 
-        // 4a.  Conditionally enforce node_reward_type presence if reward_table exists
-        if self
-            .get(NODE_REWARDS_TABLE_KEY.as_bytes(), self.latest_version())
-            .is_some()
-            && node_reward_type.is_none()
-        {
+        // 4a.  Conditionally enforce node_reward_type presence if node rewards are enabled
+        if self.are_node_rewards_enabled() && node_reward_type.is_none() {
             return Err(format!(
                 "{}do_add_node: Node reward type is required.",
                 LOG_PREFIX
@@ -195,6 +191,13 @@ impl Registry {
         println!("{}do_add_node finished: {:?}", LOG_PREFIX, payload);
 
         Ok(node_id)
+    }
+
+    /// Currently, we know that node rewards are enabled based on the presence of the table in the
+    /// registry.
+    fn are_node_rewards_enabled(&self) -> bool {
+        self.get(NODE_REWARDS_TABLE_KEY.as_bytes(), self.latest_version())
+            .is_some()
     }
 }
 
