@@ -26,7 +26,7 @@ rust_canister(
     compile_data = [
         "templates/dashboard.html",
     ],
-    proc_macro_deps = ["@crate_index//:ic-cdk-macros],
+    proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
     service_file = "kyt.did",
     deps = [
         # Keep sorted.
