@@ -1425,4 +1425,149 @@ pub fn syscalls<
             }
         })
         .unwrap();
+
+    linker
+        .func_wrap("__", "main_read_page_guard", {
+            move |mut caller: Caller<'_, StoreData>, page_index: i32| {
+                main_read_page_guard(&mut caller, page_index as u32 as usize)
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("__", "main_write_page_guard", {
+            move |mut caller: Caller<'_, StoreData>, page_index: i32| {
+                main_write_page_guard(&mut caller, page_index as u32 as usize)
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("__", "main_bulk_access_guard", {
+            move |mut caller: Caller<'_, StoreData>,
+                  start_address: i64,
+                  length: i64,
+                  write_access: i32| {
+                main_bulk_access_guard(
+                    &mut caller,
+                    start_address as u64 as usize,
+                    length as u64 as usize,
+                    write_access,
+                )
+            }
+        })
+        .unwrap();
+}
+
+const NO_ACCESS: u8 = 0;
+const WRITE_ACCESS: u8 = 1;
+const READ_ONLY_ACCESS: u8 = 2;
+
+/// Used during 64-bit main memory to guard the working set limit.
+/// The page is accessed for the potentially first time and this access is a read access.
+#[inline(never)]
+fn main_read_page_guard(
+    mut caller: &mut Caller<'_, StoreData>,
+    page_index: usize,
+) -> Result<(), anyhow::Error> {
+    let bytemap_mem = match caller.get_export(WASM_HEAP_BYTEMAP_MEMORY_NAME) {
+        Some(wasmtime::Extern::Memory(mem)) => mem,
+        _ => {
+            return Err(process_err(
+                caller,
+                HypervisorError::ToolchainContractViolation {
+                    error: "Failed to access heap bitmap".to_string(),
+                },
+            ))
+        }
+    };
+
+    let bytemap = bytemap_mem.data_mut(&mut caller);
+    if bytemap[page_index] == NO_ACCESS {
+        bytemap[page_index] = READ_ONLY_ACCESS;
+        first_access_on_main_memory_page(&mut caller)?;
+    }
+    Ok(())
+}
+
+/// Used during 64-bit main memory to guard the working set limit.
+/// The page is written for the potentially first time and there may have been preceding reads to this page.
+#[inline(never)]
+fn main_write_page_guard(
+    mut caller: &mut Caller<'_, StoreData>,
+    page_index: usize,
+) -> Result<(), anyhow::Error> {
+    let bytemap_mem = match caller.get_export(WASM_HEAP_BYTEMAP_MEMORY_NAME) {
+        Some(wasmtime::Extern::Memory(mem)) => mem,
+        _ => {
+            return Err(process_err(
+                caller,
+                HypervisorError::ToolchainContractViolation {
+                    error: "Failed to access heap bitmap".to_string(),
+                },
+            ))
+        }
+    };
+
+    let bytemap = bytemap_mem.data_mut(&mut caller);
+    let first_access = bytemap[page_index] == NO_ACCESS;
+    bytemap[page_index] = WRITE_ACCESS;
+    if first_access {
+        first_access_on_main_memory_page(&mut caller)?;
+    }
+    Ok(())
+}
+
+// Used during 64-bit main memory to guard the working set limit for bulk memory operations,
+// that potentially access multiple consecutive pages.
+// * `memory.copy` (reading and writing)
+// * `memory.fill` (write)
+#[inline(never)]
+fn main_bulk_access_guard(
+    mut caller: &mut Caller<'_, StoreData>,
+    start_address: usize,
+    length: usize,
+    write_access: i32,
+) -> Result<(), anyhow::Error> {
+    let write_access = write_access != 0;
+    let start_page = start_address / PAGE_SIZE;
+    let end_page = (start_address + length - 1) / PAGE_SIZE;
+    for page_index in start_page..end_page + 1 {
+        if write_access {
+            main_write_page_guard(&mut caller, page_index)?;
+        } else {
+            main_read_page_guard(&mut caller, page_index)?;
+        }
+    }
+    Ok(())
+}
+
+const MAIN_MEMORY_PAGE_ACCESS_LIMIT: u64 = 1024 * 1024;
+
+fn first_access_on_main_memory_page(
+    mut caller: &mut Caller<'_, StoreData>,
+) -> Result<(), anyhow::Error> {
+    let access_pages_global = caller.data().accessed_main_memory_pages.unwrap();
+    let mut total_accessed_pages = match access_pages_global.get(&mut caller) {
+        Val::I64(counter) => counter as u64,
+        _ => {
+            return Err(process_err(
+                caller,
+                HypervisorError::ToolchainContractViolation {
+                    error: "Invalid main memory page access counter".to_string(),
+                },
+            ))
+        }
+    };
+    total_accessed_pages += 1;
+    access_pages_global.set(&mut caller, Val::I64(total_accessed_pages as i64))?;
+    if total_accessed_pages > MAIN_MEMORY_PAGE_ACCESS_LIMIT {
+        Err(process_err(&mut caller, HypervisorError::MemoryAccessLimitExceeded(
+            format!("Exceeded the limit for the number of accessed pages in the main memory in a single message execution: limit: {} KB.",
+                MAIN_MEMORY_PAGE_ACCESS_LIMIT * (PAGE_SIZE as u64 / 1024),
+            )
+        )))
+    } else {
+        Ok(())
+    }
 }

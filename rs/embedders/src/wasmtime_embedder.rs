@@ -35,7 +35,7 @@ use signal_stack::WasmtimeSignalStack;
 
 use crate::wasm_utils::instrumentation::{
     WasmMemoryType, ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
-    INSTRUCTIONS_COUNTER_GLOBAL_NAME,
+    INSTRUCTIONS_COUNTER_GLOBAL_NAME, MAIN_ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
 };
 use crate::{
     serialized_module::SerializedModuleBytes, wasm_utils::validation::wasmtime_validation_config,
@@ -369,11 +369,7 @@ impl WasmtimeEmbedder {
 
         let mut result = vec![WasmMemoryInfo {
             name: WASM_HEAP_MEMORY_NAME,
-            bytemap_name: if self.config.feature_flags.write_barrier == FlagStatus::Enabled {
-                Some(WASM_HEAP_BYTEMAP_MEMORY_NAME)
-            } else {
-                None
-            },
+            bytemap_name: Some(WASM_HEAP_BYTEMAP_MEMORY_NAME),
             memory: heap_memory.clone(),
             memory_type: CanisterMemoryType::Heap,
             dirty_page_tracking,
@@ -440,6 +436,7 @@ impl WasmtimeEmbedder {
                     .table_elements(MAX_STORE_TABLE_ELEMENTS)
                     .build(),
                 canister_backtrace: self.config.feature_flags.canister_backtrace,
+                accessed_main_memory_pages: None,
             },
         );
         store.limiter(|state| &mut state.limits);
@@ -462,6 +459,9 @@ impl WasmtimeEmbedder {
 
         store.data_mut().num_instructions_global =
             instance.get_global(&mut store, INSTRUCTIONS_COUNTER_GLOBAL_NAME);
+
+        store.data_mut().accessed_main_memory_pages =
+            instance.get_global(&mut store, MAIN_ACCESSED_PAGES_COUNTER_GLOBAL_NAME);
 
         if let Some(exported_globals) = exported_globals {
             let instance_globals = get_exported_globals(&instance, &mut store);
@@ -765,6 +765,7 @@ pub struct StoreData {
     pub num_stable_dirty_pages_from_non_native_writes: NumOsPages,
     pub limits: StoreLimits,
     pub canister_backtrace: FlagStatus,
+    pub accessed_main_memory_pages: Option<wasmtime::Global>,
 }
 
 impl StoreData {
