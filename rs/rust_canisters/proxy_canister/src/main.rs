@@ -180,8 +180,8 @@ async fn send_request(
 async fn send_request_and_retrieve_refund(
     request: RemoteHttpRequest,
 ) -> ResponseWithRefundedCycles {
-    let (result, cycles) = make_http_request_with_refund_callback(request).await;
-    ResponseWithRefundedCycles::new(result, cycles)
+    let (result, refunded_cycles) = make_http_request_with_refund_callback(request).await;
+    ResponseWithRefundedCycles{result, refunded_cycles}
 }
 
 #[query]

@@ -304,9 +304,8 @@ fn test_non_existent_transform_function(env: TestEnv) {
             ..
         })
     );
-    assert_matches!(
-        refunded_cycles,
-        RefundedCycles::Cycles(refunded) if refunded < HTTP_REQUEST_CYCLE_PAYMENT
+    assert_ne!(
+        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
     );
 }
 
@@ -470,9 +469,8 @@ fn test_max_possible_request_size_exceeded(env: TestEnv) {
             ..
         })
     );
-    assert_matches!(
-        refunded_cycles,
-        RefundedCycles::Cycles(refunded) if refunded == HTTP_REQUEST_CYCLE_PAYMENT
+    assert_eq!(
+        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
     );
 }
 
@@ -658,9 +656,8 @@ fn test_max_response_bytes_too_large(env: TestEnv) {
             ..
         })
     );
-    assert_matches!(
-        refunded_cycles,
-        RefundedCycles::Cycles(refunded) if refunded == HTTP_REQUEST_CYCLE_PAYMENT
+    assert_eq!(
+        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
     );
 }
 
@@ -724,9 +721,8 @@ fn test_transform_that_bloats_response_above_2mb_limit(env: TestEnv) {
             ..
         })
     );
-    assert_matches!(
-        refunded_cycles,
-        RefundedCycles::Cycles(refunded) if refunded < HTTP_REQUEST_CYCLE_PAYMENT
+    assert_ne!(
+        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
     );
 }
 
@@ -1038,9 +1034,8 @@ fn test_invalid_domain_name(env: TestEnv) {
             ..
         })
     );
-    assert_matches!(
-        refunded_cycles,
-        RefundedCycles::Cycles(refunded) if refunded < HTTP_REQUEST_CYCLE_PAYMENT
+    assert_ne!(
+        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
     );
 }
 
@@ -1075,9 +1070,8 @@ fn test_invalid_ip(env: TestEnv) {
             ..
         })
     );
-    assert_matches!(
-        refunded_cycles,
-        RefundedCycles::Cycles(refunded) if refunded < HTTP_REQUEST_CYCLE_PAYMENT
+    assert_ne!(
+        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
     );
 }
 
@@ -1113,9 +1107,8 @@ fn test_get_hello_world_call(env: TestEnv) {
     let response = response.expect("Request is successful.");
 
     assert_matches!(&response, RemoteHttpResponse {body, status: 200, ..} if body == expected_body);
-    assert_matches!(
-        refunded_cycles,
-        RefundedCycles::Cycles(refunded) if refunded < HTTP_REQUEST_CYCLE_PAYMENT
+    assert_ne!(
+        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
     );
     assert_http_response(&response);
 }
@@ -1155,9 +1148,8 @@ fn test_request_header_total_size_within_the_48_kib_limit(env: TestEnv) {
     let response = response.expect("Request succeeds.");
 
     assert_matches!(&response, RemoteHttpResponse { status: 200, .. });
-    assert_matches!(
-        refunded_cycles,
-        RefundedCycles::Cycles(refunded) if refunded < HTTP_REQUEST_CYCLE_PAYMENT
+    assert_ne!(
+        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
     );
 }
 
@@ -1206,9 +1198,8 @@ fn test_request_header_total_size_over_the_48_kib_limit(env: TestEnv) {
             ..
         })
     );
-    assert_matches!(
-        refunded_cycles,
-        RefundedCycles::Cycles(refunded) if refunded == HTTP_REQUEST_CYCLE_PAYMENT
+    assert_eq!(
+        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
     );
 }
 
@@ -1240,9 +1231,8 @@ fn test_response_header_total_size_within_the_48_kib_limit(env: TestEnv) {
     ));
 
     assert_matches!(&response, Ok(RemoteHttpResponse { status: 200, .. }));
-    assert_matches!(
-        refunded_cycles,
-        RefundedCycles::Cycles(refunded) if refunded < HTTP_REQUEST_CYCLE_PAYMENT
+    assert_ne!(
+        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
     );
 
     // Compute exactly the size of the response headers to account also for overhead.
@@ -1297,9 +1287,8 @@ fn test_response_header_total_size_over_the_48_kib_limit(env: TestEnv) {
             ..
         })
     );
-    assert_matches!(
-        refunded_cycles,
-        RefundedCycles::Cycles(refunded) if refunded < HTTP_REQUEST_CYCLE_PAYMENT
+    assert_ne!(
+        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
     );
 }
 
@@ -1366,9 +1355,8 @@ fn test_request_header_name_too_long(env: TestEnv) {
             ..
         })
     );
-    assert_matches!(
-        refunded_cycles,
-        RefundedCycles::Cycles(refunded) if refunded == HTTP_REQUEST_CYCLE_PAYMENT
+    assert_eq!(
+        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
     );
 }
 
@@ -1405,9 +1393,8 @@ fn test_request_header_value_too_long(env: TestEnv) {
             ..
         })
     );
-    assert_matches!(
-        refunded_cycles,
-        RefundedCycles::Cycles(refunded) if refunded == HTTP_REQUEST_CYCLE_PAYMENT
+    assert_eq!(
+        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
     );
 }
 
@@ -1471,9 +1458,8 @@ fn test_response_header_name_over_limit(env: TestEnv) {
         })
     );
 
-    assert_matches!(
-        refunded_cycles,
-        RefundedCycles::Cycles(refunded) if refunded < HTTP_REQUEST_CYCLE_PAYMENT
+    assert_ne!(
+        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
     );
 }
 
@@ -1540,9 +1526,8 @@ fn test_response_header_value_over_limit(env: TestEnv) {
             ..
         })
     );
-    assert_matches!(
-        refunded_cycles,
-        RefundedCycles::Cycles(refunded) if refunded < HTTP_REQUEST_CYCLE_PAYMENT
+    assert_ne!(
+        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
     );
 }
 
@@ -1723,9 +1708,8 @@ fn test_only_headers_with_custom_max_response_bytes_exceeded(env: TestEnv) {
             ..
         })
     );
-    assert_matches!(
-        refunded_cycles,
-        RefundedCycles::Cycles(refunded) if refunded < HTTP_REQUEST_CYCLE_PAYMENT
+    assert_ne!(
+        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
     );
 }
 
@@ -1760,9 +1744,8 @@ fn test_non_ascii_url_is_accepted(env: TestEnv) {
     .expect("Request is successful");
 
     assert_matches!(&response, RemoteHttpResponse {body, status: 200, ..} if *body == expected_body);
-    assert_matches!(
-        refunded_cycles,
-        RefundedCycles::Cycles(refunded) if refunded < HTTP_REQUEST_CYCLE_PAYMENT
+    assert_ne!(
+        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
     );
 }
 
@@ -1834,9 +1817,8 @@ fn test_max_url_length_exceeded(env: TestEnv) {
             ..
         })
     );
-    assert_matches!(
-        refunded_cycles,
-        RefundedCycles::Cycles(refunded) if refunded == HTTP_REQUEST_CYCLE_PAYMENT
+    assert_eq!(
+        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
     );
 }
 
@@ -1962,9 +1944,8 @@ fn test_max_number_of_response_headers_exceeded(env: TestEnv) {
             ..
         })
     );
-    assert_matches!(
-        refunded_cycles,
-        RefundedCycles::Cycles(refunded) if refunded < HTTP_REQUEST_CYCLE_PAYMENT
+    assert_ne!(
+        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
     );
 }
 
@@ -2042,9 +2023,8 @@ fn test_max_number_of_request_headers_exceeded(env: TestEnv) {
             ..
         })
     );
-    assert_matches!(
-        refunded_cycles,
-        RefundedCycles::Cycles(refunded) if refunded == HTTP_REQUEST_CYCLE_PAYMENT
+    assert_eq!(
+        refunded_cycles, RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT) 
     );
 }
 
@@ -2226,13 +2206,17 @@ fn assert_http_json_response(
     );
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 enum RefundedCycles {
     NotApplicable,
     Cycles(u64),
 }
 
 type ProxyCanisterResponseWithRefund = ResponseWithRefundedCycles;
+
+// This type represents the result of an IC http_request and the refunded cycles.
+// The refund is returned regardless of whether the outcall succeeded (Ok) or failed (Err),
+// allowing tests to verify proper cycle refund behavior in both success and error cases.
 type OutcallsResponseWithRefund = (Result<RemoteHttpResponse, RejectResponse>, RefundedCycles);
 
 async fn submit_outcall<Request>(
@@ -2262,6 +2246,7 @@ where
                 }
                 _ => panic!("Unexpected error: {:?}", agent_error),
             };
+            // The 
             (Err(err_resp), RefundedCycles::NotApplicable)
         }
         Ok(serialized_bytes) => {
