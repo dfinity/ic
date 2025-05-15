@@ -45,7 +45,6 @@ rust_library(
     crate_name = "ic_cketh_minter",
     proc_macro_deps = [
         # Keep sorted.
-        "@crate_index//:ic-cdk-macros",
         "@crate_index//:strum_macros",
     ],
     version = "0.1.0",
@@ -150,7 +149,6 @@ rust_test(
     crate_name = "ic_cketh_minter_canister",
     proc_macro_deps = [
         # Keep sorted.
-        "@crate_index//:ic-cdk-macros",
     ],
     service_file = "cketh_minter.did",
     deps = [

@@ -630,13 +630,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ic-cdk-timers": crate.spec(
                 version = "^0.11.0",
             ),
-            "ic-cdk-macros": crate.spec(
-                version = "^0.17.2",
-            ),
-            "ic-cdk-macros-next": crate.spec(
-                package = "ic-cdk-macros",
-                version = "^0.18.0",
-            ),
             "ic-certified-map": crate.spec(
                 version = "^0.3.1",
             ),

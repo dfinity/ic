@@ -9,8 +9,8 @@ use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 
 use ic_cdk::api::instruction_counter;
 #[cfg(not(feature = "canbench-rs"))]
-use ic_cdk_macros::init;
-use ic_cdk_macros::{post_upgrade, pre_upgrade, query, update};
+use ic_cdk::init;
+use ic_cdk::{post_upgrade, pre_upgrade, query, update};
 use ic_icrc1::{
     endpoints::{convert_transfer_error, StandardRecord},
     Operation, Transaction,

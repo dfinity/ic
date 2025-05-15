@@ -1,5 +1,5 @@
 {
-  "checksum": "37a13c5638170485be15a6f40dad1d94ef7bd7acc6bb8a1609291b81a5a56689",
+  "checksum": "d1d9770d78444841bf82f8399f38b76f6186742b1456e62410fa1142dfcaf5f5",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21468,15 +21468,6 @@
             {
               "id": "educe 0.4.23",
               "target": "educe"
-            },
-            {
-              "id": "ic-cdk-macros 0.17.2",
-              "target": "ic_cdk_macros"
-            },
-            {
-              "id": "ic-cdk-macros 0.18.0",
-              "target": "ic_cdk_macros",
-              "alias": "ic_cdk_macros_next"
             },
             {
               "id": "indoc 1.0.9",
@@ -91391,8 +91382,6 @@
     "ic-cbor 3.0.3",
     "ic-cdk 0.17.2",
     "ic-cdk 0.18.0",
-    "ic-cdk-macros 0.17.2",
-    "ic-cdk-macros 0.18.0",
     "ic-cdk-timers 0.11.0",
     "ic-certificate-verification 3.0.3",
     "ic-certification 3.0.3",
