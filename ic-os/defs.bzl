@@ -149,9 +149,6 @@ def icos_build(
         "/usr/lib/firmware/brcm/brcmfmac4356-pcie.Xiaomi Inc-Mipad2.txt.zst",
     ]
 
-    if "extra_boot_args_template" in image_deps:
-        native.alias(name = "extra_boot_args_template", actual = image_deps["extra_boot_args_template"], tags = ["manual"])
-
     # Generate partition images for default image and test image (when upgrades is True).
     for test_suffix in (["", "-test"] if upgrades else [""]):
         partition_root = "partition-root" + test_suffix
@@ -198,6 +195,7 @@ def icos_build(
 
         # Sign only if extra_boot_args_template is provided
         if "extra_boot_args_template" in image_deps:
+            extra_boot_args_template = str(image_deps["extra_boot_args_template"])
             native.genrule(
                 name = "generate-" + partition_root_signed_tzst,
                 testonly = malicious,
@@ -219,10 +217,10 @@ def icos_build(
 
             native.genrule(
                 name = "generate-" + extra_boot_args,
-                srcs = [":extra_boot_args_template", partition_root_hash],
+                srcs = [extra_boot_args_template, partition_root_hash],
                 outs = [extra_boot_args],
                 cmd = "sed -e s/ROOT_HASH/$$(cat $(location " + partition_root_hash + "))/ " +
-                      "< $(location :extra_boot_args_template) > $@",
+                      "< $(location " + extra_boot_args_template + ") > $@",
                 tags = ["manual"],
             )
         else:
