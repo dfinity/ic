@@ -13,7 +13,7 @@ on the process that this file is part of, see
   on the number of nodes that can be rewarded for a given node operator for the next version of Node Provider Rewards.
 
 * The RoutingTable is now also broken up into `canister_range_*` records, instead of only in a single
-  `routing_table` record. This will allow canister migrations to be a scalable feature in the Registry.
+  `routing_table` record. This will allow clients to migrate to the new format incrementally.
 
 ## Changed
 
