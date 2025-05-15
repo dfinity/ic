@@ -510,6 +510,14 @@ impl ExecutionState {
             + self.custom_sections_memory_size()
     }
 
+    /// Returns the `ExecutionState`'s contribution to the memory of a snapshot.
+    pub fn memory_usage_in_snapshot(&self) -> NumBytes {
+        self.wasm_memory_usage()
+            + self.stable_memory_usage()
+            + self.global_memory_usage()
+            + self.wasm_binary_memory_usage()
+    }
+
     /// Returns the number of global variables in the Wasm module.
     pub fn num_wasm_globals(&self) -> usize {
         self.exported_globals.len()
