@@ -15,6 +15,7 @@ VAR_PARTITION_B=9
 
 GUESTOS_DEVICE="/dev/hostlvm/guestos"
 MANAGEBOOT_SCRIPT="/opt/ic/bin/manageboot.sh"
+IC_DOWNLOAD_BASE="https://download.dfinity.systems/ic"
 
 # Helper function to extract a value from /proc/cmdline
 get_cmdline_var() {
@@ -64,7 +65,7 @@ prepare_guestos_upgrade() {
 
 download_and_verify_upgrade() {
     local url="$1"
-    local target_hash="$2"
+    local short_hash="$2"
     local tmpdir="$3"
 
     echo "Downloading upgrade from $url..."
@@ -76,10 +77,12 @@ download_and_verify_upgrade() {
 
     echo "Verifying upgrade image hash..."
     local actual_hash=$(sha256sum "$tmpdir/upgrade.tar.zst" | cut -d' ' -f1)
-    if [ "$actual_hash" != "$target_hash" ]; then
+    local actual_short_hash=${actual_hash:0:6}
+    if [ "$actual_short_hash" != "$short_hash" ]; then
         echo "ERROR: Hash verification failed"
-        echo "Expected: $target_hash"
-        echo "Got: $actual_hash"
+        echo "Expected short hash: $short_hash"
+        echo "Got short hash: $actual_short_hash"
+        echo "Full hash: $actual_hash"
         exit 1
     fi
     echo "Hash verification successful"
@@ -121,16 +124,24 @@ guestos_upgrade_cleanup() {
 main() {
     echo "Starting GuestOS recovery updater"
 
-    URL="$(get_cmdline_var url)"
-    TARGET_HASH="$(get_cmdline_var hash)"
+    VERSION="$(get_cmdline_var version)"
+    SHORT_HASH="$(get_cmdline_var hash)"
+
+    if [ -z "$VERSION" ] || [ -z "$SHORT_HASH" ]; then
+        echo "ERROR: Both version and hash parameters are required"
+        echo "Usage: version=<commit-hash> hash=<first-6-chars-of-sha256>"
+        exit 1
+    fi
+
+    URL="${IC_DOWNLOAD_BASE}/${VERSION}/guest-os/update-img/update-img.tar.zst"
     echo "Download url: $URL"
-    echo "Download hash: $TARGET_HASH"
+    echo "Short hash: $SHORT_HASH"
 
     TMPDIR=$(mktemp -d)
     trap 'guestos_upgrade_cleanup; rm -rf "$TMPDIR"' EXIT
 
     prepare_guestos_upgrade
-    download_and_verify_upgrade "$URL" "$TARGET_HASH" "$TMPDIR"
+    download_and_verify_upgrade "$URL" "$SHORT_HASH" "$TMPDIR"
     extract_upgrade "$TMPDIR"
     install_upgrade "$TMPDIR"
 
