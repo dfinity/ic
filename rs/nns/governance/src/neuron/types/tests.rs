@@ -9,6 +9,7 @@ use crate::{
 };
 use ic_cdk::println;
 use ic_nervous_system_common::{E8, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS};
+use ic_nns_common::pb::v1::ProposalId;
 use icp_ledger::Subaccount;
 use maplit::hashmap;
 use pretty_assertions::assert_eq;
@@ -114,11 +115,7 @@ fn test_neuron_into_api() {
             neuron_type: None,
             potential_voting_power,
             deciding_voting_power,
-            maturity_disbursements_in_progress: if cfg!(feature = "test") {
-                Some(vec![])
-            } else {
-                None
-            },
+            maturity_disbursements_in_progress: Some(vec![]),
         },
     );
 
@@ -711,143 +708,6 @@ fn test_adjust_voting_power() {
             0
         );
     }
-}
-
-#[test]
-fn test_conversion_from_old_ballot_storage_full() {
-    let principal_id = PrincipalId::new_user_test_id(42);
-    let created_timestamp_seconds = 1729791574;
-
-    let recent_ballots: Vec<_> = (0..100)
-        .map(|id| BallotInfo {
-            proposal_id: Some(ProposalId { id }),
-            vote: Vote::Yes as i32,
-        })
-        .collect();
-
-    let mut neuron = NeuronBuilder::new(
-        NeuronId { id: 42 },
-        Subaccount::try_from(vec![42u8; 32].as_slice()).unwrap(),
-        principal_id,
-        DissolveStateAndAge::NotDissolving {
-            dissolve_delay_seconds: 12 * ONE_MONTH_SECONDS,
-            aging_since_timestamp_seconds: created_timestamp_seconds + 42,
-        },
-        created_timestamp_seconds, // created
-    )
-    .with_recent_ballots(recent_ballots.clone())
-    .build();
-    neuron.recent_ballots_next_entry_index = None;
-
-    assert_eq!(neuron.recent_ballots, recent_ballots);
-
-    neuron.register_recent_ballot(Topic::NetworkEconomics, &ProposalId { id: 100 }, Vote::No);
-
-    assert_eq!(neuron.recent_ballots_next_entry_index, Some(1));
-
-    let expected_updated_ballots = {
-        let mut recent_ballots = recent_ballots.clone();
-        recent_ballots.reverse();
-        recent_ballots[0] = BallotInfo {
-            proposal_id: Some(ProposalId { id: 100 }),
-            vote: Vote::No as i32,
-        };
-        recent_ballots
-    };
-
-    assert_eq!(neuron.recent_ballots, expected_updated_ballots);
-}
-
-#[test]
-fn test_conversion_from_old_ballot_storage_not_full() {
-    let principal_id = PrincipalId::new_user_test_id(42);
-    let created_timestamp_seconds = 1729791574;
-
-    let recent_ballots: Vec<_> = (0..75)
-        .map(|id| BallotInfo {
-            proposal_id: Some(ProposalId { id }),
-            vote: Vote::Yes as i32,
-        })
-        .collect();
-
-    let mut neuron = NeuronBuilder::new(
-        NeuronId { id: 42 },
-        Subaccount::try_from(vec![42u8; 32].as_slice()).unwrap(),
-        principal_id,
-        DissolveStateAndAge::NotDissolving {
-            dissolve_delay_seconds: 12 * ONE_MONTH_SECONDS,
-            aging_since_timestamp_seconds: created_timestamp_seconds + 42,
-        },
-        created_timestamp_seconds, // created
-    )
-    .with_recent_ballots(recent_ballots.clone())
-    .build();
-    neuron.recent_ballots_next_entry_index = None;
-
-    assert_eq!(neuron.recent_ballots, recent_ballots);
-
-    neuron.register_recent_ballot(Topic::NetworkEconomics, &ProposalId { id: 100 }, Vote::No);
-
-    assert_eq!(neuron.recent_ballots_next_entry_index, Some(76));
-
-    let expected_updated_ballots = {
-        let mut recent_ballots = recent_ballots.clone();
-        recent_ballots.reverse();
-        recent_ballots.push(BallotInfo {
-            proposal_id: Some(ProposalId { id: 100 }),
-            vote: Vote::No as i32,
-        });
-        recent_ballots
-    };
-
-    assert_eq!(neuron.recent_ballots, expected_updated_ballots);
-}
-
-#[test]
-fn test_recent_ballots_accessor_pre_and_post_migration() {
-    let principal_id = PrincipalId::new_user_test_id(42);
-    let created_timestamp_seconds = 1729791574;
-
-    let recent_ballots: Vec<_> = (0..100)
-        .map(|id| BallotInfo {
-            proposal_id: Some(ProposalId { id }),
-            vote: Vote::Yes as i32,
-        })
-        .collect();
-
-    let mut neuron = NeuronBuilder::new(
-        NeuronId { id: 42 },
-        Subaccount::try_from(vec![42u8; 32].as_slice()).unwrap(),
-        principal_id,
-        DissolveStateAndAge::NotDissolving {
-            dissolve_delay_seconds: 12 * ONE_MONTH_SECONDS,
-            aging_since_timestamp_seconds: created_timestamp_seconds + 42,
-        },
-        created_timestamp_seconds, // created
-    )
-    .with_recent_ballots(recent_ballots.clone())
-    .build();
-    neuron.recent_ballots_next_entry_index = None;
-
-    assert_eq!(neuron.sorted_recent_ballots(), recent_ballots);
-
-    neuron.register_recent_ballot(Topic::NetworkEconomics, &ProposalId { id: 100 }, Vote::No);
-    assert_eq!(neuron.recent_ballots_next_entry_index, Some(1));
-
-    let expected_updated_ballots = {
-        let mut recent_ballots = recent_ballots.clone();
-        recent_ballots.insert(
-            0,
-            BallotInfo {
-                proposal_id: Some(ProposalId { id: 100 }),
-                vote: Vote::No as i32,
-            },
-        );
-        recent_ballots.pop();
-        recent_ballots
-    };
-
-    assert_eq!(neuron.sorted_recent_ballots(), expected_updated_ballots);
 }
 
 #[test]

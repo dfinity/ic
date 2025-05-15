@@ -44,6 +44,7 @@ ALL_BINARIES = {
 
 # test binaries or binaries using test utils
 TESTONLY_BINARIES = [
+    # Keep sorted
     "drun",
     "e2e-test-driver",
     "ic-admin",
@@ -55,8 +56,8 @@ TESTONLY_BINARIES = [
     "ic-starter",
     "ic-test-state-machine",
     "pocket-ic",
-    "types-test",
     "replicated-state-test",
+    "types-test",
 ]
 
 # We don't strip the more complex binaries
@@ -121,6 +122,13 @@ filegroup(
 artifact_bundle(
     name = "bundle",
     inputs = [":binaries"],
+    prefix = "binaries/" + os_info,
+)
+
+artifact_bundle(
+    name = "bundle-legacy",
+    inputs = [":binaries"],
+    prefix = "release",
 )
 
 upload_artifacts(
@@ -140,6 +148,13 @@ upload_artifacts(
     remote_subdir = "release",
     target_compatible_with = ["@platforms//os:linux"],
     visibility = ["//testnet/tools:__pkg__"],
+)
+
+upload_artifacts(
+    name = "upload_sns_testing_bundle",
+    testonly = True,
+    inputs = ["//rs/sns/testing:sns_testing_bundle"],
+    remote_subdir = "binaries/" + os_info,
 )
 
 BINS_TO_TEST = [":" + name for name in ALL_BINARIES]

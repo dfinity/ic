@@ -15,5 +15,5 @@ documentation.workspace = true
 [dependencies]
 async-trait = { workspace = true }
 candid = { workspace = true }
-ic-cdk = "0.17.1"
+ic-cdk = { workspace = true }
 icrc-ledger-client = { path = "../icrc-ledger-client" }
