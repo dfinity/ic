@@ -553,8 +553,8 @@ fn should_be_able_to_perform_ed25519_signature() -> Result<(), CanisterThreshold
 
 #[test]
 fn invalid_signatures_are_rejected() -> Result<(), CanisterThresholdError> {
-    let nodes = 13;
-    let threshold = (nodes + 2) / 3;
+    let nodes: usize = 13;
+    let threshold = nodes.div_ceil(3);
     let number_of_dealings_corrupted = 0;
 
     let rng = &mut reproducible_rng();

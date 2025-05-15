@@ -3400,6 +3400,46 @@ fn can_state_sync_based_on_old_checkpoint() {
 }
 
 #[test]
+fn state_sync_doesnt_load_already_existing_cp() {
+    state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
+        let (_height, state) = src_state_manager.take_tip();
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
+
+        let hash = wait_for_checkpoint(&*src_state_manager, height(1));
+        let id = StateSyncArtifactId {
+            height: height(1),
+            hash: hash.get(),
+        };
+        let msg = src_state_sync
+            .get(&id)
+            .expect("failed to get state sync message");
+
+        assert_error_counters(src_metrics);
+
+        state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
+            dst_state_manager.take_tip();
+
+            let chunkable =
+                set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
+            let state_layout = dst_state_manager.state_layout();
+            let cp1_path = state_layout
+                .raw_path()
+                .join("checkpoints")
+                .join("0000000000000001");
+            assert!(state_layout.checkpoint_in_verification(height(1)).is_err());
+            std::fs::create_dir(&cp1_path).unwrap();
+            assert!(state_layout.checkpoint_in_verification(height(1)).is_ok());
+            std::fs::create_dir(cp1_path.join("garbage")).unwrap(); // rust successfully renames a directory into another if destination is empty
+
+            pipe_state_sync(msg, chunkable);
+
+            assert_no_remaining_chunks(dst_metrics);
+            assert_error_counters(dst_metrics);
+        })
+    });
+}
+
+#[test]
 fn can_recover_from_corruption_on_state_sync() {
     use ic_state_layout::{CheckpointLayout, RwPolicy};
 

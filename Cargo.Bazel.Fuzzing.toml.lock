@@ -3479,9 +3479,9 @@ dependencies = [
  "ic-canister-log",
  "ic-canister-sig-creation",
  "ic-cbor",
- "ic-cdk 0.17.1",
+ "ic-cdk 0.17.2",
  "ic-cdk 0.18.0",
- "ic-cdk-macros 0.17.1",
+ "ic-cdk-macros 0.17.2",
  "ic-cdk-macros 0.18.0",
  "ic-cdk-timers",
  "ic-certificate-verification",
@@ -4295,7 +4295,7 @@ checksum = "fa134314bce7c35b9214710572fb7305edc7f4223c5bd03b5857ed08bbb05897"
 dependencies = [
  "candid",
  "hex",
- "ic-cdk 0.17.1",
+ "ic-cdk 0.17.2",
  "num-bigint 0.4.6",
  "serde",
  "strum 0.26.3",
@@ -5619,7 +5619,7 @@ source = "git+https://github.com/dfinity/ic-canister-sig-creation?rev=7f9e931954
 dependencies = [
  "candid",
  "hex",
- "ic-cdk 0.17.1",
+ "ic-cdk 0.17.2",
  "ic-certification 3.0.3",
  "ic-representation-independent-hash",
  "lazy_static",
@@ -5658,12 +5658,13 @@ dependencies = [
 
 [[package]]
 name = "ic-cdk"
-version = "0.17.1"
+version = "0.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "122efbcb0af5280d408a75a57b7dc6e9d92893bf6ed9cc98fe4dcff51f18b67c"
+checksum = "95a7344f41493cbf591f13ae9f90181076f808a83af799815c3074b19c693d2e"
 dependencies = [
  "candid",
- "ic-cdk-macros 0.17.1",
+ "ic-cdk-executor",
+ "ic-cdk-macros 0.17.2",
  "ic0 0.23.0",
  "serde",
  "serde_bytes",
@@ -5687,6 +5688,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-cdk-executor"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "903057edd3d4ff4b3fe44a64eaee1ceb73f579ba29e3ded372b63d291d7c16c2"
+
+[[package]]
 name = "ic-cdk-macros"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5702,9 +5709,9 @@ dependencies = [
 
 [[package]]
 name = "ic-cdk-macros"
-version = "0.17.1"
+version = "0.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c792bf0d1621c893ccf2bcdeac4ee70121103a03030a1827031a6b3c60488944"
+checksum = "84cbaa50fa36d3e0616114becf81faa95a099e0d60948ed6978f30f1c77399fd"
 dependencies = [
  "candid",
  "proc-macro2",
@@ -5735,7 +5742,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fb8fd812a9e26f6aa00594546f8fbf4d4853f39c3ba794c8ff11ecf86fd3c9e4"
 dependencies = [
  "futures",
- "ic-cdk 0.17.1",
+ "ic-cdk 0.17.2",
  "ic0 0.23.0",
  "serde",
  "serde_bytes",
