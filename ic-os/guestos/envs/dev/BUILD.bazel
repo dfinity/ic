@@ -1,3 +1,4 @@
+load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os:defs.bzl", "icos_build")
 load("//ic-os/guestos:defs.bzl", "image_deps")
 
@@ -5,13 +6,27 @@ load("//ic-os/guestos:defs.bzl", "image_deps")
 # Check
 #       //ic-os/guestos/BUILD.bazel for examples
 #    or //ic-os/defs.bzl for the full list of targets.
-icos_build(
+icos_images = icos_build(
     name = "dev",
     image_deps_func = image_deps,
-    upload_prefix = "guest-os",
     visibility = [
         "//rs:ic-os-pkg",
         "//rs:system-tests-pkg",
         "//testnet/tools:icos_deploy-pkg",
     ],
+)
+
+# The icos_deploy testnet script needs these
+upload_artifacts(
+    name = "upload_disk-img",
+    inputs = [icos_images.disk_image],
+    remote_subdir = "guest-os/disk-img",
+    visibility = ["//testnet/tools:__pkg__"],
+)
+
+upload_artifacts(
+    name = "upload_update-img",
+    inputs = [icos_images.update_image],
+    remote_subdir = "guest-os/update-img",
+    visibility = ["//testnet/tools:__pkg__"],
 )

@@ -23,7 +23,7 @@ archive_override(
 )
 
 # configure/make dependencies
-bazel_dep(name = "rules_foreign_cc", version = "0.12.0")
+bazel_dep(name = "rules_foreign_cc", version = "0.14.0")
 
 register_toolchains(
     "@rules_foreign_cc//toolchains:preinstalled_pkgconfig_toolchain",
@@ -584,6 +584,7 @@ http_file(
 
 http_file(
     name = "cycles-ledger.wasm.gz",
+    downloaded_file_path = "cycles-ledger.wasm.gz",
     sha256 = "d2aacbd214f20d752fd1696c2e36d7eceaafe07b932b3ae9e7e5564d1bda0178",
     url = "https://github.com/dfinity/cycles-ledger/releases/download/cycles-ledger-v1.0.3/cycles-ledger.wasm.gz",
 )

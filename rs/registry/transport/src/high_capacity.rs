@@ -1,32 +1,33 @@
 //! For background, see remarks about HighCapacity* types in ./.../transport.proto.
 //!
-//! At least for now, this module just contains conversion to HighCapacity*
-//! types. (The set of implemented conversions probably isn't comprehensive, so
-//! feel free to add needed conversions that seem to be missing.) As such, this
-//! module can stay private (which is nice).
+//! At least for now, this module contains various conversions. Some are "dumb
+//! trascriptions", while others (smartly) "dechunkify".
 //!
-//! Note that when converting to HighCapacity types, there is no chunking; the
-//! conversion is just a "transcription".
+//! By "dumb transcription", we simply mean that when converting TO
+//! high-capacity types, there is NO chunking. Furthermore, a "dumb
+//! transcription" FROM high-capacity type does NOT dechunkify. Transcribing TO
+//! high-capacity types is done by implementing the From trait, but transcribing
+//! FROM high-capacity types is done via TryFrom (since there is no way that
+//! non-high-capacity types can handle LargeValueChunkKeys).
 //!
-//! Note that when converting TO HighCapacity the From trait is used, but when
-//! converting FROM HighCapacity, TryFrom should be used. This asymetry is for
-//! the usual reason(s): every non-HighCapacity object has an equivalent
-//! HighCapacity version, but not necessarily the other way around. In
-//! particular, converting FROM HighCapacity does not really work if the
-//! original object uses LargeValueChunkKeys.
-//!
-//! With the help of Chunks, it is possible to convert "back" from HighCapacity,
-//! but that is outside the scope of this crate. Instead, look for such
-//! functionality in rs/registry/canister/chunkify (if the functionality you
-//! want is not already there, feel free to add it).
+//! Within the registry canister itself, Chunks is used to dechunkify. Whereas,
+//! registry clients can use various dechunkify* functions defined here, and
+//! (publicly) re-exported by the root module.
 
-use crate::pb::v1::{
-    high_capacity_registry_get_value_response, high_capacity_registry_mutation,
-    high_capacity_registry_value, HighCapacityRegistryAtomicMutateRequest,
-    HighCapacityRegistryDelta, HighCapacityRegistryGetChangesSinceResponse,
-    HighCapacityRegistryMutation, HighCapacityRegistryValue, RegistryAtomicMutateRequest,
-    RegistryDelta, RegistryGetChangesSinceResponse, RegistryMutation, RegistryValue,
+use crate::{
+    pb::v1::{
+        high_capacity_registry_get_value_response, high_capacity_registry_mutation,
+        high_capacity_registry_value, registry_mutation, HighCapacityRegistryAtomicMutateRequest,
+        HighCapacityRegistryDelta, HighCapacityRegistryGetChangesSinceResponse,
+        HighCapacityRegistryMutation, HighCapacityRegistryValue, LargeValueChunkKeys,
+        RegistryAtomicMutateRequest, RegistryDelta, RegistryGetChangesSinceResponse,
+        RegistryMutation, RegistryValue,
+    },
+    Error,
 };
+use async_trait::async_trait;
+use ic_crypto_sha2::Sha256;
+use mockall::automock;
 
 mod downgrade_get_changes_since_response {
     use super::*;
@@ -166,7 +167,6 @@ impl From<Option<high_capacity_registry_mutation::Content>>
         }
     }
 }
-
 impl TryFrom<high_capacity_registry_value::Content>
     for high_capacity_registry_get_value_response::Content
 {
@@ -206,6 +206,183 @@ impl HighCapacityRegistryValue {
             }
         }
     }
+}
+
+/// This is just a "thin wrapper" around Registry's `get_chunk` method.
+#[automock]
+#[async_trait]
+pub trait GetChunk {
+    async fn get_chunk_without_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String>;
+}
+
+/// Returns a blob.
+///
+/// If the mutation was a delete, returns None.
+///
+/// If the content has the blob inline, returns that.
+///
+/// Otherwise, content uses LargeValueChunkKeys. In this case, fetches the
+/// chunks, concatenates them, and returns the resulting monolithic blob.
+///
+/// Possible reasons for returning Err:
+///
+///   1. get_chunk call fail.
+///   2. content does not have value
+pub async fn dechunkify_mutation_value(
+    mutation: HighCapacityRegistryMutation,
+    get_chunk: &(impl GetChunk + Sync),
+) -> Result<Option<Vec<u8>>, Error> {
+    let mutation_type =
+        registry_mutation::Type::try_from(mutation.mutation_type).map_err(|err| {
+            Error::MalformedMessage(format!(
+                "Unable to determine mutation's type. Cause: {}. mutation: {:#?}",
+                err, mutation,
+            ))
+        })?;
+
+    if mutation_type == registry_mutation::Type::Delete {
+        return Ok(None);
+    }
+
+    let HighCapacityRegistryMutation {
+        content,
+        mutation_type: _,
+        key: _,
+    } = mutation;
+
+    let Some(content) = content else {
+        return Ok(Some(vec![]));
+    };
+
+    use high_capacity_registry_mutation::Content as C;
+    let large_value_chunk_keys = match content {
+        C::LargeValueChunkKeys(ok) => ok,
+
+        C::Value(value) => {
+            return Ok(Some(value));
+        }
+    };
+
+    let monolithic_blob = dechunkify(get_chunk, &large_value_chunk_keys)
+        .await
+        .map_err(Error::UnknownError)?;
+
+    Ok(Some(monolithic_blob))
+}
+
+/// Smartly converts from HighCapacityRegistryDelta to (non-high-capacity)
+/// RegistryDelta.
+pub async fn dechunkify_delta(
+    delta: HighCapacityRegistryDelta,
+    get_chunk: &(impl GetChunk + Sync),
+) -> Result<RegistryDelta, Error> {
+    let HighCapacityRegistryDelta {
+        key,
+        values: original_values,
+    } = delta;
+
+    let mut values = vec![];
+    for value in original_values {
+        values.push(dechunkify_value(value, get_chunk).await?);
+    }
+
+    Ok(RegistryDelta { key, values })
+}
+
+// Privates
+
+async fn dechunkify_value(
+    value: HighCapacityRegistryValue,
+    get_chunk: &(impl GetChunk + Sync),
+) -> Result<RegistryValue, Error> {
+    let HighCapacityRegistryValue {
+        version,
+        content,
+        // Ignored.
+        timestamp_seconds: _,
+    } = value;
+
+    let value = match content {
+        Some(content) => dechunkify_value_content(content, get_chunk).await?,
+        None => Some(vec![]),
+    };
+    let (value, deletion_marker) = match value {
+        None => (vec![], true),
+        Some(value) => (value, false),
+    };
+
+    Ok(RegistryValue {
+        value,
+        version,
+        deletion_marker,
+    })
+}
+
+async fn dechunkify_value_content(
+    content: high_capacity_registry_value::Content,
+    get_chunk: &(impl GetChunk + Sync),
+) -> Result<Option<Vec<u8>>, Error> {
+    match content {
+        high_capacity_registry_value::Content::Value(value) => Ok(Some(value)),
+
+        high_capacity_registry_value::Content::DeletionMarker(deletion_marker) => {
+            let result = if deletion_marker { None } else { Some(vec![]) };
+
+            Ok(result)
+        }
+
+        high_capacity_registry_value::Content::LargeValueChunkKeys(keys) => {
+            let monolithic_blob = dechunkify(get_chunk, &keys).await.map_err(|err| {
+                Error::UnknownError(format!(
+                    "Unable to reconstitute chunked/large value: {}",
+                    err,
+                ))
+            })?;
+
+            Ok(Some(monolithic_blob))
+        }
+    }
+}
+
+/// Returns concatenation of chunks.
+///
+/// Fetches each chunk using get_chunk_with_validation.
+async fn dechunkify(
+    get_chunk: &(impl GetChunk + Sync),
+    keys: &LargeValueChunkKeys,
+) -> Result<Vec<u8>, String> {
+    let mut result = vec![];
+    // Chunks could instead be fetched in parallel.
+    for key in &keys.chunk_content_sha256s {
+        let mut chunk_content = get_chunk_with_validation(get_chunk, key).await?;
+        result.append(&mut chunk_content);
+    }
+    Ok(result)
+}
+
+/// Verification is needed because `get_chunk` is a query.
+async fn get_chunk_with_validation(
+    get_chunk: &(impl GetChunk + Sync),
+    content_sha256: &[u8],
+) -> Result<Vec<u8>, String> {
+    let chunk_content = get_chunk
+        .get_chunk_without_validation(content_sha256)
+        .await?;
+
+    // Verify chunk.
+    if Sha256::hash(&chunk_content) != content_sha256 {
+        let len = chunk_content.len();
+        let snippet_len = 20.min(len);
+        return Err(format!(
+            "Chunk content hash does not match: len={}, head={:?}, tail={:?} SHA256={:?}",
+            len,
+            &chunk_content[..snippet_len],
+            &chunk_content[len - snippet_len..len],
+            content_sha256,
+        ));
+    }
+
+    Ok(chunk_content)
 }
 
 #[path = "high_capacity_tests.rs"]

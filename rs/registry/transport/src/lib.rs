@@ -3,11 +3,15 @@ pub mod pb;
 
 mod high_capacity;
 
+pub use high_capacity::{dechunkify_delta, dechunkify_mutation_value, GetChunk, MockGetChunk};
+
 use std::{fmt, str};
 
 use crate::pb::v1::{
-    registry_error::Code, registry_mutation, registry_mutation::Type, Precondition, RegistryDelta,
-    RegistryError, RegistryGetChangesSinceResponse, RegistryMutation,
+    registry_error::Code,
+    registry_mutation::{self, Type},
+    HighCapacityRegistryDelta, HighCapacityRegistryGetChangesSinceResponse, Precondition,
+    RegistryError, RegistryMutation,
 };
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -299,13 +303,14 @@ pub fn serialize_get_changes_since_request(version: u64) -> Result<Vec<u8>, Erro
 /// get_changes_since() call, from protobuf.
 pub fn deserialize_get_changes_since_response(
     response: Vec<u8>,
-) -> Result<(Vec<RegistryDelta>, u64), Error> {
-    let response = match pb::v1::RegistryGetChangesSinceResponse::decode(&response[..]) {
+) -> Result<(Vec<HighCapacityRegistryDelta>, u64), Error> {
+    let response = match pb::v1::HighCapacityRegistryGetChangesSinceResponse::decode(&response[..])
+    {
         Ok(ok) => ok,
         Err(error) => return Err(Error::MalformedMessage(error.to_string())),
     };
 
-    let RegistryGetChangesSinceResponse {
+    let HighCapacityRegistryGetChangesSinceResponse {
         error,
         version,
         deltas,
@@ -532,7 +537,7 @@ mod tests {
 
     #[test]
     fn test_deserialize_get_changes_since_response_with_error() {
-        let response = RegistryGetChangesSinceResponse {
+        let response = HighCapacityRegistryGetChangesSinceResponse {
             error: Some(RegistryError {
                 code: Code::Authorization as i32,
                 reason: "You are not welcome here.".to_string(),

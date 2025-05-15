@@ -336,7 +336,6 @@ fn get_full_neuron(neuron_id: NeuronId) -> Result<Neuron, GovernanceError> {
     debug_log("get_full_neuron");
     governance()
         .get_full_neuron(&NeuronIdProto::from(neuron_id), &caller())
-        .map(Neuron::from)
         .map_err(GovernanceError::from)
 }
 
