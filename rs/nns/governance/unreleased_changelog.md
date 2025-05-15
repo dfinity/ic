@@ -13,6 +13,8 @@ on the process that this file is part of, see
 
 ## Changed
 
+* Proposal topics are persisted throughout its lifecycle instead of being recomputed every time.
+
 ## Deprecated
 
 ## Removed

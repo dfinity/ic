@@ -366,6 +366,10 @@ fn test_single_neuron_proposal_new() {
                             None,
                             Some(1),
                         )),
+                        ProposalDataChange::Topic(OptionChange::Different(
+                            None,
+                            Some(Topic::NetworkEconomics as i32),
+                        ))
                     ],
                 )]),
                 GovernanceChange::Metrics(OptionChange::Different(
@@ -8127,6 +8131,7 @@ fn fixture_for_proposals(proposal_id: ProposalId, payload: Vec<u8>) -> Governanc
     let proposal_data = ProposalData {
         id: Some(proposal_id),
         proposal: Some(proposal),
+        topic: Some(Topic::NetworkEconomics as i32),
         ..Default::default()
     };
     GovernanceProto {
@@ -8466,6 +8471,7 @@ fn test_gc_ignores_exempt_proposals() {
                         )),
                         ..Default::default()
                     }),
+                    topic: Some(Topic::SnsAndCommunityFund as i32),
                     ..Default::default()
                 },
             )
