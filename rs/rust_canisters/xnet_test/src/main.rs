@@ -9,7 +9,7 @@ use candid::{CandidType, Deserialize, Principal};
 use futures::future::join_all;
 use ic_cdk::api::{canister_cycle_balance, canister_self, msg_caller, time};
 use ic_cdk::call::{Call, CallFailed};
-use ic_cdk_macros::{heartbeat, query, update};
+use ic_cdk::{heartbeat, query, update};
 use ic_management_canister_types::CanisterId;
 use rand::Rng;
 use rand_pcg::Lcg64Xsh32;
