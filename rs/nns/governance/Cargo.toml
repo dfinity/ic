@@ -126,6 +126,7 @@ tempfile = { workspace = true }
 tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation" }
 tokio = { workspace = true }
 tokio-test = { workspace = true }
+icrc-ledger-types = { path = "../../packages/icrc-ledger-types" }
 
 [features]
 test = ["ic-sns-swap/test"]

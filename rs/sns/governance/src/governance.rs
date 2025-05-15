@@ -186,7 +186,7 @@ pub const UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS: u64 = 600;
 const UPGRADE_PROPOSAL_BLOCK_EXPIRY_SECONDS: u64 = 60 * 60 * 24; // 1 day
 
 /// Timestamp of the block in the GetBlockResult mapping is accessed by this key.
-const TIMESTAMP: &'static str = "ts";
+const TIMESTAMP: &str = "ts";
 
 /// Converts bytes to a subaccountpub fn bytes_to_subaccount(bytes: &[u8]) -> Result<icrc_ledger_types::icrc1::account::Subaccount, GovernanceError> {
 pub fn bytes_to_subaccount(

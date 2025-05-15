@@ -140,6 +140,13 @@ impl ICRC1Ledger for LedgerFixture {
             .unwrap()
             .target_canister_id
     }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<icrc_ledger_types::icrc3::blocks::GetBlocksRequest>,
+    ) -> Result<icrc_ledger_types::icrc3::blocks::GetBlocksResult, NervousSystemError> {
+        unimplemented!()
+    }
 }
 
 /// The LedgerFixtureState captures the state of a given LedgerFixture instance.
