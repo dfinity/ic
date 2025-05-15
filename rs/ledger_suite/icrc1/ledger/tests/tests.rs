@@ -532,10 +532,10 @@ fn test_get_blocks_returns_multiple_archive_callbacks() {
     );
 }
 
-// #[test]
-// fn test_icrc1_test_suite() {
-//     ic_ledger_suite_state_machine_tests::test_icrc1_test_suite(ledger_wasm(), encode_init_args);
-// }
+#[test]
+fn test_icrc1_test_suite() {
+    ic_ledger_suite_state_machine_tests::test_icrc1_test_suite(ledger_wasm(), encode_init_args);
+}
 
 #[test]
 fn test_ledger_http_request_decoding_quota() {
