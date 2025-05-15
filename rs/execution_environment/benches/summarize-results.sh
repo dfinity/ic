@@ -91,27 +91,25 @@ case "${total_diff_pct}/${total_baseline_ns}" in
     *) echo "(regressed by ${total_diff_ms} ms / ${total_diff_pct}%)" ;;
 esac
 
-# Produce top regressed/improved details.
-if [ "${total_diff_pct}" != "0" ]; then
-    echo "  Top ${TOP_N} by time:"
-    cat "${TMP_FILE}" | sort -rn | rg '^[1-9]' | head -${TOP_N} \
-        | while read diff_ms diff_pct baseline_ms new_ms name; do
-            echo "  + ${name} time regressed by ${diff_ms} ms (${baseline_ms} -> ${new_ms} ms)"
-        done
-    cat "${TMP_FILE}" | sort -n | rg '^-' | head -${TOP_N} \
-        | while read diff_ms diff_pct baseline_ms new_ms name; do
-            echo "  - ${name} time improved by ${diff_ms} ms (${baseline_ms} -> ${new_ms} ms)"
-        done
-    echo "  Top ${TOP_N} by percentage:"
-    cat "${TMP_FILE}" | sort -rnk 2 | rg '^[1-9]' | head -${TOP_N} \
-        | while read diff_ms diff_pct baseline_ms new_ms name; do
-            echo "  + ${name} time regressed by ${diff_pct}% (${baseline_ms} -> ${new_ms} ms)"
-        done
-    cat "${TMP_FILE}" | sort -nk 2 | rg '^-' | head -${TOP_N} \
-        | while read diff_ms diff_pct baseline_ms new_ms name; do
-            echo "  - ${name} time improved by ${diff_pct}% (${baseline_ms} -> ${new_ms} ms)"
-        done
-fi
+# Always produce top regressed/improved details.
+echo "  Top ${TOP_N} by time:"
+cat "${TMP_FILE}" | sort -rn | rg '^[1-9]' | head -${TOP_N} \
+    | while read diff_ms diff_pct baseline_ms new_ms name; do
+        echo "  + ${name} time regressed by ${diff_ms} ms (${baseline_ms} -> ${new_ms} ms)"
+    done
+cat "${TMP_FILE}" | sort -n | rg '^-' | head -${TOP_N} \
+    | while read diff_ms diff_pct baseline_ms new_ms name; do
+        echo "  - ${name} time improved by ${diff_ms} ms (${baseline_ms} -> ${new_ms} ms)"
+    done
+echo "  Top ${TOP_N} by percentage:"
+cat "${TMP_FILE}" | sort -rnk 2 | rg '^[1-9]' | head -${TOP_N} \
+    | while read diff_ms diff_pct baseline_ms new_ms name; do
+        echo "  + ${name} time regressed by ${diff_pct}% (${baseline_ms} -> ${new_ms} ms)"
+    done
+cat "${TMP_FILE}" | sort -nk 2 | rg '^-' | head -${TOP_N} \
+    | while read diff_ms diff_pct baseline_ms new_ms name; do
+        echo "  - ${name} time improved by ${diff_pct}% (${baseline_ms} -> ${new_ms} ms)"
+    done
 rm -f "${TMP_FILE}"
 
 # Return an error if there are changes or the is no baseline (new benchmarks),
