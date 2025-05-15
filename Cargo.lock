@@ -18303,7 +18303,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic"
-version = "9.0.0"
+version = "9.0.1"
 dependencies = [
  "backoff",
  "base64 0.13.1",
