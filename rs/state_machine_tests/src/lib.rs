@@ -451,7 +451,11 @@ fn add_subnet_local_registry_records(
                 .iter()
                 .map(|(key_id, _)| KeyConfig {
                     key_id: key_id.clone(),
-                    pre_signatures_to_create_in_advance: 1,
+                    pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
+                        1
+                    } else {
+                        0
+                    },
                     max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
                 })
                 .collect(),

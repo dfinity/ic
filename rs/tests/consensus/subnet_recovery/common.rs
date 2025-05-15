@@ -44,7 +44,7 @@ use ic_consensus_system_test_utils::{
     },
 };
 use ic_consensus_threshold_sig_system_test_utils::{
-    create_new_subnet_with_keys, make_key_ids_for_all_idkg_schemes, run_chain_key_signature_test,
+    create_new_subnet_with_keys, make_key_ids_for_all_schemes, run_chain_key_signature_test,
 };
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -98,14 +98,18 @@ pub fn setup(
         .with_dkg_interval_length(Height::from(dkg_interval))
         .add_nodes(nns_nodes);
 
-    // TODO(CON-1471): Add a VetKD key ID
-    let key_ids = make_key_ids_for_all_idkg_schemes();
+    let key_ids = make_key_ids_for_all_schemes();
+
     let key_configs = key_ids
         .into_iter()
         .map(|key_id| KeyConfig {
-            key_id,
             max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
-            pre_signatures_to_create_in_advance: 3,
+            pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
+                3
+            } else {
+                0
+            },
+            key_id,
         })
         .collect();
     nns = nns.with_chain_key_config(ChainKeyConfig {
@@ -273,8 +277,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
         .any(|s| s.subnet_type() == SubnetType::Application);
     assert!(cfg.chain_key >= create_new_subnet);
 
-    // TODO(CON-1471): Add a VetKD key ID
-    let key_ids = make_key_ids_for_all_idkg_schemes();
+    let key_ids = make_key_ids_for_all_schemes();
     let chain_key_pub_keys = cfg.chain_key.then(|| {
         info!(logger, "Chain key flag set, creating key on NNS.");
         if create_new_subnet {

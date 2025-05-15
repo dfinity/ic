@@ -1,6 +1,6 @@
 use candid::Principal;
 use ic_cdk::api::management_canister::http_request::{HttpMethod, HttpResponse, TransformArgs};
-use ic_cdk_macros::{init, post_upgrade, query, update};
+use ic_cdk::{init, post_upgrade, query, update};
 use ic_ckbtc_kyt::SetApiKeyArg;
 use ic_ckbtc_kyt::{
     Alert, AlertLevel, DepositRequest, Error, ExposureType, FetchAlertsResponse, KytMode,
@@ -126,7 +126,7 @@ impl Event {
         match &self.kind {
             EventKind::UtxoCheck { .. } => "utxo_check",
             EventKind::AddressCheck { .. } => "address_check",
-            EventKind::ApiKeyUpdate { .. } => "legacy_api_key_update",
+            EventKind::ApiKeyUpdate => "legacy_api_key_update",
             EventKind::ApiKeySet { .. } => "api_key_set",
             EventKind::ApiKeyExpired { .. } => "api_key_expired",
         }
@@ -137,7 +137,7 @@ impl Event {
         match &self.kind {
             EventKind::UtxoCheck { external_id, .. } => Some(external_id),
             EventKind::AddressCheck { external_id, .. } => Some(external_id),
-            EventKind::ApiKeyUpdate { .. } => None,
+            EventKind::ApiKeyUpdate => None,
             EventKind::ApiKeySet { .. } => None,
             EventKind::ApiKeyExpired { .. } => None,
         }

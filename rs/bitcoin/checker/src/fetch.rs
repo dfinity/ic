@@ -81,7 +81,7 @@ pub trait FetchEnv {
                 providers::next_provider(self.config().btc_network()),
                 max_response_bytes,
             ),
-            Some(FetchTxStatus::PendingOutcall { .. }) => return TryFetchResult::Pending,
+            Some(FetchTxStatus::PendingOutcall) => return TryFetchResult::Pending,
             Some(FetchTxStatus::Error(err)) => (
                 // An FetchTxStatus error can be retried with another provider
                 err.provider.next(),
