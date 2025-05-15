@@ -1061,34 +1061,38 @@ impl<'a> IDkgTranscriptBuilderImpl<'a> {
             || {
                 let mut transcript_state = TranscriptState::new();
                 // Walk the dealings to get the dealings belonging to the transcript
-                for (id, signed_dealing) in self.idkg_pool.validated().signed_dealings() {
-                    if signed_dealing.idkg_dealing().transcript_id == transcript_id {
-                        if let Some(dealing_hash) = id.dealing_hash() {
-                            transcript_state.init_dealing_state(dealing_hash, signed_dealing);
-                        } else {
-                            self.metrics
-                                .transcript_builder_errors_inc("build_transcript_id_dealing_hash");
-                            warn!(
-                                self.log,
-                                "build_transcript(): Failed to get dealing hash: {:?}", id
-                            );
-                        }
+                for (id, signed_dealing) in self
+                    .idkg_pool
+                    .validated()
+                    .signed_dealings_by_transcript_id(&transcript_id)
+                {
+                    if let Some(dealing_hash) = id.dealing_hash() {
+                        transcript_state.init_dealing_state(dealing_hash, signed_dealing);
+                    } else {
+                        self.metrics
+                            .transcript_builder_errors_inc("build_transcript_id_dealing_hash");
+                        warn!(
+                            self.log,
+                            "build_transcript(): Failed to get dealing hash: {:?}", id
+                        );
                     }
                 }
 
                 // Walk the support shares and assign to the corresponding dealing
-                for (_, support) in self.idkg_pool.validated().dealing_support() {
-                    if support.transcript_id == transcript_id {
-                        if let Err(err) = transcript_state.add_dealing_support(support) {
-                            warn!(
-                                self.log,
-                                "Failed to add support: transcript_id = {:?}, error = {:?}",
-                                transcript_id,
-                                err
-                            );
-                            self.metrics
-                                .transcript_builder_errors_inc("add_dealing_support");
-                        }
+                for (_, support) in self
+                    .idkg_pool
+                    .validated()
+                    .dealing_support_by_transcript_id(&transcript_id)
+                {
+                    if let Err(err) = transcript_state.add_dealing_support(support) {
+                        warn!(
+                            self.log,
+                            "Failed to add support: transcript_id = {:?}, error = {:?}",
+                            transcript_id,
+                            err
+                        );
+                        self.metrics
+                            .transcript_builder_errors_inc("add_dealing_support");
                     }
                 }
 

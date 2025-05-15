@@ -99,7 +99,7 @@ class Args:
     # If present - decompress `upload_img` and inject this into ssh_authorized_keys/admin
     inject_image_pub_key: Optional[str] = None
 
-    # Path to the setupos-inject-configuration tool. Necessary if any inject* args are present
+    # Path to the setupos-inject-config tool. Necessary if any inject* args are present
     inject_configuration_tool: Optional[str] = None
 
     # Time to wait between each remote deployment, in minutes
@@ -149,7 +149,7 @@ class Args:
             self.inject_image_ipv6_prefix and self.inject_image_ipv6_gateway
         ), "Both ipv6_prefix and ipv6_gateway flags must be present or none"
         if self.inject_image_ipv6_prefix:
-            assert self.inject_configuration_tool, "setupos_inject_configuration tool required to modify image"
+            assert self.inject_configuration_tool, "setupos_inject_config tool required to modify image"
         ipv4_args = [
             self.inject_image_ipv4_address,
             self.inject_image_ipv4_gateway,
@@ -641,7 +641,7 @@ def upload_to_file_share(
 
 
 def inject_config_into_image(
-    setupos_inject_configuration_path: Path,
+    setupos_inject_config_path: Path,
     working_dir: Path,
     compressed_image_path: Path,
     node_reward_type: str,
@@ -665,7 +665,7 @@ def inject_config_into_image(
     def is_executable(p: Path) -> bool:
         return os.access(p, os.X_OK)
 
-    assert setupos_inject_configuration_path.exists() and is_executable(setupos_inject_configuration_path)
+    assert setupos_inject_config_path.exists() and is_executable(setupos_inject_config_path)
 
     invoke.run(f"tar --extract --zstd --file {compressed_image_path} --directory {working_dir}", echo=True)
 
@@ -692,7 +692,7 @@ def inject_config_into_image(
         admin_key_part = f'--public-keys "{pub_key}"'
 
     invoke.run(
-        f"{setupos_inject_configuration_path} {image_part} {reward_part} {prefix_part} {gateway_part} {ipv4_part} {verbose_part} {admin_key_part}",
+        f"{setupos_inject_config_path} {image_part} {reward_part} {prefix_part} {gateway_part} {ipv4_part} {verbose_part} {admin_key_part}",
         echo=True,
     )
 

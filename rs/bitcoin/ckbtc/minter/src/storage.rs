@@ -119,7 +119,7 @@ pub fn migrate_old_events_if_not_empty() -> Option<u64> {
     let mut num_events_removed = None;
     V0_EVENTS.with(|old_events| {
         let mut old = old_events.borrow_mut();
-        if old.len() > 0 {
+        if !old.is_empty() {
             V1_EVENTS.with(|new| {
                 num_events_removed = Some(migrate_events(&old, &new.borrow()));
             });
