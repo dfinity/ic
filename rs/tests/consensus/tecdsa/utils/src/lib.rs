@@ -249,7 +249,13 @@ pub fn run_chain_key_signature_test(
         let public_key = get_public_key_with_retries(key_id, canister, logger, 100)
             .await
             .unwrap();
-        assert_eq!(existing_key, public_key);
+        // TODO(CRP-2789): Re-enable vetKD public key equality check as soon as
+        // https://github.com/dfinity/ic/pull/5088 is deployed on the NNS subnet.
+        if let MasterPublicKeyId::VetKd(_vetkd_key_id) = key_id {
+            // skip canister public key equality check because of https://github.com/dfinity/ic/pull/5088
+        } else {
+            assert_eq!(existing_key, public_key);
+        }
         let signature = get_signature_with_logger(
             message_hash.clone(),
             ECDSA_SIGNATURE_FEE,

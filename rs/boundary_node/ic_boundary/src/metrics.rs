@@ -16,13 +16,13 @@ use axum::{
 };
 use http::header::CONTENT_TYPE;
 use ic_bn_lib::http::{body::CountingBody, http_version, ConnInfo};
-use ic_types::{messages::ReplicaHealthStatus, CanisterId, SubnetId};
-use prometheus::{
+use ic_bn_lib::prometheus::{
     proto::MetricFamily, register_histogram_vec_with_registry,
     register_int_counter_vec_with_registry, register_int_gauge_vec_with_registry,
     register_int_gauge_with_registry, Encoder, HistogramOpts, HistogramVec, IntCounterVec,
     IntGauge, IntGaugeVec, Registry, TextEncoder,
 };
+use ic_types::{messages::ReplicaHealthStatus, CanisterId, SubnetId};
 use sha3::{Digest, Sha3_256};
 use tikv_jemalloc_ctl::{epoch, stats};
 use tower_http::request_id::RequestId;
@@ -80,14 +80,14 @@ fn remove_stale_metrics(
                 let node_id = v
                     .get_label()
                     .iter()
-                    .find(|&v| v.get_name() == NODE_ID_LABEL)
-                    .map(|x| x.get_value());
+                    .find(|&v| v.name() == NODE_ID_LABEL)
+                    .map(|x| x.value());
 
                 let subnet_id = v
                     .get_label()
                     .iter()
-                    .find(|&v| v.get_name() == SUBNET_ID_LABEL)
-                    .map(|x| x.get_value());
+                    .find(|&v| v.name() == SUBNET_ID_LABEL)
+                    .map(|x| x.value());
 
                 match (node_id, subnet_id) {
                     // Check if we got both node_id and subnet_id labels
