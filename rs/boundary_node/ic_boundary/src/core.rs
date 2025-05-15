@@ -334,8 +334,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             .with_options(server_opts)
             .with_metrics(http_metrics.clone())
             .build()
-            .context("unable to build HTTP TCP server")
-            .unwrap()
+            .expect("unable to build HTTP TCP server")
     });
 
     // HTTP Unix Socket
@@ -345,8 +344,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             .with_options(server_opts)
             .with_metrics(http_metrics.clone())
             .build()
-            .context("unable to build HTTP Unix Socket server")
-            .unwrap()
+            .expect("unable to build HTTP Unix Socket server")
     });
 
     // HTTP loopback server.
@@ -362,8 +360,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             .with_options(server_opts)
             .with_metrics(http_metrics.clone())
             .build()
-            .context("unable to build HTTP Loopback server")
-            .unwrap()
+            .expect("unable to build HTTP Loopback server")
     });
 
     // HTTPS
