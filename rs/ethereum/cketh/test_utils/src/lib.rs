@@ -617,9 +617,6 @@ impl CkEthSetup {
     }
 
     pub fn all_eth_get_logs_response_size_estimates(&self) -> Vec<u64> {
-        // The EVM RPC canister has a different adjustment mechanism for the response size limit.
-        // In contrast to the ckETH minter, the HEADER_SIZE_LIMIT is not added to the adjusted response size,
-        // which simply consists in doubling the estimate (the result is capped by 2_000_000 - HEADER_SIZE_LIMIT).
         let initial_estimate = self.eth_get_logs_response_size_initial_estimate();
         vec![
             initial_estimate,
