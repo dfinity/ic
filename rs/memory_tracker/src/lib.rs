@@ -20,7 +20,7 @@ use std::{
 // checkpoint file per signal handler call. Higher value gives higher
 // throughput in memory intensive workloads, but may regress performance
 // in other workloads because it increases work per signal handler call.
-const PAGES_TO_MAP: u64 = 2;
+const PAGES_TO_MAP: u64 = 4;
 
 // The new signal handler requires `AccessKind` which currently available only
 // on Linux without WSL.
