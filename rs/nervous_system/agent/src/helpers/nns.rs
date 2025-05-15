@@ -5,11 +5,11 @@ use cycles_minting_canister::{NotifyMintCyclesSuccess, MEMO_MINT_CYCLES};
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
-use ic_nns_governance_api::pb::v1::{
-    manage_neuron_response::Command, CreateServiceNervousSystem, MakeProposalRequest,
-    ManageNeuronCommandRequest, ProposalActionRequest, ProposalInfo,
+use ic_nns_governance_api::{
+    manage_neuron_response::Command, CreateServiceNervousSystem, ExecuteNnsFunction, ListNeurons,
+    MakeProposalRequest, ManageNeuronCommandRequest, Neuron, NnsFunction, ProposalActionRequest,
+    ProposalInfo, Topic,
 };
-use ic_nns_governance_api::pb::v1::{ExecuteNnsFunction, ListNeurons, Neuron, NnsFunction, Topic};
 use ic_sns_wasm::pb::v1::get_deployed_sns_by_proposal_id_response::GetDeployedSnsByProposalIdResult;
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens, TransferArgs};

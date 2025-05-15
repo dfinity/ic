@@ -537,7 +537,8 @@ mod upgrade {
     use ic_ledger_suite_orchestrator::candid::{InstalledCanister, InstalledLedgerSuite};
     use ic_ledger_suite_orchestrator::state::WasmHash;
     use ic_ledger_suite_orchestrator_test_utils::universal_canister::{
-        CanisterChangeDetails, CanisterInfoResponse, CanisterInstallMode, UniversalCanister,
+        CanisterInfoResult, ChangeDetails, CodeDeploymentMode, CodeDeploymentRecord,
+        UniversalCanister,
     };
     use ic_ledger_suite_orchestrator_test_utils::{
         default_init_arg, ledger_suite_orchestrator_wasm, ledger_wasm, tweak_ledger_suite_wasms,
@@ -677,16 +678,17 @@ mod upgrade {
         assert_ne!(tweak_index_wasm_hash, embedded_index_wasm_hash);
 
         let has_last_been_upgraded_to =
-            |canister_info: &CanisterInfoResponse, wasm_hash: &WasmHash| {
+            |canister_info: &CanisterInfoResult, wasm_hash: &WasmHash| {
                 let changes: Vec<_> = canister_info
-                    .changes()
+                    .recent_changes
+                    .clone()
                     .into_iter()
-                    .map(|c| c.details().clone())
+                    .map(|c| c.details.clone())
                     .collect();
-                let expected_change = CanisterChangeDetails::code_deployment(
-                    CanisterInstallMode::Upgrade,
-                    wasm_hash.clone().into(),
-                );
+                let expected_change = ChangeDetails::CodeDeployment(CodeDeploymentRecord {
+                    mode: CodeDeploymentMode::Upgrade,
+                    module_hash: wasm_hash.clone().as_ref().to_vec(),
+                });
                 changes.last() == Some(&expected_change)
             };
 
@@ -749,35 +751,36 @@ mod upgrade {
         let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
         let embedded_archive_wasm_hash = orchestrator.embedded_archive_wasm_hash.clone();
 
-        let has_only_install_change = |canister_info: &CanisterInfoResponse,
-                                       wasm_hash: &WasmHash| {
+        let has_only_install_change = |canister_info: &CanisterInfoResult, wasm_hash: &WasmHash| {
             let changes: Vec<_> = canister_info
-                .changes()
+                .recent_changes
+                .clone()
                 .into_iter()
-                .map(|c| c.details().clone())
+                .map(|c| c.details.clone())
                 .collect();
-            matches!(
-                changes.first(),
-                Some(CanisterChangeDetails::CanisterCreation(_))
-            ) && matches!(changes.get(1), Some(x) if x == &CanisterChangeDetails::code_deployment(
-                CanisterInstallMode::Install,
-                wasm_hash.clone().into(),
-            )) && matches!(
-                changes.get(2), //ledger will change controller of spawned off archive
-                None | Some(CanisterChangeDetails::CanisterControllersChange(_))
-            ) && changes.len() <= 3
+            matches!(changes.first(), Some(ChangeDetails::Creation(_)))
+                && matches!(changes.get(1), Some(x) if x == &ChangeDetails::CodeDeployment(CodeDeploymentRecord {
+                    mode: CodeDeploymentMode::Install,
+                    module_hash: wasm_hash.clone().as_ref().to_vec(),
+                }))
+                && matches!(
+                    changes.get(2), //ledger will change controller of spawned off archive
+                    None | Some(ChangeDetails::ControllersChange(_))
+                )
+                && changes.len() <= 3
         };
 
-        let has_been_upgraded_to = |canister_info: &CanisterInfoResponse, wasm_hash: &WasmHash| {
+        let has_been_upgraded_to = |canister_info: &CanisterInfoResult, wasm_hash: &WasmHash| {
             let changes: Vec<_> = canister_info
-                .changes()
+                .recent_changes
+                .clone()
                 .into_iter()
-                .map(|c| c.details().clone())
+                .map(|c| c.details.clone())
                 .collect();
-            let expected_change = CanisterChangeDetails::code_deployment(
-                CanisterInstallMode::Upgrade,
-                wasm_hash.clone().into(),
-            );
+            let expected_change = ChangeDetails::CodeDeployment(CodeDeploymentRecord {
+                mode: CodeDeploymentMode::Upgrade,
+                module_hash: wasm_hash.clone().as_ref().to_vec(),
+            });
             (matches!(changes.get(2), Some(c) if c == &expected_change)
                 || matches!(changes.get(3), Some(c) if c == &expected_change))
                 && changes.len() <= 4
@@ -971,16 +974,17 @@ mod upgrade {
         let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
         let embedded_archive_wasm_hash = orchestrator.embedded_archive_wasm_hash.clone();
 
-        let has_been_upgraded_to = |canister_info: &CanisterInfoResponse, wasm_hash: &WasmHash| {
+        let has_been_upgraded_to = |canister_info: &CanisterInfoResult, wasm_hash: &WasmHash| {
             let changes: Vec<_> = canister_info
-                .changes()
+                .recent_changes
+                .clone()
                 .into_iter()
-                .map(|c| c.details().clone())
+                .map(|c| c.details.clone())
                 .collect();
-            let expected_change = CanisterChangeDetails::code_deployment(
-                CanisterInstallMode::Upgrade,
-                wasm_hash.clone().into(),
-            );
+            let expected_change = ChangeDetails::CodeDeployment(CodeDeploymentRecord {
+                mode: CodeDeploymentMode::Upgrade,
+                module_hash: wasm_hash.clone().as_ref().to_vec(),
+            });
             (matches!(changes.get(2), Some(c) if c == &expected_change)
                 || matches!(changes.get(3), Some(c) if c == &expected_change))
                 && changes.len() <= 4
@@ -1115,7 +1119,7 @@ mod upgrade {
         assert_eq!(
             universal_canister
                 .canister_info(CanisterId::try_from(PrincipalId(index.canister_id)).unwrap())
-                .module_hash()
+                .module_hash
                 .unwrap()
                 .as_slice(),
             embedded_index_wasm_hash.as_ref()
@@ -1123,7 +1127,7 @@ mod upgrade {
         assert_eq!(
             universal_canister
                 .canister_info(CanisterId::try_from(PrincipalId(ledger.canister_id)).unwrap())
-                .module_hash()
+                .module_hash
                 .unwrap()
                 .as_slice(),
             embedded_ledger_wasm_hash.as_ref()

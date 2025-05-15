@@ -1120,7 +1120,7 @@ impl Swap {
     /// of ICP a buyer has contributed from the ICP ledger canister.
     ///
     /// It is assumed that prior to calling this method, tokens have
-    /// been transfer by the buyer to a subaccount of the swap
+    /// been transferred by the buyer to a subaccount of the swap
     /// canister (this canister) on the ICP ledger.
     /// Also, deletes an existing ticket if it has been fully executed
     /// (i.e. the requested increment is >= that the ticket amount).
@@ -1179,7 +1179,7 @@ impl Swap {
         // Once swap is OPEN, the Swap.params field is set. In light of validation performed
         // above, we should be able to `expect` this value without a panic.
         let params = &self.params.as_ref().expect("Expected params to be set");
-        // Subtraction safe because of the preceding if-statement.
+
         let max_increment_e8s = self.available_direct_participation_e8s();
 
         // Check that the maximum number of participants has not been reached yet.
@@ -1245,7 +1245,7 @@ impl Swap {
         // Limit the participation based on the maximum per participant.
         let new_balance_e8s = std::cmp::min(new_balance_e8s, max_participant_icp_e8s);
 
-        // Check that the new_balance_e8s is bigger than the minimum required for
+        // Check that the new_balance_e8s is bigger than or equal to the minimum required for
         // participating.
         if new_balance_e8s < params.min_participant_icp_e8s {
             return Err(format!(
@@ -3199,18 +3199,12 @@ impl Swap {
 ///
 /// # Arguments
 ///
-/// * `tot_direct_participation` - The current amount of tokens committed to
-///                                the swap by all users.
-/// * `max_tot_direct_participation` - The maximum amount of tokens that can
-///                                    be committed to the swap.
-/// * `min_user_participation` - The minimum amount of tokens that a
-///                              user must commit to participate to the swap.
-/// * `max_user_participation` - The maximum amount of tokens that a
-///                              user can commit to participate to the swap.
-/// * `user_participation` - The current amount of tokens committed to the
-///                          swap by the user that requested the increment.
-/// * `requested_increment` - The amount of tokens by which the user wants
-///                           to increase its participation in the swap.
+/// * `tot_direct_participation` - The current amount of tokens committed to the swap by all users.
+/// * `max_tot_direct_participation` - The maximum amount of tokens that can be committed to the swap.
+/// * `min_user_participation` - The minimum amount of tokens that a user must commit to participate to the swap.
+/// * `max_user_participation` - The maximum amount of tokens that a user can commit to participate to the swap.
+/// * `user_participation` - The current amount of tokens committed to the swap by the user that requested the increment.
+/// * `requested_increment` - The amount of tokens by which the user wants to increase its participation in the swap.
 fn compute_participation_increment(
     tot_direct_participation: u64,
     max_tot_direct_participation: u64,

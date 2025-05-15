@@ -1,4 +1,5 @@
 use crate::{
+    following::TOPICS,
     governance::{Governance, TimeWarp, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER},
     logs::INFO,
     pb::{
@@ -24,16 +25,17 @@ use crate::{
                 self, DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
             },
             nervous_system_function::FunctionType,
-            neuron::{Followees, TopicFollowees},
+            neuron::{FolloweesForTopic, TopicFollowees},
             proposal::Action,
             ChunkedCanisterWasm, ClaimSwapNeuronsError, ClaimSwapNeuronsResponse,
             ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters, Empty,
-            ExecuteGenericNervousSystemFunction, GovernanceError, ManageDappCanisterSettings,
-            ManageLedgerParameters, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens, Motion,
-            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronIds,
-            NeuronPermission, NeuronPermissionList, NeuronPermissionType, ProposalId,
-            RegisterDappCanisters, RewardEvent, SnsVersion, TransferSnsTreasuryFunds,
-            UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
+            ExecuteGenericNervousSystemFunction, Followee, GovernanceError,
+            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuronResponse,
+            ManageSnsMetadata, MintSnsTokens, Motion, NervousSystemFunction,
+            NervousSystemParameters, Neuron, NeuronId, NeuronIds, NeuronPermission,
+            NeuronPermissionList, NeuronPermissionType, ProposalId, RegisterDappCanisters,
+            RewardEvent, SnsVersion, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
+            UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
         },
     },
     proposal::ValidGenericNervousSystemFunction,
@@ -58,7 +60,6 @@ use ic_sns_governance_api::format_full_hash;
 use ic_sns_governance_proposal_criticality::{ProposalCriticality, VotingDurationParameters};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use lazy_static::lazy_static;
-use maplit::btreemap;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     convert::TryFrom,
@@ -2293,30 +2294,56 @@ impl NeuronRecipe {
         Ok(permissions)
     }
 
-    /// Adds `self.followees` entries in `base_followees` that are
-    /// keyed by `function_ids_to_follow`.
-    pub(crate) fn construct_followees(&self) -> BTreeMap<u64, Followees> {
+    pub(crate) fn construct_topic_followees(&self) -> TopicFollowees {
         let Some(followees) = &self.followees else {
-            return btreemap! {};
+            return TopicFollowees::default();
         };
+
         let followees = &followees.neuron_ids;
 
+        // There's a root neuron without any following set up out of the box.
         if followees.is_empty() {
-            btreemap! {}
-        } else {
-            let catch_all = u64::from(&Action::Unspecified(Empty {}));
-            let followees = Followees {
-                followees: followees.clone(),
-            };
-            btreemap! { catch_all => followees }
+            return TopicFollowees::default();
         }
-    }
 
-    // TODO[NNS1-3676]: Provide a proper implementation for this function once new SNSs are
-    // TODO[NNS1-3676]: to begin using topics-based following.
-    pub(crate) fn construct_topic_followees(&self) -> TopicFollowees {
+        let root_neuron_alias = |followee_neuron_index, num_followees| {
+            if num_followees == 1 {
+                "Neuron-basket-main".to_string()
+            } else {
+                // This is not currently used, as each neuron basket has a single root neuron.
+                format!("Followee-{}", followee_neuron_index)
+            }
+        };
+
+        // All other neurons follow on all available topics.
+        let topic_id_to_followees = TOPICS
+            .iter()
+            .map(|topic| {
+                let topic = i32::from(*topic);
+                let num_followees = followees.len();
+
+                let followees = followees
+                    .iter()
+                    .enumerate()
+                    .map(|(followee_neuron_index, followee_neuron_id)| {
+                        let alias = Some(root_neuron_alias(followee_neuron_index, num_followees));
+                        let neuron_id = Some(followee_neuron_id.clone());
+
+                        Followee { neuron_id, alias }
+                    })
+                    .collect();
+
+                let followees_per_topic = FolloweesForTopic {
+                    followees,
+                    topic: Some(topic),
+                };
+
+                (topic, followees_per_topic)
+            })
+            .collect();
+
         TopicFollowees {
-            topic_id_to_followees: btreemap! {},
+            topic_id_to_followees,
         }
     }
 

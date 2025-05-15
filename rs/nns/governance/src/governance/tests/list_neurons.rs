@@ -6,8 +6,7 @@ use crate::{
 };
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance_api::pb::v1::list_neurons::NeuronSubaccount;
-use ic_nns_governance_api::pb::v1::ListNeurons;
+use ic_nns_governance_api::{list_neurons::NeuronSubaccount, ListNeurons};
 use std::sync::Arc;
 
 #[test]

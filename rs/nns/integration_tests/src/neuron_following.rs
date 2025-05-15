@@ -5,7 +5,7 @@ use ic_nervous_system_common::{E8, ONE_MONTH_SECONDS};
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{install_canister, nns};
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     governance_error::ErrorType,
     manage_neuron_response::{Command, FollowResponse},
     neuron::{DissolveState, Followees},

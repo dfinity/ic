@@ -65,7 +65,7 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
                     MANAGE_SNS_METADATA,
                 ],
             },
-            is_critical: false,
+            is_critical: true,
         },
         TopicInfo::<NativeFunctions> {
             topic: Topic::SnsFrameworkManagement,

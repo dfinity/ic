@@ -97,9 +97,6 @@ mod update_unassigned_nodes_config;
 mod wait_for_quiet;
 
 #[cfg(test)]
-mod governance_migrations;
-
-#[cfg(test)]
 mod governance_neurons;
 
 #[cfg(test)]

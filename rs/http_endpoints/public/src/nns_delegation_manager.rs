@@ -220,17 +220,16 @@ async fn try_fetch_delegation_from_nns(
     registry_client: &dyn RegistryClient,
     tls_config: &(dyn TlsConfig + Send + Sync),
 ) -> Result<CertificateDelegation, BoxError> {
-    let (peer_id, node) =
-        match get_random_node_from_nns_subnet(registry_client, *nns_subnet_id).await {
-            Ok(node_topology) => node_topology,
-            Err(err) => {
-                fatal!(
-                    log,
-                    "Could not find a node from the root subnet to talk to. Error :{}",
-                    err
-                );
-            }
-        };
+    let (peer_id, node) = match get_random_node_from_nns_subnet(registry_client, *nns_subnet_id) {
+        Ok(node_topology) => node_topology,
+        Err(err) => {
+            fatal!(
+                log,
+                "Could not find a node from the root subnet to talk to. Error :{}",
+                err
+            );
+        }
+    };
 
     let envelope = HttpRequestEnvelope {
         content: HttpReadStateContent::ReadState {
@@ -269,12 +268,18 @@ async fn try_fetch_delegation_from_nns(
         .client_config(peer_id, registry_version)
         .map_err(|err| format!("Retrieving TLS client config failed: {:?}.", err))?;
 
+    info!(log, "Establishing TCP connection to {peer_id} @ {addr}");
     let tcp_stream: TcpStream = TcpStream::connect(addr)
         .await
         .map_err(|err| format!("Could not connect to node {}. {:?}.", addr, err))?;
 
     let tls_connector = TlsConnector::from(Arc::new(tls_client_config));
     let irrelevant_domain = "domain.is-irrelevant-as-hostname-verification-is.disabled";
+
+    info!(
+        log,
+        "Establishing TLS stream to {peer_id}. Tcp stream: {tcp_stream:?}"
+    );
     let tls_stream = tls_connector
         .connect(
             irrelevant_domain
@@ -291,6 +296,10 @@ async fn try_fetch_delegation_from_nns(
             )
         })?;
 
+    info!(
+        log,
+        "Establishing HTTP connection to {peer_id}. Tls stream: {tls_stream:?}"
+    );
     let (mut request_sender, connection) =
         hyper::client::conn::http1::handshake(TokioIo::new(tls_stream)).await?;
 
@@ -416,7 +425,7 @@ async fn try_fetch_delegation_from_nns(
     Ok(delegation)
 }
 
-async fn get_random_node_from_nns_subnet(
+fn get_random_node_from_nns_subnet(
     registry_client: &dyn RegistryClient,
     nns_subnet_id: SubnetId,
 ) -> Result<(NodeId, ConnectionEndpoint), String> {

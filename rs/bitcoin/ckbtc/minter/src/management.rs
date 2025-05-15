@@ -10,9 +10,10 @@ use ic_btc_interface::{Address, MillisatoshiPerByte, Utxo};
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::management_canister::bitcoin::UtxoFilter;
-use ic_management_canister_types_private::{
-    DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
+use ic_management_canister_types::{
+    EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgs, EcdsaPublicKeyResult,
 };
+use ic_management_canister_types_private::DerivationPath;
 use serde::de::DeserializeOwned;
 use std::fmt;
 
@@ -255,9 +256,9 @@ pub async fn ecdsa_public_key(
     call(
         "ecdsa_public_key",
         /*payment=*/ 0,
-        &ECDSAPublicKeyArgs {
+        &EcdsaPublicKeyArgs {
             canister_id: None,
-            derivation_path,
+            derivation_path: derivation_path.into_inner(),
             key_id: EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,
                 name: key_name,
@@ -265,7 +266,7 @@ pub async fn ecdsa_public_key(
         },
     )
     .await
-    .map(|response: ECDSAPublicKeyResponse| ECDSAPublicKey {
+    .map(|response: EcdsaPublicKeyResult| ECDSAPublicKey {
         public_key: response.public_key,
         chain_code: response.chain_code,
     })

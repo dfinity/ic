@@ -31,7 +31,7 @@ const MAX_LOGS_RESPONSE_SIZE: usize = 1 << 20;
 ///     Ok(())
 /// }
 ///
-/// #[ic_cdk_macros::query]
+/// #[ic_cdk::query]
 /// fn http_request(request: CanisterHttpRequestArgument) -> HttpResponse {
 ///     let path = match request.url.find('?') {
 ///         None => &request.url[..],
@@ -92,7 +92,7 @@ pub fn serve_metrics(
 /// declare_log_buffer!(name = INFO, capacity = 100);
 /// declare_log_buffer!(name = ERROR, capacity = 100);
 ///
-/// #[ic_cdk_macros::query]
+/// #[ic_cdk::query]
 /// fn http_request(request: CanisterHttpRequestArgument) -> HttpResponse {
 ///     log!(INFO, "This is an INFO log");
 ///     log!(ERROR, "This is an ERROR log");
