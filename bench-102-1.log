@@ -1,0 +1,737 @@
+00:00:55 > embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_checkpoint 199.7 ms
+00:01:00 > embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_page_delta 215.1 ms
+00:01:05 > embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_mix 248.7 ms
+00:01:08 > embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_new_allocation 161.6 ms
+00:01:12 > embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_checkpoint 175.3 ms
+00:01:15 > embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_page_delta 156.1 ms
+00:01:19 > embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_mix 182.2 ms
+00:01:22 > embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_new_allocation 152.4 ms
+00:01:25 > embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_checkpoint 22.3 ms
+00:01:28 > embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_page_delta 19.2 ms
+00:01:32 > embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_mix 22.2 ms
+00:01:34 > embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_new_allocation 18.4 ms
+00:01:38 > embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_checkpoint 10.9 ms
+00:01:41 > embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_page_delta 9.6 ms
+00:01:44 > embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_mix 10.6 ms
+00:01:47 > embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_new_allocation 9.8 ms
+00:01:50 > embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_checkpoint 0.9 ms
+00:01:53 > embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_page_delta 0.9 ms
+00:01:57 > embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_mix 1.0 ms
+00:02:00 > embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_new_allocation 0.8 ms
+00:02:03 > embedders:heap/query/wasm32_query_read_fwd_102m_step_4m_checkpoint 0.5 ms
+00:02:06 > embedders:heap/query/wasm32_query_read_fwd_102m_step_4m_page_delta 0.5 ms
+00:02:09 > embedders:heap/query/wasm32_query_read_fwd_102m_step_4m_mix 0.5 ms
+00:02:11 > embedders:heap/query/wasm32_query_read_fwd_102m_step_4m_new_allocation 0.5 ms
+00:02:17 > embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_checkpoint 193.3 ms
+00:02:27 > embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_page_delta 291.5 ms
+00:02:41 > embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_mix 332.1 ms
+00:02:44 > embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_new_allocation 159.4 ms
+00:02:50 > embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_checkpoint 141.8 ms
+00:02:58 > embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_page_delta 135.2 ms
+00:03:11 > embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_mix 153.7 ms
+00:03:14 > embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_new_allocation 132.1 ms
+00:03:17 > embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_checkpoint 17.1 ms
+00:03:24 > embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_page_delta 22.9 ms
+00:03:36 > embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_mix 25.1 ms
+00:03:39 > embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_new_allocation 16.8 ms
+00:03:42 > embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_checkpoint 10.1 ms
+00:03:49 > embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_page_delta 14.2 ms
+00:04:01 > embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_mix 15.6 ms
+00:04:04 > embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_new_allocation 8.5 ms
+00:04:07 > embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_checkpoint 1.1 ms
+00:04:13 > embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_page_delta 0.9 ms
+00:04:25 > embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_mix 1.0 ms
+00:04:29 > embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_new_allocation 0.8 ms
+00:04:33 > embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_checkpoint 0.9 ms
+00:04:39 > embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_page_delta 0.6 ms
+00:04:51 > embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_mix 0.7 ms
+00:04:54 > embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_new_allocation 0.5 ms
+00:04:59 > embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_checkpoint 253.8 ms
+00:05:04 > embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_page_delta 247.1 ms
+00:05:10 > embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_mix 279.5 ms
+00:05:14 > embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_new_allocation 220.9 ms
+00:05:19 > embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_checkpoint 250.1 ms
+00:05:23 > embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_page_delta 225.2 ms
+00:05:28 > embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_mix 258.2 ms
+00:05:32 > embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_new_allocation 215.7 ms
+00:05:37 > embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_checkpoint 29.4 ms
+00:05:40 > embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_page_delta 25.8 ms
+00:05:45 > embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_mix 29.0 ms
+00:05:48 > embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_new_allocation 24.0 ms
+00:05:52 > embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_checkpoint 13.9 ms
+00:05:56 > embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_page_delta 12.7 ms
+00:06:00 > embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_mix 14.1 ms
+00:06:03 > embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_new_allocation 12.3 ms
+00:06:06 > embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_checkpoint 1.1 ms
+00:06:09 > embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_page_delta 1.0 ms
+00:06:12 > embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_mix 1.1 ms
+00:06:15 > embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_new_allocation 1.1 ms
+00:06:18 > embedders:heap/query/wasm32_query_write_fwd_102m_step_4m_checkpoint 0.6 ms
+00:06:21 > embedders:heap/query/wasm32_query_write_fwd_102m_step_4m_page_delta 0.6 ms
+00:06:24 > embedders:heap/query/wasm32_query_write_fwd_102m_step_4m_mix 0.6 ms
+00:06:26 > embedders:heap/query/wasm32_query_write_fwd_102m_step_4m_new_allocation 0.6 ms
+00:06:36 > embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_checkpoint 404.2 ms
+00:06:48 > embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_page_delta 381.5 ms
+00:07:04 > embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_mix 419.1 ms
+00:07:10 > embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_new_allocation 338.3 ms
+00:07:18 > embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_checkpoint 304.7 ms
+00:07:29 > embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_page_delta 292.8 ms
+00:07:44 > embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_mix 329.8 ms
+00:07:49 > embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_new_allocation 264.0 ms
+00:07:53 > embedders:heap/update/wasm32_update_write_fwd_102m_step_64k_checkpoint 56.7 ms
+00:08:00 > embedders:heap/update/wasm32_update_write_fwd_102m_step_64k_page_delta 48.8 ms
+00:08:13 > embedders:heap/update/wasm32_update_write_fwd_102m_step_64k_mix 51.8 ms
+00:08:16 > embedders:heap/update/wasm32_update_write_fwd_102m_step_64k_new_allocation 34.8 ms
+00:08:19 > embedders:heap/update/wasm32_update_write_fwd_102m_step_128k_checkpoint 26.2 ms
+00:08:26 > embedders:heap/update/wasm32_update_write_fwd_102m_step_128k_page_delta 26.7 ms
+00:08:39 > embedders:heap/update/wasm32_update_write_fwd_102m_step_128k_mix 28.2 ms
+00:08:41 > embedders:heap/update/wasm32_update_write_fwd_102m_step_128k_new_allocation 17.0 ms
+00:08:45 > embedders:heap/update/wasm32_update_write_fwd_102m_step_2m_checkpoint 2.3 ms
+00:08:51 > embedders:heap/update/wasm32_update_write_fwd_102m_step_2m_page_delta 1.9 ms
+00:09:03 > embedders:heap/update/wasm32_update_write_fwd_102m_step_2m_mix 2.0 ms
+00:09:06 > embedders:heap/update/wasm32_update_write_fwd_102m_step_2m_new_allocation 1.5 ms
+00:09:09 > embedders:heap/update/wasm32_update_write_fwd_102m_step_4m_checkpoint 1.4 ms
+00:09:15 > embedders:heap/update/wasm32_update_write_fwd_102m_step_4m_page_delta 1.2 ms
+00:09:27 > embedders:heap/update/wasm32_update_write_fwd_102m_step_4m_mix 1.3 ms
+00:09:30 > embedders:heap/update/wasm32_update_write_fwd_102m_step_4m_new_allocation 0.9 ms
+00:09:38 = cbe9cf5540..a9d6c3dbb6: Embedders Heap total time: 8451 ms (regressed by 3630.6 ms / 75.3%)
+00:09:38   Top 1000 by time:
+00:09:38   + embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_mix time regressed by 256.6 ms (75.5 -> 332.1 ms)
+00:09:38   + embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_page_delta time regressed by 227.9 ms (63.6 -> 291.5 ms)
+00:09:38   + embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_checkpoint time regressed by 195.5 ms (54.5 -> 250.1 ms)
+00:09:38   + embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_checkpoint time regressed by 183.6 ms (16.1 -> 199.7 ms)
+00:09:38   + embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_checkpoint time regressed by 177.5 ms (15.8 -> 193.3 ms)
+00:09:38   + embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_new_allocation time regressed by 175.7 ms (40.0 -> 215.7 ms)
+00:09:38   + embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_mix time regressed by 169.9 ms (78.9 -> 248.7 ms)
+00:09:38   + embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_checkpoint time regressed by 164.5 ms (239.7 -> 404.2 ms)
+00:09:38   + embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_mix time regressed by 158.5 ms (260.6 -> 419.1 ms)
+00:09:38   + embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_mix time regressed by 158.4 ms (121.1 -> 279.5 ms)
+00:09:38   + embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_checkpoint time regressed by 156.6 ms (18.7 -> 175.3 ms)
+00:09:38   + embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_page_delta time regressed by 154.3 ms (92.8 -> 247.1 ms)
+00:09:38   + embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_page_delta time regressed by 149.8 ms (65.2 -> 215.1 ms)
+00:09:38   + embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_page_delta time regressed by 148.9 ms (232.7 -> 381.5 ms)
+00:09:38   + embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_checkpoint time regressed by 148.7 ms (105.2 -> 253.8 ms)
+00:09:38   + embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_new_allocation time regressed by 139.4 ms (81.5 -> 220.9 ms)
+00:09:38   + embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_new_allocation time regressed by 137.6 ms (14.8 -> 152.4 ms)
+00:09:38   + embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_new_allocation time regressed by 137.0 ms (201.3 -> 338.3 ms)
+00:09:38   + embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_new_allocation time regressed by 133.9 ms (27.7 -> 161.6 ms)
+00:09:38   + embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_new_allocation time regressed by 132.6 ms (26.8 -> 159.4 ms)
+00:09:38   + embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_checkpoint time regressed by 127.7 ms (14.1 -> 141.8 ms)
+00:09:38   + embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_new_allocation time regressed by 117.9 ms (14.2 -> 132.1 ms)
+00:09:38   + embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_checkpoint time regressed by 22.0 ms (7.5 -> 29.4 ms)
+00:09:38   + embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_new_allocation time regressed by 18.5 ms (5.5 -> 24.0 ms)
+00:09:38   + embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_new_allocation time regressed by 15.2 ms (3.2 -> 18.4 ms)
+00:09:38   + embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_new_allocation time regressed by 13.7 ms (3.1 -> 16.8 ms)
+00:09:38   + embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_checkpoint time regressed by 9.5 ms (4.4 -> 13.9 ms)
+00:09:38   + embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_new_allocation time regressed by 8.8 ms (3.5 -> 12.3 ms)
+00:09:38   + embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_new_allocation time regressed by 7.5 ms (2.3 -> 9.8 ms)
+00:09:38   + embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_new_allocation time regressed by 6.2 ms (2.3 -> 8.5 ms)
+00:09:38   + embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_mix time regressed by 5.8 ms (176.4 -> 182.2 ms)
+00:09:38   + embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_checkpoint time regressed by 4.9 ms (17.4 -> 22.3 ms)
+00:09:38   + embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_checkpoint time regressed by 3.3 ms (13.9 -> 17.1 ms)
+00:09:38   + embedders:heap/update/wasm32_update_write_fwd_102m_step_64k_checkpoint time regressed by 2.2 ms (54.5 -> 56.7 ms)
+00:09:38   + embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_checkpoint time regressed by 2.0 ms (8.1 -> 10.1 ms)
+00:09:38   + embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_checkpoint time regressed by 1.6 ms (9.4 -> 10.9 ms)
+00:09:38   + embedders:heap/update/wasm32_update_write_fwd_102m_step_64k_page_delta time regressed by 1.5 ms (47.4 -> 48.8 ms)
+00:09:38   + embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_page_delta time regressed by 1.0 ms (24.8 -> 25.8 ms)
+00:09:38   - embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_checkpoint time improved by -17.6 ms (322.4 -> 304.7 ms)
+00:09:38   - embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_page_delta time improved by -8.9 ms (301.7 -> 292.8 ms)
+00:09:38   - embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_new_allocation time improved by -7.7 ms (271.7 -> 264.0 ms)
+00:09:38   - embedders:heap/update/wasm32_update_write_fwd_102m_step_128k_checkpoint time improved by -3.0 ms (29.2 -> 26.2 ms)
+00:09:38   - embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_mix time improved by -1.0 ms (30.0 -> 29.0 ms)
+00:09:38   - embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_mix time improved by -0.8 ms (25.9 -> 25.1 ms)
+00:09:38   - embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_mix time improved by -0.6 ms (14.7 -> 14.1 ms)
+00:09:38   - embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_page_delta time improved by -0.5 ms (19.7 -> 19.2 ms)
+00:09:38   - embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_checkpoint time improved by -0.5 ms (1.5 -> 0.9 ms)
+00:09:38   - embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_checkpoint time improved by -0.4 ms (1.5 -> 1.1 ms)
+00:09:38   - embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_page_delta time improved by -0.3 ms (9.8 -> 9.6 ms)
+00:09:38   - embedders:heap/query/wasm32_query_read_fwd_102m_step_4m_checkpoint time improved by -0.3 ms (0.8 -> 0.5 ms)
+00:09:38   - embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_checkpoint time improved by -0.1 ms (1.0 -> 0.9 ms)
+00:09:38   - embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_checkpoint time improved by -0.1 ms (1.2 -> 1.1 ms)
+00:09:38   - embedders:heap/query/wasm32_query_write_fwd_102m_step_4m_checkpoint time improved by -0.1 ms (0.7 -> 0.6 ms)
+00:09:38   - embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_new_allocation time improved by -0.1 ms (0.9 -> 0.8 ms)
+00:09:38   - embedders:heap/query/wasm32_query_write_fwd_102m_step_4m_new_allocation time improved by -0.0 ms (0.6 -> 0.6 ms)
+00:09:38   - embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_mix time improved by -0.0 ms (0.7 -> 0.7 ms)
+00:09:38   - embedders:heap/update/wasm32_update_write_fwd_102m_step_4m_page_delta time improved by -0.0 ms (1.2 -> 1.2 ms)
+00:09:38   - embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_new_allocation time improved by -0.0 ms (0.6 -> 0.5 ms)
+00:09:38   - embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_new_allocation time improved by -0.0 ms (0.9 -> 0.8 ms)
+00:09:38   - embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_page_delta time improved by -0.0 ms (1.0 -> 1.0 ms)
+00:09:38   Top 1000 by percentage:
+00:09:38   + embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_checkpoint time regressed by 1141.8% (16.1 -> 199.7 ms)
+00:09:38   + embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_checkpoint time regressed by 1121.5% (15.8 -> 193.3 ms)
+00:09:38   + embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_new_allocation time regressed by 928.5% (14.8 -> 152.4 ms)
+00:09:38   + embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_checkpoint time regressed by 903.1% (14.1 -> 141.8 ms)
+00:09:38   + embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_checkpoint time regressed by 838.3% (18.7 -> 175.3 ms)
+00:09:38   + embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_new_allocation time regressed by 832.8% (14.2 -> 132.1 ms)
+00:09:38   + embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_new_allocation time regressed by 494.4% (26.8 -> 159.4 ms)
+00:09:38   + embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_new_allocation time regressed by 482.7% (27.7 -> 161.6 ms)
+00:09:38   + embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_new_allocation time regressed by 477.4% (3.2 -> 18.4 ms)
+00:09:38   + embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_new_allocation time regressed by 439.7% (3.1 -> 16.8 ms)
+00:09:38   + embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_new_allocation time regressed by 438.8% (40.0 -> 215.7 ms)
+00:09:38   + embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_checkpoint time regressed by 358.7% (54.5 -> 250.1 ms)
+00:09:38   + embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_page_delta time regressed by 358.0% (63.6 -> 291.5 ms)
+00:09:38   + embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_mix time regressed by 339.9% (75.5 -> 332.1 ms)
+00:09:38   + embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_new_allocation time regressed by 334.1% (5.5 -> 24.0 ms)
+00:09:38   + embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_new_allocation time regressed by 322.1% (2.3 -> 9.8 ms)
+00:09:38   + embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_checkpoint time regressed by 295.0% (7.5 -> 29.4 ms)
+00:09:38   + embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_new_allocation time regressed by 269.6% (2.3 -> 8.5 ms)
+00:09:38   + embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_new_allocation time regressed by 252.1% (3.5 -> 12.3 ms)
+00:09:38   + embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_page_delta time regressed by 229.6% (65.2 -> 215.1 ms)
+00:09:38   + embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_checkpoint time regressed by 218.0% (4.4 -> 13.9 ms)
+00:09:38   + embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_mix time regressed by 215.3% (78.9 -> 248.7 ms)
+00:09:38   + embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_new_allocation time regressed by 170.9% (81.5 -> 220.9 ms)
+00:09:38   + embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_page_delta time regressed by 166.3% (92.8 -> 247.1 ms)
+00:09:38   + embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_checkpoint time regressed by 141.3% (105.2 -> 253.8 ms)
+00:09:38   + embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_mix time regressed by 130.8% (121.1 -> 279.5 ms)
+00:09:38   + embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_checkpoint time regressed by 68.7% (239.7 -> 404.2 ms)
+00:09:38   + embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_new_allocation time regressed by 68.1% (201.3 -> 338.3 ms)
+00:09:38   + embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_page_delta time regressed by 64.0% (232.7 -> 381.5 ms)
+00:09:38   + embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_mix time regressed by 60.8% (260.6 -> 419.1 ms)
+00:09:38   + embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_checkpoint time regressed by 28.3% (17.4 -> 22.3 ms)
+00:09:38   + embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_checkpoint time regressed by 24.2% (8.1 -> 10.1 ms)
+00:09:38   + embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_checkpoint time regressed by 23.7% (13.9 -> 17.1 ms)
+00:09:38   + embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_checkpoint time regressed by 16.7% (9.4 -> 10.9 ms)
+00:09:38   + embedders:heap/update/wasm32_update_write_fwd_102m_step_64k_checkpoint time regressed by 4.1% (54.5 -> 56.7 ms)
+00:09:38   + embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_page_delta time regressed by 4.0% (24.8 -> 25.8 ms)
+00:09:38   + embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_mix time regressed by 3.3% (176.4 -> 182.2 ms)
+00:09:38   + embedders:heap/update/wasm32_update_write_fwd_102m_step_64k_page_delta time regressed by 3.1% (47.4 -> 48.8 ms)
+00:09:38   - embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_checkpoint time improved by -36.6% (1.5 -> 0.9 ms)
+00:09:38   - embedders:heap/query/wasm32_query_read_fwd_102m_step_4m_checkpoint time improved by -33.5% (0.8 -> 0.5 ms)
+00:09:38   - embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_checkpoint time improved by -24.2% (1.5 -> 1.1 ms)
+00:09:38   - embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_checkpoint time improved by -14.5% (1.0 -> 0.9 ms)
+00:09:38   - embedders:heap/update/wasm32_update_write_fwd_102m_step_128k_checkpoint time improved by -10.4% (29.2 -> 26.2 ms)
+00:09:38   - embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_new_allocation time improved by -8.1% (0.9 -> 0.8 ms)
+00:09:38   - embedders:heap/query/wasm32_query_write_fwd_102m_step_4m_checkpoint time improved by -7.7% (0.7 -> 0.6 ms)
+00:09:38   - embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_checkpoint time improved by -5.5% (322.4 -> 304.7 ms)
+00:09:38   - embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_checkpoint time improved by -5.0% (1.2 -> 1.1 ms)
+00:09:38   - embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_new_allocation time improved by -4.8% (0.9 -> 0.8 ms)
+00:09:38   - embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_page_delta time improved by -4.8% (1.0 -> 1.0 ms)
+00:09:38   - embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_new_allocation time improved by -4.7% (0.6 -> 0.5 ms)
+00:09:38   - embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_mix time improved by -4.3% (14.7 -> 14.1 ms)
+00:09:38   - embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_mix time improved by -3.3% (30.0 -> 29.0 ms)
+00:09:38   - embedders:heap/update/wasm32_update_write_fwd_102m_step_4m_page_delta time improved by -3.2% (1.2 -> 1.2 ms)
+00:09:38   - embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_mix time improved by -3.1% (25.9 -> 25.1 ms)
+00:09:38   - embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_page_delta time improved by -2.9% (301.7 -> 292.8 ms)
+00:09:38   - embedders:heap/query/wasm32_query_write_fwd_102m_step_4m_new_allocation time improved by -2.8% (0.6 -> 0.6 ms)
+00:09:38   - embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_mix time improved by -2.8% (0.7 -> 0.7 ms)
+00:09:38   - embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_page_delta time improved by -2.8% (19.7 -> 19.2 ms)
+00:09:38   - embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_new_allocation time improved by -2.8% (271.7 -> 264.0 ms)
+00:09:38   - embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_page_delta time improved by -2.7% (9.8 -> 9.6 ms)
+00:09:42 > embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_checkpoint 200.4 ms
+00:09:47 > embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_page_delta 216.4 ms
+00:09:52 > embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_mix 255.5 ms
+00:09:55 > embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_new_allocation 164.0 ms
+00:09:59 > embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_checkpoint 178.2 ms
+00:10:02 > embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_page_delta 156.2 ms
+00:10:06 > embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_mix 180.5 ms
+00:10:09 > embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_new_allocation 152.4 ms
+00:10:12 > embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_checkpoint 21.3 ms
+00:10:15 > embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_page_delta 19.2 ms
+00:10:19 > embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_mix 21.1 ms
+00:10:21 > embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_new_allocation 18.7 ms
+00:10:25 > embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_checkpoint 11.0 ms
+00:10:28 > embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_page_delta 9.8 ms
+00:10:31 > embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_mix 10.7 ms
+00:10:34 > embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_new_allocation 9.6 ms
+00:10:38 > embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_checkpoint 1.0 ms
+00:10:41 > embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_page_delta 0.8 ms
+00:10:45 > embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_mix 0.9 ms
+00:10:48 > embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_new_allocation 0.8 ms
+00:10:51 > embedders:heap/query/wasm32_query_read_fwd_102m_step_4m_checkpoint 0.5 ms
+00:10:54 > embedders:heap/query/wasm32_query_read_fwd_102m_step_4m_page_delta 0.5 ms
+00:10:57 > embedders:heap/query/wasm32_query_read_fwd_102m_step_4m_mix 0.5 ms
+00:10:59 > embedders:heap/query/wasm32_query_read_fwd_102m_step_4m_new_allocation 0.5 ms
+00:11:05 > embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_checkpoint 192.4 ms
+00:11:15 > embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_page_delta 288.3 ms
+00:11:29 > embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_mix 339.0 ms
+00:11:33 > embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_new_allocation 158.5 ms
+00:11:38 > embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_checkpoint 137.7 ms
+00:11:46 > embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_page_delta 139.1 ms
+00:11:59 > embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_mix 155.6 ms
+00:12:02 > embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_new_allocation 131.4 ms
+00:12:05 > embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_checkpoint 17.2 ms
+00:12:12 > embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_page_delta 22.8 ms
+00:12:24 > embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_mix 25.4 ms
+00:12:27 > embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_new_allocation 16.5 ms
+00:12:31 > embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_checkpoint 8.9 ms
+00:12:37 > embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_page_delta 14.4 ms
+00:12:49 > embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_mix 15.1 ms
+00:12:52 > embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_new_allocation 8.4 ms
+00:12:55 > embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_checkpoint 1.1 ms
+00:13:02 > embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_page_delta 0.9 ms
+00:13:14 > embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_mix 1.0 ms
+00:13:17 > embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_new_allocation 0.8 ms
+00:13:20 > embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_checkpoint 0.9 ms
+00:13:26 > embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_page_delta 0.6 ms
+00:13:39 > embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_mix 0.7 ms
+00:13:42 > embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_new_allocation 0.5 ms
+00:13:47 > embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_checkpoint 256.4 ms
+00:13:52 > embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_page_delta 247.7 ms
+00:13:58 > embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_mix 283.5 ms
+00:14:02 > embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_new_allocation 222.9 ms
+00:14:06 > embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_checkpoint 247.5 ms
+00:14:11 > embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_page_delta 225.1 ms
+00:14:16 > embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_mix 253.4 ms
+00:14:20 > embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_new_allocation 224.5 ms
+00:14:25 > embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_checkpoint 29.1 ms
+00:14:28 > embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_page_delta 25.0 ms
+00:14:33 > embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_mix 28.7 ms
+00:14:36 > embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_new_allocation 23.9 ms
+00:14:40 > embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_checkpoint 14.4 ms
+00:14:44 > embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_page_delta 12.7 ms
+00:14:48 > embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_mix 14.4 ms
+00:14:51 > embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_new_allocation 12.3 ms
+00:14:54 > embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_checkpoint 1.1 ms
+00:14:57 > embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_page_delta 1.0 ms
+00:15:00 > embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_mix 1.1 ms
+00:15:04 > embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_new_allocation 1.0 ms
+00:15:07 > embedders:heap/query/wasm32_query_write_fwd_102m_step_4m_checkpoint 0.6 ms
+00:15:10 > embedders:heap/query/wasm32_query_write_fwd_102m_step_4m_page_delta 0.6 ms
+00:15:13 > embedders:heap/query/wasm32_query_write_fwd_102m_step_4m_mix 0.7 ms
+00:15:16 > embedders:heap/query/wasm32_query_write_fwd_102m_step_4m_new_allocation 0.6 ms
+00:15:25 > embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_checkpoint 401.3 ms
+00:15:37 > embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_page_delta 383.5 ms
+00:15:53 > embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_mix 420.3 ms
+00:16:00 > embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_new_allocation 338.2 ms
+00:16:07 > embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_checkpoint 307.2 ms
+00:16:19 > embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_page_delta 300.2 ms
+00:16:33 > embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_mix 328.6 ms
+00:16:39 > embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_new_allocation 268.9 ms
+00:16:43 > embedders:heap/update/wasm32_update_write_fwd_102m_step_64k_checkpoint 58.4 ms
+00:16:50 > embedders:heap/update/wasm32_update_write_fwd_102m_step_64k_page_delta 47.5 ms
+00:17:03 > embedders:heap/update/wasm32_update_write_fwd_102m_step_64k_mix 51.8 ms
+00:17:06 > embedders:heap/update/wasm32_update_write_fwd_102m_step_64k_new_allocation 35.2 ms
+00:17:09 > embedders:heap/update/wasm32_update_write_fwd_102m_step_128k_checkpoint 29.0 ms
+00:17:16 > embedders:heap/update/wasm32_update_write_fwd_102m_step_128k_page_delta 27.4 ms
+00:17:29 > embedders:heap/update/wasm32_update_write_fwd_102m_step_128k_mix 28.6 ms
+00:17:32 > embedders:heap/update/wasm32_update_write_fwd_102m_step_128k_new_allocation 17.0 ms
+00:17:35 > embedders:heap/update/wasm32_update_write_fwd_102m_step_2m_checkpoint 2.1 ms
+00:17:41 > embedders:heap/update/wasm32_update_write_fwd_102m_step_2m_page_delta 1.9 ms
+00:17:53 > embedders:heap/update/wasm32_update_write_fwd_102m_step_2m_mix 2.1 ms
+00:17:57 > embedders:heap/update/wasm32_update_write_fwd_102m_step_2m_new_allocation 1.5 ms
+00:18:00 > embedders:heap/update/wasm32_update_write_fwd_102m_step_4m_checkpoint 1.3 ms
+00:18:06 > embedders:heap/update/wasm32_update_write_fwd_102m_step_4m_page_delta 1.2 ms
+00:18:19 > embedders:heap/update/wasm32_update_write_fwd_102m_step_4m_mix 1.3 ms
+00:18:22 > embedders:heap/update/wasm32_update_write_fwd_102m_step_4m_new_allocation 0.9 ms
+00:18:23 ^ improved: embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_mix (182.2 -> 180.5 ms)
+00:18:23 ^ improved: embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_checkpoint (22.3 -> 21.3 ms)
+00:18:23 ^ improved: embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_page_delta (19.2 -> 19.2 ms)
+00:18:23 ^ improved: embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_mix (22.2 -> 21.1 ms)
+00:18:23 ^ improved: embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_new_allocation (9.8 -> 9.6 ms)
+00:18:24 ^ improved: embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_page_delta (0.9 -> 0.8 ms)
+00:18:24 ^ improved: embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_mix (1.0 -> 0.9 ms)
+00:18:24 ^ improved: embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_new_allocation (0.8 -> 0.8 ms)
+00:18:24 ^ improved: embedders:heap/query/wasm32_query_read_fwd_102m_step_4m_mix (0.5 -> 0.5 ms)
+00:18:24 ^ improved: embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_checkpoint (193.3 -> 192.4 ms)
+00:18:24 ^ improved: embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_page_delta (291.5 -> 288.3 ms)
+00:18:24 ^ improved: embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_new_allocation (159.4 -> 158.5 ms)
+00:18:24 ^ improved: embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_checkpoint (141.8 -> 137.7 ms)
+00:18:25 ^ improved: embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_new_allocation (132.1 -> 131.4 ms)
+00:18:25 ^ improved: embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_page_delta (22.9 -> 22.8 ms)
+00:18:25 ^ improved: embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_new_allocation (16.8 -> 16.5 ms)
+00:18:25 ^ improved: embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_checkpoint (10.1 -> 8.9 ms)
+00:18:25 ^ improved: embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_mix (15.6 -> 15.1 ms)
+00:18:25 ^ improved: embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_new_allocation (8.5 -> 8.4 ms)
+00:18:25 ^ improved: embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_checkpoint (1.1 -> 1.1 ms)
+00:18:25 ^ improved: embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_page_delta (0.9 -> 0.9 ms)
+00:18:25 ^ improved: embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_new_allocation (0.8 -> 0.8 ms)
+00:18:26 ^ improved: embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_page_delta (0.6 -> 0.6 ms)
+00:18:26 ^ improved: embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_mix (0.7 -> 0.7 ms)
+00:18:26 ^ improved: embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_checkpoint (250.1 -> 247.5 ms)
+00:18:26 ^ improved: embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_page_delta (225.2 -> 225.1 ms)
+00:18:26 ^ improved: embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_mix (258.2 -> 253.4 ms)
+00:18:26 ^ improved: embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_checkpoint (29.4 -> 29.1 ms)
+00:18:26 ^ improved: embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_page_delta (25.8 -> 25.0 ms)
+00:18:26 ^ improved: embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_mix (29.0 -> 28.7 ms)
+00:18:26 ^ improved: embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_new_allocation (24.0 -> 23.9 ms)
+00:18:27 ^ improved: embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_new_allocation (1.1 -> 1.0 ms)
+00:18:27 ^ improved: embedders:heap/query/wasm32_query_write_fwd_102m_step_4m_checkpoint (0.6 -> 0.6 ms)
+00:18:27 ^ improved: embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_checkpoint (404.2 -> 401.3 ms)
+00:18:28 ^ improved: embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_new_allocation (338.3 -> 338.2 ms)
+00:18:28 ^ improved: embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_mix (329.8 -> 328.6 ms)
+00:18:28 ^ improved: embedders:heap/update/wasm32_update_write_fwd_102m_step_64k_page_delta (48.8 -> 47.5 ms)
+00:18:28 ^ improved: embedders:heap/update/wasm32_update_write_fwd_102m_step_128k_new_allocation (17.0 -> 17.0 ms)
+00:18:28 ^ improved: embedders:heap/update/wasm32_update_write_fwd_102m_step_2m_checkpoint (2.3 -> 2.1 ms)
+00:18:29 ^ improved: embedders:heap/update/wasm32_update_write_fwd_102m_step_2m_page_delta (1.9 -> 1.9 ms)
+00:18:29 ^ improved: embedders:heap/update/wasm32_update_write_fwd_102m_step_2m_new_allocation (1.5 -> 1.5 ms)
+00:18:29 ^ improved: embedders:heap/update/wasm32_update_write_fwd_102m_step_4m_checkpoint (1.4 -> 1.3 ms)
+00:18:29 ^ improved: embedders:heap/update/wasm32_update_write_fwd_102m_step_4m_new_allocation (0.9 -> 0.9 ms)
+00:18:36 = cbe9cf5540..a9d6c3dbb6: Embedders Heap total time: 8420 ms (regressed by 3599.6 ms / 74.7%)
+00:18:36   Top 1000 by time:
+00:18:36   + embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_mix time regressed by 256.6 ms (75.5 -> 332.1 ms)
+00:18:36   + embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_page_delta time regressed by 224.7 ms (63.6 -> 288.3 ms)
+00:18:36   + embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_checkpoint time regressed by 193.0 ms (54.5 -> 247.5 ms)
+00:18:36   + embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_checkpoint time regressed by 183.6 ms (16.1 -> 199.7 ms)
+00:18:36   + embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_checkpoint time regressed by 176.6 ms (15.8 -> 192.4 ms)
+00:18:36   + embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_new_allocation time regressed by 175.7 ms (40.0 -> 215.7 ms)
+00:18:36   + embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_mix time regressed by 169.9 ms (78.9 -> 248.7 ms)
+00:18:36   + embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_checkpoint time regressed by 161.6 ms (239.7 -> 401.3 ms)
+00:18:36   + embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_mix time regressed by 158.5 ms (260.6 -> 419.1 ms)
+00:18:36   + embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_mix time regressed by 158.4 ms (121.1 -> 279.5 ms)
+00:18:36   + embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_checkpoint time regressed by 156.6 ms (18.7 -> 175.3 ms)
+00:18:36   + embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_page_delta time regressed by 154.3 ms (92.8 -> 247.1 ms)
+00:18:36   + embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_page_delta time regressed by 149.8 ms (65.2 -> 215.1 ms)
+00:18:36   + embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_page_delta time regressed by 148.9 ms (232.7 -> 381.5 ms)
+00:18:36   + embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_checkpoint time regressed by 148.7 ms (105.2 -> 253.8 ms)
+00:18:36   + embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_new_allocation time regressed by 139.4 ms (81.5 -> 220.9 ms)
+00:18:36   + embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_new_allocation time regressed by 137.6 ms (14.8 -> 152.4 ms)
+00:18:36   + embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_new_allocation time regressed by 136.9 ms (201.3 -> 338.2 ms)
+00:18:36   + embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_new_allocation time regressed by 133.9 ms (27.7 -> 161.6 ms)
+00:18:36   + embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_new_allocation time regressed by 131.7 ms (26.8 -> 158.5 ms)
+00:18:36   + embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_checkpoint time regressed by 123.6 ms (14.1 -> 137.7 ms)
+00:18:36   + embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_new_allocation time regressed by 117.2 ms (14.2 -> 131.4 ms)
+00:18:36   + embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_checkpoint time regressed by 21.6 ms (7.5 -> 29.1 ms)
+00:18:36   + embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_new_allocation time regressed by 18.3 ms (5.5 -> 23.9 ms)
+00:18:36   + embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_new_allocation time regressed by 15.2 ms (3.2 -> 18.4 ms)
+00:18:36   + embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_new_allocation time regressed by 13.4 ms (3.1 -> 16.5 ms)
+00:18:36   + embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_checkpoint time regressed by 9.5 ms (4.4 -> 13.9 ms)
+00:18:36   + embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_new_allocation time regressed by 8.8 ms (3.5 -> 12.3 ms)
+00:18:36   + embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_new_allocation time regressed by 7.3 ms (2.3 -> 9.6 ms)
+00:18:36   + embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_new_allocation time regressed by 6.1 ms (2.3 -> 8.4 ms)
+00:18:36   + embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_mix time regressed by 4.2 ms (176.4 -> 180.5 ms)
+00:18:36   + embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_checkpoint time regressed by 3.9 ms (17.4 -> 21.3 ms)
+00:18:36   + embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_checkpoint time regressed by 3.3 ms (13.9 -> 17.1 ms)
+00:18:36   + embedders:heap/update/wasm32_update_write_fwd_102m_step_64k_checkpoint time regressed by 2.2 ms (54.5 -> 56.7 ms)
+00:18:36   + embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_checkpoint time regressed by 1.6 ms (9.4 -> 10.9 ms)
+00:18:36   - embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_checkpoint time improved by -17.6 ms (322.4 -> 304.7 ms)
+00:18:36   - embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_page_delta time improved by -8.9 ms (301.7 -> 292.8 ms)
+00:18:36   - embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_new_allocation time improved by -7.7 ms (271.7 -> 264.0 ms)
+00:18:36   - embedders:heap/update/wasm32_update_write_fwd_102m_step_128k_checkpoint time improved by -3.0 ms (29.2 -> 26.2 ms)
+00:18:36   - embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_mix time improved by -1.3 ms (30.0 -> 28.7 ms)
+00:18:36   - embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_mix time improved by -0.8 ms (25.9 -> 25.1 ms)
+00:18:36   - embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_mix time improved by -0.7 ms (21.8 -> 21.1 ms)
+00:18:36   - embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_page_delta time improved by -0.6 ms (19.7 -> 19.2 ms)
+00:18:36   - embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_mix time improved by -0.6 ms (14.7 -> 14.1 ms)
+00:18:36   - embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_checkpoint time improved by -0.5 ms (1.5 -> 0.9 ms)
+00:18:36   - embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_checkpoint time improved by -0.4 ms (1.5 -> 1.1 ms)
+00:18:36   - embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_page_delta time improved by -0.3 ms (9.8 -> 9.6 ms)
+00:18:36   - embedders:heap/query/wasm32_query_read_fwd_102m_step_4m_checkpoint time improved by -0.3 ms (0.8 -> 0.5 ms)
+00:18:36   - embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_checkpoint time improved by -0.1 ms (1.0 -> 0.9 ms)
+00:18:36   - embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_checkpoint time improved by -0.1 ms (1.2 -> 1.1 ms)
+00:18:36   - embedders:heap/update/wasm32_update_write_fwd_102m_step_2m_checkpoint time improved by -0.1 ms (2.2 -> 2.1 ms)
+00:18:36   - embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_new_allocation time improved by -0.1 ms (1.1 -> 1.0 ms)
+00:18:36   - embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_new_allocation time improved by -0.1 ms (0.9 -> 0.8 ms)
+00:18:36   - embedders:heap/query/wasm32_query_write_fwd_102m_step_4m_checkpoint time improved by -0.1 ms (0.7 -> 0.6 ms)
+00:18:36   - embedders:heap/query/wasm32_query_write_fwd_102m_step_4m_new_allocation time improved by -0.0 ms (0.6 -> 0.6 ms)
+00:18:36   - embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_mix time improved by -0.0 ms (0.7 -> 0.7 ms)
+00:18:36   - embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_page_delta time improved by -0.0 ms (1.0 -> 0.9 ms)
+00:18:36   - embedders:heap/update/wasm32_update_write_fwd_102m_step_4m_page_delta time improved by -0.0 ms (1.2 -> 1.2 ms)
+00:18:36   - embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_page_delta time improved by -0.0 ms (0.8 -> 0.8 ms)
+00:18:36   - embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_new_allocation time improved by -0.0 ms (0.6 -> 0.5 ms)
+00:18:36   - embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_page_delta time improved by -0.0 ms (1.0 -> 1.0 ms)
+00:18:36   - embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_new_allocation time improved by -0.0 ms (0.9 -> 0.8 ms)
+00:18:36   Top 1000 by percentage:
+00:18:36   + embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_checkpoint time regressed by 1141.8% (16.1 -> 199.7 ms)
+00:18:36   + embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_checkpoint time regressed by 1115.6% (15.8 -> 192.4 ms)
+00:18:36   + embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_new_allocation time regressed by 928.5% (14.8 -> 152.4 ms)
+00:18:36   + embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_checkpoint time regressed by 874.3% (14.1 -> 137.7 ms)
+00:18:36   + embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_checkpoint time regressed by 838.3% (18.7 -> 175.3 ms)
+00:18:36   + embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_new_allocation time regressed by 827.8% (14.2 -> 131.4 ms)
+00:18:36   + embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_new_allocation time regressed by 491.1% (26.8 -> 158.5 ms)
+00:18:36   + embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_new_allocation time regressed by 482.7% (27.7 -> 161.6 ms)
+00:18:36   + embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_new_allocation time regressed by 477.4% (3.2 -> 18.4 ms)
+00:18:36   + embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_new_allocation time regressed by 438.8% (40.0 -> 215.7 ms)
+00:18:36   + embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_new_allocation time regressed by 431.0% (3.1 -> 16.5 ms)
+00:18:36   + embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_checkpoint time regressed by 354.0% (54.5 -> 247.5 ms)
+00:18:36   + embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_page_delta time regressed by 353.0% (63.6 -> 288.3 ms)
+00:18:36   + embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_mix time regressed by 339.9% (75.5 -> 332.1 ms)
+00:18:36   + embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_new_allocation time regressed by 332.2% (5.5 -> 23.9 ms)
+00:18:36   + embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_new_allocation time regressed by 313.3% (2.3 -> 9.6 ms)
+00:18:36   + embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_checkpoint time regressed by 289.8% (7.5 -> 29.1 ms)
+00:18:36   + embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_new_allocation time regressed by 262.9% (2.3 -> 8.4 ms)
+00:18:36   + embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_new_allocation time regressed by 252.1% (3.5 -> 12.3 ms)
+00:18:36   + embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_page_delta time regressed by 229.6% (65.2 -> 215.1 ms)
+00:18:36   + embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_checkpoint time regressed by 218.0% (4.4 -> 13.9 ms)
+00:18:36   + embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_mix time regressed by 215.3% (78.9 -> 248.7 ms)
+00:18:36   + embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_new_allocation time regressed by 170.9% (81.5 -> 220.9 ms)
+00:18:36   + embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_page_delta time regressed by 166.3% (92.8 -> 247.1 ms)
+00:18:36   + embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_checkpoint time regressed by 141.3% (105.2 -> 253.8 ms)
+00:18:36   + embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_mix time regressed by 130.8% (121.1 -> 279.5 ms)
+00:18:36   + embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_new_allocation time regressed by 68.0% (201.3 -> 338.2 ms)
+00:18:36   + embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_checkpoint time regressed by 67.4% (239.7 -> 401.3 ms)
+00:18:36   + embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_page_delta time regressed by 64.0% (232.7 -> 381.5 ms)
+00:18:36   + embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_mix time regressed by 60.8% (260.6 -> 419.1 ms)
+00:18:36   + embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_checkpoint time regressed by 23.7% (13.9 -> 17.1 ms)
+00:18:36   + embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_checkpoint time regressed by 22.3% (17.4 -> 21.3 ms)
+00:18:36   + embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_checkpoint time regressed by 16.7% (9.4 -> 10.9 ms)
+00:18:36   + embedders:heap/update/wasm32_update_write_fwd_102m_step_64k_checkpoint time regressed by 4.1% (54.5 -> 56.7 ms)
+00:18:36   + embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_mix time regressed by 2.4% (176.4 -> 180.5 ms)
+00:18:36   - embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_checkpoint time improved by -36.6% (1.5 -> 0.9 ms)
+00:18:36   - embedders:heap/query/wasm32_query_read_fwd_102m_step_4m_checkpoint time improved by -33.5% (0.8 -> 0.5 ms)
+00:18:36   - embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_checkpoint time improved by -25.5% (1.5 -> 1.1 ms)
+00:18:36   - embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_checkpoint time improved by -14.5% (1.0 -> 0.9 ms)
+00:18:36   - embedders:heap/update/wasm32_update_write_fwd_102m_step_128k_checkpoint time improved by -10.4% (29.2 -> 26.2 ms)
+00:18:36   - embedders:heap/query/wasm32_query_write_fwd_102m_step_4m_checkpoint time improved by -8.9% (0.7 -> 0.6 ms)
+00:18:36   - embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_new_allocation time improved by -8.6% (0.9 -> 0.8 ms)
+00:18:36   - embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_new_allocation time improved by -8.0% (1.1 -> 1.0 ms)
+00:18:36   - embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_new_allocation time improved by -5.5% (0.9 -> 0.8 ms)
+00:18:36   - embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_checkpoint time improved by -5.5% (322.4 -> 304.7 ms)
+00:18:36   - embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_checkpoint time improved by -5.0% (1.2 -> 1.1 ms)
+00:18:36   - embedders:heap/update/wasm32_update_write_fwd_102m_step_2m_checkpoint time improved by -5.0% (2.2 -> 2.1 ms)
+00:18:36   - embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_page_delta time improved by -4.8% (1.0 -> 1.0 ms)
+00:18:36   - embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_new_allocation time improved by -4.7% (0.6 -> 0.5 ms)
+00:18:36   - embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_mix time improved by -4.4% (30.0 -> 28.7 ms)
+00:18:36   - embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_mix time improved by -4.3% (14.7 -> 14.1 ms)
+00:18:36   - embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_page_delta time improved by -3.3% (0.8 -> 0.8 ms)
+00:18:36   - embedders:heap/update/wasm32_update_write_fwd_102m_step_4m_page_delta time improved by -3.2% (1.2 -> 1.2 ms)
+00:18:36   - embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_mix time improved by -3.1% (0.7 -> 0.7 ms)
+00:18:36   - embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_page_delta time improved by -3.1% (1.0 -> 0.9 ms)
+00:18:36   - embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_mix time improved by -3.1% (21.8 -> 21.1 ms)
+00:18:36   - embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_mix time improved by -3.1% (25.9 -> 25.1 ms)
+00:18:36   - embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_page_delta time improved by -2.9% (19.7 -> 19.2 ms)
+00:18:36   - embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_page_delta time improved by -2.9% (301.7 -> 292.8 ms)
+00:18:36   - embedders:heap/query/wasm32_query_write_fwd_102m_step_4m_new_allocation time improved by -2.8% (0.6 -> 0.6 ms)
+00:18:36   - embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_new_allocation time improved by -2.8% (271.7 -> 264.0 ms)
+00:18:36   - embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_page_delta time improved by -2.7% (9.8 -> 9.6 ms)
+00:18:41 > embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_checkpoint 200.7 ms
+00:18:45 > embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_page_delta 214.5 ms
+00:18:51 > embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_mix 257.7 ms
+00:18:54 > embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_new_allocation 163.8 ms
+00:18:58 > embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_checkpoint 176.8 ms
+00:19:01 > embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_page_delta 162.9 ms
+00:19:05 > embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_mix 178.9 ms
+00:19:08 > embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_new_allocation 153.2 ms
+00:19:11 > embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_checkpoint 21.5 ms
+00:19:14 > embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_page_delta 19.2 ms
+00:19:18 > embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_mix 21.7 ms
+00:19:20 > embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_new_allocation 18.8 ms
+00:19:24 > embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_checkpoint 10.6 ms
+00:19:26 > embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_page_delta 9.7 ms
+00:19:30 > embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_mix 10.8 ms
+00:19:33 > embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_new_allocation 9.6 ms
+00:19:37 > embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_checkpoint 1.0 ms
+00:19:40 > embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_page_delta 0.8 ms
+00:19:44 > embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_mix 0.9 ms
+00:19:47 > embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_new_allocation 0.8 ms
+00:19:50 > embedders:heap/query/wasm32_query_read_fwd_102m_step_4m_checkpoint 0.6 ms
+00:19:53 > embedders:heap/query/wasm32_query_read_fwd_102m_step_4m_page_delta 0.5 ms
+00:19:56 > embedders:heap/query/wasm32_query_read_fwd_102m_step_4m_mix 0.5 ms
+00:19:58 > embedders:heap/query/wasm32_query_read_fwd_102m_step_4m_new_allocation 0.5 ms
+00:20:03 > embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_checkpoint 193.0 ms
+00:20:14 > embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_page_delta 295.0 ms
+00:20:28 > embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_mix 340.7 ms
+00:20:32 > embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_new_allocation 159.1 ms
+00:20:37 > embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_checkpoint 138.5 ms
+00:20:46 > embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_page_delta 134.0 ms
+00:20:58 > embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_mix 155.2 ms
+00:21:01 > embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_new_allocation 123.8 ms
+00:21:04 > embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_checkpoint 17.4 ms
+00:21:11 > embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_page_delta 22.7 ms
+00:21:24 > embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_mix 26.4 ms
+00:21:27 > embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_new_allocation 16.4 ms
+00:21:30 > embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_checkpoint 9.1 ms
+00:21:37 > embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_page_delta 13.9 ms
+00:21:49 > embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_mix 15.3 ms
+00:21:52 > embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_new_allocation 8.3 ms
+00:21:55 > embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_checkpoint 1.2 ms
+00:22:01 > embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_page_delta 0.9 ms
+00:22:14 > embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_mix 1.0 ms
+00:22:18 > embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_new_allocation 0.8 ms
+00:22:21 > embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_checkpoint 0.9 ms
+00:22:27 > embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_page_delta 0.6 ms
+00:22:39 > embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_mix 0.7 ms
+00:22:42 > embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_new_allocation 0.5 ms
+00:22:47 > embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_checkpoint 257.9 ms
+00:22:52 > embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_page_delta 247.5 ms
+00:22:58 > embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_mix 286.0 ms
+00:23:02 > embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_new_allocation 224.3 ms
+00:23:07 > embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_checkpoint 248.0 ms
+00:23:12 > embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_page_delta 224.7 ms
+00:23:17 > embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_mix 269.8 ms
+00:23:21 > embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_new_allocation 224.7 ms
+00:23:25 > embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_checkpoint 29.1 ms
+00:23:29 > embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_page_delta 26.0 ms
+00:23:34 > embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_mix 28.8 ms
+00:23:37 > embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_new_allocation 25.0 ms
+00:23:41 > embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_checkpoint 14.4 ms
+00:23:45 > embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_page_delta 12.5 ms
+00:23:49 > embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_mix 14.4 ms
+00:23:52 > embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_new_allocation 12.0 ms
+00:23:55 > embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_checkpoint 1.1 ms
+00:23:58 > embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_page_delta 1.0 ms
+00:24:01 > embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_mix 1.2 ms
+00:24:04 > embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_new_allocation 1.0 ms
+00:24:07 > embedders:heap/query/wasm32_query_write_fwd_102m_step_4m_checkpoint 0.6 ms
+00:24:10 > embedders:heap/query/wasm32_query_write_fwd_102m_step_4m_page_delta 0.6 ms
+00:24:13 > embedders:heap/query/wasm32_query_write_fwd_102m_step_4m_mix 0.7 ms
+00:24:16 > embedders:heap/query/wasm32_query_write_fwd_102m_step_4m_new_allocation 0.6 ms
+00:24:25 > embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_checkpoint 398.2 ms
+00:24:37 > embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_page_delta 390.2 ms
+00:24:53 > embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_mix 423.2 ms
+00:25:00 > embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_new_allocation 344.9 ms
+00:25:08 > embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_checkpoint 310.3 ms
+00:25:19 > embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_page_delta 301.3 ms
+00:25:34 > embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_mix 334.8 ms
+00:25:39 > embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_new_allocation 270.2 ms
+00:25:43 > embedders:heap/update/wasm32_update_write_fwd_102m_step_64k_checkpoint 58.9 ms
+00:25:50 > embedders:heap/update/wasm32_update_write_fwd_102m_step_64k_page_delta 48.1 ms
+00:26:03 > embedders:heap/update/wasm32_update_write_fwd_102m_step_64k_mix 53.5 ms
+00:26:06 > embedders:heap/update/wasm32_update_write_fwd_102m_step_64k_new_allocation 34.7 ms
+00:26:10 > embedders:heap/update/wasm32_update_write_fwd_102m_step_128k_checkpoint 28.2 ms
+00:26:16 > embedders:heap/update/wasm32_update_write_fwd_102m_step_128k_page_delta 27.7 ms
+00:26:29 > embedders:heap/update/wasm32_update_write_fwd_102m_step_128k_mix 28.6 ms
+00:26:32 > embedders:heap/update/wasm32_update_write_fwd_102m_step_128k_new_allocation 16.9 ms
+00:26:35 > embedders:heap/update/wasm32_update_write_fwd_102m_step_2m_checkpoint 2.3 ms
+00:26:42 > embedders:heap/update/wasm32_update_write_fwd_102m_step_2m_page_delta 1.9 ms
+00:26:54 > embedders:heap/update/wasm32_update_write_fwd_102m_step_2m_mix 2.0 ms
+00:26:57 > embedders:heap/update/wasm32_update_write_fwd_102m_step_2m_new_allocation 1.5 ms
+00:27:00 > embedders:heap/update/wasm32_update_write_fwd_102m_step_4m_checkpoint 1.5 ms
+00:27:06 > embedders:heap/update/wasm32_update_write_fwd_102m_step_4m_page_delta 1.2 ms
+00:27:19 > embedders:heap/update/wasm32_update_write_fwd_102m_step_4m_mix 1.3 ms
+00:27:21 > embedders:heap/update/wasm32_update_write_fwd_102m_step_4m_new_allocation 0.9 ms
+00:27:22 ^ improved: embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_page_delta (215.1 -> 214.5 ms)
+00:27:22 ^ improved: embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_mix (180.5 -> 178.9 ms)
+00:27:22 ^ improved: embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_checkpoint (10.9 -> 10.6 ms)
+00:27:22 ^ improved: embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_new_allocation (9.6 -> 9.6 ms)
+00:27:23 ^ improved: embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_mix (0.9 -> 0.9 ms)
+00:27:23 ^ improved: embedders:heap/query/wasm32_query_read_fwd_102m_step_4m_mix (0.5 -> 0.5 ms)
+00:27:23 ^ improved: embedders:heap/query/wasm32_query_read_fwd_102m_step_4m_new_allocation (0.5 -> 0.5 ms)
+00:27:23 ^ improved: embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_page_delta (135.2 -> 134.0 ms)
+00:27:24 ^ improved: embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_new_allocation (131.4 -> 123.8 ms)
+00:27:24 ^ improved: embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_page_delta (22.8 -> 22.7 ms)
+00:27:24 ^ improved: embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_new_allocation (16.5 -> 16.4 ms)
+00:27:24 ^ improved: embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_page_delta (14.2 -> 13.9 ms)
+00:27:24 ^ improved: embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_new_allocation (8.4 -> 8.3 ms)
+00:27:24 ^ improved: embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_page_delta (0.9 -> 0.9 ms)
+00:27:25 ^ improved: embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_page_delta (0.6 -> 0.6 ms)
+00:27:25 ^ improved: embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_page_delta (225.1 -> 224.7 ms)
+00:27:26 ^ improved: embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_page_delta (12.7 -> 12.5 ms)
+00:27:26 ^ improved: embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_new_allocation (12.3 -> 12.0 ms)
+00:27:26 ^ improved: embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_new_allocation (1.0 -> 1.0 ms)
+00:27:26 ^ improved: embedders:heap/query/wasm32_query_write_fwd_102m_step_4m_checkpoint (0.6 -> 0.6 ms)
+00:27:26 ^ improved: embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_checkpoint (401.3 -> 398.2 ms)
+00:27:27 ^ improved: embedders:heap/update/wasm32_update_write_fwd_102m_step_64k_new_allocation (34.8 -> 34.7 ms)
+00:27:27 ^ improved: embedders:heap/update/wasm32_update_write_fwd_102m_step_128k_new_allocation (17.0 -> 16.9 ms)
+00:27:28 ^ improved: embedders:heap/update/wasm32_update_write_fwd_102m_step_2m_mix (2.0 -> 2.0 ms)
+00:27:28 ^ improved: embedders:heap/update/wasm32_update_write_fwd_102m_step_4m_mix (1.3 -> 1.3 ms)
+00:27:35 = cbe9cf5540..a9d6c3dbb6: Embedders Heap total time: 8404 ms (regressed by 3583.3 ms / 74.3%)
+00:27:35   Top 1000 by time:
+00:27:35   + embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_mix time regressed by 256.6 ms (75.5 -> 332.1 ms)
+00:27:35   + embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_page_delta time regressed by 224.7 ms (63.6 -> 288.3 ms)
+00:27:35   + embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_checkpoint time regressed by 193.0 ms (54.5 -> 247.5 ms)
+00:27:35   + embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_checkpoint time regressed by 183.6 ms (16.1 -> 199.7 ms)
+00:27:35   + embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_checkpoint time regressed by 176.6 ms (15.8 -> 192.4 ms)
+00:27:35   + embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_new_allocation time regressed by 175.7 ms (40.0 -> 215.7 ms)
+00:27:35   + embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_mix time regressed by 169.9 ms (78.9 -> 248.7 ms)
+00:27:35   + embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_checkpoint time regressed by 158.5 ms (239.7 -> 398.2 ms)
+00:27:35   + embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_mix time regressed by 158.5 ms (260.6 -> 419.1 ms)
+00:27:35   + embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_mix time regressed by 158.4 ms (121.1 -> 279.5 ms)
+00:27:35   + embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_checkpoint time regressed by 156.6 ms (18.7 -> 175.3 ms)
+00:27:35   + embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_page_delta time regressed by 154.3 ms (92.8 -> 247.1 ms)
+00:27:35   + embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_page_delta time regressed by 149.2 ms (65.2 -> 214.5 ms)
+00:27:35   + embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_page_delta time regressed by 148.9 ms (232.7 -> 381.5 ms)
+00:27:35   + embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_checkpoint time regressed by 148.7 ms (105.2 -> 253.8 ms)
+00:27:35   + embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_new_allocation time regressed by 139.4 ms (81.5 -> 220.9 ms)
+00:27:35   + embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_new_allocation time regressed by 137.6 ms (14.8 -> 152.4 ms)
+00:27:35   + embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_new_allocation time regressed by 136.9 ms (201.3 -> 338.2 ms)
+00:27:35   + embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_new_allocation time regressed by 133.9 ms (27.7 -> 161.6 ms)
+00:27:35   + embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_new_allocation time regressed by 131.7 ms (26.8 -> 158.5 ms)
+00:27:35   + embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_checkpoint time regressed by 123.6 ms (14.1 -> 137.7 ms)
+00:27:35   + embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_new_allocation time regressed by 109.6 ms (14.2 -> 123.8 ms)
+00:27:35   + embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_checkpoint time regressed by 21.6 ms (7.5 -> 29.1 ms)
+00:27:35   + embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_new_allocation time regressed by 18.3 ms (5.5 -> 23.9 ms)
+00:27:35   + embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_new_allocation time regressed by 15.2 ms (3.2 -> 18.4 ms)
+00:27:35   + embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_new_allocation time regressed by 13.3 ms (3.1 -> 16.4 ms)
+00:27:35   + embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_checkpoint time regressed by 9.5 ms (4.4 -> 13.9 ms)
+00:27:35   + embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_new_allocation time regressed by 8.5 ms (3.5 -> 12.0 ms)
+00:27:35   + embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_new_allocation time regressed by 7.3 ms (2.3 -> 9.6 ms)
+00:27:35   + embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_new_allocation time regressed by 6.0 ms (2.3 -> 8.3 ms)
+00:27:35   + embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_checkpoint time regressed by 3.9 ms (17.4 -> 21.3 ms)
+00:27:35   + embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_checkpoint time regressed by 3.3 ms (13.9 -> 17.1 ms)
+00:27:35   + embedders:heap/update/wasm32_update_write_fwd_102m_step_64k_checkpoint time regressed by 2.2 ms (54.5 -> 56.7 ms)
+00:27:35   + embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_checkpoint time regressed by 1.2 ms (9.4 -> 10.6 ms)
+00:27:35   - embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_checkpoint time improved by -17.6 ms (322.4 -> 304.7 ms)
+00:27:35   - embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_page_delta time improved by -8.9 ms (301.7 -> 292.8 ms)
+00:27:35   - embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_new_allocation time improved by -7.7 ms (271.7 -> 264.0 ms)
+00:27:35   - embedders:heap/update/wasm32_update_write_fwd_102m_step_128k_checkpoint time improved by -3.0 ms (29.2 -> 26.2 ms)
+00:27:35   - embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_mix time improved by -1.3 ms (30.0 -> 28.7 ms)
+00:27:35   - embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_mix time improved by -0.8 ms (25.9 -> 25.1 ms)
+00:27:35   - embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_mix time improved by -0.7 ms (21.8 -> 21.1 ms)
+00:27:35   - embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_page_delta time improved by -0.6 ms (19.7 -> 19.2 ms)
+00:27:35   - embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_mix time improved by -0.6 ms (14.7 -> 14.1 ms)
+00:27:35   - embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_checkpoint time improved by -0.5 ms (1.5 -> 0.9 ms)
+00:27:35   - embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_checkpoint time improved by -0.4 ms (1.5 -> 1.1 ms)
+00:27:35   - embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_page_delta time improved by -0.3 ms (14.2 -> 13.9 ms)
+00:27:35   - embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_page_delta time improved by -0.3 ms (9.8 -> 9.6 ms)
+00:27:35   - embedders:heap/query/wasm32_query_read_fwd_102m_step_4m_checkpoint time improved by -0.3 ms (0.8 -> 0.5 ms)
+00:27:35   - embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_checkpoint time improved by -0.1 ms (1.0 -> 0.9 ms)
+00:27:35   - embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_checkpoint time improved by -0.1 ms (1.2 -> 1.1 ms)
+00:27:35   - embedders:heap/update/wasm32_update_write_fwd_102m_step_2m_checkpoint time improved by -0.1 ms (2.2 -> 2.1 ms)
+00:27:35   - embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_page_delta time improved by -0.1 ms (1.0 -> 0.9 ms)
+00:27:35   - embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_new_allocation time improved by -0.1 ms (0.9 -> 0.8 ms)
+00:27:35   - embedders:heap/query/wasm32_query_write_fwd_102m_step_4m_checkpoint time improved by -0.1 ms (0.7 -> 0.6 ms)
+00:27:35   - embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_new_allocation time improved by -0.1 ms (1.1 -> 1.0 ms)
+00:27:35   - embedders:heap/query/wasm32_query_read_fwd_102m_step_4m_mix time improved by -0.0 ms (0.5 -> 0.5 ms)
+00:27:35   - embedders:heap/query/wasm32_query_write_fwd_102m_step_4m_new_allocation time improved by -0.0 ms (0.6 -> 0.6 ms)
+00:27:35   - embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_mix time improved by -0.0 ms (0.7 -> 0.7 ms)
+00:27:35   - embedders:heap/update/wasm32_update_write_fwd_102m_step_4m_page_delta time improved by -0.0 ms (1.2 -> 1.2 ms)
+00:27:35   - embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_page_delta time improved by -0.0 ms (0.8 -> 0.8 ms)
+00:27:35   - embedders:heap/query/wasm32_query_read_fwd_102m_step_4m_new_allocation time improved by -0.0 ms (0.5 -> 0.5 ms)
+00:27:35   - embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_new_allocation time improved by -0.0 ms (0.6 -> 0.5 ms)
+00:27:35   - embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_page_delta time improved by -0.0 ms (1.0 -> 1.0 ms)
+00:27:35   - embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_new_allocation time improved by -0.0 ms (0.9 -> 0.8 ms)
+00:27:35   Top 1000 by percentage:
+00:27:35   + embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_checkpoint time regressed by 1141.8% (16.1 -> 199.7 ms)
+00:27:35   + embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_checkpoint time regressed by 1115.6% (15.8 -> 192.4 ms)
+00:27:35   + embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_new_allocation time regressed by 928.5% (14.8 -> 152.4 ms)
+00:27:35   + embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_checkpoint time regressed by 874.3% (14.1 -> 137.7 ms)
+00:27:35   + embedders:heap/query/wasm32_query_read_fwd_102m_step_8k_checkpoint time regressed by 838.3% (18.7 -> 175.3 ms)
+00:27:35   + embedders:heap/update/wasm32_update_read_fwd_102m_step_8k_new_allocation time regressed by 774.1% (14.2 -> 123.8 ms)
+00:27:35   + embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_new_allocation time regressed by 491.1% (26.8 -> 158.5 ms)
+00:27:35   + embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_new_allocation time regressed by 482.7% (27.7 -> 161.6 ms)
+00:27:35   + embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_new_allocation time regressed by 477.4% (3.2 -> 18.4 ms)
+00:27:35   + embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_new_allocation time regressed by 438.8% (40.0 -> 215.7 ms)
+00:27:35   + embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_new_allocation time regressed by 429.0% (3.1 -> 16.4 ms)
+00:27:35   + embedders:heap/query/wasm32_query_write_fwd_102m_step_8k_checkpoint time regressed by 354.0% (54.5 -> 247.5 ms)
+00:27:35   + embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_page_delta time regressed by 353.0% (63.6 -> 288.3 ms)
+00:27:35   + embedders:heap/update/wasm32_update_read_fwd_102m_step_4k_mix time regressed by 339.9% (75.5 -> 332.1 ms)
+00:27:35   + embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_new_allocation time regressed by 332.2% (5.5 -> 23.9 ms)
+00:27:35   + embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_new_allocation time regressed by 312.2% (2.3 -> 9.6 ms)
+00:27:35   + embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_checkpoint time regressed by 289.8% (7.5 -> 29.1 ms)
+00:27:35   + embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_new_allocation time regressed by 258.6% (2.3 -> 8.3 ms)
+00:27:35   + embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_new_allocation time regressed by 245.1% (3.5 -> 12.0 ms)
+00:27:35   + embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_page_delta time regressed by 228.7% (65.2 -> 214.5 ms)
+00:27:35   + embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_checkpoint time regressed by 218.0% (4.4 -> 13.9 ms)
+00:27:35   + embedders:heap/query/wasm32_query_read_fwd_102m_step_4k_mix time regressed by 215.3% (78.9 -> 248.7 ms)
+00:27:35   + embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_new_allocation time regressed by 170.9% (81.5 -> 220.9 ms)
+00:27:35   + embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_page_delta time regressed by 166.3% (92.8 -> 247.1 ms)
+00:27:35   + embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_checkpoint time regressed by 141.3% (105.2 -> 253.8 ms)
+00:27:35   + embedders:heap/query/wasm32_query_write_fwd_102m_step_4k_mix time regressed by 130.8% (121.1 -> 279.5 ms)
+00:27:35   + embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_new_allocation time regressed by 68.0% (201.3 -> 338.2 ms)
+00:27:35   + embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_checkpoint time regressed by 66.1% (239.7 -> 398.2 ms)
+00:27:35   + embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_page_delta time regressed by 64.0% (232.7 -> 381.5 ms)
+00:27:35   + embedders:heap/update/wasm32_update_write_fwd_102m_step_4k_mix time regressed by 60.8% (260.6 -> 419.1 ms)
+00:27:35   + embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_checkpoint time regressed by 23.7% (13.9 -> 17.1 ms)
+00:27:35   + embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_checkpoint time regressed by 22.3% (17.4 -> 21.3 ms)
+00:27:35   + embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_checkpoint time regressed by 13.0% (9.4 -> 10.6 ms)
+00:27:35   + embedders:heap/update/wasm32_update_write_fwd_102m_step_64k_checkpoint time regressed by 4.1% (54.5 -> 56.7 ms)
+00:27:35   - embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_checkpoint time improved by -36.6% (1.5 -> 0.9 ms)
+00:27:35   - embedders:heap/query/wasm32_query_read_fwd_102m_step_4m_checkpoint time improved by -33.5% (0.8 -> 0.5 ms)
+00:27:35   - embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_checkpoint time improved by -25.5% (1.5 -> 1.1 ms)
+00:27:35   - embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_checkpoint time improved by -14.5% (1.0 -> 0.9 ms)
+00:27:35   - embedders:heap/update/wasm32_update_write_fwd_102m_step_128k_checkpoint time improved by -10.4% (29.2 -> 26.2 ms)
+00:27:35   - embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_new_allocation time improved by -9.8% (1.1 -> 1.0 ms)
+00:27:35   - embedders:heap/query/wasm32_query_write_fwd_102m_step_4m_checkpoint time improved by -9.5% (0.7 -> 0.6 ms)
+00:27:35   - embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_new_allocation time improved by -8.6% (0.9 -> 0.8 ms)
+00:27:35   - embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_new_allocation time improved by -5.5% (0.9 -> 0.8 ms)
+00:27:35   - embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_checkpoint time improved by -5.5% (322.4 -> 304.7 ms)
+00:27:35   - embedders:heap/update/wasm32_update_read_fwd_102m_step_2m_page_delta time improved by -5.4% (1.0 -> 0.9 ms)
+00:27:35   - embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_checkpoint time improved by -5.0% (1.2 -> 1.1 ms)
+00:27:35   - embedders:heap/update/wasm32_update_write_fwd_102m_step_2m_checkpoint time improved by -5.0% (2.2 -> 2.1 ms)
+00:27:35   - embedders:heap/query/wasm32_query_write_fwd_102m_step_2m_page_delta time improved by -4.8% (1.0 -> 1.0 ms)
+00:27:35   - embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_new_allocation time improved by -4.7% (0.6 -> 0.5 ms)
+00:27:35   - embedders:heap/query/wasm32_query_write_fwd_102m_step_64k_mix time improved by -4.4% (30.0 -> 28.7 ms)
+00:27:35   - embedders:heap/query/wasm32_query_write_fwd_102m_step_128k_mix time improved by -4.3% (14.7 -> 14.1 ms)
+00:27:35   - embedders:heap/query/wasm32_query_read_fwd_102m_step_4m_new_allocation time improved by -3.7% (0.5 -> 0.5 ms)
+00:27:35   - embedders:heap/query/wasm32_query_read_fwd_102m_step_2m_page_delta time improved by -3.3% (0.8 -> 0.8 ms)
+00:27:35   - embedders:heap/update/wasm32_update_write_fwd_102m_step_4m_page_delta time improved by -3.2% (1.2 -> 1.2 ms)
+00:27:35   - embedders:heap/update/wasm32_update_read_fwd_102m_step_4m_mix time improved by -3.1% (0.7 -> 0.7 ms)
+00:27:35   - embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_mix time improved by -3.1% (21.8 -> 21.1 ms)
+00:27:35   - embedders:heap/update/wasm32_update_read_fwd_102m_step_64k_mix time improved by -3.1% (25.9 -> 25.1 ms)
+00:27:35   - embedders:heap/query/wasm32_query_read_fwd_102m_step_64k_page_delta time improved by -2.9% (19.7 -> 19.2 ms)
+00:27:35   - embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_page_delta time improved by -2.9% (301.7 -> 292.8 ms)
+00:27:35   - embedders:heap/query/wasm32_query_read_fwd_102m_step_4m_mix time improved by -2.8% (0.5 -> 0.5 ms)
+00:27:35   - embedders:heap/query/wasm32_query_write_fwd_102m_step_4m_new_allocation time improved by -2.8% (0.6 -> 0.6 ms)
+00:27:35   - embedders:heap/update/wasm32_update_write_fwd_102m_step_8k_new_allocation time improved by -2.8% (271.7 -> 264.0 ms)
+00:27:35   - embedders:heap/query/wasm32_query_read_fwd_102m_step_128k_page_delta time improved by -2.7% (9.8 -> 9.6 ms)
+00:27:35   - embedders:heap/update/wasm32_update_read_fwd_102m_step_128k_page_delta time improved by -2.4% (14.2 -> 13.9 ms)
