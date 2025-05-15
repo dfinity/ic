@@ -68,7 +68,7 @@ impl<Rt: Runtime + Send + Sync> ICRC1Ledger for IcpLedgerCanister<Rt> {
         &self,
         args: Vec<GetBlocksRequest>,
     ) -> Result<GetBlocksResult, NervousSystemError> {
-        <IcpLedgerCanister<Rt> as IcpLedger>::icrc3_get_blocks(&self, args).await
+        <IcpLedgerCanister<Rt> as IcpLedger>::icrc3_get_blocks(self, args).await
     }
 }
 
