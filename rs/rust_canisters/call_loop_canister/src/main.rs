@@ -1,8 +1,7 @@
 use candid::candid_method;
-use ic_cdk::call::Call;
+use ic_cdk::api::call;
 use ic_cdk_macros::update;
 use ic_principal::Principal;
-use std::future::IntoFuture;
 
 const MB: usize = 1024 * 1024;
 
@@ -15,9 +14,7 @@ async fn send_calls(megabytes_to_send: u32) {
             let mut slice = [0; 29];
             slice[..4].copy_from_slice(&i.to_le_bytes());
             let canister = Principal::from_slice(&slice);
-            Call::unbounded_wait(canister, "")
-                .with_raw_args(&[5; MB])
-                .into_future()
+            call::call_raw(canister, "", &[5; MB], 0)
         })
         .collect::<Vec<_>>();
     let _ = futures::future::join_all(calls).await;
