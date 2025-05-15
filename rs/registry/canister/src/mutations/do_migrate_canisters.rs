@@ -65,7 +65,6 @@ mod test {
     use ic_base_types::PrincipalId;
     use ic_registry_routing_table::CanisterIdRange;
     use ic_registry_routing_table::RoutingTable;
-    use ic_registry_transport::pb::v1::registry_mutation;
 
     // We only need a basic test, because the rest of the logic for this is tested in the tests
     // for migrating canister ranges, which is already supported.

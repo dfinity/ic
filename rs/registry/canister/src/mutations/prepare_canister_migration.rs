@@ -244,7 +244,6 @@ mod tests {
     use assert_matches::assert_matches;
     use ic_base_types::CanisterId;
     use ic_registry_routing_table::RoutingTable;
-    use ic_registry_transport::pb::v1::registry_mutation;
     use ic_test_utilities_types::ids::subnet_test_id;
 
     use crate::{

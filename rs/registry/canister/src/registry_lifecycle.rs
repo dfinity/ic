@@ -107,7 +107,6 @@ fn add_missing_node_types_to_nodes(registry: &Registry) -> Vec<RegistryMutation>
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::mutations::routing_table::routing_table_into_registry_mutation;
     use crate::{
         common::test_helpers::{empty_mutation, invariant_compliant_registry},
         registry::{EncodedVersion, Version},
@@ -291,30 +290,34 @@ mod test {
 
     #[test]
     fn test_migration_for_routing_table() {
+        use ic_protobuf::registry::routing_table::v1 as pb;
+
         let mut registry = invariant_compliant_registry(0);
         let system_subnet =
             PrincipalId::try_from(registry.get_subnet_list_record().subnets.first().unwrap())
                 .unwrap();
 
-        let mut rt = RoutingTable::new();
-        rt.insert(
-            CanisterIdRange {
-                start: CanisterId::from(5000),
-                end: CanisterId::from(6000),
-            },
-            system_subnet.into(),
-        )
-        .unwrap();
-        rt.insert(
-            CanisterIdRange {
-                start: CanisterId::from(6001),
-                end: CanisterId::from(7000),
-            },
-            system_subnet.into(),
-        )
-        .unwrap();
+        let mut routing_table = RoutingTable::new();
+        routing_table
+            .insert(
+                CanisterIdRange {
+                    start: CanisterId::from(5000),
+                    end: CanisterId::from(6000),
+                },
+                system_subnet.into(),
+            )
+            .unwrap();
+        routing_table
+            .insert(
+                CanisterIdRange {
+                    start: CanisterId::from(6001),
+                    end: CanisterId::from(7000),
+                },
+                system_subnet.into(),
+            )
+            .unwrap();
 
-        let new_routing_table = pb::RoutingTable::from(routing_table);
+        let new_routing_table = pb::RoutingTable::from(routing_table.clone());
         let mutations = vec![upsert(
             make_routing_table_record_key().as_bytes(),
             new_routing_table.encode_to_vec(),
@@ -334,6 +337,6 @@ mod test {
         let recovered = registry
             .get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
 
-        assert_eq!(recovered, rt);
+        assert_eq!(recovered, routing_table);
     }
 }
