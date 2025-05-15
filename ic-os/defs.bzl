@@ -16,6 +16,7 @@ load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:boundary-guestos.bzl", boundary_component_files = "component_files")
 load("//ic-os/components:defs.bzl", "tree_hash")
 load("//ic-os/components/conformance_tests:defs.bzl", "component_file_references_test")
+load("//publish:defs.bzl", "artifact_bundle")
 load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "disk_image_no_tar", "ext4_image", "upgrade_image")
 
 def icos_build(
@@ -767,13 +768,21 @@ EOF
     if mode == "dev":
         upload_suffix += "-dev"
 
+    # Export checksums & build artifacts
+    artifact_bundle(
+        name = "bundle",
+        inputs = [":prod"],
+        prefix = "boundary-os/disk-img",
+        visibility = visibility,
+    )
+
     upload_artifacts(
         name = "upload_disk-img",
         inputs = [
-            ":disk-img.tar.zst",
+            ":bundle-img.tar.zst",
             ":disk-img.tar.gz",
         ],
-        remote_subdir = "boundary-os/disk-img" + upload_suffix,
+        #remote_subdir = "boundary-os/disk-img" + upload_suffix,
         visibility = visibility,
     )
 
