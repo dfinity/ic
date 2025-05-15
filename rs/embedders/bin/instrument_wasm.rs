@@ -38,12 +38,12 @@ pub struct Options {
     /// Input Wasm.
     input_file: PathBuf,
 
-    /// Write output to the given file (defaul is stdout).
+    /// Write output to the given file (default is stdout).
     #[arg(short, long, value_name = "OUTPUT_FILE")]
     output_file: Option<PathBuf>,
 
     /// Artifact to produce.
-    #[arg(value_enum, short, long, default_value = Artifact::InstrumentedWasm)]
+    #[arg(value_enum, short, long, default_value = "instrumented-wasm")]
     artifact: Artifact,
 }
 

@@ -1575,81 +1575,6 @@ fn inject_metering(
     *orig_elems = elems;
 }
 
-// This function adds mem barrier writes, assuming that arguments
-// of the original store operation are on the stack
-fn write_barrier_instructions<'a>(
-    offset: u64,
-    val_arg_idx: u32,
-    addr_arg_idx: u32,
-) -> Vec<Operator<'a>> {
-    use Operator::*;
-    let page_size_shift = PAGE_SIZE.trailing_zeros() as i32;
-    let tracking_mem_idx = 1;
-    if offset % PAGE_SIZE as u64 == 0 {
-        vec![
-            LocalSet {
-                local_index: val_arg_idx,
-            }, // value
-            LocalTee {
-                local_index: addr_arg_idx,
-            }, // address
-            I32Const {
-                value: page_size_shift,
-            },
-            I32ShrU,
-            I32Const { value: 1 },
-            I32Store8 {
-                memarg: wasmparser::MemArg {
-                    align: 0,
-                    max_align: 0,
-                    offset: offset >> page_size_shift,
-                    memory: tracking_mem_idx,
-                },
-            },
-            // Put original params on the stack
-            LocalGet {
-                local_index: addr_arg_idx,
-            },
-            LocalGet {
-                local_index: val_arg_idx,
-            },
-        ]
-    } else {
-        vec![
-            LocalSet {
-                local_index: val_arg_idx,
-            }, // value
-            LocalTee {
-                local_index: addr_arg_idx,
-            }, // address
-            I32Const {
-                value: offset as i32,
-            },
-            I32Add,
-            I32Const {
-                value: page_size_shift,
-            },
-            I32ShrU,
-            I32Const { value: 1 },
-            I32Store8 {
-                memarg: wasmparser::MemArg {
-                    align: 0,
-                    max_align: 0,
-                    offset: 0,
-                    memory: tracking_mem_idx,
-                },
-            },
-            // Put original params on the stack
-            LocalGet {
-                local_index: addr_arg_idx,
-            },
-            LocalGet {
-                local_index: val_arg_idx,
-            },
-        ]
-    }
-}
-
 enum AccessKind {
     // Native Wasm load operation with `length <= 8 <= PAGE_SIZE`.
     NativeLoad {
@@ -2233,7 +2158,11 @@ fn inject_mem_barrier(
                     injection_points.push(idx)
                 }
                 MemoryCopy { .. } => {
-                    val_i64_needed = true;
+                    // Actually storing the source address.
+                    match mem_type {
+                        WasmMemoryType::Wasm32 => val_i32_needed = true,
+                        WasmMemoryType::Wasm64 => val_i64_needed = true,
+                    };
                     memory_length_needed = true;
                     injection_points.push(idx)
                 }
@@ -2303,7 +2232,10 @@ fn inject_mem_barrier(
         let memory_length_index = if memory_length_needed {
             let memory_length_index = next_local;
             next_local += 1;
-            func_body.locals.push((1, ValType::I64));
+            match mem_type {
+                WasmMemoryType::Wasm32 => func_body.locals.push((1, ValType::I32)),
+                WasmMemoryType::Wasm64 => func_body.locals.push((1, ValType::I64)),
+            }
             Some(memory_length_index)
         } else {
             None
@@ -2337,29 +2269,17 @@ fn inject_mem_barrier(
                         mem_type,
                     ));
                 }
-                I32Store { memarg } | I32Store8 { memarg } | I32Store16 { memarg } => {
-                    match mem_type {
-                        WasmMemoryType::Wasm64 => {
-                            elems.extend_from_slice(&memory64_barrier_instructions(
-                                AccessKind::NativeStore {
-                                    value_argument_index: arg_i32_val_idx,
-                                    offset: memarg.offset,
-                                    length: access_length.unwrap(),
-                                },
-                                arg_address_idx,
-                                byte_map_index,
-                                mem_type,
-                            ))
-                        }
-                        WasmMemoryType::Wasm32 => {
-                            elems.extend_from_slice(&write_barrier_instructions(
-                                memarg.offset,
-                                arg_i32_val_idx,
-                                arg_address_idx,
-                            ))
-                        }
-                    }
-                }
+                I32Store { memarg } | I32Store8 { memarg } | I32Store16 { memarg } => elems
+                    .extend_from_slice(&memory64_barrier_instructions(
+                        AccessKind::NativeStore {
+                            value_argument_index: arg_i32_val_idx,
+                            offset: memarg.offset,
+                            length: access_length.unwrap(),
+                        },
+                        arg_address_idx,
+                        byte_map_index,
+                        mem_type,
+                    )),
                 I64Load { memarg }
                 | I64Load8U { memarg }
                 | I64Load8S { memarg }
@@ -2437,7 +2357,10 @@ fn inject_mem_barrier(
                     assert_eq!(src_mem, 0);
                     elems.extend_from_slice(&memory_copy_barrier_instructions(
                         arg_address_idx,
-                        arg_i64_val_idx,
+                        match mem_type {
+                            WasmMemoryType::Wasm32 => arg_i32_val_idx,
+                            WasmMemoryType::Wasm64 => arg_i64_val_idx,
+                        },
                         memory_length_index.unwrap(),
                         byte_map_index,
                         mem_type,
@@ -2705,7 +2628,7 @@ fn export_table(mut module: Module) -> Module {
 /// the stable memory will always be inserted directly after the stable memory.
 fn update_memories(
     mut module: Module,
-    write_barrier: FlagStatus,
+    _write_barrier: FlagStatus,
     max_wasm_memory_size: NumBytes,
     max_stable_memory_size: NumBytes,
 ) -> (Module, u32) {
