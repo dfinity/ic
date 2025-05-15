@@ -317,7 +317,19 @@ where
     .expect("Candid decoding failed"))
 }
 
-/// Upload chunks to a chunk store canister.
+/// Clears the chunk store and upload chunks to a chunk store canister.
+//
+/// Uses bounded-wait calls under the hood, ensuring that the caller isn't blocked
+/// from upgrading itself due to open call contexts.
+/// It retries any failed calls until the `stop_trying` function returns true.
+/// See the `ic-call-retry` crate for sample functions.
+///
+/// It may fail if retrying the calls is no longer possible.
+///
+///
+/// # Returns
+/// * `Ok(())` if all the chunks have been successful upgraded.
+/// * `Err(e)` if the upgrade failed definitively.
 pub async fn upload_chunks<P>(
     store_canister_id: CanisterId,
     chunks: Vec<Vec<u8>>,
