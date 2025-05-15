@@ -8,8 +8,8 @@ on the process that this file is part of, see
 
 ## Added
 
-* In test builds, the RoutingTable is now also broken up into `canister_range_*` records, instead of only in a single
-  `routing_table` record. This will allow canister migrations to be a scalable feature in the Registry.
+* The RoutingTable is now also broken up into `canister_range_*` records, instead of only in a single
+  `routing_table` record. This will allow clients to migrate to the new format incrementally.
 
 ## Changed
 
