@@ -78,7 +78,7 @@ for fullrelpath in $(find -L "$BUNDLE" -type f); do
 
     # rclone reads the $(dirname $f) to get file attributes.
     # Therefore symlink should be resolved.
-    REMOTE_SUBDIR="$artifact_subdir" upload "$(readlink "$fullrelpath")"
+    REMOTE_SUBDIR="$artifact_subdir" upload "$(readlink -f "$fullrelpath")"
     log "done uploading '$artifact_basename'"
 
     URL_PATH="ic/${VERSION}/$artifact_subdir/$artifact_basename"
