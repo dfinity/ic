@@ -364,7 +364,7 @@ fn checkpoints_files_are_removed_after_flushing_removal_channel() {
                 .promote_scratchpad_to_unverified_checkpoint(scratchpad_layout, h)
                 .unwrap();
             cp.finalize_and_remove_unverified_marker(None).unwrap();
-            cp
+            cp.as_readonly()
         };
 
         let mut checkpoints = vec![];
@@ -759,7 +759,9 @@ fn wasm_file_can_hold_checkpoint_for_lazy_loading() {
 
         let cp1 = state_layout
             .promote_scratchpad_to_unverified_checkpoint(scratchpad, Height::new(1))
-            .unwrap();
+            .unwrap()
+            .as_readonly();
+
         cp1.finalize_and_remove_unverified_marker(None).unwrap();
 
         // Create another checkpoint at height 2 so that we can remove the first one.
