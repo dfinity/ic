@@ -2053,7 +2053,7 @@ fn do_roundtrip_and_check_error(metrics: &BlockmakerMetricsTimeSeries, expected_
     let test_metrics = TestMetrics(Arc::new(Mutex::new("".to_string())));
 
     // Currently the String stored in `TestMetrics` is still empty
-    assert!(test_metrics.0.lock().unwrap().len() == 0);
+    assert!(test_metrics.0.lock().unwrap().is_empty());
 
     let pb_stats = pb_metadata::BlockmakerMetricsTimeSeries::from(metrics);
     let deserialized_stats = BlockmakerMetricsTimeSeries::try_from((

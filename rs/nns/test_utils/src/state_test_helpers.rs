@@ -37,7 +37,7 @@ use ic_nns_constants::{
     ROOT_CANISTER_INDEX_IN_NNS_SUBNET, SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
     SUBNET_RENTAL_CANISTER_ID, SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
 };
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     self as nns_governance_pb,
     manage_neuron::{
         self,
@@ -2231,7 +2231,7 @@ pub fn manage_network_economics(
     network_economics: NetworkEconomics,
     sender: PrincipalId,
     neuron_id: NeuronId,
-) {
+) -> ProposalId {
     let proposal = MakeProposalRequest {
         title: Some("manage network economics".to_string()),
         summary: "manage network economics".to_string(),
@@ -2243,12 +2243,10 @@ pub fn manage_network_economics(
 
     let propose_response = nns_governance_make_proposal(machine, sender, neuron_id, &proposal);
 
-    let proposal_id = match propose_response.command.unwrap() {
+    match propose_response.command.unwrap() {
         manage_neuron_response::Command::MakeProposal(response) => response.proposal_id.unwrap(),
         _ => panic!("Propose didn't return MakeProposal"),
-    };
-
-    nns_wait_for_proposal_execution(machine, proposal_id.id);
+    }
 }
 
 pub fn setup_cycles_ledger(state_machine: &StateMachine) {

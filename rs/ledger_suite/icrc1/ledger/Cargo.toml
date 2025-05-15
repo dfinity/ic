@@ -19,8 +19,8 @@ ciborium = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
-ic-cdk = { workspace = true }
-ic-cdk-macros = { workspace = true }
+ic-cdk = "0.17.1"
+ic-cdk-macros = "0.17.1"
 ic-cdk-timers = { workspace = true }
 ic-certification = { workspace = true }
 ic-crypto-tree-hash = { path = "../../../crypto/tree_hash" }

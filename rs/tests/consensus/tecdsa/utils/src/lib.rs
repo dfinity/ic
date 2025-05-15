@@ -16,7 +16,7 @@ use ic_management_canister_types_private::{
 use ic_message::ForwardParams;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
-use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
+use ic_nns_governance_api::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
 use ic_registry_subnet_type::SubnetType;
@@ -249,7 +249,13 @@ pub fn run_chain_key_signature_test(
         let public_key = get_public_key_with_retries(key_id, canister, logger, 100)
             .await
             .unwrap();
-        assert_eq!(existing_key, public_key);
+        // TODO(CRP-2789): Re-enable vetKD public key equality check as soon as
+        // https://github.com/dfinity/ic/pull/5088 is deployed on the NNS subnet.
+        if let MasterPublicKeyId::VetKd(_vetkd_key_id) = key_id {
+            // skip canister public key equality check because of https://github.com/dfinity/ic/pull/5088
+        } else {
+            assert_eq!(existing_key, public_key);
+        }
         let signature = get_signature_with_logger(
             message_hash.clone(),
             ECDSA_SIGNATURE_FEE,
@@ -795,7 +801,13 @@ pub async fn add_chain_keys_with_timeout_and_rotation_period(
                 .into_iter()
                 .map(|key_id| KeyConfigUpdate {
                     key_id: Some(key_id.clone()),
-                    pre_signatures_to_create_in_advance: Some(5),
+                    pre_signatures_to_create_in_advance: Some(
+                        if key_id.requires_pre_signatures() {
+                            5
+                        } else {
+                            0
+                        },
+                    ),
                     max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                 })
                 .collect(),
@@ -854,9 +866,15 @@ pub async fn create_new_subnet_with_keys(
             .into_iter()
             .map(|(key_id, subnet_id)| KeyConfigRequest {
                 key_config: Some(KeyConfigCreate {
-                    key_id: Some(key_id),
-                    pre_signatures_to_create_in_advance: Some(4),
+                    pre_signatures_to_create_in_advance: Some(
+                        if key_id.requires_pre_signatures() {
+                            4
+                        } else {
+                            0
+                        },
+                    ),
                     max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                    key_id: Some(key_id),
                 }),
                 subnet_id: Some(subnet_id),
             })

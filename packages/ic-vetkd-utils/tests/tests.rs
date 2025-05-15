@@ -27,6 +27,24 @@ fn test_hkdf_test_vector() {
 }
 
 #[test]
+fn test_public_key_derivation() {
+    let mpk = MasterPublicKey::deserialize(&hex::decode("9183b871aa141d15ba2efc5bc58a49cb6a167741364804617f48dfe11e0285696b7018f172dad1a87ed81abf27ea4c320995041e2ee4a47b2226a2439d92a38557a7e2a\
+  cc72fd157283b20f1f37ba872be235214c6a9cbba1eb2ef39deec72a5").unwrap()).unwrap();
+
+    let canister_id = b"test-canister-id";
+    let context = b"test-context";
+
+    let dk1 = mpk.derive_canister_key(canister_id);
+
+    assert_eq!(hex::encode(dk1.serialize()),
+               "af78a908589d332fc8b9d042807c483e73872e2aea7620bdb985b9289d5a99ebfd5ac0ec4844a4c542f6d0f12a716d941674953cef4f38dde601ce9792db8832557eaa051733c5541fa5017465d69b62cc4d93f2079fb8c050b4bd735ef75859");
+
+    let dk2 = dk1.derive_sub_key(context);
+    assert_eq!(hex::encode(dk2.serialize()),
+                 "a20125b8cdfc57f71b6f67e557e82c1307c1af9f728573f3b682f3b1816684f3f6aed5d8dd40a309b457a25dab7d8a1416fc0e0973000321c0c1dd844d80a5708e81fdd8338ea6433f175992fa05ef343b1e7f89a09f3b5b7c0766ccb3c624cd");
+}
+
+#[test]
 fn test_second_level_public_key_derivation() {
     let canister_key = DerivedPublicKey::deserialize(&hex::decode("8bf165ea580742abf5fd5123eb848aa116dcf75c3ddb3cd3540c852cf99f0c5394e72dfc2f25dbcb5f9220f251cd04040a508a0bcb8b2543908d6626b46f09d614c924c5deb63a9949338ae4f4ac436bd77f8d0a392fd29de0f392a009fa61f3").unwrap()).unwrap();
 
@@ -37,7 +55,7 @@ fn test_second_level_public_key_derivation() {
     let derived_key = canister_key.derive_sub_key(context);
 
     assert_eq!(hex::encode(derived_key.serialize()),
-               "9784a7db548f0271d7e35abf3bda4021d8a5993c7736bfe3cc8304d35f77441c0618bb47b53694e04a33382668a96012155cae5b0e48d586475a7148bc648a13ba680b847a2853a438a557c5e6ab2d430c8a5213042918145277aaa7c1ff75e2");
+               "80b4f1e11766d32bed0ea4e8b05e82bf84519de4a63eca0213d9e3603a946ea2968150882d1e9508701f34048fcec80919b4f493a2a254fc13dc956f1d82c6b8e641f962e1c0342c95eb58e168327d5e51e9337627ac9f1aa93d2e3058a1ff09");
 }
 
 #[test]
@@ -49,8 +67,8 @@ fn protocol_flow_with_emulated_server_side() {
 
     let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(seed);
 
-    let derivation_path = DerivationContext::new(b"canister-id", b"context");
-    let input = rng.gen::<[u8; 32]>();
+    let derivation_context = DerivationContext::new(b"canister-id", b"context");
+    let identity = rng.gen::<[u8; 32]>();
 
     let tsk_seed = rng.gen::<[u8; 32]>().to_vec();
     let tsk = TransportSecretKey::from_seed(tsk_seed).unwrap();
@@ -66,16 +84,15 @@ fn protocol_flow_with_emulated_server_side() {
     let master_sk = random_scalar(&mut rng);
     let master_pk = G2Affine::from(G2Affine::generator() * master_sk);
 
-    let derived_public_key =
-        G2Affine::from(master_pk + G2Affine::generator() * derivation_path.delta());
+    let (derived_public_key, _delta) = derivation_context.derive_key(&master_pk);
 
     let ek_bytes = create_encrypted_key(
         &mut rng,
         &master_pk,
         &master_sk,
         &tpk,
-        &derivation_path,
-        &input,
+        &derivation_context,
+        &identity,
     );
 
     let ek = EncryptedVetKey::deserialize(&ek_bytes).unwrap();
@@ -84,11 +101,11 @@ fn protocol_flow_with_emulated_server_side() {
 
     let dpk = DerivedPublicKey::deserialize(&dpk_bytes).unwrap();
 
-    let vetkey = ek.decrypt_and_verify(&tsk, &dpk, &input).unwrap();
+    let vetkey = ek.decrypt_and_verify(&tsk, &dpk, &identity).unwrap();
 
     let msg = rng.gen::<[u8; 32]>().to_vec();
     let seed = rng.gen::<[u8; 32]>().to_vec();
-    let ctext = IBECiphertext::encrypt(&dpk, &input, &msg, &seed).unwrap();
+    let ctext = IBECiphertext::encrypt(&dpk, &identity, &msg, &seed).unwrap();
 
     let ptext = ctext.decrypt(&vetkey).expect("IBE decryption failed");
     assert_eq!(ptext, msg);
@@ -134,26 +151,26 @@ fn protocol_flow_with_fixed_rng_has_expected_outputs() {
 
     let ek = EncryptedVetKey::deserialize(&hex::decode("b1a13757eaae15a3c8884fc1a3453f8a29b88984418e65f1bd21042ce1d6809b2f8a49f7326c1327f2a3921e8ff1d6c3adde2a801f1f88de98ccb40c62e366a279e7aec5875a0ce2f2a9f3e109d9cb193f0197eadb2c5f5568ee4d6a87e115910662e01e604087246be8b081fc6b8a06b4b0100ed1935d8c8d18d9f70d61718c5dba23a641487e72b3b25884eeede8feb3c71599bfbcebe60d29408795c85b4bdf19588c034d898e7fc513be8dbd04cac702a1672f5625f5833d063b05df7503").unwrap()).unwrap();
 
-    let input = hex::decode("6d657373616765").unwrap();
-
-    let vetkey = ek.decrypt_and_verify(&tsk, &dpk, &input).unwrap();
-
-    assert_eq!(hex::encode(vetkey.signature_bytes()),
-               "987db5406ce297e729c8564a106dc896943b00216a095fe9c5d32a16a330c02eb80e6f468ede83cde5462b5145b58f65");
+    let identity = hex::decode("6d657373616765").unwrap();
 
     let msg = hex::decode("f00f11").unwrap();
     let seed: [u8; 32] = [0u8; 32];
-    let ctext = IBECiphertext::encrypt(&dpk, &input, &msg, &seed).unwrap();
+    let ctext = IBECiphertext::encrypt(&dpk, &identity, &msg, &seed).unwrap();
 
     let ctext_bytes = ctext.serialize();
 
     assert_eq!(hex::encode(&ctext_bytes),
-               "4943204942450001a9937528bda5826cf5c7da77a5f5e46719a9748f4ea0aa491c8fba92081e5d55457ab36ec4f6335954c6d87987d0b28301bd8da166493bb537c842d20396da5a68cc9e9672fadedf1e311e0057fc906dfd37d1077ca027954c45336405e66e5e4b346b0f24bfd358a09de701654c1e0791741e4826396588440eee021df9b2398f143c");
+               "4943204942450001a9937528bda5826cf5c7da77a5f5e46719a9748f4ea0aa491c8fba92081e5d55457ab36ec4f6335954c6d87987d0b28301bd8da166493bb537c842d20396da5a68cc9e9672fadedf1e311e0057fc906dfd37d1077ca027954c45336405e66e5e4b346b0f24bfd358a09de701654c1e0791741e4826396588440eee021df9b2399f7f98");
 
     assert_eq!(
         ctext,
         IBECiphertext::deserialize(&ctext_bytes).expect("Deserializing IBECiphertext failed")
     );
+
+    let vetkey = ek.decrypt_and_verify(&tsk, &dpk, &identity).unwrap();
+
+    assert_eq!(hex::encode(vetkey.signature_bytes()),
+               "987db5406ce297e729c8564a106dc896943b00216a095fe9c5d32a16a330c02eb80e6f468ede83cde5462b5145b58f65");
 
     let ptext = ctext.decrypt(&vetkey).expect("IBE decryption failed");
     assert_eq!(ptext, msg);

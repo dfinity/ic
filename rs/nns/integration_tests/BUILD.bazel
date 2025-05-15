@@ -33,9 +33,9 @@ BASE_DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:fs_extra",
     "@crate_index//:futures",
-    "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-stable-structures",
+    "@crate_index//:ic_cdk_0_17_1",
     "@crate_index//:lazy_static",
     "@crate_index//:prometheus-parse",
     "@crate_index//:prost",
@@ -108,7 +108,7 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:async-trait",
-    "@crate_index//:ic-cdk-macros",
+    "@crate_index//:ic_cdk_macros_0_17_1",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [
     ],

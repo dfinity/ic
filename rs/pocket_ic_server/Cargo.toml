@@ -31,7 +31,7 @@ ic-bn-lib = { workspace = true }
 ic-boundary = { path = "../boundary_node/ic_boundary" }
 ic-btc-adapter = { path = "../bitcoin/adapter" }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
-ic-cdk = { workspace = true }
+ic-cdk = "0.17.1"
 ic-config = { path = "../config" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }

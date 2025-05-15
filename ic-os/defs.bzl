@@ -10,7 +10,7 @@ This macro defines the overall build process for ICOS images, including:
 """
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("//bazel:defs.bzl", "file_size_check", "gzip_compress", "zstd_compress")
+load("//bazel:defs.bzl", "gzip_compress", "zstd_compress")
 load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:boundary-guestos.bzl", boundary_component_files = "component_files")
@@ -20,11 +20,9 @@ load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build
 
 def icos_build(
         name,
-        upload_prefix,
         image_deps_func,
         mode = None,
         malicious = False,
-        max_file_sizes = None,
         upgrades = True,
         vuln_scan = True,
         visibility = None,
@@ -37,11 +35,9 @@ def icos_build(
 
     Args:
       name: Name for the generated filegroup.
-      upload_prefix: Prefix to be used as the target when uploading
       image_deps_func: Function to be used to generate image manifest
       mode: dev or prod. If not specified, will use the value of `name`
       malicious: if True, bundle the `malicious_replica`
-      max_file_sizes: mapping of output file to max allowed size
       upgrades: if True, build upgrade images as well
       vuln_scan: if True, create targets for vulnerability scanning
       visibility: See Bazel documentation
@@ -49,13 +45,14 @@ def icos_build(
       build_local_base_image: if True, build the base images from scratch. Do not download the docker.io base image.
       installable: if True, create install and debug targets, else create launch ones.
       ic_version: the label pointing to the target that returns IC version
+
+
+    Returns:
+      A struct containing the labels of the images that were built.
     """
 
     if mode == None:
         mode = name
-
-    if max_file_sizes == None:
-        max_file_sizes = {}
 
     image_deps = image_deps_func(mode, malicious)
 
@@ -223,7 +220,7 @@ def icos_build(
         )
 
     # When boot_args are fixed, don't bother signing
-    if "boot_args_template" not in image_deps:
+    if "extra_boot_args_template" not in image_deps:
         native.alias(name = "partition-root.tzst", actual = ":partition-root-unsigned.tzst", tags = ["manual", "no-cache"])
         native.alias(name = "extra_boot_args", actual = image_deps["extra_boot_args"], tags = ["manual"])
 
@@ -231,7 +228,7 @@ def icos_build(
             native.alias(name = "partition-root-test.tzst", actual = ":partition-root-test-unsigned.tzst", tags = ["manual", "no-cache"])
             native.alias(name = "extra_boot_test_args", actual = image_deps["extra_boot_args"], tags = ["manual"])
     else:
-        native.alias(name = "extra_boot_args_template", actual = image_deps["boot_args_template"], tags = ["manual"])
+        native.alias(name = "extra_boot_args_template", actual = image_deps["extra_boot_args_template"], tags = ["manual"])
 
         native.genrule(
             name = "partition-root-sign",
@@ -336,20 +333,19 @@ def icos_build(
         ],
     )
 
+    disk_img_tar_zst = "disk-img.tar.zst"
+
     zstd_compress(
-        name = "disk-img.tar.zst",
+        name = disk_img_tar_zst,
         srcs = [":disk-img.tar"],
         visibility = visibility,
         tags = ["manual"],
     )
 
-    if "disk-img.tar.zst" in max_file_sizes:
-        file_size_check(
-            name = "disk-img.tar.zst",
-            max_file_size = max_file_sizes["disk-img.tar.zst"],
-        )
-
     # -------------------- Assemble upgrade image --------------------
+
+    update_image_tar_zst = "update-img.tar.zst"  # final output file
+    update_image_test_tar_zst = "update-img-test.tar.zst"  # final output file
 
     if upgrades:
         upgrade_image(
@@ -364,17 +360,11 @@ def icos_build(
         )
 
         zstd_compress(
-            name = "update-img.tar.zst",
+            name = update_image_tar_zst,
             srcs = [":update-img.tar"],
             visibility = visibility,
             tags = ["manual"],
         )
-
-        if "update-img.tar.zst" in max_file_sizes:
-            file_size_check(
-                name = "update-img.tar.zst",
-                max_file_size = max_file_sizes["update-img.tar.zst"],
-            )
 
         upgrade_image(
             name = "update-img-test.tar",
@@ -388,48 +378,11 @@ def icos_build(
         )
 
         zstd_compress(
-            name = "update-img-test.tar.zst",
+            name = update_image_test_tar_zst,
             srcs = [":update-img-test.tar"],
             visibility = visibility,
             tags = ["manual"],
         )
-
-        if "update-img-test.tar.zst" in max_file_sizes:
-            file_size_check(
-                name = "update-img-test.tar.zst",
-                max_file_size = max_file_sizes["update-img-test.tar.zst"],
-            )
-
-    # -------------------- Upload artifacts --------------------
-
-    upload_suffix = ""
-    if mode == "dev":
-        upload_suffix = "-dev"
-    if malicious:
-        upload_suffix += "-malicious"
-
-    if upload_prefix != None:
-        upload_artifacts(
-            name = "upload_disk-img",
-            inputs = [
-                ":disk-img.tar.zst",
-            ],
-            remote_subdir = upload_prefix + "/disk-img" + upload_suffix,
-            visibility = visibility,
-        )
-
-        if upgrades:
-            upload_artifacts(
-                name = "upload_update-img",
-                inputs = [
-                    ":update-img.tar.zst",
-                    ":update-img-test.tar.zst",
-                ],
-                remote_subdir = upload_prefix + "/update-img" + upload_suffix,
-                visibility = visibility,
-            )
-
-    # end if upload_prefix != None
 
     # -------------------- Vulnerability Scanning Tool ------------
 
@@ -603,14 +556,21 @@ EOF
         name = name,
         testonly = malicious,
         srcs = [
-            ":disk-img.tar.zst",
+            ":" + disk_img_tar_zst,
         ] + ([
-            ":update-img.tar.zst",
-            ":update-img-test.tar.zst",
+            ":" + update_image_tar_zst,
+            ":" + update_image_test_tar_zst,
         ] if upgrades else []),
         visibility = visibility,
         tags = tags,
     )
+
+    icos_images = struct(
+        disk_image = disk_img_tar_zst,
+        update_image = update_image_tar_zst,
+        update_image_test = update_image_test_tar_zst,
+    )
+    return icos_images
 
 # end def icos_build
 

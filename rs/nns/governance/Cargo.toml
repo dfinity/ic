@@ -35,8 +35,8 @@ cycles-minting-canister = { path = "../cmc" }
 dyn-clone = "1.0.14"
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic-cdk = { workspace = true }
-ic-cdk-macros = { workspace = true }
+ic-cdk = "0.17.1"
+ic-cdk-macros = "0.17.1"
 ic-cdk-timers = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-dummy-getrandom-for-wasm = { path = "../../../packages/ic-dummy-getrandom-for-wasm" }

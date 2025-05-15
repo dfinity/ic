@@ -1016,8 +1016,6 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "Last max fee per gas",
                 )?;
 
-                ic_cketh_minter::eth_rpc::encode_metrics(w)?;
-
                 Ok(())
             })
         }

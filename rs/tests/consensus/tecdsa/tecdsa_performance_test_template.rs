@@ -359,7 +359,7 @@ pub fn tecdsa_performance_test(
         if cfg!(feature = "upload_perf_systest_results") {
             // elastic search url
             const ES_URL: &str =
-                "https://elasticsearch.ch1-obsdev1.dfinity.network/ci-performance-test/_doc";
+                "https://elasticsearch.testnet.dfinity.network/ci-performance-test/_doc";
             const NUM_UPLOAD_ATTEMPS: usize = 3;
             info!(
                 log,

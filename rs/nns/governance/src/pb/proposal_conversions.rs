@@ -1,7 +1,7 @@
 use crate::{governance::EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX, pb::v1 as pb};
 
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance_api::pb::v1 as pb_api;
+use ic_nns_governance_api as pb_api;
 use std::collections::{BTreeSet, HashMap};
 
 fn convert_execute_nns_function(

@@ -591,10 +591,10 @@ mod evm_rpc_conversion {
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
     use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
     use crate::eth_rpc_client::{
-        Block, Equality, FeeHistory, HttpOutcallError, LogEntry, MinByKey, MultiCallError,
-        MultiCallResults, Reduce, ReduceWithStrategy, SingleCallError,
+        Block, FeeHistory, HttpOutcallError, LogEntry, MultiCallError, MultiCallResults, Reduce,
+        SingleCallError,
     };
-    use crate::numeric::{BlockNumber, TransactionCount, Wei};
+    use crate::numeric::{BlockNumber, Wei};
     use crate::test_fixtures::arb::{
         arb_block, arb_evm_rpc_error, arb_fee_history, arb_gas_used_ratio, arb_hex, arb_hex20,
         arb_hex256, arb_hex32, arb_hex_byte, arb_log_entry, arb_nat_256, arb_transaction_receipt,
@@ -603,11 +603,9 @@ mod evm_rpc_conversion {
         Block as EvmBlock, EthMainnetService as EvmEthMainnetService, FeeHistory as EvmFeeHistory,
         Hex, Hex20, Hex32, HttpOutcallError as EvmHttpOutcallError, LogEntry as EvmLogEntry,
         MultiRpcResult as EvmMultiRpcResult, Nat256, RpcApi as EvmRpcApi, RpcError as EvmRpcError,
-        RpcResult as EvmRpcResult, RpcService as EvmRpcService,
-        SendRawTransactionStatus as EvmSendRawTransactionStatus,
+        RpcService as EvmRpcService, SendRawTransactionStatus as EvmSendRawTransactionStatus,
         TransactionReceipt as EvmTransactionReceipt,
     };
-    use proptest::collection::vec;
     use proptest::{option, prelude::Strategy, prop_assert_eq, proptest};
     use std::collections::BTreeSet;
     use std::fmt::Debug;
@@ -759,20 +757,6 @@ mod evm_rpc_conversion {
 
     proptest! {
         #[test]
-        fn should_have_consistent_log_entries_between_minter_and_evm_rpc
-        (
-            minter_logs in vec(arb_log_entry(), 1..=100),
-            first_error in arb_evm_rpc_error(),
-            second_error in arb_evm_rpc_error(),
-            third_error in arb_evm_rpc_error(),
-        ) {
-            let evm_rpc_logs: Vec<_> = minter_logs.clone().into_iter().map(evm_rpc_log_entry).collect();
-            test_consistency_between_minter_and_evm_rpc(minter_logs, evm_rpc_logs, first_error, second_error, third_error)?;
-        }
-    }
-
-    proptest! {
-        #[test]
         fn should_have_consistent_fee_history_between_minter_and_evm_rpc(
             minter_fee_history in arb_fee_history(),
             gas_used_ratio in arb_gas_used_ratio(),
@@ -796,46 +780,6 @@ mod evm_rpc_conversion {
         ) {
             let (minter_tx_receipt, evm_rpc_tx_receipt) = transaction_receipts;
             test_consistency_between_minter_and_evm_rpc(minter_tx_receipt, evm_rpc_tx_receipt, first_error, second_error, third_error)?;
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn should_have_consistent_transaction_count_between_minter_and_evm_rpc
-        (
-            first_tx_count in arb_evm_rpc_transaction_count(),
-            second_tx_count in arb_evm_rpc_transaction_count(),
-            third_tx_count in arb_evm_rpc_transaction_count(),
-        ) {
-            let (block_pi_evm_rpc_provider, public_node_evm_rpc_provider, llama_nodes_evm_rpc_provider) =
-                evm_rpc_providers();
-            let evm_results = match (&first_tx_count, &second_tx_count, &third_tx_count) {
-                (Ok(count_1), Ok(count_2), Ok(count_3)) if count_1 == count_2 && count_2 == count_3 => {
-                    EvmMultiRpcResult::Consistent(Ok(count_1.clone()))
-                }
-                _ => EvmMultiRpcResult::Inconsistent(vec![
-                    (block_pi_evm_rpc_provider, first_tx_count.clone()),
-                    (public_node_evm_rpc_provider, second_tx_count.clone()),
-                    (llama_nodes_evm_rpc_provider, third_tx_count.clone()),
-                ]),
-            };
-            let minter_results: MultiCallResults<TransactionCount> = MultiCallResults::from_non_empty_iter(vec![
-                (BLOCK_PI, first_tx_count.map_err(SingleCallError::from)),
-                (PUBLIC_NODE, second_tx_count.map_err(SingleCallError::from)),
-                (LLAMA_NODES, third_tx_count.map_err(SingleCallError::from)),
-            ])
-            .map(&TransactionCount::try_from, &|e| {
-                panic!("BUG: selected Nat should fit in a U256: {:?}", e)
-            });
-
-            prop_assert_eq_ignoring_provider(
-                ReduceWithStrategy::<Equality>::reduce(evm_results.clone()),
-                ReduceWithStrategy::<Equality>::reduce(minter_results.clone()),
-            )?;
-            prop_assert_eq_ignoring_provider(
-                ReduceWithStrategy::<MinByKey>::reduce(evm_results),
-                ReduceWithStrategy::<MinByKey>::reduce(minter_results),
-            )?;
         }
     }
 
@@ -1288,10 +1232,6 @@ mod evm_rpc_conversion {
                 )
                 .boxed(),
         }
-    }
-
-    fn arb_evm_rpc_transaction_count() -> impl Strategy<Value = EvmRpcResult<Nat256>> {
-        proptest::result::maybe_ok(arb_nat_256(), arb_evm_rpc_error())
     }
 
     fn arb_evm_rpc_send_raw_transaction_status(

@@ -39,33 +39,70 @@ fn augmented_hash_to_g1(pk: &G2Affine, data: &[u8]) -> G1Affine {
     G1Affine::from(pt)
 }
 
-fn hash_to_scalar(input: &[u8], domain_sep: &str) -> ic_bls12_381::Scalar {
-    use ic_bls12_381::hash_to_curve::HashToField;
+const DERIVATION_CANISTER_DST: &[u8; 33] = b"ic-vetkd-bls12-381-g2-canister-id";
 
-    let mut s = [ic_bls12_381::Scalar::zero()];
-    <ic_bls12_381::Scalar as HashToField>::hash_to_field::<ExpandMsgXmd<sha2::Sha256>>(
-        input,
-        domain_sep.as_bytes(),
-        &mut s,
-    );
-    s[0]
-}
+const DERIVATION_CONTEXT_DST: &[u8; 29] = b"ic-vetkd-bls12-381-g2-context";
 
 pub struct DerivationContext {
-    delta: Scalar,
+    canister_id: Vec<u8>,
+    context: Option<Vec<u8>>,
 }
 
 impl DerivationContext {
-    /// Create a new derivation path
+    /// Create a new derivation context
     pub fn new(canister_id: &[u8], context: &[u8]) -> Self {
-        let domain_sep = "ic-vetkd-bls12-381-context";
-        let mut delta = hash_to_scalar(canister_id, domain_sep);
-        delta += hash_to_scalar(context, domain_sep);
-        Self { delta }
+        Self {
+            canister_id: canister_id.to_vec(),
+            context: if context.is_empty() {
+                None
+            } else {
+                Some(context.to_vec())
+            },
+        }
     }
 
-    pub fn delta(&self) -> &Scalar {
-        &self.delta
+    fn hash_to_scalar(input1: &[u8], input2: &[u8], domain_sep: &'static [u8]) -> Scalar {
+        let combined_input = {
+            let mut c = Vec::with_capacity(2 * 8 + input1.len() + input2.len());
+            c.extend_from_slice(&(input1.len() as u64).to_be_bytes());
+            c.extend_from_slice(input1);
+            c.extend_from_slice(&(input2.len() as u64).to_be_bytes());
+            c.extend_from_slice(input2);
+            c
+        };
+
+        use ic_bls12_381::hash_to_curve::HashToField;
+
+        let mut s = [ic_bls12_381::Scalar::zero()];
+        <ic_bls12_381::Scalar as HashToField>::hash_to_field::<ExpandMsgXmd<sha2::Sha256>>(
+            &combined_input,
+            domain_sep,
+            &mut s,
+        );
+        s[0]
+    }
+
+    pub fn derive_key(&self, master_pk: &G2Affine) -> (G2Affine, Scalar) {
+        let mut offset = Self::hash_to_scalar(
+            &master_pk.to_compressed(),
+            &self.canister_id,
+            DERIVATION_CANISTER_DST,
+        );
+
+        let canister_key = G2Affine::from(G2Affine::generator() * offset + master_pk);
+
+        if let Some(context) = &self.context {
+            let context_offset = Self::hash_to_scalar(
+                &canister_key.to_compressed(),
+                context,
+                DERIVATION_CONTEXT_DST,
+            );
+            let canister_key_with_context = G2Affine::generator() * context_offset + canister_key;
+            offset += context_offset;
+            (G2Affine::from(canister_key_with_context), offset)
+        } else {
+            (canister_key, offset)
+        }
     }
 }
 
@@ -77,10 +114,9 @@ pub fn create_encrypted_key<R: CryptoRng + RngCore>(
     context: &DerivationContext,
     input: &[u8],
 ) -> Vec<u8> {
-    let delta = context.delta();
+    let (dpk, delta) = context.derive_key(master_pk);
 
     let dsk = delta + master_sk;
-    let dpk = G2Affine::from(G2Affine::generator() * delta + master_pk);
 
     let r = random_scalar(rng);
 
