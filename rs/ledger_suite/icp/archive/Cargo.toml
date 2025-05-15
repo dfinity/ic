@@ -10,7 +10,7 @@ documentation.workspace = true
 candid = { workspace = true }
 ciborium = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
-ic-cdk = "0.17.1"
+ic-cdk = { workspace = true }
 ic-http-types = { path = "../../../../packages/ic-http-types" }
 ic-ledger-canister-core = { path = "../../common/ledger_canister_core" }
 ic-ledger-core = { path = "../../common/ledger_core" }

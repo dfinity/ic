@@ -154,7 +154,7 @@ members = [
     "rs/ic_os/network",
     "rs/ic_os/nft_exporter",
     "rs/ic_os/nss_icos",
-    "rs/ic_os/dev_test_tools/setupos-inject-configuration",
+    "rs/ic_os/dev_test_tools/setupos-image-config",
     "rs/ic_os/build_tools/partition_tools",
     "rs/ic_os/dev_test_tools/setupos-disable-checks",
     "rs/ic_os/os_tools/setupos_tool",
@@ -270,6 +270,7 @@ members = [
     "rs/registry/client",
     "rs/registry/canister-client",
     "rs/registry/fake",
+    "rs/registry/fetch_large_record_test_canister",
     "rs/registry/helpers",
     "rs/registry/local_registry",
     "rs/registry/local_store",
@@ -580,8 +581,8 @@ ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "686cff6ccd422
 ic-btc-interface = "0.2.2"
 ic-canister-sig-creation = { git = "https://github.com/dfinity/ic-canister-sig-creation", rev = "7f9e931954637526295269155881207f6c832d6d" }
 ic-cbor = "3"
-ic-cdk = "0.18.0"
-ic-cdk-macros = "0.18.0"
+ic-cdk = "0.17.2"
+ic-cdk-macros = "0.17.2"
 ic-cdk-timers = "0.11.0"
 ic-certificate-verification = "3"
 ic-certification = "3"
