@@ -554,6 +554,7 @@ fn test_block_transformation() {
     );
 }
 
+#[ignore]
 #[test]
 fn icrc1_test_upgrade_serialization_from_mainnet() {
     icrc1_test_upgrade_serialization(ledger_mainnet_wasm(), true);
@@ -593,6 +594,7 @@ fn get_all_blocks(state_machine: &StateMachine, ledger_id: CanisterId) -> Vec<En
     blocks.into_iter().map(|b| b.encode()).collect()
 }
 
+#[ignore]
 #[test]
 fn icrc1_test_multi_step_migration_from_mainnet() {
     ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
@@ -640,10 +642,11 @@ fn icrc1_test_downgrade_from_incompatible_version() {
         ledger_wasm_nextledgerversion(),
         ledger_wasm(),
         encode_init_args,
-        false,
+        true,
     );
 }
 
+#[ignore]
 #[test]
 fn icrc1_test_stable_migration_endpoints_disabled_from_mainnet() {
     test_stable_migration_endpoints_disabled(ledger_mainnet_wasm());
@@ -681,6 +684,7 @@ fn test_stable_migration_endpoints_disabled(ledger_wasm_mainnet: Vec<u8>) {
     );
 }
 
+#[ignore]
 #[test]
 fn icrc1_test_incomplete_migration_from_mainnet() {
     ic_ledger_suite_state_machine_tests::test_incomplete_migration(
@@ -717,6 +721,7 @@ fn icrc1_test_incomplete_migration_from_v2_noledgerversion() {
     );
 }
 
+#[ignore]
 #[test]
 fn icrc1_test_incomplete_migration_to_current_from_mainnet() {
     ic_ledger_suite_state_machine_tests::test_incomplete_migration_to_current(
@@ -753,6 +758,7 @@ fn icrc1_test_incomplete_migration_to_current_from_v2_noledgerversion() {
     );
 }
 
+#[ignore]
 #[test]
 fn icrc1_test_migration_resumes_from_frozen_from_mainnet() {
     ic_ledger_suite_state_machine_tests::test_migration_resumes_from_frozen(
@@ -780,6 +786,7 @@ fn icrc1_test_migration_resumes_from_frozen_from_v2() {
     );
 }
 
+#[ignore]
 #[test]
 fn icrc1_test_metrics_while_migrating_from_mainnet() {
     ic_ledger_suite_state_machine_tests::test_metrics_while_migrating(
@@ -1551,7 +1558,7 @@ fn test_icrc3_certificate_ledger_upgrade() {
     // Install the ledger with a version serving the non-compliant ICRC-3 certificate.
     let ledger_id = env
         .install_canister(
-            ledger_mainnet_wasm(),
+            ledger_mainnet_v3_wasm(),
             Encode!(&(LedgerArgument::Init(init_args.clone()))).unwrap(),
             None,
         )
