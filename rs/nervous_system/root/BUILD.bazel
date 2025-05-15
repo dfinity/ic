@@ -10,7 +10,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_core",
     "//rs/types/management_canister_types",
     "@crate_index//:candid",
-    "@crate_index//:ic_cdk_0_17_1",
+    "@crate_index//:ic-cdk",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
 ]
