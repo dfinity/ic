@@ -38,7 +38,6 @@ MACRO_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
     "@crate_index//:async-trait",
-    "@crate_index//:ic-cdk-macros",
 ]
 
 BUILD_DEPENDENCIES = [

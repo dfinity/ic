@@ -3906,7 +3906,6 @@ dependencies = [
  "candid",
  "ic-base-types",
  "ic-cdk 0.18.0",
- "ic-cdk-macros 0.18.0",
  "serde",
 ]
 
@@ -19294,7 +19293,6 @@ dependencies = [
  "futures",
  "ic-base-types",
  "ic-cdk 0.18.0",
- "ic-cdk-macros 0.18.0",
  "ic-error-types 0.1.0",
  "ic-types",
  "proptest 1.6.0",
@@ -24406,7 +24404,6 @@ dependencies = [
  "candid",
  "futures",
  "ic-cdk 0.18.0",
- "ic-cdk-macros 0.18.0",
  "ic-management-canister-types",
  "rand 0.8.5",
  "rand_pcg 0.3.1",
