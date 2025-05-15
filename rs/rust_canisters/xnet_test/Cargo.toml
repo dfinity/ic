@@ -14,7 +14,6 @@ path = "src/main.rs"
 candid = { workspace = true }
 futures = { workspace = true }
 ic-cdk = "0.18.0"
-ic-cdk-macros = "0.18.0"
 ic-management-canister-types = { workspace = true }
 rand = { workspace = true }
 rand_pcg = "0.3"

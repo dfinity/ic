@@ -12,7 +12,6 @@ candid = { workspace = true }
 getrandom = { version = "0.2", features = ["custom"] }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-cdk = { workspace = true }
-ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-nns-constants = { path = "../../nns/constants" }

@@ -18,7 +18,6 @@ path = "src/lib.rs"
 candid = { workspace = true }
 futures = { workspace = true }
 ic-cdk = { workspace = true }
-ic-cdk-macros = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]
