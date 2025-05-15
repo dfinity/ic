@@ -50,6 +50,7 @@ pub enum BypassReasonIC {
 impl CustomBypassReason for BypassReasonIC {}
 
 #[derive(Debug, Clone)]
+/// Decides if we need to bypass caching for the given request
 struct BypasserIC {
     cache_non_anonymous: bool,
 }
@@ -69,10 +70,10 @@ impl Bypasser for BypasserIC {
             // We cache only Query
             Some(BypassReasonIC::IncorrectRequestType)
         } else if ctx.nonce.is_some() {
-            // Skip cache if there's a nonce
+            // Bypass cache if there's a nonce
             Some(BypassReasonIC::Nonce)
         } else if ctx.is_anonymous() == Some(false) && !self.cache_non_anonymous {
-            // Skip non-anonymous requests if not configured to cache them
+            // Bypass non-anonymous requests if not configured to cache them
             Some(BypassReasonIC::NonAnonymous)
         } else {
             None

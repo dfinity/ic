@@ -282,6 +282,7 @@ pub fn setup_test_router(
         "--obs-log-null",
         "--retry-update-call",
     ];
+
     if !enable_logging {
         args.push("--obs-disable-request-logging");
     }
@@ -336,9 +337,7 @@ pub fn setup_test_router(
         None,
         &cli,
         &metrics_registry,
-        enable_cache.then_some(Arc::new(
-            CacheState::new(&cli.cache, &Registry::new()).unwrap(),
-        )),
+        enable_cache.then(|| Arc::new(CacheState::new(&cli.cache, &Registry::new()).unwrap())),
         salt,
     );
 

@@ -1,5 +1,5 @@
 {
-  "checksum": "d1d9770d78444841bf82f8399f38b76f6186742b1456e62410fa1142dfcaf5f5",
+  "checksum": "efefdad09818d3e4b172910c5505c55eb87fdb87e3d398d8d3aee7c9e4944cf4",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -32756,7 +32756,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-bn-lib",
           "commitish": {
-            "Rev": "f85fc84e1e608cdea7d60763cf202d74a7fd5050"
+            "Rev": "ec4a6b4abab2d94e09c4d5fee2d57d7bb1260835"
           }
         }
       },
@@ -34179,7 +34179,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-gateway",
           "commitish": {
-            "Rev": "8248267091e8f3306808355d5556701ed15d777f"
+            "Rev": "ed8539d9edd45b97148c46b8020fa6d7ebd48c07"
           }
         }
       },
