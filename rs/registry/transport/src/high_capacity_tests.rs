@@ -107,19 +107,19 @@ async fn test_dechunkify_delta() {
                 content: Some(high_capacity_registry_value::Content::Value(
                     b"inline".to_vec(),
                 )),
-                timestamp_seconds: 0,
+                timestamp_nanoseconds: 0,
             },
             HighCapacityRegistryValue {
                 version: 8,
                 content: Some(high_capacity_registry_value::Content::LargeValueChunkKeys(
                     LARGE_VALUE_CHUNK_KEYS.clone(),
                 )),
-                timestamp_seconds: 0,
+                timestamp_nanoseconds: 0,
             },
             HighCapacityRegistryValue {
                 version: 9,
                 content: Some(high_capacity_registry_value::Content::DeletionMarker(true)),
-                timestamp_seconds: 0,
+                timestamp_nanoseconds: 0,
             },
         ],
     };

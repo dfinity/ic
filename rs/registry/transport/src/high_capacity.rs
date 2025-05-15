@@ -299,7 +299,7 @@ async fn dechunkify_value(
         version,
         content,
         // Ignored.
-        timestamp_seconds: _,
+        timestamp_nanoseconds: _,
     } = value;
 
     let value = match content {
