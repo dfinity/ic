@@ -42,6 +42,8 @@ pub(crate) fn mutations_for_canister_ranges(
     old_rt: &RoutingTable,
     new_rt: &RoutingTable,
 ) -> Vec<RegistryMutation> {
+    // These two iterators are both sorted in the same way - by start of the range. If the sort
+    // were not guaranteed the same, the below algorithm would produce incorrect results.
     let mut old_it = old_rt
         .iter()
         .map(|(range, &subnet)| ((range.start, subnet), range.end))
