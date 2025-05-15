@@ -22,7 +22,7 @@ get_cmdline_var() {
     grep -oP "${var}=[^ ]*" /proc/cmdline | head -n1 | cut -d= -f2-
 }
 
-# Get partition targets based on boot alternative (help: should it be the other system?)
+# Get partition targets based on boot alternative (help: should it be the other system? We're currently upgrading to the passive GuestOS system, but should it actually be the active system?)
 get_partition_targets() {
     local lodev="$1"
     local boot_alternative="$2"
@@ -35,7 +35,7 @@ get_partition_targets() {
     fi
 }
 
-# Upgrade and boot into the alternative boot partition (help: reverse this?)
+# Upgrade and boot into the alternative boot partition
 prepare_guestos_upgrade() {
     echo "Starting guestos upgrade preparation"
     lodev="$(losetup -Pf --show ${GUESTOS_DEVICE})"
