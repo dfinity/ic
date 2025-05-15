@@ -481,6 +481,7 @@ pub(crate) enum CanisterManagerError {
         limit: usize,
     },
     CanisterSnapshotNotEnoughCycles(CanisterOutOfCyclesError),
+    CanisterSnapshotImmutable,
     LongExecutionAlreadyInProgress {
         canister_id: CanisterId,
     },
@@ -653,6 +654,10 @@ impl AsErrorHelp for CanisterManagerError {
             },
             CanisterManagerError::CanisterSnapshotNotEnoughCycles { .. } => ErrorHelp::UserError {
                 suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::CanisterSnapshotImmutable => ErrorHelp::UserError {
+                suggestion: "Only canister snapshots created by metadata upload can be mutated.".to_string(),
                 doc_link: "".to_string(),
             },
             CanisterManagerError::LongExecutionAlreadyInProgress { .. } => ErrorHelp::UserError {
@@ -973,6 +978,12 @@ impl From<CanisterManagerError> for UserError {
                 Self::new(
                 ErrorCode::CanisterOutOfCycles,
                     format!("Canister snapshotting failed with `{}`{additional_help}", err),
+                )
+            }
+            CanisterSnapshotImmutable => {
+                Self::new(
+                ErrorCode::CanisterSnapshotImmutable,
+                    "Only canister snapshots created by metadata upload can be mutated.".to_string(),
                 )
             }
             LongExecutionAlreadyInProgress { canister_id } => {
