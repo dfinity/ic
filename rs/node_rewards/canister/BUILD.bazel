@@ -18,7 +18,7 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-stable-structures",
-    "@crate_index//:ic_cdk_0_17",
+    "@crate_index//:ic-cdk,
     "@crate_index//:prost",
 ]
 

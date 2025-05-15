@@ -9,7 +9,7 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:flate2",
     "@crate_index//:ic-certified-map",
-    "@crate_index//:ic_cdk_0_17",
+    "@crate_index//:ic-cdk,
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",
     "@crate_index//:sha2",
@@ -19,7 +19,7 @@ DEV_DEPENDENCIES = []
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
-    "@crate_index//:ic_cdk_macros_0_17",
+    "@crate_index//:ic-cdk-macros,
 ]
 
 MACRO_DEV_DEPENDENCIES = []

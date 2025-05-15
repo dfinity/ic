@@ -19,7 +19,7 @@ package(default_visibility = ["//visibility:public"])
         proc_macro_deps = [
             # Keep sorted.
             "@crate_index//:async-trait",
-            "@crate_index//:ic_cdk_macros_0_17",
+            "@crate_index//:ic-cdk-macros,
         ],
         rustc_env = {
             "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(execpath //rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm.wasm.gz)",
@@ -39,7 +39,7 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:candid",
             "@crate_index//:hex",
             "@crate_index//:ic-stable-structures",
-            "@crate_index//:ic_cdk_0_17",
+            "@crate_index//:ic-cdk,
             "@crate_index//:intmap",
             "@crate_index//:lazy_static",
             "@crate_index//:minicbor",

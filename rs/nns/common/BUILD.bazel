@@ -21,7 +21,7 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:comparable",
     "@crate_index//:ic-stable-structures",
-    "@crate_index//:ic_cdk_0_17",
+    "@crate_index//:ic-cdk,
     "@crate_index//:lazy_static",
     "@crate_index//:num-traits",
     "@crate_index//:prost",

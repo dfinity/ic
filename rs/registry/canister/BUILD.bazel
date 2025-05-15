@@ -47,7 +47,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-certified-map",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
-    "@crate_index//:ic_cdk_0_17",
+    "@crate_index//:ic-cdk,
     "@crate_index//:idna",
     "@crate_index//:ipnet",
     "@crate_index//:lazy_static",

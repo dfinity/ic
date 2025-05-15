@@ -37,7 +37,7 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:ic-certification",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:ic-stable-structures",
-            "@crate_index//:ic_cdk_0_17",
+            "@crate_index//:ic-cdk,
             "@crate_index//:leb128",
             "@crate_index//:minicbor",
             "@crate_index//:serde",
@@ -113,7 +113,7 @@ package(default_visibility = ["//visibility:public"])
         opt = "z",
         proc_macro_deps = [
             # Keep sorted.
-            "@crate_index//:ic_cdk_macros_0_17",
+            "@crate_index//:ic-cdk-macros,
         ],
         service_file = ":ledger.did",
         deps = [
@@ -131,7 +131,7 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:ic-certification",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:ic-stable-structures",
-            "@crate_index//:ic_cdk_0_17",
+            "@crate_index//:ic-cdk,
             "@crate_index//:num-traits",
             "@crate_index//:serde_bytes",
         ] + extra_deps,
@@ -387,7 +387,7 @@ rust_test(
         crate_features = features,
         proc_macro_deps = [
             # Keep sorted.
-            "@crate_index//:ic_cdk_macros_0_17",
+            "@crate_index//:ic-cdk-macros,
         ],
         results_file = "canbench_results/canbench" + name_suffix + ".yml",
         deps = [
@@ -405,7 +405,7 @@ rust_test(
             "@crate_index//:ic-cdk-timers",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:ic-stable-structures",
-            "@crate_index//:ic_cdk_0_17",
+            "@crate_index//:ic-cdk,
             "@crate_index//:num-traits",
             "@crate_index//:serde_bytes",
         ] + extra_deps,

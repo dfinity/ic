@@ -69,7 +69,7 @@ system_test(
         "@crate_index//:candid",
         "@crate_index//:ic-agent",
         "@crate_index//:ic-utils",
-        "@crate_index//:ic_cdk_0_17",
+        "@crate_index//:ic-cdk,
         "@crate_index//:lazy_static",
         "@crate_index//:rand",
         "@crate_index//:rand_chacha",
