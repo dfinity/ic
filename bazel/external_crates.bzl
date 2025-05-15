@@ -182,7 +182,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^4.9.0",
             ),
             "actix-web-prom": crate.spec(
-                version = "0.9.0",
+                version = "0.10.0",
             ),
             "addr": crate.spec(
                 version = "^0.15.6",
@@ -548,7 +548,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.12",
             ),
             "http": crate.spec(
-                version = "^1.2.0",
+                version = "^1.3.1",
             ),
             "http-body": crate.spec(
                 version = "^1.0.1",
@@ -602,7 +602,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-bn-lib": crate.spec(
                 git = "https://github.com/dfinity/ic-bn-lib",
-                rev = "686cff6ccd422716d48767a299ab33044a27d4ad",
+                rev = "eef90dd1a2f9a22a0a94ca9c40e4f266a3479522",
+                features = [
+                    "acme_alpn",
+                ],
             ),
             "ic-btc-interface": crate.spec(
                 version = "^0.2.2",
@@ -645,7 +648,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-gateway": crate.spec(
                 git = "https://github.com/dfinity/ic-gateway",
-                rev = "469d2daee8b44aadb46400bcb2832d560baf7272",
+                rev = "f35b9b7374b6490eb6883407677fb02cb219f19e",
             ),
             "ic-http-certification": crate.spec(
                 version = "3.0.3",
@@ -992,7 +995,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "prometheus": crate.spec(
-                version = "^0.13.4",
+                version = "^0.14.0",
                 features = [
                     "process",
                 ],
@@ -1017,7 +1020,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.13.3",
             ),
             "protobuf": crate.spec(
-                version = "^2.28.0",
+                version = "^3.7.2",
             ),
             "publicsuffix": crate.spec(
                 version = "^2.2.3",
@@ -1405,10 +1408,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "tracing",
                 ],
             ),
-            # axum 0.8 support not yet released, use git
             "tower_governor": crate.spec(
-                git = "https://github.com/benwis/tower-governor",
-                rev = "bc9a6eacafcaec1e732886ceae8ae324bbd327df",
+                version = "^0.7.0",
             ),
             "tower-request-id": crate.spec(
                 version = "^0.3.0",
@@ -1456,10 +1457,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "uuid": crate.spec(
-                version = "^1.11.0",
+                version = "^1.16.0",
                 features = [
                     "v4",
                     "serde",
+                    "rng-rand",
                 ],
             ),
             "vsock": crate.spec(

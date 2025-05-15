@@ -245,9 +245,9 @@ impl CryptoMetrics {
             metrics
                 .crypto_vault_message_sizes
                 .with_label_values(&[
-                    service_type_string,
-                    message_type_string,
-                    domain_string,
+                    service_type_string.as_str(),
+                    message_type_string.as_str(),
+                    domain_string.as_str(),
                     method_name,
                 ])
                 .observe(message_size as f64);
@@ -256,9 +256,9 @@ impl CryptoMetrics {
                 metrics
                     .crypto_vault_message_serialization_duration_seconds
                     .with_label_values(&[
-                        service_type_string,
-                        message_type_string,
-                        domain_string,
+                        service_type_string.as_str(),
+                        message_type_string.as_str(),
+                        domain_string.as_str(),
                         method_name,
                     ])
                     .observe(start_time.elapsed().as_secs_f64());

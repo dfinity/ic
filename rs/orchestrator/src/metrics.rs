@@ -109,16 +109,16 @@ impl OrchestratorMetrics {
         KeyRotationStatus::iter()
             .filter(|s| !status.is_transient() || !s.is_error())
             .for_each(|s| {
+                let lbl: &'static str = s.into();
                 self.key_rotation_status
-                    .with_label_values(&[s.into()])
+                    .with_label_values(&[lbl])
                     .set((s == status) as i64);
             });
     }
 
     /// Set the error status to '1'.
     pub fn observe_key_rotation_error(&self) {
-        self.key_rotation_status
-            .with_label_values(&[KeyRotationStatus::Error.into()])
-            .set(1);
+        let lbl: &'static str = KeyRotationStatus::Error.into();
+        self.key_rotation_status.with_label_values(&[lbl]).set(1);
     }
 }

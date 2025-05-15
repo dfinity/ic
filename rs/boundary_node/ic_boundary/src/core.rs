@@ -172,14 +172,15 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     http_client_opts.dns_resolver = Some(dns_resolver);
 
     // HTTP client for health checks
-    let http_client_check = http::client::ReqwestClient::new(http_client_opts.clone())
+    let http_client_check = http::ReqwestClient::new(http_client_opts.clone())
         .context("unable to create HTTP client for checks")?;
     let http_client_check = Arc::new(http_client_check);
 
     // HTTP client for normal requests
-    let http_client = http::client::ReqwestClientLeastLoaded::new(
+    let http_client = http::ReqwestClientLeastLoaded::new(
         http_client_opts,
         cli.network.network_http_client_count as usize,
+        Some(&metrics_registry),
     )
     .context("unable to create HTTP client")?;
     let http_client = WithMetrics(
@@ -735,9 +736,6 @@ fn setup_tls_resolver_acme(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>
     let opts = tls::acme::AcmeOptions::new(
         vec![hostname],
         path,
-        // Does not matter, rustls-acme renews after 45 days always
-        Duration::from_secs(1),
-        false,
         cli.tls_acme_staging,
         "mailto:boundary-nodes@dfinity.org".into(),
     );

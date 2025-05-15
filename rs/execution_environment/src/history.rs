@@ -273,11 +273,11 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
                     let user_error_code_string = dashboard_label_value_from(user_error_code);
 
                     self.message_state_transition_failed_ic_duration_seconds
-                        .with_label_values(&[&reject_code, user_error_code_string])
+                        .with_label_values(&[reject_code.as_str(), user_error_code_string])
                         .observe(ic_duration);
 
                     self.message_state_transition_failed_wall_clock_duration_seconds
-                        .with_label_values(&[&reject_code, user_error_code_string])
+                        .with_label_values(&[reject_code.as_str(), user_error_code_string])
                         .observe(wall_duration);
                 }
             }

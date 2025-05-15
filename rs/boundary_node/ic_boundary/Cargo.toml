@@ -95,7 +95,7 @@ tokio-util = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
 # axum 0.8 support not yet released, use git
-tower_governor = { git = "https://github.com/benwis/tower-governor", rev = "bc9a6eacafcaec1e732886ceae8ae324bbd327df" }
+tower_governor = { version = "0.7" }
 tracing = { workspace = true }
 tracing-serde = "0.1.3"
 tracing-slog = "0.2"

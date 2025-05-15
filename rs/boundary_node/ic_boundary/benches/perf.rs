@@ -74,13 +74,11 @@ fn benchmark(c: &mut Criterion) {
         let listener =
             server::Listener::new(server::Addr::Tcp("127.0.0.1:0".parse().unwrap()), 1024).unwrap();
         let addr = listener.local_addr().unwrap();
-        let server = server::Server::new_with_registry(
-            server::Addr::Tcp("127.0.0.1:0".parse().unwrap()),
-            app,
-            server_opts,
-            &prometheus::Registry::new(),
-            None,
-        );
+        let server = server::ServerBuilder::new(app)
+            .listen_tcp("127.0.0.1:0".parse().unwrap())
+            .with_options(server_opts)
+            .build()
+            .unwrap();
 
         tx.send(addr).unwrap();
         server
