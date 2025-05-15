@@ -7,6 +7,7 @@ DEPENDENCIES = [
     "//rs/crypto/sha2",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:lazy_static",
+    "@crate_index//:prost",
 ]
 
 DEV_DEPENDENCIES = [
