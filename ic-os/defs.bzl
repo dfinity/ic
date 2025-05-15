@@ -11,7 +11,6 @@ This macro defines the overall build process for ICOS images, including:
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("//bazel:defs.bzl", "gzip_compress", "zstd_compress")
-load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:boundary-guestos.bzl", boundary_component_files = "component_files")
 load("//ic-os/components:defs.bzl", "tree_hash")
@@ -771,19 +770,12 @@ EOF
     # Export checksums & build artifacts
     artifact_bundle(
         name = "bundle",
-        inputs = [":prod"],
-        prefix = "boundary-os/disk-img",
-        visibility = visibility,
-    )
-
-    upload_artifacts(
-        name = "upload_disk-img",
         inputs = [
-            ":bundle-img.tar.zst",
+            ":disk-img.tar.zst",
             ":disk-img.tar.gz",
         ],
-        #remote_subdir = "boundary-os/disk-img" + upload_suffix,
-        visibility = visibility,
+        prefix = "boundary-os/disk-img" + upload_suffix,
+        visibility = ["//visibility:public"],
     )
 
     native.filegroup(

@@ -151,14 +151,17 @@ genrule(
     cmd = "gunzip -c $< > $@",
 )
 
-# TODO: add BN upload
+# Upload artifacts to the CDN
 upload_artifacts(
     name = "upload-artifacts",
     testonly = True,
     inputs = [
         "//publish/binaries:bundle",
         "//publish/binaries:bundle-legacy",
+        "//publish/binaries:bundle-sns-testing",
         "//publish/canisters:bundle",
+        "//ic-os/boundary-guestos/envs/dev:bundle",
+        "//ic-os/boundary-guestos/envs/prod:bundle",
         "//ic-os/guestos/envs/dev:bundle-disk",
         "//ic-os/guestos/envs/dev:bundle-update",
         "//ic-os/hostos/envs/prod:bundle",

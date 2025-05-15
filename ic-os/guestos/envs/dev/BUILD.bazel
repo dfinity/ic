@@ -16,6 +16,7 @@ icos_images = icos_build(
     ],
 )
 
+# The icos_deploy testnet script needs this
 artifact_bundle(
     name = "bundle-disk",
     testonly = True,  # wtf
@@ -31,18 +32,3 @@ artifact_bundle(
     prefix = "guest-os/update-img",
     visibility = ["//visibility:public"],
 )
-
-# The icos_deploy testnet script needs these
-#upload_artifacts(
-#    name = "upload_disk-img",
-#    inputs = [icos_images.disk_image],
-#    remote_subdir = "guest-os/disk-img",
-#    visibility = ["//testnet/tools:__pkg__"],
-#)
-#
-#upload_artifacts(
-#    name = "upload_update-img",
-#    inputs = [icos_images.update_image],
-#    remote_subdir = "guest-os/update-img",
-#    visibility = ["//testnet/tools:__pkg__"],
-#)
