@@ -35,6 +35,7 @@ rclone_common_flags=(
     --checksum
     --immutable
     --s3-upload-cutoff=5G
+    --s3-no-check-bucket
 )
 
 REMOTE_SUBDIR="${REMOTE_SUBDIR:?Remote subdirectory not set}"

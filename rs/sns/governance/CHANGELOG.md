@@ -11,6 +11,38 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-05-10: Proposal 136582
+
+http://dashboard.internetcomputer.org/proposal/136582
+
+## Changed
+
+SNS neuron baskets created for swap participants are now set up using topic-based following.
+Within each basket, there is still a root neuron with the largest dissolve delay (which does not
+follow anyone), and all other neurons in the same basket will now follow the root on all topics,
+including the critical ones (beforehand only non-critical following was set up within each basket).
+Read more details in the [forum thread](https://forum.dfinity.org/t/topic-based-following-for-swap-neuron-baskets/43649).
+
+
+# 2025-05-06: Proposal 136455
+
+http://dashboard.internetcomputer.org/proposal/136455
+
+## Changed
+
+The DAO community settings topic is promoted to being critical. For context, please refer to
+the [forum thread](https://forum.dfinity.org/t/make-sns-topic-dao-community-settings-critical/46689).
+
+
+# 2025-04-25: Proposal 136373
+
+http://dashboard.internetcomputer.org/proposal/136373
+
+## Deprecated
+
+* Custom proposals that were not yet assigned to a topic are no longer allowed to be submitted.
+
+
 # 2025-04-11: Proposal 136227
 
 http://dashboard.internetcomputer.org/proposal/136227

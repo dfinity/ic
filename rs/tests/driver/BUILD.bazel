@@ -36,6 +36,7 @@ rust_library(
     ],
     deps = [
         # Keep sorted.
+        "//packages/ic-http-types",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/artifact_pool",
         "//rs/canister_client",
@@ -94,7 +95,6 @@ rust_library(
         "//rs/rust_canisters/canister_test",
         "//rs/rust_canisters/dfn_candid",
         "//rs/rust_canisters/dfn_protobuf",
-        "//rs/rust_canisters/http_types",
         "//rs/rust_canisters/on_wire",
         "//rs/sns/governance",
         "//rs/sns/init",
@@ -131,8 +131,8 @@ rust_library(
         "@crate_index//:hyper",
         "@crate_index//:ic-agent",
         "@crate_index//:ic-btc-interface",
-        "@crate_index//:ic-cdk",
         "@crate_index//:ic-utils",
+        "@crate_index//:ic_cdk_0_17_1",
         "@crate_index//:itertools",
         "@crate_index//:json5",
         "@crate_index//:k256",

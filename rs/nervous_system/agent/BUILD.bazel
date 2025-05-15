@@ -14,6 +14,7 @@ DEPENDENCIES = [
     "//rs/nns/constants",
     "//rs/nns/governance/api",
     "//rs/nns/sns-wasm",
+    "//rs/node_rewards/canister/api",
     "//rs/registry/canister",
     "//rs/registry/canister/api",
     "//rs/sns/governance/api",

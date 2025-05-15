@@ -15,7 +15,7 @@ use ic_nns_constants::{
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{
-        self, icrc1_balance, query, setup_nns_canisters, sns_claim_staked_neuron, sns_get_proposal,
+        icrc1_balance, query, setup_nns_canisters, sns_claim_staked_neuron, sns_get_proposal,
         sns_make_proposal, sns_stake_neuron, sns_wait_for_proposal_executed_or_failed,
         sns_wait_for_proposal_execution,
     },
@@ -288,7 +288,6 @@ fn new_treasury_scenario(
 fn test_sns_treasury_can_transfer_funds_via_proposals() {
     // Step 1: Prepare the world.
 
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let state_machine = state_machine_builder_for_sns_tests().build();
 
     let (whale_neuron_id, sns_test_canister_ids) = new_treasury_scenario(&state_machine);
@@ -525,7 +524,6 @@ fn test_transfer_sns_treasury_funds_proposals_that_are_too_big_get_blocked_at_su
     // order to provoke a giant treasury valuation, which then puts a lower cap on the number of
     // tokens that proposals can transfer from the treasury.
 
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let state_machine = state_machine_builder_for_sns_tests().build();
 
     let (whale_neuron_id, sns_test_canister_ids) = new_treasury_scenario(&state_machine);
@@ -696,7 +694,6 @@ fn test_transfer_sns_treasury_funds_proposals_that_are_too_big_get_blocked_at_su
 fn test_transfer_sns_treasury_funds_upper_bound_is_enforced_at_execution() {
     // Step 1: Prepare the world.
 
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let state_machine = state_machine_builder_for_sns_tests().build();
 
     let (whale_neuron_id, sns_test_canister_ids) = new_treasury_scenario(&state_machine);
@@ -863,7 +860,6 @@ fn nns_ledger_balance(state_machine: &StateMachine, account: Account) -> Tokens 
 fn sns_can_mint_funds_via_proposals() {
     // Step 1: Prepare the world.
 
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let state_machine = state_machine_builder_for_sns_tests().build();
 
     let (whale_neuron_id, sns_test_canister_ids) = new_treasury_scenario(&state_machine);

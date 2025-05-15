@@ -1,24 +1,27 @@
 use std::time::Duration;
 
+use candid::Encode;
 use cycles_minting_canister::{NotifyMintCyclesSuccess, MEMO_MINT_CYCLES};
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
-use ic_nns_governance_api::pb::v1::{
-    manage_neuron_response::Command, CreateServiceNervousSystem, MakeProposalRequest,
-    ManageNeuronCommandRequest, ProposalActionRequest, ProposalInfo, Topic,
+use ic_nns_governance_api::{
+    manage_neuron_response::Command, CreateServiceNervousSystem, ExecuteNnsFunction, ListNeurons,
+    MakeProposalRequest, ManageNeuronCommandRequest, Neuron, NnsFunction, ProposalActionRequest,
+    ProposalInfo, Topic,
 };
 use ic_sns_wasm::pb::v1::get_deployed_sns_by_proposal_id_response::GetDeployedSnsByProposalIdResult;
+use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens, TransferArgs};
 
-use crate::nns::governance::{get_proposal_info, manage_neuron};
+use crate::nns::governance::{get_proposal_info, list_neurons, manage_neuron};
 use crate::nns::sns_wasm::get_deployed_sns_by_proposal_id;
 use crate::sns::Sns;
-use crate::{CallCanisters, ProgressNetwork};
+use crate::{CallCanisters, CallCanistersWithStoppedCanisterError, ProgressNetwork};
 
 // TODO @rvem: we probably need more meaningful error type rather than just 'String'
 
-pub async fn propose_and_wait<C: CallCanisters + ProgressNetwork>(
+pub async fn propose_and_wait<C: CallCanistersWithStoppedCanisterError + ProgressNetwork>(
     agent: &C,
     neuron_id: NeuronId,
     proposal: MakeProposalRequest,
@@ -40,7 +43,9 @@ pub async fn propose_and_wait<C: CallCanisters + ProgressNetwork>(
     }
 }
 
-pub async fn propose_to_deploy_sns_and_wait<C: CallCanisters + ProgressNetwork>(
+pub async fn propose_to_deploy_sns_and_wait<
+    C: CallCanistersWithStoppedCanisterError + ProgressNetwork,
+>(
     agent: &C,
     neuron_id: NeuronId,
     create_service_nervous_system: CreateServiceNervousSystem,
@@ -73,7 +78,9 @@ pub async fn propose_to_deploy_sns_and_wait<C: CallCanisters + ProgressNetwork>(
     Ok((sns, nns_proposal_id))
 }
 
-pub async fn wait_for_proposal_execution<C: CallCanisters + ProgressNetwork>(
+pub async fn wait_for_proposal_execution<
+    C: CallCanistersWithStoppedCanisterError + ProgressNetwork,
+>(
     agent: &C,
     proposal_id: ProposalId,
 ) -> Result<ProposalInfo, String> {
@@ -110,7 +117,7 @@ pub async fn wait_for_proposal_execution<C: CallCanisters + ProgressNetwork>(
         if let Some(failure_reason) = &proposal_info.failure_reason {
             return Err(format!(
                 "Execution failed for {:?} proposal '{}': {:#?}",
-                Topic::try_from(proposal_info.topic).unwrap(),
+                Topic::from_repr(proposal_info.topic).unwrap(),
                 proposal_info
                     .proposal
                     .unwrap()
@@ -155,4 +162,55 @@ pub async fn convert_icp_to_cycles<C: CallCanisters>(benecificary_agent: &C, amo
         .await
         .unwrap()
         .unwrap();
+}
+
+pub async fn add_wasm_via_nns_proposal<
+    C: CallCanistersWithStoppedCanisterError + ProgressNetwork,
+>(
+    agent: &C,
+    neuron_id: NeuronId,
+    wasm: SnsWasm,
+) -> Result<ProposalInfo, String> {
+    let hash = wasm.sha256_hash();
+    let canister_type = wasm.canister_type;
+    let payload = AddWasmRequest {
+        hash: hash.to_vec(),
+        wasm: Some(wasm),
+    };
+
+    let proposal = MakeProposalRequest {
+        title: Some(format!("Add WASM for SNS canister type {}", canister_type)),
+        summary: "summary".to_string(),
+        url: "".to_string(),
+        action: Some(ProposalActionRequest::ExecuteNnsFunction(
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::AddSnsWasm as i32,
+                payload: Encode!(&payload).expect("Error encoding proposal payload"),
+            },
+        )),
+    };
+    propose_and_wait(agent, neuron_id, proposal).await
+}
+
+pub async fn get_nns_neuron_controller<C: CallCanisters>(
+    agent: &C,
+    neuron_id: NeuronId,
+) -> Result<Option<PrincipalId>, String> {
+    let request = ListNeurons {
+        neuron_ids: vec![neuron_id.id],
+        ..Default::default()
+    };
+    let response = list_neurons(agent, request)
+        .await
+        .map_err(|err| format!("Failed to list neurons {}", err))?;
+    let neurons = response
+        .full_neurons
+        .into_iter()
+        .filter(|n| n.id == Some(neuron_id))
+        .collect::<Vec<Neuron>>();
+    let neuron = neurons.first();
+    let controller = neuron
+        .ok_or_else(|| format!("Failed to get neuron {} full info", neuron_id.id))?
+        .controller;
+    Ok(controller)
 }

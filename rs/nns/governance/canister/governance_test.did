@@ -641,6 +641,7 @@ type Neuron = record {
   voting_power_refreshed_timestamp_seconds : opt nat64;
   deciding_voting_power : opt nat64;
   potential_voting_power : opt nat64;
+  maturity_disbursements_in_progress : opt vec MaturityDisbursement;
 };
 
 type NeuronBasketConstructionParameters = record {
@@ -1153,6 +1154,13 @@ type WaitForQuietState = record {
 type XdrConversionRate = record {
   xdr_permyriad_per_icp : opt nat64;
   timestamp_seconds : opt nat64;
+};
+
+type MaturityDisbursement = record {
+  amount_e8s : opt nat64;
+  timestamp_of_disbursement_seconds : opt nat64;
+  finalize_disbursement_timestamp_seconds : opt nat64;
+  account_to_disburse_to : opt Account;
 };
 
 service : (Governance) -> {

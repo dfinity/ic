@@ -12,6 +12,8 @@ documentation.workspace = true
 [dependencies]
 actix-web-prom = { workspace = true }
 anyhow = { workspace = true }
+axum = { workspace = true }
+bytes = { workspace = true }
 candid = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
@@ -27,6 +29,8 @@ serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 serde_with = { workspace = true }
 tokio = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
 tracing = { workspace = true }
 icp-ledger = { path = "../../../ledger_suite/icp" }
 

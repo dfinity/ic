@@ -19,8 +19,8 @@ bincode = { workspace = true }
 candid = { workspace = true }
 cfg-if = "1.0.0"
 hex = { workspace = true }
-ic-cdk = { workspace = true }
-ic-cdk-macros = { workspace = true }
+ic-cdk = "0.17.1"
+ic-cdk-macros = "0.17.1"
 ic-cdk-timers = { workspace = true }
 ic-certified-map = "0.3.2"
 ic-stable-structures = { workspace = true }

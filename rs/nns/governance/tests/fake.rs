@@ -25,7 +25,7 @@ use ic_nns_governance::{
     },
     use_node_provider_reward_canister,
 };
-use ic_nns_governance_api::pb::v1::{manage_neuron_response, ManageNeuronResponse};
+use ic_nns_governance_api::{manage_neuron_response, ManageNeuronResponse};
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_swap::pb::v1 as sns_swap_pb;
 use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};

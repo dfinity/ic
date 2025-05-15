@@ -174,10 +174,12 @@ rust_ic_test(
     data = DATA + [
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
-    env = dict(ENV.items() + [
-        ("UNIVERSAL_CANISTER_WASM_PATH", "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)"),
-    ]),
+    env = ENV | {
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+        "RUST_TEST_THREADS": "4",
+    },
     tags = [
+        "cpu:4",
         "test_macos_slow",
     ],
     deps = [":execution_environment"] + DEPENDENCIES + DEV_DEPENDENCIES,

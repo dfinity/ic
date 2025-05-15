@@ -2,7 +2,7 @@ use super::*;
 use crate::stable_memory::{StorableRegistryKey, StorableRegistryValue};
 use crate::test_registry_data_stable_memory_impl;
 use futures::FutureExt;
-use ic_nervous_system_canisters::registry::FakeRegistry;
+use ic_nervous_system_canisters::registry::fake::FakeRegistry;
 use ic_registry_keys::NODE_RECORD_KEY_PREFIX;
 use ic_registry_transport::pb::v1::{RegistryDelta, RegistryValue};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};

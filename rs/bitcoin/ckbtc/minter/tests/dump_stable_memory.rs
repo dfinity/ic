@@ -93,6 +93,7 @@ fn default_init_args() -> CkbtcMinterInitArgs {
         btc_checker_principal: Some(CanisterId::from(0)),
         kyt_principal: None,
         kyt_fee: None,
+        get_utxos_cache_expiration_seconds: None,
     }
 }
 

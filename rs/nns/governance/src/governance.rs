@@ -96,15 +96,12 @@ use ic_nns_constants::{
     SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_nns_governance_api::{
-    pb::v1::{
-        self as api,
-        manage_neuron_response::{self, MergeMaturityResponse, StakeMaturityResponse},
-        CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons,
-        ListNeuronsResponse, ListProposalInfoResponse, ManageNeuronResponse, NeuronInfo,
-        ProposalInfo,
-    },
+    self as api,
+    manage_neuron_response::{self, MergeMaturityResponse, StakeMaturityResponse},
     proposal_validation,
     subnet_rental::SubnetRentalRequest,
+    CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons, ListNeuronsResponse,
+    ListProposalInfoResponse, ManageNeuronResponse, NeuronInfo, ProposalInfo,
 };
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
@@ -137,7 +134,7 @@ use std::{
     string::ToString,
 };
 
-mod disburse_maturity;
+pub mod disburse_maturity;
 mod ledger_helper;
 mod merge_neurons;
 mod split_neuron;
@@ -928,7 +925,7 @@ impl ProposalData {
         // no only needs a tie.
         let current_deadline = wait_for_quiet_state.current_deadline_timestamp_seconds;
         let deciding_amount_yes = new_tally.total / 2 + 1;
-        let deciding_amount_no = (new_tally.total + 1) / 2;
+        let deciding_amount_no = new_tally.total.div_ceil(2);
         if new_tally.yes >= deciding_amount_yes
             || new_tally.no >= deciding_amount_no
             || now_seconds > current_deadline
@@ -1674,8 +1671,7 @@ impl Governance {
         cmc: Arc<dyn CMC>,
         mut randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
-        let (heap_neurons, heap_governance_proto, maybe_rng_seed) =
-            split_governance_proto(governance_proto);
+        let (_, heap_governance_proto, maybe_rng_seed) = split_governance_proto(governance_proto);
 
         // Carry over the previous rng seed to avoid race conditions in handling queued ingress
         // messages that may require a functioning RNG.
@@ -1685,7 +1681,7 @@ impl Governance {
 
         Self {
             heap_data: heap_governance_proto,
-            neuron_store: NeuronStore::new_restored(heap_neurons),
+            neuron_store: NeuronStore::new_restored(),
             env,
             ledger,
             cmc,
@@ -1702,11 +1698,9 @@ impl Governance {
     /// After calling this method, the proto and neuron_store (the heap neurons at least)
     /// becomes unusable, so it should only be called in pre_upgrade once.
     pub fn take_heap_proto(&mut self) -> GovernanceProto {
-        let neuron_store = std::mem::take(&mut self.neuron_store);
-        let neurons = neuron_store.take();
         let heap_governance_proto = std::mem::take(&mut self.heap_data);
         let rng_seed = self.randomness.get_rng_seed();
-        reassemble_governance_proto(neurons, heap_governance_proto, rng_seed)
+        reassemble_governance_proto(BTreeMap::new(), heap_governance_proto, rng_seed)
     }
 
     pub fn __get_state_for_test(&self) -> GovernanceProto {
@@ -5631,11 +5625,24 @@ impl Governance {
         }
     }
 
+    /// Preconditions:
+    /// 0. `register_vote.proposal` is a proposal ID of a proposal that still accepts votes.
+    /// 1. `neuron_id` identifies an existing neuron that is eligible to vote on that proposal
+    ///    (i.e., it has a corresponding ballot).
+    /// 2. `caller` is authorized to vote on behalf of `neuron_id` (either due to being its
+    ///    controller or a hotkey).
+    /// 3. `register_vote.vote` must not be `Vote::Unspecified`.
+    /// 4. The neuron has not already cast its vote.
+    ///
+    /// Practically, neurons that have already dissolved cannot vote, as long as the minimal
+    /// possible dissolve delay is greated than the maximum possible voting period. Refer to:
+    /// - `VotingPowerEconomics.NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS_BOUNDS`
+    /// - `ProposalData.evaluate_wait_for_quiet`
     async fn register_vote(
         &mut self,
         neuron_id: &NeuronId,
         caller: &PrincipalId,
-        pb: &manage_neuron::RegisterVote,
+        register_vote: &manage_neuron::RegisterVote,
     ) -> Result<(), GovernanceError> {
         let now_seconds = self.env.now();
         let voting_period_seconds = self.voting_period_seconds();
@@ -5650,7 +5657,10 @@ impl Governance {
                 "Caller is not authorized to vote for neuron.",
             ));
         }
-        let proposal_id = pb.proposal.as_ref().ok_or_else(||
+
+        let manage_neuron::RegisterVote { proposal, vote } = register_vote;
+
+        let proposal_id = proposal.as_ref().ok_or_else(||
             // Proposal not specified.
             GovernanceError::new_with_message(ErrorType::PreconditionFailed, "Vote must include a proposal id."))?;
         let proposal = self
@@ -5666,7 +5676,7 @@ impl Governance {
             .map(|p| p.topic())
             .unwrap_or(Topic::Unspecified);
 
-        let vote = Vote::try_from(pb.vote).unwrap_or(Vote::Unspecified);
+        let vote = Vote::try_from(*vote).unwrap_or(Vote::Unspecified);
         if vote == Vote::Unspecified {
             // Invalid vote specified, i.e., not yes or no.
             return Err(GovernanceError::new_with_message(
@@ -6899,13 +6909,6 @@ impl Governance {
                 latest_round_available_e8s_equivalent_float as u64,
             ),
         })
-    }
-
-    pub fn batch_adjust_neurons_storage(
-        &mut self,
-        next: std::ops::Bound<NeuronId>,
-    ) -> std::ops::Bound<NeuronId> {
-        self.neuron_store.batch_adjust_neurons_storage(next)
     }
 
     /// Recompute cached metrics once per day

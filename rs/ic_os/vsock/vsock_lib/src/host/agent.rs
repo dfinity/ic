@@ -1,19 +1,22 @@
 use crate::host::command_utilities::handle_command_output;
 use crate::host::hsm::{attach_hsm, detach_hsm};
 use crate::protocol::{Command, HostOSVsockVersion, NotifyData, Payload, Response, UpgradeData};
-use futures::executor::block_on;
 use ic_http_utils::file_downloader::FileDownloader;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::Path;
 use std::time::Duration;
+use tokio::runtime::Runtime;
 
 pub fn dispatch(command: &Command) -> Response {
     use Command::*;
     match command {
         AttachHSM => attach_hsm(),
         DetachHSM => detach_hsm(),
-        Upgrade(upgrade_data) => block_on(upgrade_hostos(upgrade_data)),
+        Upgrade(upgrade_data) => {
+            let rt = Runtime::new().map_err(|e| e.to_string())?;
+            rt.block_on(upgrade_hostos(upgrade_data))
+        }
         Notify(notify_data) => notify(notify_data),
         GetVsockProtocol => get_hostos_vsock_version(),
         GetHostOSVersion => get_hostos_version(),

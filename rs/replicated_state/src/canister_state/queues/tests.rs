@@ -2,6 +2,7 @@ use super::input_schedule::testing::InputScheduleTesting;
 use super::message_pool::{MessageStats, REQUEST_LIFETIME};
 use super::testing::new_canister_output_queues_for_test;
 use super::*;
+use crate::testing::FakeDropMessageMetrics;
 use crate::{CanisterState, InputQueueType::*, SchedulerState, SystemState};
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
@@ -135,11 +136,12 @@ impl CanisterQueuesFixture {
     /// Times out all messages with deadlines: all requests in output queues (best
     /// effort or guaranteed response); and all best effort messages, except
     /// responses in input queues.
-    fn time_out_all_messages_with_deadlines(&mut self) -> (usize, Cycles) {
+    fn time_out_all_messages_with_deadlines(&mut self) -> Cycles {
         self.queues.time_out_messages(
             Time::from_nanos_since_unix_epoch(u64::MAX),
             &self.this,
             &BTreeMap::default(),
+            &FakeDropMessageMetrics::default(),
         )
     }
 
@@ -220,6 +222,34 @@ pub fn input_queue_type_from_local_canisters(
             RemoteSubnet
         }
     }
+}
+
+fn time_out_messages(
+    queues: &mut CanisterQueues,
+    current_time: Time,
+    own_canister_id: &CanisterId,
+    local_canisters: &BTreeMap<CanisterId, CanisterState>,
+) -> (usize, Cycles) {
+    let metrics = FakeDropMessageMetrics::default();
+    let lost_cycles =
+        queues.time_out_messages(current_time, own_canister_id, local_canisters, &metrics);
+    let timed_out_messages = metrics.timed_out_messages.borrow().values().sum();
+    (timed_out_messages, lost_cycles)
+}
+
+fn shed_largest_message(
+    queues: &mut CanisterQueues,
+    own_canister_id: &CanisterId,
+    local_canisters: &BTreeMap<CanisterId, CanisterState>,
+) -> (bool, Cycles) {
+    let metrics = FakeDropMessageMetrics::default();
+    let (message_shed, lost_cycles) =
+        queues.shed_largest_message(own_canister_id, local_canisters, &metrics);
+
+    let shed_messages: usize = metrics.shed_messages.borrow().values().sum();
+    assert_eq!(message_shed as usize, shed_messages);
+
+    (message_shed, lost_cycles)
 }
 
 /// Can push one request to the output queues.
@@ -643,11 +673,11 @@ fn test_shed_largest_message() {
     let local_canisters = Default::default();
     assert_eq!(
         (true, Cycles::zero()),
-        queues.shed_largest_message(&this, &local_canisters)
+        shed_largest_message(&mut queues, &this, &local_canisters)
     );
     assert_eq!(
         (true, Cycles::zero()),
-        queues.shed_largest_message(&this, &local_canisters)
+        shed_largest_message(&mut queues, &this, &local_canisters)
     );
 
     // There should be a reject response in an input queue.
@@ -660,7 +690,7 @@ fn test_shed_largest_message() {
     // And nothing else to shed.
     assert_eq!(
         (false, Cycles::zero()),
-        queues.shed_largest_message(&this, &local_canisters)
+        shed_largest_message(&mut queues, &this, &local_canisters)
     );
 }
 
@@ -697,7 +727,7 @@ fn test_shed_inbound_response() {
     let memory_usage3 = queues.best_effort_message_memory_usage();
     assert_eq!(
         (true, Cycles::zero()),
-        queues.shed_largest_message(&this, &NO_LOCAL_CANISTERS)
+        shed_largest_message(&mut queues, &this, &NO_LOCAL_CANISTERS)
     );
     let memory_usage2 = queues.best_effort_message_memory_usage();
     assert!(memory_usage2 < memory_usage3);
@@ -705,7 +735,7 @@ fn test_shed_inbound_response() {
     // Shed the next largest response (callback ID 2).
     assert_eq!(
         (true, Cycles::zero()),
-        queues.shed_largest_message(&this, &NO_LOCAL_CANISTERS)
+        shed_largest_message(&mut queues, &this, &NO_LOCAL_CANISTERS)
     );
     let memory_usage1 = queues.best_effort_message_memory_usage();
     assert!(memory_usage1 < memory_usage2);
@@ -718,7 +748,7 @@ fn test_shed_inbound_response() {
     // There's nothing else to shed.
     assert_eq!(
         (false, Cycles::zero()),
-        queues.shed_largest_message(&this, &NO_LOCAL_CANISTERS)
+        shed_largest_message(&mut queues, &this, &NO_LOCAL_CANISTERS)
     );
 
     // Peek then pop the response for callback ID 2.
@@ -762,7 +792,7 @@ fn test_shed_largest_message_reports_lost_cycles() {
         .unwrap();
     assert_eq!(
         (true, inbound_request.payment),
-        canister_queues.shed_largest_message(&own_canister_id, &BTreeMap::new())
+        shed_largest_message(&mut canister_queues, &own_canister_id, &BTreeMap::new())
     );
 
     // Inbound best-effort response: cycles are lost.
@@ -775,7 +805,7 @@ fn test_shed_largest_message_reports_lost_cycles() {
         .unwrap();
     assert_eq!(
         (true, inbound_response.refund),
-        canister_queues.shed_largest_message(&own_canister_id, &BTreeMap::new())
+        shed_largest_message(&mut canister_queues, &own_canister_id, &BTreeMap::new())
     );
     assert_eq!(
         Some(CanisterInput::ResponseDropped(
@@ -790,7 +820,7 @@ fn test_shed_largest_message_reports_lost_cycles() {
         .unwrap();
     assert_eq!(
         (true, Cycles::zero()),
-        canister_queues.shed_largest_message(&own_canister_id, &BTreeMap::new())
+        shed_largest_message(&mut canister_queues, &own_canister_id, &BTreeMap::new())
     );
     assert_matches!(
         canister_queues.pop_input(),
@@ -805,7 +835,7 @@ fn test_shed_largest_message_reports_lost_cycles() {
     canister_queues.push_output_response(outbound_response.clone().into());
     assert_eq!(
         (true, outbound_response.refund),
-        canister_queues.shed_largest_message(&own_canister_id, &BTreeMap::new())
+        shed_largest_message(&mut canister_queues, &own_canister_id, &BTreeMap::new())
     );
 }
 
@@ -973,7 +1003,8 @@ impl CanisterQueuesMultiFixture {
     /// effort or guaranteed response); and all best effort messages, except
     /// responses in input queues.
     fn time_out_all_messages_with_deadlines(&mut self) -> (usize, Cycles) {
-        self.queues.time_out_messages(
+        time_out_messages(
+            &mut self.queues,
             Time::from_nanos_since_unix_epoch(u64::MAX),
             &self.this,
             &BTreeMap::default(),
@@ -1366,9 +1397,21 @@ fn new_queues_with_stale_references() -> (CanisterQueues, Vec<Request>) {
 
     // Time out requests @0, @1 and @4 (deadlines 1000, 1001, 1002), including the
     // only request from canister 1; and the first and last request from canister 2.
+    let metrics = FakeDropMessageMetrics::default();
     assert_eq!(
-        (3, Cycles::zero()),
-        queues.time_out_messages(coarse_time(1003).into(), &own_canister_id, &local_canisters)
+        Cycles::zero(),
+        queues.time_out_messages(
+            coarse_time(1003).into(),
+            &own_canister_id,
+            &local_canisters,
+            &metrics,
+        )
+    );
+    assert_eq!(
+        btreemap! {
+            ("request", "inbound", "best-effort") => 3,
+        },
+        *metrics.timed_out_messages.borrow(),
     );
 
     assert!(queues.has_input());
@@ -1470,7 +1513,10 @@ fn canister_queues_with_empty_queues_in_input_schedules() -> CanisterQueues {
     assert_eq!(Ok(()), fixture.schedules_ok());
 
     // Time out the messages from `other_1`, `other_3`, `other_4` and `other_6`.
-    fixture.time_out_all_messages_with_deadlines();
+    assert_eq!(
+        (4, Cycles::zero()),
+        fixture.time_out_all_messages_with_deadlines()
+    );
     assert_eq!(Ok(()), fixture.queues.test_invariants());
     assert_eq!(Ok(()), fixture.schedules_ok());
 
@@ -1668,7 +1714,10 @@ fn test_push_into_empty_queue_in_input_schedule() {
         .unwrap());
 
     // Time out all messages.
-    fixture.time_out_all_messages_with_deadlines();
+    assert_eq!(
+        (2, Cycles::zero()),
+        fixture.time_out_all_messages_with_deadlines()
+    );
     assert_eq!(Ok(()), fixture.queues.test_invariants());
     assert_eq!(Ok(()), fixture.schedules_ok());
     assert!(!fixture.has_input());
@@ -2053,7 +2102,7 @@ fn canister_queues_proto_with_inbound_responses() -> pb_queues::CanisterQueues {
     // Shed the response for callback 3.
     assert_eq!(
         (true, Cycles::zero()),
-        queues.shed_largest_message(&canister_id, &BTreeMap::new())
+        shed_largest_message(&mut queues, &canister_id, &BTreeMap::new())
     );
     assert_eq!(
         Some(&CallbackId::from(3)),
@@ -2381,13 +2430,20 @@ fn test_stats_best_effort() {
 
     // Time out the one message with a deadline of less than 20 (the outgoing
     // request; generating a reject response) and shed the incoming response.
+    let metrics = FakeDropMessageMetrics::default();
     assert_eq!(
-        (1, Cycles::zero()),
-        queues.time_out_messages(t20.into(), &request4.sender, &BTreeMap::new())
+        Cycles::zero(),
+        queues.time_out_messages(t20.into(), &request4.sender, &BTreeMap::new(), &metrics)
+    );
+    assert_eq!(
+        btreemap! {
+            ("request", "outbound", "best-effort") => 1,
+        },
+        *metrics.timed_out_messages.borrow(),
     );
     assert_eq!(
         (true, Cycles::zero()),
-        queues.shed_largest_message(&response2.respondent, &BTreeMap::new())
+        shed_largest_message(&mut queues, &response2.respondent, &BTreeMap::new())
     );
 
     // Input queue slot reservation was consumed by reject response.
@@ -2538,13 +2594,21 @@ fn test_stats_guaranteed_response() {
 
     // Time out the one message that has an (implicit) deadline (the outgoing
     // request), pop the incoming response and the generated reject response.
+    let metrics = FakeDropMessageMetrics::default();
     assert_eq!(
-        (1, Cycles::zero()),
+        Cycles::zero(),
         queues.time_out_messages(
             coarse_time(u32::MAX).into(),
             &request4.sender,
-            &BTreeMap::new()
+            &BTreeMap::new(),
+            &metrics,
         )
+    );
+    assert_eq!(
+        btreemap! {
+            ("request", "outbound", "guaranteed response") => 1,
+        },
+        *metrics.timed_out_messages.borrow(),
     );
     assert_eq!(
         queues.pop_input(),
@@ -2667,15 +2731,23 @@ fn test_stats_oversized_requests() {
     // Shed the outgoing best-effort request and time out the outgoing guaranteed one.
     assert_eq!(
         (true, Cycles::zero()),
-        queues.shed_largest_message(&best_effort.sender, &BTreeMap::new())
+        shed_largest_message(&mut queues, &best_effort.sender, &BTreeMap::new())
     );
+    let metrics = FakeDropMessageMetrics::default();
     assert_eq!(
-        (1, Cycles::zero()),
+        Cycles::zero(),
         queues.time_out_messages(
             coarse_time(u32::MAX).into(),
             &best_effort.sender,
-            &BTreeMap::new()
+            &BTreeMap::new(),
+            &metrics,
         )
+    );
+    assert_eq!(
+        btreemap! {
+            ("request", "outbound", "guaranteed response") => 1,
+        },
+        *metrics.timed_out_messages.borrow(),
     );
 
     // Input queue slots and the input queue memory reservation were consumed.
@@ -2939,7 +3011,12 @@ fn test_peek_output_with_stale_references() {
     let own_canister_id = canister_test_id(13);
     let local_canisters = BTreeMap::new();
     // Time out the first two requests, including the only request to canister 2.
-    queues.time_out_messages(coarse_time(1002).into(), &own_canister_id, &local_canisters);
+    time_out_messages(
+        &mut queues,
+        coarse_time(1002).into(),
+        &own_canister_id,
+        &local_canisters,
+    );
 
     assert!(queues.has_output());
 
@@ -3212,13 +3289,14 @@ fn output_into_iter_peek_with_stale_references(
     let own_canister_id = canister_test_id(13);
     let local_canisters = BTreeMap::new();
     // Time out some messages.
-    canister_queues.time_out_messages(
+    time_out_messages(
+        &mut canister_queues,
         coarse_time(deadline).into(),
         &own_canister_id,
         &local_canisters,
     );
     // And shed one more.
-    canister_queues.shed_largest_message(&own_canister_id, &local_canisters);
+    shed_largest_message(&mut canister_queues, &own_canister_id, &local_canisters);
 
     // Peek and pop until the output queues are empty.
     let mut output_iter = canister_queues.output_into_iter();
@@ -3240,13 +3318,14 @@ fn output_into_iter_pop_with_stale_references(
     let own_canister_id = canister_test_id(13);
     let local_canisters = BTreeMap::new();
     // Time out some messages.
-    canister_queues.time_out_messages(
+    time_out_messages(
+        &mut canister_queues,
         coarse_time(deadline).into(),
         &own_canister_id,
         &local_canisters,
     );
     // And shed one more.
-    canister_queues.shed_largest_message(&own_canister_id, &local_canisters);
+    shed_largest_message(&mut canister_queues, &own_canister_id, &local_canisters);
 
     // Pop (after optionally peeking) a few times.
     let mut output_iter = canister_queues.output_into_iter();
@@ -3365,7 +3444,12 @@ fn time_out_messages_pushes_correct_reject_responses() {
     let current_time = t0 + REQUEST_LIFETIME + Duration::from_secs(1);
     assert_eq!(
         (3, Cycles::zero()),
-        canister_queues.time_out_messages(current_time, &own_canister_id, &local_canisters),
+        time_out_messages(
+            &mut canister_queues,
+            current_time,
+            &own_canister_id,
+            &local_canisters
+        ),
     );
 
     // Check that each canister has one request timed out in the output queue and one
@@ -3421,7 +3505,12 @@ fn time_out_messages_pushes_correct_reject_responses() {
     let current_time = t1 + REQUEST_LIFETIME + Duration::from_secs(1);
     assert_eq!(
         (1, Cycles::zero()),
-        canister_queues.time_out_messages(current_time, &own_canister_id, &local_canisters),
+        time_out_messages(
+            &mut canister_queues,
+            current_time,
+            &own_canister_id,
+            &local_canisters
+        ),
     );
 
     // Zero input queue reserved slots, 4 inbound responses,
@@ -3510,12 +3599,24 @@ fn time_out_messages_reports_lost_cycles() {
     // responses with refunds are generated for both outbound requests).
     let current_time = UNIX_EPOCH + 2 * REQUEST_LIFETIME;
     let own_canister_id = inbound_best_effort_request.sender;
+    let metrics = FakeDropMessageMetrics::default();
     assert_eq!(
-        (
-            4,
-            inbound_best_effort_request.payment + outbound_best_effort_response.refund
+        inbound_best_effort_request.payment + outbound_best_effort_response.refund,
+        canister_queues.time_out_messages(
+            current_time,
+            &own_canister_id,
+            &BTreeMap::new(),
+            &metrics
         ),
-        canister_queues.time_out_messages(current_time, &own_canister_id, &BTreeMap::new()),
+    );
+    assert_eq!(
+        btreemap! {
+            ("request", "inbound", "best-effort") => 1,
+            ("request", "outbound", "best-effort") => 1,
+            ("request", "outbound", "guaranteed response") => 1,
+            ("response", "outbound", "best-effort") => 1,
+        },
+        *metrics.timed_out_messages.borrow(),
     );
 }
 

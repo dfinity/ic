@@ -127,7 +127,7 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "max_ingress_payload_size_test",
     env = UNIVERSAL_CANISTER_ENV,
     tags = [
@@ -137,11 +137,15 @@ system_test(
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
+        "//rs/limits",
         "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/base_types",
+        "//rs/types/types",
         "//rs/universal_canister/lib",
         "@crate_index//:anyhow",
+        "@crate_index//:assert_matches",
         "@crate_index//:futures",
         "@crate_index//:ic-agent",
         "@crate_index//:slog",

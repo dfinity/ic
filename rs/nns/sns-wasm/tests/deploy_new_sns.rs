@@ -13,7 +13,7 @@ use ic_nns_constants::{
 };
 use ic_nns_test_utils::{
     sns_wasm,
-    state_test_helpers::{self, set_controllers, set_up_universal_canister, update_with_sender},
+    state_test_helpers::{set_controllers, set_up_universal_canister, update_with_sender},
 };
 use ic_sns_init::pb::v1::{DappCanisters, SnsInitPayload};
 use ic_sns_root::{CanisterSummary, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
@@ -32,7 +32,6 @@ pub mod common;
 #[test]
 fn test_canisters_are_created_and_installed() {
     // Step 1: Set up NNS
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let state_machine = set_up_state_machine_with_nns();
 
     // Step 2: Add cycles and canister WASMs to SNS-WASM.
@@ -166,7 +165,6 @@ fn test_canisters_are_created_and_installed() {
 /// simulate failures executing basic IC00 operations
 #[test]
 fn test_deploy_cleanup_on_wasm_install_failure() {
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = set_up_state_machine_with_nns();
 
     // Add cycles to the SNS-W canister to deploy an SNS.
@@ -253,7 +251,6 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
 
 #[test]
 fn test_deploy_adds_cycles_to_target_canisters() {
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = set_up_state_machine_with_nns();
 
     // Add cycles to the SNS-W canister to deploy an SNS.
@@ -319,7 +316,6 @@ fn test_deploy_adds_cycles_to_target_canisters() {
 #[test]
 fn test_deploy_sns_and_transfer_dapps() {
     // Setup the state machine
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = set_up_state_machine_with_nns();
 
     // Add cycles to the SNS-W canister to deploy the SNS

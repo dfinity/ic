@@ -11,7 +11,8 @@ use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use crate::page_map::PageAllocatorFileDescriptor;
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{
-    CanisterQueues, CanisterState, CheckpointLoadingMetrics, InputQueueType, PageMap, StateError,
+    CanisterQueues, CanisterState, CheckpointLoadingMetrics, DroppedMessageMetrics, InputQueueType,
+    PageMap, StateError,
 };
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
@@ -1297,14 +1298,14 @@ impl SystemState {
 
         match (&msg, &self.status) {
             // Best-effort responses are silently dropped when stopped.
-            (RequestOrResponse::Response(response), CanisterStatus::Stopped { .. })
+            (RequestOrResponse::Response(response), CanisterStatus::Stopped)
                 if response.is_best_effort() =>
             {
                 Ok(false)
             }
 
             // Requests and guaranteed responses are both rejected when stopped.
-            (_, CanisterStatus::Stopped { .. }) => {
+            (_, CanisterStatus::Stopped) => {
                 Err((StateError::CanisterStopped(self.canister_id()), msg))
             }
 
@@ -1513,7 +1514,7 @@ impl SystemState {
         match self.status {
             CanisterStatus::Running { .. } => CanisterStatusType::Running,
             CanisterStatus::Stopping { .. } => CanisterStatusType::Stopping,
-            CanisterStatus::Stopped { .. } => CanisterStatusType::Stopped,
+            CanisterStatus::Stopped => CanisterStatusType::Stopped,
         }
     }
 
@@ -1687,8 +1688,8 @@ impl SystemState {
         self.queues.has_expired_deadlines(current_time)
     }
 
-    /// Drops expired messages given a current time. Returns the number of messages
-    /// that were timed out and the total amount of attached cycles that was lost.
+    /// Drops expired messages given a current time. Returns the total amount of
+    /// attached cycles that was lost.
     ///
     /// See [`CanisterQueues::time_out_messages`] for further details.
     pub fn time_out_messages(
@@ -1696,9 +1697,10 @@ impl SystemState {
         current_time: Time,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
-    ) -> (usize, Cycles) {
+        metrics: &impl DroppedMessageMetrics,
+    ) -> Cycles {
         self.queues
-            .time_out_messages(current_time, own_canister_id, local_canisters)
+            .time_out_messages(current_time, own_canister_id, local_canisters, metrics)
     }
 
     /// Queries whether the `CallContextManager` in `self.state` holds any not
@@ -1785,9 +1787,10 @@ impl SystemState {
         &mut self,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        metrics: &impl DroppedMessageMetrics,
     ) -> (bool, Cycles) {
         self.queues
-            .shed_largest_message(own_canister_id, local_canisters)
+            .shed_largest_message(own_canister_id, local_canisters, metrics)
     }
 
     /// Re-partitions the local and remote input schedules of `self.queues`
@@ -1841,9 +1844,9 @@ impl SystemState {
         );
     }
 
-    /// Moves the given amount of cycles from the main balance to the reserved balance.
+    /// Checks if the given amount of cycles from the main balance can be moved to the reserved balance.
     /// Returns an error if the main balance is lower than the requested amount.
-    pub fn reserve_cycles(&mut self, amount: Cycles) -> Result<(), ReservationError> {
+    pub fn can_reserve_cycles(&self, amount: Cycles) -> Result<(), ReservationError> {
         if amount == Cycles::zero() {
             return Ok(());
         }
@@ -1861,10 +1864,17 @@ impl SystemState {
                 available: self.cycles_balance,
             })
         } else {
-            self.cycles_balance -= amount;
-            self.reserved_balance += amount;
             Ok(())
         }
+    }
+
+    /// Moves the given amount of cycles from the main balance to the reserved balance.
+    /// Returns an error if the main balance is lower than the requested amount.
+    pub fn reserve_cycles(&mut self, amount: Cycles) -> Result<(), ReservationError> {
+        self.can_reserve_cycles(amount)?;
+        self.cycles_balance -= amount;
+        self.reserved_balance += amount;
+        Ok(())
     }
 
     /// Removes all cycles from `cycles_balance` and `reserved_balance` as part
@@ -2018,9 +2028,9 @@ impl SystemState {
     /// depending if the condition for `OnLowWasmMemoryHook` is satisfied:
     ///
     /// 1. In the case of `memory_allocation`
-    ///     `wasm_memory_threshold >= min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit) - wasm_memory_usage`
+    ///    `wasm_memory_threshold >= min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit) - wasm_memory_usage`
     /// 2. Without memory allocation
-    ///     `wasm_memory_threshold >= wasm_memory_limit - wasm_memory_usage`
+    ///    `wasm_memory_threshold >= wasm_memory_limit - wasm_memory_usage`
     ///
     /// Note: if `wasm_memory_limit` is not set, its default value is 4 GiB.
     pub fn update_on_low_wasm_memory_hook_status(

@@ -704,6 +704,11 @@ impl Ledger {
             index_principal,
         };
 
+        if ledger.fee_collector.as_ref().map(|fc| fc.fee_collector) == Some(ledger.minting_account)
+        {
+            ic_cdk::trap("The fee collector account cannot be the same as the minting account");
+        }
+
         for (account, balance) in initial_balances.into_iter() {
             let amount = Tokens::try_from(balance.clone()).unwrap_or_else(|e| {
                 panic!(

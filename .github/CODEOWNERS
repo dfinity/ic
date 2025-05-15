@@ -41,6 +41,8 @@ go_deps.bzl               @dfinity/idx
 /publish/ @dfinity/idx
 
 # [Packages]
+/packages/canlog/                       @dfinity/cross-chain-team
+/packages/canlog_derive/                @dfinity/cross-chain-team
 /packages/icrc-cbor/                    @dfinity/finint @dfinity/cross-chain-team
 /packages/icrc-ledger-agent/            @dfinity/finint
 /packages/icrc-ledger-types/            @dfinity/finint
@@ -51,6 +53,7 @@ go_deps.bzl               @dfinity/idx
 /packages/ic-ed25519/                   @dfinity/crypto-team
 /packages/ic-ethereum-types/            @dfinity/cross-chain-team
 /packages/ic-hpke/                      @dfinity/crypto-team
+/packages/ic-http-types/                @dfinity/cross-chain-team
 /packages/ic-metrics-assert/            @dfinity/cross-chain-team
 /packages/ic-secp256k1/                 @dfinity/crypto-team
 /packages/ic-sha3/                      @dfinity/crypto-team
@@ -75,6 +78,7 @@ go_deps.bzl               @dfinity/idx
 /.github/workflows/rosetta-release.yml                                   @dfinity/finint @dfinity/idx
 /.github/CODEOWNERS                                                      @dfinity/ic-owners-owners
 /ci/                                                                     @dfinity/idx
+/ci/actions/dependencies/                                                @dfinity/product-security
 /ci/src/dependencies/                                                    @dfinity/product-security
 /ci/src/dependencies/resources/container_scanner_finding_failover_ignore_list_guestos.txt @dfinity/node
 /ci/tools/repro-check                                                    @dfinity/dre

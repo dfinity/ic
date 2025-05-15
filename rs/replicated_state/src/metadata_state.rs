@@ -5,7 +5,7 @@ mod tests;
 use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
 use crate::CanisterQueues;
 use crate::{canister_state::system_state::CyclesUseCase, CheckpointLoadingMetrics};
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, SnapshotId};
 use ic_btc_replica_types::BlockBlob;
 use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
@@ -175,6 +175,10 @@ pub struct SystemMetadata {
     /// by aggregating them and storing a running total over multiple days by node id and
     /// timestamp. Observations of blockmaker stats are performed each time a batch is processed.
     pub blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries,
+
+    /// Modifications to the state that have not been applied yet to the next checkpoint.
+    /// This field is transient and is emptied before writing the next checkpoint.
+    pub unflushed_checkpoint_ops: UnflushedCheckpointOps,
 }
 
 /// Full description of the IC network toplogy.
@@ -763,6 +767,7 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
                 Some(blockmaker_metrics) => (blockmaker_metrics, metrics).try_into()?,
                 None => BlockmakerMetricsTimeSeries::default(),
             },
+            unflushed_checkpoint_ops: Default::default(),
         })
     }
 }
@@ -794,6 +799,7 @@ impl SystemMetadata {
             expected_compiled_wasms: BTreeSet::new(),
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
+            unflushed_checkpoint_ops: Default::default(),
         }
     }
 
@@ -1063,6 +1069,7 @@ impl SystemMetadata {
             ref expected_compiled_wasms,
             bitcoin_get_successors_follow_up_responses: _,
             blockmaker_metrics_time_series: _,
+            unflushed_checkpoint_ops: _,
         } = self;
 
         let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");
@@ -2170,6 +2177,58 @@ impl
     }
 }
 
+/// Modifications to the state that require explicit tracking in order to be correctly applied
+/// by the checkpointing logic.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum UnflushedCheckpointOp {
+    /// A snapshot was deleted.
+    DeleteSnapshot(SnapshotId),
+    /// A new snapshot was taken from a canister.
+    TakeSnapshot(CanisterId, SnapshotId),
+    /// A snapshot was loaded to a canister.
+    LoadSnapshot(CanisterId, SnapshotId),
+}
+
+/// A collection of unflushed checkpoint operations in the order that they were applied to the state.
+/// Entries are added by the execution code and read by the checkpointing logic.
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
+pub struct UnflushedCheckpointOps {
+    operations: Vec<UnflushedCheckpointOp>,
+}
+
+impl UnflushedCheckpointOps {
+    pub fn take(&mut self) -> Vec<UnflushedCheckpointOp> {
+        std::mem::take(&mut self.operations)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.operations.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.operations.len()
+    }
+
+    pub fn delete_snapshot(&mut self, snapshot_id: SnapshotId) {
+        self.operations
+            .push(UnflushedCheckpointOp::DeleteSnapshot(snapshot_id));
+    }
+
+    pub fn take_snapshot(&mut self, canister_id: CanisterId, snapshot_id: SnapshotId) {
+        self.operations.push(UnflushedCheckpointOp::TakeSnapshot(
+            canister_id,
+            snapshot_id,
+        ));
+    }
+
+    pub fn load_snapshot(&mut self, canister_id: CanisterId, snapshot_id: SnapshotId) {
+        self.operations.push(UnflushedCheckpointOp::LoadSnapshot(
+            canister_id,
+            snapshot_id,
+        ));
+    }
+}
+
 pub(crate) mod testing {
     use super::*;
 
@@ -2224,6 +2283,7 @@ pub(crate) mod testing {
             expected_compiled_wasms: Default::default(),
             bitcoin_get_successors_follow_up_responses: Default::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
+            unflushed_checkpoint_ops: Default::default(),
         };
     }
 }

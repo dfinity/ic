@@ -8,7 +8,7 @@ use candid::{CandidType, Deserialize, Principal};
 use ic_btc_checker::CheckTransactionResponse;
 use ic_btc_interface::{MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, Utxo};
 use ic_canister_log::log;
-use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork;
+use ic_cdk::api::management_canister::bitcoin;
 use ic_management_canister_types_private::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
@@ -112,17 +112,17 @@ pub struct ECDSAPublicKey {
     pub chain_code: Vec<u8>,
 }
 
-pub type GetUtxosRequest = ic_cdk::api::management_canister::bitcoin::GetUtxosRequest;
+pub type GetUtxosRequest = bitcoin::GetUtxosRequest;
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct GetUtxosResponse {
     pub utxos: Vec<Utxo>,
     pub tip_height: u32,
     pub next_page: Option<Page>,
 }
 
-impl From<ic_cdk::api::management_canister::bitcoin::GetUtxosResponse> for GetUtxosResponse {
-    fn from(response: ic_cdk::api::management_canister::bitcoin::GetUtxosResponse) -> Self {
+impl From<bitcoin::GetUtxosResponse> for GetUtxosResponse {
+    fn from(response: bitcoin::GetUtxosResponse) -> Self {
         Self {
             utxos: response
                 .utxos
@@ -155,12 +155,12 @@ pub enum Network {
     Regtest,
 }
 
-impl From<Network> for BitcoinNetwork {
+impl From<Network> for bitcoin::BitcoinNetwork {
     fn from(network: Network) -> Self {
         match network {
-            Network::Mainnet => BitcoinNetwork::Mainnet,
-            Network::Testnet => BitcoinNetwork::Testnet,
-            Network::Regtest => BitcoinNetwork::Regtest,
+            Network::Mainnet => bitcoin::BitcoinNetwork::Mainnet,
+            Network::Testnet => bitcoin::BitcoinNetwork::Testnet,
+            Network::Regtest => bitcoin::BitcoinNetwork::Regtest,
         }
     }
 }
@@ -907,9 +907,13 @@ pub async fn sign_transaction(
 
         let sighash = sighasher.sighash(input, &pkhash);
 
-        let sec1_signature =
-            management::sign_with_ecdsa(key_name.clone(), DerivationPath::new(path), sighash)
-                .await?;
+        let sec1_signature = management::sign_with_ecdsa(
+            key_name.clone(),
+            DerivationPath::new(path),
+            sighash,
+            &IC_CANISTER_RUNTIME,
+        )
+        .await?;
 
         signed_inputs.push(tx::SignedInput {
             signature: signature::EncodedSignature::from_sec1(&sec1_signature),
@@ -1247,6 +1251,13 @@ pub trait CanisterRuntime {
         to: Account,
         memo: Memo,
     ) -> Result<u64, UpdateBalanceError>;
+
+    async fn sign_with_ecdsa(
+        &self,
+        key_name: String,
+        derivation_path: DerivationPath,
+        message_hash: [u8; 32],
+    ) -> Result<Vec<u8>, CallError>;
 }
 
 #[derive(Copy, Clone)]
@@ -1294,10 +1305,45 @@ impl CanisterRuntime for IcCanisterRuntime {
     ) -> Result<u64, UpdateBalanceError> {
         updates::update_balance::mint(amount, to, memo).await
     }
+
+    async fn sign_with_ecdsa(
+        &self,
+        key_name: String,
+        derivation_path: DerivationPath,
+        message_hash: [u8; 32],
+    ) -> Result<Vec<u8>, CallError> {
+        use ic_cdk::api::management_canister::ecdsa::{
+            EcdsaCurve, EcdsaKeyId, SignWithEcdsaArgument,
+        };
+
+        ic_cdk::api::management_canister::ecdsa::sign_with_ecdsa(SignWithEcdsaArgument {
+            message_hash: message_hash.to_vec(),
+            derivation_path: derivation_path.into_inner(),
+            key_id: EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: key_name.clone(),
+            },
+        })
+        .await
+        .map(|(result,)| result.signature)
+        .map_err(|err| CallError::from_cdk_error("sign_with_ecdsa", err))
+    }
 }
 
 /// Time in nanoseconds since the epoch (1970-01-01).
-#[derive(Eq, Clone, Copy, PartialEq, Debug, Default, Serialize, CandidType, serde::Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Debug,
+    Default,
+    Serialize,
+    CandidType,
+    serde::Deserialize,
+)]
 pub struct Timestamp(u64);
 
 impl Timestamp {
@@ -1340,3 +1386,104 @@ impl From<u64> for Timestamp {
         Self(timestamp)
     }
 }
+
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+struct Timestamped<Inner> {
+    timestamp: Timestamp,
+    inner: Option<Inner>,
+}
+
+impl<Inner> Timestamped<Inner> {
+    fn new<T: Into<Timestamp>>(timestamp: T, inner: Inner) -> Self {
+        Self {
+            timestamp: timestamp.into(),
+            inner: Some(inner),
+        }
+    }
+}
+
+/// A cache that expires older entries upon insertion.
+///
+/// More specifically, entries are inserted with a timestamp, and
+/// then all existing entries with a timestamp less than `t - expiration` are removed before
+/// the new entry is inserted.
+///
+/// Similarly, lookups will also take an additional timestamp as argument, and only entries
+/// newer than that will be returned.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct CacheWithExpiration<Key, Value> {
+    expiration: Duration,
+    keys: BTreeMap<Key, Timestamp>,
+    values: BTreeMap<Timestamped<Key>, Value>,
+}
+
+impl<Key: Ord + Clone, Value: Clone> CacheWithExpiration<Key, Value> {
+    pub fn new(expiration: Duration) -> Self {
+        Self {
+            expiration,
+            keys: Default::default(),
+            values: Default::default(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn len(&self) -> usize {
+        let len = self.keys.len();
+        assert_eq!(len, self.values.len());
+        len
+    }
+
+    pub fn set_expiration(&mut self, expiration: Duration) {
+        self.expiration = expiration;
+    }
+
+    pub fn prune<T: Into<Timestamp>>(&mut self, now: T) {
+        let timestamp = now.into();
+        if let Some(expire_cutoff) = timestamp.checked_sub(self.expiration) {
+            let pivot = Timestamped {
+                timestamp: expire_cutoff,
+                inner: None,
+            };
+            let mut non_expired = self.values.split_off(&pivot);
+            self.values.keys().for_each(|key| {
+                self.keys.remove(key.inner.as_ref().unwrap());
+            });
+            std::mem::swap(&mut self.values, &mut non_expired);
+            assert_eq!(self.keys.len(), self.values.len())
+        }
+    }
+
+    fn insert_without_prune<T: Into<Timestamp>>(&mut self, key: Key, value: Value, now: T) {
+        let timestamp = now.into();
+        if let Some(old_timestamp) = self.keys.insert(key.clone(), timestamp) {
+            self.values
+                .remove(&Timestamped::new(old_timestamp, key.clone()));
+        }
+        self.values.insert(Timestamped::new(timestamp, key), value);
+    }
+
+    pub fn insert<T: Into<Timestamp>>(&mut self, key: Key, value: Value, now: T) {
+        let timestamp = now.into();
+        self.prune(timestamp);
+        self.insert_without_prune(key, value, timestamp);
+    }
+
+    pub fn get<T: Into<Timestamp>>(&self, key: &Key, now: T) -> Option<&Value> {
+        let now = now.into();
+        let timestamp = *self.keys.get(key)?;
+        if let Some(expire_cutoff) = now.checked_sub(self.expiration) {
+            if timestamp < expire_cutoff {
+                return None;
+            }
+        }
+        self.values.get(&Timestamped {
+            timestamp,
+            inner: Some(key.clone()),
+        })
+    }
+}
+
+pub type GetUtxosCache = CacheWithExpiration<bitcoin::GetUtxosRequest, GetUtxosResponse>;

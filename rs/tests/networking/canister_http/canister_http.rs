@@ -2,7 +2,12 @@ use canister_test::Canister;
 use canister_test::Runtime;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::prometheus_vm::HasPrometheus;
+use ic_system_test_driver::driver::prometheus_vm::PrometheusVm;
+use ic_system_test_driver::driver::simulate_network::ProductionSubnetTopology;
+use ic_system_test_driver::driver::simulate_network::SimulateNetwork;
 use ic_system_test_driver::driver::test_env_api::{
     HasTopologySnapshot, IcNodeContainer, RetrieveIpv4Addr,
 };
@@ -12,8 +17,8 @@ use ic_system_test_driver::driver::{
     test_env::{TestEnv, TestEnvAttribute},
     test_env_api::*,
 };
-use ic_system_test_driver::util::{self, create_and_install};
-pub use ic_types::{CanisterId, PrincipalId};
+use ic_system_test_driver::util::{self, create_and_install, create_and_install_with_cycles};
+pub use ic_types::{CanisterId, Cycles, PrincipalId};
 use slog::info;
 use std::env;
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -23,6 +28,8 @@ pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 pub const EXPIRATION: Duration = Duration::from_secs(120);
 pub const BACKOFF_DELAY: Duration = Duration::from_secs(5);
 
+const APP_SUBNET_SIZES: [usize; 3] = [13, 28, 40];
+pub const CONCURRENCY_LEVELS: [u64; 3] = [200, 500, 1000];
 const PROXY_CANISTER_ID_PATH: &str = "proxy_canister_id";
 
 pub enum PemType {
@@ -31,12 +38,20 @@ pub enum PemType {
 }
 
 pub fn await_nodes_healthy(env: &TestEnv) {
-    info!(&env.logger(), "Checking readiness of all nodes...");
+    info!(&env.logger(), "Checking readiness of all replica nodes...");
     env.topology_snapshot().subnets().for_each(|subnet| {
         subnet
             .nodes()
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
+
+    info!(
+        &env.logger(),
+        "Checking readiness of all API boundary nodes..."
+    );
+    env.topology_snapshot()
+        .api_boundary_nodes()
+        .for_each(|api_bn| api_bn.await_status_is_healthy().unwrap());
 }
 
 pub fn install_nns_canisters(env: &TestEnv) {
@@ -54,7 +69,7 @@ pub fn install_nns_canisters(env: &TestEnv) {
 
 pub fn setup(env: TestEnv) {
     std::thread::scope(|s| {
-        // Set up IC with 1 system subnet and 4 application subnets
+        // Set up IC with 1 system subnet with one node, and one application subnet with 4 nodes.
         s.spawn(|| {
             InternetComputer::new()
                 .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
@@ -95,6 +110,54 @@ pub fn setup(env: TestEnv) {
             start_httpbin_on_uvm(&env);
         });
     });
+}
+
+pub fn stress_setup(env: TestEnv) {
+    let logger = env.logger();
+    PrometheusVm::default()
+        .start(&env)
+        .expect("Failed to start prometheus VM");
+
+    UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
+        .with_config_img(get_dependency_path(
+            "rs/tests/networking/canister_http/http_uvm_config_image.zst",
+        ))
+        .start(&env)
+        .expect("failed to set up universal VM");
+
+    start_httpbin_on_uvm(&env);
+    info!(&logger, "Started Universal VM!");
+
+    let mut ic = InternetComputer::new()
+        .with_required_host_features(vec![HostFeature::Performance])
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1));
+    for subnet_size in APP_SUBNET_SIZES {
+        ic = ic.add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_features(SubnetFeatures {
+                    http_requests: true,
+                    ..SubnetFeatures::default()
+                })
+                .add_nodes(subnet_size),
+        );
+    }
+    ic.with_api_boundary_nodes(1)
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
+
+    await_nodes_healthy(&env);
+    install_nns_canisters(&env);
+
+    env.topology_snapshot()
+        .subnets()
+        .filter(|s| s.subnet_type() == SubnetType::Application)
+        .for_each(|s| match s.nodes().count() {
+            28 => s.apply_network_settings(ProductionSubnetTopology::UZR34),
+            13 => s.apply_network_settings(ProductionSubnetTopology::IO67),
+            _ => {}
+        });
+
+    env.sync_with_prometheus();
 }
 
 pub fn get_universal_vm_address(env: &TestEnv) -> Ipv6Addr {
@@ -187,6 +250,13 @@ pub fn get_node_snapshots(env: &TestEnv) -> Box<dyn Iterator<Item = IcNodeSnapsh
         .nodes()
 }
 
+pub fn get_all_application_subnets(env: &TestEnv) -> Vec<SubnetSnapshot> {
+    env.topology_snapshot()
+        .subnets()
+        .filter(|s| s.subnet_type() == SubnetType::Application)
+        .collect()
+}
+
 pub fn get_system_subnet_node_snapshots(env: &TestEnv) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
     env.topology_snapshot()
         .subnets()
@@ -227,12 +297,57 @@ pub fn create_proxy_canister_with_name<'a>(
 
     Canister::new(runtime, CanisterId::unchecked_from_principal(principal_id))
 }
+
+pub fn create_proxy_canister_with_name_and_cycles<'a>(
+    env: &TestEnv,
+    runtime: &'a Runtime,
+    node: &IcNodeSnapshot,
+    canister_name: &str,
+    cycles: Cycles,
+) -> Canister<'a> {
+    info!(
+        &env.logger(),
+        "Installing proxy_canister with a custom cycle amount ({cycles:?})."
+    );
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+    let proxy_canister_id = rt.block_on(create_and_install_with_cycles(
+        &node.build_default_agent(),
+        node.effective_canister_id(),
+        &load_wasm(
+            env::var("PROXY_WASM_PATH").expect("Environment variable PROXY_WASM_PATH not set"),
+        ),
+        cycles,
+    ));
+
+    info!(
+        &env.logger(),
+        "Proxy canister {:?} installed with cycles {:?}", proxy_canister_id, cycles
+    );
+
+    let principal_id = PrincipalId::from(proxy_canister_id);
+
+    env.write_json_object(canister_name, &principal_id)
+        .expect("Could not write proxy canister ID to TestEnv.");
+
+    Canister::new(runtime, CanisterId::unchecked_from_principal(principal_id))
+}
+
 pub fn create_proxy_canister<'a>(
     env: &TestEnv,
     runtime: &'a Runtime,
     node: &IcNodeSnapshot,
 ) -> Canister<'a> {
     create_proxy_canister_with_name(env, runtime, node, PROXY_CANISTER_ID_PATH)
+}
+
+pub fn create_proxy_canister_with_cycles<'a>(
+    env: &TestEnv,
+    runtime: &'a Runtime,
+    node: &IcNodeSnapshot,
+    cycles: Cycles,
+) -> Canister<'a> {
+    create_proxy_canister_with_name_and_cycles(env, runtime, node, PROXY_CANISTER_ID_PATH, cycles)
 }
 
 pub fn get_proxy_canister_id_with_name(env: &TestEnv, name: &str) -> PrincipalId {

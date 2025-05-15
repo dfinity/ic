@@ -21,7 +21,7 @@ slog = { workspace = true }
 ic-tests-ckbtc = { path = "../ckbtc" }
 ic-types = { path = "../../types/types" }
 ic-config = { path = "../../config" }
-ic-cdk = { workspace = true }
+ic-cdk = "0.17.1"
 ic-base-types = { path = "../../types/base_types" }
 ic-cycles-account-manager = { path = "../../cycles_account_manager" }
 rand = { workspace = true }

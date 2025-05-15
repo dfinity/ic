@@ -732,6 +732,10 @@ type Neuron = record {
   //
   // Per NNS policy, this is opt. Nevertheless, it will never be null.
   potential_voting_power : opt nat64;
+
+  // The maturity disbursements in progress, i.e. the disbursements that are initiated but not
+  // finalized. The finalization happens 7 days after the disbursement is initiated.
+  maturity_disbursements_in_progress : opt vec MaturityDisbursement;
 };
 
 type NeuronBasketConstructionParameters = record {
@@ -1266,6 +1270,13 @@ type WaitForQuietState = record {
 type XdrConversionRate = record {
   xdr_permyriad_per_icp : opt nat64;
   timestamp_seconds : opt nat64;
+};
+
+type MaturityDisbursement = record {
+  amount_e8s : opt nat64;
+  timestamp_of_disbursement_seconds : opt nat64;
+  finalize_disbursement_timestamp_seconds : opt nat64;
+  account_to_disburse_to : opt Account;
 };
 
 service : (Governance) -> {

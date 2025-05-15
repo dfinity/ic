@@ -9,7 +9,7 @@ on the process that this file is part of, see
 
 ## Added
 
-* A timer task is added to take daily snapshots of voting power for standard proposals.
+* The `DisburseMaturity` neuron command is enabled. See https://forum.dfinity.org/t/disburse-maturity-in-nns/43228 for more details.
 
 ## Changed
 
@@ -18,7 +18,5 @@ on the process that this file is part of, see
 ## Removed
 
 ## Fixed
-
-* Turned off `DisburseMaturity` that was incorrectly turned on before.
 
 ## Security

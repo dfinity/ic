@@ -10,9 +10,9 @@ use ic_btc_checker::{
 };
 use ic_btc_interface::Txid;
 use ic_canister_log::{export as export_logs, log};
-use ic_canisters_http_types as http;
 use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
+use ic_http_types as http;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt;

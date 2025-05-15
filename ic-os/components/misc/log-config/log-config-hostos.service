@@ -1,7 +1,5 @@
 [Unit]
 Description=Log config partition
-After=update-config.service
-Wants=update-config.service
 
 [Service]
 Type=oneshot
