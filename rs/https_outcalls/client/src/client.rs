@@ -159,6 +159,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
             let max_response_size_bytes = request_max_response_bytes
                 .unwrap_or(NumBytes::new(MAX_CANISTER_HTTP_RESPONSE_BYTES))
                 .get();
+
             // Build future that sends and transforms request.
             let adapter_canister_http_response = http_adapter_client
                 .https_outcall(HttpsOutcallRequest {
@@ -298,7 +299,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         metrics
                             .request_total
                             .with_label_values(&[
-                                &reject_code.to_string(),
+                                reject_code.as_str(),
                                 request_http_method.as_str(),
                             ])
                             .inc();
