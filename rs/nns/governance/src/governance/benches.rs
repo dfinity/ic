@@ -1,6 +1,6 @@
 use crate::benches_util::check_projected_instructions;
 use crate::governance::REWARD_DISTRIBUTION_PERIOD_SECONDS;
-use crate::pb::v1::{RewardEvent, VotingPowerEconomics, WaitForQuietState};
+use crate::pb::v1::{Motion, RewardEvent, VotingPowerEconomics, WaitForQuietState};
 use crate::test_utils::MockRandomness;
 use crate::{
     governance::{
@@ -66,6 +66,14 @@ fn set_up<R: Rng>(
         1,
         ProposalData {
             id: Some(ProposalId { id: 1 }),
+            proposal: Some(Proposal {
+                summary: "Summary".to_string(),
+                url: "".to_string(),
+                title: Some("Title".to_string()),
+                action: Some(Action::Motion(Motion {
+                    motion_text: "Motion".to_string(),
+                })),
+            }),
             ..Default::default()
         },
     );
@@ -532,7 +540,15 @@ fn distribute_rewards_with_stable_neurons() -> BenchResult {
                 wait_for_quiet_state: Some(WaitForQuietState {current_deadline_timestamp_seconds: now_seconds - 200}),
                 decided_timestamp_seconds: now_seconds - 100,
                 executed_timestamp_seconds: now_seconds - 100,
-                ballots ,
+                ballots,
+                proposal: Some(Proposal {
+                    summary: "Summary".to_string(),
+                    url: "".to_string(),
+                    title: Some("Title".to_string()),
+                    action: Some(Action::Motion(Motion {
+                        motion_text: "Motion".to_string(),
+                    })),
+                }),
                 ..Default::default()
             }
         },

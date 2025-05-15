@@ -31,7 +31,7 @@ benches:
     scopes: {}
   centralized_following_all_stable:
     total:
-      instructions: 44534158
+      instructions: 42074044
       heap_increase: 0
       stable_memory_increase: 128
     scopes: {}
@@ -43,7 +43,7 @@ benches:
     scopes: {}
   distribute_rewards_with_stable_neurons:
     total:
-      instructions: 7305416
+      instructions: 2721444
       heap_increase: 0
       stable_memory_increase: 256
     scopes: {}
@@ -103,7 +103,7 @@ benches:
     scopes: {}
   single_vote_all_stable:
     total:
-      instructions: 2633954
+      instructions: 271542
       heap_increase: 0
       stable_memory_increase: 128
     scopes: {}
