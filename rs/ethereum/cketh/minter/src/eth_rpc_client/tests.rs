@@ -157,6 +157,26 @@ mod multi_call_results {
         }
     }
 
+    mod reduce_with_min_by_key {
+        use crate::eth_rpc_client::tests::{BLOCK_PI, PUBLIC_NODE};
+        use crate::eth_rpc_client::{MinByKey, ReduceWithStrategy};
+        use crate::numeric::TransactionCount;
+        use evm_rpc_client::{MultiRpcResult, Nat256};
+
+        #[test]
+        fn should_get_minimum_tx_count() {
+            let results: MultiRpcResult<Nat256> = MultiRpcResult::Inconsistent(vec![
+                (BLOCK_PI, Ok(123456_u32.into())),
+                (PUBLIC_NODE, Ok(123457_u32.into())),
+            ]);
+
+            let reduced: Result<TransactionCount, _> =
+                ReduceWithStrategy::<MinByKey>::reduce(results).into();
+
+            assert_eq!(reduced, Ok(TransactionCount::new(123456)));
+        }
+    }
+
     mod reduce_with_stable_majority_by_key {
         use crate::eth_rpc::{FeeHistory, HttpOutcallError};
         use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
