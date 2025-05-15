@@ -143,7 +143,7 @@ fn main() -> Result<()> {
                     test_response_header_total_size_over_the_48_kib_limit
                 ))
                 // This section tests the url and ip scenarios
-                .add_test(systest!(test_non_ascii_url_is_rejected))
+                .add_test(systest!(test_non_ascii_url_is_accepted))
                 .add_test(systest!(test_invalid_ip))
                 .add_test(systest!(test_invalid_domain_name))
                 .add_test(systest!(test_max_url_length))
@@ -1661,7 +1661,7 @@ fn test_only_headers_with_custom_max_response_bytes_exceeded(env: TestEnv) {
     );
 }
 
-fn test_non_ascii_url_is_rejected(env: TestEnv) {
+fn test_non_ascii_url_is_accepted(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
     let expected_body = "안녕하세요";
@@ -1688,15 +1688,10 @@ fn test_non_ascii_url_is_rejected(env: TestEnv) {
             request: request.clone(),
             cycles: 500_000_000_000,
         },
-    ));
+    ))
+    .expect("Request is successful");
 
-    assert_matches!(
-        response,
-        Err(RejectResponse {
-            reject_code: RejectCode::SysFatal,
-            ..
-        })
-    );
+    assert_matches!(&response, RemoteHttpResponse {body, status: 200, ..} if *body == expected_body);
 }
 
 fn test_max_url_length(env: TestEnv) {
