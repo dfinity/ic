@@ -8,7 +8,7 @@ DEPENDENCIES = [
     "@crate_index//:by_address",
     "@crate_index//:candid",
     "@crate_index//:ic-metrics-encoder",
-    "@crate_index//:ic-cdk,
+    "@crate_index//:ic-cdk",
     "@crate_index//:maplit",
     "@crate_index//:priority-queue",
     "@crate_index//:serde",

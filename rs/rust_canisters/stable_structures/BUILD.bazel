@@ -11,6 +11,6 @@ rust_canister(
         # Keep sorted.
         "@crate_index//:candid",
         "@crate_index//:ic-stable-structures",
-        "@crate_index//:ic-cdk,
+        "@crate_index//:ic-cdk",
     ],
 )

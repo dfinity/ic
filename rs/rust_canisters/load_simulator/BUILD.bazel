@@ -6,13 +6,13 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
-    "@crate_index//:ic-cdk,
 ]
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
-    "@crate_index//:ic-cdk-macros,
+    "@crate_index//:ic-cdk-macros",
 ]
 
 DEV_DEPENDENCIES = []

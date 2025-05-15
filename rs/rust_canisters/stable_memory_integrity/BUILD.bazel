@@ -14,7 +14,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "@crate_index//:candid",
-        "@crate_index//:ic-cdk,
+        "@crate_index//:ic-cdk",
         "@crate_index//:serde",
     ],
 )
@@ -28,7 +28,7 @@ rust_canister(
         # Keep sorted.
         "//rs/rust_canisters/stable_memory_integrity",
         "@crate_index//:candid",
-        "@crate_index//:ic-cdk,
+        "@crate_index//:ic-cdk",
     ],
 )
 

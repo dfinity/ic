@@ -150,7 +150,7 @@ rust_canister(
     service_file = ":canister/test.did",
     deps = [
         "@crate_index//:candid",
-        "@crate_index//:ic-cdk,
+        "@crate_index//:ic-cdk",
         "@crate_index//:serde",
     ],
 )
