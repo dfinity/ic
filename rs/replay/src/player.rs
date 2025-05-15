@@ -1685,10 +1685,10 @@ mod tests {
         },
         crypto::{CryptoHash, Signed},
         signature::ThresholdSignatureShare,
-        time::GENESIS,
     };
     use pretty_assertions::assert_eq;
     use prost::Message;
+    use std::time::SystemTime;
 
     use super::*;
 
@@ -1873,7 +1873,7 @@ mod tests {
         //     2. A couple of get_chunk calls. These are to fetch the content of
         //        larger records received during the first call.
         const VERSION: u64 = 42;
-        let ingress_expiry = GENESIS + Duration::from_secs(123_456_789);
+        let ingress_expiry = expiry_time_from_now();
 
         type ExpectedCall = (
             /* method_name: */ &'static str,
@@ -1973,26 +1973,59 @@ mod tests {
         ];
 
         let mut perform_query = MockPerformQuery::new();
-        for (method_name, request, reply) in expected_registry_canister_method_calls {
-            let query = Query {
-                source: QuerySource::User {
-                    user_id: UserId::from(PrincipalId::new_anonymous()),
-                    ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
-                    nonce: None,
-                },
-                receiver: REGISTRY_CANISTER_ID,
-                method_name: method_name.to_string(),
-                method_payload: request,
-            };
-            let reply_time = GENESIS + Duration::from_secs(123_000_000);
-
+        for (i, (method_name, request, reply)) in expected_registry_canister_method_calls
+            .into_iter()
+            .enumerate()
+        {
             perform_query
                 .expect_perform_query()
-                .with(mockall::predicate::eq(query))
+                .withf(move |observed_query| {
+                    // Extract ingress_expiry from observed_query.
+                    let QuerySource::User {
+                        ingress_expiry: observed_ingress_expiry,
+                        ..
+                    } = &observed_query.source
+                    else {
+                        println!("{}th query NOT a User QuerySource.", i);
+                        return false;
+                    };
+                    // ingress_expiry is a number of nanoseconds since the UNIX Epoch.
+                    let observed_ingress_expiry: u64 = *observed_ingress_expiry;
+
+                    // Assert that observed ingress_expiry is within the next 5 minutes.
+                    let now = Time::try_from(SystemTime::now())
+                        .unwrap()
+                        .as_nanos_since_unix_epoch();
+                    let ok = now < observed_ingress_expiry
+                        && observed_ingress_expiry < now + 5 * 60 * 1_000_000_000;
+                    if !ok {
+                        println!(
+                            "Bad ingress expiry in {}th call to {}: {}",
+                            i, method_name, observed_ingress_expiry,
+                        );
+                        return false;
+                    }
+
+                    let expected_query = Query {
+                        source: QuerySource::User {
+                            user_id: UserId::from(PrincipalId::new_anonymous()),
+                            ingress_expiry: observed_ingress_expiry,
+                            nonce: None,
+                        },
+                        receiver: REGISTRY_CANISTER_ID,
+                        method_name: method_name.to_string(),
+                        method_payload: request.clone(),
+                    };
+
+                    observed_query == &expected_query
+                })
                 .times(1)
                 .returning(move |_query| {
                     // Yo, dawg. I heard you like Results.
-                    Ok(Ok((Ok(WasmResult::Reply(reply.clone())), reply_time)))
+                    Ok(Ok((
+                        Ok(WasmResult::Reply(reply.clone())),
+                        Time::try_from(SystemTime::now()).unwrap(),
+                    )))
                 });
         }
 
