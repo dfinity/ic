@@ -115,4 +115,11 @@ impl ICRC1Ledger for DoNothingLedger {
     fn canister_id(&self) -> CanisterId {
         unimplemented!()
     }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        unimplemented!()
+    }
 }

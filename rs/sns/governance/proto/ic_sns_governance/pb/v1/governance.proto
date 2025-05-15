@@ -1596,13 +1596,13 @@ message GetMetadataResponse {
 
 // Request message for 'get_sns_status'
 message GetSnsStatusRequest {
-  optional uint64 time_window = 1;
+  optional uint64 time_window_seconds = 1;
 }
 
 // Response message for 'get_sns_status'
 message GetSnsStatusResponse {
-  optional uint64 recent_proposals = 1;
-  optional uint64 recent_transactions = 2;
+  optional uint64 num_recent_proposals = 1;
+  optional uint64 last_transaction_timestamp = 2;
 }
 
 // Request message for 'get_sns_initialization_parameters'
