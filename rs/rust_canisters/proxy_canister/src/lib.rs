@@ -68,18 +68,6 @@ pub struct ResponseWithRefundedCycles {
     pub refunded_cycles: u64,
 }
 
-impl ResponseWithRefundedCycles {
-    pub fn new(
-        result: Result<RemoteHttpResponse, (RejectionCode, String)>,
-        refunded_cycles: u64,
-    ) -> Self {
-        Self {
-            result,
-            refunded_cycles,
-        }
-    }
-}
-
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct RemoteHttpStressResponse {
     pub response: RemoteHttpResponse,
