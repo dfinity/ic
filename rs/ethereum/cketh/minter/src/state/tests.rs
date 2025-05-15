@@ -576,6 +576,7 @@ prop_compose! {
         ledger_id in arb_principal(),
         ecdsa_key_name in "[a-z_]*",
         last_scraped_block_number in arb_nat(),
+        evm_rpc_id in proptest::option::of(arb_principal()),
     ) -> InitArg {
         InitArg {
             ethereum_network: EthereumNetwork::Sepolia,
@@ -586,6 +587,7 @@ prop_compose! {
             minimum_withdrawal_amount,
             next_transaction_nonce,
             last_scraped_block_number,
+            evm_rpc_id,
         }
     }
 }

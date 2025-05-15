@@ -29,6 +29,8 @@ pub struct InitArg {
     pub next_transaction_nonce: Nat,
     #[cbor(n(8), with = "icrc_cbor::nat")]
     pub last_scraped_block_number: Nat,
+    #[cbor(n(9), with = "icrc_cbor::principal::option")]
+    pub evm_rpc_id: Option<Principal>,
 }
 
 impl TryFrom<InitArg> for State {
@@ -43,6 +45,7 @@ impl TryFrom<InitArg> for State {
             minimum_withdrawal_amount,
             next_transaction_nonce,
             last_scraped_block_number,
+            evm_rpc_id,
         }: InitArg,
     ) -> Result<Self, Self::Error> {
         use std::str::FromStr;
@@ -98,7 +101,7 @@ impl TryFrom<InitArg> for State {
             http_request_counter: 0,
             last_transaction_price_estimate: None,
             ledger_suite_orchestrator_id: None,
-            evm_rpc_id: None,
+            evm_rpc_id,
             ckerc20_tokens: Default::default(),
             erc20_balances: Default::default(),
             log_scrapings,

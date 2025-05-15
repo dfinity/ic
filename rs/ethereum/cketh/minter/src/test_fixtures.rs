@@ -43,6 +43,7 @@ pub fn valid_init_arg() -> InitArg {
         minimum_withdrawal_amount: Nat::from(10_000_000_000_000_000_u64),
         next_transaction_nonce: Default::default(),
         last_scraped_block_number: Default::default(),
+        evm_rpc_id: None,
     }
 }
 
