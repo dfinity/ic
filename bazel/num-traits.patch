@@ -1,0 +1,34 @@
+From d0c058b39ee0e23451489489b33979cb19cef7ff Mon Sep 17 00:00:00 2001
+From: Bas van Dijk <bas@dfinity.org>
+Date: Wed, 14 May 2025 10:33:07 +0000
+Subject: [PATCH] Make the build reproducible
+
+---
+ Cargo.toml | 1 +
+ build.rs   | 3 ++-
+ 2 files changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/Cargo.toml b/Cargo.toml
+index 226d416..a5aab9e 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -32,3 +32,4 @@ i128 = []
+ 
+ [build-dependencies]
+ autocfg = "1"
++tempfile = "3"
+diff --git a/build.rs b/build.rs
+index 98b06be..b3e2958 100644
+--- a/build.rs
++++ b/build.rs
+@@ -1,5 +1,6 @@
+ fn main() {
+-    let ac = autocfg::new();
++    let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
++    let ac = autocfg::AutoCfg::with_dir(temp_dir.path()).unwrap();
+ 
+     ac.emit_expression_cfg("1f64.total_cmp(&2f64)", "has_total_cmp"); // 1.62
+ 
+-- 
+2.43.0
+

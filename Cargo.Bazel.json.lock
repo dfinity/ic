@@ -1,5 +1,5 @@
 {
-  "checksum": "4154c13c2fbfe871f941850b0698f8866f5687a2bb91c33e8209fe890b5d197b",
+  "checksum": "2691357477ac6c33dfa18b00ef02381fe99c53820bc7d8b89d2b3045794975f1",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -47361,7 +47361,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/num-traits/0.2.19/download",
-          "sha256": "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
+          "sha256": "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:num-traits.patch"
+          ]
         }
       },
       "targets": [

@@ -165,6 +165,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
         "metrics-proxy": [crate.annotation(
             gen_binaries = True,
         )],
+        "num-traits": [crate.annotation(
+            patch_args = ["-p1"],
+            patches = ["@@//bazel:num-traits.patch"],
+        )],
     }
     CRATE_ANNOTATIONS.update(sanitize_external_crates(sanitizers_enabled = sanitizers_enabled))
     crates_repository(
@@ -885,7 +889,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2.2",
             ),
             "num-traits": crate.spec(
-                version = "^0.2.12",
+                git = "https://github.com/basvandijk/num-traits",
+                rev = "8cb9d01e4f44e617ef8a94d4c1543559364e4e5d",
                 features = [
                     "libm",
                 ],
