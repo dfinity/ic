@@ -1,0 +1,15 @@
+[package]
+name = "retry-test-canister"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+ic-cdk = { workspace = true }
+candid = { workspace = true }
+ic-call-retry = { path = "../../retry", features = ["use_call_chaos"] }
+ic-call-chaos = { path = "../../../ic-call-chaos/call-chaos" }
+lazy_static = "1.5.0"

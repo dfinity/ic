@@ -1,0 +1,36 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "safe_upgrades",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "ic_safe_upgrades",
+    version = "0.1.1",
+    deps = [
+        # Keep sorted
+        "//packages/ic-call-retry/retry",
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:sha2",
+    ],
+)
+
+rust_library(
+    name = "safe_upgrades__use_calL_chaos",
+    srcs = glob(["src/**/*.rs"]),
+    crate_features = ["use_call_chaos"],
+    crate_name = "ic_safe_upgrades",
+    version = "0.1.0",
+    deps = [
+        # Keep sorted
+        "//packages/ic-call-chaos/call-chaos",
+        "//packages/ic-call-retry/retry:retry__use_calL_chaos",
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-management-canister-types",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:sha2",
+    ],
+)

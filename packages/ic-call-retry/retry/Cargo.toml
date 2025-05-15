@@ -1,0 +1,15 @@
+[package]
+name = "ic-call-retry"
+version = "0.1.0"
+edition = "2021"
+authors = ["Ognjen Maric <ognjen.maric@dfinity.org>"]
+description = "Retries for inter-canister calls on the Internet Computer"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/oggy-dfin/ic_call_utils"
+
+[features]
+use_call_chaos = ["dep:ic-call-chaos"]
+
+[dependencies]
+ic-cdk = { workspace = true }
+ic-call-chaos = { version = "0.1.0", path = "../../ic-call-chaos/call-chaos", optional = true }

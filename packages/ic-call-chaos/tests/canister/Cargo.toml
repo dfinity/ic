@@ -1,0 +1,16 @@
+[package]
+name = "call-chaos-test-canister"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+use_call_chaos = ["dep:ic-call-chaos"]
+
+[dependencies]
+ic-cdk = { workspace = true }
+candid = { workspace = true }
+ic-call-chaos = { path = "../../call-chaos", optional = true }

@@ -1,0 +1,12 @@
+[package]
+name = "safe-upgrades-pocket-ic-test"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+
+[dev-dependencies]
+lazy_static = { workspace = true }
+candid = { workspace = true }
+pocket-ic = "9.0.0"
+once_cell = { version = "1.21.3" }

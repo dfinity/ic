@@ -1,0 +1,25 @@
+load("//bazel:canisters.bzl", "rust_canister")
+
+rust_canister(
+    name = "target-test-canister__v1",
+    srcs = ["src/lib.rs"],
+    crate_features = ["v1"],
+    service_file = "canister.did",
+    deps = [
+        # Keep sorted.
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+    ],
+)
+
+rust_canister(
+    name = "target-test-canister__v2",
+    srcs = ["src/lib.rs"],
+    crate_features = ["v2"],
+    service_file = "canister.did",
+    deps = [
+        # Keep sorted.
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+    ],
+)

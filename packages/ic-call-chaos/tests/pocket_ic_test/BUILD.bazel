@@ -1,0 +1,25 @@
+load("@rules_rust//rust:defs.bzl", "rust_test")
+
+rust_test(
+    name = "call-chaos-test",
+    srcs = glob(["tests/**/*.rs"]),
+    data = [
+        "//packages/ic-call-chaos/tests/canister:call-chaos-test-canister.wasm.gz",
+        "//packages/ic-call-chaos/tests/canister:call-chaos-test-canister-no-chaos.wasm.gz",
+        "//rs/pocket_ic_server:pocket-ic-server",
+    ],
+    env = {
+        "TEST_CANISTER_NO_CALL_CHAOS": "$(rootpath //packages/ic-call-chaos/tests/canister:call-chaos-test-canister-no-chaos.wasm.gz)",
+        "TEST_CANISTER_WITH_CALL_CHAOS": "$(rootpath //packages/ic-call-chaos/tests/canister:call-chaos-test-canister.wasm.gz)",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+    },
+    deps = [
+        # Keep sorted.
+        "//packages/ic-call-chaos/call-chaos",
+        "//packages/pocket-ic",
+        "@crate_index//:candid",
+        "@crate_index//:hex",
+        "@crate_index//:lazy_static",
+        "@crate_index//:once_cell",
+    ],
+)
