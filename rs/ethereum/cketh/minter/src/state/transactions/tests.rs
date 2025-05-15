@@ -1055,7 +1055,6 @@ mod eth_transactions {
         use crate::tx::{Eip1559TransactionRequest, GasFeeEstimate};
         use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
         use proptest::{prop_assume, proptest};
-        use std::iter;
 
         #[test]
         fn should_fail_when_no_sent_tx() {
@@ -1127,8 +1126,7 @@ mod eth_transactions {
             test(
                 cketh_withdrawal_request_with_index(cketh_ledger_burn_index),
                 |created_tx| {
-                    iter::repeat(created_tx)
-                        .take(10)
+                    std::iter::repeat_n(created_tx, 10)
                         .enumerate()
                         .map(|(index, mut tx)| {
                             tx.max_priority_fee_per_gas = tx
@@ -1147,8 +1145,7 @@ mod eth_transactions {
                     ckerc20_ledger_burn_index,
                 ),
                 |created_tx| {
-                    iter::repeat(created_tx)
-                        .take(10)
+                    std::iter::repeat_n(created_tx, 10)
                         .enumerate()
                         .map(|(index, mut tx)| {
                             tx.max_priority_fee_per_gas = tx

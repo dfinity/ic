@@ -2250,7 +2250,7 @@ fn toolchain_error_message() {
     rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister's Wasm module is not valid: Wasmtime \
     failed to validate wasm module wasmtime::Module::validate() failed with \
     multiple memories (at offset 0x14).\n\
-    This is likely an error with the compiler/CDK toolchain being used to \
+    If you are running this canister in a test environment (e.g., dfx), make sure the test environment is up to date. Otherwise, this is likely an error with the compiler/CDK toolchain being used to \
     build the canister. Please report the error to IC devs on the forum: \
     https://forum.dfinity.org and include which language/CDK was used to \
     create the canister."
