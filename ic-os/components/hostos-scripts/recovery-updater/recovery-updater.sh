@@ -23,7 +23,7 @@ get_cmdline_var() {
     grep -oP "${var}=[^ ]*" /proc/cmdline | head -n1 | cut -d= -f2-
 }
 
-# Get partition targets based on boot alternative (help: should it be the other system? We're currently upgrading to the passive GuestOS system, but should it actually be the active system?)
+# Get partition targets based on boot alternative
 get_partition_targets() {
     local lodev="$1"
     local boot_alternative="$2"
@@ -36,7 +36,6 @@ get_partition_targets() {
     fi
 }
 
-# Upgrade and boot into the alternative boot partition
 prepare_guestos_upgrade() {
     echo "Starting guestos upgrade preparation"
     lodev="$(losetup -Pf --show ${GUESTOS_DEVICE})"
@@ -52,11 +51,10 @@ prepare_guestos_upgrade() {
     mount -o rw,sync "${lodev}p${GRUB_PARTITION_NUM}" "${grubdir}"
     echo "Mounted grub partition at ${grubdir}"
 
-    # Get the boot alternative
     boot_alternative="$(grep -oP '^boot_alternative=\K[a-zA-Z]+' "${grubdir}/grubenv")"
     echo "Current boot alternative: $boot_alternative"
 
-    # Get partition targets
+    # Get upgrade partition targets
     read -r boot_target root_target var_target < <(get_partition_targets "$lodev" "$boot_alternative")
     echo "Target boot partition: $boot_target"
     echo "Target root partition: $root_target"
