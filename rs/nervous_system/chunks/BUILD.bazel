@@ -1,6 +1,9 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
-package(default_visibility = ["//rs/nervous_system:default_visibility"])
+package(default_visibility = [
+    "//rs/nervous_system:default_visibility",
+    "//rs/replay:__pkg__",
+])
 
 DEPENDENCIES = [
     # Keep sorted.

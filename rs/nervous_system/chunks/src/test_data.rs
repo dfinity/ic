@@ -4,7 +4,7 @@ use ic_crypto_sha2::Sha256;
 use lazy_static::lazy_static;
 use prost::Message;
 
-#[derive(::prost::Message)]
+#[derive(::prost::Message, PartialEq, Eq, Clone)]
 pub struct MegaBlob {
     #[prost(bytes = "vec", tag = "1")]
     pub content: Vec<u8>,

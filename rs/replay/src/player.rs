@@ -27,13 +27,14 @@ use ic_interfaces::{
     messaging::{MessageRouting, MessageRoutingError},
     time_source::SysTimeSource,
 };
-use ic_interfaces_registry::{RegistryClient, RegistryTransportRecord};
+use ic_interfaces_registry::{RegistryClient, RegistryTransportRecord, RegistryValue};
 use ic_interfaces_state_manager::{
     PermanentStateHashError, StateHashError, StateManager, StateReader,
 };
 use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
+use ic_nervous_system_chunks::test_data::MegaBlob;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::{
     registry::{replica_version::v1::BlessedReplicaVersions, subnet::v1::SubnetRecord},
@@ -877,52 +878,13 @@ impl Player {
         &self,
         ingress_expiry: Time,
     ) -> Result<BlessedReplicaVersions, String> {
-        // Construct request.
-        let key = make_blessed_replica_versions_key();
-        let query = Query {
-            source: QuerySource::User {
-                user_id: UserId::from(PrincipalId::new_anonymous()),
-                ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
-                nonce: None,
-            },
-            receiver: REGISTRY_CANISTER_ID,
-            method_name: "get_value".to_string(),
-            method_payload: serialize_get_value_request(key.as_bytes().to_vec(), None)
-                .map_err(|err| format!("{}", err))?,
-        };
-
         self.certify_state_with_dummy_certification();
-
-        // Call get_value.
-        let reply: Vec<u8> = match self
-            .runtime
-            .block_on(self.query_handler.clone().oneshot((query, None)))
-            .unwrap()
-        {
-            Ok((Ok(WasmResult::Reply(reply)), _)) => reply,
-            garbage => {
-                return Err(format!(
-                    "Did not get reply from Registry get_value call: {:?}. key={}",
-                    garbage, key,
-                ));
-            }
-        };
-
-        // Parse (and possibly dechunkify) reply.
-        let record: Vec<u8> = self
-            .runtime
-            .block_on(deserialize_and_dechunkify_get_value_response(
-                reply,
-                &self.query_handler,
-                &key,
-            ))
-            .map_err(|err| format!("{:?}", err))?;
-        let record = deserialize_registry_value::<BlessedReplicaVersions>(Ok(Some(record)))
-            .map_err(|err| format!("{}", err))?
-            .expect("BlessedReplicaVersions does not exist");
-
-        // Done!
-        Ok(record)
+        let perform_query = Arc::new(Mutex::new(self.query_handler.clone()));
+        self.runtime.block_on(registry_get_value(
+            /* key_source: */ (),
+            ingress_expiry,
+            &perform_query,
+        ))
     }
 
     /// Return the latest registry version by querying the registry canister.
@@ -973,66 +935,19 @@ impl Player {
     ) -> Result<Vec<RegistryTransportRecord>, String> {
         self.certify_state_with_dummy_certification();
 
-        let query_execution_service = Arc::new(Mutex::new(self.query_handler.clone()));
-        get_changes_since(
-            version,
-            ingress_expiry,
-            &self.runtime,
-            &query_execution_service,
-        )
+        let perform_query = Arc::new(Mutex::new(self.query_handler.clone()));
+        get_changes_since(version, ingress_expiry, &self.runtime, &perform_query)
     }
 
     /// Return the SubnetRecord of this subnet at the latest registry version.
     pub fn get_subnet_record(&self, ingress_expiry: Time) -> Result<SubnetRecord, String> {
-        // Construct request.
-        let subnet_record_key = make_subnet_record_key(self.subnet_id);
-        let query = Query {
-            source: QuerySource::User {
-                user_id: UserId::from(PrincipalId::new_anonymous()),
-                ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
-                nonce: None,
-            },
-            receiver: REGISTRY_CANISTER_ID,
-            method_name: "get_value".to_string(),
-            method_payload: serialize_get_value_request(
-                subnet_record_key.as_bytes().to_vec(),
-                None,
-            )
-            .map_err(|err| format!("{}", err))?,
-        };
-
         self.certify_state_with_dummy_certification();
-
-        // Call get_value.
-        let reply: Vec<u8> = match self
-            .runtime
-            .block_on(self.query_handler.clone().oneshot((query, None)))
-            .unwrap()
-        {
-            Ok((Ok(WasmResult::Reply(reply)), _)) => reply,
-            garbage => {
-                return Err(format!(
-                    "Did not get reply from Registry get_value call: {:?}. key={}",
-                    garbage, subnet_record_key,
-                ));
-            }
-        };
-
-        // Parse (and possibly dechunkify) reply.
-        let record: Vec<u8> = self
-            .runtime
-            .block_on(deserialize_and_dechunkify_get_value_response(
-                reply,
-                &self.query_handler,
-                &subnet_record_key,
-            ))
-            .map_err(|err| format!("{:?}", err))?;
-        let record = deserialize_registry_value::<SubnetRecord>(Ok(Some(record)))
-            .map_err(|err| format!("{}", err))?
-            .expect("SubnetRecord does not exist");
-
-        // Done!
-        Ok(record)
+        let perform_query = Arc::new(Mutex::new(self.query_handler.clone()));
+        self.runtime.block_on(registry_get_value(
+            self.subnet_id,
+            ingress_expiry,
+            &perform_query,
+        ))
     }
 
     /// Restores the execution state starting from the given height.
@@ -1278,11 +1193,11 @@ impl Player {
 }
 
 // This is just to avoid clippy complaints about complicated return type.
-type PerformQueryResult = Result<(Result<WasmResult, UserError>, Time), QueryExecutionError>;
+pub type PerformQueryResult = Result<(Result<WasmResult, UserError>, Time), QueryExecutionError>;
 
 #[automock]
 #[async_trait]
-trait PerformQuery {
+pub trait PerformQuery {
     async fn perform_query(&self, query: Query) -> Result<PerformQueryResult, Infallible>;
 }
 
@@ -1425,31 +1340,149 @@ impl<PerformQueryImpl: PerformQuery + Sync> GetChunk for GetChunkImpl<'_, Perfor
     }
 }
 
-async fn deserialize_and_dechunkify_get_value_response(
-    reply: Vec<u8>,
-    query_handler: &QueryExecutionService,
-    key: &str,
-) -> Result<Vec<u8>, ic_registry_transport::Error> {
-    let breadcrumbs = || format!("key={}", key);
+// Prost actually already has something like this, but generating such
+// implementations is NOT enabled by default. I guess this is because it would
+// cause lots of code to be generated that most applications would not use.
+// Well, we only need this for two types, so instead of having Prost start
+// generating a zillion implementations for us, here, we just do it for the
+// types that we actually care about.
+pub trait SayMyName {
+    const NAME: &'static str;
+}
 
-    // Deserialize reply.
-    let reply = deserialize_get_value_response(reply)?;
+impl SayMyName for BlessedReplicaVersions {
+    const NAME: &'static str = "BlessedReplicaVersions";
+}
 
-    // Unpack response.
+impl SayMyName for SubnetRecord {
+    const NAME: &'static str = "SubnetRecord";
+}
+
+impl SayMyName for MegaBlob {
+    const NAME: &'static str = "MegaBlob";
+}
+
+/// Make types that get stored in Registry know how to construct their own keys.
+//
+// We should really make this part of rs/protobuf so that it can be used all over the place.
+pub trait MakeKey {
+    type KeySource;
+    fn make_key(key_source: Self::KeySource) -> String;
+}
+
+impl MakeKey for BlessedReplicaVersions {
+    type KeySource = ();
+    fn make_key(_unique_record: ()) -> String {
+        make_blessed_replica_versions_key()
+    }
+}
+
+impl MakeKey for SubnetRecord {
+    type KeySource = SubnetId;
+    fn make_key(subnet_id: SubnetId) -> String {
+        make_subnet_record_key(subnet_id)
+    }
+}
+
+impl MakeKey for MegaBlob {
+    type KeySource = u64;
+    fn make_key(key: u64) -> String {
+        format!("daniel_wong_{}", key)
+    }
+}
+
+pub async fn public_only_for_test_registry_get_value<Record, KeySource>(
+    key_source: KeySource,
+    ingress_expiry: Time,
+    perform_query: &(impl PerformQuery + Sync),
+) -> Result<Record, String>
+where
+    Record: RegistryValue + Default + SayMyName + MakeKey<KeySource = KeySource>,
+{
+    registry_get_value(key_source, ingress_expiry, perform_query).await
+}
+
+async fn registry_get_value<Record, KeySource>(
+    key_source: KeySource,
+    ingress_expiry: Time,
+    perform_query: &(impl PerformQuery + Sync),
+) -> Result<Record, String>
+where
+    Record: RegistryValue + Default + SayMyName + MakeKey<KeySource = KeySource>,
+{
+    let key = Record::make_key(key_source).into_bytes();
+    let breadcrumbs = || format!("key={}", String::from_utf8_lossy(&key));
+
+    // Construct request.
+    let method_payload = serialize_get_value_request(
+        key.to_vec(),
+        None, // latest version
+    )
+    .map_err(|err| {
+        format!(
+            "Failed to serialize get_value request where {}: {}",
+            breadcrumbs(),
+            err,
+        )
+    })?;
+    let query = Query {
+        source: QuerySource::User {
+            user_id: UserId::from(PrincipalId::new_anonymous()),
+            ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
+            nonce: None,
+        },
+        receiver: REGISTRY_CANISTER_ID,
+        method_name: "get_value".to_string(),
+        method_payload,
+    };
+
+    // Call the Registry canister's get_value method.
+    let perform_query_result = perform_query.perform_query(query).await.unwrap();
+
+    // Handle no reply.
+    let reply: Vec<u8> = match perform_query_result {
+        Ok((Ok(WasmResult::Reply(reply)), _)) => reply,
+        garbage => {
+            return Err(format!(
+                "Did not get reply from Registry get_value call where {}: {:?}",
+                breadcrumbs(),
+                garbage,
+            ));
+        }
+    };
+
+    // Unpack reply
+    let reply = deserialize_get_value_response(reply).map_err(|err| {
+        format!(
+            "Unable to deserialize the reply from a Registry canister get_value \
+             method call where {}: {:?}",
+            breadcrumbs(),
+            err,
+        )
+    })?;
     let Some(content) = reply.content else {
-        return Err(ic_registry_transport::Error::MalformedMessage(format!(
+        return Err(format!(
             "Got a reply from Registry to get_value call, and was able to \
              deserialize it, but no content field was populated. {}",
             breadcrumbs(),
-        )));
+        ));
     };
+    let get_chunk = GetChunkImpl { perform_query };
+    let record: Vec<u8> = dechunkify_get_value_response_content(content, &get_chunk)
+        .await
+        .map_err(|err| {
+            format!(
+                "Unable to dechunkify get_value response where {}: {:?}",
+                breadcrumbs(),
+                err,
+            )
+        })?;
+    let record: Record = deserialize_registry_value::<Record>(Ok(Some(record)))
+        .map_err(|err| format!("{}", err))?
+        .ok_or_else(|| format!("{} does not exist", Record::NAME))?;
 
-    // Dechunkify.
-    let query_handler = Arc::new(Mutex::new(query_handler.clone()));
-    let get_chunk = GetChunkImpl {
-        perform_query: &query_handler,
-    };
-    dechunkify_get_value_response_content(content, &get_chunk).await
+    // Nice reply!
+    Ok(record)
 }
 
 /// Return the set of signers that created multiple valid certification shares for the same height

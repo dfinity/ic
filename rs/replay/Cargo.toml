@@ -29,6 +29,7 @@ ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-logger = { path = "../monitoring/logger" }
 ic-messaging = { path = "../messaging" }
 ic-metrics = { path = "../monitoring/metrics" }
+ic-nervous-system-chunks = { path = "../nervous_system/chunks" }
 ic-nervous-system-common = { path = "../nervous_system/common" }
 ic-nns-common = { path = "../nns/common" }
 ic-nns-constants = { path = "../nns/constants" }
@@ -59,11 +60,17 @@ tower = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
+async-trait = { workspace = true }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
+ic-nervous-system-agent = { path = "../nervous_system/agent" }
+ic-nervous-system-integration-tests = { path = "../nervous_system/integration_tests" }
+ic-nns-test-utils = { path = "../nns/test_utils" }
 ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
+pocket-ic = { path = "../../packages/pocket-ic" }
 pretty_assertions = { workspace = true }
+strum = { workspace = true }
 
 [[bin]]
 name = "ic-replay"
