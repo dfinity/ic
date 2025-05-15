@@ -193,7 +193,7 @@ pub(crate) fn spawn_tip_thread(
                             debug_assert!(tip_state.latest_checkpoint_state.has_manifest);
                             debug_assert_eq!(tip_state.tip_folder_state.page_maps_height, height);
                             debug_assert!(tip_state.tip_folder_state.has_filtered_canisters);
-                            // Snapshots and other unflushed changed should have been handled earlier in `flush_page_delta`.
+                            // Snapshots and other unflushed changed should have been handled earlier in `flush_canister_snapshots_and_page_maps `.
                             debug_assert!(state.metadata.unflushed_checkpoint_ops.is_empty());
                             tip_state.latest_checkpoint_state = tip_state.tip_folder_state;
                             tip_state.tip_folder_state = Default::default();
