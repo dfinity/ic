@@ -3792,7 +3792,7 @@ impl<'a> Payload<'a> for ReadCanisterSnapshotMetadataArgs {
 pub enum SnapshotSource {
     #[default]
     TakenFromCanister,
-    UploadedManually,
+    MetadataUpload,
 }
 
 impl From<SnapshotSource> for pb_canister_snapshot_bits::SnapshotSource {
@@ -3801,7 +3801,7 @@ impl From<SnapshotSource> for pb_canister_snapshot_bits::SnapshotSource {
             SnapshotSource::TakenFromCanister => {
                 pb_canister_snapshot_bits::SnapshotSource::TakenFromCanister
             }
-            SnapshotSource::UploadedManually => {
+            SnapshotSource::MetadataUpload => {
                 pb_canister_snapshot_bits::SnapshotSource::UploadedManually
             }
         }
@@ -3823,7 +3823,7 @@ impl TryFrom<pb_canister_snapshot_bits::SnapshotSource> for SnapshotSource {
                 Ok(SnapshotSource::TakenFromCanister)
             }
             pb_canister_snapshot_bits::SnapshotSource::UploadedManually => {
-                Ok(SnapshotSource::UploadedManually)
+                Ok(SnapshotSource::MetadataUpload)
             }
         }
     }
@@ -4062,11 +4062,11 @@ impl ReadCanisterSnapshotDataResponse {
 ///     wasm_memory_size : nat64;
 ///     stable_memory_size : nat64;
 ///     certified_data : blob;
-///     global_timer : variant {
+///     global_timer : opt variant {
 ///         inactive;
 ///         active : nat64;
 ///     };
-///     on_low_wasm_memory_hook_status : variant {
+///     on_low_wasm_memory_hook_status : opt variant {
 ///         condition_not_satisfied;
 ///         ready;
 ///         executed;

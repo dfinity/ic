@@ -2191,7 +2191,7 @@ impl CanisterManager {
             });
         }
         // Ensure the snapshot was created via metadata upload, not from the canister.
-        if snapshot.source() != SnapshotSource::UploadedManually {
+        if snapshot.source() != SnapshotSource::MetadataUpload {
             return Err(CanisterManagerError::CanisterSnapshotImmutable);
         }
 
@@ -2259,6 +2259,15 @@ impl CanisterManager {
                 let chunk_bytes = wasm_chunk_store::chunk_size();
                 let new_memory_usage = canister.memory_usage() + chunk_bytes;
                 let instructions = self.config.upload_wasm_chunk_instructions;
+                let validated_memory_usage = self.memory_usage_checks(
+                    subnet_size,
+                    canister,
+                    round_limits,
+                    new_memory_usage,
+                    memory_usage,
+                    resource_saturation,
+                )?;
+
                 self.cycles_account_manager
                     .consume_cycles_for_instructions(
                         &sender,
@@ -2269,14 +2278,7 @@ impl CanisterManager {
                         WasmExecutionMode::Wasm32,
                     )
                     .map_err(CanisterManagerError::CanisterSnapshotNotEnoughCycles)?;
-                let validated_memory_usage = self.memory_usage_checks(
-                    subnet_size,
-                    canister,
-                    round_limits,
-                    new_memory_usage,
-                    memory_usage,
-                    resource_saturation,
-                )?;
+
                 self.memory_usage_updates(canister, round_limits, validated_memory_usage);
 
                 snapshot_inner
@@ -2298,17 +2300,17 @@ impl CanisterManager {
     fn remove_snapshot(
         &self,
         canister: &mut CanisterState,
-        replace_snapshot: SnapshotId,
+        snapshot_id: SnapshotId,
         state: &mut ReplicatedState,
-        replace_snapshot_size: NumBytes,
+        snapshot_size: NumBytes,
     ) {
         // Delete old snapshot identified by `replace_snapshot` ID.
-        state.delete_snapshot(replace_snapshot);
+        state.delete_snapshot(snapshot_id);
         canister.system_state.snapshots_memory_usage = canister
             .system_state
             .snapshots_memory_usage
             .get()
-            .saturating_sub(replace_snapshot_size.get())
+            .saturating_sub(snapshot_size.get())
             .into();
         // Confirm that `snapshots_memory_usage` is updated correctly.
         debug_assert_eq!(

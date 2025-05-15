@@ -384,11 +384,15 @@ impl CanisterSnapshot {
     ) -> Self {
         let stable_memory = PageMemory {
             page_map: PageMap::new(Arc::clone(&fd_factory)),
-            size: NumWasmPages::new(metadata.stable_memory_size as usize / WASM_PAGE_SIZE_IN_BYTES),
+            size: NumWasmPages::new(
+                (metadata.stable_memory_size as usize).div_ceil(WASM_PAGE_SIZE_IN_BYTES),
+            ),
         };
         let wasm_memory = PageMemory {
             page_map: PageMap::new(Arc::clone(&fd_factory)),
-            size: NumWasmPages::new(metadata.wasm_memory_size as usize / WASM_PAGE_SIZE_IN_BYTES),
+            size: NumWasmPages::new(
+                (metadata.wasm_memory_size as usize).div_ceil(WASM_PAGE_SIZE_IN_BYTES),
+            ),
         };
         let execution_snapshot = ExecutionStateSnapshot {
             // This is an invalid module now, but will be written to via `upload_canister_snapshot_data`.
@@ -402,7 +406,7 @@ impl CanisterSnapshot {
         let chunk_store = WasmChunkStore::new(Arc::clone(&fd_factory));
         Self {
             canister_id: CanisterId::try_from(metadata.canister_id).unwrap(),
-            source: SnapshotSource::UploadedManually,
+            source: SnapshotSource::MetadataUpload,
             taken_at_timestamp,
             canister_version,
             size: metadata.snapshot_size_bytes(),
