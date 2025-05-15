@@ -139,7 +139,7 @@ pub fn encode_decode_stream_test<
                 "destination subnet must be different from both sender and receiver subnets",
             );
         }
-        let destination_subnet = destination_subnet.unwrap_or_else(|| receiver_subnet);
+        let destination_subnet = destination_subnet.unwrap_or(receiver_subnet);
 
         state.modify_streams(|streams| {
             streams.insert(destination_subnet, stream.clone());
