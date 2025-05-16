@@ -576,6 +576,7 @@ prop_compose! {
         ledger_id in arb_principal(),
         ecdsa_key_name in "[a-z_]*",
         last_scraped_block_number in arb_nat(),
+        evm_rpc_id in proptest::option::of(arb_principal()),
     ) -> InitArg {
         InitArg {
             ethereum_network: EthereumNetwork::Sepolia,
@@ -586,6 +587,7 @@ prop_compose! {
             minimum_withdrawal_amount,
             next_transaction_nonce,
             last_scraped_block_number,
+            evm_rpc_id,
         }
     }
 }
@@ -805,6 +807,7 @@ fn state_equivalence() {
     use crate::tx::{
         Eip1559Signature, Eip1559TransactionRequest, SignedTransactionRequest, TransactionRequest,
     };
+    use crate::EVM_RPC_ID_PRODUCTION;
     use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
     use maplit::{btreemap, btreeset};
 
@@ -1039,7 +1042,7 @@ fn state_equivalence() {
         skipped_blocks: Default::default(),
         last_transaction_price_estimate: None,
         ledger_suite_orchestrator_id: Some("2s5qh-7aaaa-aaaar-qadya-cai".parse().unwrap()),
-        evm_rpc_id: Some("7hfb6-caaaa-aaaar-qadga-cai".parse().unwrap()),
+        evm_rpc_id: EVM_RPC_ID_PRODUCTION,
         ckerc20_tokens,
     };
 

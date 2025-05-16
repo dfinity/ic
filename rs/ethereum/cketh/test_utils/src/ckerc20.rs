@@ -84,7 +84,7 @@ impl CkErc20Setup {
     }
 
     pub fn new_without_ckerc20_active(env: Arc<StateMachine>) -> Self {
-        let cketh = CkEthSetup::maybe_evm_rpc(env.clone());
+        let cketh = CkEthSetup::new(env.clone());
         let orchestrator = LedgerSuiteOrchestrator::new(
             env.clone(),
             LedgerSuiteOrchestratorInitArg {
