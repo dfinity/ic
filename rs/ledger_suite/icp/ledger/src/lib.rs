@@ -422,7 +422,7 @@ impl Ledger {
                     .to_string(),
                 ),
                 CTE::AllowanceChanged { .. } => todo!(),
-                CTE::SelfApproval { .. } => todo!(),
+                CTE::SelfApproval => todo!(),
                 CTE::BadBurn { .. } => todo!(),
             }
         })

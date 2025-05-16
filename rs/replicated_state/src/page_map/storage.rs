@@ -63,14 +63,14 @@ pub enum OverlayVersion {
     /// The overlay file consists of 3 sections (from back to front):
     /// 1. Version: A single 32 bit little-endian unsigned integer containg the OverlayVersion.
     /// 2. Size: A 64 bit little-endian unsigned integer containing the number of pages in the overlay
-    ///          file.
+    ///    file.
     /// 3. Index: Description of the pages contained in this Overlay. The index
-    ///           is encoded as a series of contiguous ranges. For each range we
-    ///           encode two numbers as 64 bit little-endian unsigned integers:
+    ///    is encoded as a series of contiguous ranges. For each range we
+    ///    encode two numbers as 64 bit little-endian unsigned integers:
     ///
-    ///           1. The `PageIndex` of the first page in the range.
-    ///           2. The `PageIndex` past the last page in the range
-    ///           3. The `FileIndex` (offset in PAGE_SIZE blocks) of the first page in the range.
+    ///    1. The `PageIndex` of the first page in the range.
+    ///    2. The `PageIndex` past the last page in the range
+    ///    3. The `FileIndex` (offset in PAGE_SIZE blocks) of the first page in the range.
     ///
     /// 4. Data: The data of any number of 4KB pages concatenated.
     ///

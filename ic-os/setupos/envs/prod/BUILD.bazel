@@ -31,6 +31,7 @@ launch_bare_metal(
 artifact_bundle(
     name = "bundle",
     inputs = [":prod"],
+    prefix = "setup-os/disk-img",
 )
 
 # This image is used as the IC-OS installation image downloaded by Node Providers

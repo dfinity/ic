@@ -12,6 +12,6 @@ path = "src/canister.rs"
 
 [dependencies]
 candid = { workspace = true }
-ic-cdk = "0.17.1"
+ic-cdk = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }

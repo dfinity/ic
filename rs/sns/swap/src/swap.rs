@@ -3199,18 +3199,12 @@ impl Swap {
 ///
 /// # Arguments
 ///
-/// * `tot_direct_participation` - The current amount of tokens committed to
-///                                the swap by all users.
-/// * `max_tot_direct_participation` - The maximum amount of tokens that can
-///                                    be committed to the swap.
-/// * `min_user_participation` - The minimum amount of tokens that a
-///                              user must commit to participate to the swap.
-/// * `max_user_participation` - The maximum amount of tokens that a
-///                              user can commit to participate to the swap.
-/// * `user_participation` - The current amount of tokens committed to the
-///                          swap by the user that requested the increment.
-/// * `requested_increment` - The amount of tokens by which the user wants
-///                           to increase its participation in the swap.
+/// * `tot_direct_participation` - The current amount of tokens committed to the swap by all users.
+/// * `max_tot_direct_participation` - The maximum amount of tokens that can be committed to the swap.
+/// * `min_user_participation` - The minimum amount of tokens that a user must commit to participate to the swap.
+/// * `max_user_participation` - The maximum amount of tokens that a user can commit to participate to the swap.
+/// * `user_participation` - The current amount of tokens committed to the swap by the user that requested the increment.
+/// * `requested_increment` - The amount of tokens by which the user wants to increase its participation in the swap.
 fn compute_participation_increment(
     tot_direct_participation: u64,
     max_tot_direct_participation: u64,
