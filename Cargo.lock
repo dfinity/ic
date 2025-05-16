@@ -9224,6 +9224,7 @@ name = "ic-http-endpoints-public"
 version = "0.9.0"
 dependencies = [
  "askama",
+ "assert_matches",
  "async-trait",
  "axum 0.8.1",
  "axum-server",
