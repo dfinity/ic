@@ -511,6 +511,10 @@ impl ExecutionState {
     }
 
     /// Returns the `ExecutionState`'s contribution to the memory of a snapshot.
+    /// The difference to `memory_usage` is that the custom wasm section is not
+    /// stored explicitly in a snapshot, only implicitly in the wasm module,
+    /// whereas for the running canister, it's explicit and takes additional
+    /// memory.
     pub fn memory_usage_in_snapshot(&self) -> NumBytes {
         self.wasm_memory_usage()
             + self.stable_memory_usage()
