@@ -251,6 +251,7 @@ fn http_request(req: ic_http_types::HttpRequest) -> ic_http_types::HttpResponse 
             match encode_metrics(&mut writer) {
                 Ok(()) => HttpResponseBuilder::ok()
                     .header("Content-Type", "text/plain; version=0.0.4")
+                    .header("Cache-Control", "no-store")
                     .with_body_and_content_length(writer.into_inner())
                     .build(),
                 Err(err) => {
