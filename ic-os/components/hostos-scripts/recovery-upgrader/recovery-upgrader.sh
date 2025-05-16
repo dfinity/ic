@@ -23,8 +23,7 @@ get_cmdline_var() {
     grep -oP "${var}=[^ ]*" /proc/cmdline | head -n1 | cut -d= -f2-
 }
 
-# Get partition targets based on boot alternative
-get_partition_targets() {
+get_upgrade_target_partitions() {
     local lodev="$1"
     local boot_alternative="$2"
 
@@ -55,7 +54,7 @@ prepare_guestos_upgrade() {
     echo "Current boot alternative: $boot_alternative"
 
     # Get upgrade partition targets
-    read -r boot_target root_target var_target < <(get_partition_targets "$lodev" "$boot_alternative")
+    read -r boot_target root_target var_target < <(get_upgrade_target_partitions "$lodev" "$boot_alternative")
     echo "Target boot partition: $boot_target"
     echo "Target root partition: $root_target"
     echo "Target var partition: $var_target"
