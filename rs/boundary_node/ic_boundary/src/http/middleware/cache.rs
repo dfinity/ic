@@ -20,7 +20,8 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     cli,
-    routes::{ApiError, ErrorCause, RequestContext},
+    errors::{ApiError, ErrorCause},
+    routes::RequestContext,
 };
 
 #[derive(Debug, Clone)]

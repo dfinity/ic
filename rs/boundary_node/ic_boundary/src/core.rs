@@ -10,8 +10,8 @@ use anyhow::{anyhow, Context, Error};
 use arc_swap::ArcSwapOption;
 use async_scoped::TokioScope;
 use async_trait::async_trait;
-use axum::extract::Request;
 use axum::{
+    extract::Request,
     middleware,
     response::IntoResponse,
     routing::method_routing::{get, post},
@@ -54,12 +54,18 @@ use tracing::{debug, error, warn};
 
 use crate::{
     bouncer,
-    cache::{cache_middleware, CacheState},
     check::{Checker, Runner as CheckRunner},
     cli::Cli,
     dns::DnsResolver,
+    errors::ErrorCause,
     firewall::{FirewallGenerator, SystemdReloader},
-    geoip,
+    http::middleware::{
+        cache::{cache_middleware, CacheState},
+        geoip::{self},
+        process::{self},
+        retry::{retry_request, RetryParams},
+        validate::{self},
+    },
     metrics::{
         self, HttpMetricParams, HttpMetricParamsStatus, MetricParams, MetricParamsCheck,
         MetricParamsPersist, MetricParamsSnapshot, MetricsCache, MetricsRunner, WithMetrics,
@@ -67,8 +73,7 @@ use crate::{
     },
     persist::{Persist, Persister, Routes},
     rate_limiting::{generic, RateLimit},
-    retry::{retry_request, RetryParams},
-    routes::{self, ErrorCause, Health, Lookup, Proxy, ProxyRouter, RootKey},
+    routes::{self, Health, Lookup, Proxy, ProxyRouter, RootKey},
     salt_fetcher::AnonymizationSaltFetcher,
     snapshot::{
         generate_stub_snapshot, generate_stub_subnet, RegistrySnapshot, SnapshotPersister,
@@ -975,13 +980,13 @@ pub fn setup_router(
         .layer(middleware_metrics)
         .layer(load_shedder_system_mw)
         .layer(middleware_concurrency)
-        .layer(middleware::from_fn(routes::postprocess_response))
-        .layer(middleware::from_fn(routes::preprocess_request))
+        .layer(middleware::from_fn(process::postprocess_response))
+        .layer(middleware::from_fn(process::preprocess_request))
         .layer(load_shedder_latency_mw);
 
     let service_canister_read_call_query = ServiceBuilder::new()
-        .layer(middleware::from_fn(routes::validate_request))
-        .layer(middleware::from_fn(routes::validate_canister_request))
+        .layer(middleware::from_fn(validate::validate_request))
+        .layer(middleware::from_fn(validate::validate_canister_request))
         .layer(common_service_layers.clone())
         .layer(middleware_subnet_lookup.clone())
         .layer(middleware_generic_limiter.clone())
@@ -991,8 +996,8 @@ pub fn setup_router(
         .layer(middleware_retry.clone());
 
     let service_subnet_read = ServiceBuilder::new()
-        .layer(middleware::from_fn(routes::validate_request))
-        .layer(middleware::from_fn(routes::validate_subnet_request))
+        .layer(middleware::from_fn(validate::validate_request))
+        .layer(middleware::from_fn(validate::validate_subnet_request))
         .layer(common_service_layers)
         .layer(middleware_subnet_lookup)
         .layer(middleware_generic_limiter)
