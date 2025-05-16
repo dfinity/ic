@@ -213,8 +213,6 @@ impl Default for InstallCodeContextBuilder {
                     wat::parse_str(EMPTY_WAT).unwrap(),
                 )),
                 arg: vec![],
-                compute_allocation: None,
-                memory_allocation: None,
                 mode: CanisterInstallModeV2::Install,
             },
         }
@@ -365,8 +363,6 @@ fn install_code(
         context.canister_id,
         context.wasm_source.unwrap_as_slice_for_testing().into(),
         context.arg.clone(),
-        None,
-        None,
     );
     let ingress = IngressBuilder::new()
         .source(UserId::from(context.sender()))
@@ -538,8 +534,6 @@ fn install_code_preserves_messages() {
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
         vec![],
-        None,
-        None,
     ))
     .unwrap();
 
@@ -643,8 +637,6 @@ fn cannot_install_non_empty_canister() {
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
         vec![],
-        None,
-        None,
     ))
     .unwrap();
 
@@ -654,8 +646,6 @@ fn cannot_install_non_empty_canister() {
             canister_id,
             UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
-            None,
-            None,
         ))
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterNonEmpty);
@@ -682,8 +672,6 @@ fn install_code_with_wrong_controller_fails() {
             canister_id,
             UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
-            None,
-            None,
         ))
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
@@ -804,8 +792,6 @@ fn reinstall_on_empty_canister_succeeds() {
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
         vec![],
-        None,
-        None,
     ));
 
     let _ = get_reply(result);
@@ -887,8 +873,6 @@ fn install_puts_canister_back_after_invalid_wasm() {
             canister_id,
             wasm.to_vec(),
             vec![],
-            None,
-            None,
         ))
         .unwrap_err();
 
@@ -910,8 +894,6 @@ fn reinstall_clears_stable_memory() {
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
         vec![],
-        None,
-        None,
     ))
     .unwrap();
 
@@ -934,8 +916,6 @@ fn reinstall_clears_stable_memory() {
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
         vec![],
-        None,
-        None,
     ))
     .unwrap();
 
@@ -1741,8 +1721,6 @@ fn installing_a_canister_with_not_enough_cycles_fails() {
             canister_id,
             UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
-            None,
-            None,
         ))
         .unwrap_err();
 
@@ -1854,8 +1832,6 @@ fn failed_upgrade_hooks_consume_instructions() {
                 canister_id,
                 wasm_source: WasmSource::CanisterModule(CanisterModule::new(initial_wasm)),
                 arg: vec![],
-                compute_allocation: None,
-                memory_allocation: None,
                 mode: CanisterInstallModeV2::Install,
             },
             &mut state,
@@ -1879,8 +1855,6 @@ fn failed_upgrade_hooks_consume_instructions() {
                 canister_id,
                 wasm_source: WasmSource::CanisterModule(CanisterModule::new(upgrade_wasm)),
                 arg: vec![],
-                compute_allocation: None,
-                memory_allocation: None,
                 mode: CanisterInstallModeV2::Upgrade(None),
             },
             &mut state,
@@ -2000,8 +1974,6 @@ fn failed_install_hooks_consume_instructions() {
                 canister_id,
                 wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
                 arg: vec![],
-                compute_allocation: None,
-                memory_allocation: None,
                 mode: CanisterInstallModeV2::Install,
             },
             &mut state,
@@ -2122,8 +2094,6 @@ fn install_code_respects_instruction_limit() {
             canister_id,
             wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
             arg: vec![],
-            compute_allocation: None,
-            memory_allocation: None,
             mode: CanisterInstallModeV2::Install,
         },
         &mut state,
@@ -2155,8 +2125,6 @@ fn install_code_respects_instruction_limit() {
             canister_id,
             wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
             arg: vec![],
-            compute_allocation: None,
-            memory_allocation: None,
             mode: CanisterInstallModeV2::Install,
         },
         &mut state,
@@ -2182,8 +2150,6 @@ fn install_code_respects_instruction_limit() {
             canister_id,
             wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
             arg: vec![],
-            compute_allocation: None,
-            memory_allocation: None,
             mode: CanisterInstallModeV2::Upgrade(None),
         },
         &mut state,
@@ -2214,8 +2180,6 @@ fn install_code_respects_instruction_limit() {
             canister_id,
             wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
             arg: vec![],
-            compute_allocation: None,
-            memory_allocation: None,
             mode: CanisterInstallModeV2::Upgrade(None),
         },
         &mut state,
@@ -2429,8 +2393,6 @@ fn lower_memory_allocation_than_usage_fails() {
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
         vec![],
-        None,
-        None,
     ))
     .unwrap();
 
@@ -2462,8 +2424,6 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
             canister_id,
             UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
-            None,
-            None,
         ))
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InsufficientMemoryAllocation);
@@ -2481,8 +2441,6 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
         vec![],
-        None,
-        None,
     ))
     .unwrap();
 }
@@ -2508,8 +2466,6 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
         canister_id,
         wasm.to_vec(),
         vec![],
-        None,
-        None,
     ))
     .unwrap();
 
@@ -2526,8 +2482,6 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
             canister_id,
             wasm.to_vec(),
             vec![],
-            None,
-            None,
         ))
         .unwrap_err();
 
@@ -2549,8 +2503,6 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
         canister_id,
         wasm.to_vec(),
         vec![],
-        None,
-        None,
     ))
     .unwrap();
 }
@@ -2646,8 +2598,6 @@ fn test_install_when_setting_memory_allocation_to_zero() {
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
         vec![],
-        None,
-        None,
     ))
     .unwrap();
 }
@@ -2663,8 +2613,6 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
         vec![],
-        None,
-        None,
     ))
     .unwrap();
 
@@ -2676,8 +2624,6 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
         vec![],
-        None,
-        None,
     ))
     .unwrap();
 }
@@ -3134,28 +3080,6 @@ fn test_install_code_rate_limiting_disabled() {
     let binary = UNIVERSAL_CANISTER_WASM.to_vec();
     test.upgrade_canister(canister_id, binary.clone()).unwrap();
     test.upgrade_canister(canister_id, binary).unwrap();
-}
-
-#[test]
-fn install_code_context_conversion_u128() {
-    let install_args = InstallCodeArgsV2 {
-        mode: CanisterInstallModeV2::Install,
-        canister_id: PrincipalId::try_from([1, 2, 3].as_ref()).unwrap(),
-        wasm_module: vec![],
-        arg: vec![],
-        compute_allocation: Some(candid::Nat::from(u128::MAX)),
-        memory_allocation: Some(candid::Nat::from(u128::MAX)),
-        sender_canister_version: None,
-    };
-
-    assert!(InstallCodeContext::try_from((
-        CanisterChangeOrigin::from_canister(
-            PrincipalId::try_from([1, 2, 3].as_ref()).unwrap(),
-            None
-        ),
-        install_args,
-    ))
-    .is_err());
 }
 
 #[test]

@@ -1571,8 +1571,6 @@ impl Payload<'_> for CanisterStatusResultV2 {}
 ///     canister_id: principal;
 ///     wasm_module: blob;
 ///     arg: blob;
-///     compute_allocation: opt nat;
-///     memory_allocation: opt nat;
 ///     sender_canister_version : opt nat64;
 /// })`
 #[derive(Clone, Debug, CandidType, Deserialize)]
@@ -1583,8 +1581,6 @@ pub struct InstallCodeArgs {
     pub wasm_module: Vec<u8>,
     #[serde(with = "serde_bytes")]
     pub arg: Vec<u8>,
-    pub compute_allocation: Option<candid::Nat>,
-    pub memory_allocation: Option<candid::Nat>,
     pub sender_canister_version: Option<u64>,
 }
 
@@ -1595,22 +1591,6 @@ impl std::fmt::Display for InstallCodeArgs {
         writeln!(f, "  canister_id: {:?}", &self.canister_id)?;
         writeln!(f, "  wasm_module: <{:?} bytes>", self.wasm_module.len())?;
         writeln!(f, "  arg: <{:?} bytes>", self.arg.len())?;
-        writeln!(
-            f,
-            "  compute_allocation: {:?}",
-            &self
-                .compute_allocation
-                .as_ref()
-                .map(|value| format!("{}", value))
-        )?;
-        writeln!(
-            f,
-            "  memory_allocation: {:?}",
-            &self
-                .memory_allocation
-                .as_ref()
-                .map(|value| format!("{}", value))
-        )?;
         writeln!(f, "}}")
     }
 }
@@ -1623,16 +1603,12 @@ impl InstallCodeArgs {
         canister_id: CanisterId,
         wasm_module: Vec<u8>,
         arg: Vec<u8>,
-        compute_allocation: Option<u64>,
-        memory_allocation: Option<u64>,
     ) -> Self {
         Self {
             mode,
             canister_id: canister_id.into(),
             wasm_module,
             arg,
-            compute_allocation: compute_allocation.map(candid::Nat::from),
-            memory_allocation: memory_allocation.map(candid::Nat::from),
             sender_canister_version: None,
         }
     }
@@ -1654,8 +1630,6 @@ pub struct InstallCodeArgsV2 {
     pub wasm_module: Vec<u8>,
     #[serde(with = "serde_bytes")]
     pub arg: Vec<u8>,
-    pub compute_allocation: Option<candid::Nat>,
-    pub memory_allocation: Option<candid::Nat>,
     pub sender_canister_version: Option<u64>,
 }
 
@@ -1666,22 +1640,6 @@ impl std::fmt::Display for InstallCodeArgsV2 {
         writeln!(f, "  canister_id: {:?}", &self.canister_id)?;
         writeln!(f, "  wasm_module: <{:?} bytes>", self.wasm_module.len())?;
         writeln!(f, "  arg: <{:?} bytes>", self.arg.len())?;
-        writeln!(
-            f,
-            "  compute_allocation: {:?}",
-            &self
-                .compute_allocation
-                .as_ref()
-                .map(|value| format!("{}", value))
-        )?;
-        writeln!(
-            f,
-            "  memory_allocation: {:?}",
-            &self
-                .memory_allocation
-                .as_ref()
-                .map(|value| format!("{}", value))
-        )?;
         writeln!(f, "}}")
     }
 }
@@ -1694,16 +1652,12 @@ impl InstallCodeArgsV2 {
         canister_id: CanisterId,
         wasm_module: Vec<u8>,
         arg: Vec<u8>,
-        compute_allocation: Option<u64>,
-        memory_allocation: Option<u64>,
     ) -> Self {
         Self {
             mode,
             canister_id: canister_id.into(),
             wasm_module,
             arg,
-            compute_allocation: compute_allocation.map(candid::Nat::from),
-            memory_allocation: memory_allocation.map(candid::Nat::from),
             sender_canister_version: None,
         }
     }

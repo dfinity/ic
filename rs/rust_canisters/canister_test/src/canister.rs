@@ -1119,8 +1119,6 @@ impl<'a> Install<'a> {
             canister.canister_id,
             self.wasm.0.clone(),
             payload,
-            self.compute_allocation,
-            self.memory_allocation,
         );
         eprintln!("Install args: {}", &install_args);
         match self.runtime {
@@ -1135,8 +1133,6 @@ impl<'a> Install<'a> {
                     canister_id,
                     wasm_module,
                     arg,
-                    compute_allocation: _,
-                    memory_allocation: _,
                     sender_canister_version: _,
                 } = install_args;
                 state_machine
