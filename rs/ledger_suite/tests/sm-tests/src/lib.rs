@@ -5467,12 +5467,14 @@ pub mod archiving {
     /// Test that when archiving lots of blocks at once, the ledger hits the instruction limit when
     /// purging the archived blocks from the ledger, even though sending the blocks to the archive
     /// is done in chunks.
-    pub fn test_archiving_hits_instruction_limit_purging_blocks_from_ledger<T>(
+    pub fn test_archiving_hits_instruction_limit_purging_blocks_from_ledger<T, B>(
         ledger_wasm: Vec<u8>,
         encode_init_args: fn(InitArgs) -> T,
         num_initial_balances: u64,
+        get_blocks_fn: fn(&StateMachine, CanisterId, u64, usize) -> GenericGetBlocksResponse<B>,
     ) where
         T: CandidType,
+        B: Eq + Debug,
     {
         const NUM_BLOCKS_TO_ARCHIVE: usize = 800_000;
         const TRIGGER_THRESHOLD: usize = 2_000;
@@ -5507,23 +5509,31 @@ pub mod archiving {
             .install_canister(ledger_wasm.clone(), args, None)
             .unwrap();
 
+        let initial_chain_length = get_blocks_fn(&env, ledger_id, 0, 1).chain_length;
+
         // Perform a transaction. This should spawn an archive, and archive `num_blocks_to_archive`,
         // but since there are so many blocks to archive, the archiving will be done in chunks.
         // Finally, the blocks that were archived should be purged from the ledger - however, since
         // blocks are purged from the stable BTreeMap one at a time, this consumes so many
-        // instructions that the instruction limit is hit, and the transfer fails.
+        // instructions that the instruction limit is hit, and the response to the transfer is an
+        // error.
         let transfer_error = env
             .execute_ingress_as(
                 p1,
                 ledger_id,
                 "icrc1_transfer",
-                encode_transfer_args(p1.0, p2.0, 10_000),
+                encode_transfer_args(p1.0, p2.0, 12_344),
             )
             .expect_err("transfer should not fit in the instruction limit");
         assert_eq!(
             transfer_error.code(),
             ErrorCode::CanisterInstructionLimitExceeded
         );
+
+        // However, since the archiving is done using asynchronous inter-canister calls, the
+        // transfer actually succeeded and was committed.
+        let chain_length = get_blocks_fn(&env, ledger_id, initial_chain_length, 1).chain_length;
+        assert_eq!(initial_chain_length + 1, chain_length);
     }
 
     // ----- Helper structures -----
