@@ -1277,7 +1277,6 @@ fn serialize_canister_protos_to_tip(
     Ok(())
 }
 
-/// Serialize a single snapshot to disk at checkpoint time.
 fn serialize_snapshot_protos_to_tip(
     snapshot_id: &SnapshotId,
     canister_snapshot: &CanisterSnapshot,
