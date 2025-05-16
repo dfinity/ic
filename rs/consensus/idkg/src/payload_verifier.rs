@@ -39,7 +39,7 @@ use ic_interfaces::{
     validation::{ValidationError, ValidationResult},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::{StateManager, StateManagerError};
+use ic_interfaces_state_manager::StateManager;
 use ic_management_canister_types_private::{Payload, SignWithECDSAReply, SignWithSchnorrReply};
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::{
@@ -67,6 +67,7 @@ use ic_types::{
     },
     messages::CallbackId,
     registry::RegistryClientError,
+    state_manager::StateManagerError,
     Height, SubnetId,
 };
 use prometheus::HistogramVec;

@@ -23,7 +23,7 @@ use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID, SNS_WASM_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
     ManageNeuron, ManageNeuronResponse, NnsFunction, ProposalInfo, ProposalStatus, Vote,
 };
@@ -151,30 +151,6 @@ pub async fn get_software_version_from_snapshot(
             .map(|v| ReplicaVersion::try_from(v).unwrap()),
         Err(_) => None,
     }
-}
-
-pub async fn update_xdr_per_icp(
-    nns_api: &'_ Runtime,
-    timestamp_seconds: u64,
-    xdr_permyriad_per_icp: u64,
-) -> Result<(), String> {
-    let governance_canister = get_governance_canister(nns_api);
-    let proposal_payload = ic_nns_common::types::UpdateIcpXdrConversionRatePayload {
-        data_source: "".to_string(),
-        timestamp_seconds,
-        xdr_permyriad_per_icp,
-        reason: None,
-    };
-
-    let proposal_id = submit_external_proposal_with_test_id(
-        &governance_canister,
-        NnsFunction::IcpXdrConversionRate,
-        proposal_payload,
-    )
-    .await;
-
-    vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
-    Ok(())
 }
 
 pub async fn set_authorized_subnetwork_list(

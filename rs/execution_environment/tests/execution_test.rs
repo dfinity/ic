@@ -3,7 +3,6 @@ use candid::Encode;
 use canister_test::CanisterInstallMode;
 use ic_base_types::PrincipalId;
 use ic_config::{
-    embedders::BestEffortResponsesFeature,
     execution_environment::{Config as HypervisorConfig, DEFAULT_WASM_MEMORY_LIMIT},
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
@@ -2251,7 +2250,7 @@ fn toolchain_error_message() {
     rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister's Wasm module is not valid: Wasmtime \
     failed to validate wasm module wasmtime::Module::validate() failed with \
     multiple memories (at offset 0x14).\n\
-    This is likely an error with the compiler/CDK toolchain being used to \
+    If you are running this canister in a test environment (e.g., dfx), make sure the test environment is up to date. Otherwise, this is likely an error with the compiler/CDK toolchain being used to \
     build the canister. Please report the error to IC devs on the forum: \
     https://forum.dfinity.org and include which language/CDK was used to \
     create the canister."
@@ -2264,17 +2263,12 @@ fn helper_best_effort_responses(
     expected_deadline_seconds: u32,
 ) {
     let subnet_config = SubnetConfig::new(SubnetType::Application);
-    let mut embedders_config = ic_config::embedders::Config::default();
-    embedders_config.feature_flags.best_effort_responses = BestEffortResponsesFeature::Enabled;
 
     let env = StateMachineBuilder::new()
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
         .with_config(Some(StateMachineConfig::new(
             subnet_config,
-            HypervisorConfig {
-                embedders_config,
-                ..Default::default()
-            },
+            HypervisorConfig::default(),
         )))
         .build();
 

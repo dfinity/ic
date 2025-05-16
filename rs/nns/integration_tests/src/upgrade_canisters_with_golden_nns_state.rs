@@ -7,16 +7,23 @@ use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
-    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NODE_REWARDS_CANISTER_ID,
-    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID,
+    NODE_REWARDS_CANISTER_ID, PROTOCOL_CANISTER_IDS, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::{MonthlyNodeProviderRewards, Vote};
+use ic_nns_governance_api::{
+    MonthlyNodeProviderRewards, NetworkEconomics, Vote, VotingPowerEconomics,
+};
+use ic_nns_test_utils::state_test_helpers::{
+    nns_get_most_recent_monthly_node_provider_rewards, nns_wait_for_proposal_execution,
+    scrape_metrics,
+};
 use ic_nns_test_utils::{
     common::modify_wasm_bytes,
     state_test_helpers::{
-        get_canister_status, nns_cast_vote, nns_create_super_powerful_neuron,
-        nns_get_most_recent_monthly_node_provider_rewards, nns_propose_upgrade_nns_canister,
-        scrape_metrics, wait_for_canister_upgrade_to_succeed,
+        get_canister_status, manage_network_economics, nns_cast_vote,
+        nns_create_super_powerful_neuron, nns_propose_upgrade_nns_canister,
+        wait_for_canister_upgrade_to_succeed,
     },
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
@@ -146,6 +153,8 @@ impl Debug for NnsCanisterUpgrade {
     }
 }
 
+/// Returns a list of well-known public neurons. Impersonating these neurons to vote a certain way
+/// should be able to make the proposals pass instantly.
 fn get_well_known_public_neurons() -> Vec<(NeuronId, PrincipalId)> {
     [
         (
@@ -164,6 +173,36 @@ fn get_well_known_public_neurons() -> Vec<(NeuronId, PrincipalId)> {
         (id, principal)
     })
     .collect()
+}
+
+/// Votes yes on the proposal with the given ID using well-known public neurons. Note that this is
+/// needed because we should no longer be able to create a neuron with a huge stake and pass
+/// proposals using this new neuron, as voting power spikes are automatically detected and a defense
+/// mechanism is in place to prevent this exact situation. Instead, here we use the super power
+/// given by the StateMachine test framework where any principal can be impersonated, which is
+/// clearly unavailable on the mainnet.
+fn vote_yes_with_well_known_public_neurons(
+    state_machine: &StateMachine,
+    proposal_id: u64,
+    check_vote_should_succeed: bool,
+) {
+    for (voter_neuron_id, voter_controller) in get_well_known_public_neurons() {
+        // Note that the voting can fail if the proposal already reaches absolute
+        // majority and the NNS Governance starts to upgrade.
+        let result = nns_cast_vote(
+            state_machine,
+            voter_controller,
+            voter_neuron_id,
+            proposal_id,
+            Vote::Yes,
+        );
+        if check_vote_should_succeed {
+            result.unwrap().panic_if_error(&format!(
+                "Voting with well-known public neuron {:?} on proposal {} failed",
+                voter_neuron_id, proposal_id
+            ));
+        }
+    }
 }
 
 #[test]
@@ -213,6 +252,9 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     let neuron_id = nns_create_super_powerful_neuron(
         &state_machine,
         neuron_controller,
+        // Note that this number is chosen so that such an increase in voting power does not reach
+        // 50% of the current voting power, which would be considered a spike and triggers a defense
+        // mechanism designed to prevent a sudden takeover of the NNS.
         Tokens::from_tokens(100_000_000).unwrap(),
     );
     println!("Done creating super powerful Neuron.");
@@ -274,18 +316,14 @@ fn test_upgrade_canisters_with_golden_nns_state() {
                     module_arg.clone(),
                 );
 
-                // Impersonate some public neurons to vote on the proposal.
-                for (voter_neuron_id, voter_controller) in get_well_known_public_neurons() {
-                    // Note that the voting can fail if the proposal already reaches absolute
-                    // majority and the NNS Governance starts to upgrade.
-                    let _result = nns_cast_vote(
-                        &state_machine,
-                        voter_controller,
-                        voter_neuron_id,
-                        proposal_id.id,
-                        Vote::Yes,
-                    );
-                }
+                // Impersonate some public neurons to vote on the proposal. Note that we do not
+                // check whether votes succeed, as the governance upgrade can start at any point
+                // which will make the canister unresponsive.
+                vote_yes_with_well_known_public_neurons(
+                    &state_machine,
+                    proposal_id.id,
+                    false, /* check_vote_should_succeed */
+                );
 
                 // Step 3: Verify result(s): In a short while, the canister should
                 // be running the new code.
@@ -304,6 +342,29 @@ fn test_upgrade_canisters_with_golden_nns_state() {
             repetition_number += 1;
         };
 
+    // TODO[NNS1-3790]: Remove this once the mainnet NNS has initialized the
+    // TODO[NNS1-3790]: `neuron_minimum_dissolve_delay_to_vote_seconds` field.
+    let proposal_id = manage_network_economics(
+        &state_machine,
+        NetworkEconomics {
+            voting_power_economics: Some(VotingPowerEconomics {
+                neuron_minimum_dissolve_delay_to_vote_seconds: Some(
+                    VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
+                ),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+        neuron_controller,
+        neuron_id,
+    );
+    vote_yes_with_well_known_public_neurons(
+        &state_machine,
+        proposal_id.id,
+        true, /* check_vote_should_succeed */
+    );
+    nns_wait_for_proposal_execution(&state_machine, proposal_id.id);
+
     perform_sequence_of_upgrades(&nns_canister_upgrade_sequence);
 
     // Modify all WASMs, but preserve their behavior.
@@ -314,6 +375,8 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     perform_sequence_of_upgrades(&nns_canister_upgrade_sequence);
 
     perform_sanity_check_after_upgrade(&state_machine, &nns_canister_upgrade_sequence);
+
+    check_canisters_are_all_protocol_canisters(&state_machine);
 }
 
 fn perform_sanity_check_after_upgrade(
@@ -403,4 +466,23 @@ fn perform_sanity_check_after_upgrade_governance(state_machine: &StateMachine) {
         "After advancing some time after upgrade, total minted node provider rewards decreased too much. Before: {}, After: {}",
         total_rewards_xdr_e8s_before, total_rewards_xdr_e8s_after
     );
+}
+
+// Check that all canisters in the NNS subnet (except for exempted ones) are protocol canisters. If
+// this fails, either add the canister id into `non_protocol_canister_ids_in_nns_subnet` or
+// `PROTOCOL_CANISTER_IDS`.
+fn check_canisters_are_all_protocol_canisters(state_machine: &StateMachine) {
+    let canister_ids = state_machine.get_canister_ids();
+    let non_protocol_canister_ids_in_nns_subnet = [NNS_UI_CANISTER_ID, SNS_WASM_CANISTER_ID];
+
+    for canister_id in canister_ids {
+        if non_protocol_canister_ids_in_nns_subnet.contains(&canister_id) {
+            continue;
+        }
+        assert!(
+            PROTOCOL_CANISTER_IDS.contains(&&canister_id),
+            "Canister {} is in the NNS subnet but not a protocol canister",
+            canister_id,
+        );
+    }
 }

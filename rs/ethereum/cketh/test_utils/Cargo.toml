@@ -35,4 +35,3 @@ strum_macros = { workspace = true }
 
 [features]
 default = []
-evm-rpc = []

@@ -15,7 +15,7 @@ use ic_nervous_system_common_test_keys::{
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::governance::INITIAL_NEURON_DISSOLVE_DELAY;
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     governance_error::ErrorType,
     list_neurons::NeuronSubaccount,
     manage_neuron::{Command, Merge, NeuronIdOrSubaccount, Spawn},

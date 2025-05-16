@@ -1,5 +1,4 @@
 use ic_crypto::MegaKeyFromRegistryError;
-use ic_interfaces_state_manager::StateManagerError;
 use ic_types::{
     consensus::idkg,
     crypto::canister_threshold_sig::{
@@ -10,6 +9,7 @@ use ic_types::{
         idkg::InitialIDkgDealings,
     },
     registry::RegistryClientError,
+    state_manager::StateManagerError,
     Height, RegistryVersion, SubnetId,
 };
 

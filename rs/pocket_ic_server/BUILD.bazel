@@ -62,8 +62,8 @@ LIB_DEPENDENCIES = [
     "@crate_index//:hyper",
     "@crate_index//:hyper-util",
     "@crate_index//:ic-agent",
-    "@crate_index//:ic-bn-lib",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-gateway",
     "@crate_index//:ic-http-gateway",
     "@crate_index//:ic-utils",
     "@crate_index//:itertools",
@@ -164,7 +164,7 @@ rust_library(
     ]),
     crate_name = "pocket_ic_server",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "9.0.1",
+    version = "9.0.2",
     deps = LIB_DEPENDENCIES + [":build_script"],
 )
 
