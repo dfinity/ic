@@ -140,6 +140,7 @@ use std::{
     io,
     time::{Duration, SystemTime},
 };
+use storage::VOTING_POWER_SNAPSHOTS;
 use timer_tasks::encode_timer_task_metrics;
 
 #[cfg(any(test, feature = "canbench-rs"))]
@@ -606,6 +607,17 @@ pub fn encode_metrics(
 
     // Timer tasks
     encode_timer_task_metrics(w)?;
+
+    // Voting power snapshots
+    let latest_snapshot_is_spike = VOTING_POWER_SNAPSHOTS.with_borrow(|voting_power_snapshots| {
+        voting_power_snapshots.is_latest_snapshot_a_spike(now_seconds())
+    });
+
+    w.encode_gauge(
+        "voting_power_snapshots_latest_snapshot_is_spike",
+        if latest_snapshot_is_spike { 1.0 } else { 0.0 },
+        "Indicates whether the latest voting power snapshot is a spike compared to previous snapshots.",
+    )?;
 
     // Periodically Calculated (almost entirely detailed neuron breakdowns/rollups)
 
