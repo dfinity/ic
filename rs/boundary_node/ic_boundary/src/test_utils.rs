@@ -36,10 +36,10 @@ use ic_types::{
 };
 use reqwest;
 
-use crate::cache::CacheState;
 use crate::{
     cli::Cli,
     core::setup_router,
+    http::middleware::cache::CacheState,
     persist::{Persist, Persister, Routes},
     snapshot::{node_test_id, subnet_test_id, RegistrySnapshot, Snapshot, Snapshotter, Subnet},
 };
@@ -296,7 +296,7 @@ pub fn setup_test_router(
 
     if enable_cache {
         args.push("--cache-size");
-        args.push("1048576");
+        args.push("104857600");
     }
 
     #[cfg(not(feature = "tls"))]

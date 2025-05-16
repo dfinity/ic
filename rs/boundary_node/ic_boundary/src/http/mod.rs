@@ -1,6 +1,8 @@
+pub(crate) mod middleware;
+
 use rustls::Error as RustlsError;
 
-use crate::{core::error_source, dns::DnsError, routes::ErrorCause};
+use crate::{core::error_source, dns::DnsError, errors::ErrorCause};
 
 // Try to categorize the error that we got from Reqwest call
 pub fn error_infer(e: &impl std::error::Error) -> ErrorCause {

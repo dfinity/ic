@@ -1,16 +1,14 @@
 mod bouncer;
-mod cache;
 mod check;
 mod cli;
 mod core;
 mod dns;
+mod errors;
 mod firewall;
-mod geoip;
 mod http;
 mod metrics;
 mod persist;
 mod rate_limiting;
-mod retry;
 mod routes;
 mod salt_fetcher;
 mod snapshot;
