@@ -85,6 +85,13 @@ impl ICRC1Ledger for AlwaysSucceedingLedger {
     fn canister_id(&self) -> CanisterId {
         CanisterId::from_u64(42)
     }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        unimplemented!()
+    }
 }
 
 const TRANSITION_ROUND_COUNT: u64 = 42;
@@ -161,6 +168,13 @@ async fn test_perform_transfer_sns_treasury_funds_execution_fails_when_another_c
         }
 
         fn canister_id(&self) -> CanisterId {
+            unimplemented!()
+        }
+
+        async fn icrc3_get_blocks(
+            &self,
+            _args: Vec<GetBlocksRequest>,
+        ) -> Result<GetBlocksResult, NervousSystemError> {
             unimplemented!()
         }
     }
@@ -289,6 +303,13 @@ async fn test_neuron_operations_exclude_one_another() {
         }
 
         fn canister_id(&self) -> CanisterId {
+            unimplemented!()
+        }
+
+        async fn icrc3_get_blocks(
+            &self,
+            _args: Vec<GetBlocksRequest>,
+        ) -> Result<GetBlocksResult, NervousSystemError> {
             unimplemented!()
         }
     }

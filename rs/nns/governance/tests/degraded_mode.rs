@@ -83,6 +83,13 @@ impl IcpLedger for DegradedEnv {
     fn canister_id(&self) -> CanisterId {
         unimplemented!()
     }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<icrc_ledger_types::icrc3::blocks::GetBlocksRequest>,
+    ) -> Result<icrc_ledger_types::icrc3::blocks::GetBlocksResult, NervousSystemError> {
+        unimplemented!()
+    }
 }
 
 #[async_trait]

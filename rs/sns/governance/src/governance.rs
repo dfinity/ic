@@ -55,15 +55,16 @@ use crate::{
             GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
             GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse,
             GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
-            GetSnsInitializationParametersResponse, Governance as GovernanceProto, GovernanceError,
-            ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
-            ListProposalsResponse, ManageDappCanisterSettings, ManageLedgerParameters,
-            ManageNeuron, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens,
-            MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
-            Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
-            Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-            RegisterDappCanisters, RewardEvent, SetTopicsForCustomProposals, Tally, Topic,
-            TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, Vote, WaitForQuietState,
+            GetSnsInitializationParametersResponse, GetSnsStatusRequest, GetSnsStatusResponse,
+            Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
+            ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
+            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
+            ManageSnsMetadata, MintSnsTokens, MintTokensRequest, MintTokensResponse,
+            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
+            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
+            ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
+            RewardEvent, SetTopicsForCustomProposals, Tally, Topic, TransferSnsTreasuryFunds,
+            UpgradeSnsControlledCanister, Vote, WaitForQuietState,
         },
     },
     proposal::{
@@ -79,7 +80,7 @@ use crate::{
     },
     types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock, Wasm},
 };
-use candid::{Decode, Encode};
+use candid::{Decode, Encode, Nat};
 #[cfg(not(target_arch = "wasm32"))]
 use futures::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -110,7 +111,11 @@ use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use ic_sns_governance_token_valuation::Valuation;
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_types::{
+    icrc::generic_value::ICRC3Value,
+    icrc1::account::{Account, Subaccount},
+    icrc3::blocks::{GetBlocksRequest, GetBlocksResult},
+};
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashset};
 use rust_decimal::Decimal;
@@ -160,6 +165,8 @@ pub const HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES: usize =
 
 pub const MAX_UPGRADE_JOURNAL_ENTRIES_PER_REQUEST: u64 = 100;
 
+pub const ONE_SEC_NANOSEC: u64 = 1_000_000_000;
+
 /// Prefixes each log line for this canister.
 pub fn log_prefix() -> String {
     "[Governance] ".into()
@@ -177,6 +184,9 @@ pub const UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS: u64 = 600;
 /// Adopted-but-not-yet-executed upgrade proposals block other upgrade proposals from executing.
 /// But this is only true for proposals that are less than 1 day old, to prevent a stuck proposal from blocking all upgrades forever.
 const UPGRADE_PROPOSAL_BLOCK_EXPIRY_SECONDS: u64 = 60 * 60 * 24; // 1 day
+
+/// Timestamp of the block in the GetBlocksResult mapping is accessed by this key.
+const TIMESTAMP: &str = "ts";
 
 /// Converts bytes to a subaccountpub fn bytes_to_subaccount(bytes: &[u8]) -> Result<icrc_ledger_types::icrc1::account::Subaccount, GovernanceError> {
 pub fn bytes_to_subaccount(
@@ -2005,6 +2015,107 @@ impl Governance {
             })
             .min()
             .unwrap_or(u64::MAX);
+    }
+
+    // Shah-TODO what error types should be used?
+    pub async fn get_sns_statistics(
+        &self,
+        request: GetSnsStatusRequest,
+    ) -> Result<GetSnsStatusResponse, GovernanceError> {
+        let time_window_seconds = request.time_window_seconds.map_or(
+            Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Error: parsing the request failed on unwrapping `time_window_seconds` field"
+                    .to_string(),
+            )),
+            |time_window_seconds| Ok(time_window_seconds),
+        )?;
+        let num_recent_proposals = self.recent_proposals(time_window_seconds);
+        let last_transaction_timestamp = self.get_most_recent_tx_ts().await?;
+
+        // transaction timestamps are in nanoseconds
+        Ok(GetSnsStatusResponse {
+            num_recent_proposals: Some(num_recent_proposals),
+            last_transaction_timestamp: Some(last_transaction_timestamp),
+        })
+    }
+
+    async fn get_most_recent_tx_ts(&self) -> Result<u64, GovernanceError> {
+        let call_icrc3_get_blocks = |args: Vec<GetBlocksRequest>| async {
+            let result =
+                self.ledger
+                    .icrc3_get_blocks(args)
+                    .await
+                    .map_err(|nervous_system_error| {
+                        GovernanceError::new_with_message(
+                            ErrorType::External,
+                            nervous_system_error.error_message,
+                        )
+                    })?;
+
+            Ok::<GetBlocksResult, GovernanceError>(result)
+        };
+        // Make the first call to get the current block number.
+        // No matter if the parameters of `GetBlocksRequest` lie in a valid
+        // range or not, the current block number (which is still not added)
+        // is included in the response. We hence make a call with default parameters
+        // just to find out the last block number added to the blockchain on
+        // ledger.
+        let args = vec![GetBlocksRequest::default()];
+        let last_block_number = call_icrc3_get_blocks(args)
+            .await
+            .map(|blocks| blocks.log_length - Nat::from(1_u32))?;
+
+        // Make the second call to the last added block to fetch the most
+        // recent transaction.
+        let args = vec![GetBlocksRequest {
+            start: last_block_number,
+            length: Nat::from(1_u32),
+        }];
+
+        let last_block = call_icrc3_get_blocks(args).await?;
+
+        // TODO asserting/logging if blocks.len() != 1
+        // We assume in each block we have 1 and only 1 transaction.
+        // Block timestamps are in nano seconds
+        let ts_nanos = Self::get_block_ts_nanos(&last_block.blocks[0].block)?;
+        let ts = ts_nanos / Nat::from(ONE_SEC_NANOSEC);
+
+        Ok(ts.0.to_u64_digits()[0])
+    }
+
+    // Shah-TODO it implies that blocks are always a mapping
+    // Find how catually the blocks are created.
+    fn get_block_ts_nanos(block: &ICRC3Value) -> Result<Nat, GovernanceError> {
+        match block {
+            ICRC3Value::Map(map) => map.get(TIMESTAMP).map_or(
+                Err(GovernanceError::new(ErrorType::PreconditionFailed)),
+                |value| match value {
+                    ICRC3Value::Nat(ts) => Ok(ts.clone()),
+                    _ => Err(GovernanceError::new_with_message(
+                        ErrorType::PreconditionFailed,
+                        "Error parsing the block failed: missing timestamp".to_string(),
+                    )),
+                },
+            ),
+            _ => Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Error parsing the block failed: missing timestamp".to_string(),
+            )),
+        }
+    }
+
+    fn recent_proposals(&self, time_window_seconds: u64) -> u64 {
+        self.proto
+            .proposals
+            .values()
+            .filter(|proposal_data| {
+                self.env
+                    .now()
+                    .saturating_sub(proposal_data.proposal_creation_timestamp_seconds)
+                    <= time_window_seconds
+            })
+            .count() as u64
     }
 
     /// Starts execution of the given proposal in the background.
@@ -6189,6 +6300,20 @@ fn get_neuron_id_from_memo_and_controller(
     NeuronId::from(ledger::compute_neuron_staking_subaccount_bytes(
         controller, memo,
     ))
+}
+
+#[test]
+fn test_decoding_nat() {
+    let mut num_nat = Nat::from(1234_u64);
+    let mut val = num_nat
+        .to_string()
+        .chars()
+        .filter(|c| *c != '_')
+        .collect::<String>()
+        .parse::<u64>()
+        .unwrap();
+
+    assert_eq!(val, 1234);
 }
 
 #[cfg(test)]

@@ -106,6 +106,13 @@ impl IcpLedger for StubIcpLedger {
     fn canister_id(&self) -> CanisterId {
         unimplemented!()
     }
+
+    async fn icrc3_get_blocks(
+        &self,
+        args: Vec<icrc_ledger_types::icrc3::blocks::GetBlocksRequest>,
+    ) -> Result<icrc_ledger_types::icrc3::blocks::GetBlocksResult, NervousSystemError> {
+        unimplemented!()
+    }
 }
 
 pub(crate) struct StubCMC {}

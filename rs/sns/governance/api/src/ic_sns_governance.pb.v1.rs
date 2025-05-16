@@ -1645,6 +1645,17 @@ pub struct GetMetadataResponse {
     pub name: Option<String>,
     pub description: Option<String>,
 }
+/// Request message for 'get_metadata'.
+#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, Copy, PartialEq)]
+pub struct GetSnsStatusRequest {
+    pub time_window_seconds: Option<u64>,
+}
+/// Response message for 'get_metadata'.
+#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+pub struct GetSnsStatusResponse {
+    pub num_recent_proposals: Option<u64>,
+    pub last_transaction_timestamp: Option<u64>,
+}
 /// Request message for 'get_sns_initialization_parameters'
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, Copy, PartialEq)]
 pub struct GetSnsInitializationParametersRequest {}
