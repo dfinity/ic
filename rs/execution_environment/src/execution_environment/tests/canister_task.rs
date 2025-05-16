@@ -1,6 +1,5 @@
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
-use ic_config::execution_environment::MINIMUM_FREEZING_THRESHOLD;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{
@@ -838,7 +837,7 @@ fn global_timer_resumes_after_canister_is_being_frozen_and_unfrozen_again() {
     };
     let unfreeze = |env: &StateMachine, canister_id: CanisterId| {
         let args = CanisterSettingsArgsBuilder::new()
-            .with_freezing_threshold(MINIMUM_FREEZING_THRESHOLD)
+            .with_freezing_threshold(0)
             .build();
         let result = env.update_settings(&canister_id, args);
         assert_matches!(result, Ok(_));
@@ -980,7 +979,7 @@ fn on_low_wasm_memory_hook_is_run_after_freezing() {
     );
 
     // We update `freezing_threshold` unfreezing canister.
-    test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(100))
         .unwrap();
 
     // The hook is executed.

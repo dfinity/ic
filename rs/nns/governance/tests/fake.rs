@@ -8,29 +8,26 @@ use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_common::NervousSystemError;
 use ic_nervous_system_timers::test::{advance_time_for_timers, set_time_for_timers};
-use ic_nns_common::{
-    pb::v1::{NeuronId, ProposalId},
-    types::UpdateIcpXdrConversionRatePayload,
-};
+use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID,
-    SNS_WASM_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID,
+    NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance::{
     governance::{Environment, Governance, HeapGrowthPotential, RngError},
     pb::v1::{
         manage_neuron, manage_neuron::NeuronIdOrSubaccount, proposal, ExecuteNnsFunction,
-        GovernanceError, ManageNeuron, Motion, NetworkEconomics, Neuron, NnsFunction, Proposal,
-        Vote,
+        GovernanceError, ManageNeuron, Motion, NetworkEconomics, Neuron, Proposal, Vote,
     },
+    use_node_provider_reward_canister,
 };
-use ic_nns_governance_api::pb::v1::{manage_neuron_response, ManageNeuronResponse};
+use ic_nns_governance_api::{manage_neuron_response, ManageNeuronResponse};
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_swap::pb::v1 as sns_swap_pb;
 use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use lazy_static::lazy_static;
-use maplit::hashmap;
+use maplit::{btreemap, hashmap};
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use registry_canister::pb::v1::NodeProvidersMonthlyXdrRewards;
@@ -50,6 +47,7 @@ use ic_nns_governance::governance::tla::{
 };
 use ic_nns_governance::governance::RandomnessGenerator;
 use ic_nns_governance::{tla_log_request, tla_log_response};
+use ic_node_rewards_canister_api::monthly_rewards::GetNodeProvidersMonthlyXdrRewardsResponse;
 
 lazy_static! {
     pub(crate) static ref SNS_ROOT_CANISTER_ID: PrincipalId = PrincipalId::new_user_test_id(213599);
@@ -566,17 +564,32 @@ impl Environment for FakeDriver {
         }
 
         if method_name == "get_node_providers_monthly_xdr_rewards" {
-            assert_eq!(PrincipalId::from(target), REGISTRY_CANISTER_ID.get());
+            if use_node_provider_reward_canister() {
+                assert_eq!(PrincipalId::from(target), NODE_REWARDS_CANISTER_ID.get());
 
-            return Ok(Encode!(&Ok::<NodeProvidersMonthlyXdrRewards, String>(
-                NodeProvidersMonthlyXdrRewards {
-                    rewards: hashmap! {
-                        PrincipalId::new_user_test_id(1).to_string() => NODE_PROVIDER_REWARD,
-                    },
-                    registry_version: Some(5)
-                }
-            ))
-            .unwrap());
+                return Ok(Encode!(&GetNodeProvidersMonthlyXdrRewardsResponse {
+                    rewards: Some(ic_node_rewards_canister_api::monthly_rewards::NodeProvidersMonthlyXdrRewards {
+                        rewards: btreemap! {
+                            PrincipalId::new_user_test_id(1).0 => NODE_PROVIDER_REWARD,
+                        },
+                        registry_version: Some(5)
+                    }),
+                    error: None
+                })
+                .unwrap());
+            } else {
+                assert_eq!(PrincipalId::from(target), REGISTRY_CANISTER_ID.get());
+
+                return Ok(Encode!(&Ok::<NodeProvidersMonthlyXdrRewards, String>(
+                    NodeProvidersMonthlyXdrRewards {
+                        rewards: hashmap! {
+                            PrincipalId::new_user_test_id(1).to_string() => NODE_PROVIDER_REWARD,
+                        },
+                        registry_version: Some(5)
+                    }
+                ))
+                .unwrap());
+            }
         }
 
         if method_name == "get_average_icp_xdr_conversion_rate" {
@@ -672,7 +685,6 @@ pub fn register_vote_assert_success(
 pub enum ProposalTopicBehavior {
     Governance,
     NetworkEconomics,
-    ExchangeRate,
 }
 
 /// A struct to help setting up tests concisely thanks to a concise format to
@@ -702,18 +714,6 @@ impl ProposalNeuronBehavior {
             ProposalTopicBehavior::NetworkEconomics => {
                 proposal::Action::ManageNetworkEconomics(NetworkEconomics {
                     ..Default::default()
-                })
-            }
-            ProposalTopicBehavior::ExchangeRate => {
-                proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-                    nns_function: NnsFunction::IcpXdrConversionRate as i32,
-                    payload: Encode!(&UpdateIcpXdrConversionRatePayload {
-                        xdr_permyriad_per_icp: 1000000,
-                        data_source: "".to_string(),
-                        timestamp_seconds: 0,
-                        reason: None,
-                    })
-                    .unwrap(),
                 })
             }
         };
@@ -761,11 +761,11 @@ impl From<&str> for ProposalNeuronBehavior {
     /// 'NetworkEconomics', or 'IcpXdrConversionRate'.
     ///
     /// Example:
-    /// "--yP-nyE" means:
+    /// "--yP-nyG" means:
     ///
     /// neuron 3 proposes, neurons 2 and 6 votes yes, neuron 5 votes
     /// no, neurons 0, 1, and 4 do not vote; the proposal topic is
-    /// ExchangeRate.
+    /// Governance.
     fn from(str: &str) -> ProposalNeuronBehavior {
         // Look at the last letter to figure out if it specifies a proposal type.
         let chr = if str.is_empty() {
@@ -773,14 +773,13 @@ impl From<&str> for ProposalNeuronBehavior {
         } else {
             str.chars().last().unwrap()
         };
-        let (str, proposal_topic) = match "NEG".find(chr) {
+        let (str, proposal_topic) = match "NG".find(chr) {
             None => (str, ProposalTopicBehavior::NetworkEconomics),
             Some(x) => (
                 &str[0..str.len() - 1],
                 match x {
                     0 => ProposalTopicBehavior::NetworkEconomics,
-                    1 => ProposalTopicBehavior::ExchangeRate,
-                    // Must be 2, but using _ for a complete match.
+                    // Must be 1, but using _ for a complete match.
                     _ => ProposalTopicBehavior::Governance,
                 },
             ),

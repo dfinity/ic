@@ -219,13 +219,16 @@ impl<'a> QueryContext<'a> {
             }
         };
 
-        if let QuerySource::Anonymous = query.source {
-            if let WasmMethod::CompositeQuery(_) = &method {
-                info!(
-                    self.log,
-                    "Running composite canister http transform on canister {}.", query.receiver
-                );
+        match query.source {
+            QuerySource::System => {
+                if let WasmMethod::CompositeQuery(_) = &method {
+                    info!(
+                        self.log,
+                        "Running composite canister http transform on canister {}.", query.receiver
+                    );
+                }
             }
+            QuerySource::User { .. } => (),
         }
 
         let instructions_before = self.round_limits.instructions;
@@ -276,16 +279,19 @@ impl<'a> QueryContext<'a> {
             }
         };
 
-        if let QuerySource::Anonymous = query.source {
-            let instructions_consumed = instructions_before - self.round_limits.instructions;
-            if instructions_consumed >= RoundInstructions::from(100_000_000) {
-                info!(
-                    self.log,
-                    "Canister http transform on canister {} consumed {} instructions.",
-                    canister_id,
-                    instructions_consumed
-                );
+        match query.source {
+            QuerySource::System => {
+                let instructions_consumed = instructions_before - self.round_limits.instructions;
+                if instructions_consumed >= RoundInstructions::from(10_000_000) {
+                    info!(
+                        self.log,
+                        "Canister http transform on canister {} consumed {} instructions.",
+                        canister_id,
+                        instructions_consumed
+                    );
+                }
             }
+            QuerySource::User { .. } => (),
         }
 
         result

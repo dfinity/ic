@@ -29,7 +29,7 @@ use ic_types::{
     LongExecutionMode, MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time,
 };
 use ic_utils::thread::maybe_parallel_map;
-use ic_wasm_types::{CanisterModule, WasmHash};
+use ic_wasm_types::{CanisterModule, MemoryMappableWasmFile, WasmHash};
 use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::{identity, From, TryFrom, TryInto};
@@ -135,7 +135,7 @@ pub struct ExecutionStateBits {
     pub exports: ExportedFunctions,
     pub last_executed_round: ExecutionRound,
     pub metadata: WasmMetadata,
-    pub binary_hash: Option<WasmHash>,
+    pub binary_hash: WasmHash,
     pub next_scheduled_method: NextScheduledMethod,
     pub is_wasm64: bool,
 }
@@ -197,7 +197,7 @@ pub struct CanisterSnapshotBits {
     /// The canister version at the time of taking the snapshot.
     pub canister_version: u64,
     /// The hash of the canister wasm.
-    pub binary_hash: Option<WasmHash>,
+    pub binary_hash: WasmHash,
     /// The certified data blob belonging to the canister.
     pub certified_data: Vec<u8>,
     /// The metadata required for a wasm chunk store.
@@ -1706,6 +1706,34 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
             .collect())
     }
 
+    pub fn all_existing_wasm_files(&self) -> Result<Vec<WasmFile<Permissions>>, LayoutError> {
+        let canister_wasm_files = self
+            .canister_ids()?
+            .into_iter()
+            .map(|id| {
+                let canister = self.canister(&id)?;
+                Ok(canister.wasm())
+            })
+            .collect::<Result<Vec<_>, LayoutError>>()?;
+
+        let snapshot_wasm_files = self
+            .snapshot_ids()?
+            .into_iter()
+            .map(|id| {
+                let snapshot = self.snapshot(&id)?;
+                Ok(snapshot.wasm())
+            })
+            .collect::<Result<Vec<_>, LayoutError>>()?;
+
+        let wasm_files = canister_wasm_files
+            .into_iter()
+            .chain(snapshot_wasm_files)
+            .filter(|wasm| wasm.raw_path().exists())
+            .collect();
+
+        Ok(wasm_files)
+    }
+
     /// Directory where the snapshot for `snapshot_id` is stored.
     /// Note that we store them by canister. This means we have the canister id in the path, which is
     /// necessary in the context of subnet splitting. Also see [`canister_id_from_path`].
@@ -2094,7 +2122,11 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
     }
 
     pub fn wasm(&self) -> WasmFile<Permissions> {
-        self.canister_root.join(WASM_FILE).into()
+        WasmFile {
+            path: self.canister_root.join(WASM_FILE),
+            permissions_tag: PhantomData,
+            _checkpoint: self.checkpoint.clone(),
+        }
     }
 
     pub fn canister(
@@ -2180,7 +2212,11 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
     }
 
     pub fn wasm(&self) -> WasmFile<Permissions> {
-        self.snapshot_root.join(WASM_FILE).into()
+        WasmFile {
+            path: self.snapshot_root.join(WASM_FILE),
+            permissions_tag: PhantomData,
+            _checkpoint: self.checkpoint.clone(),
+        }
     }
 
     pub fn snapshot(
@@ -2431,29 +2467,65 @@ where
 /// A value of type `WasmFile` declares that some path should contain
 /// a Wasm module and provides a way to read it from disk or write it
 /// to disk.
-pub struct WasmFile<Permissions> {
+pub struct WasmFile<Permissions: AccessPolicy> {
     path: PathBuf,
     permissions_tag: PhantomData<Permissions>,
+    // Keep checkpoint alive so that the WasmFile can be loaded asynchronously.
+    _checkpoint: Option<CheckpointLayout<Permissions>>,
 }
 
-impl<T> WasmFile<T> {
+impl<Permissions: AccessPolicy> WasmFile<Permissions> {
     pub fn raw_path(&self) -> &Path {
         &self.path
     }
+}
+
+impl<T> MemoryMappableWasmFile for WasmFile<T>
+where
+    T: ReadPolicy,
+{
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+/// Checks that the given wasm file can be memory-mapped successfully.
+pub fn try_mmap_wasm_file(
+    wasm_file_layout: &dyn MemoryMappableWasmFile,
+) -> Result<(), LayoutError> {
+    wasm_file_layout
+        .mmap_file()
+        .map_err(|err| LayoutError::IoError {
+            path: wasm_file_layout.path().to_path_buf(),
+            message: "Failed to validate wasm file".to_string(),
+            io_err: err,
+        })?;
+    Ok(())
 }
 
 impl<T> WasmFile<T>
 where
     T: ReadPolicy,
 {
-    pub fn deserialize(
-        &self,
-        module_hash: Option<WasmHash>,
-    ) -> Result<CanisterModule, LayoutError> {
-        CanisterModule::new_from_file(self.path.clone(), module_hash).map_err(|err| {
+    /// Lazily loads a Wasm file with a known `module_hash` and optionally a known file `len`.
+    ///
+    /// If the file length is already known before calling this function,
+    /// passing it into the function avoids fetching the file's metadata, which can
+    /// be a relatively expensive operation when dealing with a large number of files.
+    /// This is similar to providing the `module_hash` upfront to avoid recomputing it.
+    pub fn lazy_load_with_module_hash(
+        self,
+        module_hash: WasmHash,
+        len: Option<usize>,
+    ) -> Result<CanisterModule, LayoutError>
+    where
+        T: Send + Sync + 'static,
+    {
+        let path = self.path.clone();
+        CanisterModule::new_from_file(Box::new(self), module_hash, len).map_err(|err| {
             LayoutError::IoError {
-                path: self.path.clone(),
-                message: "Failed to read file contents".to_string(),
+                path,
+                message: "Failed to load wasm file lazily".to_string(),
                 io_err: err,
             }
         })
@@ -2531,15 +2603,6 @@ where
     /// Removes the file if it exists, else does nothing.
     pub fn try_delete_file(&self) -> Result<(), LayoutError> {
         try_remove_file(&self.path)
-    }
-}
-
-impl<Permissions> From<PathBuf> for WasmFile<Permissions> {
-    fn from(path: PathBuf) -> Self {
-        Self {
-            path,
-            permissions_tag: PhantomData,
-        }
     }
 }
 
@@ -2768,7 +2831,7 @@ impl From<&ExecutionStateBits> for pb_canister_state_bits::ExecutionStateBits {
             exports: (&item.exports).into(),
             last_executed_round: item.last_executed_round.get(),
             metadata: Some((&item.metadata).into()),
-            binary_hash: item.binary_hash.as_ref().map(|h| h.to_vec()),
+            binary_hash: item.binary_hash.to_vec(),
             next_scheduled_method: Some(
                 pb_canister_state_bits::NextScheduledMethod::from(item.next_scheduled_method)
                     .into(),
@@ -2786,18 +2849,14 @@ impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits 
         for g in value.exported_globals.into_iter() {
             globals.push(g.try_into()?);
         }
-        let binary_hash = match value.binary_hash {
-            Some(hash) => {
-                let hash: [u8; 32] =
-                    hash.try_into()
-                        .map_err(|e| ProxyDecodeError::ValueOutOfRange {
-                            typ: "BinaryHash",
-                            err: format!("Expected a 32-byte long module hash, got {:?}", e),
-                        })?;
-                Some(hash.into())
-            }
-            None => None,
-        };
+        let binary_hash: [u8; 32] =
+            value
+                .binary_hash
+                .try_into()
+                .map_err(|e| ProxyDecodeError::ValueOutOfRange {
+                    typ: "BinaryHash",
+                    err: format!("Expected a 32-byte long module hash, got {:?}", e),
+                })?;
 
         Ok(Self {
             exported_globals: globals,
@@ -2806,7 +2865,7 @@ impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits 
             last_executed_round: value.last_executed_round.into(),
             metadata: try_from_option_field(value.metadata, "ExecutionStateBits::metadata")
                 .unwrap_or_default(),
-            binary_hash,
+            binary_hash: WasmHash::from(binary_hash),
             next_scheduled_method: match value.next_scheduled_method {
                 Some(method_id) => pb_canister_state_bits::NextScheduledMethod::try_from(method_id)
                     .unwrap_or_default()
@@ -2825,7 +2884,7 @@ impl From<CanisterSnapshotBits> for pb_canister_snapshot_bits::CanisterSnapshotB
             canister_id: Some((item.canister_id).into()),
             taken_at_timestamp: item.taken_at_timestamp.as_nanos_since_unix_epoch(),
             canister_version: item.canister_version,
-            binary_hash: item.binary_hash.as_ref().map(|h| h.to_vec()),
+            binary_hash: item.binary_hash.to_vec(),
             certified_data: item.certified_data.clone(),
             wasm_chunk_store_metadata: Some((&item.wasm_chunk_store_metadata).into()),
             stable_memory_size: item.stable_memory_size.get() as u64,
@@ -2855,18 +2914,13 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
         let canister_id: CanisterId =
             try_from_option_field(item.canister_id, "CanisterSnapshotBits::canister_id")?;
 
-        let binary_hash = match item.binary_hash {
-            Some(hash) => {
-                let hash: [u8; 32] =
-                    hash.try_into()
-                        .map_err(|e| ProxyDecodeError::ValueOutOfRange {
-                            typ: "BinaryHash",
-                            err: format!("Expected a 32-byte long module hash, got {:?}", e),
-                        })?;
-                Some(hash.into())
-            }
-            None => None,
-        };
+        let binary_hash: [u8; 32] =
+            item.binary_hash
+                .try_into()
+                .map_err(|e| ProxyDecodeError::ValueOutOfRange {
+                    typ: "BinaryHash",
+                    err: format!("Expected a 32-byte long module hash, got {:?}", e),
+                })?;
 
         let mut exported_globals = Vec::with_capacity(item.exported_globals.len());
         for global in item.exported_globals.into_iter() {
@@ -2889,7 +2943,7 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
             canister_id,
             taken_at_timestamp: Time::from_nanos_since_unix_epoch(item.taken_at_timestamp),
             canister_version: item.canister_version,
-            binary_hash,
+            binary_hash: WasmHash::from(binary_hash),
             certified_data: item.certified_data,
             wasm_chunk_store_metadata: try_from_option_field(
                 item.wasm_chunk_store_metadata,

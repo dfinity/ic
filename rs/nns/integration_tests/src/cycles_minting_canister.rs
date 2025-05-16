@@ -2,8 +2,8 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Canister;
 use cycles_minting_canister::{
-    CanisterSettingsArgs, ChangeSubnetTypeAssignmentArgs, CreateCanister, CreateCanisterError,
-    IcpXdrConversionRateCertifiedResponse, NotifyCreateCanister, NotifyError, NotifyErrorCode,
+    AuthorizedSubnetsResponse, CanisterSettingsArgs, ChangeSubnetTypeAssignmentArgs,
+    CreateCanister, CreateCanisterError, NotifyCreateCanister, NotifyError, NotifyErrorCode,
     NotifyMintCyclesArg, NotifyMintCyclesSuccess, NotifyTopUp, SubnetListWithType,
     SubnetTypesToSubnetsResponse, UpdateSubnetTypeArgs, BAD_REQUEST_CYCLES_PENALTY,
     MEANINGFUL_MEMOS, MEMO_CREATE_CANISTER, MEMO_MINT_CYCLES, MEMO_TOP_UP_CANISTER,
@@ -11,7 +11,6 @@ use cycles_minting_canister::{
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_canister_client_sender::Sender;
-use ic_config::execution_environment::MINIMUM_FREEZING_THRESHOLD;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 // TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
 use ic_management_canister_types_private::{
@@ -24,12 +23,13 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL,
     TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL,
 };
-use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
+use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID,
     LEDGER_CANISTER_ID, LEDGER_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
+use ic_nns_governance_api::{NnsFunction, ProposalStatus};
+use ic_nns_test_utils::state_test_helpers::cmc_set_authorized_subnetworks_for_principal;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{submit_external_update_proposal, wait_for_final_state},
@@ -58,66 +58,6 @@ use std::time::Duration;
 
 const CYCLES_LEDGER_FEE: u128 = 100_000_000;
 
-/// Test that the CMC's `icp_xdr_conversion_rate` can be updated via Governance
-/// proposal.
-#[test]
-fn test_set_icp_xdr_conversion_rate() {
-    state_machine_test_on_nns_subnet(|runtime| async move {
-        let nns_init_payload = NnsInitPayloadsBuilder::new()
-            .with_initial_invariant_compliant_mutations()
-            .with_test_neurons()
-            .build();
-        let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;
-
-        let payload = UpdateIcpXdrConversionRatePayload {
-            data_source: "test_set_icp_xdr_conversion_rate".to_string(),
-            timestamp_seconds: 1665782922,
-            xdr_permyriad_per_icp: 200,
-            reason: None,
-        };
-
-        set_icp_xdr_conversion_rate(&nns_canisters, payload).await;
-
-        Ok(())
-    });
-}
-
-async fn set_icp_xdr_conversion_rate(
-    nns: &NnsCanisters<'_>,
-    payload: UpdateIcpXdrConversionRatePayload,
-) {
-    let proposal_id: ProposalId = submit_external_update_proposal(
-        &nns.governance,
-        Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
-        NeuronId(TEST_NEURON_1_ID),
-        NnsFunction::IcpXdrConversionRate,
-        payload.clone(),
-        "<proposal created by set_icp_xdr_conversion_rate>".to_string(),
-        "".to_string(),
-    )
-    .await;
-
-    // Wait for the proposal to be accepted and executed.
-    assert_eq!(
-        wait_for_final_state(&nns.governance, proposal_id)
-            .await
-            .status,
-        ProposalStatus::Executed as i32
-    );
-
-    let response: IcpXdrConversionRateCertifiedResponse = nns
-        .cycles_minting
-        .query_("get_icp_xdr_conversion_rate", candid_one, ())
-        .await
-        .unwrap();
-
-    assert_eq!(response.data.timestamp_seconds, payload.timestamp_seconds);
-    assert_eq!(
-        response.data.xdr_permyriad_per_icp,
-        payload.xdr_permyriad_per_icp
-    );
-}
-
 /// Test that we can top-up the Governance canister with cycles when the CMC has
 /// a set exchange rate
 #[test]
@@ -137,15 +77,6 @@ fn test_cmc_mints_cycles_when_cmc_has_exchange_rate() {
             .build();
 
         let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;
-
-        let payload = UpdateIcpXdrConversionRatePayload {
-            data_source: "test_set_icp_xdr_conversion_rate".to_string(),
-            timestamp_seconds: 1665782922,
-            xdr_permyriad_per_icp: 20_000,
-            reason: None,
-        };
-
-        set_icp_xdr_conversion_rate(&nns_canisters, payload).await;
 
         let governance_status_initial: CanisterStatusResult = nns_canisters
             .root
@@ -212,7 +143,7 @@ fn test_cmc_mints_cycles_when_cmc_has_exchange_rate() {
         // Assert that the expected amount of cycles were added to governance.
         assert_eq!(
             governance_cycles_final - governance_cycles_initial,
-            Nat::from(20000000000000u64)
+            Nat::from(1000000000000000u64)
         );
 
         Ok(())
@@ -440,7 +371,7 @@ fn test_cmc_notify_create_with_settings() {
         &state_machine,
         Some(
             CanisterSettingsArgsBuilder::new()
-                .with_freezing_threshold(MINIMUM_FREEZING_THRESHOLD)
+                .with_freezing_threshold(7)
                 .build(),
         ),
     );
@@ -448,7 +379,7 @@ fn test_cmc_notify_create_with_settings() {
     assert_eq!(status.controllers(), vec![*TEST_USER1_PRINCIPAL]);
     assert_eq!(status.compute_allocation(), 0);
     assert_eq!(status.memory_allocation(), 0);
-    assert_eq!(status.freezing_threshold(), MINIMUM_FREEZING_THRESHOLD);
+    assert_eq!(status.freezing_threshold(), 7);
 
     //specify memory allocation
     let canister = notify_create_canister(
@@ -689,7 +620,7 @@ fn test_cmc_cycles_create_with_settings() {
         Some(
             CanisterSettingsArgsBuilder::new()
                 .with_controllers(vec![*TEST_USER1_PRINCIPAL])
-                .with_freezing_threshold(MINIMUM_FREEZING_THRESHOLD)
+                .with_freezing_threshold(7)
                 .build(),
         ),
         None,
@@ -700,7 +631,7 @@ fn test_cmc_cycles_create_with_settings() {
     assert_eq!(status.controllers(), vec![*TEST_USER1_PRINCIPAL]);
     assert_eq!(status.compute_allocation(), 0);
     assert_eq!(status.memory_allocation(), 0);
-    assert_eq!(status.freezing_threshold(), MINIMUM_FREEZING_THRESHOLD);
+    assert_eq!(status.freezing_threshold(), 7);
 
     //specify memory allocation
     let canister = cmc_create_canister_with_cycles(
@@ -802,7 +733,7 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
     let assert_canister_statuses_fixed = |test_phase| {
         assert_eq!(
             btreemap! {
-                btreemap! { "status".to_string() => "running".to_string() } => 11,
+                btreemap! { "status".to_string() => "running".to_string() } => 17,
                 btreemap! { "status".to_string() => "stopped".to_string() } => 0,
                 btreemap! { "status".to_string() => "stopping".to_string() } => 0,
             },
@@ -1754,7 +1685,7 @@ fn cmc_notify_top_up_not_rate_limited_by_invalid_top_up() {
 }
 
 #[test]
-fn cmc_get_default_subnets() {
+fn test_cmc_set_and_get_authorized_subnets() {
     let account = AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None);
     let icpts = Tokens::new(100, 0).unwrap();
     let neuron = get_neuron_1();
@@ -1776,6 +1707,20 @@ fn cmc_get_default_subnets() {
     let decoded = Decode!(default_subnets.bytes().as_slice(), Vec<PrincipalId>).unwrap();
     assert!(decoded.is_empty());
 
+    let authorized_subnets_response = state_machine
+        .execute_ingress(
+            CYCLES_MINTING_CANISTER_ID,
+            "get_principals_authorized_to_create_canisters_to_subnets",
+            candid::encode_one(()).unwrap(),
+        )
+        .unwrap();
+    let authorized_for_sam = Decode!(
+        &authorized_subnets_response.bytes().as_slice(),
+        AuthorizedSubnetsResponse
+    )
+    .unwrap();
+    assert_eq!(authorized_for_sam.data.len(), 0);
+
     let subnet_id = state_machine.get_subnet_id();
     cmc_set_default_authorized_subnetworks(
         &state_machine,
@@ -1793,4 +1738,45 @@ fn cmc_get_default_subnets() {
         .unwrap();
     let decoded = Decode!(default_subnets.bytes().as_slice(), Vec<PrincipalId>).unwrap();
     assert!(decoded.len() == 1);
+
+    let authorized_subnets_response = state_machine
+        .execute_ingress(
+            CYCLES_MINTING_CANISTER_ID,
+            "get_principals_authorized_to_create_canisters_to_subnets",
+            candid::encode_one(()).unwrap(),
+        )
+        .unwrap();
+    let authorized_subnets_response = Decode!(
+        &authorized_subnets_response.bytes().as_slice(),
+        AuthorizedSubnetsResponse
+    )
+    .unwrap();
+    assert_eq!(authorized_subnets_response.data.len(), 0);
+
+    let bob = PrincipalId::new_user_test_id(1010101);
+    cmc_set_authorized_subnetworks_for_principal(
+        &state_machine,
+        Some(bob),
+        vec![subnet_id],
+        neuron.principal_id,
+        neuron.neuron_id,
+    );
+
+    let authorized_subnets_response = state_machine
+        .execute_ingress(
+            CYCLES_MINTING_CANISTER_ID,
+            "get_principals_authorized_to_create_canisters_to_subnets",
+            candid::encode_one(()).unwrap(),
+        )
+        .unwrap();
+    let mut authorized_subnets_response = Decode!(
+        &authorized_subnets_response.bytes().as_slice(),
+        AuthorizedSubnetsResponse
+    )
+    .unwrap();
+    assert_eq!(authorized_subnets_response.data.len(), 1);
+    assert_eq!(
+        authorized_subnets_response.data.pop(),
+        Some((bob, vec![subnet_id]))
+    );
 }

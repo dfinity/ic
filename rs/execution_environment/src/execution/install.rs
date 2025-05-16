@@ -28,7 +28,7 @@ use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 
 /// Installs a new code in canister. The algorithm consists of five stages:
 /// - Stage 0: validate input.
-/// - Stage 1: create a new execution state based on the new Wasm code, clear certified data, deactivate global timer, and bump canister version.
+/// - Stage 1: create a new execution state based on the new Wasm code, clear certified data and canister logs, deactivate global timer, and bump canister version.
 /// - Stage 2: invoke the `start()` method (if present).
 /// - Stage 3: invoke the `canister_init()` method (if present).
 /// - Stage 4: finalize execution and refund execution cycles.
@@ -44,7 +44,7 @@ use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 ///   │
 ///   │
 ///   ▼
-/// [create new execution state, clear certified data, deactivate global timer, and bump canister version]
+/// [create new execution state, clear certified data and canister logs, deactivate global timer, and bump canister version]
 ///   │
 ///   │
 ///   │                   exceeded slice
@@ -94,7 +94,7 @@ pub(crate) fn execute_install(
         );
     }
 
-    // Stage 1: create a new execution state based on the new Wasm binary, clear certified data, deactivate global timer, and bump canister version.
+    // Stage 1: create a new execution state based on the new Wasm binary, clear certified data and canister logs, deactivate global timer, and bump canister version.
     let canister_id = helper.canister().canister_id();
     let layout = canister_layout(&original.canister_layout_path, &canister_id);
     let context_sender = context.sender();
@@ -142,6 +142,7 @@ pub(crate) fn execute_install(
         );
     }
     helper.clear_certified_data();
+    helper.clear_log();
     helper.deactivate_global_timer();
     helper.bump_canister_version();
     helper.add_canister_change(round.time, context.origin, context.mode, module_hash.into());

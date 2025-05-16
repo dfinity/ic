@@ -2578,6 +2578,14 @@ impl MasterPublicKeyId {
             Self::VetKd(_) => false,
         }
     }
+
+    /// Check whether this type of [`MasterPublicKeyId`] requires pre-signatures
+    pub fn requires_pre_signatures(&self) -> bool {
+        match self {
+            Self::Ecdsa(_) | Self::Schnorr(_) => true,
+            Self::VetKd(_) => false,
+        }
+    }
 }
 
 impl FromStr for MasterPublicKeyId {
@@ -3997,6 +4005,11 @@ impl ReadCanisterSnapshotDataArgs {
     pub fn get_canister_id(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(self.canister_id)
     }
+
+    // TODO: EXC-1997 strengthen types
+    pub fn get_snapshot_id(&self) -> SnapshotId {
+        SnapshotId::try_from(&self.snapshot_id).unwrap()
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
@@ -4026,6 +4039,12 @@ pub enum CanisterSnapshotDataKind {
 pub struct ReadCanisterSnapshotDataResponse {
     #[serde(with = "serde_bytes")]
     pub chunk: Vec<u8>,
+}
+
+impl ReadCanisterSnapshotDataResponse {
+    pub fn new(chunk: Vec<u8>) -> Self {
+        Self { chunk }
+    }
 }
 
 /// Struct to encode/decode

@@ -16,6 +16,7 @@ use general_execution_tests::ingress_rate_limiting::*;
 use general_execution_tests::malicious_input::malicious_input_test;
 use general_execution_tests::nns_shielding::*;
 use general_execution_tests::queries::query_reply_sizes;
+use general_execution_tests::security::stack_overflow;
 use general_execution_tests::wasm_chunk_store::*;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
@@ -100,7 +101,8 @@ fn main() -> Result<()> {
                 .add_test(systest!(install_large_wasm_with_other_store))
                 .add_test(systest!(
                     install_large_wasm_with_other_store_fails_cross_subnet
-                )),
+                ))
+                .add_test(systest!(stack_overflow)),
         )
         .execute_from_args()?;
 

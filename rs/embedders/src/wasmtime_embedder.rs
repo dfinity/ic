@@ -75,19 +75,27 @@ fn demangle(func_name: &str) -> String {
     }
 }
 
-fn convert_backtrace(wasm: &wasmtime::WasmBacktrace) -> CanisterBacktrace {
+/// Convert a backtrace to our internal representation. Returns `None` if we
+/// can't get function names for any of the frames. This likely indicates that
+/// the `name` section is not present and the user won't want an error
+/// cluttered with a useless backtrace anyway.
+fn convert_backtrace(wasm: &wasmtime::WasmBacktrace) -> Option<CanisterBacktrace> {
     let funcs: Vec<_> = wasm
         .frames()
         .iter()
         .map(|f| (f.func_index(), f.func_name().map(demangle)))
         .collect();
-    CanisterBacktrace(funcs)
+    if funcs.iter().all(|(_, name)| name.is_none()) {
+        None
+    } else {
+        Some(CanisterBacktrace(funcs))
+    }
 }
 
 fn wasmtime_error_to_hypervisor_error(err: anyhow::Error) -> HypervisorError {
     let backtrace = err
         .downcast_ref::<wasmtime::WasmBacktrace>()
-        .map(convert_backtrace);
+        .and_then(convert_backtrace);
     match err.downcast::<wasmtime::Trap>() {
         Ok(trap) => trap_code_to_hypervisor_error(trap, backtrace),
         Err(err) => {
@@ -263,7 +271,7 @@ impl WasmtimeEmbedder {
             WasmMemoryType::Wasm32 => {
                 linker::syscalls::<u32>(
                     &mut linker,
-                    self.config.feature_flags.clone(),
+                    self.config.feature_flags,
                     self.config.stable_memory_dirty_page_limit,
                     self.config.stable_memory_accessed_page_limit,
                     main_memory_type,
@@ -272,7 +280,7 @@ impl WasmtimeEmbedder {
             WasmMemoryType::Wasm64 => {
                 linker::syscalls::<u64>(
                     &mut linker,
-                    self.config.feature_flags.clone(),
+                    self.config.feature_flags,
                     self.config.stable_memory_dirty_page_limit,
                     self.config.stable_memory_accessed_page_limit,
                     main_memory_type,

@@ -1084,6 +1084,16 @@ pub fn opening_prefix(
     IDkgPrefixOf::new(IDkgPrefix::new(transcript_id.id(), hasher.finish()))
 }
 
+/// Represent the different ways of iterating through entries that share a same pattern.
+///
+/// The pattern must be a prefix of the entry key as we leverage the fact that the keys are sorted
+/// when iterating.
+#[derive(Clone)]
+pub enum IterationPattern {
+    GroupTag(u64),
+    Prefix(IDkgPrefix),
+}
+
 pub type IDkgArtifactIdDataOf<T> = Id<T, IDkgArtifactIdData>;
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]

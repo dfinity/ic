@@ -4,7 +4,7 @@ use crate::{
 };
 use candid::{CandidType, Decode, Encode, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use ic_http_types::{HttpRequest, HttpResponse};
 use ic_state_machine_tests::StateMachine;
 use ic_types::ingress::WasmResult;
 use icrc_ledger_types::icrc2::approve::ApproveArgs;

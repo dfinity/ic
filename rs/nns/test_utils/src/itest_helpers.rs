@@ -23,13 +23,9 @@ use ic_nns_common::{
     types::{NeuronId, ProposalId},
 };
 use ic_nns_constants::*;
-use ic_nns_governance_api::{
-    pb::v1::{Governance, NnsFunction, ProposalStatus},
-    test_api::TimeWarp,
-};
+use ic_nns_governance_api::{test_api::TimeWarp, Governance, NnsFunction, ProposalStatus};
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
-use ic_node_rewards_canister_api::lifecycle_args::InitArgs as NodeRewardsInitArgs;
 use ic_registry_transport::pb::v1::RegistryMutation;
 use ic_sns_wasm::{init::SnsWasmCanisterInitPayload, pb::v1::AddWasmRequest};
 use ic_test_utilities::universal_canister::{
@@ -445,10 +441,7 @@ pub async fn install_rust_canister_from_path<P: AsRef<Path>>(
 /// Compiles the governance canister, builds it's initial payload and installs
 /// it
 pub async fn install_governance_canister(canister: &mut Canister<'_>, init_payload: Governance) {
-    let mut serialized = Vec::new();
-    init_payload
-        .encode(&mut serialized)
-        .expect("Couldn't serialize init payload.");
+    let serialized = Encode!(&init_payload).expect("Couldn't serialize init payload.");
     install_rust_canister(canister, "governance-canister", &["test"], Some(serialized)).await;
 }
 
@@ -637,12 +630,8 @@ pub async fn install_sns_wasm_canister(
     install_rust_canister(canister, "sns-wasm-canister", &[], Some(encoded)).await;
 }
 
-pub async fn install_node_rewards_canister(
-    canister: &mut Canister<'_>,
-    init_payload: NodeRewardsInitArgs,
-) {
-    let encoded = Encode!(&init_payload).unwrap();
-    install_rust_canister(canister, "node-rewards-canister", &[], Some(encoded)).await;
+pub async fn install_node_rewards_canister(canister: &mut Canister<'_>) {
+    install_rust_canister(canister, "node-rewards-canister", &[], None).await;
 }
 
 /// Creates and installs the sns_wasm canister.

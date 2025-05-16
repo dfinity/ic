@@ -25,7 +25,6 @@ use icrc_ledger_types::{
 };
 use pocket_ic::PocketIcBuilder;
 use rust_decimal::prelude::ToPrimitive;
-use std::time::SystemTime;
 
 #[tokio::test]
 async fn test_upgrade_existing_sns() {
@@ -261,12 +260,7 @@ async fn test_upgrade_existing_sns() {
             .unwrap();
             (wealthy_user_principal_id, wealthy_user_account)
         };
-        let current_ic_unix_time_nanos = pocket_ic
-            .get_time()
-            .await
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos() as u64;
+        let current_ic_unix_time_nanos = pocket_ic.get_time().await.as_nanos_since_unix_epoch();
         let spender_principal_id = PrincipalId::new_user_test_id(1_000_002);
         let spender = Account {
             owner: spender_principal_id.0,

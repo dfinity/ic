@@ -24,13 +24,34 @@ BUILD_INFO_REV = "701a696844fba5c87df162fbbc1ccef96f27c9d7"
 
 def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enabled):
     CRATE_ANNOTATIONS = {
+        "openssl-sys": [crate.annotation(
+            build_script_data = [
+                "@openssl//:gen_dir",
+            ],
+            build_script_env = {
+                "OPENSSL_NO_VENDOR": "1",
+                "OPENSSL_LIB_DIR": "$(location @openssl//:gen_dir)/lib64",
+                "OPENSSL_INCLUDE_DIR": "$(location @openssl//:gen_dir)/include",
+                "OPENSSL_STATIC": "1",
+            },
+        )],
         "canbench": [crate.annotation(
             gen_binaries = True,
+        )],
+        "cc": [crate.annotation(
+            patch_args = ["-p1"],
+            patches = ["@@//bazel:cc_rs.patch"],
         )],
         "libssh2-sys": [crate.annotation(
             # Patch for determinism issues
             patch_args = ["-p1"],
             patches = ["@@//bazel:libssh2-sys.patch"],
+            build_script_data = [
+                "@openssl//:gen_dir",
+            ],
+        )],
+        "libz-sys": [crate.annotation(
+            crate_features = ["static"],
         )],
         "curve25519-dalek": [crate.annotation(
             rustc_flags = [
@@ -89,20 +110,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             patch_args = ["-p4"],
             patches = ["@@//bazel:cranelift-isle.patch"],
         )],
-        "cranelift-codegen-meta": [crate.annotation(
-            patch_args = ["-p4"],
-            patches = [
-                "@@//bazel:cranelift-codegen-meta.patch",  # Patch for determinism issues
-                "@@//bazel:cranelift-codegen-meta-isle.patch",  # Patch for issue: https://github.com/bytecodealliance/wasmtime/pull/10334
-            ],
-        )],
         "cranelift-assembler-x64": [crate.annotation(
-            # Patch for issue: https://github.com/bytecodealliance/wasmtime/pull/10334
+            # Patch for determinism issues
             patch_args = ["-p3"],
-            patches = [
-                "@@//bazel:cranelift-assembler-lib.patch",
-                "@@//bazel:cranelift-assembler-main.patch",
-            ],
+            patches = ["@@//bazel:cranelift-assembler-lib.patch"],
         )],
         "secp256k1-sys": [crate.annotation(
             # This specific version is used by ic-btc-kyt canister, which
@@ -423,7 +434,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.8.4",
             ),
             "crossbeam-channel": crate.spec(
-                version = "^0.5.13",
+                version = "^0.5.15",
             ),
             "csv": crate.spec(
                 version = "^1.1",
@@ -438,6 +449,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "cvt": crate.spec(
                 version = "^0.1.1",
+            ),
+            "darling": crate.spec(
+                version = "^0.20.11",
             ),
             "dashmap": crate.spec(
                 version = "^5.3.4",
@@ -534,7 +548,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.12",
             ),
             "http": crate.spec(
-                version = "^1.2.0",
+                version = "^1.3.1",
             ),
             "http-body": crate.spec(
                 version = "^1.0.1",
@@ -588,7 +602,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-bn-lib": crate.spec(
                 git = "https://github.com/dfinity/ic-bn-lib",
-                rev = "686cff6ccd422716d48767a299ab33044a27d4ad",
+                rev = "f85fc84e1e608cdea7d60763cf202d74a7fd5050",
+                features = [
+                    "acme_alpn",
+                ],
             ),
             "ic-btc-interface": crate.spec(
                 version = "^0.2.2",
@@ -604,23 +621,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "3.0.3",
             ),
             "ic-cdk": crate.spec(
-                version = "^0.17.0",
-            ),
-            "ic-cdk-timers": crate.spec(
-                version = "^0.11.0",
-            ),
-            "ic-cdk-macros": crate.spec(
-                version = "^0.17.0",
-            ),
-            "ic-cdk-macros-next": crate.spec(
-                package = "ic-cdk-macros",
-                git = "https://github.com/dfinity/cdk-rs.git",
-                rev = "4e287ce51636b0e70768c193da38d2fc5324ea15",
+                version = "^0.17.2",
             ),
             "ic-cdk-next": crate.spec(
                 package = "ic-cdk",
-                git = "https://github.com/dfinity/cdk-rs.git",
-                rev = "4e287ce51636b0e70768c193da38d2fc5324ea15",
+                version = "^0.18.0",
+            ),
+            "ic-cdk-timers": crate.spec(
+                version = "^0.11.0",
             ),
             "ic-certified-map": crate.spec(
                 version = "^0.3.1",
@@ -633,7 +641,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-gateway": crate.spec(
                 git = "https://github.com/dfinity/ic-gateway",
-                rev = "469d2daee8b44aadb46400bcb2832d560baf7272",
+                rev = "8248267091e8f3306808355d5556701ed15d777f",
+                default_features = False,
             ),
             "ic-http-certification": crate.spec(
                 version = "3.0.3",
@@ -645,7 +654,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.1.1",
             ),
             "ic-management-canister-types": crate.spec(
-                version = "0.2.1",
+                version = "0.3.0",
             ),
             "ic_principal": crate.spec(
                 version = "^0.1.1",
@@ -1280,6 +1289,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "full",
                 ],
             ),
+            "syn2": crate.spec(
+                package = "syn",
+                version = "^2.0.101",
+            ),
             "syscalls": crate.spec(
                 version = "^0.6.18",
             ),
@@ -1439,8 +1452,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "serde",
                 ],
             ),
+            # DO NOT upgrade to >=1.13 unless you are ready to deal with problems.
+            # This breaks `wasm32-unknown-unknown` compatibility.
+            # Read https://github.com/uuid-rs/uuid/releases/tag/1.13.0
             "uuid": crate.spec(
-                version = "^1.11.0",
+                version = "=1.12.1",
                 features = [
                     "v4",
                     "serde",
@@ -1460,26 +1476,26 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2",
             ),
             "wasm-encoder": crate.spec(
-                version = "^0.224.0",
+                version = "^0.228.0",
                 features = [
                     "wasmparser",
                 ],
             ),
             "wasm-smith": crate.spec(
-                version = "^0.224.0",
+                version = "^0.228.0",
                 default_features = False,
                 features = [
                     "wasmparser",
                 ],
             ),
             "wasmparser": crate.spec(
-                version = "^0.224.0",
+                version = "^0.228.0",
             ),
             "wasmprinter": crate.spec(
-                version = "^0.224.0",
+                version = "^0.228.0",
             ),
             "wasmtime": crate.spec(
-                version = "^30.0.2",
+                version = "^32.0.0",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1490,13 +1506,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^30.0.2",
+                version = "^32.0.0",
             ),
             "wast": crate.spec(
-                version = "^224.0.0",
+                version = "^228.0.0",
             ),
             "wat": crate.spec(
-                version = "^1.224.0",
+                version = "^1.228.0",
             ),
             "wee_alloc": crate.spec(
                 version = "^0.4.3",

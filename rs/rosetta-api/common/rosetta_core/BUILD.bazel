@@ -11,8 +11,13 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:actix-web-prom",
     "@crate_index//:anyhow",
+    "@crate_index//:axum",
+    "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:hex",
+    "@crate_index//:http-body",
+    "@crate_index//:http-body-util",
+    "@crate_index//:hyper",
     "@crate_index//:ic-agent",
     "@crate_index//:lazy_static",
     "@crate_index//:num-bigint",
@@ -22,6 +27,8 @@ DEPENDENCIES = [
     "@crate_index//:serde_json",
     "@crate_index//:serde_with",
     "@crate_index//:tokio",
+    "@crate_index//:tower",
+    "@crate_index//:tower-http",
     "@crate_index//:tracing",
 ]
 

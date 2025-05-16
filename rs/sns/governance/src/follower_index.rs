@@ -129,7 +129,7 @@ pub fn add_neuron_to_follower_index(
 
 /// This is analogous to the legacy `build_function_followee_index` function, but for topic
 /// following.
-pub fn build_follower_index(
+pub(crate) fn build_follower_index(
     neurons: &BTreeMap<String, Neuron>,
 ) -> BTreeMap<Topic, BTreeMap<String, BTreeSet<NeuronId>>> {
     let mut function_followee_index = BTreeMap::new();
@@ -152,7 +152,7 @@ pub(crate) mod legacy {
     ///
     /// The index is built from the `neurons` in the `Governance` struct, which map followers
     /// (the neuron ID) to a set of followees per function.
-    pub fn build_function_followee_index(
+    pub(crate) fn build_function_followee_index(
         id_to_nervous_system_functions: &BTreeMap<u64, NervousSystemFunction>,
         neurons: &BTreeMap<String, Neuron>,
     ) -> BTreeMap<u64, BTreeMap<String, BTreeSet<NeuronId>>> {
@@ -194,21 +194,41 @@ pub(crate) mod legacy {
         }
     }
 
-    /// Removes a neuron from the function_followee_index.
-    pub fn remove_neuron_from_function_followee_index(index: &mut FollowerIndex, neuron: &Neuron) {
-        for (function, followees) in neuron.followees.iter() {
-            if let Some(followee_index) = index.get_mut(function) {
-                for followee in followees.followees.iter() {
-                    let nid = followee.to_string();
-                    if let Some(followee_set) = followee_index.get_mut(&nid) {
-                        followee_set
-                            .remove(neuron.id.as_ref().expect("Neuron must have a NeuronId"));
-                        if followee_set.is_empty() {
-                            followee_index.remove(&nid);
-                        }
-                    }
+    pub fn remove_neuron_from_function_followee_index_for_function(
+        index: &mut FollowerIndex,
+        neuron: &Neuron,
+        function: u64,
+    ) {
+        let Some(neuron_id) = neuron.id.as_ref() else {
+            log!(ERROR, "Neuron {:?} does not have an ID!", neuron);
+            return;
+        };
+
+        let Some(followees) = neuron.followees.get(&function) else {
+            return;
+        };
+
+        let Some(followee_index) = index.get_mut(&function) else {
+            return;
+        };
+
+        for followee in followees.followees.iter() {
+            let nid = followee.to_string();
+
+            if let Some(followee_set) = followee_index.get_mut(&nid) {
+                followee_set.remove(neuron_id);
+
+                if followee_set.is_empty() {
+                    followee_index.remove(&nid);
                 }
             }
+        }
+    }
+
+    /// Removes a neuron from the function_followee_index.
+    pub fn remove_neuron_from_function_followee_index(index: &mut FollowerIndex, neuron: &Neuron) {
+        for function in neuron.followees.keys() {
+            remove_neuron_from_function_followee_index_for_function(index, neuron, *function);
         }
     }
 }

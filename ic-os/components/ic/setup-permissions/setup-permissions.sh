@@ -31,7 +31,7 @@ function make_group_owned_and_sticky() {
 
 make_group_owned_and_sticky /var/lib/ic/backup ic-replica backup
 make_group_owned_and_sticky /var/lib/ic/crypto ic-csp-vault ic-csp-vault
-make_group_owned_and_sticky /var/lib/ic/data/ic_consensus_pool ic-replica nonconfidential
+make_group_owned_and_sticky /var/lib/ic/data/ic_consensus_pool ic-replica ic-consensus-pool
 make_group_owned_and_sticky /var/lib/ic/data/ic_state ic-replica nonconfidential
 make_group_owned_and_sticky /var/lib/ic/data/cups ic-replica nonconfidential
 make_group_owned_and_sticky /var/lib/ic/data/orchestrator ic-replica nonconfidential

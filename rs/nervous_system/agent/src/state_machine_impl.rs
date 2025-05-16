@@ -1,7 +1,6 @@
-use crate::{CallCanisters, CanisterInfo, Request};
+use crate::{AgentFor, CallCanisters, CanisterInfo, Request};
 use candid::Principal;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_error_types::ErrorCode;
 use ic_state_machine_tests::{StateMachine, UserError, WasmResult};
 use std::time::Duration;
 use thiserror::Error;
@@ -99,10 +98,6 @@ impl CallCanisters for StateMachineAgent<'_> {
                 .collect(),
         })
     }
-
-    fn is_canister_stopped_error(&self, err: &Self::Error) -> bool {
-        self.state_machine.is_canister_stopped_error(err)
-    }
 }
 
 impl CallCanisters for StateMachine {
@@ -130,13 +125,10 @@ impl CallCanisters for StateMachine {
             .canister_info(canister_id)
             .await
     }
+}
 
-    fn is_canister_stopped_error(&self, err: &Self::Error) -> bool {
-        match err {
-            StateMachineCallError::IngressStateError(err) => {
-                [ErrorCode::CanisterStopped, ErrorCode::CanisterStopping].contains(&err.code())
-            }
-            _ => false,
-        }
+impl AgentFor for StateMachine {
+    fn agent_for(&self, principal: impl Into<Principal>) -> impl CallCanisters {
+        StateMachineAgent::new(self, principal)
     }
 }

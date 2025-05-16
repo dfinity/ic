@@ -7,15 +7,15 @@
 //! ```
 use candid::{CandidType, Deserialize, Principal};
 use futures::future::join_all;
-use ic_cdk::api::management_canister::provisional::CanisterId;
 use ic_cdk::api::{canister_cycle_balance, canister_self, msg_caller, time};
-use ic_cdk::call::{Call, CallError, ConfigurableCall, SendableCall};
-use ic_cdk::setup;
-use ic_cdk_macros::{heartbeat, query, update};
+use ic_cdk::call::{Call, CallFailed};
+use ic_cdk::{heartbeat, query, update};
+use ic_management_canister_types::CanisterId;
 use rand::Rng;
 use rand_pcg::Lcg64Xsh32;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::future::IntoFuture;
 use std::time::Duration;
 use xnet_test::{Metrics, NetworkTopology, StartArgs};
 
@@ -214,13 +214,16 @@ async fn fanout() {
                 .get(seq_no as usize % timeouts_seconds.len())
                 .unwrap();
 
-            let call = Call::new(canister, "handle_request").with_arg(payload);
-            let call = if let Some(timeout_seconds) = timeout_seconds {
-                call.change_timeout(*timeout_seconds)
-            } else {
-                call.with_guaranteed_response()
-            };
-            futures.push(call.call::<Reply>());
+            let call = match timeout_seconds {
+                Some(timeout_seconds) => {
+                    Call::bounded_wait(canister, "handle_request").change_timeout(*timeout_seconds)
+                }
+                None => Call::unbounded_wait(canister, "handle_request"),
+            }
+            .with_arg(payload);
+
+            futures.push(call.into_future());
+
             METRICS.with(move |m| m.borrow_mut().calls_attempted += 1);
         }
     }
@@ -229,21 +232,26 @@ async fn fanout() {
 
     for res in results {
         match res {
-            Ok(reply) => {
-                let elapsed = Duration::from_nanos(time() - reply.time_nanos);
-                METRICS.with(|m| m.borrow_mut().latency_distribution.observe(elapsed));
-            }
-            Err(CallError::CallRejected(rejection)) if rejection.is_sync() => {
-                // Call failed due to a synchronous error.
-                log(&format!(
-                    "{} sync failure {:?} {}",
-                    time() / 1_000_000,
-                    rejection.reject_code(),
-                    rejection.reject_message()
-                ));
+            Ok(response) => match response.candid::<Reply>() {
+                Ok(reply) => {
+                    let elapsed = Duration::from_nanos(time() - reply.time_nanos);
+                    METRICS.with(|m| m.borrow_mut().latency_distribution.observe(elapsed));
+                }
+                Err(err) => {
+                    log(&format!("{} call failed: {}", time() / 1_000_000, err));
+                    METRICS.with(|m| m.borrow_mut().call_errors += 1);
+                }
+            },
+            Err(CallFailed::InsufficientLiquidCycleBalance(err)) => {
+                log(&format!("{} call failed: {}", time() / 1_000_000, err));
                 METRICS.with(|m| m.borrow_mut().call_errors += 1);
             }
-            Err(CallError::CallRejected(rejection)) => {
+            Err(CallFailed::CallPerformFailed(err)) => {
+                // Call failed due to a synchronous error.
+                log(&format!("{} sync failure {:?}", time() / 1_000_000, err,));
+                METRICS.with(|m| m.borrow_mut().call_errors += 1);
+            }
+            Err(CallFailed::CallRejected(rejection)) => {
                 log(&format!(
                     "{} rejected {:?} {}",
                     time() / 1_000_000,
@@ -251,10 +259,6 @@ async fn fanout() {
                     rejection.reject_message()
                 ));
                 METRICS.with(|m| m.borrow_mut().reject_responses += 1);
-            }
-            Err(CallError::CandidDecodeFailed(err)) => {
-                log(&format!("{} call failed: {}", time() / 1_000_000, err));
-                METRICS.with(|m| m.borrow_mut().call_errors += 1);
             }
         }
     }
@@ -281,11 +285,9 @@ fn handle_request(req: Request) -> Reply {
 #[update]
 async fn return_cycles(canister_id_record: CanisterIdRecord) -> String {
     let cycle_refund = canister_cycle_balance().saturating_sub(1_000_000_000_000);
-    Call::new(Principal::from_text("aaaaa-aa").unwrap(), "deposit_cycles")
+    Call::unbounded_wait(Principal::from_text("aaaaa-aa").unwrap(), "deposit_cycles")
         .with_arg(canister_id_record)
-        .with_guaranteed_response()
         .with_cycles(cycle_refund)
-        .call::<()>()
         .await
         .unwrap();
 
@@ -299,6 +301,4 @@ fn metrics() -> Metrics {
 }
 
 #[export_name = "canister_init"]
-fn main() {
-    setup();
-}
+fn main() {}

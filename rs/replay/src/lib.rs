@@ -121,7 +121,7 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
                 cmd.start_height,
             )
             .with_replay_target_height(target_height);
-            *res_clone.borrow_mut() = player.restore(cmd.start_height + 1);
+            *res_clone.borrow_mut() = player.restore_from_backup(cmd.start_height + 1);
             return;
         }
 

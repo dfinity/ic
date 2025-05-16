@@ -13,12 +13,11 @@ use ic_nns_constants::{
     ALL_NNS_CANISTER_IDS, CYCLES_LEDGER_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID,
     ROOT_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::{Governance, NetworkEconomics, Neuron};
+use ic_nns_governance_api::{Governance, NetworkEconomics, Neuron};
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_gtc_accounts::{ECT_ACCOUNTS, SEED_ROUND_ACCOUNTS};
 use ic_nns_handler_root::init::{RootCanisterInitPayload, RootCanisterInitPayloadBuilder};
-use ic_node_rewards_canister_api::lifecycle_args::InitArgs as NodeRewardsInitArgs;
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_sns_wasm::init::{SnsWasmCanisterInitPayload, SnsWasmCanisterInitPayloadBuilder};
 use ic_utils::byte_slice_fmt::truncate_and_format;
@@ -43,7 +42,6 @@ pub struct NnsInitPayloads {
     pub genesis_token: Gtc,
     pub sns_wasms: SnsWasmCanisterInitPayload,
     pub index: ic_icp_index::InitArg,
-    pub node_rewards: NodeRewardsInitArgs,
 }
 
 /// Builder to help create the initial payloads for the NNS canisters.
@@ -283,7 +281,6 @@ impl NnsInitPayloadsBuilder {
             genesis_token: self.genesis_token.build(),
             sns_wasms: self.sns_wasms.build(),
             index: self.index.clone(),
-            node_rewards: NodeRewardsInitArgs {},
         }
     }
 }
@@ -311,10 +308,20 @@ pub fn modify_wasm_bytes(wasm_bytes: &[u8], modify_with: u32) -> Vec<u8> {
 // REGISTRY
 
 /// Build Wasm for NNS Registry canister
-pub fn build_registry_wasm() -> Wasm {
-    let features = [];
-    Project::cargo_bin_maybe_from_env("registry-canister", &features)
+pub fn build_registry_wasm_with_features(features: &[&str]) -> Wasm {
+    Project::cargo_bin_maybe_from_env("registry-canister", features)
 }
+
+/// Build Wasm for NNS Registry canister
+pub fn build_registry_wasm() -> Wasm {
+    build_registry_wasm_with_features(&[])
+}
+
+/// Build Wasm for NNS Registry canister
+pub fn build_test_registry_wasm() -> Wasm {
+    build_registry_wasm_with_features(&["test"])
+}
+
 /// Build mainnet Wasm for NNS Registry canister
 pub fn build_mainnet_registry_wasm() -> Wasm {
     let features = [];

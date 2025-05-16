@@ -2,9 +2,6 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_base_types::{NumSeconds, PrincipalId};
 use ic_config::subnet_config::SchedulerConfig;
-use ic_config::{
-    embedders::BestEffortResponsesFeature, execution_environment::MINIMUM_FREEZING_THRESHOLD,
-};
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
     wasm_utils::instrumentation::{instruction_to_cost, WasmMemoryType},
@@ -1060,7 +1057,7 @@ fn ic0_canister_version_returns_correct_value() {
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
     );
 
-    test.update_freezing_threshold(canister_id, NumSeconds::from(MINIMUM_FREEZING_THRESHOLD))
+    test.update_freezing_threshold(canister_id, NumSeconds::from(1))
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
     // Plus 5 for the previous ingress messages.
@@ -3825,9 +3822,9 @@ fn ic0_trap_preserves_some_cycles() {
     );
 }
 
-// If method is not exported, `execute_anonymous_query` fails.
+// If method is not exported, `execute_system_query` fails.
 #[test]
-fn canister_anonymous_query_method_not_exported() {
+fn canister_system_query_method_not_exported() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
@@ -3835,7 +3832,7 @@ fn canister_anonymous_query_method_not_exported() {
             (export "memory" (memory $memory))
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
-    let result = test.anonymous_query(canister_id, "http_transform", vec![], vec![]);
+    let result = test.system_query(canister_id, "http_transform", vec![], vec![]);
     assert_eq!(
         result,
         Err(
@@ -3845,9 +3842,9 @@ fn canister_anonymous_query_method_not_exported() {
     );
 }
 
-// Using `execute_anonymous_query` to execute transform function on a http response succeeds.
+// Using `execute_system_query` to execute transform function on a http response succeeds.
 #[test]
-fn canister_anonymous_query_transform_http_response() {
+fn canister_system_query_transform_http_response() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
@@ -3883,7 +3880,7 @@ fn canister_anonymous_query_transform_http_response() {
         body: vec![0, 1, 2],
     };
     let payload = Encode!(&canister_http_response).unwrap();
-    let result = test.anonymous_query(canister_id, "http_transform", payload, vec![]);
+    let result = test.system_query(canister_id, "http_transform", payload, vec![]);
     let transformed_canister_http_response = Decode!(
         result.unwrap().bytes().as_slice(),
         CanisterHttpResponsePayload
@@ -5666,9 +5663,7 @@ fn cycles_correct_if_update_fails() {
 
 #[test]
 fn call_with_best_effort_response_succeeds() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test.universal_canister().unwrap();
 
@@ -5690,9 +5685,7 @@ fn call_with_best_effort_response_succeeds() {
 
 #[test]
 fn call_with_best_effort_response_fails_when_timeout_is_set() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test.universal_canister().unwrap();
 
@@ -5720,7 +5713,6 @@ fn call_with_best_effort_response_test_helper(
     timeout_seconds: u32,
 ) -> CoarseTime {
     let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .with_manual_execution()
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
         .build();
@@ -5784,7 +5776,6 @@ fn ic0_msg_deadline_while_executing_ingress_message() {
     let start_time_seconds = 100;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
         .build();
 
@@ -5806,7 +5797,6 @@ fn ic0_msg_deadline_when_deadline_is_not_set() {
     let start_time_seconds = 100;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
         .build();
 
@@ -5844,7 +5834,6 @@ fn ic0_msg_deadline_when_deadline_is_set() {
     let timeout_seconds = 200;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
         .build();
 
@@ -6968,7 +6957,7 @@ fn stable_memory_grow_reserves_cycles() {
             .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
             .unwrap();
 
-        test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
+        test.update_freezing_threshold(canister_id, NumSeconds::new(0))
             .unwrap();
         test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
             .unwrap();
@@ -7072,7 +7061,7 @@ fn wasm_memory_grow_reserves_cycles() {
 
         let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
 
-        test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
+        test.update_freezing_threshold(canister_id, NumSeconds::new(0))
             .unwrap();
         test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
             .unwrap();
@@ -7150,7 +7139,7 @@ fn set_reserved_cycles_limit_below_existing_fails() {
 
     let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
 
-    test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
         .unwrap();
     test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
         .unwrap();
@@ -7289,7 +7278,7 @@ fn resource_saturation_scaling_works_in_regular_execution() {
 
     let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
 
-    test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
         .unwrap();
     test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
         .unwrap();
@@ -7355,7 +7344,7 @@ fn wasm_memory_grow_respects_reserved_cycles_limit() {
 
     let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
 
-    test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
         .unwrap();
 
     test.canister_state_mut(canister_id)
@@ -7392,7 +7381,7 @@ fn stable_memory_grow_respects_reserved_cycles_limit() {
         .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
 
-    test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
         .unwrap();
 
     test.canister_state_mut(canister_id)
@@ -7436,7 +7425,7 @@ fn stable_memory_grow_does_not_reserve_cycles_on_out_of_memory() {
     let canister_id = test
         .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
-    test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
         .unwrap();
 
     let reserved_cycles_before = test

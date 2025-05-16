@@ -76,6 +76,7 @@ mod tests {
         let hostos_settings = HostOSSettings {
             vm_memory: 490,
             vm_cpu: "kvm".to_string(),
+            vm_nr_of_vcpus: 64,
             verbose: false,
         };
         let guestos_settings = GuestOSSettings {
@@ -153,7 +154,7 @@ mod tests {
             "mgmt_mac": "EC:2A:72:31:A2:0C",
             "deployment_environment": "Mainnet",
             "logging": {
-                "elasticsearch_hosts": "elasticsearch.ch1-obsdev1.dfinity.network:443",
+                "elasticsearch_hosts": "elasticsearch.testnet.dfinity.network:443",
                 "elasticsearch_tags": "tag1 tag2"
             },
             "use_nns_public_key": true,
@@ -167,6 +168,7 @@ mod tests {
         "hostos_settings": {
             "vm_memory": 490,
             "vm_cpu": "kvm",
+            "vm_nr_of_vcpus": 64,
             "verbose": false
         },
         "guestos_settings": {
@@ -247,6 +249,7 @@ mod tests {
         let config: HostOSConfig = serde_json::from_str(HOSTOS_CONFIG_JSON_V1_0_0).unwrap();
         assert_eq!(config.config_version, "1.0.0");
         assert_eq!(config.hostos_settings.vm_cpu, "kvm");
+        assert_eq!(config.hostos_settings.vm_nr_of_vcpus, 64);
     }
 
     #[test]

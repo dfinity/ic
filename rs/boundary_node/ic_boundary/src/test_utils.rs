@@ -10,6 +10,7 @@ use clap::Parser;
 use http;
 use ic_base_types::NodeId;
 use ic_bn_lib::http::{Client as HttpClient, ConnInfo};
+use ic_bn_lib::prometheus::Registry;
 use ic_certification_test_utils::CertificateBuilder;
 use ic_certification_test_utils::CertificateData::*;
 use ic_crypto_tree_hash::Digest;
@@ -33,7 +34,6 @@ use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey, replica_version::ReplicaVersion, time::Time,
     CanisterId, RegistryVersion, SubnetId,
 };
-use prometheus::Registry;
 use reqwest;
 
 use crate::{

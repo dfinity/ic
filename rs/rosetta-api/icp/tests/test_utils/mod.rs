@@ -3,9 +3,7 @@ use async_trait::async_trait;
 use ic_ledger_canister_blocks_synchronizer::blocks::{Blocks, HashedBlock, RosettaBlocksMode};
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::{block::BlockType, timestamp::TimeStamp};
-use ic_nns_governance_api::pb::v1::{
-    manage_neuron::NeuronIdOrSubaccount, KnownNeuron, ProposalInfo,
-};
+use ic_nns_governance_api::{manage_neuron::NeuronIdOrSubaccount, KnownNeuron, ProposalInfo};
 use ic_rosetta_api::{
     convert::{from_arg, to_model_account_identifier},
     errors::ApiError,
@@ -231,7 +229,7 @@ impl LedgerAccess for TestLedger {
         &self,
         _id: NeuronIdOrSubaccount,
         _: bool,
-    ) -> Result<ic_nns_governance_api::pb::v1::NeuronInfo, ApiError> {
+    ) -> Result<ic_nns_governance_api::NeuronInfo, ApiError> {
         panic!("Neuron info not available through TestLedger");
     }
 

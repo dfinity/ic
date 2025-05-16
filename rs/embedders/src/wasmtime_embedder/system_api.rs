@@ -1,7 +1,5 @@
 use ic_base_types::{InternalAddress, PrincipalIdBlobParseError};
-use ic_config::embedders::{
-    BestEffortResponsesFeature, Config as EmbeddersConfig, StableMemoryPageLimit,
-};
+use ic_config::embedders::{Config as EmbeddersConfig, StableMemoryPageLimit};
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::RejectCode;
@@ -1055,9 +1053,6 @@ pub struct SystemApiImpl {
     #[allow(unused)]
     canister_backtrace: FlagStatus,
 
-    /// Rollout stage of the best-effort responses feature.
-    best_effort_responses: BestEffortResponsesFeature,
-
     /// The maximum sum of `<name>` lengths in exported functions called `canister_update <name>`,
     /// `canister_query <name>`, or `canister_composite_query <name>`.
     max_sum_exported_function_name_lengths: usize,
@@ -1138,7 +1133,6 @@ impl SystemApiImpl {
             memory_usage,
             execution_parameters,
             canister_backtrace: embedders_config.feature_flags.canister_backtrace,
-            best_effort_responses: embedders_config.feature_flags.best_effort_responses.clone(),
             max_sum_exported_function_name_lengths: embedders_config
                 .max_sum_exported_function_name_lengths,
             stable_memory,
@@ -3401,8 +3395,6 @@ impl SystemApi for SystemApiImpl {
     ///
     /// Fails and returns an error if `set_timeout()` was already called.
     fn ic0_call_with_best_effort_response(&mut self, timeout_seconds: u32) -> HypervisorResult<()> {
-        let subnet_id = &self.sandbox_safe_system_state.get_subnet_id();
-        let subnet_type = self.subnet_type();
         let result = match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
@@ -3447,12 +3439,9 @@ impl SystemApi for SystemApiImpl {
                     }),
 
                 Some(request) => {
-                    // No-op if the feature is disabled on this subnet.
-                    if self.best_effort_responses.is_enabled_on(subnet_id, subnet_type) {
-                        let bounded_timeout =
-                            std::cmp::min(timeout_seconds, MAX_CALL_TIMEOUT_SECONDS);
-                        request.set_timeout(bounded_timeout);
-                    }
+                    let bounded_timeout =
+                        std::cmp::min(timeout_seconds, MAX_CALL_TIMEOUT_SECONDS);
+                    request.set_timeout(bounded_timeout);
                     Ok(())
                 }
             },

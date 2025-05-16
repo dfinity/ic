@@ -6,25 +6,16 @@ set -e
 
 source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
+source /opt/ic/bin/config.sh
 
 # Get keyword arguments
 for argument in "${@}"; do
     case ${argument} in
-        -c=* | --config=*)
-            CONFIG="${argument#*=}"
-            shift
-            ;;
-        -d=* | --deployment=*)
-            DEPLOYMENT="${argument#*=}"
-            shift
-            ;;
         -h | --help)
             echo 'Usage:
 Generate GuestOS Configuration
 
 Arguments:
-  -c=, --config=        specify the config.ini configuration file (Default: /boot/config/config.ini)
-  -d=, --deployment=    specify the deployment.json configuration file (Default: /boot/config/deployment.json)
   -h, --help            show this help message and exit
   -i=, --input=         specify the input template file (Default: /opt/ic/share/guestos.xml.template)
   -m=, --media=         specify the config media image file (Default: /run/ic-node/config.img)
@@ -52,52 +43,60 @@ Arguments:
 done
 
 function validate_arguments() {
-    if [ "${CONFIG}" == "" -o "${DEPLOYMENT}" == "" -o "${INPUT}" == "" -o "${OUTPUT}" == "" ]; then
+    if [ "${INPUT}" == "" -o "${OUTPUT}" == "" ]; then
         $0 --help
     fi
 }
 
 # Set arguments if undefined
-CONFIG="${CONFIG:=/boot/config/config.ini}"
-DEPLOYMENT="${DEPLOYMENT:=/boot/config/deployment.json}"
 INPUT="${INPUT:=/opt/ic/share/guestos.xml.template}"
 MEDIA="${MEDIA:=/run/ic-node/config.img}"
 OUTPUT="${OUTPUT:=/var/lib/libvirt/guestos.xml}"
 
-function read_variables() {
-    # Read limited set of keys. Be extra-careful quoting values as it could
-    # otherwise lead to executing arbitrary shell code!
-    while IFS="=" read -r key value; do
-        case "$key" in
-            "ipv6_prefix") ipv6_prefix="${value}" ;;
-            "ipv6_gateway") ipv6_gateway="${value}" ;;
-            "ipv4_address") ipv4_address="${value}" ;;
-            "ipv4_prefix_length") ipv4_prefix_length="${value}" ;;
-            "ipv4_gateway") ipv4_gateway="${value}" ;;
-            "domain") domain="${value}" ;;
-            "node_reward_type") node_reward_type="${value}" ;;
-        esac
-    done <"${CONFIG}"
+function read_config_variables() {
+    ipv6_gateway=$(get_config_value '.network_settings.ipv6_config.Deterministic.gateway')
+    ipv4_address=$(get_config_value '.network_settings.ipv4_config.address')
+    ipv4_prefix_length=$(get_config_value '.network_settings.ipv4_config.prefix_length')
+    ipv4_gateway=$(get_config_value '.network_settings.ipv4_config.gateway')
+    domain_name=$(get_config_value '.network_settings.domain_name')
+    node_reward_type=$(get_config_value '.icos_settings.node_reward_type')
+    nns_urls=$(get_config_value '.icos_settings.nns_urls | join(",")')
+    mgmt_mac=$(get_config_value '.icos_settings.mgmt_mac')
+
+    use_nns_public_key=$(get_config_value '.icos_settings.use_nns_public_key')
+    use_node_operator_private_key=$(get_config_value '.icos_settings.use_node_operator_private_key')
+
+    vm_memory=$(get_config_value '.hostos_settings.vm_memory')
+    vm_cpu=$(get_config_value '.hostos_settings.vm_cpu')
+    vm_nr_of_vcpus=$(get_config_value '.hostos_settings.vm_nr_of_vcpus')
 }
 
 function assemble_config_media() {
+    ipv6_address="$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type GuestOS)"
+    /opt/ic/bin/config generate-guestos-config --guestos-ipv6-address "$ipv6_address"
+
     cmd=(/opt/ic/bin/build-bootstrap-config-image.sh ${MEDIA})
-    cmd+=(--nns_public_key "/boot/config/nns_public_key.pem")
+    cmd+=(--guestos_config "/boot/config/config-guestos.json")
+    if [[ "${use_nns_public_key,,}" == "true" ]]; then
+        cmd+=(--nns_public_key "/boot/config/nns_public_key.pem")
+    fi
+    if [[ "${use_node_operator_private_key,,}" == "true" ]]; then
+        cmd+=(--node_operator_private_key "/boot/config/node_operator_private_key.pem")
+    fi
     cmd+=(--ipv6_address "$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type GuestOS)")
     cmd+=(--ipv6_gateway "${ipv6_gateway}")
-    if [[ -n "$ipv4_address" && -n "$ipv4_prefix_length" && -n "$ipv4_gateway" && -n "$domain" ]]; then
+    if [[ -n "$ipv4_address" && -n "$ipv4_prefix_length" && -n "$ipv4_gateway" ]]; then
         cmd+=(--ipv4_address "${ipv4_address}/${ipv4_prefix_length}")
         cmd+=(--ipv4_gateway "${ipv4_gateway}")
-        cmd+=(--domain "${domain}")
+    fi
+    if [[ -n "$domain_name" ]]; then
+        cmd+=(--domain "${domain_name}")
     fi
     if [[ -n "$node_reward_type" ]]; then
         cmd+=(--node_reward_type "${node_reward_type}")
     fi
-    cmd+=(--hostname "guest-$(/opt/ic/bin/hostos_tool fetch-mac-address | sed 's/://g')")
-    cmd+=(--nns_urls "$(/opt/ic/bin/fetch-property.sh --key=.nns.url --metric=hostos_nns_url --config=${DEPLOYMENT})")
-    if [ -f "/boot/config/node_operator_private_key.pem" ]; then
-        cmd+=(--node_operator_private_key "/boot/config/node_operator_private_key.pem")
-    fi
+    cmd+=(--hostname "guest-${mgmt_mac//:/}")
+    cmd+=(--nns_urls "${nns_urls}")
 
     # Run the above command
     "${cmd[@]}"
@@ -105,22 +104,31 @@ function assemble_config_media() {
 }
 
 function generate_guestos_config() {
-    RESOURCES_MEMORY=$(/opt/ic/bin/fetch-property.sh --key=.resources.memory --metric=hostos_resources_memory --config=${DEPLOYMENT})
     MAC_ADDRESS=$(/opt/ic/bin/hostos_tool generate-mac-address --node-type GuestOS)
-    # NOTE: `fetch-property` will error if the target is not found. Here we
-    # only want to act when the field is set.
-    CPU_MODE=$(jq -r ".resources.cpu" ${DEPLOYMENT})
 
-    CPU_DOMAIN="kvm"
-    CPU_SPEC="/opt/ic/share/kvm-cpu.xml"
-    if [ "${CPU_MODE}" == "qemu" ]; then
+    # Generate inline CPU spec based on mode
+    CPU_SPEC=$(mktemp)
+    if [ "${vm_cpu}" == "qemu" ]; then
         CPU_DOMAIN="qemu"
-        CPU_SPEC="/opt/ic/share/qemu-cpu.xml"
+        cat >"${CPU_SPEC}" <<EOF
+<cpu mode='host-model'/>
+EOF
+    else
+        CPU_DOMAIN="kvm"
+        CORE_COUNT=$((vm_nr_of_vcpus / 4))
+        cat >"${CPU_SPEC}" <<EOF
+<cpu mode='host-passthrough' migratable='off'>
+  <cache mode='passthrough'/>
+  <topology sockets='2' cores='${CORE_COUNT}' threads='2'/>
+  <feature policy="require" name="topoext"/>
+</cpu>
+EOF
     fi
 
     if [ ! -f "${OUTPUT}" ]; then
         mkdir -p "$(dirname "$OUTPUT")"
-        sed -e "s@{{ resources_memory }}@${RESOURCES_MEMORY}@" \
+        sed -e "s@{{ resources_memory }}@${vm_memory}@" \
+            -e "s@{{ nr_of_vcpus }}@${vm_nr_of_vcpus:-64}@" \
             -e "s@{{ mac_address }}@${MAC_ADDRESS}@" \
             -e "s@{{ cpu_domain }}@${CPU_DOMAIN}@" \
             -e "/{{ cpu_spec }}/{r ${CPU_SPEC}" -e "d" -e "}" \
@@ -138,12 +146,13 @@ function generate_guestos_config() {
             "HostOS generate GuestOS config" \
             "gauge"
     fi
+
+    rm -f "${CPU_SPEC}"
 }
 
 function main() {
-    # Establish run order
     validate_arguments
-    read_variables
+    read_config_variables
     assemble_config_media
     generate_guestos_config
 }

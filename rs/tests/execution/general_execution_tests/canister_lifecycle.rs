@@ -30,7 +30,6 @@ end::catalog[] */
 
 use candid::{Decode, Encode};
 use ic_agent::{agent::RejectCode, export::Principal, identity::Identity};
-use ic_config::execution_environment::MINIMUM_FREEZING_THRESHOLD;
 use ic_management_canister_types_private::{
     CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2, CreateCanisterArgs,
     EmptyBlob, Payload,
@@ -1105,7 +1104,7 @@ pub fn create_canister_with_freezing_threshold(env: TestEnv) {
                 UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
                     .await;
 
-            for valid_value in [u64::MAX, MINIMUM_FREEZING_THRESHOLD].iter() {
+            for valid_value in [u64::MAX, 0].iter() {
                 // Create the canister with the freezing threshold set.
                 let new_canister_id = canister
                     .forward_with_cycles_to(

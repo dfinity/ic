@@ -5,7 +5,7 @@ use ic_icrc1_test_utils::KeyPairGenerator;
 use ic_ledger_core::{block::BlockIndex, Tokens};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance_api::pb::v1::{neuron::DissolveState, Neuron};
+use ic_nns_governance_api::{neuron::DissolveState, Neuron};
 use ic_rosetta_api::{
     convert::{
         from_hex, from_model_account_identifier, from_transaction_operation_results,

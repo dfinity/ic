@@ -214,6 +214,10 @@ pub async fn sync_from_the_tip(
         None => bail!("could not convert last_block_index {tip_block_index} to u64"),
     };
 
+    storage_client
+        .get_metrics()
+        .set_verified_height(tip_block_index);
+
     // The starting point of the synchronization process is either 0 if the database is empty or the highest stored block index plus one.
     // The trailing parent hash is either `None` if the database is empty or the block hash of the block with the highest block index in storage.
     let sync_range = storage_client.get_block_with_highest_block_idx()?.map_or(
@@ -352,11 +356,14 @@ async fn sync_blocks_interval(
         }
 
         leading_block_hash.clone_from(&fetched_blocks[0].get_parent_hash());
-        let number_of_blocks_fetched = fetched_blocks.len();
+        let number_of_blocks_fetched = fetched_blocks.len() as u64;
 
         // Store the fetched blocks in the database.
         storage_client.store_blocks(fetched_blocks.clone())?;
-        pr.update(number_of_blocks_fetched as u64);
+        storage_client
+            .get_metrics()
+            .add_blocks_fetched(number_of_blocks_fetched);
+        pr.update(number_of_blocks_fetched);
 
         // If the interval of the last iteration started at the target height, then all blocks above and including the target height have been synched.
         if *next_index_interval.start() == *sync_range.index_range.start() {

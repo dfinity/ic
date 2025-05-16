@@ -87,7 +87,7 @@ pub fn execute_call_or_task(
                     Err(err) => {
                         if call_or_task == CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) {
                             //`OnLowWasmMemoryHook` is taken from task_queue (i.e. `OnLowWasmMemoryHookStatus` is `Executed`),
-                            // but its was not executed due to the freezing of the canister. To ensure that the hook is executed
+                            // but it was not executed due to the freezing of the canister. To ensure that the hook is executed
                             // when the canister is unfrozen we need to set `OnLowWasmMemoryHookStatus` to `Ready`. Because of
                             // the way `OnLowWasmMemoryHookStatus::update` is implemented we first need to remove it from the
                             // task_queue (which calls `OnLowWasmMemoryHookStatus::update(false)`) followed with `enqueue`

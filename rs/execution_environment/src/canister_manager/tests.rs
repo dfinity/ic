@@ -3,7 +3,7 @@ use crate::{
     canister_manager::{
         uninstall_canister, AddCanisterChangeToHistory, CanisterManager, CanisterManagerError,
         CanisterMgrConfig, DtsInstallCodeResult, InstallCodeContext, StopCanisterResult,
-        WasmSource,
+        WasmSource, MAX_SLICE_SIZE_BYTES,
     },
     canister_settings::CanisterSettings,
     execution_environment::{as_round_instructions, CompilationCostHandling, RoundCounters},
@@ -12,13 +12,12 @@ use crate::{
     IngressHistoryWriterImpl, RoundLimits,
 };
 use assert_matches::assert_matches;
-use candid::Decode;
+use candid::{CandidType, Decode, Encode};
 use ic_base_types::{NumSeconds, PrincipalId};
 use ic_config::{
     execution_environment::{
         Config, CANISTER_GUARANTEED_CALLBACK_QUOTA, DEFAULT_WASM_MEMORY_LIMIT,
-        MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, MINIMUM_FREEZING_THRESHOLD,
-        SUBNET_CALLBACK_SOFT_LIMIT,
+        MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, SUBNET_CALLBACK_SOFT_LIMIT,
     },
     flag_status::FlagStatus,
     subnet_config::SchedulerConfig,
@@ -46,6 +45,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    canister_state::system_state::wasm_chunk_store::ChunkValidationResult,
     canister_state::system_state::{wasm_chunk_store, CyclesUseCase},
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
     page_map::TestPageAllocatorFileDescriptorImpl,
@@ -82,7 +82,8 @@ use ic_types::{
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset};
-use more_asserts::{assert_ge, assert_lt};
+use more_asserts::{assert_ge, assert_le, assert_lt};
+use serde::Deserialize;
 use std::{collections::BTreeSet, convert::TryFrom, mem::size_of, path::Path, sync::Arc};
 
 use super::InstallCodeResult;
@@ -103,6 +104,20 @@ const MINIMAL_WASM: [u8; 8] = [
 ];
 
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
+
+// Ensure the slice, with extra room for Candid encoding, fits within 2 MiB.
+#[test]
+fn test_slice() {
+    let slice = vec![42; MAX_SLICE_SIZE_BYTES as usize];
+    #[derive(Deserialize, CandidType)]
+    struct S {
+        #[serde(with = "serde_bytes")]
+        x: Vec<u8>,
+    }
+    let x = S { x: slice };
+    let encoded = Encode!(&x).unwrap();
+    assert_le!(encoded.len(), 2 * 1024 * 1024);
+}
 
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory = SubnetAvailableMemory::new(
@@ -298,6 +313,7 @@ fn canister_manager_config(
         SchedulerConfig::application_subnet().upload_wasm_chunk_instructions,
         ic_config::embedders::Config::default().wasm_max_size,
         SchedulerConfig::application_subnet().canister_snapshot_baseline_instructions,
+        SchedulerConfig::application_subnet().canister_snapshot_data_baseline_instructions,
         DEFAULT_WASM_MEMORY_LIMIT,
         MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
     )
@@ -439,9 +455,30 @@ where
 #[test]
 fn install_canister_makes_subnet_oversubscribed() {
     let mut test = ExecutionTestBuilder::new().build();
-    let canister_id1 = test.create_canister(Cycles::new(u128::MAX));
-    let canister_id2 = test.create_canister(Cycles::new(u128::MAX));
-    let canister_id3 = test.create_canister(Cycles::new(u128::MAX));
+    let canister_id1 = test
+        .create_canister_with_settings(
+            *INITIAL_CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_freezing_threshold(1)
+                .build(),
+        )
+        .unwrap();
+    let canister_id2 = test
+        .create_canister_with_settings(
+            *INITIAL_CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_freezing_threshold(1)
+                .build(),
+        )
+        .unwrap();
+    let canister_id3 = test
+        .create_canister_with_settings(
+            *INITIAL_CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_freezing_threshold(1)
+                .build(),
+        )
+        .unwrap();
 
     test.install_code_v2(InstallCodeArgsV2::new(
         CanisterInstallModeV2::Install,
@@ -2883,16 +2920,18 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
         .build();
 
     // Insert data to the chunk store to verify it is cleared on uninstall.
-    state
+    let store = &mut state
         .canister_state_mut(&canister_test_id(0))
         .unwrap()
         .system_state
-        .wasm_chunk_store
-        .insert_chunk(
-            canister_manager.config.wasm_chunk_store_max_size,
-            &[0x41; 200],
-        )
-        .unwrap();
+        .wasm_chunk_store;
+    let chunk = [0x41, 200].to_vec();
+    let result = store.can_insert_chunk(canister_manager.config.wasm_chunk_store_max_size, chunk);
+    let validated_chunk = match result {
+        ChunkValidationResult::Insert(validated_chunk) => validated_chunk,
+        res => panic!("Unexpected chunk validation result: {:?}", res),
+    };
+    store.insert_chunk(validated_chunk);
 
     assert!(state
         .canister_state(&canister_test_id(0))
@@ -3499,7 +3538,7 @@ fn unfreezing_of_frozen_canister() {
     let payload = UpdateSettingsArgs {
         canister_id: canister_id.get(),
         settings: CanisterSettingsArgsBuilder::new()
-            .with_freezing_threshold(MINIMUM_FREEZING_THRESHOLD)
+            .with_freezing_threshold(1)
             .build(),
         sender_canister_version: None,
     }
@@ -3575,9 +3614,10 @@ fn create_canister_fails_if_memory_capacity_exceeded() {
 
     test.canister_state_mut(uc)
         .system_state
-        .set_balance(Cycles::new(u128::MAX));
+        .set_balance(Cycles::new(1_000_000_000_000_000_000));
 
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_freezing_threshold(1)
         .with_memory_allocation(MEMORY_CAPACITY.get() / 2)
         .build();
     let args = CreateCanisterArgs {
@@ -3591,7 +3631,7 @@ fn create_canister_fails_if_memory_capacity_exceeded() {
             call_args()
                 .other_side(args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee() + Cycles::from(u64::MAX),
+            test.canister_creation_fee() + Cycles::new(1_000_000_000),
         )
         .build();
     let result = test.ingress(uc, "update", create_canister);
@@ -3601,6 +3641,7 @@ fn create_canister_fails_if_memory_capacity_exceeded() {
     // There should be not enough memory for CAPACITY/2 because universal
     // canister already consumed some
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_freezing_threshold(1)
         .with_memory_allocation(MEMORY_CAPACITY.get() / 2)
         .build();
     let args = CreateCanisterArgs {
@@ -3614,7 +3655,7 @@ fn create_canister_fails_if_memory_capacity_exceeded() {
             call_args()
                 .other_side(args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee() + Cycles::from(u64::MAX),
+            test.canister_creation_fee() + Cycles::new(1_000_000_000),
         )
         .build();
     let result = test.ingress(uc, "update", create_canister).unwrap();
@@ -3633,6 +3674,7 @@ fn create_canister_makes_subnet_oversubscribed() {
         .set_balance(Cycles::new(u128::MAX));
 
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_freezing_threshold(1)
         .with_compute_allocation(50)
         .build();
     let args = CreateCanisterArgs {
@@ -3646,7 +3688,7 @@ fn create_canister_makes_subnet_oversubscribed() {
             call_args()
                 .other_side(args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            Cycles::from(u64::MAX),
+            test.canister_creation_fee() + Cycles::new(1_000_000_000),
         )
         .build();
     let result = test.ingress(uc, "update", create_canister);
@@ -3654,6 +3696,7 @@ fn create_canister_makes_subnet_oversubscribed() {
     Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
 
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_freezing_threshold(1)
         .with_compute_allocation(25)
         .build();
     let args = CreateCanisterArgs {
@@ -3667,7 +3710,7 @@ fn create_canister_makes_subnet_oversubscribed() {
             call_args()
                 .other_side(args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            Cycles::from(u64::MAX),
+            test.canister_creation_fee() + Cycles::new(1_000_000_000),
         )
         .build();
     let result = test.ingress(uc, "update", create_canister);
@@ -3676,6 +3719,7 @@ fn create_canister_makes_subnet_oversubscribed() {
 
     // Create a canister with compute allocation.
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_freezing_threshold(1)
         .with_compute_allocation(30)
         .build();
     let args = CreateCanisterArgs {
@@ -3689,7 +3733,7 @@ fn create_canister_makes_subnet_oversubscribed() {
             call_args()
                 .other_side(args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            Cycles::from(u64::MAX),
+            test.canister_creation_fee() + Cycles::new(1_000_000_000),
         )
         .build();
     let result = test.ingress(uc, "update", create_canister).unwrap();
@@ -3709,14 +3753,15 @@ fn update_settings_makes_subnet_oversubscribed() {
         .with_subnet_execution_memory(100 * 1024 * 1024) // 100 MiB
         .with_subnet_memory_reservation(0)
         .build();
-    let c1 = test.create_canister(Cycles::new(u128::MAX));
-    let c2 = test.create_canister(Cycles::new(u128::MAX));
-    let c3 = test.create_canister(Cycles::new(u128::MAX));
+    let c1 = test.create_canister(Cycles::new(1_000_000_000_000_000));
+    let c2 = test.create_canister(Cycles::new(1_000_000_000_000_000));
+    let c3 = test.create_canister(Cycles::new(1_000_000_000_000_000));
 
     // Updating the compute allocation.
     let args = UpdateSettingsArgs {
         canister_id: c1.get(),
         settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(1)
             .with_compute_allocation(50)
             .build(),
         sender_canister_version: None,
@@ -3727,6 +3772,7 @@ fn update_settings_makes_subnet_oversubscribed() {
     let args = UpdateSettingsArgs {
         canister_id: c2.get(),
         settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(1)
             .with_compute_allocation(25)
             .build(),
         sender_canister_version: None,
@@ -3738,6 +3784,7 @@ fn update_settings_makes_subnet_oversubscribed() {
     let args = UpdateSettingsArgs {
         canister_id: c3.get(),
         settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(1)
             .with_compute_allocation(30)
             .build(),
         sender_canister_version: None,
@@ -3751,6 +3798,7 @@ fn update_settings_makes_subnet_oversubscribed() {
     let args = UpdateSettingsArgs {
         canister_id: c1.get(),
         settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(1)
             .with_memory_allocation(10 * 1024 * 1024)
             .build(),
         sender_canister_version: None,
@@ -3761,6 +3809,7 @@ fn update_settings_makes_subnet_oversubscribed() {
     let args = UpdateSettingsArgs {
         canister_id: c2.get(),
         settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(1)
             .with_memory_allocation(30 * 1024 * 1024)
             .build(),
         sender_canister_version: None,
@@ -3772,6 +3821,7 @@ fn update_settings_makes_subnet_oversubscribed() {
     let args = UpdateSettingsArgs {
         canister_id: c3.get(),
         settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(1)
             .with_memory_allocation(65 * 1024 * 1024)
             .build(),
         sender_canister_version: None,
@@ -5959,6 +6009,14 @@ fn upload_chunk_fails_when_allocation_exceeded() {
     assert!(result.is_ok());
     let initial_subnet_available_memory = test.subnet_available_memory();
 
+    // Uploading the same chunk again succeeds.
+    let result = test.subnet_message("upload_chunk", upload_args.encode());
+    assert!(result.is_ok());
+    assert_eq!(
+        test.subnet_available_memory(),
+        initial_subnet_available_memory
+    );
+
     // Second chunk upload fails
     let chunk = vec![4, 4];
     let upload_args = UploadChunkArgs {
@@ -6000,6 +6058,14 @@ fn upload_chunk_fails_when_subnet_memory_exceeded() {
     assert!(result.is_ok());
     let initial_subnet_available_memory = test.subnet_available_memory();
 
+    // Uploading the same chunk again succeeds.
+    let result = test.subnet_message("upload_chunk", upload_args.encode());
+    assert!(result.is_ok());
+    assert_eq!(
+        test.subnet_available_memory(),
+        initial_subnet_available_memory
+    );
+
     // Second chunk upload fails
     let chunk = vec![4, 4];
     let upload_args = UploadChunkArgs {
@@ -6034,6 +6100,18 @@ fn upload_chunk_counts_to_memory_usage() {
         canister_id: canister_id.into(),
         chunk,
     };
+    let result = test.subnet_message("upload_chunk", upload_args.encode());
+    assert!(result.is_ok());
+    assert_eq!(
+        test.canister_state(canister_id).memory_usage(),
+        chunk_size + initial_memory_usage
+    );
+    assert_eq!(
+        test.subnet_available_memory().get_execution_memory(),
+        initial_subnet_available_memory - chunk_size.get() as i64
+    );
+
+    // Check memory usage after uploading the same chunk again.
     let result = test.subnet_message("upload_chunk", upload_args.encode());
     assert!(result.is_ok());
     assert_eq!(
@@ -6144,7 +6222,7 @@ fn upload_chunk_fails_when_freeze_threshold_triggered() {
         .subnet_message("upload_chunk", upload_args.encode())
         .unwrap_err();
 
-    assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
+    assert_eq!(error.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
     assert!(
         error
             .description()
@@ -6262,6 +6340,21 @@ fn upload_chunk_reserves_cycles() {
             reserved_balance,
             "Reserved balance {} should be positive",
             reserved_balance
+        );
+
+        // Uploading the same chunk again should not reserve any further cycles.
+        let _hash = test
+            .subnet_message("upload_chunk", upload_args.encode())
+            .unwrap();
+        let new_reserved_balance = test
+            .canister_state(canister_id)
+            .system_state
+            .reserved_balance()
+            .get();
+        assert_eq!(
+            new_reserved_balance, reserved_balance,
+            "The current reserved balance {} should match the previous reserved balance {}",
+            new_reserved_balance, reserved_balance
         );
     });
 }
@@ -6437,6 +6530,11 @@ fn upload_chunk_fails_when_heap_delta_rate_limited() {
         .subnet_message("upload_chunk", upload_args.encode())
         .unwrap();
 
+    // Uploading the same chunk again will succeed
+    let _hash = test
+        .subnet_message("upload_chunk", upload_args.encode())
+        .unwrap();
+
     // Uploading the second chunk will fail because of rate limiting.
     let initial_subnet_available_memory = test.subnet_available_memory();
     let upload_args = UploadChunkArgs {
@@ -6478,6 +6576,16 @@ fn upload_chunk_increases_subnet_heap_delta() {
         test.state().metadata.heap_delta_estimate,
         wasm_chunk_store::chunk_size()
     );
+
+    // Uploading the same chunk again will not increase the delta.
+    let _hash = test
+        .subnet_message("upload_chunk", upload_args.encode())
+        .unwrap();
+
+    assert_eq!(
+        test.state().metadata.heap_delta_estimate,
+        wasm_chunk_store::chunk_size()
+    );
 }
 
 #[test]
@@ -6501,11 +6609,22 @@ fn upload_chunk_charges_canister_cycles() {
         test.subnet_size(),
         test.canister_wasm_execution_mode(canister_id),
     );
-    let _hash = test.subnet_message("upload_chunk", payload).unwrap();
+    let _hash = test
+        .subnet_message("upload_chunk", payload.clone())
+        .unwrap();
 
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         initial_balance - expected_charge,
+    );
+
+    // Uploading the same chunk again will decrease balance by the cycles corresponding to
+    // the instructions for uploading.
+    let _hash = test.subnet_message("upload_chunk", payload).unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_balance - expected_charge - expected_charge,
     );
 }
 
@@ -6637,7 +6756,7 @@ fn chunk_store_counts_against_subnet_memory_in_initial_round_computation() {
     // a second.
     let payload = UploadChunkArgs {
         canister_id: canister_id.into(),
-        chunk: vec![0x42; 1024 * 1024],
+        chunk: vec![0x43; 1024 * 1024],
     }
     .encode();
     let error = env
