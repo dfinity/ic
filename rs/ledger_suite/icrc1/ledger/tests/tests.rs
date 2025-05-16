@@ -555,11 +555,6 @@ fn test_block_transformation() {
 }
 
 #[test]
-fn icrc1_test_upgrade_serialization_from_mainnet() {
-    icrc1_test_upgrade_serialization(ledger_mainnet_wasm(), true);
-}
-
-#[test]
 fn icrc1_test_upgrade_serialization_from_v2() {
     icrc1_test_upgrade_serialization(ledger_mainnet_v2_wasm(), true);
 }
@@ -591,16 +586,6 @@ fn icrc1_test_upgrade_serialization(ledger_mainnet_wasm: Vec<u8>, mainnet_on_pre
 fn get_all_blocks(state_machine: &StateMachine, ledger_id: CanisterId) -> Vec<EncodedBlock> {
     let blocks = get_all_ledger_and_archive_blocks::<Tokens>(state_machine, ledger_id, None, None);
     blocks.into_iter().map(|b| b.encode()).collect()
-}
-
-#[test]
-fn icrc1_test_multi_step_migration_from_mainnet() {
-    ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
-        ledger_mainnet_wasm(),
-        ledger_wasm_lowupgradeinstructionlimits(),
-        encode_init_args_no_archiving,
-        get_all_blocks,
-    );
 }
 
 #[test]
@@ -640,13 +625,8 @@ fn icrc1_test_downgrade_from_incompatible_version() {
         ledger_wasm_nextledgerversion(),
         ledger_wasm(),
         encode_init_args,
-        false,
+        true,
     );
-}
-
-#[test]
-fn icrc1_test_stable_migration_endpoints_disabled_from_mainnet() {
-    test_stable_migration_endpoints_disabled(ledger_mainnet_wasm());
 }
 
 #[test]
@@ -682,15 +662,6 @@ fn test_stable_migration_endpoints_disabled(ledger_wasm_mainnet: Vec<u8>) {
 }
 
 #[test]
-fn icrc1_test_incomplete_migration_from_mainnet() {
-    ic_ledger_suite_state_machine_tests::test_incomplete_migration(
-        ledger_mainnet_wasm(),
-        ledger_wasm_lowupgradeinstructionlimits(),
-        encode_init_args_no_archiving,
-    );
-}
-
-#[test]
 fn icrc1_test_incomplete_migration_from_v3() {
     ic_ledger_suite_state_machine_tests::test_incomplete_migration(
         ledger_mainnet_v3_wasm(),
@@ -714,15 +685,6 @@ fn icrc1_test_incomplete_migration_from_v2_noledgerversion() {
         ledger_mainnet_v2_noledgerversion_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,
-    );
-}
-
-#[test]
-fn icrc1_test_incomplete_migration_to_current_from_mainnet() {
-    ic_ledger_suite_state_machine_tests::test_incomplete_migration_to_current(
-        ledger_mainnet_wasm(),
-        ledger_wasm_lowupgradeinstructionlimits(),
-        encode_init_args_no_archiving,
     );
 }
 
@@ -754,15 +716,6 @@ fn icrc1_test_incomplete_migration_to_current_from_v2_noledgerversion() {
 }
 
 #[test]
-fn icrc1_test_migration_resumes_from_frozen_from_mainnet() {
-    ic_ledger_suite_state_machine_tests::test_migration_resumes_from_frozen(
-        ledger_mainnet_wasm(),
-        ledger_wasm_lowupgradeinstructionlimits(),
-        encode_init_args,
-    );
-}
-
-#[test]
 fn icrc1_test_migration_resumes_from_frozen_from_v3() {
     ic_ledger_suite_state_machine_tests::test_migration_resumes_from_frozen(
         ledger_mainnet_v3_wasm(),
@@ -777,15 +730,6 @@ fn icrc1_test_migration_resumes_from_frozen_from_v2() {
         ledger_mainnet_v2_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,
-    );
-}
-
-#[test]
-fn icrc1_test_metrics_while_migrating_from_mainnet() {
-    ic_ledger_suite_state_machine_tests::test_metrics_while_migrating(
-        ledger_mainnet_wasm(),
-        ledger_wasm_lowupgradeinstructionlimits(),
-        encode_init_args_no_archiving,
     );
 }
 
@@ -1551,7 +1495,7 @@ fn test_icrc3_certificate_ledger_upgrade() {
     // Install the ledger with a version serving the non-compliant ICRC-3 certificate.
     let ledger_id = env
         .install_canister(
-            ledger_mainnet_wasm(),
+            ledger_mainnet_v3_wasm(),
             Encode!(&(LedgerArgument::Init(init_args.clone()))).unwrap(),
             None,
         )
