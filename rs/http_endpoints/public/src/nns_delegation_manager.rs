@@ -344,7 +344,7 @@ async fn try_fetch_delegation_from_nns(
             )
             .into())
         }
-        Ok(Err(err)) => return Err(format!("Failed to read body from connection: {err}").into()),
+        Ok(Err(e)) => return Err(format!("Failed to read body from connection: {}", e).into()),
         Err(_) => {
             return Err(format!(
                 "Timed out while receiving http body after {NNS_DELEGATION_BODY_RECEIVE_TIMEOUT:?}"
