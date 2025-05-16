@@ -259,12 +259,12 @@ type GetMetadataResponse = record {
 
 type GetSnsStatusRequest = record {
   time_window_seconds : opt nat64;
-}
+};
 
 type GetSnsStatusResponse = record {
   num_recent_proposals : opt nat64;
   last_transaction_timestamp : opt nat64;
-}
+};
 
 type GetModeResponse = record {
   mode : opt int32;
