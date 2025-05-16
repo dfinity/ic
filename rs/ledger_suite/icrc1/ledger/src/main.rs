@@ -1081,12 +1081,9 @@ fn icrc10_supported_standards() -> Vec<StandardRecord> {
 #[query]
 #[candid_method(query)]
 fn icrc106_get_index_principal() -> Result<Principal, Icrc106Error> {
-    Access::with_ledger(|ledger| {
-        if let Some(index_principal) = ledger.index_principal() {
-            Ok(index_principal)
-        } else {
-            Err(Icrc106Error::IndexPrincipalNotSet)
-        }
+    Access::with_ledger(|ledger| match ledger.index_principal() {
+        None => Err(Icrc106Error::IndexPrincipalNotSet),
+        Some(index_principal) => Ok(index_principal),
     })
 }
 
