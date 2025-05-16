@@ -82,22 +82,12 @@ impl<T: IngressPool> PoolMutationsProducer<T> for IngressManager {
                     Ok(()) => {
                         self.metrics
                             .observe_validated_ingress_message(self.time_source.as_ref(), artifact);
+
                         MoveToValidated(IngressMessageId::from(ingress_object))
                     }
                     Err(err) => {
-                        let reason_label = match err {
-                            IngressMessageValidationError::IngressMessageTooLarge { .. } => {
-                                "ingress_message_too_large"
-                            }
-                            IngressMessageValidationError::IngressMessageAlreadyKnown => {
-                                "ingress_message_already_known"
-                            }
-                            IngressMessageValidationError::InvalidRequest(_) => "invalid_request",
-                        };
                         self.metrics
-                            .invalidated_ingress_message_count
-                            .with_label_values(&[reason_label])
-                            .inc();
+                            .observe_invalidated_ingress_message(artifact, err);
 
                         RemoveFromUnvalidated(IngressMessageId::from(ingress_object))
                     }
@@ -137,7 +127,7 @@ impl<T: IngressPool> PoolMutationsProducer<T> for IngressManager {
     }
 }
 
-enum IngressMessageValidationError {
+pub(crate) enum IngressMessageValidationError {
     IngressMessageTooLarge { max: usize, actual: usize },
     IngressMessageAlreadyKnown,
     InvalidRequest(RequestValidationError),
