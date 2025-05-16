@@ -2373,7 +2373,7 @@ impl ExecutionEnvironment {
         let resource_saturation =
             self.subnet_memory_saturation(&round_limits.subnet_available_memory);
         let replace_snapshot = args.replace_snapshot();
-        let (result, instructions_used) = self.canister_manager.take_canister_snapshot(
+        let result = self.canister_manager.take_canister_snapshot(
             subnet_size,
             sender,
             &mut canister,
@@ -2386,8 +2386,8 @@ impl ExecutionEnvironment {
         state.put_canister_state(canister);
 
         match result {
-            Ok(response) => (Ok(response.encode()), instructions_used),
-            Err(err) => (Err(err.into()), instructions_used),
+            Ok((response, instructions_used)) => (Ok(response.encode()), instructions_used),
+            Err(err) => (Err(err.into()), NumInstructions::new(0)),
         }
     }
 
