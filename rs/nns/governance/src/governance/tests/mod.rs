@@ -867,6 +867,7 @@ mod metrics_tests {
                 no: 0,
                 total: 555,
             }),
+            topic: Some(Topic::Governance as i32),
             ..ProposalData::default()
         };
 
@@ -884,6 +885,7 @@ mod metrics_tests {
                 no: 0,
                 total: 1,
             }),
+            topic: Some(Topic::NeuronManagement as i32),
             ..ProposalData::default()
         };
         let governance = Governance::new(
@@ -926,6 +928,7 @@ mod metrics_tests {
                 action: Some(manage_neuron_action.clone()),
                 ..Proposal::default()
             }),
+            topic: Some(Topic::NeuronManagement as i32),
             ..ProposalData::default()
         };
 
@@ -937,6 +940,7 @@ mod metrics_tests {
                 ..Proposal::default()
             }),
             decided_timestamp_seconds: 1,
+            topic: Some(Topic::NeuronManagement as i32),
             ..ProposalData::default()
         };
 
@@ -947,6 +951,7 @@ mod metrics_tests {
                 action: Some(motion_action.clone()),
                 ..Proposal::default()
             }),
+            topic: Some(Topic::Governance as i32),
             ..ProposalData::default()
         };
 
@@ -1291,20 +1296,9 @@ fn test_validate_execute_nns_function() {
                 nns_function: NnsFunction::IcpXdrConversionRate as i32,
                 payload: vec![],
             },
-            "The payload could not be decoded into a UpdateIcpXdrConversionRatePayload: \
-             Cannot parse header "
+            "Proposal is obsolete because NNS_FUNCTION_ICP_XDR_CONVERSION_RATE is obsolete as \
+            conversion rates are now provided by the exchange rate canister automatically."
                 .to_string(),
-        ),
-        (
-            ExecuteNnsFunction {
-                nns_function: NnsFunction::IcpXdrConversionRate as i32,
-                payload: Encode!(&UpdateIcpXdrConversionRatePayload {
-                    xdr_permyriad_per_icp: 0,
-                    ..Default::default()
-                })
-                .unwrap(),
-            },
-            "The proposed rate 0 is below the minimum allowable rate".to_string(),
         ),
         (
             ExecuteNnsFunction {
@@ -1428,14 +1422,6 @@ fn test_validate_execute_nns_function() {
         ExecuteNnsFunction {
             nns_function: NnsFunction::CreateSubnet as i32,
             payload: vec![1u8; PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX],
-        },
-        ExecuteNnsFunction {
-            nns_function: NnsFunction::IcpXdrConversionRate as i32,
-            payload: Encode!(&UpdateIcpXdrConversionRatePayload {
-                xdr_permyriad_per_icp: 101,
-                ..Default::default()
-            })
-            .unwrap(),
         },
         ExecuteNnsFunction {
             nns_function: NnsFunction::AssignNoid as i32,
