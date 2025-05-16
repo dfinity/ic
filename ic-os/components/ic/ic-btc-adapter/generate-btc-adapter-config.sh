@@ -5,50 +5,29 @@
 #
 # Arguments:
 # - $1: Name of the file to be read.
-function read_bitcoind_addr_variables() {
-    while IFS="=" read -r key value; do
-        case "$key" in
-            "bitcoind_addr") bitcoind_addr="${value}" ;;
-        esac
-    done <"$1"
-}
 
-# Reads the socks proxy config file. The file must be of the form "key=value".
-# The file should only contain the key `socks_proxy`. All other keys are ignored.
-#
-# Arguments:
-# - $1: Name of the file to be read.
-function read_socks_proxy() {
-    while IFS="=" read -r key value; do
-        case "$key" in
-            "socks_proxy") SOCKS_PROXY="${value}" ;;
-        esac
-    done <"$1"
+source /opt/ic/bin/config.sh
+
+function read_config_variables() {
+    config_bitcoind_addr=$(get_config_value '.guestos_settings.guestos_dev_settings.bitcoind_addr')
+    config_socks_proxy=$(get_config_value '.guestos_settings.guestos_dev_settings.socks_proxy')
 }
 
 function usage() {
     cat <<EOF
 Usage:
-  generate-btc-adapter-config [-b bitcoind_addr.conf] [-s socks_proxy.conf] -o ic-btc-adapter.json5
+  generate-btc-adapter-config -o ic-btc-adapter.json5
 
   Generate the bitcoin adapter config.
 
-  -b bitcoind_addr.conf: Optional, bitcoind address
-  -s socks_proxy.conf: Optional, socks proxy url
-  -m If set, we will use bitcoin mainnet dns seeds 
+  -m If set, we will use bitcoin mainnet dns seeds
   -o outfile: output ic-btc-adapter.json5 file
 EOF
 }
 
 MAINNET=false
-while getopts "b:mo:s:" OPT; do
+while getopts "mo:" OPT; do
     case "${OPT}" in
-        b)
-            BITCOIND_ADDR_FILE="${OPTARG}"
-            ;;
-        s)
-            SOCKS_FILE="${OPTARG}"
-            ;;
         o)
             OUT_FILE="${OPTARG}"
             ;;
@@ -62,11 +41,13 @@ while getopts "b:mo:s:" OPT; do
     esac
 done
 
+read_config_variables
+
 # Production socks5 proxy url needs to include schema, host and port to be accepted by the adapters.
-# Testnets deploy with a 'socks_proxy.conf' file to overwrite the production socks proxy with the testnet proxy.
+# Testnets deploy with a development socks_proxy config value to overwrite the production socks proxy with the testnet proxy.
 SOCKS_PROXY="socks5://socks5.ic0.app:1080"
-if [ "${SOCKS_FILE}" != "" -a -e "${SOCKS_FILE}" ]; then
-    read_socks_proxy "${SOCKS_FILE}"
+if [ "${config_socks_proxy}" != "" ] && [ "${config_socks_proxy}" != "null" ]; then
+    SOCKS_PROXY="${config_socks_proxy}"
 fi
 
 BITCOIN_NETWORK='"testnet4"'
@@ -91,20 +72,12 @@ if [ "${OUT_FILE}" == "" ]; then
     exit 1
 fi
 
-# BITCOIND_ADDR indicates that we are in system test environment. No socks proxy needed.
-# bitcoin_addr.conf should be formatted like this: key 'bitcoind_addr', comma separated values, NO "" around addresses, NO trailing ',' AND spaces
-# Example: bitcoind_addr=seed.bitcoin.sipa.be,regtest.random.me,regtest.random.org
-#
-# Bash explanation:
-# ${bitcoind_addr:+\"${bitcoind_addr//,/\",\"}\"}
-# ${parameter:+word}: If parameter is null or unset, nothing is substituted, otherwise the expansion of word is substituted.
-# word: \"${bitcoind_addr//,/\",\"}\" Adds surrounding "" and matches and replaces all ',' with '","'
-if [ "${BITCOIND_ADDR_FILE}" != "" -a -e "${BITCOIND_ADDR_FILE}" ]; then
-    read_bitcoind_addr_variables "${BITCOIND_ADDR_FILE}"
+# config_bitcoind_addr indicates that we are in system test environment. No socks proxy needed.
+if [ "${config_bitcoind_addr}" != "" ] && [ "${config_bitcoind_addr}" != "null" ]; then
     echo '{
         "network": "regtest",
         "dns_seeds": [],
-        "nodes": ['"${bitcoind_addr:+\"${bitcoind_addr//,/\",\"}\"}"'],
+        "nodes": ['"${config_bitcoind_addr:+\"${config_bitcoind_addr//,/\",\"}\"}"'],
         "logger": {
             "format": "json",
             "level": "info"

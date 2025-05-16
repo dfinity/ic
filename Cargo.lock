@@ -5081,6 +5081,7 @@ dependencies = [
  "anyhow",
  "clap 4.5.27",
  "config",
+ "config_types",
  "indoc",
  "itertools 0.12.1",
  "network",
@@ -6222,7 +6223,7 @@ dependencies = [
 [[package]]
 name = "ic-bn-lib"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/ic-bn-lib?rev=f85fc84e1e608cdea7d60763cf202d74a7fd5050#f85fc84e1e608cdea7d60763cf202d74a7fd5050"
+source = "git+https://github.com/dfinity/ic-bn-lib?rev=ec4a6b4abab2d94e09c4d5fee2d57d7bb1260835#ec4a6b4abab2d94e09c4d5fee2d57d7bb1260835"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -9097,7 +9098,7 @@ dependencies = [
 [[package]]
 name = "ic-gateway"
 version = "0.2.0"
-source = "git+https://github.com/dfinity/ic-gateway?rev=8248267091e8f3306808355d5556701ed15d777f#8248267091e8f3306808355d5556701ed15d777f"
+source = "git+https://github.com/dfinity/ic-gateway?rev=ed8539d9edd45b97148c46b8020fa6d7ebd48c07#ed8539d9edd45b97148c46b8020fa6d7ebd48c07"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -10614,6 +10615,7 @@ dependencies = [
  "ic-crypto-sha2",
  "ic-stable-structures",
  "lazy_static",
+ "prost 0.13.4",
 ]
 
 [[package]]
@@ -11090,6 +11092,7 @@ dependencies = [
  "ic-base-types",
  "ic-cdk 0.17.2",
  "ic-crypto-sha2",
+ "ic-nervous-system-canisters",
  "ic-nervous-system-common",
  "ic-nns-common-protobuf-generator",
  "ic-nns-constants",
@@ -11519,6 +11522,7 @@ name = "ic-nns-test-utils"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
+ "async-trait",
  "candid",
  "canister-test",
  "cycles-minting-canister",
@@ -12152,16 +12156,22 @@ dependencies = [
  "ic-crypto-sha2",
  "ic-crypto-tree-hash",
  "ic-interfaces-registry",
+ "ic-nervous-system-agent",
+ "ic-nervous-system-chunks",
+ "ic-nervous-system-integration-tests",
  "ic-nns-constants",
+ "ic-nns-test-utils",
  "ic-registry-canister-api",
  "ic-registry-transport",
  "ic-types",
  "leb128",
  "mockall",
+ "pocket-ic",
  "pretty_assertions",
  "prost 0.13.4",
  "rand 0.8.5",
  "serde",
+ "tokio",
  "tree-deserializer",
  "url",
 ]
@@ -12326,10 +12336,14 @@ dependencies = [
  "ic-logger",
  "ic-messaging",
  "ic-metrics",
+ "ic-nervous-system-agent",
+ "ic-nervous-system-chunks",
  "ic-nervous-system-common",
+ "ic-nervous-system-integration-tests",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
+ "ic-nns-test-utils",
  "ic-protobuf",
  "ic-registry-canister-api",
  "ic-registry-client",
@@ -12346,6 +12360,7 @@ dependencies = [
  "ic-types",
  "icp-ledger",
  "mockall",
+ "pocket-ic",
  "pretty_assertions",
  "prost 0.13.4",
  "rand 0.8.5",
@@ -12353,6 +12368,7 @@ dependencies = [
  "serde_json",
  "slog",
  "slog-async",
+ "strum 0.26.3",
  "tempfile",
  "tokio",
  "tower 0.5.2",
@@ -13728,6 +13744,7 @@ dependencies = [
  "canister-test",
  "chrono",
  "clap 4.5.27",
+ "config",
  "config_types",
  "crossbeam-channel",
  "cycles-minting-canister",
@@ -16079,6 +16096,8 @@ name = "launch-single-vm"
 version = "0.1.0"
 dependencies = [
  "clap 4.5.27",
+ "config",
+ "config_types",
  "ic-prep",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
