@@ -601,6 +601,7 @@ pub struct Ledger {
     #[serde(default)]
     pub ledger_version: u64,
 
+    // #[serde(default)]
     index_principal: Option<Principal>,
 }
 
