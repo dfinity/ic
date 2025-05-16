@@ -57,8 +57,29 @@ function define_guestos() {
     fi
 }
 
+function is_guestos_running() {
+    virsh list --state-running | grep " guestos " > /dev/null
+}
+
+function stop_guestos() {
+    if [ "$(virsh list --state-shutoff | grep ' guestos ')" ]; then
+          write_log "GuestOS virtual machine is already stopped."
+          write_metric "hostos_guestos_service_stop" \
+              "0" \
+              "GuestOS virtual machine stop state" \
+              "gauge"
+      else
+          virsh destroy --graceful guestos
+          write_log "Stopping GuestOS virtual machine."
+          write_metric "hostos_guestos_service_stop" \
+              "1" \
+              "GuestOS virtual machine stop state" \
+              "gauge"
+    fi
+}
+
 function start_guestos() {
-    if [ "$(virsh list --state-running | grep 'guestos')" ]; then
+    if is_guestos_running; then
         write_log "GuestOS virtual machine is already running."
         write_metric "hostos_guestos_service_start" \
             "0" \
@@ -100,6 +121,8 @@ function start_guestos() {
             exit 1
         fi
 
+        trap "stop_guestos; exit 0" SIGTERM
+        systemd-notify --ready
         sleep 10
         write_tty1_log ""
         write_tty1_log "#################################################"
@@ -117,10 +140,24 @@ function start_guestos() {
     fi
 }
 
+function wait_for_vm_shutdown() {
+  while true; do
+    virsh event guestos lifecycle
+    # When we terminate normally via systemd stop, the SIGTERM handler will shutdown the VM and this code isn't
+    # reached.
+    if ! is_guestos_running; then
+      write_log "GuestOS VM shut down unexpectedly."
+      systemd-notify --stopping --status="GuestOS VM shut down unexpectedly."
+      exit 1
+    fi
+  done
+}
+
 function main() {
     # Establish run order
     define_guestos
     start_guestos
+    wait_for_vm_shutdown
 }
 
 main
