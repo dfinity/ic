@@ -46,12 +46,7 @@ fn setup(env: TestEnv) {
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
-}
 
-/// As the malicious behavior `CorruptOwnStateAtHeights` is enabled, this test
-/// waits for the state to diverge and makes sure that the faulty replica is
-/// restarted and that it can contribute to consensus afterwards.
-fn test(env: TestEnv) {
     let log = env.logger();
     let topology = env.topology_snapshot();
     info!(log, "Checking readiness of all nodes after the IC setup...");
@@ -61,6 +56,14 @@ fn test(env: TestEnv) {
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
     info!(log, "All nodes are ready, IC setup succeeded.");
+}
+
+/// As the malicious behavior `CorruptOwnStateAtHeights` is enabled, this test
+/// waits for the state to diverge and makes sure that the faulty replica is
+/// restarted and that it can contribute to consensus afterwards.
+fn test(env: TestEnv) {
+    let log = env.logger();
+    let topology = env.topology_snapshot();
     let malicious_node = topology
         .root_subnet()
         .nodes()
@@ -127,11 +130,9 @@ fn test(env: TestEnv) {
 
             // Wait until the malicious node restarts.
             malicious_node
-                .await_status_is_healthy()
+                .await_status_is_healthy_async()
+                .await
                 .expect("Node didn't report healthy");
-
-            // Recreate the agent after the restart.
-            let agent = malicious_node.build_default_agent_async().await;
 
             // For the same reason as before, if N = DKG_INTERVAL + 1, it's guaranteed
             // that a catch up package is proposed by the faulty node.
