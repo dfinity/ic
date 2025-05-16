@@ -5,6 +5,7 @@ use crate::numeric::{BlockNumber, TransactionNonce, Wei};
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::transactions::EthTransactions;
 use crate::state::{InvalidStateError, State};
+use crate::{EVM_RPC_ID_PRODUCTION, EVM_RPC_ID_STAGING};
 use candid::types::number::Nat;
 use candid::types::principal::Principal;
 use candid::{CandidType, Deserialize};
@@ -73,6 +74,10 @@ impl TryFrom<InitArg> for State {
                         "ERROR: last_scraped_block_number is at maximum value".to_string(),
                     )
                 })?;
+        let evm_rpc_id = evm_rpc_id.unwrap_or(match ethereum_network {
+            EthereumNetwork::Mainnet => EVM_RPC_ID_PRODUCTION,
+            EthereumNetwork::Sepolia => EVM_RPC_ID_STAGING,
+        });
         let mut log_scrapings = LogScrapings::new(last_scraped_block_number);
         if let Some(contract_address) = eth_helper_contract_address {
             log_scrapings

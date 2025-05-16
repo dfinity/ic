@@ -13,7 +13,6 @@ use crate::numeric::{
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData, WithdrawalRequest};
 use crate::tx::GasFeeEstimate;
-use crate::{EVM_RPC_ID_MAINNET, EVM_RPC_ID_STAGING};
 use candid::Principal;
 use ic_canister_log::log;
 use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
@@ -94,7 +93,7 @@ pub struct State {
 
     /// Canister ID of the EVM RPC canister that
     /// handles communication with Ethereum
-    pub evm_rpc_id: Option<Principal>,
+    pub evm_rpc_id: Principal,
 
     /// ERC-20 tokens that the minter can mint:
     /// - primary key: ledger ID for the ckERC20 token
@@ -535,11 +534,7 @@ impl State {
             self.ledger_suite_orchestrator_id = Some(orchestrator_id);
         }
         if let Some(evm_id) = evm_rpc_id {
-            if evm_id == Principal::management_canister() {
-                self.evm_rpc_id = None;
-            } else {
-                self.evm_rpc_id = Some(evm_id);
-            }
+            self.evm_rpc_id = evm_id;
         }
         self.validate_config()
     }
@@ -586,22 +581,13 @@ impl State {
     }
 
     pub fn max_block_spread_for_logs_scraping(&self) -> u16 {
-        if self.evm_rpc_id.is_some() {
-            // Limit set by the EVM-RPC canister itself, see
-            // https://github.com/internet-computer-protocol/evm-rpc-canister/blob/3cce151d4c1338d83e6741afa354ccf11dff41e8/src/candid_rpc.rs#L192
-            500_u16
-        } else {
-            // The maximum block spread is introduced by Cloudflare limits.
-            // https://developers.cloudflare.com/web3/ethereum-gateway/
-            799_u16
-        }
+        // Limit set by the EVM-RPC canister itself, see
+        // https://github.com/internet-computer-protocol/evm-rpc-canister/blob/3cce151d4c1338d83e6741afa354ccf11dff41e8/src/candid_rpc.rs#L192
+        500_u16
     }
 
-    pub fn evm_rpc_id(&self) -> Principal {
-        self.evm_rpc_id.unwrap_or(match self.ethereum_network {
-            EthereumNetwork::Mainnet => EVM_RPC_ID_MAINNET,
-            EthereumNetwork::Sepolia => EVM_RPC_ID_STAGING,
-        })
+    pub const fn evm_rpc_id(&self) -> Principal {
+        self.evm_rpc_id
     }
 }
 

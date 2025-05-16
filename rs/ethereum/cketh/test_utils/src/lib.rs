@@ -120,6 +120,7 @@ impl AsRef<CkEthSetup> for CkEthSetup {
 
 impl CkEthSetup {
     pub fn new(env: Arc<StateMachine>) -> Self {
+        // Create minter canister first to match canister ID and Ethereum address hardcoded in tests.
         let minter_id =
             env.create_canister_with_cycles(None, Cycles::new(100_000_000_000_000), None);
         let ledger_id = env.create_canister(None);

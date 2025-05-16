@@ -85,7 +85,8 @@ type InitArg = record {
     last_scraped_block_number : nat;
 
     // The principal of the EVM RPC canister that handles the communication
-    // with the Ethereum blockchain.
+    // with the Ethereum blockchain. If not specified, uses the production or
+    // staging EVM RPC canister based on the ethereum_network field.
     evm_rpc_id : opt principal;
 };
 
