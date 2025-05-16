@@ -54,7 +54,7 @@ use tracing::{debug, error, warn};
 
 use crate::{
     bouncer,
-    cache::{cache_middleware, Cache},
+    cache::{cache_middleware, CacheState},
     check::{Checker, Runner as CheckRunner},
     cli::Cli,
     dns::DnsResolver,
@@ -259,17 +259,11 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     };
 
     // Caching
-    let cache = cli.cache.cache_size.map(|x| {
-        Arc::new(
-            Cache::new(
-                x,
-                cli.cache.cache_max_item_size,
-                cli.cache.cache_ttl,
-                cli.cache.cache_non_anonymous,
-            )
-            .expect("unable to initialize cache"),
-        )
-    });
+    let cache_state = if cli.cache.cache_size.is_some() {
+        Some(Arc::new(CacheState::new(&cli.cache, &metrics_registry)?))
+    } else {
+        None
+    };
 
     // Bouncer
     let bouncer = if cli.bouncer.bouncer_enable {
@@ -317,7 +311,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         generic_limiter.clone(),
         &cli,
         &metrics_registry,
-        cache.clone(),
+        cache_state.clone(),
         anonymization_salt.clone(),
     );
 
@@ -419,7 +413,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             MetricsRunner::new(
                 metrics_cache,
                 metrics_registry.clone(),
-                cache,
+                cache_state,
                 Arc::clone(&registry_snapshot),
             ),
             MetricParams::new(&metrics_registry, "run_metrics"),
@@ -820,7 +814,7 @@ pub fn setup_router(
     generic_limiter: Option<Arc<generic::GenericLimiter>>,
     cli: &Cli,
     metrics_registry: &Registry,
-    cache: Option<Arc<Cache>>,
+    cache_state: Option<Arc<CacheState>>,
     anonymization_salt: Arc<ArcSwapOption<Vec<u8>>>,
 ) -> Router {
     let proxy_router = ProxyRouter::new(
@@ -991,7 +985,7 @@ pub fn setup_router(
         .layer(common_service_layers.clone())
         .layer(middleware_subnet_lookup.clone())
         .layer(middleware_generic_limiter.clone())
-        .layer(option_layer(cache.map(|x| {
+        .layer(option_layer(cache_state.map(|x| {
             middleware::from_fn_with_state(x.clone(), cache_middleware)
         })))
         .layer(middleware_retry.clone());

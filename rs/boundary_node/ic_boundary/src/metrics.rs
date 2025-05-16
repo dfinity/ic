@@ -15,7 +15,7 @@ use axum::{
     Extension,
 };
 use http::header::CONTENT_TYPE;
-use ic_bn_lib::http::{body::CountingBody, http_version, ConnInfo};
+use ic_bn_lib::http::{body::CountingBody, cache::CacheStatus, http_version, ConnInfo};
 use ic_bn_lib::prometheus::{
     proto::MetricFamily, register_histogram_vec_with_registry,
     register_int_counter_vec_with_registry, register_int_gauge_vec_with_registry,
@@ -29,7 +29,7 @@ use tower_http::request_id::RequestId;
 use tracing::info;
 
 use crate::{
-    cache::{Cache, CacheStatus},
+    cache::CacheState,
     core::Run,
     geoip,
     persist::RouteSubnet,
@@ -127,9 +127,7 @@ pub struct MetricsRunner {
     registry: Registry,
     encoder: TextEncoder,
 
-    cache: Option<Arc<Cache>>,
-    cache_items: IntGauge,
-    cache_size: IntGauge,
+    cache_state: Option<Arc<CacheState>>,
 
     mem_allocated: IntGauge,
     mem_resident: IntGauge,
@@ -142,23 +140,9 @@ impl MetricsRunner {
     pub fn new(
         metrics_cache: Arc<RwLock<MetricsCache>>,
         registry: Registry,
-        cache: Option<Arc<Cache>>,
+        cache_state: Option<Arc<CacheState>>,
         published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     ) -> Self {
-        let cache_items = register_int_gauge_with_registry!(
-            format!("cache_items"),
-            format!("Number of items in the request cache"),
-            registry
-        )
-        .unwrap();
-
-        let cache_size = register_int_gauge_with_registry!(
-            format!("cache_size"),
-            format!("Size of items in the request cache in bytes"),
-            registry
-        )
-        .unwrap();
-
         let mem_allocated = register_int_gauge_with_registry!(
             format!("memory_allocated"),
             format!("Allocated memory in bytes"),
@@ -177,9 +161,7 @@ impl MetricsRunner {
             metrics_cache,
             registry,
             encoder: TextEncoder::new(),
-            cache,
-            cache_items,
-            cache_size,
+            cache_state,
             mem_allocated,
             mem_resident,
             published_registry_snapshot,
@@ -197,18 +179,9 @@ impl Run for MetricsRunner {
         self.mem_resident
             .set(stats::resident::read().unwrap() as i64);
 
-        // Gather cache stats if it's enabled, otherwise set to zero
-        let (cache_items, cache_size) = match self.cache.as_ref() {
-            Some(v) => {
-                v.housekeep().await;
-                (v.len(), v.size())
-            }
-
-            None => (0, 0),
-        };
-
-        self.cache_items.set(cache_items as i64);
-        self.cache_size.set(cache_size as i64);
+        if let Some(v) = &self.cache_state {
+            v.update_metrics().await;
+        }
 
         // Get a snapshot of metrics
         let mut metric_families = self.registry.gather();
