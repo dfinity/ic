@@ -6758,9 +6758,9 @@ fn stream_store_encode_decode(
         /* certification verification should succeed  */
         true,
         /* modification between encoding and decoding  */
-        |state_manager, slice| {
+        |_state_manager, slice| {
             // we do not modify the slice before decoding it again - so this should succeed
-            (state_manager, slice)
+            slice
         },
     );
 }
@@ -6787,12 +6787,12 @@ fn stream_store_decode_with_modified_hash_fails(
         /* certification verification should succeed  */
         true,
         /* modification between encoding and decoding  */
-        |state_manager, mut slice| {
+        |_state_manager, mut slice| {
             let mut hash = slice.certification.signed.content.hash.get();
             *hash.0.first_mut().unwrap() = hash.0.first().unwrap().overflowing_add(1).0;
             slice.certification.signed.content.hash = CryptoHashOfPartialState::from(hash);
 
-            (state_manager, slice)
+            slice
         },
     );
 }
@@ -6819,10 +6819,9 @@ fn stream_store_decode_with_empty_witness_fails(
         /* certification verification should succeed */
         true,
         /* modification between encoding and decoding  */
-        |state_manager, mut slice| {
+        |_state_manager, mut slice| {
             slice.merkle_proof = vec![];
-
-            (state_manager, slice)
+            slice
         },
     );
 }
@@ -7014,10 +7013,10 @@ fn stream_store_decode_with_invalid_destination(
         /* certification verification should succeed */
         true,
         /* modification between encoding and decoding  */
-        |state_manager, slice| {
+        |_state_manager, slice| {
             // Do not modify the slice before decoding it again - the wrong
             // destination subnet should already make it fail
-            (state_manager, slice)
+            slice
         },
     );
 }
@@ -7044,10 +7043,10 @@ fn stream_store_decode_with_rejecting_verifier(
         /* certification verification should fail */
         false,
         /* modification between encoding and decoding  */
-        |state_manager, slice| {
+        |_state_manager, slice| {
             // Do not modify the slice before decoding it again - the signature validation
             // failure caused by passing the `RejectingVerifier` should already make it fail.
-            (state_manager, slice)
+            slice
         },
     );
 }
@@ -7076,10 +7075,10 @@ fn stream_store_decode_with_invalid_destination_and_rejecting_verifier(
         /* certification verification should fail  */
         false,
         /* modification between encoding and decoding  */
-        |state_manager, slice| {
+        |_state_manager, slice| {
             // Do not modify the slice, the wrong destination subnet and rejecting verifier
             // should make it fail regardless.
-            (state_manager, slice)
+            slice
         },
     );
 }
