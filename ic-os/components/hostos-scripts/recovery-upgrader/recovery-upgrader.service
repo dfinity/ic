@@ -3,7 +3,6 @@ Description=Recovery Upgrader Service
 ConditionKernelCommandLine=recovery=1
 After=network-online.target
 Requires=network-online.target
-After=guestos.service
 
 [Service]
 Type=oneshot
