@@ -710,6 +710,7 @@ struct Agent;
 impl Agent {
     fn builder() -> AgentBuilder {
         <AgentBuilder as Default>::default()
+            .with_ingress_expiry(Duration::from_secs(4 * 60))
             .with_max_polling_time(Duration::from_secs(6 * 60))
             .with_nonce_generator(NonceGeneratorImpl)
     }
