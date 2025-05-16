@@ -1874,7 +1874,7 @@ mod tests {
                                     content: Some(high_capacity_registry_value::Content::Value(
                                         b"inline".to_vec(),
                                     )),
-                                    timestamp_seconds: 0,
+                                    timestamp_nanoseconds: 0,
                                 },
                                 HighCapacityRegistryValue {
                                     version: 44,
@@ -1888,14 +1888,14 @@ mod tests {
                                             },
                                         ),
                                     ),
-                                    timestamp_seconds: 0,
+                                    timestamp_nanoseconds: 0,
                                 },
                                 HighCapacityRegistryValue {
                                     version: 45,
                                     content: Some(
                                         high_capacity_registry_value::Content::DeletionMarker(true),
                                     ),
-                                    timestamp_seconds: 0,
+                                    timestamp_nanoseconds: 0,
                                 },
                             ],
                         },
@@ -1907,14 +1907,14 @@ mod tests {
                                     content: Some(high_capacity_registry_value::Content::Value(
                                         b"herp".to_vec(),
                                     )),
-                                    timestamp_seconds: 0,
+                                    timestamp_nanoseconds: 0,
                                 },
                                 HighCapacityRegistryValue {
                                     version: 50,
                                     content: Some(high_capacity_registry_value::Content::Value(
                                         b"derp".to_vec(),
                                     )),
-                                    timestamp_seconds: 0,
+                                    timestamp_nanoseconds: 0,
                                 },
                             ],
                         },
