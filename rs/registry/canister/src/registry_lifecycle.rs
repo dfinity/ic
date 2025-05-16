@@ -7,6 +7,7 @@ use crate::{
 use ic_base_types::{NodeId, PrincipalId};
 use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
 use ic_registry_keys::{make_node_record_key, NODE_RECORD_KEY_PREFIX};
+use ic_registry_routing_table::RoutingTable;
 use ic_registry_transport::{pb::v1::RegistryMutation, update};
 use prost::Message;
 use std::str::FromStr;
@@ -65,12 +66,17 @@ pub fn canister_post_upgrade(
 
 // TODO(NNS1-3781): Delete this migration before removing routing_table key from registry.
 fn maybe_write_routing_table_to_canister_ranges(registry: &Registry) -> Vec<RegistryMutation> {
+    // Even when empty this will work.  It can only panic if there are invalid entries
     let ranges_rt =
         registry.get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
-    let active_rt = registry.get_routing_table_or_panic(registry.latest_version());
 
-    // If there are no differences, this will not generate any mutations
-    mutations_for_canister_ranges(&ranges_rt, &active_rt)
+    // In some test cases, there is no routing table, and this panics, which is not desired since
+    // that case will later be caught by the invariant check.  This breaks tests for no reason, so
+    // we do a match here.
+    match registry.get_routing_table(registry.latest_version()) {
+        Ok(active_rt) => mutations_for_canister_ranges(&ranges_rt, &active_rt),
+        Err(_) => vec![],
+    }
 }
 
 // This will be used one additional time before being removed, after node_reward_type is enforced
