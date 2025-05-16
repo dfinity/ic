@@ -1,0 +1,13 @@
+[Unit]
+Description=Recovery Upgrader Service
+ConditionKernelCommandLine=recovery=1
+After=network-online.target
+Requires=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ic/bin/recovery-upgrader.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
