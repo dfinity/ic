@@ -153,18 +153,30 @@ fn canister_migrations_into_registry_mutation(
 }
 
 impl Registry {
-    /// Get the routing table or panic on error with a message.
-    pub fn get_routing_table_or_panic(&self, version: u64) -> RoutingTable {
+    pub fn get_routing_table(&self, version: u64) -> Result<RoutingTable, String> {
         let RegistryValue {
             value: routing_table_bytes,
             version: _,
             deletion_marker: _,
         } = self
             .get(make_routing_table_record_key().as_bytes(), version)
-            .unwrap_or_else(|| panic!("{}routing table not found in the registry.", LOG_PREFIX));
+            .ok_or(format!(
+                "{}routing table not found in the registry.",
+                LOG_PREFIX
+            ))?;
 
         RoutingTable::try_from(pb::RoutingTable::decode(routing_table_bytes.as_slice()).unwrap())
-            .expect("failed to decode the routing table from protobuf")
+            .map_err(|e| {
+                format!(
+                    "{}failed to decode the routing table from protobuf: {}",
+                    LOG_PREFIX, e
+                )
+            })
+    }
+    /// Get the routing table or panic on error with a message.
+    pub fn get_routing_table_or_panic(&self, version: u64) -> RoutingTable {
+        self.get_routing_table(version)
+            .unwrap_or_else(|e| panic!("{e}"))
     }
 
     pub fn get_routing_table_from_canister_range_records_or_panic(
