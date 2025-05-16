@@ -480,7 +480,7 @@ mod tests {
             content: Some(high_capacity_registry_get_value_response::Content::Value(
                 value.clone(),
             )),
-            timestamp_seconds: 42,
+            timestamp_nanoseconds: 42,
             error: None,
         };
 
