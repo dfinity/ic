@@ -84,75 +84,89 @@ fn check_block_hash<T: TokensType>(block: Block<T>) -> Result<(), TestCaseError>
     Ok(())
 }
 
-proptest! {
-    #[test]
-    fn test_generic_block_to_encoded_block_conversion(block in blocks_strategy(arb_small_amount())) {
-        check_block_conversion::<U64>(block)?;
-    }
-
-    #[test]
-    fn test_generic_block_to_encoded_block_conversion_u128(block in blocks_strategy(large_u128_amount())) {
-        check_block_conversion::<U256>(block)?;
-    }
-
-    #[test]
-    fn test_generic_block_to_encoded_block_conversion_u256(block in blocks_strategy(large_u256_amount())) {
-        check_block_conversion::<U256>(block)?;
-    }
-
-    #[test]
-    fn test_generic_transaction_hash(block in blocks_strategy(arb_small_amount())) {
-        check_tx_hash::<U64>(block)?;
-    }
-
-    #[test]
-    fn test_generic_transaction_hash_u256(block in blocks_strategy(arb_u256())) {
-        check_tx_hash::<U256>(block)?;
-    }
-
-    #[test]
-    fn test_generic_block_and_encoded_block_hash_parity(block in blocks_strategy(arb_u256())) {
-        check_block_hash::<U256>(block)?;
-    }
-
-    #[test]
-    fn test_generic_block_and_encoded_block_hash_parity_u64(block in blocks_strategy(arb_amount())) {
-        check_block_hash::<U64>(block)?;
-    }
-
-    #[test]
-    fn test_generic_block_and_encoded_block_hash_parity_u128(block in blocks_strategy(large_u128_amount())) {
-        check_block_hash::<U256>(block)?;
-    }
-
-    #[test]
-    fn test_generic_block_and_encoded_block_hash_parity_u256(block in blocks_strategy(large_u256_amount())) {
-        check_block_hash::<U256>(block)?;
-    }
+#[test_strategy::proptest]
+fn test_generic_block_to_encoded_block_conversion(
+    #[strategy(blocks_strategy(arb_small_amount()))] block: Block<U64>,
+) {
+    check_block_conversion::<U64>(block)?;
 }
 
-#[test]
-fn test_encoding_decoding_block_u64() {
-    fn arb_token() -> impl Strategy<Value = Tokens> {
-        any::<u64>().prop_map(Tokens::from_e8s)
-    }
-    proptest!(|(block in arb_block(arb_token, 32))| {
-        let mut bytes = vec![];
-        ciborium::into_writer(&block, &mut bytes).unwrap();
-        let decoded: Block<Tokens> = ciborium::from_reader(&bytes[..]).unwrap();
-        prop_assert_eq!(block, decoded);
-    })
+#[test_strategy::proptest]
+fn test_generic_block_to_encoded_block_conversion_u128(
+    #[strategy(blocks_strategy(large_u128_amount()))] block: Block<U256>,
+) {
+    check_block_conversion::<U256>(block)?;
 }
 
-#[test]
-fn test_encoding_decoding_block_u254() {
-    fn arb_token() -> impl Strategy<Value = U256> {
-        (any::<u128>(), any::<u128>()).prop_map(|(hi, lo)| U256::from_words(hi, lo))
-    }
-    proptest!(|(block in arb_block(arb_token, 32))| {
-        let mut bytes = vec![];
-        ciborium::into_writer(&block, &mut bytes).unwrap();
-        let decoded: Block<U256> = ciborium::from_reader(&bytes[..]).unwrap();
-        prop_assert_eq!(block, decoded);
-    })
+#[test_strategy::proptest]
+fn test_generic_block_to_encoded_block_conversion_u256(
+    #[strategy(blocks_strategy(large_u256_amount()))] block: Block<U256>,
+) {
+    check_block_conversion::<U256>(block)?;
+}
+
+#[test_strategy::proptest]
+fn test_generic_transaction_hash(
+    #[strategy(blocks_strategy(arb_small_amount()))] block: Block<U64>,
+) {
+    check_tx_hash::<U64>(block)?;
+}
+
+#[test_strategy::proptest]
+fn test_generic_transaction_hash_u256(#[strategy(blocks_strategy(arb_u256()))] block: Block<U256>) {
+    check_tx_hash::<U256>(block)?;
+}
+
+#[test_strategy::proptest]
+fn test_generic_block_and_encoded_block_hash_parity(
+    #[strategy(blocks_strategy(arb_u256()))] block: Block<U256>,
+) {
+    check_block_hash::<U256>(block)?;
+}
+
+#[test_strategy::proptest]
+fn test_generic_block_and_encoded_block_hash_parity_u64(
+    #[strategy(blocks_strategy(arb_amount()))] block: Block<U64>,
+) {
+    check_block_hash::<U64>(block)?;
+}
+
+#[test_strategy::proptest]
+fn test_generic_block_and_encoded_block_hash_parity_u128(
+    #[strategy(blocks_strategy(large_u128_amount()))] block: Block<U256>,
+) {
+    check_block_hash::<U256>(block)?;
+}
+
+#[test_strategy::proptest]
+fn test_generic_block_and_encoded_block_hash_parity_u256(
+    #[strategy(blocks_strategy(large_u256_amount()))] block: Block<U256>,
+) {
+    check_block_hash::<U256>(block)?;
+}
+
+#[test_strategy::proptest]
+fn test_encoding_decoding_block_u64(#[strategy(arb_block(arb_token, 32))] block: Block<Tokens>) {
+    let mut bytes = vec![];
+    ciborium::into_writer(&block, &mut bytes).unwrap();
+    let decoded: Block<Tokens> = ciborium::from_reader(&bytes[..]).unwrap();
+    prop_assert_eq!(block, decoded);
+}
+
+fn arb_token() -> impl Strategy<Value = Tokens> {
+    any::<u64>().prop_map(Tokens::from_e8s)
+}
+
+#[test_strategy::proptest]
+fn test_encoding_decoding_block_u256(
+    #[strategy(arb_block(arb_token_u256, 32))] block: Block<U256>,
+) {
+    let mut bytes = vec![];
+    ciborium::into_writer(&block, &mut bytes).unwrap();
+    let decoded: Block<U256> = ciborium::from_reader(&bytes[..]).unwrap();
+    prop_assert_eq!(block, decoded);
+}
+
+fn arb_token_u256() -> impl Strategy<Value = U256> {
+    (any::<u128>(), any::<u128>()).prop_map(|(hi, lo)| U256::from_words(hi, lo))
 }
