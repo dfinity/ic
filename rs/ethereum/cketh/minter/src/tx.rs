@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::eth_rpc::{BlockSpec, BlockTag, FeeHistory, FeeHistoryParams, Hash, Quantity};
+use crate::eth_rpc::{FeeHistory, FeeHistoryParams, Hash, Quantity};
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
 use crate::guard::TimerGuard;
@@ -9,6 +9,7 @@ use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, GasAmount, TransactionNonce, Wei, WeiPerGas};
 use crate::state::{lazy_call_ecdsa_public_key, mutate_state, read_state, TaskType};
 use ethnum::u256;
+use evm_rpc_client::BlockTag;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use ic_management_canister_types_private::DerivationPath;
@@ -650,7 +651,7 @@ pub async fn lazy_refresh_gas_fee_estimate() -> Option<GasFeeEstimate> {
         read_state(EthRpcClient::from_state)
             .eth_fee_history(FeeHistoryParams {
                 block_count: Quantity::from(5_u8),
-                highest_block: BlockSpec::Tag(BlockTag::Latest),
+                highest_block: BlockTag::Latest,
                 reward_percentiles: vec![20],
             })
             .await
