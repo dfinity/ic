@@ -166,14 +166,18 @@ async fn send_request_with_refund_callback(
         }
     };
     let refunded_cycles = ic_cdk::api::call::msg_cycles_refunded();
-    ResponseWithRefundedCycles{result, refunded_cycles}
+    ResponseWithRefundedCycles {
+        result,
+        refunded_cycles,
+    }
 }
 
 #[update]
 async fn send_request(
     request: RemoteHttpRequest,
 ) -> Result<RemoteHttpResponse, (RejectionCode, String)> {
-    let ResponseWithRefundedCycles { result, ..} = send_request_with_refund_callback(request).await;
+    let ResponseWithRefundedCycles { result, .. } =
+        send_request_with_refund_callback(request).await;
     result
 }
 
