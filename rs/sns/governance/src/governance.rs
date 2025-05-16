@@ -185,7 +185,7 @@ pub const UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS: u64 = 600;
 /// But this is only true for proposals that are less than 1 day old, to prevent a stuck proposal from blocking all upgrades forever.
 const UPGRADE_PROPOSAL_BLOCK_EXPIRY_SECONDS: u64 = 60 * 60 * 24; // 1 day
 
-/// Timestamp of the block in the GetBlockResult mapping is accessed by this key.
+/// Timestamp of the block in the GetBlocksResult mapping is accessed by this key.
 const TIMESTAMP: &str = "ts";
 
 /// Converts bytes to a subaccountpub fn bytes_to_subaccount(bytes: &[u8]) -> Result<icrc_ledger_types::icrc1::account::Subaccount, GovernanceError> {
@@ -2021,7 +2021,15 @@ impl Governance {
         &self,
         request: GetSnsStatusRequest,
     ) -> Result<GetSnsStatusResponse, GovernanceError> {
-        let num_recent_proposals = self.recent_proposals(request.time_window_seconds.unwrap());
+        let time_window_seconds = request.time_window_seconds.try_into().map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!(
+                    "Error: parsing the request failed on unwrapping `time_window_seconds` field"
+                ),
+            )
+        })?;
+        let num_recent_proposals = self.recent_proposals(time_window_seconds);
         let last_transaction_timestamp = self.get_most_recent_tx_ts().await?;
 
         // transaction timestamps are in nanoseconds
