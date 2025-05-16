@@ -24,15 +24,15 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
 };
 use ic_tests_ckbtc::{
-    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_btc_checker,
-    install_ledger, install_minter, setup, subnet_app, subnet_sys, upgrade_btc_checker,
+    create_canister, install_bitcoin_canister, install_btc_checker, install_ledger, install_minter,
+    setup, subnet_app, subnet_sys, upgrade_btc_checker,
     utils::{
         assert_mint_transaction, assert_no_new_utxo, assert_no_transaction,
         assert_temporarily_unavailable, ensure_wallet, generate_blocks, get_btc_address,
         get_btc_client, start_canister, stop_canister, update_balance, upgrade_canister,
         upgrade_canister_with_args, wait_for_bitcoin_balance, BTC_BLOCK_REWARD,
     },
-    BTC_MIN_CONFIRMATIONS, CHECK_FEE, TEST_KEY_LOCAL,
+    BTC_MIN_CONFIRMATIONS, CHECK_FEE,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
@@ -92,14 +92,6 @@ pub fn test_update_balance(env: TestEnv) {
         let universal_canister =
             UniversalCanister::new_with_retries(&agent, app_node.effective_canister_id(), &logger)
                 .await;
-        // activate_ecdsa_signature(
-        //     sys_node.clone(),
-        //     subnet_sys.subnet_id,
-        //     TEST_KEY_LOCAL,
-        //     &logger,
-        // )
-        // .await;
-
         let ledger_agent = Icrc1Agent {
             agent: agent.clone(),
             ledger_canister_id: ledger,
