@@ -5081,6 +5081,7 @@ dependencies = [
  "anyhow",
  "clap 4.5.27",
  "config",
+ "config_types",
  "indoc",
  "itertools 0.12.1",
  "network",
@@ -13708,6 +13709,7 @@ dependencies = [
  "canister-test",
  "chrono",
  "clap 4.5.27",
+ "config",
  "config_types",
  "crossbeam-channel",
  "cycles-minting-canister",
@@ -16037,6 +16039,8 @@ name = "launch-single-vm"
 version = "0.1.0"
 dependencies = [
  "clap 4.5.27",
+ "config",
+ "config_types",
  "ic-prep",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
