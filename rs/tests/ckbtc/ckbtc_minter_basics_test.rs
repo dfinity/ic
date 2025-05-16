@@ -46,7 +46,7 @@ pub fn test_ckbtc_addresses(env: TestEnv) {
         let minter_id =
             install_minter(&mut minter_canister, ledger_id, &logger, 0, btc_checker_id).await;
         let minter = Principal::try_from_slice(minter_id.as_ref()).unwrap();
-        activate_ecdsa_signature(sys_node, subnet_sys.subnet_id, TEST_KEY_LOCAL, &logger).await;
+        //activate_ecdsa_signature(sys_node, subnet_sys.subnet_id, TEST_KEY_LOCAL, &logger).await;
 
         // Call endpoint get_btc_address
         info!(logger, "Calling get_btc_address endpoint...");
@@ -138,7 +138,7 @@ pub fn test_ckbtc_minter_agent(env: TestEnv) {
         let minter_id =
             install_minter(&mut minter_canister, ledger_id, &logger, 0, btc_checker_id).await;
         let minter = Principal::try_from_slice(minter_id.as_ref()).unwrap();
-        activate_ecdsa_signature(sys_node, subnet_sys.subnet_id, TEST_KEY_LOCAL, &logger).await;
+        //activate_ecdsa_signature(sys_node, subnet_sys.subnet_id, TEST_KEY_LOCAL, &logger).await;
 
         // Build agent.
         let agent = CkBtcMinterAgent {

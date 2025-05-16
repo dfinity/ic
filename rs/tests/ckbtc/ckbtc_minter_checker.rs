@@ -86,7 +86,7 @@ pub fn test_btc_checker(env: TestEnv) {
         let universal_canister =
             UniversalCanister::new_with_retries(&agent, app_node.effective_canister_id(), &logger)
                 .await;
-        activate_ecdsa_signature(sys_node, subnet_sys.subnet_id, TEST_KEY_LOCAL, &logger).await;
+        //activate_ecdsa_signature(sys_node, subnet_sys.subnet_id, TEST_KEY_LOCAL, &logger).await;
 
         let ledger_agent = Icrc1Agent {
             agent: agent.clone(),

@@ -75,7 +75,7 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
             install_minter(&mut minter_canister, ledger_id, &logger, 0, btc_checker_id).await;
         let minter = Principal::from(minter_id.get());
         let ledger = Principal::from(ledger_id.get());
-        activate_ecdsa_signature(sys_node, subnet_sys.subnet_id, TEST_KEY_LOCAL, &logger).await;
+        //activate_ecdsa_signature(sys_node, subnet_sys.subnet_id, TEST_KEY_LOCAL, &logger).await;
 
         let ledger_agent = Icrc1Agent {
             agent: agent.clone(),
