@@ -2017,18 +2017,20 @@ impl Governance {
             .unwrap_or(u64::MAX);
     }
 
+    // Shah-TODO what error types should be used?
     pub async fn get_sns_statistics(
         &self,
         request: GetSnsStatusRequest,
     ) -> Result<GetSnsStatusResponse, GovernanceError> {
-        let time_window_seconds = request.time_window_seconds.try_into().map_err(|err| {
-            GovernanceError::new_with_message(
+        let time_window_seconds = request.time_window_seconds.map_or(
+            Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
                     "Error: parsing the request failed on unwrapping `time_window_seconds` field"
                 ),
-            )
-        })?;
+            )),
+            |time_window_seconds| Ok(time_window_seconds),
+        )?;
         let num_recent_proposals = self.recent_proposals(time_window_seconds);
         let last_transaction_timestamp = self.get_most_recent_tx_ts().await?;
 
@@ -2040,7 +2042,6 @@ impl Governance {
     }
 
     async fn get_most_recent_tx_ts(&self) -> Result<u64, GovernanceError> {
-        // Make the first call to get the current block number
         let call_icrc3_get_blocks = |args: Vec<GetBlocksRequest>| async {
             let result =
                 self.ledger
@@ -2055,14 +2056,19 @@ impl Governance {
 
             Ok::<GetBlocksResult, GovernanceError>(result)
         };
+        // Make the first call to get the current block number.
+        // No matter if the parameters of `GetBlocksRequest` lie in a valid
+        // range or not, the current block number (which is still not added)
+        // is included in the response. We hence make a call with default parameters
+        // just to find out the last block number added to the blockchain on
+        // ledger.
         let args = vec![GetBlocksRequest::default()];
-
-        // Make the second call to the last added block to fetch the most
-        // recent transaction.
         let last_block_number = call_icrc3_get_blocks(args)
             .await
             .map(|blocks| blocks.log_length - Nat::from(1_u32))?;
 
+        // Make the second call to the last added block to fetch the most
+        // recent transaction.
         let args = vec![GetBlocksRequest {
             start: last_block_number,
             length: Nat::from(1_u32),
@@ -2073,43 +2079,42 @@ impl Governance {
         // TODO asserting/logging if blocks.len() != 1
         // We assume in each block we have 1 and only 1 transaction.
         // Block timestamps are in nano seconds
-        let ts =
-            Self::get_block_ts(&last_block.blocks[0].block).unwrap() / Nat::from(ONE_SEC_NANOSEC);
+        let ts_nanos = Self::get_block_ts_nanos(&last_block.blocks[0].block)?;
+        let ts = ts_nanos / Nat::from(ONE_SEC_NANOSEC);
 
-        // As there is no clean way of converting candid::Nat to u64,
-        // we first convert it to a string, remove `_` delimiters, and parse it
-        // to get u64.
-        Ok(ts
-            .to_string()
-            .chars()
-            .filter(|c| *c != '_')
-            .collect::<String>()
-            .parse::<u64>()
-            .unwrap())
+        Ok(ts.0.to_u64_digits()[0])
     }
 
-    fn get_block_ts(block: &ICRC3Value) -> Option<Nat> {
+    // Shah-TODO it implies that blocks are always a mapping
+    // Find how catually the blocks are created.
+    fn get_block_ts_nanos(block: &ICRC3Value) -> Result<Nat, GovernanceError> {
         match block {
-            ICRC3Value::Map(map) => {
-                let value = map.get(TIMESTAMP).unwrap();
-
-                match value {
-                    ICRC3Value::Nat(ts) => Some(ts.clone()),
-                    _ => None,
-                }
-            }
-            _ => None,
+            ICRC3Value::Map(map) => map.get(TIMESTAMP).map_or(
+                Err(GovernanceError::new(ErrorType::PreconditionFailed)),
+                |value| match value {
+                    ICRC3Value::Nat(ts) => Ok(ts.clone()),
+                    _ => Err(GovernanceError::new_with_message(
+                        ErrorType::PreconditionFailed,
+                        format!("Error parsing the block failed: missing timestamp"),
+                    )),
+                },
+            ),
+            _ => Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!("Error parsing the block failed: missing timestamp"),
+            )),
         }
     }
 
-    fn recent_proposals(&self, time_window: u64) -> u64 {
+    fn recent_proposals(&self, time_window_seconds: u64) -> u64 {
         self.proto
             .proposals
             .values()
             .filter(|proposal_data| {
-                self.env.now() >= proposal_data.proposal_creation_timestamp_seconds
-                    && self.env.now() - proposal_data.proposal_creation_timestamp_seconds
-                        <= time_window
+                self.env
+                    .now()
+                    .saturating_sub(proposal_data.proposal_creation_timestamp_seconds)
+                    <= time_window_seconds
             })
             .count() as u64
     }

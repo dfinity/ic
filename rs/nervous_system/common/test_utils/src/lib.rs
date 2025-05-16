@@ -129,7 +129,7 @@ impl ICRC1Ledger for InterleavingTestLedger {
         &self,
         _args: Vec<icrc_ledger_types::icrc3::blocks::GetBlocksRequest>,
     ) -> Result<icrc_ledger_types::icrc3::blocks::GetBlocksResult, NervousSystemError> {
-        unimplemented!()
+        panic!("InterleavingTestLedger::icrc3_get_blocks()")
     }
 }
 
@@ -270,7 +270,7 @@ impl ICRC1Ledger for SpyLedger {
         &self,
         _args: Vec<icrc_ledger_types::icrc3::blocks::GetBlocksRequest>,
     ) -> Result<icrc_ledger_types::icrc3::blocks::GetBlocksResult, NervousSystemError> {
-        unimplemented!()
+        panic!("Spyledger::icrc3_get_blocks()")
     }
 }
 
