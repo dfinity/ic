@@ -5646,7 +5646,7 @@ dependencies = [
 [[package]]
 name = "ic-bn-lib"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/ic-bn-lib?rev=f85fc84e1e608cdea7d60763cf202d74a7fd5050#f85fc84e1e608cdea7d60763cf202d74a7fd5050"
+source = "git+https://github.com/dfinity/ic-bn-lib?rev=ec4a6b4abab2d94e09c4d5fee2d57d7bb1260835#ec4a6b4abab2d94e09c4d5fee2d57d7bb1260835"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -5929,7 +5929,7 @@ dependencies = [
 [[package]]
 name = "ic-gateway"
 version = "0.2.0"
-source = "git+https://github.com/dfinity/ic-gateway?rev=8248267091e8f3306808355d5556701ed15d777f#8248267091e8f3306808355d5556701ed15d777f"
+source = "git+https://github.com/dfinity/ic-gateway?rev=ed8539d9edd45b97148c46b8020fa6d7ebd48c07#ed8539d9edd45b97148c46b8020fa6d7ebd48c07"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
