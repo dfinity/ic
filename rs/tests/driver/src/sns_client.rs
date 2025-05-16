@@ -28,7 +28,7 @@ use ic_nervous_system_common_test_keys::{
 use ic_nervous_system_proto::pb::v1::{Duration, Image, Percentage, Tokens};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     create_service_nervous_system::{
         governance_parameters::VotingRewardParameters,
         initial_token_distribution::{
@@ -329,7 +329,7 @@ pub fn test_create_service_nervous_system_proposal(
         .clone();
     CreateServiceNervousSystem {
         swap_parameters: Some(
-            ic_nns_governance_api::pb::v1::create_service_nervous_system::SwapParameters {
+            ic_nns_governance_api::create_service_nervous_system::SwapParameters {
                 minimum_participants: Some(min_participants),
                 minimum_participant_icp: Some(Tokens::from_e8s(
                     SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,

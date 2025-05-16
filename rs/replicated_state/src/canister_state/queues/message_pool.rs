@@ -1,5 +1,9 @@
 use super::CanisterInput;
 use crate::page_map::int_map::{AsInt, MutableIntMap};
+use crate::{
+    CLASS_BEST_EFFORT, CLASS_GUARANTEED_RESPONSE, CONTEXT_INBOUND, CONTEXT_OUTBOUND, KIND_REQUEST,
+    KIND_RESPONSE,
+};
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_types::messages::{
@@ -31,8 +35,16 @@ pub(super) enum Kind {
 }
 
 impl Kind {
-    // Message kind bit (request or response).
+    /// Message kind bit (request or response).
     const BIT: u64 = 1;
+
+    /// Returns a string representation to be used as metric label value.
+    pub(super) fn to_label_value(self) -> &'static str {
+        match self {
+            Self::Request => KIND_REQUEST,
+            Self::Response => KIND_RESPONSE,
+        }
+    }
 }
 
 impl From<&RequestOrResponse> for Kind {
@@ -53,8 +65,16 @@ pub(super) enum Context {
 }
 
 impl Context {
-    // Message context bit (inbound or outbound).
+    /// Message context bit (inbound or outbound).
     const BIT: u64 = 1 << 1;
+
+    /// Returns a string representation to be used as metric label value.
+    pub(super) fn to_label_value(self) -> &'static str {
+        match self {
+            Self::Inbound => CONTEXT_INBOUND,
+            Self::Outbound => CONTEXT_OUTBOUND,
+        }
+    }
 }
 
 /// Bit encoding the message class (guaranteed response vs best-effort).
@@ -66,8 +86,16 @@ pub(super) enum Class {
 }
 
 impl Class {
-    // Message class bit (guaranteed response vs best-effort).
+    /// Message class bit (guaranteed response vs best-effort).
     const BIT: u64 = 1 << 2;
+
+    /// Returns a string representation to be used as metric label value.
+    pub(super) fn to_label_value(self) -> &'static str {
+        match self {
+            Self::GuaranteedResponse => CLASS_GUARANTEED_RESPONSE,
+            Self::BestEffort => CLASS_BEST_EFFORT,
+        }
+    }
 }
 
 impl From<&RequestOrResponse> for Class {
@@ -146,7 +174,7 @@ impl AsInt for (CoarseTime, Id) {
 
     #[inline]
     fn as_int(&self) -> u128 {
-        (self.0.as_secs_since_unix_epoch() as u128) << 64 | self.1 .0 as u128
+        ((self.0.as_secs_since_unix_epoch() as u128) << 64) | self.1 .0 as u128
     }
 }
 
@@ -155,7 +183,7 @@ impl AsInt for (usize, Id) {
 
     #[inline]
     fn as_int(&self) -> u128 {
-        (self.0 as u128) << 64 | self.1 .0 as u128
+        ((self.0 as u128) << 64) | self.1 .0 as u128
     }
 }
 
@@ -171,7 +199,7 @@ where
     /// Constructs a new `Reference<T>` of the given `class` and `kind`.
     fn new(class: Class, kind: Kind, generator: u64) -> Self {
         Self(
-            T::context() as u64 | class as u64 | kind as u64 | generator << Id::BITMASK_LEN,
+            T::context() as u64 | class as u64 | kind as u64 | (generator << Id::BITMASK_LEN),
             PhantomData,
         )
     }
@@ -280,6 +308,27 @@ impl ToContext for RequestOrResponse {
 pub(super) enum SomeReference {
     Inbound(InboundReference),
     Outbound(OutboundReference),
+}
+
+impl SomeReference {
+    fn id(&self) -> Id {
+        match self {
+            Self::Inbound(reference) => reference.into(),
+            Self::Outbound(reference) => reference.into(),
+        }
+    }
+
+    pub(super) fn kind(&self) -> Kind {
+        self.id().kind()
+    }
+
+    pub(super) fn context(&self) -> Context {
+        self.id().context()
+    }
+
+    pub(super) fn class(&self) -> Class {
+        self.id().class()
+    }
 }
 
 impl From<Id> for SomeReference {

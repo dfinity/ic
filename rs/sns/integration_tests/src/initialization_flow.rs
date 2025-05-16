@@ -7,7 +7,7 @@ use ic_nervous_system_proto::pb::v1::{
 };
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     create_service_nervous_system::{
         governance_parameters::VotingRewardParameters,
         initial_token_distribution::{

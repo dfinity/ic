@@ -3,7 +3,7 @@ use candid::Encode;
 use canister_test::{Canister, CanisterId, Runtime};
 use ic_ledger_core::Tokens;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_nns_governance_api::pb::v1::{Governance, NetworkEconomics, Neuron};
+use ic_nns_governance_api::{Governance, NetworkEconomics, Neuron};
 use ic_nns_test_utils::itest_helpers::install_rust_canister;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{

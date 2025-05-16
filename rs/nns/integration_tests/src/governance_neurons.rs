@@ -15,7 +15,7 @@ use ic_nervous_system_common_test_keys::{
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::governance::INITIAL_NEURON_DISSOLVE_DELAY;
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     governance_error::ErrorType,
     list_neurons::NeuronSubaccount,
     manage_neuron::{Command, Merge, NeuronIdOrSubaccount, Spawn},
@@ -337,8 +337,13 @@ fn test_neuron_disburse_maturity() {
     let neuron =
         nns_governance_get_full_neuron(&state_machine, test_user_principal, test_neuron_id.id)
             .expect("Failed to get neuron");
-    assert!(neuron.maturity_e8s_equivalent > 0, "{:#?}", neuron);
-    println!("{:#?}", neuron);
+    let original_neuron_maturity_e8s_equivalent = neuron.maturity_e8s_equivalent;
+    assert!(
+        original_neuron_maturity_e8s_equivalent > 0,
+        "{}",
+        original_neuron_maturity_e8s_equivalent
+    );
+    assert_eq!(neuron.maturity_disbursements_in_progress, Some(vec![]));
 
     // Step 2: Call the code under test - disburse maturity.
     let disburse_destination = PrincipalId::new_self_authenticating(&[1u8]);
@@ -359,7 +364,25 @@ fn test_neuron_disburse_maturity() {
     else {
         panic!("Failed to disburse maturity: {:#?}", disburse_response)
     };
-    assert!(disburse_maturity_response.amount_disbursed_e8s() > 0);
+    assert!(disburse_maturity_response.amount_disbursed_e8s.unwrap() > 0);
+    let neuron =
+        nns_governance_get_full_neuron(&state_machine, test_user_principal, test_neuron_id.id)
+            .expect("Failed to get neuron");
+    let maturity_disbursement = neuron
+        .maturity_disbursements_in_progress
+        .unwrap()
+        .first()
+        .cloned()
+        .unwrap();
+    assert_eq!(
+        maturity_disbursement.amount_e8s.unwrap(),
+        disburse_maturity_response.amount_disbursed_e8s.unwrap()
+    );
+    assert_eq!(
+        neuron.maturity_e8s_equivalent,
+        original_neuron_maturity_e8s_equivalent
+            - disburse_maturity_response.amount_disbursed_e8s.unwrap()
+    );
 
     let get_balance_e8s_of_disburse_destination = || {
         icrc1_balance(
@@ -388,6 +411,10 @@ fn test_neuron_disburse_maturity() {
     }
     let balance = get_balance_e8s_of_disburse_destination();
     assert!(balance > 0, "{}", balance);
+    let neuron =
+        nns_governance_get_full_neuron(&state_machine, test_user_principal, test_neuron_id.id)
+            .expect("Failed to get neuron");
+    assert_eq!(neuron.maturity_disbursements_in_progress, Some(vec![]));
 }
 
 /// If a neuron's controller is added as a hot key and then removed, assert that Governance
@@ -497,8 +524,8 @@ fn test_hotkey_can_join_and_leave_community_fund() {
             command: Some(manage_neuron_response::Command::Error(error)),
         } => {
             assert_eq!(
-                ErrorType::try_from(error.error_type),
-                Ok(ErrorType::NotAuthorized),
+                error.error_type,
+                ErrorType::NotAuthorized as i32,
                 "{:?}",
                 error
             );

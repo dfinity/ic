@@ -57,7 +57,7 @@ const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
 #[derive(Parser)]
-#[clap(version = "9.0.0")]
+#[clap(version = "9.0.2")]
 struct Args {
     /// The IP address to which the PocketIC server should bind (defaults to 127.0.0.1)
     #[clap(long, short)]
@@ -553,9 +553,11 @@ mod test {
     use std::sync::Arc;
 
     use clap::Parser;
-    use ic_agent::agent::route_provider::RoundRobinRouteProvider;
-    use ic_bn_lib::tls::prepare_client_config;
-    use ic_gateway::{setup_router, Cli};
+    use ic_gateway::{
+        ic_agent::agent::route_provider::RoundRobinRouteProvider,
+        ic_bn_lib::{self, prometheus, tls::prepare_client_config},
+        setup_router, Cli,
+    };
 
     #[test]
     fn test_setup_router() {
@@ -591,8 +593,6 @@ mod test {
             http_client,
             Arc::new(route_provider),
             &prometheus::Registry::new(),
-            None,
-            None,
         )
         .unwrap();
     }

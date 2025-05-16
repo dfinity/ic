@@ -16,17 +16,12 @@ use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_management_canister_types_private::{CanisterIdRecord, CanisterStatusResultV2};
 use ic_nervous_system_clients::canister_status::CanisterStatusResult as RootCanisterStatusResult;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL,
-    TEST_USER2_KEYPAIR,
+    TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_KEYPAIR,
 };
-use ic_nns_common::types::{NeuronId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, ROOT_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::NnsFunction;
-use ic_nns_test_utils::governance::{
-    submit_external_update_proposal_allowing_error, upgrade_nns_canister_by_proposal,
-};
+use ic_nns_test_utils::governance::upgrade_nns_canister_by_proposal;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::InternetComputer;
@@ -38,10 +33,7 @@ use ic_system_test_driver::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
         },
     },
-    nns::{
-        get_governance_canister, set_authorized_subnetwork_list,
-        submit_external_proposal_with_test_id, update_xdr_per_icp,
-    },
+    nns::set_authorized_subnetwork_list,
     util::{block_on, runtime_from_url},
 };
 use ic_types::Cycles;
@@ -119,41 +111,6 @@ pub fn test(env: TestEnv) {
             cycles_per_xdr: DEFAULT_CYCLES_PER_XDR.into(),
         };
 
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-
-        // Set the XDR-to-cycles conversion rate.
-        info!(logger, "setting CYCLES_PER_XDR");
-        update_xdr_per_icp(&nns, timestamp, xdr_permyriad_per_icp)
-            .await
-            .unwrap();
-
-        // Set the XDR-to-cycles conversion rate, but expect it to fail
-        info!(logger, "setting conversion rate to 0, failure expected");
-        let governance_canister = get_governance_canister(&nns);
-        let proposal_payload = UpdateIcpXdrConversionRatePayload {
-            timestamp_seconds: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
-            xdr_permyriad_per_icp: 0,
-            ..Default::default()
-        };
-
-        submit_external_update_proposal_allowing_error(
-            &governance_canister,
-            Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
-            NeuronId(TEST_NEURON_1_ID),
-            NnsFunction::IcpXdrConversionRate,
-            proposal_payload,
-            "Test Title".to_string(),
-            "Test Summary".to_string(),
-        )
-        .await
-        .unwrap_err();
-
         let canister = Canister::new(&nns, CYCLES_MINTING_CANISTER_ID);
         /* Test getting the conversion rate */
         let mut conversion_rate_response = canister
@@ -202,22 +159,6 @@ pub fn test(env: TestEnv) {
             mixed_hash_tree.digest().as_bytes(),
         )
         .unwrap();
-
-        let proposal_payload = UpdateIcpXdrConversionRatePayload {
-            timestamp_seconds: timestamp,
-            xdr_permyriad_per_icp: xdr_permyriad_per_icp + 1234,
-            ..Default::default()
-        };
-
-        // Set the XDR-to-cycles conversion rate again but with the same timestamp.
-        // No change expected.
-        info!(logger, "setting CYCLES_PER_XDR");
-        submit_external_proposal_with_test_id(
-            &governance_canister,
-            NnsFunction::IcpXdrConversionRate,
-            proposal_payload,
-        )
-        .await;
 
         conversion_rate_response = canister
             .query_(

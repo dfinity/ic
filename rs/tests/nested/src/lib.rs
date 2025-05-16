@@ -100,6 +100,10 @@ pub fn upgrade_hostos(env: TestEnv) {
         HostosVersion::try_from(target_version_str.trim()).expect("Invalid mainnet hostos version");
 
     let update_image_url_str = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_URL").unwrap();
+    info!(
+        logger,
+        "HostOS update image URL: '{}'", update_image_url_str
+    );
     let update_image_url =
         Url::parse(update_image_url_str.trim()).expect("Invalid mainnet hostos update image URL");
     let update_image_sha256 = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_SHA").unwrap();

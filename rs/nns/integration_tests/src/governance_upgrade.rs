@@ -18,7 +18,7 @@ use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     manage_neuron::{configure, Command, Configure, NeuronIdOrSubaccount, RemoveHotKey},
     ManageNeuron, ManageNeuronResponse,
 };
@@ -129,8 +129,6 @@ fn test_root_restarts_canister_during_upgrade_canister_with_stop_canister_timeou
         canister_id: GOVERNANCE_CANISTER_ID,
         wasm_module,
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         chunked_canister_wasm: None,
     };
 

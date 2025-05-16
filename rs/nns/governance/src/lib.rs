@@ -204,10 +204,9 @@ thread_local! {
     static DISABLE_NF_FUND_PROPOSALS: Cell<bool>
         = const { Cell::new(cfg!(not(any(feature = "canbench-rs", feature = "test")))) };
 
-    static IS_DISBURSE_MATURITY_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+    static IS_DISBURSE_MATURITY_ENABLED: Cell<bool> = const { Cell::new(true) };
 
-    static USE_NODE_PROVIDER_REWARD_CANISTER: Cell<bool>
-        = const { Cell::new(cfg!(feature = "test")) };
+    static USE_NODE_PROVIDER_REWARD_CANISTER: Cell<bool> = const { Cell::new(true) };
 }
 
 thread_local! {
@@ -431,11 +430,6 @@ pub fn encode_metrics(
         "Total number of neurons that have been locked for disburse operations.",
     )?;
     w.encode_gauge(
-        "governance_heap_neuron_count",
-        governance.neuron_store.heap_neuron_store_len() as f64,
-        "The number of neurons in NNS Governance canister's heap memory.",
-    )?;
-    w.encode_gauge(
         "governance_stable_memory_neuron_count",
         governance.neuron_store.stable_neuron_store_len() as f64,
         "The number of neurons in NNS Governance canister's stable memory.",
@@ -489,13 +483,7 @@ pub fn encode_metrics(
         .proposals
         .values()
         // Exclude ManageNeuron proposals.
-        .filter(|proposal_data| {
-            proposal_data
-                .proposal
-                .as_ref()
-                .map(|proposal| !proposal.is_manage_neuron())
-                .unwrap_or_default()
-        })
+        .filter(|proposal_data| !proposal_data.is_manage_neuron())
         .next_back();
     let mut total_deciding_voting_power = 0.0;
     let mut total_potential_voting_power = 0.0;

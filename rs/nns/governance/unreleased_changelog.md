@@ -9,17 +9,19 @@ on the process that this file is part of, see
 
 ## Added
 
+* The `DisburseMaturity` neuron command is enabled. See https://forum.dfinity.org/t/disburse-maturity-in-nns/43228 for more details.
+
 ## Changed
+
+* Proposal topics are persisted throughout its lifecycle instead of being recomputed every time.
 
 ## Deprecated
 
 ## Removed
 
-* All the `_pb` methods are removed as they already always panic, as well as decoding the init arg
-  as protobuf.
+* The `IcpXdrConversionRate` proposal is now obsolete and cannot be submitted.
 
 ## Fixed
 
-* Use `StableBTreeMap::init` instead of `::new` for voting power snapshots.
-
 ## Security
+Enforce a lower bound for `min_participant_icp_e8s` of `1_000_000`.

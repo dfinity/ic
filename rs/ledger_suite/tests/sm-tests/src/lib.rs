@@ -3213,7 +3213,7 @@ pub fn test_metrics_while_migrating<T>(
         send_approval(&env, canister_id, account.owner, &approve_args).expect("approval failed");
     }
 
-    for i in 2..30 {
+    for i in 2..31 {
         let to = Account::from(PrincipalId::new_user_test_id(i).0);
         transfer(&env, canister_id, account, to, 100).expect("failed to transfer funds");
     }
@@ -3224,6 +3224,18 @@ pub fn test_metrics_while_migrating<T>(
         Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
     )
     .unwrap();
+
+    // The migration should not yet have completed - if this happens (e.g., due to a bump of some
+    // dependency, leading to more blocks being migrated within the configured instruction limits),
+    // consider adjusting the number of blocks stored in the ledger before starting the migration.
+    let is_ledger_ready = Decode!(
+        &env.query(canister_id, "is_ledger_ready", Encode!().unwrap())
+            .expect("failed to call is_ledger_ready")
+            .bytes(),
+        bool
+    )
+    .expect("failed to decode is_ledger_ready response");
+    assert!(!is_ledger_ready);
 
     let metrics = retrieve_metrics(&env, canister_id);
     assert!(
@@ -3238,15 +3250,6 @@ pub fn test_metrics_while_migrating<T>(
             .any(|line| line.contains("ledger_num_approvals")),
         "ledger_num_approvals should not be in metrics"
     );
-
-    let is_ledger_ready = Decode!(
-        &env.query(canister_id, "is_ledger_ready", Encode!().unwrap())
-            .expect("failed to call is_ledger_ready")
-            .bytes(),
-        bool
-    )
-    .expect("failed to decode is_ledger_ready response");
-    assert!(!is_ledger_ready);
 
     wait_ledger_ready(&env, canister_id, 20);
 

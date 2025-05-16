@@ -10,14 +10,12 @@ use ic_base_types::{
     subnet_id_into_protobuf, CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId,
 };
 use ic_management_canister_types_private::{
-    ComputeInitialIDkgDealingsArgs, ComputeInitialIDkgDealingsResponse, MasterPublicKeyId,
+    MasterPublicKeyId, ReshareChainKeyArgs, ReshareChainKeyResponse,
 };
+use ic_protobuf::registry::subnet::v1::chain_key_initialization::Initialization;
 use ic_protobuf::registry::{
     crypto::v1::ChainKeyEnabledSubnetList,
-    subnet::v1::{
-        chain_key_initialization, CatchUpPackageContents, ChainKeyInitialization, SubnetListRecord,
-        SubnetRecord,
-    },
+    subnet::v1::{CatchUpPackageContents, ChainKeyInitialization, SubnetListRecord, SubnetRecord},
 };
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_chain_key_enabled_subnet_list_key,
@@ -182,36 +180,36 @@ impl Registry {
         key_map
     }
 
-    /// Get the initial iDKG dealings via a call to IC00 for a given InitialChainKeyConfig
-    /// and a set of nodes to receive them.
-    pub(crate) async fn get_all_initial_i_dkg_dealings_from_ic00(
+    /// Get the initial key material (IDKG dealings or DKG transcripts)
+    /// via a call to IC00 for a given InitialChainKeyConfig and a set of nodes to receive them.
+    pub(crate) async fn get_all_chain_key_reshares_from_ic00(
         &self,
         initial_chain_key_config: &Option<InitialChainKeyConfigInternal>,
         receiver_nodes: Vec<NodeId>,
     ) -> Vec<ChainKeyInitialization> {
-        let initial_i_dkg_dealings_futures = initial_chain_key_config
+        let reshare_chain_key_futures = initial_chain_key_config
             .as_ref()
             .map(|initial_chain_key_config| {
-                self.get_compute_i_dkg_args_from_initial_config(
+                self.get_reshare_chain_key_args_from_initial_config(
                     initial_chain_key_config,
                     receiver_nodes,
                 )
                 .into_iter()
-                .map(|dealing_request| self.get_i_dkg_initializations_from_ic00(dealing_request))
+                .map(|reshare_request| self.get_chain_key_resharing_from_ic00(reshare_request))
                 .collect::<Vec<_>>()
             })
             .unwrap_or_default();
 
-        futures::future::join_all(initial_i_dkg_dealings_futures).await
+        futures::future::join_all(reshare_chain_key_futures).await
     }
 
     /// Helper function to build the request objects to send to IC00 for
-    /// `compute_initial_i_dkg_dealings`
-    fn get_compute_i_dkg_args_from_initial_config(
+    /// `reshare_chain_key`
+    fn get_reshare_chain_key_args_from_initial_config(
         &self,
         initial_chain_key_config: &InitialChainKeyConfigInternal,
         receiver_nodes: Vec<NodeId>,
-    ) -> Vec<ComputeInitialIDkgDealingsArgs> {
+    ) -> Vec<ReshareChainKeyArgs> {
         let latest_version = self.latest_version();
         let registry_version = RegistryVersion::new(latest_version);
         initial_chain_key_config
@@ -227,38 +225,43 @@ impl Registry {
                     let key_id = key_config.key_id.clone();
                     let subnet_id = SubnetId::new(*subnet_id);
                     let nodes = receiver_nodes.iter().copied().collect();
-                    ComputeInitialIDkgDealingsArgs::new(key_id, subnet_id, nodes, registry_version)
+                    ReshareChainKeyArgs::new(key_id, subnet_id, nodes, registry_version)
                 },
             )
             .collect()
     }
 
     /// Helper function to make the request and decode the response for
-    /// `compute_initial_i_dkg_dealings`.
-    async fn get_i_dkg_initializations_from_ic00(
+    /// `reshare_chain_key`.
+    async fn get_chain_key_resharing_from_ic00(
         &self,
-        dealing_request: ComputeInitialIDkgDealingsArgs,
+        reshare_request: ReshareChainKeyArgs,
     ) -> ChainKeyInitialization {
         let response_bytes = call(
             CanisterId::ic_00(),
-            "compute_initial_i_dkg_dealings",
+            "reshare_chain_key",
             bytes,
-            Encode!(&dealing_request).unwrap(),
+            Encode!(&reshare_request).unwrap(),
         )
         .await
         .unwrap();
 
-        let response = ComputeInitialIDkgDealingsResponse::decode(&response_bytes).unwrap();
+        let response = ReshareChainKeyResponse::decode(&response_bytes).unwrap();
         println!(
-            "{}response from compute_initial_i_dkg_dealings successfully received",
+            "{}response from reshare_chain_key successfully received",
             LOG_PREFIX
         );
 
+        let initialization = match response {
+            ReshareChainKeyResponse::IDkg(dealings) => Initialization::Dealings(dealings),
+            ReshareChainKeyResponse::NiDkg(transcript_record) => {
+                Initialization::TranscriptRecord(transcript_record)
+            }
+        };
+
         ChainKeyInitialization {
-            key_id: Some((&dealing_request.key_id).into()),
-            initialization: Some(chain_key_initialization::Initialization::Dealings(
-                response.initial_dkg_dealings,
-            )),
+            key_id: Some((&reshare_request.key_id).into()),
+            initialization: Some(initialization),
         }
     }
 

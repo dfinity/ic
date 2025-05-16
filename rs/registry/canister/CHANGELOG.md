@@ -10,6 +10,43 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 
 INSERT NEW RELEASES HERE
 
+
+# 2025-05-10: Proposal 136581
+
+http://dashboard.internetcomputer.org/proposal/136581
+
+## Added
+
+* Added new endpoint for `migrate_canisters` which is only callable by governance, and updates the routing table for
+  the provided canisters when called so that requests will be routed to a different subnet. This will be used to support
+  the broader canister migrations feature.
+
+* Started populating `timestamp_seconds` fields.
+
+## Changed
+
+* The `create_subnet` and `recover_subnet` calls are using the `reshare_chain_key` endpoint rather than the old `compute_initial_i_dkg_dealings` endpoint. With this change, recovery of vetkeys is supported.
+
+
+# 2025-05-02: Proposal 136428
+
+https://dashboard.internetcomputer.org/proposal/136428
+
+No behavior changes. When there are large registry records, then, the new code
+here will behave differently (per [this forum post]), but there is currently no
+way to generate such records.
+
+[this forum post]: https://forum.dfinity.org/t/breaking-registry-changes-for-large-records/42893
+
+# 2025-04-25: Proposal 136371
+
+http://dashboard.internetcomputer.org/proposal/136371
+
+## Changed
+
+* `get_node_providers_monthly_xdr_rewards` can now take an optional paramter to specify the Registry version to use when
+  calculating the rewards.
+
 # 2025-03-28: Proposal 136007
 
 https://dashboard.internetcomputer.org/proposal/136007

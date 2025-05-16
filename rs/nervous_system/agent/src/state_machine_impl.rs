@@ -1,4 +1,4 @@
-use crate::{CallCanisters, CanisterInfo, Request};
+use crate::{AgentFor, CallCanisters, CanisterInfo, Request};
 use candid::Principal;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_state_machine_tests::{StateMachine, UserError, WasmResult};
@@ -124,5 +124,11 @@ impl CallCanisters for StateMachine {
         StateMachineAgent::new(self, Principal::anonymous())
             .canister_info(canister_id)
             .await
+    }
+}
+
+impl AgentFor for StateMachine {
+    fn agent_for(&self, principal: impl Into<Principal>) -> impl CallCanisters {
+        StateMachineAgent::new(self, principal)
     }
 }

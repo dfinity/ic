@@ -451,7 +451,11 @@ fn add_subnet_local_registry_records(
                 .iter()
                 .map(|(key_id, _)| KeyConfig {
                     key_id: key_id.clone(),
-                    pre_signatures_to_create_in_advance: 1,
+                    pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
+                        1
+                    } else {
+                        0
+                    },
                     max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
                 })
                 .collect(),
@@ -2050,6 +2054,21 @@ impl StateMachine {
             .build()
     }
 
+    /// Same as [restart_node], but enables snapshot downloading.
+    pub fn restart_node_with_snapshot_download_enabled(self) -> Self {
+        // We must drop self before setup_form_dir so that we don't have two StateManagers pointing
+        // to the same root.
+        let (state_dir, nonce, time, checkpoint_interval_length) = self.into_components();
+
+        StateMachineBuilder::new()
+            .with_state_machine_state_dir(state_dir)
+            .with_nonce(nonce)
+            .with_time(time)
+            .with_checkpoint_interval_length(checkpoint_interval_length)
+            .with_snapshot_download_enabled(true)
+            .build()
+    }
+
     /// Same as [restart_node], but the subnet will have the specified `config`
     /// after the restart.
     pub fn restart_node_with_config(self, config: StateMachineConfig) -> Self {
@@ -3384,6 +3403,17 @@ impl StateMachine {
             .take()
             .canister_states
             .contains_key(&canister)
+    }
+
+    /// Returns all the canister ids.
+    pub fn get_canister_ids(&self) -> Vec<CanisterId> {
+        self.state_manager
+            .get_latest_state()
+            .take()
+            .canister_states
+            .keys()
+            .cloned()
+            .collect()
     }
 
     /// Returns true if the canister with the specified id exists and is not empty.

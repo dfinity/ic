@@ -121,7 +121,7 @@ system_test_nns(
     use_empty_image = True,
     uses_guestos_dev = True,
     uses_hostos_mainnet_update_img = True,
-    uses_setupos_dev = True,
+    uses_setupos_mainnet = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
     deps = RUNNER_DEPENDENCIES,
 )

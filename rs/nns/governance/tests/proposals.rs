@@ -8,7 +8,7 @@ use ic_nns_governance::{
     governance::{Governance, REWARD_DISTRIBUTION_PERIOD_SECONDS},
     pb::v1::{
         neuron::DissolveState, proposal::Action, Ballot, Governance as GovernanceProto,
-        NetworkEconomics, Neuron, Proposal, ProposalData, ProposalRewardStatus, Vote,
+        NetworkEconomics, Neuron, Proposal, ProposalData, ProposalRewardStatus, Topic, Vote,
         WaitForQuietState,
     },
     proposals::sum_weighted_voting_power,
@@ -98,6 +98,7 @@ lazy_static! {
             wait_for_quiet_state: Some(WaitForQuietState {
                 current_deadline_timestamp_seconds: NOW_SECONDS - 5 * ONE_DAY_SECONDS,
             }),
+            topic: Some(Topic::ParticipantManagement as i32),
             ..Default::default()
         };
 
@@ -134,6 +135,7 @@ lazy_static! {
             79 => {
                 let mut proposal_data = proposal_data;
                 proposal_data.id = Some(ProposalId { id: 79 });
+                proposal_data.topic = Some(Topic::Governance as i32);
 
                 let proposal = proposal_data.proposal.as_mut().unwrap();
                 proposal.action = Some(Action::Motion(Default::default()));
