@@ -31,6 +31,7 @@ use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc::generic_value::Value as GenericValue;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
+use icrc_ledger_types::icrc106::errors::Icrc106Error;
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
@@ -62,6 +63,7 @@ use std::{
 };
 
 pub mod fee_collector;
+pub mod icrc_106;
 pub mod in_memory_ledger;
 pub mod metrics;
 
@@ -101,6 +103,7 @@ pub struct InitArgs {
     pub metadata: Vec<(String, Value)>,
     pub archive_options: ArchiveOptions,
     pub feature_flags: Option<FeatureFlags>,
+    pub index_principal: Option<Principal>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType)]
@@ -891,6 +894,7 @@ fn init_args(initial_balances: Vec<(Account, u64)>) -> InitArgs {
             max_transactions_per_response: None,
         },
         feature_flags: Some(FeatureFlags { icrc2: true }),
+        index_principal: None,
     }
 }
 
@@ -1086,7 +1090,7 @@ where
     standards.sort();
     assert_eq!(
         standards,
-        vec!["ICRC-1", "ICRC-10", "ICRC-2", "ICRC-21", "ICRC-3"]
+        vec!["ICRC-1", "ICRC-10", "ICRC-106", "ICRC-2", "ICRC-21", "ICRC-3"]
     );
 }
 
@@ -1664,6 +1668,7 @@ pub fn test_archive_controllers(ledger_wasm: Vec<u8>) {
                 max_transactions_per_response: None,
             },
             feature_flags: args.feature_flags,
+            index_principal: None,
         })
     }
 
@@ -1692,6 +1697,7 @@ pub fn test_archive_no_additional_controllers(ledger_wasm: Vec<u8>) {
                 max_transactions_per_response: None,
             },
             feature_flags: args.feature_flags,
+            index_principal: None,
         })
     }
 
@@ -1725,6 +1731,7 @@ pub fn test_archive_duplicate_controllers(ledger_wasm: Vec<u8>) {
                 max_transactions_per_response: None,
             },
             feature_flags: args.feature_flags,
+            index_principal: None,
         })
     }
     let p100 = PrincipalId::new_user_test_id(100);
