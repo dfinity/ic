@@ -132,7 +132,7 @@ Usage:
       will result in a wrong (possibly failing) boot.
 
     upgrade-recovery
-      Used by recovery-updater.sh to perform a manual GuestOS upgrade from the HostOS
+      Used by recovery-upgrader.sh to perform a manual GuestOS upgrade from the HostOS
 
     confirm
       Confirm that the current system booted fine (required after first
@@ -340,7 +340,7 @@ case "${ACTION}" in
         BOOT_IMG="$5"
         ROOT_IMG="$6"
 
-        echo "=== Recovery Updater Mode ==="
+        echo "=== Recovery Upgrader Mode ==="
         echo "Grubenv file: ${GRUBENV_FILE}"
         echo "Boot device: ${BOOT_DEV}"
         echo "Root device: ${ROOT_DEV}"
@@ -391,7 +391,7 @@ case "${ACTION}" in
         write_grubenv "${GRUBENV_FILE}"
         echo "Grubenv updated successfully"
 
-        echo "Recovery updater mode completed. Waiting for HostOS to reboot GuestOS..."
+        echo "Recovery Upgrader mode completed. Waiting for HostOS to reboot GuestOS..."
         ;;
     confirm)
         if [ "$boot_cycle" != "stable" ]; then

@@ -120,7 +120,7 @@ guestos_upgrade_cleanup() {
 }
 
 main() {
-    echo "Starting GuestOS recovery updater"
+    echo "Starting GuestOS Recovery Upgrader"
 
     VERSION="$(get_cmdline_var version)"
     SHORT_HASH="$(get_cmdline_var hash)"
@@ -143,7 +143,7 @@ main() {
     extract_upgrade "$TMPDIR"
     install_upgrade "$TMPDIR"
 
-    echo "Recovery updater completed successfully"
+    echo "Recovery Upgrader completed successfully"
 
     echo "Rebooting GuestOS into new version..."
     systemctl restart guestos

@@ -1,5 +1,5 @@
 [Unit]
-Description=Recovery Updater Service
+Description=Recovery Upgrader Service
 ConditionKernelCommandLine=recovery=1
 After=network-online.target
 Requires=network-online.target
@@ -7,7 +7,7 @@ After=guestos.service
 
 [Service]
 Type=oneshot
-ExecStart=/opt/ic/bin/recovery-updater.sh
+ExecStart=/opt/ic/bin/recovery-upgrader.sh
 RemainAfterExit=yes
 
 [Install]
