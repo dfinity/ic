@@ -65,8 +65,10 @@ while read min_bench; do
     if [ -n "${new_result_ns}" -a -n "${baseline_result_ns}" ]; then
         total_baseline_ns=$((total_baseline_ns + baseline_result_ns))
         total_new_ns=$((total_new_ns + new_result_ns))
+        baseline_ms=$((baseline_result_ns / 1000 / 1000))
+        new_ms=$((new_result_ns / 1000 / 1000))
         diff_ms_pct=$(echo_diff_ms_pct "${baseline_result_ns}" "${new_result_ns}")
-        echo "${diff_ms_pct} ${name}" >>"${TMP_FILE}"
+        echo "${diff_ms_pct} ${baseline_ms} ${new_ms} ${name}" >>"${TMP_FILE}"
     fi
 done <"${MIN_FILE}"
 
@@ -83,26 +85,26 @@ case "${total_diff_pct}/${total_baseline_ns}" in
 esac
 
 # Produce top regressed/improved details.
-if [ "${total_diff_pct}" != "0" ]; then
+# if [ "${total_diff_pct}" != "0" ]; then
     echo "  Top ${TOP_N} by time:"
     cat "${TMP_FILE}" | sort -rn | rg '^[1-9]' | head -${TOP_N} \
-        | while read diff_ms diff_pct name; do
-            echo "  + ${name} time regressed by ${diff_ms} ms (${diff_pct}%)"
+        | while read diff_ms diff_pct baseline_ms new_ms name; do
+            echo "  + ${name} time regressed by ${diff_ms} ms (${baseline_ms} -> ${new_ms} ms)"
         done
     cat "${TMP_FILE}" | sort -n | rg '^-' | head -${TOP_N} \
-        | while read diff_ms diff_pct name; do
-            echo "  - ${name} time improved by ${diff_ms} ms (${diff_pct}%)"
+        | while read diff_ms diff_pct baseline_ms new_ms name; do
+            echo "  - ${name} time improved by ${diff_ms} ms (${baseline_ms} -> ${new_ms} ms)"
         done
     echo "  Top ${TOP_N} by percentage:"
     cat "${TMP_FILE}" | sort -rnk 2 | rg '^[1-9]' | head -${TOP_N} \
-        | while read diff_ms diff_pct name; do
-            echo "  + ${name} time regressed by ${diff_pct}% (${diff_ms} ms)"
+        | while read diff_ms diff_pct baseline_ms new_ms name; do
+            echo "  + ${name} time regressed by ${diff_pct}% (${baseline_ms} -> ${new_ms} ms)"
         done
     cat "${TMP_FILE}" | sort -nk 2 | rg '^-' | head -${TOP_N} \
-        | while read diff_ms diff_pct name; do
-            echo "  - ${name} time improved by ${diff_pct}% (${diff_ms} ms)"
+        | while read diff_ms diff_pct baseline_ms new_ms name; do
+            echo "  - ${name} time improved by ${diff_pct}% (${baseline_ms} -> ${new_ms} ms)"
         done
-fi
+# fi
 rm -f "${TMP_FILE}"
 
 # Return an error if there are changes or the is no baseline (new benchmarks),
