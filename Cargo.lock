@@ -10284,6 +10284,7 @@ dependencies = [
  "icrc-ledger-types",
  "icrc1-test-env",
  "icrc1-test-suite",
+ "num-bigint 0.4.6",
  "num-traits",
  "proptest 1.6.0",
 ]
@@ -15158,7 +15159,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-types"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "assert_matches",
  "base32",
