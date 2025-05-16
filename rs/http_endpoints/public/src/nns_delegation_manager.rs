@@ -297,7 +297,7 @@ async fn try_fetch_delegation_from_nns(
     )
     .await
     .map_err(|_| {
-        String::from("Timed out while connecting to the nns node after {CONNECTION_TIMEOUT:?}")
+        format!("Timed out while connecting to the nns node after {CONNECTION_TIMEOUT:?}")
     })??;
 
     // any effective canister id can be used when invoking read_state here
@@ -320,7 +320,7 @@ async fn try_fetch_delegation_from_nns(
     )
     .await
     .map_err(|_| {
-        String::from(
+        format!(
             "Timed out while sending request to the nns \
             node after {NNS_DELEGATION_REQUEST_SEND_TIMEOUT:?}",
         )
@@ -344,7 +344,7 @@ async fn try_fetch_delegation_from_nns(
             )
             .into())
         }
-        Ok(Err(e)) => return Err(format!("Failed to read body from connection: {}", e).into()),
+        Ok(Err(err)) => return Err(format!("Failed to read body from connection: {err}").into()),
         Err(_) => {
             return Err(format!(
                 "Timed out while receiving http body after {NNS_DELEGATION_BODY_RECEIVE_TIMEOUT:?}"
