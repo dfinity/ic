@@ -17884,7 +17884,7 @@ dependencies = [
  "hyper 1.6.0",
  "hyper-rustls 0.27.5",
  "hyper-util",
- "ic-agent",
+ "ic-agent 0.39.3",
  "ic-config",
  "ic-consensus",
  "ic-consensus-dkg",
