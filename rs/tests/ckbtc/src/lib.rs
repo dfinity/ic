@@ -20,7 +20,7 @@ use ic_consensus_threshold_sig_system_test_utils::{
 };
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
 use ic_management_canister_types::{CanisterIdRecord, ProvisionalCreateCanisterWithCyclesArgs};
-use ic_management_canister_types_private::MasterPublicKeyId;
+use ic_management_canister_types_private::{EcdsaCurve, MasterPublicKeyId};
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
@@ -156,6 +156,18 @@ docker run  --name=bitcoind-node -d \
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(10))
+                .with_chain_key_config(ic_registry_subnet_features::ChainKeyConfig {
+                    key_configs: vec![ic_registry_subnet_features::KeyConfig {
+                        key_id: MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                            curve: EcdsaCurve::Secp256k1,
+                            name: TEST_KEY_LOCAL.to_string(),
+                        }),
+                        pre_signatures_to_create_in_advance: 10,
+                        max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+                    }],
+                    signature_request_timeout_ns: None,
+                    idkg_key_rotation_period_ms: None,
+                })
                 .add_nodes(1),
         )
         .add_subnet(
