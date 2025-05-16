@@ -1740,8 +1740,8 @@ fn test_non_ascii_url_is_accepted(env: TestEnv) {
             request: request.clone(),
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
-    ))
-    .expect("Request is successful");
+    ));
+    let response = response.expect("Request is successful");
 
     assert_matches!(&response, RemoteHttpResponse {body, status: 200, ..} if *body == expected_body);
     assert_ne!(
