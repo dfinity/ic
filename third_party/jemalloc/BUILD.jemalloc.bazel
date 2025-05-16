@@ -49,7 +49,10 @@ configure_make(
 
     # Specify the name for the static archive instead of defaulting to <rulename>.a
     out_static_libs = ["libjemalloc.a"],
-    tags = ["manual", "no-cache"],
+    tags = [
+        "manual",
+        "no-cache",
+    ],
 
     # Ensures only the static archive is built. Otherwise (make) targets (including jemalloc.sh) cause
     # non-determinism in the build and aren't necessary for us.
