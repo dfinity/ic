@@ -241,8 +241,12 @@ mod tests {
                 stream.push_reject_signal(RejectReason::Unknown);
                 stream.push_reject_signal(RejectReason::CanisterStopping);
             }
+            let loopback_stream = Stream::new(
+                StreamIndexedQueue::with_begin(StreamIndex::from(13)),
+                StreamIndex::new(13),
+            );
             state.modify_streams(|streams| {
-                streams.insert(own_subnet_id, stream.clone());
+                streams.insert(own_subnet_id, loopback_stream.clone());
                 streams.insert(other_subnet_id, stream);
             });
 
@@ -360,9 +364,9 @@ mod tests {
         // BACKWARD COMPATIBILITY CODE FOR OLD CERTIFICATION VERSIONS THAT
         // NEED TO BE SUPPORTED.
         let expected_hashes: [&str; 3] = [
-            "994813D4F32CCE0C1264A7107C1F113F7C3F6A5F81CFA79F4BDD8EBDC7E532C3",
-            "FC128D5CE9D011B306E1C7906519F5A05C7B381C3B5787C89889712E9C1A30AA",
-            "53412C4D575CF56676E4F16B18654BCC0D7E644BB00ADB5C3E1914A776C972B9",
+            "2F2CB05EC73A0E96F04982E6DB14FBC1D50CB3662B83F404A0E57BCC75384D91",
+            "587D8CAE032491FB9400989BFFC4F055FA8741936873B95F092953C66268F543",
+            "2941BBB941D41EBB2908B92200A9361646C213CD4E12F61628DF0AA6715F74AB",
         ];
         assert_eq!(expected_hashes.len(), all_supported_versions().count());
 

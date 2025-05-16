@@ -136,7 +136,7 @@ pub fn encode_decode_stream_test<
         if let Some(destination_subnet) = destination_subnet {
             assert!(
                 destination_subnet != sender_subnet && destination_subnet != receiver_subnet,
-                "destination subnet must be different from both sender and receiver subnets",
+                "destination subnet, when specified, must be different from both sender and receiver subnets",
             );
         }
         let destination_subnet = destination_subnet.unwrap_or(receiver_subnet);
@@ -539,8 +539,9 @@ pub fn pipe_partial_state_sync(
     unreachable!()
 }
 
-/// Creates a `StateManagerImpl` with the given `own_subnet_id` and that whose
-/// verification either always succeeds or always fails.
+/// Creates a `StateManagerImpl` with the given `own_subnet_id` and whose
+/// verifications either always succeed or always fail, as determined by the
+/// `should_pass_verification` flag.
 fn state_manager_with_verifier_result(
     own_subnet_id: SubnetId,
     should_pass_verification: bool,
@@ -568,7 +569,7 @@ fn state_manager_with_verifier_result(
     (state_manager, tmp)
 }
 
-/// Fisture to run a test with a `StateManagerImpl` with the given
+/// Fixture to run a test with a `StateManagerImpl` with the given
 /// `own_subnet_id` and whose verification either always succeeds or always
 /// fails.
 fn state_manager_test_with_verifier_result<
