@@ -4,12 +4,8 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use bitcoin::p2p::ServiceFlags;
-
-use bitcoin::p2p::{
-    message::{CommandString, NetworkMessage},
-    message_network::VersionMessage,
-    Address, Magic,
+use crate::import::{
+    CommandString, Magic, NetworkAddress as Address, NetworkMessage, ServiceFlags, VersionMessage,
 };
 use ic_logger::{error, info, trace, warn, ReplicaLogger};
 use rand::prelude::*;
@@ -694,8 +690,7 @@ fn connection_limits(address_book: &AddressBook) -> (usize, usize) {
 mod test {
     use super::*;
     use crate::config::test::ConfigBuilder;
-    use bitcoin::p2p::ServiceFlags;
-    use bitcoin::Network;
+    use crate::import::{Network, ServiceFlags};
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use std::str::FromStr;

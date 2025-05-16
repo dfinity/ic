@@ -1,4 +1,4 @@
-use bitcoin::Network;
+use crate::import::Network;
 use ic_config::logger::Config as LoggerConfig;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;

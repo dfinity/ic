@@ -2,12 +2,11 @@
 //! to the correct component.
 use crate::{
     blockchainmanager::BlockchainManager, common::DEFAULT_CHANNEL_BUFFER_SIZE, config::Config,
-    connectionmanager::ConnectionManager, metrics::RouterMetrics, stream::handle_stream,
-    transaction_store::TransactionStore, AdapterState, BlockchainManagerRequest, BlockchainState,
-    Channel, ProcessBitcoinNetworkMessage, ProcessBitcoinNetworkMessageError, ProcessEvent,
-    TransactionManagerRequest,
+    connectionmanager::ConnectionManager, import::NetworkMessage, metrics::RouterMetrics,
+    stream::handle_stream, transaction_store::TransactionStore, AdapterState,
+    BlockchainManagerRequest, BlockchainState, Channel, ProcessBitcoinNetworkMessage,
+    ProcessBitcoinNetworkMessageError, ProcessEvent, TransactionManagerRequest,
 };
-use bitcoin::p2p::message::NetworkMessage;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use std::net::SocketAddr;
@@ -69,6 +68,7 @@ pub fn start_main_event_loop(
                 },
                 network_message = network_message_receiver.recv() => {
                     let (address, message) = network_message.unwrap();
+                    println!("network_message received = {:?}", message);
                     router_metrics
                         .bitcoin_messages_received
                         .with_label_values(&[message.cmd()])
@@ -89,6 +89,7 @@ pub fn start_main_event_loop(
                     let command = result.expect("Receiving should not fail because the sender part of the channel is never closed.");
                     match command {
                         BlockchainManagerRequest::EnqueueNewBlocksToDownload(next_headers) => {
+                            println!("receives EnqueueNewBlocksToDownload");
                             blockchain_manager.enqueue_new_blocks_to_download(next_headers);
                         }
                         BlockchainManagerRequest::PruneBlocks(anchor, processed_block_hashes) => {

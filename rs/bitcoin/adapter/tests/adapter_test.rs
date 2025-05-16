@@ -1,6 +1,6 @@
-use bitcoin::{consensus::encode::deserialize, Address, Amount, Block, BlockHash};
 use bitcoincore_rpc::{bitcoincore_rpc_json::CreateRawTransactionInput, Auth, Client, RpcApi};
 use bitcoind::{BitcoinD, Conf, P2P};
+use ic_btc_adapter::import::{deserialize, Address, Amount, Block, BlockHash};
 use ic_btc_adapter::{start_server, Config, IncomingSource};
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_interface::Network;
@@ -261,8 +261,10 @@ fn sync_until_end_block(
     let mut tries = 0;
 
     let end_hash = client.get_best_block_hash().unwrap()[..].to_vec();
+    println!("end_hash = {:?}", end_hash);
     while anchor != end_hash && tries < max_tries {
         let res = make_get_successors_request(adapter_client, anchor.clone(), headers.clone());
+        println!("res = {:?}", res);
         match res {
             Ok(BitcoinAdapterResponseWrapper::GetSuccessorsResponse(res)) => {
                 let new_blocks = res.blocks;
