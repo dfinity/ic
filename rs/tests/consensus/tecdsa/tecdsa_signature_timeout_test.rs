@@ -67,14 +67,15 @@ fn test(env: TestEnv) {
             } else {
                 "VetKD request expired"
             };
-            assert_eq!(
-                error,
-                AgentError::CertifiedReject(RejectResponse {
-                    reject_code: RejectCode::CanisterReject,
-                    reject_message: expected_message.to_string(),
-                    error_code: Some("IC0406".to_string())
-                })
-            )
+            let expected_reject = RejectResponse {
+                reject_code: RejectCode::CanisterReject,
+                reject_message: expected_message.to_string(),
+                error_code: Some("IC0406".to_string()),
+            };
+            match error {
+                AgentError::CertifiedReject { reject, .. } => assert_eq!(reject, expected_reject),
+                _ => panic!("Unexpected error: {:?}", error),
+            };
         }
     });
 }
