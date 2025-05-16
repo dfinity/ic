@@ -9,11 +9,11 @@ async fn main() {
 
     let (exit_sender, exit_signal) = tokio::sync::watch::channel(false);
 
-    let mut orchestrator = Orchestrator::new(args)
+    let orchestrator = Orchestrator::new(args)
         .await
         .expect("Failed to start orchestrator");
     let logger = orchestrator.logger.clone();
-    let join_handle = tokio::spawn(async move { orchestrator.start_tasks(exit_signal).await });
+    let join_handle = tokio::spawn(orchestrator.start_tasks(exit_signal));
     shutdown_signal(logger.inner_logger.root.clone()).await;
 
     exit_sender.send(true).expect("Failed to send exit signal");
