@@ -564,7 +564,7 @@ fn canister_history_cleared_if_canister_out_of_cycles() {
             settings: CanisterSettingsArgsBuilder::new()
                 .with_compute_allocation(1)
                 .build(),
-            sender_canister_version: Some(666), // ignored for ingress messages
+            sender_canister_version: None,
         }
         .encode(),
     )
