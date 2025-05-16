@@ -20,8 +20,7 @@ comparable = { version = "0.5.1", features = ["derive"] }
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
-ic-cdk = "0.17.1"
-ic-cdk-macros = "0.17.1"
+ic-cdk = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }

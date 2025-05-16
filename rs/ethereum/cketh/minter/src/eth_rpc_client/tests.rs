@@ -195,10 +195,11 @@ mod multi_call_results {
     }
 
     mod reduce_with_stable_majority_by_key {
-        use crate::eth_rpc::{FeeHistory, HttpOutcallError};
+        use crate::eth_rpc::HttpOutcallError;
         use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
         use crate::eth_rpc_client::{MultiCallError, MultiCallResults, SingleCallError};
-        use crate::numeric::{BlockNumber, WeiPerGas};
+        use candid::Nat;
+        use evm_rpc_client::FeeHistory;
         use ic_cdk::api::call::RejectionCode;
 
         #[test]
@@ -210,8 +211,9 @@ mod multi_call_results {
                     (LLAMA_NODES, Ok(fee_history())),
                 ]);
 
-            let reduced =
-                results.reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block);
+            let reduced = results.reduce_with_strict_majority_by_key(|fee_history| {
+                Nat::from(fee_history.oldest_block.clone())
+            });
 
             assert_eq!(reduced, Ok(fee_history()));
         }
@@ -221,7 +223,7 @@ mod multi_call_results {
             for index_non_majority in 0..3_usize {
                 let index_majority = (index_non_majority + 1) % 3;
                 let mut fees = [fee_history(), fee_history(), fee_history()];
-                fees[index_non_majority].oldest_block = BlockNumber::new(0x10f73fd);
+                fees[index_non_majority].oldest_block = 0x10f73fd_u32.into();
                 assert_ne!(
                     fees[index_non_majority].oldest_block,
                     fees[index_majority].oldest_block
@@ -235,8 +237,9 @@ mod multi_call_results {
                         (PUBLIC_NODE, Ok(public_node_fee_history)),
                     ]);
 
-                let reduced = results
-                    .reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block);
+                let reduced = results.reduce_with_strict_majority_by_key(|fee_history| {
+                    Nat::from(fee_history.oldest_block.clone())
+                });
 
                 assert_eq!(reduced, Ok(majority_fee));
             }
@@ -258,8 +261,9 @@ mod multi_call_results {
                     (LLAMA_NODES, Ok(fee_history())),
                 ]);
 
-            let reduced =
-                results.reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block);
+            let reduced = results.reduce_with_strict_majority_by_key(|fee_history| {
+                Nat::from(fee_history.oldest_block.clone())
+            });
 
             assert_eq!(reduced, Ok(fee_history()));
         }
@@ -267,15 +271,15 @@ mod multi_call_results {
         #[test]
         fn should_fail_when_no_strict_majority() {
             let block_pi_fee_history = FeeHistory {
-                oldest_block: BlockNumber::new(0x10f73fd),
+                oldest_block: 0x10f73fd_u32.into(),
                 ..fee_history()
             };
             let llama_nodes_fee_history = FeeHistory {
-                oldest_block: BlockNumber::new(0x10f73fc),
+                oldest_block: 0x10f73fc_u32.into(),
                 ..fee_history()
             };
             let public_node_fee_history = FeeHistory {
-                oldest_block: BlockNumber::new(0x10f73fe),
+                oldest_block: 0x10f73fe_u32.into(),
                 ..fee_history()
             };
             let three_distinct_results: MultiCallResults<FeeHistory> =
@@ -286,7 +290,9 @@ mod multi_call_results {
 
             let reduced = three_distinct_results
                 .clone()
-                .reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block);
+                .reduce_with_strict_majority_by_key(|fee_history| {
+                    Nat::from(fee_history.oldest_block.clone())
+                });
 
             assert_eq!(
                 reduced,
@@ -306,7 +312,9 @@ mod multi_call_results {
 
             let reduced = two_distinct_results
                 .clone()
-                .reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block);
+                .reduce_with_strict_majority_by_key(|fee_history| {
+                    Nat::from(fee_history.oldest_block.clone())
+                });
 
             assert_eq!(
                 reduced,
@@ -333,7 +341,9 @@ mod multi_call_results {
 
             let reduced = two_distinct_results_and_error
                 .clone()
-                .reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block);
+                .reduce_with_strict_majority_by_key(|fee_history| {
+                    Nat::from(fee_history.oldest_block.clone())
+                });
 
             assert_eq!(
                 reduced,
@@ -351,7 +361,7 @@ mod multi_call_results {
             let (fee, inconsistent_fee) = {
                 let fee = fee_history();
                 let mut inconsistent_fee = fee.clone();
-                inconsistent_fee.base_fee_per_gas[0] = WeiPerGas::new(0x729d3f3b4);
+                inconsistent_fee.base_fee_per_gas[0] = 0x729d3f3b4_u64.into();
                 assert_ne!(fee, inconsistent_fee);
                 (fee, inconsistent_fee)
             };
@@ -362,8 +372,9 @@ mod multi_call_results {
                     (PUBLIC_NODE, Ok(inconsistent_fee.clone())),
                 ]);
 
-            let reduced =
-                results.reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block);
+            let reduced = results.reduce_with_strict_majority_by_key(|fee_history| {
+                Nat::from(fee_history.oldest_block.clone())
+            });
 
             assert_eq!(
                 reduced,
@@ -392,28 +403,31 @@ mod multi_call_results {
 
             let reduced = results
                 .clone()
-                .reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block);
+                .reduce_with_strict_majority_by_key(|fee_history| {
+                    Nat::from(fee_history.oldest_block.clone())
+                });
 
             assert_eq!(reduced, Err(MultiCallError::InconsistentResults(results)));
         }
 
         fn fee_history() -> FeeHistory {
             FeeHistory {
-                oldest_block: BlockNumber::new(0x10f73fc),
+                oldest_block: 0x10f73fc_u32.into(),
                 base_fee_per_gas: vec![
-                    WeiPerGas::new(0x729d3f3b3),
-                    WeiPerGas::new(0x766e503ea),
-                    WeiPerGas::new(0x75b51b620),
-                    WeiPerGas::new(0x74094f2b4),
-                    WeiPerGas::new(0x716724f03),
-                    WeiPerGas::new(0x73b467f76),
+                    0x729d3f3b3_u64.into(),
+                    0x766e503ea_u64.into(),
+                    0x75b51b620_u64.into(),
+                    0x74094f2b4_u64.into(),
+                    0x716724f03_u64.into(),
+                    0x73b467f76_u64.into(),
                 ],
+                gas_used_ratio: vec![1f64; 6],
                 reward: vec![
-                    vec![WeiPerGas::new(0x5f5e100)],
-                    vec![WeiPerGas::new(0x55d4a80)],
-                    vec![WeiPerGas::new(0x5f5e100)],
-                    vec![WeiPerGas::new(0x5f5e100)],
-                    vec![WeiPerGas::new(0x5f5e100)],
+                    vec![0x5f5e100_u32.into()],
+                    vec![0x55d4a80_u32.into()],
+                    vec![0x5f5e100_u32.into()],
+                    vec![0x5f5e100_u32.into()],
+                    vec![0x5f5e100_u32.into()],
                 ],
             }
         }
@@ -591,23 +605,21 @@ mod evm_rpc_conversion {
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
     use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
     use crate::eth_rpc_client::{
-        Block, Equality, FeeHistory, HttpOutcallError, LogEntry, MinByKey, MultiCallError,
-        MultiCallResults, Reduce, ReduceWithStrategy, SingleCallError,
+        Block, HttpOutcallError, LogEntry, MultiCallError, MultiCallResults, Reduce,
+        SingleCallError,
     };
-    use crate::numeric::{BlockNumber, TransactionCount, Wei};
+    use crate::numeric::{BlockNumber, Wei};
     use crate::test_fixtures::arb::{
-        arb_block, arb_evm_rpc_error, arb_fee_history, arb_gas_used_ratio, arb_hex, arb_hex20,
-        arb_hex256, arb_hex32, arb_hex_byte, arb_log_entry, arb_nat_256, arb_transaction_receipt,
+        arb_block, arb_evm_rpc_error, arb_hex, arb_hex20, arb_hex256, arb_hex32, arb_hex_byte,
+        arb_log_entry, arb_nat_256, arb_transaction_receipt,
     };
     use evm_rpc_client::{
-        Block as EvmBlock, EthMainnetService as EvmEthMainnetService, FeeHistory as EvmFeeHistory,
-        Hex, Hex20, Hex32, HttpOutcallError as EvmHttpOutcallError, LogEntry as EvmLogEntry,
+        Block as EvmBlock, EthMainnetService as EvmEthMainnetService, Hex, Hex20, Hex32,
+        HttpOutcallError as EvmHttpOutcallError, LogEntry as EvmLogEntry,
         MultiRpcResult as EvmMultiRpcResult, Nat256, RpcApi as EvmRpcApi, RpcError as EvmRpcError,
-        RpcResult as EvmRpcResult, RpcService as EvmRpcService,
-        SendRawTransactionStatus as EvmSendRawTransactionStatus,
+        RpcService as EvmRpcService, SendRawTransactionStatus as EvmSendRawTransactionStatus,
         TransactionReceipt as EvmTransactionReceipt,
     };
-    use proptest::collection::vec;
     use proptest::{option, prelude::Strategy, prop_assert_eq, proptest};
     use std::collections::BTreeSet;
     use std::fmt::Debug;
@@ -759,34 +771,6 @@ mod evm_rpc_conversion {
 
     proptest! {
         #[test]
-        fn should_have_consistent_log_entries_between_minter_and_evm_rpc
-        (
-            minter_logs in vec(arb_log_entry(), 1..=100),
-            first_error in arb_evm_rpc_error(),
-            second_error in arb_evm_rpc_error(),
-            third_error in arb_evm_rpc_error(),
-        ) {
-            let evm_rpc_logs: Vec<_> = minter_logs.clone().into_iter().map(evm_rpc_log_entry).collect();
-            test_consistency_between_minter_and_evm_rpc(minter_logs, evm_rpc_logs, first_error, second_error, third_error)?;
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn should_have_consistent_fee_history_between_minter_and_evm_rpc(
-            minter_fee_history in arb_fee_history(),
-            gas_used_ratio in arb_gas_used_ratio(),
-            first_error in arb_evm_rpc_error(),
-            second_error in arb_evm_rpc_error(),
-            third_error in arb_evm_rpc_error(),
-        ) {
-            let evm_fee_history = evm_rpc_fee_history(minter_fee_history.clone(), gas_used_ratio);
-            test_consistency_between_minter_and_evm_rpc(minter_fee_history, Some(evm_fee_history), first_error, second_error, third_error)?;
-        }
-    }
-
-    proptest! {
-        #[test]
         fn should_have_consistent_transaction_receipts_between_minter_and_evm_rpc
         (
             transaction_receipts in minter_and_evm_rpc_transaction_receipts(),
@@ -796,46 +780,6 @@ mod evm_rpc_conversion {
         ) {
             let (minter_tx_receipt, evm_rpc_tx_receipt) = transaction_receipts;
             test_consistency_between_minter_and_evm_rpc(minter_tx_receipt, evm_rpc_tx_receipt, first_error, second_error, third_error)?;
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn should_have_consistent_transaction_count_between_minter_and_evm_rpc
-        (
-            first_tx_count in arb_evm_rpc_transaction_count(),
-            second_tx_count in arb_evm_rpc_transaction_count(),
-            third_tx_count in arb_evm_rpc_transaction_count(),
-        ) {
-            let (block_pi_evm_rpc_provider, public_node_evm_rpc_provider, llama_nodes_evm_rpc_provider) =
-                evm_rpc_providers();
-            let evm_results = match (&first_tx_count, &second_tx_count, &third_tx_count) {
-                (Ok(count_1), Ok(count_2), Ok(count_3)) if count_1 == count_2 && count_2 == count_3 => {
-                    EvmMultiRpcResult::Consistent(Ok(count_1.clone()))
-                }
-                _ => EvmMultiRpcResult::Inconsistent(vec![
-                    (block_pi_evm_rpc_provider, first_tx_count.clone()),
-                    (public_node_evm_rpc_provider, second_tx_count.clone()),
-                    (llama_nodes_evm_rpc_provider, third_tx_count.clone()),
-                ]),
-            };
-            let minter_results: MultiCallResults<TransactionCount> = MultiCallResults::from_non_empty_iter(vec![
-                (BLOCK_PI, first_tx_count.map_err(SingleCallError::from)),
-                (PUBLIC_NODE, second_tx_count.map_err(SingleCallError::from)),
-                (LLAMA_NODES, third_tx_count.map_err(SingleCallError::from)),
-            ])
-            .map(&TransactionCount::try_from, &|e| {
-                panic!("BUG: selected Nat should fit in a U256: {:?}", e)
-            });
-
-            prop_assert_eq_ignoring_provider(
-                ReduceWithStrategy::<Equality>::reduce(evm_results.clone()),
-                ReduceWithStrategy::<Equality>::reduce(minter_results.clone()),
-            )?;
-            prop_assert_eq_ignoring_provider(
-                ReduceWithStrategy::<MinByKey>::reduce(evm_results),
-                ReduceWithStrategy::<MinByKey>::reduce(minter_results),
-            )?;
         }
     }
 
@@ -1114,26 +1058,6 @@ mod evm_rpc_conversion {
         }
     }
 
-    pub fn evm_rpc_fee_history(
-        minter_fee_history: FeeHistory,
-        gas_used_ratio: Vec<f64>,
-    ) -> EvmFeeHistory {
-        EvmFeeHistory {
-            oldest_block: minter_fee_history.oldest_block.into(),
-            base_fee_per_gas: minter_fee_history
-                .base_fee_per_gas
-                .into_iter()
-                .map(Nat256::from)
-                .collect(),
-            gas_used_ratio,
-            reward: minter_fee_history
-                .reward
-                .into_iter()
-                .map(|rewards| rewards.into_iter().map(Nat256::from).collect())
-                .collect(),
-        }
-    }
-
     fn evm_rpc_block() -> EvmBlock {
         EvmBlock {
             base_fee_per_gas: Some(8_876_901_983_u64.into()),
@@ -1288,10 +1212,6 @@ mod evm_rpc_conversion {
                 )
                 .boxed(),
         }
-    }
-
-    fn arb_evm_rpc_transaction_count() -> impl Strategy<Value = EvmRpcResult<Nat256>> {
-        proptest::result::maybe_ok(arb_nat_256(), arb_evm_rpc_error())
     }
 
     fn arb_evm_rpc_send_raw_transaction_status(

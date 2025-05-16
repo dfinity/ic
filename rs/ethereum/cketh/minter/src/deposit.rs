@@ -2,7 +2,7 @@ use crate::eth_logs::{
     report_transaction_error, LogParser, LogScraping, ReceivedErc20LogScraping,
     ReceivedEthLogScraping, ReceivedEthOrErc20LogScraping, ReceivedEvent, ReceivedEventError,
 };
-use crate::eth_rpc::{BlockSpec, GetLogsParam, HttpOutcallError, LogEntry, Topic};
+use crate::eth_rpc::{BlockSpec, FixedSizeData, HttpOutcallError, LogEntry, Topic};
 use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
@@ -11,6 +11,7 @@ use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::{
     audit::process_event, event::EventType, mutate_state, read_state, State, TaskType,
 };
+use evm_rpc_client::{BlockTag, GetLogsArgs, Hex20, Hex32, Nat256};
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use num_traits::ToPrimitive;
@@ -238,11 +239,11 @@ where
         let range = subranges.pop_front().unwrap();
         let (from_block, to_block) = range.clone().into_inner();
 
-        let request = GetLogsParam {
-            from_block: BlockSpec::from(from_block),
-            to_block: BlockSpec::from(to_block),
-            address: vec![contract_address],
-            topics: topics.clone(),
+        let request = GetLogsArgs {
+            from_block: Some(BlockTag::Number(Nat256::from(from_block))),
+            to_block: Some(BlockTag::Number(Nat256::from(to_block))),
+            addresses: vec![Hex20::from(contract_address.into_bytes())],
+            topics: Some(into_evm_topic(topics.clone())),
         };
 
         let result = rpc_client
@@ -345,4 +346,18 @@ pub fn register_deposit_events(
         }
         report_transaction_error(error);
     }
+}
+
+fn into_evm_topic(topics: Vec<Topic>) -> Vec<Vec<Hex32>> {
+    let into_hex_32 = |data: FixedSizeData| Hex32::from(data.0);
+    let mut result = Vec::with_capacity(topics.len());
+    for topic in topics {
+        result.push(match topic {
+            Topic::Single(single_topic) => vec![into_hex_32(single_topic)],
+            Topic::Multiple(multiple_topic) => {
+                multiple_topic.into_iter().map(into_hex_32).collect()
+            }
+        });
+    }
+    result
 }

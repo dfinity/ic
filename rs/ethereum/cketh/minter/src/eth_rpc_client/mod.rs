@@ -1,17 +1,17 @@
 use crate::eth_rpc::{
-    Block, BlockSpec, BlockTag, Data, FeeHistory, FeeHistoryParams, FixedSizeData, GetLogsParam,
-    Hash, HttpOutcallError, LogEntry, Quantity, SendRawTransactionResult, Topic, HEADER_SIZE_LIMIT,
+    Block, BlockSpec, BlockTag, Data, FixedSizeData, Hash, HttpOutcallError, LogEntry, Quantity,
+    SendRawTransactionResult, HEADER_SIZE_LIMIT,
 };
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;
 use crate::logs::{PrintProxySink, INFO, TRACE_HTTP};
 use crate::numeric::{BlockNumber, GasAmount, LogIndex, TransactionCount, Wei, WeiPerGas};
 use crate::state::State;
+use candid::Nat;
 use evm_rpc_client::{
     Block as EvmBlock, BlockTag as EvmBlockTag, ConsensusStrategy, EthSepoliaService, EvmRpcClient,
-    FeeHistory as EvmFeeHistory, FeeHistoryArgs as EvmFeeHistoryArgs,
-    GetLogsArgs as EvmGetLogsArgs, GetTransactionCountArgs as EvmGetTransactionCountArgs, Hex20,
-    Hex32, IcRuntime, LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256,
+    FeeHistory, FeeHistoryArgs, GetLogsArgs, GetTransactionCountArgs as EvmGetTransactionCountArgs,
+    Hex20, IcRuntime, LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256,
     OverrideRpcConfig, RpcConfig as EvmRpcConfig, RpcError as EvmRpcError,
     RpcResult as EvmRpcResult, RpcService as EvmRpcService, RpcServices as EvmRpcServices,
     SendRawTransactionStatus as EvmSendRawTransactionStatus,
@@ -94,19 +94,10 @@ impl EthRpcClient {
 
     pub async fn eth_get_logs(
         &self,
-        params: GetLogsParam,
+        params: GetLogsArgs,
     ) -> Result<Vec<LogEntry>, MultiCallError<Vec<LogEntry>>> {
         self.evm_rpc_client
-            .eth_get_logs(EvmGetLogsArgs {
-                from_block: Some(into_evm_block_tag(params.from_block)),
-                to_block: Some(into_evm_block_tag(params.to_block)),
-                addresses: params
-                    .address
-                    .into_iter()
-                    .map(|a| Hex20::from(a.into_bytes()))
-                    .collect(),
-                topics: Some(into_evm_topic(params.topics)),
-            })
+            .eth_get_logs(params)
             .await
             .reduce()
             .into()
@@ -136,14 +127,10 @@ impl EthRpcClient {
 
     pub async fn eth_fee_history(
         &self,
-        params: FeeHistoryParams,
+        params: FeeHistoryArgs,
     ) -> Result<FeeHistory, MultiCallError<FeeHistory>> {
         self.evm_rpc_client
-            .eth_fee_history(EvmFeeHistoryArgs {
-                block_count: Nat256::from_be_bytes(params.block_count.to_be_bytes()),
-                newest_block: into_evm_block_tag(params.highest_block),
-                reward_percentiles: Some(params.reward_percentiles),
-            })
+            .eth_fee_history(params)
             .await
             .reduce()
             .into()
@@ -508,47 +495,18 @@ impl Reduce for EvmMultiRpcResult<Vec<EvmLogEntry>> {
     }
 }
 
-impl Reduce for MultiCallResults<Vec<LogEntry>> {
-    type Item = Vec<LogEntry>;
-
-    fn reduce(self) -> ReducedResult<Self::Item> {
-        self.reduce_with_equality().into()
-    }
-}
-
-impl Reduce for EvmMultiRpcResult<Option<EvmFeeHistory>> {
+impl Reduce for EvmMultiRpcResult<Option<FeeHistory>> {
     type Item = FeeHistory;
 
     fn reduce(self) -> ReducedResult<Self::Item> {
-        fn map_fee_history(fee_history: Option<EvmFeeHistory>) -> Result<FeeHistory, String> {
-            let fee_history = fee_history.ok_or("No fee history available")?;
-            Ok(FeeHistory {
-                oldest_block: BlockNumber::from(fee_history.oldest_block),
-                base_fee_per_gas: wei_per_gas_iter(fee_history.base_fee_per_gas),
-                reward: fee_history
-                    .reward
-                    .into_iter()
-                    .map(wei_per_gas_iter)
-                    .collect(),
-            })
-        }
-
-        fn wei_per_gas_iter(values: Vec<Nat256>) -> Vec<WeiPerGas> {
-            values.into_iter().map(WeiPerGas::from).collect()
-        }
-
-        ReducedResult::from_internal(self).map_reduce(&map_fee_history, |results| {
-            results.reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block)
-        })
-    }
-}
-
-impl Reduce for MultiCallResults<FeeHistory> {
-    type Item = FeeHistory;
-
-    fn reduce(self) -> ReducedResult<Self::Item> {
-        self.reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block)
-            .into()
+        ReducedResult::from_internal(self).map_reduce(
+            &|fee_history| fee_history.ok_or("No fee history available".to_string()),
+            |results| {
+                results.reduce_with_strict_majority_by_key(|fee_history| {
+                    Nat::from(fee_history.oldest_block.clone())
+                })
+            },
+        )
     }
 }
 
@@ -626,14 +584,6 @@ trait ReduceWithStrategy<S> {
 pub enum Equality {}
 pub enum MinByKey {}
 
-impl ReduceWithStrategy<Equality> for MultiCallResults<TransactionCount> {
-    type Item = TransactionCount;
-
-    fn reduce(self) -> ReducedResult<Self::Item> {
-        self.reduce_with_equality().into()
-    }
-}
-
 impl ReduceWithStrategy<Equality> for EvmMultiRpcResult<Nat256> {
     type Item = TransactionCount;
 
@@ -644,15 +594,6 @@ impl ReduceWithStrategy<Equality> for EvmMultiRpcResult<Nat256> {
             },
             MultiCallResults::reduce_with_equality,
         )
-    }
-}
-
-impl ReduceWithStrategy<MinByKey> for MultiCallResults<TransactionCount> {
-    type Item = TransactionCount;
-
-    fn reduce(self) -> ReducedResult<Self::Item> {
-        self.reduce_with_min_by_key(|transaction_count| *transaction_count)
-            .into()
     }
 }
 
@@ -808,23 +749,9 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
 
 fn into_evm_block_tag(block: BlockSpec) -> EvmBlockTag {
     match block {
-        BlockSpec::Number(n) => EvmBlockTag::Number(Nat256::from_be_bytes(n.to_be_bytes())),
+        BlockSpec::Number(n) => EvmBlockTag::Number(Nat256::from(n)),
         BlockSpec::Tag(BlockTag::Latest) => EvmBlockTag::Latest,
         BlockSpec::Tag(BlockTag::Safe) => EvmBlockTag::Safe,
         BlockSpec::Tag(BlockTag::Finalized) => EvmBlockTag::Finalized,
     }
-}
-
-fn into_evm_topic(topics: Vec<Topic>) -> Vec<Vec<Hex32>> {
-    let into_hex_32 = |data: FixedSizeData| Hex32::from(data.0);
-    let mut result = Vec::with_capacity(topics.len());
-    for topic in topics {
-        result.push(match topic {
-            Topic::Single(single_topic) => vec![into_hex_32(single_topic)],
-            Topic::Multiple(multiple_topic) => {
-                multiple_topic.into_iter().map(into_hex_32).collect()
-            }
-        });
-    }
-    result
 }

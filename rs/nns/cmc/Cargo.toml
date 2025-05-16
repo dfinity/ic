@@ -14,8 +14,7 @@ candid = { workspace = true }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 ic-base-types = { path = "../../types/base_types" }
-ic-cdk = "0.17.1"
-ic-cdk-macros = "0.17.1"
+ic-cdk = { workspace = true }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-dummy-getrandom-for-wasm = { path = "../../../packages/ic-dummy-getrandom-for-wasm" }
 ic-http-types = { path = "../../../packages/ic-http-types" }

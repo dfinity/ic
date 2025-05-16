@@ -10,21 +10,19 @@ This macro defines the overall build process for ICOS images, including:
 """
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("//bazel:defs.bzl", "file_size_check", "gzip_compress", "zstd_compress")
-load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
+load("//bazel:defs.bzl", "gzip_compress", "zstd_compress")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:boundary-guestos.bzl", boundary_component_files = "component_files")
 load("//ic-os/components:defs.bzl", "tree_hash")
 load("//ic-os/components/conformance_tests:defs.bzl", "component_file_references_test")
+load("//publish:defs.bzl", "artifact_bundle")
 load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "disk_image_no_tar", "ext4_image", "upgrade_image")
 
 def icos_build(
         name,
-        upload_prefix,
         image_deps_func,
         mode = None,
         malicious = False,
-        max_file_sizes = None,
         upgrades = True,
         vuln_scan = True,
         visibility = None,
@@ -37,11 +35,9 @@ def icos_build(
 
     Args:
       name: Name for the generated filegroup.
-      upload_prefix: Prefix to be used as the target when uploading
       image_deps_func: Function to be used to generate image manifest
       mode: dev or prod. If not specified, will use the value of `name`
       malicious: if True, bundle the `malicious_replica`
-      max_file_sizes: mapping of output file to max allowed size
       upgrades: if True, build upgrade images as well
       vuln_scan: if True, create targets for vulnerability scanning
       visibility: See Bazel documentation
@@ -49,13 +45,13 @@ def icos_build(
       build_local_base_image: if True, build the base images from scratch. Do not download the docker.io base image.
       installable: if True, create install and debug targets, else create launch ones.
       ic_version: the label pointing to the target that returns IC version
+
+    Returns:
+      A struct containing the labels of the images that were built.
     """
 
     if mode == None:
         mode = name
-
-    if max_file_sizes == None:
-        max_file_sizes = {}
 
     image_deps = image_deps_func(mode, malicious)
 
@@ -130,15 +126,11 @@ def icos_build(
         name = "file_contexts",
         src = "rootfs-tree.tar",
         path = "etc/selinux/default/contexts/files/file_contexts",
-        target_compatible_with = [
-            "@platforms//os:linux",
-        ],
+        target_compatible_with = ["@platforms//os:linux"],
         tags = ["manual"],
     )
 
-    # -------------------- Extract root partition --------------------
-
-    # Note that we defer injecting the files from images_deps["rootfs"]. These are mostly slower to build.
+    # -------------------- Extract root and boot partitions --------------------
 
     # NOTE: e2fsdroid does not support filenames with spaces, fortunately,
     # these only occur in firmware that we do not use.
@@ -156,22 +148,84 @@ def icos_build(
         "/usr/lib/firmware/brcm/brcmfmac4356-pcie.Intel Corporation-CHERRYVIEW D1 PLATFORM.txt.zst",
         "/usr/lib/firmware/brcm/brcmfmac4356-pcie.Xiaomi Inc-Mipad2.txt.zst",
     ]
-    ext4_image(
-        name = "partition-root-unsigned.tzst",
-        testonly = malicious,
-        src = ":rootfs-tree.tar",
-        file_contexts = ":file_contexts",
-        partition_size = image_deps["rootfs_size"],
-        strip_paths = PARTITION_ROOT_STRIP_PATHS,
-        extra_files = {
-            k: v
-            for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
-        },
-        target_compatible_with = [
-            "@platforms//os:linux",
-        ],
-        tags = ["manual", "no-cache"],
-    )
+
+    # Generate partition images for default image and test image (when upgrades is True).
+    for test_suffix in (["", "-test"] if upgrades else [""]):
+        partition_root = "partition-root" + test_suffix
+        partition_root_unsigned_tzst = partition_root + "-unsigned.tzst"
+        partition_root_signed_tzst = partition_root + ".tzst"
+        partition_root_hash = partition_root + "-hash"
+        partition_boot_tzst = "partition-boot" + test_suffix + ".tzst"
+        version_txt = "version" + test_suffix + ".txt"
+        extra_boot_args = "extra_boot" + test_suffix + "_args"
+
+        ext4_image(
+            name = partition_root_unsigned_tzst,
+            testonly = malicious,
+            src = ":rootfs-tree.tar",
+            file_contexts = ":file_contexts",
+            partition_size = image_deps["rootfs_size"],
+            strip_paths = PARTITION_ROOT_STRIP_PATHS,
+            extra_files = {
+                k: v
+                for k, v in (image_deps["rootfs"].items() + [(version_txt, "/opt/ic/share/version.txt:0644")])
+            },
+            target_compatible_with = ["@platforms//os:linux"],
+            tags = ["manual", "no-cache"],
+        )
+
+        ext4_image(
+            name = partition_boot_tzst,
+            src = ":rootfs-tree.tar",
+            file_contexts = ":file_contexts",
+            partition_size = image_deps["bootfs_size"],
+            subdir = "boot",
+            target_compatible_with = ["@platforms//os:linux"],
+            extra_files = {
+                k: v
+                for k, v in (
+                    image_deps["bootfs"].items() + [
+                        (version_txt, "/version.txt:0644"),
+                        (extra_boot_args, "/extra_boot_args:0644"),
+                    ]
+                )
+            },
+            tags = ["manual", "no-cache"],
+        )
+
+        # Sign only if extra_boot_args_template is provided
+        if "extra_boot_args_template" in image_deps:
+            extra_boot_args_template = str(image_deps["extra_boot_args_template"])
+            native.genrule(
+                name = "generate-" + partition_root_signed_tzst,
+                testonly = malicious,
+                srcs = [partition_root_unsigned_tzst],
+                outs = [partition_root_signed_tzst, partition_root_hash],
+                cmd = "$(location //toolchains/sysimage:proc_wrapper) " +
+                      "$(location //toolchains/sysimage:verity_sign) " +
+                      "-i $< -o $(location :" + partition_root_signed_tzst + ") " +
+                      "-r $(location " + partition_root_hash + ") " +
+                      "--dflate $(location //rs/ic_os/build_tools/dflate)",
+                executable = False,
+                tools = [
+                    "//toolchains/sysimage:proc_wrapper",
+                    "//toolchains/sysimage:verity_sign",
+                    "//rs/ic_os/build_tools/dflate",
+                ],
+                tags = ["manual", "no-cache"],
+            )
+
+            native.genrule(
+                name = "generate-" + extra_boot_args,
+                srcs = [extra_boot_args_template, partition_root_hash],
+                outs = [extra_boot_args],
+                cmd = "sed -e s/ROOT_HASH/$$(cat $(location " + partition_root_hash + "))/ " +
+                      "< $(location " + extra_boot_args_template + ") > $@",
+                tags = ["manual"],
+            )
+        else:
+            native.alias(name = partition_root_signed_tzst, actual = partition_root_unsigned_tzst, tags = ["manual", "no-cache"])
+            native.alias(name = extra_boot_args, actual = image_deps["extra_boot_args"], tags = ["manual"])
 
     component_file_references_test(
         name = name + "_component_file_references_test",
@@ -180,125 +234,6 @@ def icos_build(
         # Inherit tags for this test, to avoid triggering builds for local base images
         tags = tags,
     )
-
-    # -------------------- Extract boot partition --------------------
-
-    ext4_image(
-        name = "partition-boot.tzst",
-        src = ":rootfs-tree.tar",
-        file_contexts = ":file_contexts",
-        partition_size = image_deps["bootfs_size"],
-        subdir = "boot",
-        target_compatible_with = [
-            "@platforms//os:linux",
-        ],
-        extra_files = {
-            k: v
-            for k, v in (
-                image_deps["bootfs"].items() + [
-                    (":version.txt", "/version.txt:0644"),
-                    (":extra_boot_args", "/extra_boot_args:0644"),
-                ]
-            )
-        },
-        tags = ["manual", "no-cache"],
-    )
-
-    if upgrades:
-        ext4_image(
-            name = "partition-root-test-unsigned.tzst",
-            testonly = malicious,
-            src = ":rootfs-tree.tar",
-            file_contexts = ":file_contexts",
-            partition_size = image_deps["rootfs_size"],
-            strip_paths = PARTITION_ROOT_STRIP_PATHS,
-            extra_files = {
-                k: v
-                for k, v in (image_deps["rootfs"].items() + [(":version-test.txt", "/opt/ic/share/version.txt:0644")])
-            },
-            target_compatible_with = [
-                "@platforms//os:linux",
-            ],
-            tags = ["manual", "no-cache"],
-        )
-
-    # When boot_args are fixed, don't bother signing
-    if "boot_args_template" not in image_deps:
-        native.alias(name = "partition-root.tzst", actual = ":partition-root-unsigned.tzst", tags = ["manual", "no-cache"])
-        native.alias(name = "extra_boot_args", actual = image_deps["extra_boot_args"], tags = ["manual"])
-
-        if upgrades:
-            native.alias(name = "partition-root-test.tzst", actual = ":partition-root-test-unsigned.tzst", tags = ["manual", "no-cache"])
-            native.alias(name = "extra_boot_test_args", actual = image_deps["extra_boot_args"], tags = ["manual"])
-    else:
-        native.alias(name = "extra_boot_args_template", actual = image_deps["boot_args_template"], tags = ["manual"])
-
-        native.genrule(
-            name = "partition-root-sign",
-            testonly = malicious,
-            srcs = ["partition-root-unsigned.tzst"],
-            outs = ["partition-root.tzst", "partition-root-hash"],
-            cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
-            executable = False,
-            tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign", "//rs/ic_os/build_tools/dflate"],
-            tags = ["manual", "no-cache"],
-        )
-
-        native.genrule(
-            name = "extra_boot_args_root_hash",
-            srcs = [
-                ":extra_boot_args_template",
-                ":partition-root-hash",
-            ],
-            outs = ["extra_boot_args"],
-            cmd = "sed -e s/ROOT_HASH/$$(cat $(location :partition-root-hash))/ < $(location :extra_boot_args_template) > $@",
-            tags = ["manual"],
-        )
-
-        if upgrades:
-            native.genrule(
-                name = "partition-root-test-sign",
-                testonly = malicious,
-                srcs = ["partition-root-test-unsigned.tzst"],
-                outs = ["partition-root-test.tzst", "partition-root-test-hash"],
-                cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign) -i $< -o $(location :partition-root-test.tzst) -r $(location partition-root-test-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
-                tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign", "//rs/ic_os/build_tools/dflate"],
-                tags = ["manual", "no-cache"],
-            )
-
-            native.genrule(
-                name = "extra_boot_args_root_test_hash",
-                srcs = [
-                    ":extra_boot_args_template",
-                    ":partition-root-test-hash",
-                ],
-                outs = ["extra_boot_test_args"],
-                cmd = "sed -e s/ROOT_HASH/$$(cat $(location :partition-root-test-hash))/ < $(location :extra_boot_args_template) > $@",
-                tags = ["manual"],
-            )
-
-    if upgrades:
-        ext4_image(
-            name = "partition-boot-test.tzst",
-            src = ":rootfs-tree.tar",
-            file_contexts = ":file_contexts",
-            partition_size = image_deps["bootfs_size"],
-            subdir = "boot",
-            target_compatible_with = [
-                "@platforms//os:linux",
-            ],
-            extra_files = {
-                k: v
-                for k, v in (
-                    image_deps["bootfs"].items() + [
-                        (":version-test.txt", "/version.txt:0644"),
-                        (":extra_boot_test_args", "/extra_boot_args:0644"),
-                    ]
-                )
-            },
-            tags = ["manual", "no-cache"],
-        )
-
     # -------------------- Assemble disk partitions ---------------
 
     # Build a list of custom partitions to allow "injecting" variant-specific partition logic.
@@ -319,9 +254,7 @@ def icos_build(
         partitions = partitions,
         expanded_size = image_deps.get("expanded_size", default = None),
         tags = ["manual", "no-cache"],
-        target_compatible_with = [
-            "@platforms//os:linux",
-        ],
+        target_compatible_with = ["@platforms//os:linux"],
     )
 
     # Disk images just for testing.
@@ -331,9 +264,7 @@ def icos_build(
         partitions = partitions,
         expanded_size = image_deps.get("expanded_size", default = None),
         tags = ["manual", "no-cache"],
-        target_compatible_with = [
-            "@platforms//os:linux",
-        ],
+        target_compatible_with = ["@platforms//os:linux"],
     )
 
     zstd_compress(
@@ -343,93 +274,27 @@ def icos_build(
         tags = ["manual"],
     )
 
-    if "disk-img.tar.zst" in max_file_sizes:
-        file_size_check(
-            name = "disk-img.tar.zst",
-            max_file_size = max_file_sizes["disk-img.tar.zst"],
-        )
-
     # -------------------- Assemble upgrade image --------------------
 
     if upgrades:
-        upgrade_image(
-            name = "update-img.tar",
-            boot_partition = ":partition-boot.tzst",
-            root_partition = ":partition-root.tzst",
-            tags = ["manual", "no-cache"],
-            target_compatible_with = [
-                "@platforms//os:linux",
-            ],
-            version_file = ":version.txt",
-        )
+        for test_suffix in ["", "-test"]:
+            update_image_tar = "update-img" + test_suffix + ".tar"
 
-        zstd_compress(
-            name = "update-img.tar.zst",
-            srcs = [":update-img.tar"],
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
-        if "update-img.tar.zst" in max_file_sizes:
-            file_size_check(
-                name = "update-img.tar.zst",
-                max_file_size = max_file_sizes["update-img.tar.zst"],
+            upgrade_image(
+                name = update_image_tar,
+                boot_partition = ":partition-boot" + test_suffix + ".tzst",
+                root_partition = ":partition-root" + test_suffix + ".tzst",
+                tags = ["manual", "no-cache"],
+                target_compatible_with = ["@platforms//os:linux"],
+                version_file = ":version" + test_suffix + ".txt",
             )
 
-        upgrade_image(
-            name = "update-img-test.tar",
-            boot_partition = ":partition-boot-test.tzst",
-            root_partition = ":partition-root-test.tzst",
-            tags = ["manual", "no-cache"],
-            target_compatible_with = [
-                "@platforms//os:linux",
-            ],
-            version_file = ":version-test.txt",
-        )
-
-        zstd_compress(
-            name = "update-img-test.tar.zst",
-            srcs = [":update-img-test.tar"],
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
-        if "update-img-test.tar.zst" in max_file_sizes:
-            file_size_check(
-                name = "update-img-test.tar.zst",
-                max_file_size = max_file_sizes["update-img-test.tar.zst"],
-            )
-
-    # -------------------- Upload artifacts --------------------
-
-    upload_suffix = ""
-    if mode == "dev":
-        upload_suffix = "-dev"
-    if malicious:
-        upload_suffix += "-malicious"
-
-    if upload_prefix != None:
-        upload_artifacts(
-            name = "upload_disk-img",
-            inputs = [
-                ":disk-img.tar.zst",
-            ],
-            remote_subdir = upload_prefix + "/disk-img" + upload_suffix,
-            visibility = visibility,
-        )
-
-        if upgrades:
-            upload_artifacts(
-                name = "upload_update-img",
-                inputs = [
-                    ":update-img.tar.zst",
-                    ":update-img-test.tar.zst",
-                ],
-                remote_subdir = upload_prefix + "/update-img" + upload_suffix,
+            zstd_compress(
+                name = update_image_tar + ".zst",
+                srcs = [update_image_tar],
                 visibility = visibility,
+                tags = ["manual"],
             )
-
-    # end if upload_prefix != None
 
     # -------------------- Vulnerability Scanning Tool ------------
 
@@ -461,9 +326,7 @@ def icos_build(
 
     native.genrule(
         name = "echo-component-files-hash",
-        srcs = [
-            ":component-files-hash",
-        ],
+        srcs = [":component-files-hash"],
         outs = ["component-files-hash-script"],
         cmd = """
         HASH="$(location :component-files-hash)"
@@ -555,12 +418,8 @@ EOF
             for action, action_flags in (("install", ""), ("debug", "--defeat-installer")):
                 native.genrule(
                     name = "interactive-" + action + variant.replace(" ", "-"),
-                    srcs = [
-                        ":disk.img",
-                    ],
-                    tools = [
-                        ":launch-local-vm-script",
-                    ] + preproc_checks,
+                    srcs = [":disk.img"],
+                    tools = [":launch-local-vm-script"] + preproc_checks,
                     outs = ["interactive_" + action + variant.replace(" ", "_")],
                     cmd = """
             cat <<"EOF" > $@
@@ -577,12 +436,8 @@ EOF
             # VHOST for nested VMs is not configured at the moment (should be possible).
             native.genrule(
                 name = "launch-local-vm" + variant.replace(" ", "-"),
-                srcs = [
-                    ":disk.img",
-                ],
-                tools = [
-                    ":launch-local-vm-script",
-                ],
+                srcs = [":disk.img"],
+                tools = [":launch-local-vm-script"],
                 outs = ["launch_local_vm" + variant.replace(" ", "_")],
                 cmd = """
                 cat <<"EOF" > $@
@@ -611,6 +466,13 @@ EOF
         visibility = visibility,
         tags = tags,
     )
+
+    icos_images = struct(
+        disk_image = ":disk-img.tar.zst",
+        update_image = ":update-img.tar.zst",
+        update_image_test = ":update-img-test.tar.zst",
+    )
+    return icos_images
 
 # end def icos_build
 
@@ -807,14 +669,15 @@ EOF
     if mode == "dev":
         upload_suffix += "-dev"
 
-    upload_artifacts(
-        name = "upload_disk-img",
+    # Export checksums & build artifacts
+    artifact_bundle(
+        name = "bundle",
         inputs = [
             ":disk-img.tar.zst",
             ":disk-img.tar.gz",
         ],
-        remote_subdir = "boundary-os/disk-img" + upload_suffix,
-        visibility = visibility,
+        prefix = "boundary-os/disk-img" + upload_suffix,
+        visibility = ["//visibility:public"],
     )
 
     native.filegroup(
