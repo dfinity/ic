@@ -58,23 +58,23 @@ function define_guestos() {
 }
 
 function is_guestos_running() {
-    virsh list --state-running | grep " guestos " > /dev/null
+    virsh list --state-running | grep " guestos " >/dev/null
 }
 
 function stop_guestos() {
-    if [ "$(virsh list --state-shutoff | grep ' guestos ')" ]; then
-          write_log "GuestOS virtual machine is already stopped."
-          write_metric "hostos_guestos_service_stop" \
-              "0" \
-              "GuestOS virtual machine stop state" \
-              "gauge"
-      else
-          virsh destroy --graceful guestos
-          write_log "Stopping GuestOS virtual machine."
-          write_metric "hostos_guestos_service_stop" \
-              "1" \
-              "GuestOS virtual machine stop state" \
-              "gauge"
+    if is_guestos_running; then
+        virsh destroy --graceful guestos
+        write_log "Stopping GuestOS virtual machine."
+        write_metric "hostos_guestos_service_stop" \
+            "1" \
+            "GuestOS virtual machine stop state" \
+            "gauge"
+    else
+        write_log "GuestOS virtual machine is already stopped."
+        write_metric "hostos_guestos_service_stop" \
+            "0" \
+            "GuestOS virtual machine stop state" \
+            "gauge"
     fi
 }
 
@@ -141,16 +141,16 @@ function start_guestos() {
 }
 
 function wait_for_vm_shutdown() {
-  while true; do
-    virsh event guestos lifecycle
-    # When we terminate normally via systemd stop, the SIGTERM handler will shutdown the VM and this code isn't
-    # reached.
-    if ! is_guestos_running; then
-      write_log "GuestOS VM shut down unexpectedly."
-      systemd-notify --stopping --status="GuestOS VM shut down unexpectedly."
-      exit 1
-    fi
-  done
+    while true; do
+        virsh event guestos lifecycle
+        # When we terminate normally via systemd stop, the SIGTERM handler will shutdown the VM and this code isn't
+        # reached.
+        if ! is_guestos_running; then
+            write_log "GuestOS VM shut down unexpectedly."
+            systemd-notify --stopping --status="GuestOS VM shut down unexpectedly."
+            exit 1
+        fi
+    done
 }
 
 function main() {
