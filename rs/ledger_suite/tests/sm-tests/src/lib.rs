@@ -5475,6 +5475,13 @@ pub mod archiving {
         encode_init_args: fn(InitArgs) -> T,
         num_initial_balances: u64,
         get_blocks_fn: fn(&StateMachine, CanisterId, u64, usize) -> GenericGetBlocksResponse<B>,
+        get_archives: fn(&StateMachine, CanisterId) -> Vec<Principal>,
+        archive_get_blocks_fn: fn(
+            &StateMachine,
+            CanisterId,
+            u64,
+            usize,
+        ) -> GenericGetBlocksResponse<B>,
     ) where
         T: CandidType,
         B: Eq + Debug,
@@ -5537,6 +5544,30 @@ pub mod archiving {
         // transfer actually succeeded and was committed.
         let chain_length = get_blocks_fn(&env, ledger_id, initial_chain_length, 1).chain_length;
         assert_eq!(initial_chain_length + 1, chain_length);
+
+        // Since a number of blocks were sent to the archive, but not successfully purged from the
+        // ledger, it is possible to get some of them from either location. In particular, block 0
+        // should appear in both locations.
+        let ledger_blocks_res = get_blocks_fn(&env, ledger_id, 0, 1);
+        let archive_ids = get_archives(&env, ledger_id);
+        let archive_blocks_res = archive_get_blocks_fn(
+            &env,
+            CanisterId::unchecked_from_principal(PrincipalId::from(
+                *archive_ids.first().expect("should have one archive"),
+            )),
+            0,
+            1,
+        );
+        assert_eq!(
+            ledger_blocks_res
+                .blocks
+                .first()
+                .expect("ledger should contain block 0"),
+            archive_blocks_res
+                .blocks
+                .first()
+                .expect("archive should contain block 0")
+        );
     }
 
     // ----- Helper structures -----

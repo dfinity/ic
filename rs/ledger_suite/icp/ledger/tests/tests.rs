@@ -1828,6 +1828,8 @@ fn test_archiving_hits_instruction_limit_purging_blocks_from_ledger() {
     ic_ledger_suite_state_machine_tests::archiving::test_archiving_hits_instruction_limit_purging_blocks_from_ledger(
         ledger_wasm(), encode_init_args, 390_000,
         ic_ledger_suite_state_machine_tests::archiving::query_encoded_blocks,
+        icp_archives,
+        ic_ledger_suite_state_machine_tests::archiving::get_encoded_blocks,
     );
 }
 
