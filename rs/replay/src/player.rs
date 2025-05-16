@@ -34,7 +34,6 @@ use ic_interfaces_state_manager::{
 use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
-use ic_nervous_system_chunks::test_data::MegaBlob;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::{
     registry::{replica_version::v1::BlessedReplicaVersions, subnet::v1::SubnetRecord},
@@ -881,7 +880,7 @@ impl Player {
         self.certify_state_with_dummy_certification();
         let perform_query = Arc::new(Mutex::new(self.query_handler.clone()));
         self.runtime.block_on(registry_get_value(
-            /* key_source: */ (),
+            &make_blessed_replica_versions_key(),
             ingress_expiry,
             &perform_query,
         ))
@@ -944,7 +943,7 @@ impl Player {
         self.certify_state_with_dummy_certification();
         let perform_query = Arc::new(Mutex::new(self.query_handler.clone()));
         self.runtime.block_on(registry_get_value(
-            self.subnet_id,
+            &make_subnet_record_key(self.subnet_id),
             ingress_expiry,
             &perform_query,
         ))
@@ -1340,89 +1339,34 @@ impl<PerformQueryImpl: PerformQuery + Sync> GetChunk for GetChunkImpl<'_, Perfor
     }
 }
 
-// Prost actually already has something like this, but generating such
-// implementations is NOT enabled by default. I guess this is because it would
-// cause lots of code to be generated that most applications would not use.
-// Well, we only need this for two types, so instead of having Prost start
-// generating a zillion implementations for us, here, we just do it for the
-// types that we actually care about.
-pub trait SayMyName {
-    const NAME: &'static str;
-}
-
-impl SayMyName for BlessedReplicaVersions {
-    const NAME: &'static str = "BlessedReplicaVersions";
-}
-
-impl SayMyName for SubnetRecord {
-    const NAME: &'static str = "SubnetRecord";
-}
-
-impl SayMyName for MegaBlob {
-    const NAME: &'static str = "MegaBlob";
-}
-
-/// Make types that get stored in Registry know how to construct their own keys.
-//
-// We should really make this part of rs/protobuf so that it can be used all over the place.
-pub trait MakeKey {
-    type KeySource;
-    fn make_key(key_source: Self::KeySource) -> String;
-}
-
-impl MakeKey for BlessedReplicaVersions {
-    type KeySource = ();
-    fn make_key(_unique_record: ()) -> String {
-        make_blessed_replica_versions_key()
-    }
-}
-
-impl MakeKey for SubnetRecord {
-    type KeySource = SubnetId;
-    fn make_key(subnet_id: SubnetId) -> String {
-        make_subnet_record_key(subnet_id)
-    }
-}
-
-impl MakeKey for MegaBlob {
-    type KeySource = u64;
-    fn make_key(key: u64) -> String {
-        format!("daniel_wong_{}", key)
-    }
-}
-
-pub async fn public_only_for_test_registry_get_value<Record, KeySource>(
-    key_source: KeySource,
+pub async fn public_only_for_test_registry_get_value<Record>(
+    key: &str,
     ingress_expiry: Time,
     perform_query: &(impl PerformQuery + Sync),
 ) -> Result<Record, String>
 where
-    Record: RegistryValue + Default + SayMyName + MakeKey<KeySource = KeySource>,
+    Record: RegistryValue + Default,
 {
-    registry_get_value(key_source, ingress_expiry, perform_query).await
+    registry_get_value(key, ingress_expiry, perform_query).await
 }
 
-async fn registry_get_value<Record, KeySource>(
-    key_source: KeySource,
+async fn registry_get_value<Record>(
+    key: &str,
     ingress_expiry: Time,
     perform_query: &(impl PerformQuery + Sync),
 ) -> Result<Record, String>
 where
-    Record: RegistryValue + Default + SayMyName + MakeKey<KeySource = KeySource>,
+    Record: RegistryValue + Default,
 {
-    let key = Record::make_key(key_source).into_bytes();
-    let breadcrumbs = || format!("key={}", String::from_utf8_lossy(&key));
-
     // Construct request.
     let method_payload = serialize_get_value_request(
-        key.to_vec(),
+        key.as_bytes().to_vec(),
         None, // latest version
     )
     .map_err(|err| {
         format!(
-            "Failed to serialize get_value request where {}: {}",
-            breadcrumbs(),
-            err,
+            "Failed to serialize get_value request where key={}: {}",
+            key, err,
         )
     })?;
     let query = Query {
@@ -1444,27 +1388,25 @@ where
         Ok((Ok(WasmResult::Reply(reply)), _)) => reply,
         garbage => {
             return Err(format!(
-                "Did not get reply from Registry get_value call where {}: {:?}",
-                breadcrumbs(),
-                garbage,
+                "Did not get reply from Registry get_value call where key={}: {:?}",
+                key, garbage,
             ));
         }
     };
 
-    // Unpack reply
+    // Unpack reply.
     let reply = deserialize_get_value_response(reply).map_err(|err| {
         format!(
             "Unable to deserialize the reply from a Registry canister get_value \
-             method call where {}: {:?}",
-            breadcrumbs(),
-            err,
+             method call where key={}: {:?}",
+            key, err,
         )
     })?;
     let Some(content) = reply.content else {
         return Err(format!(
             "Got a reply from Registry to get_value call, and was able to \
-             deserialize it, but no content field was populated. {}",
-            breadcrumbs(),
+             deserialize it, but no content field was populated. key={}",
+            key,
         ));
     };
     let get_chunk = GetChunkImpl { perform_query };
@@ -1472,14 +1414,18 @@ where
         .await
         .map_err(|err| {
             format!(
-                "Unable to dechunkify get_value response where {}: {:?}",
-                breadcrumbs(),
-                err,
+                "Unable to dechunkify get_value response where key={}: {:?}",
+                key, err,
             )
         })?;
     let record: Record = deserialize_registry_value::<Record>(Ok(Some(record)))
-        .map_err(|err| format!("{}", err))?
-        .ok_or_else(|| format!("{} does not exist", Record::NAME))?;
+        .map_err(|err| {
+            format!(
+                "Failed to deserialize content of Registry record with key={}: {}",
+                key, err,
+            )
+        })?
+        .ok_or_else(|| format!("Registry key {} does not exist", key))?;
 
     // Nice reply!
     Ok(record)

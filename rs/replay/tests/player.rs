@@ -63,11 +63,7 @@ impl PerformQuery for PerformQueryImpl<'_> {
             }
         };
 
-        let result = (
-            result,
-            // Not sure if this is right. Indirection overload!
-            before_call_time,
-        );
+        let result = (result, before_call_time);
 
         Ok(Ok(result))
     }
@@ -113,10 +109,13 @@ async fn test_registry_get_value() {
     let perform_query = PerformQueryImpl {
         pocket_ic: &pocket_ic,
     };
-    let observed_mega_blob: MegaBlob =
-        registry_get_value(42, expiry_time_from_now(), &perform_query)
-            .await
-            .unwrap();
+    let observed_mega_blob: MegaBlob = registry_get_value(
+        &format!("daniel_wong_42"),
+        expiry_time_from_now(),
+        &perform_query,
+    )
+    .await
+    .unwrap();
 
     // Step 3: Verify result(s).
 
