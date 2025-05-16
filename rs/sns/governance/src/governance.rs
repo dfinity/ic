@@ -2025,9 +2025,8 @@ impl Governance {
         let time_window_seconds = request.time_window_seconds.map_or(
             Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
-                format!(
-                    "Error: parsing the request failed on unwrapping `time_window_seconds` field"
-                ),
+                "Error: parsing the request failed on unwrapping `time_window_seconds` field"
+                    .to_string(),
             )),
             |time_window_seconds| Ok(time_window_seconds),
         )?;
@@ -2095,13 +2094,13 @@ impl Governance {
                     ICRC3Value::Nat(ts) => Ok(ts.clone()),
                     _ => Err(GovernanceError::new_with_message(
                         ErrorType::PreconditionFailed,
-                        format!("Error parsing the block failed: missing timestamp"),
+                        "Error parsing the block failed: missing timestamp".to_string(),
                     )),
                 },
             ),
             _ => Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
-                format!("Error parsing the block failed: missing timestamp"),
+                "Error parsing the block failed: missing timestamp".to_string(),
             )),
         }
     }
