@@ -552,17 +552,24 @@ fn canister_history_cleared_if_canister_out_of_cycles() {
         user_id2,
         ic00::IC_00,
         Method::InstallCode,
-        InstallCodeArgs::new(
-            Install,
-            canister_id,
-            test_canister,
-            vec![],
-            Some(1), // set compute allocation to 1 per cent
-            None,
-        )
+        InstallCodeArgs::new(Install, canister_id, test_canister, vec![], None, None).encode(),
+    )
+    .unwrap();
+    env.execute_ingress_as(
+        user_id2,
+        ic00::IC_00,
+        Method::UpdateSettings,
+        UpdateSettingsArgs {
+            canister_id: canister_id.into(),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_compute_allocation(1)
+                .build(),
+            sender_canister_version: Some(666), // ignored for ingress messages
+        }
         .encode(),
     )
     .unwrap();
+
     // update reference canister history
     reference_change_entries.push(CanisterChange::new(
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
