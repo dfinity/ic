@@ -1560,4 +1560,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
         splicing_config = splicing_config(
             resolver_version = "2",
         ),
+        supported_platform_triples =
+            [
+                "aarch64-apple-darwin",
+                "aarch64-unknown-linux-gnu",
+                "wasm32-unknown-unknown",
+                "x86_64-apple-darwin",
+                "x86_64-unknown-linux-gnu",
+            ],
     )
