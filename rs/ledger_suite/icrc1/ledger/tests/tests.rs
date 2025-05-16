@@ -549,7 +549,7 @@ fn encode_icrc106_upgrade_args(index_principal: Option<Principal>) -> LedgerArgu
 
 #[test]
 fn test_icrc106_unsupported_if_index_not_set() {
-    ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_unsupported_if_index_not_set(
+    ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_supported_even_if_index_not_set(
         ledger_wasm(),
         encode_init_args,
         encode_icrc106_upgrade_args,
@@ -569,6 +569,17 @@ fn test_icrc106_set_index_in_upgrade() {
     ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_set_index_in_upgrade(
         ledger_wasm(),
         encode_init_args,
+        encode_icrc106_upgrade_args,
+    );
+}
+
+#[test]
+fn test_upgrade_from_mainnet_ledger_version() {
+    ic_ledger_suite_state_machine_tests::icrc_106::test_upgrade_downgrade_with_mainnet_ledger(
+        ledger_mainnet_wasm(),
+        ledger_wasm(),
+        encode_init_args,
+        encode_upgrade_args,
         encode_icrc106_upgrade_args,
     );
 }

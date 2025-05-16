@@ -290,19 +290,6 @@ fn icrc21_consent_message(
     .expect("failed to decode icrc21_canister_call_consent_message response")
 }
 
-fn icrc106_get_index_principal(
-    env: &StateMachine,
-    ledger: CanisterId,
-) -> Result<Principal, Icrc106Error> {
-    Decode!(
-        &env.query(ledger, "icrc106_get_index_principal", Encode!().unwrap())
-            .expect("failed to query icrc106_get_index_principal")
-            .bytes(),
-        Result<Principal, Icrc106Error>
-    )
-    .expect("failed to decode icrc106_get_index_principal response")
-}
-
 pub fn get_all_ledger_and_archive_blocks<Tokens: TokensType>(
     state_machine: &StateMachine,
     ledger_id: CanisterId,
