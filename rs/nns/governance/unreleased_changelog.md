@@ -10,6 +10,7 @@ on the process that this file is part of, see
 ## Added
 
 * The `DisburseMaturity` neuron command is enabled. See https://forum.dfinity.org/t/disburse-maturity-in-nns/43228 for more details.
+* Expose a new metric `voting_power_snapshots_latest_snapshot_is_spike`.
 
 ## Changed
 
