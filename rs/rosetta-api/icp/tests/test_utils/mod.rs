@@ -38,12 +38,14 @@ pub struct TestLedger {
     pub submit_queue: RwLock<Vec<HashedBlock>>,
     pub transfer_fee: Tokens,
     pub next_block_timestamp: Mutex<TimeStamp>,
+    pub stop_token: Arc<AtomicBool>,
 }
 
 impl TestLedger {
-    pub fn new() -> Self {
+    pub fn new(stop_token: Arc<AtomicBool>) -> Self {
         Self {
-            blockchain: RwLock::new(Blocks::new_in_memory(false).unwrap()),
+            stop_token,
+            blockchain: RwLock::new(Blocks::new_in_memory(false, false).unwrap()),
             canister_id: CanisterId::unchecked_from_principal(
                 PrincipalId::from_str("5v3p4-iyaaa-aaaaa-qaaaa-cai").unwrap(),
             ),
@@ -99,7 +101,7 @@ fn next_millisecond(t: TimeStamp) -> TimeStamp {
 
 impl Default for TestLedger {
     fn default() -> Self {
-        Self::new()
+        Self::new(Arc::new(AtomicBool::new(false)))
     }
 }
 

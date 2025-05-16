@@ -58,12 +58,13 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         store_max_blocks: Option<u64>,
         verification_info: Option<VerificationInfo>,
         enable_rosetta_blocks: bool,
+        optimize_search_indexes: bool,
     ) -> Result<LedgerBlocksSynchronizer<B>, Error> {
         let rosetta_metrics =
             RosettaMetrics::new("ICP".to_string(), "ryjl3-tyaaa-aaaaa-aaaba-cai".to_string());
         let mut blocks = match store_location {
-            Some(loc) => Blocks::new_persistent(loc, enable_rosetta_blocks)?,
-            None => Blocks::new_in_memory(enable_rosetta_blocks)?,
+            Some(loc) => Blocks::new_persistent(loc, enable_rosetta_blocks, optimize_search_indexes)?,
+            None => Blocks::new_in_memory(enable_rosetta_blocks, optimize_search_indexes)?,
         };
 
         if let Some(blocks_access) = &blocks_access {
@@ -499,6 +500,7 @@ mod test {
             /* store_location = */ None,
             /* store_max_blocks = */ None,
             /* verification_info = */ None,
+            false,
             false,
         )
         .await

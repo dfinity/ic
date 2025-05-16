@@ -150,6 +150,7 @@ impl LedgerClient {
         offline: bool,
         root_key: Option<ThresholdSigPublicKey>,
         enable_rosetta_blocks: bool,
+        optimize_search_indexes: bool,
     ) -> Result<LedgerClient, ApiError> {
         let canister_access = if offline {
             None
@@ -186,6 +187,7 @@ impl LedgerClient {
             store_max_blocks,
             verification_info,
             enable_rosetta_blocks,
+            optimize_search_indexes,
         )
         .await?;
 
