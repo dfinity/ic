@@ -10,6 +10,7 @@ use clap::Parser;
 use http;
 use ic_base_types::NodeId;
 use ic_bn_lib::http::{Client as HttpClient, ConnInfo};
+use ic_bn_lib::prometheus::Registry;
 use ic_certification_test_utils::CertificateBuilder;
 use ic_certification_test_utils::CertificateData::*;
 use ic_crypto_tree_hash::Digest;
@@ -33,11 +34,10 @@ use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey, replica_version::ReplicaVersion, time::Time,
     CanisterId, RegistryVersion, SubnetId,
 };
-use prometheus::Registry;
 use reqwest;
 
+use crate::cache::CacheState;
 use crate::{
-    cache::Cache,
     cli::Cli,
     core::setup_router,
     persist::{Persist, Persister, Routes},
@@ -282,6 +282,7 @@ pub fn setup_test_router(
         "--obs-log-null",
         "--retry-update-call",
     ];
+
     if !enable_logging {
         args.push("--obs-disable-request-logging");
     }
@@ -291,6 +292,11 @@ pub fn setup_test_router(
     if rate_limit_subnet != "0" {
         args.push("--rate-limit-per-second-per-subnet");
         args.push(rate_limit_subnet.as_str());
+    }
+
+    if enable_cache {
+        args.push("--cache-size");
+        args.push("1048576");
     }
 
     #[cfg(not(feature = "tls"))]
@@ -331,9 +337,7 @@ pub fn setup_test_router(
         None,
         &cli,
         &metrics_registry,
-        enable_cache.then_some(Arc::new(
-            Cache::new(10485760, 262144, Duration::from_secs(1), false).unwrap(),
-        )),
+        enable_cache.then(|| Arc::new(CacheState::new(&cli.cache, &Registry::new()).unwrap())),
         salt,
     );
 

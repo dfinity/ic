@@ -19,5 +19,5 @@ CANISTER_NAME_TO_MAX_COMPRESSED_WASM_SIZE_E5_BYTES = {
     "governance-canister.wasm.gz": 17,
     "governance-canister_test.wasm.gz": 19,
     "registry-canister.wasm.gz": 14,
-    "root-canister.wasm.gz": 4,
+    "root-canister.wasm.gz": 5,
 }
