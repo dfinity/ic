@@ -3405,6 +3405,17 @@ impl StateMachine {
             .contains_key(&canister)
     }
 
+    /// Returns all the canister ids.
+    pub fn get_canister_ids(&self) -> Vec<CanisterId> {
+        self.state_manager
+            .get_latest_state()
+            .take()
+            .canister_states
+            .keys()
+            .cloned()
+            .collect()
+    }
+
     /// Returns true if the canister with the specified id exists and is not empty.
     pub fn canister_not_empty(&self, canister: CanisterId) -> bool {
         self.state_manager

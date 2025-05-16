@@ -43,6 +43,24 @@ fn new_get_chunk() -> MockGetChunk {
 }
 
 #[tokio::test]
+async fn test_dechunkify_get_value_content() {
+    // Step 1: Prepare the world. Actually, this is done in the lazy_static +
+    // new_get_chunk fixture, so our job here is trivial.
+
+    // Step 2: Run the code under test.
+    let dechunkified = dechunkify_get_value_response_content(
+        high_capacity_registry_get_value_response::Content::LargeValueChunkKeys(
+            LARGE_VALUE_CHUNK_KEYS.clone(),
+        ),
+        &new_get_chunk(),
+    )
+    .await;
+
+    // Step 3: Verify result(s).
+    assert_eq!(dechunkified, Ok(RECONSTITUTED_MONOLITHIC_BLOB.clone()));
+}
+
+#[tokio::test]
 async fn test_dechunkify_mutation_value() {
     // Step 1: Prepare the world. Actually, this is done in the lazy_static +
     // new_get_chunk fixture, so our job here is trivial.

@@ -548,7 +548,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.12",
             ),
             "http": crate.spec(
-                version = "^1.2.0",
+                version = "^1.3.1",
             ),
             "http-body": crate.spec(
                 version = "^1.0.1",
@@ -602,7 +602,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-bn-lib": crate.spec(
                 git = "https://github.com/dfinity/ic-bn-lib",
-                rev = "686cff6ccd422716d48767a299ab33044a27d4ad",
+                rev = "ec4a6b4abab2d94e09c4d5fee2d57d7bb1260835",
+                features = [
+                    "acme_alpn",
+                ],
             ),
             "ic-btc-interface": crate.spec(
                 version = "^0.2.2",
@@ -627,13 +630,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ic-cdk-timers": crate.spec(
                 version = "^0.11.0",
             ),
-            "ic-cdk-macros": crate.spec(
-                version = "^0.17.2",
-            ),
-            "ic-cdk-macros-next": crate.spec(
-                package = "ic-cdk-macros",
-                version = "^0.18.0",
-            ),
             "ic-certified-map": crate.spec(
                 version = "^0.3.1",
             ),
@@ -645,7 +641,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-gateway": crate.spec(
                 git = "https://github.com/dfinity/ic-gateway",
-                rev = "469d2daee8b44aadb46400bcb2832d560baf7272",
+                rev = "ed8539d9edd45b97148c46b8020fa6d7ebd48c07",
+                default_features = False,
             ),
             "ic-http-certification": crate.spec(
                 version = "3.0.3",
@@ -1455,8 +1452,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "serde",
                 ],
             ),
+            # DO NOT upgrade to >=1.13 unless you are ready to deal with problems.
+            # This breaks `wasm32-unknown-unknown` compatibility.
+            # Read https://github.com/uuid-rs/uuid/releases/tag/1.13.0
             "uuid": crate.spec(
-                version = "^1.11.0",
+                version = "=1.12.1",
                 features = [
                     "v4",
                     "serde",
@@ -1560,4 +1560,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
         splicing_config = splicing_config(
             resolver_version = "2",
         ),
+        supported_platform_triples =
+            [
+                "aarch64-apple-darwin",
+                "aarch64-unknown-linux-gnu",
+                "wasm32-unknown-unknown",
+                "x86_64-apple-darwin",
+                "x86_64-unknown-linux-gnu",
+            ],
     )

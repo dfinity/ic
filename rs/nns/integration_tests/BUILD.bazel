@@ -108,7 +108,6 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:async-trait",
-    "@crate_index//:ic-cdk-macros",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [
     ],
