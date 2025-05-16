@@ -6,7 +6,7 @@ use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_2_ID, TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
-use ic_nns_common::types::NeuronId;
+use ic_nns_common::types::{NeuronId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID};
 use ic_nns_governance_api::NnsFunction;
 use ic_nns_gtc::{
@@ -18,7 +18,7 @@ use ic_nns_test_utils::{
     governance::{
         bump_gzip_timestamp, get_pending_proposals, reinstall_nns_canister_by_proposal,
         submit_external_update_proposal, upgrade_nns_canister_by_proposal,
-        upgrade_nns_canister_with_arg_by_proposal, HardResetNnsRootToVersionPayload,
+        upgrade_nns_canister_with_arg_by_proposal,
     },
     itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
 };
@@ -110,11 +110,13 @@ fn test_reinstall_and_upgrade_canisters_with_state_changes() {
             Sender::from_keypair(&TEST_NEURON_2_OWNER_KEYPAIR),
             NeuronId(TEST_NEURON_2_ID),
             // Random proposal type
-            NnsFunction::HardResetNnsRootToVersion,
+            NnsFunction::IcpXdrConversionRate,
             // Payload itself doesn't matter
-            HardResetNnsRootToVersionPayload {
-                wasm_module: vec![],
-                init_arg: vec![],
+            UpdateIcpXdrConversionRatePayload {
+                data_source: "".to_string(),
+                timestamp_seconds: 1,
+                xdr_permyriad_per_icp: 100,
+                reason: None,
             },
             "<proposal created by test_reinstall_and_upgrade_canisters_with_state_changes>"
                 .to_string(),
@@ -164,11 +166,13 @@ fn test_reinstall_and_upgrade_canisters_with_state_changes() {
             Sender::from_keypair(&TEST_NEURON_2_OWNER_KEYPAIR),
             NeuronId(TEST_NEURON_2_ID),
             // Random proposal type
-            NnsFunction::HardResetNnsRootToVersion,
+            NnsFunction::IcpXdrConversionRate,
             // Payload itself doesn't matter
-            HardResetNnsRootToVersionPayload {
-                wasm_module: vec![],
-                init_arg: vec![],
+            UpdateIcpXdrConversionRatePayload {
+                data_source: "".to_string(),
+                timestamp_seconds: 1,
+                xdr_permyriad_per_icp: 100,
+                reason: None,
             },
             "<proposal created by test_reinstall_and_upgrade_canisters_with_state_changes>"
                 .to_string(),
