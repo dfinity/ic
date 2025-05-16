@@ -78,7 +78,7 @@ runs:
             done
 
 
-            if [[ $diff_only == "true" ]]; then
+            if [[ $diff_only == "truenope" ]]; then
                 target_pattern_file=$(mktemp)
                 trap "rm $target_pattern_file" INT TERM EXIT
 

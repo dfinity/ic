@@ -10,7 +10,7 @@ if [[ $RELEASE_BUILD == "true" ]]; then
 fi
 
 # run full non-release build if not asked to diff
-if ! [ "${RUN_ON_DIFF_ONLY:-}" == "true" ]; then
+if ! [ "${RUN_ON_DIFF_ONLY:-}" == "truenope" ]; then
     ci/container/build-ic.sh -i -c -b --no-release
     exit 0
 fi
