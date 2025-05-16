@@ -15,7 +15,7 @@ filegroup(
 # need it.
 genrule(
     name = "libjemalloc",
-    srcs = [":jemalloc_private"],
+    srcs = [":jemalloc_private_"],
     outs = ["libjemalloc.a"],
 
     # Just iterate over the outputs of `configure_make` until we find the static archive
@@ -32,7 +32,7 @@ genrule(
 
 # The actual jemalloc build, not exported because not used.
 configure_make(
-    name = "jemalloc_private",
+    name = "jemalloc_private_",
     autoconf = True,
     configure_in_place = True,
 
@@ -49,6 +49,7 @@ configure_make(
 
     # Specify the name for the static archive instead of defaulting to <rulename>.a
     out_static_libs = ["libjemalloc.a"],
+    tags = ["manual", "no-cache"],
 
     # Ensures only the static archive is built. Otherwise (make) targets (including jemalloc.sh) cause
     # non-determinism in the build and aren't necessary for us.
