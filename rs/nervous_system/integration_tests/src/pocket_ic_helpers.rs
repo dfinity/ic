@@ -465,6 +465,11 @@ impl NnsInstaller {
         self
     }
 
+    pub fn with_test_registry_canister(&mut self) -> &mut Self {
+        self.with_test_registry_canister = true;
+        self
+    }
+
     /// Requests the NNS Governance to be initialized with the following neurons.
     /// Mutually exclusive with `with_neurons_fund_hotkeys`.
     pub fn with_neurons(&mut self, neurons: Vec<Neuron>) -> &mut Self {

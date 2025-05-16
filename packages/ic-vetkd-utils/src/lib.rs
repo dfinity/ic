@@ -49,11 +49,21 @@ fn hash_to_scalar(input: &[u8], domain_sep: &str) -> ic_bls12_381::Scalar {
     s[0]
 }
 
-fn prefix_with_len(bytes: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(bytes.len() + 8);
-    out.extend_from_slice(&(bytes.len() as u64).to_be_bytes());
-    out.extend_from_slice(bytes);
-    out
+fn hash_to_scalar_two_inputs(
+    input1: &[u8],
+    input2: &[u8],
+    domain_sep: &str,
+) -> ic_bls12_381::Scalar {
+    let combined_input = {
+        let mut c = Vec::with_capacity(2 * 8 + input1.len() + input2.len());
+        c.extend_from_slice(&(input1.len() as u64).to_be_bytes());
+        c.extend_from_slice(input1);
+        c.extend_from_slice(&(input2.len() as u64).to_be_bytes());
+        c.extend_from_slice(input2);
+        c
+    };
+
+    hash_to_scalar(&combined_input, domain_sep)
 }
 
 #[cfg_attr(feature = "js", wasm_bindgen)]
@@ -114,6 +124,70 @@ pub fn is_valid_transport_public_key_encoding(bytes: &[u8]) -> bool {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+/// Error indicating deserializing a derived public key failed
+pub enum PublicKeyDeserializationError {
+    /// The public key is invalid
+    InvalidPublicKey,
+}
+
+#[cfg_attr(feature = "js", wasm_bindgen)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+/// A master VetKD public key
+pub struct MasterPublicKey {
+    point: G2Affine,
+}
+
+impl MasterPublicKey {
+    const BYTES: usize = G2AFFINE_BYTES;
+
+    // TODO(CRP-2797) add
+    // pub fn production_key(key_id: SomeEnum) -> Self
+
+    /// Deserializes a (derived) public key.
+    ///
+    /// Only compressed points are supported.
+    ///
+    /// Normally the bytes provided here will have been returned by the
+    /// Internet Computer's `vetkd_public_key`` management canister interface.
+    ///
+    /// Returns an error if the key is invalid (e.g., it has invalid length,
+    /// i.e., not 96 bytes, it is not in compressed format, is is not a point
+    /// on the curve, it is not torsion-free).
+    pub fn deserialize(bytes: &[u8]) -> Result<Self, PublicKeyDeserializationError> {
+        let dpk_bytes: &[u8; Self::BYTES] = bytes
+            .try_into()
+            .map_err(|_e: TryFromSliceError| PublicKeyDeserializationError::InvalidPublicKey)?;
+        let dpk = option_from_ctoption(G2Affine::from_compressed(dpk_bytes))
+            .ok_or(PublicKeyDeserializationError::InvalidPublicKey)?;
+        Ok(Self { point: dpk })
+    }
+
+    /// Perform first-stage derivation of a canister public key from the master public key
+    ///
+    /// To create the derived public key in VetKD, a two step derivation is performed;
+    ///
+    /// - The first step creates a canister public key, sometimes called canister master key.
+    ///   This step is implemented by the `derive_canister_key` method.
+    ///
+    /// - The second step derives a canister sub-key which incorporates the "context" value provided to the
+    ///   `vetkd_public_key` management canister interface. This step is implemented by the
+    ///   `DerivedPublicKey::derive_sub_key` method.
+    pub fn derive_canister_key(&self, canister_id: &[u8]) -> DerivedPublicKey {
+        let dst = "ic-vetkd-bls12-381-g2-canister-id";
+
+        let offset = hash_to_scalar_two_inputs(&self.serialize(), canister_id, dst);
+
+        let derived_key = G2Affine::from(self.point + G2Affine::generator() * offset);
+        DerivedPublicKey { point: derived_key }
+    }
+
+    /// Return the byte encoding of this master public key
+    pub fn serialize(&self) -> Vec<u8> {
+        self.point.to_compressed().to_vec()
+    }
+}
+
 #[cfg_attr(feature = "js", wasm_bindgen)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 /// A derived public key
@@ -125,13 +199,6 @@ impl From<DerivedPublicKey> for G2Affine {
     fn from(public_key: DerivedPublicKey) -> Self {
         public_key.point
     }
-}
-
-#[derive(Copy, Clone, Debug)]
-/// Error indicating deserializing a derived public key failed
-pub enum DerivedPublicKeyDeserializationError {
-    /// The public key is invalid
-    InvalidPublicKey,
 }
 
 impl DerivedPublicKey {
@@ -147,21 +214,23 @@ impl DerivedPublicKey {
     /// Returns an error if the key is invalid (e.g., it has invalid length,
     /// i.e., not 96 bytes, it is not in compressed format, is is not a point
     /// on the curve, it is not torsion-free).
-    pub fn deserialize(bytes: &[u8]) -> Result<Self, DerivedPublicKeyDeserializationError> {
-        let dpk_bytes: &[u8; Self::BYTES] = bytes.try_into().map_err(|_e: TryFromSliceError| {
-            DerivedPublicKeyDeserializationError::InvalidPublicKey
-        })?;
+    pub fn deserialize(bytes: &[u8]) -> Result<Self, PublicKeyDeserializationError> {
+        let dpk_bytes: &[u8; Self::BYTES] = bytes
+            .try_into()
+            .map_err(|_e: TryFromSliceError| PublicKeyDeserializationError::InvalidPublicKey)?;
         let dpk = option_from_ctoption(G2Affine::from_compressed(dpk_bytes))
-            .ok_or(DerivedPublicKeyDeserializationError::InvalidPublicKey)?;
+            .ok_or(PublicKeyDeserializationError::InvalidPublicKey)?;
         Ok(Self { point: dpk })
     }
 
-    /// Perform second-stage derivation of a public key
+    /// Perform second-stage derivation of a public key from a canister public key
     ///
-    /// To create the derived public key in VetKD, a two step derivation is performed. The first step
-    /// creates a key that is specific to the canister that is making VetKD requests to the
-    /// management canister, sometimes called canister master key. The second step incorporates the
-    /// "derivation context" value provided to the `vetkd_public_key` management canister interface.
+    /// To create the derived public key in VetKD, a two step derivation is performed;
+    ///
+    /// - The first step creates a canister public key, sometimes called canister master key. This step is implemented
+    ///   by the `MasterKey::derive_canister_key` method.
+    /// - The second step derives a canister sub-key which incorporates the "context" value provided to the
+    ///   `vetkd_public_key` management canister interface. This step is implemented by the `derive_sub_key` method.
     ///
     /// If `vetkd_public_key` is invoked with an empty derivation context, it simply returns the
     /// canister master key. Then the second derivation step can be done offline, using this
@@ -174,7 +243,7 @@ impl DerivedPublicKey {
 
         let dst = "ic-vetkd-bls12-381-g2-context";
 
-        let offset = hash_to_scalar(&prefix_with_len(context), dst);
+        let offset = hash_to_scalar_two_inputs(&self.serialize(), context, dst);
 
         let derived_key = G2Affine::from(self.point + G2Affine::generator() * offset);
         Self { point: derived_key }

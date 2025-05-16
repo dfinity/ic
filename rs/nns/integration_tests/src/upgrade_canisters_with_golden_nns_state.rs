@@ -7,8 +7,9 @@ use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
-    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NODE_REWARDS_CANISTER_ID,
-    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID,
+    NODE_REWARDS_CANISTER_ID, PROTOCOL_CANISTER_IDS, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance_api::{
     MonthlyNodeProviderRewards, NetworkEconomics, Vote, VotingPowerEconomics,
@@ -374,6 +375,8 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     perform_sequence_of_upgrades(&nns_canister_upgrade_sequence);
 
     perform_sanity_check_after_upgrade(&state_machine, &nns_canister_upgrade_sequence);
+
+    check_canisters_are_all_protocol_canisters(&state_machine);
 }
 
 fn perform_sanity_check_after_upgrade(
@@ -463,4 +466,23 @@ fn perform_sanity_check_after_upgrade_governance(state_machine: &StateMachine) {
         "After advancing some time after upgrade, total minted node provider rewards decreased too much. Before: {}, After: {}",
         total_rewards_xdr_e8s_before, total_rewards_xdr_e8s_after
     );
+}
+
+// Check that all canisters in the NNS subnet (except for exempted ones) are protocol canisters. If
+// this fails, either add the canister id into `non_protocol_canister_ids_in_nns_subnet` or
+// `PROTOCOL_CANISTER_IDS`.
+fn check_canisters_are_all_protocol_canisters(state_machine: &StateMachine) {
+    let canister_ids = state_machine.get_canister_ids();
+    let non_protocol_canister_ids_in_nns_subnet = [NNS_UI_CANISTER_ID, SNS_WASM_CANISTER_ID];
+
+    for canister_id in canister_ids {
+        if non_protocol_canister_ids_in_nns_subnet.contains(&canister_id) {
+            continue;
+        }
+        assert!(
+            PROTOCOL_CANISTER_IDS.contains(&&canister_id),
+            "Canister {} is in the NNS subnet but not a protocol canister",
+            canister_id,
+        );
+    }
 }
