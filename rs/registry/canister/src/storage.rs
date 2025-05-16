@@ -24,7 +24,7 @@ const CHUNKS_MEMORY_ID: MemoryId = MemoryId::new(1);
 /// because if it were only a little bit larger, we are hardly enhancing our
 /// capabilities. At the same time, a higher limit is not needed (yet).
 /// Therefore, 5x the message size limit seems appropriate (for now).
-const MAX_CHUNKABLE_ATOMIC_MUTATION_LEN: usize = 10 * (1024 * 1024);
+pub(crate) const MAX_CHUNKABLE_ATOMIC_MUTATION_LEN: usize = 10 * (1024 * 1024);
 
 type VM = VirtualMemory<DefaultMemoryImpl>;
 
@@ -57,8 +57,12 @@ pub(crate) fn with_chunks<R>(f: impl FnOnce(&Chunks<VM>) -> R) -> R {
 
 /// Converts to HighCapacity version of input.
 ///
-/// When the input is "too large", "large" blobs are stored into CHUNKS, rather
-/// than remaining inline.
+/// When the input is "too large" to simply transcribe to the HighCapacity type,
+/// "large" blobs are stored into CHUNKS, rather than remaining inline.
+///
+/// However, even with chunking, the input's size is limited by
+/// MAX_CHUNKABLE_ATOMIC_MUTATION_LEN. If this limit is exceeded, this function
+/// panics.
 pub(crate) fn chunkify_composite_mutation_if_too_large(
     original_mutation: RegistryAtomicMutateRequest,
 ) -> HighCapacityRegistryAtomicMutateRequest {
@@ -82,7 +86,15 @@ pub(crate) fn chunkify_composite_mutation_if_too_large(
 
     // If the input is small, simply transcribe it.
     const SIZE_OF_VERSION: usize = std::mem::size_of::<crate::registry::EncodedVersion>();
-    let is_small = original_mutation.encoded_len() + SIZE_OF_VERSION < MAX_REGISTRY_DELTAS_SIZE;
+    let is_small = original_mutation.encoded_len() + SIZE_OF_VERSION
+        < MAX_REGISTRY_DELTAS_SIZE
+        // This fudge factor is to account for the fact that
+        // HighCapacityRegistryAtomicMutateRequest will have its timestamp field
+        // populated later. Without this, we will fail to chunkify in cases
+        // where we really need to in order to avoid later blocking of mutations
+        // that are close to the MAX_REGISTRY_DELTAS_SIZE (but within the
+        // MAX_CHUNKABLE_ATOMIC_MUTATION_LEN limit).
+        - 25;
     if is_small {
         return HighCapacityRegistryAtomicMutateRequest::from(original_mutation);
     }
