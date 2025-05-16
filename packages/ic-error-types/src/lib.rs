@@ -29,12 +29,12 @@ pub enum RejectCode {
 
 impl std::fmt::Display for RejectCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_str())
+        write!(f, "{}", self.as_str())
     }
 }
 
 impl RejectCode {
-    fn to_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             RejectCode::SysFatal => "SYS_FATAL",
             RejectCode::SysTransient => "SYS_TRANSIENT",
