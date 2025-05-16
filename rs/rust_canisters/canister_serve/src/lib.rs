@@ -67,6 +67,10 @@ pub fn serve_metrics(
                         name: "Content-Length".to_string(),
                         value: content_body.len().to_string(),
                     },
+                    HttpHeader {
+                        name: "Cache-Control".to_string(),
+                        value: "no-store".to_string(),
+                    },
                 ],
                 body: content_body,
             }
@@ -96,7 +100,7 @@ pub fn serve_metrics(
 /// fn http_request(request: CanisterHttpRequestArgument) -> HttpResponse {
 ///     log!(INFO, "This is an INFO log");
 ///     log!(ERROR, "This is an ERROR log");
-///     
+///
 ///     let path = match request.url.find('?') {
 ///         None => &request.url[..],
 ///         Some(index) => &request.url[..index],
