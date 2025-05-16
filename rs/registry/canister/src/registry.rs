@@ -516,8 +516,12 @@ impl Registry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::flags::{
-        temporarily_disable_chunkifying_large_values, temporarily_enable_chunkifying_large_values,
+    use crate::{
+        flags::{
+            temporarily_disable_chunkifying_large_values,
+            temporarily_enable_chunkifying_large_values,
+        },
+        storage::MAX_CHUNKABLE_ATOMIC_MUTATION_LEN,
     };
     use ic_registry_canister_chunkify::dechunkify;
     use ic_registry_transport::{delete, insert, update, upsert};
@@ -847,9 +851,6 @@ mod tests {
 
     #[test]
     fn test_count_fitting_deltas_max_size() {
-        // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
-        let _restore_on_drop = temporarily_disable_chunkifying_large_values();
-
         let mut registry = Registry::new();
         let version = 1;
         let key = b"key";
@@ -1110,9 +1111,6 @@ mod tests {
     #[test]
     #[should_panic(expected = "[Registry] Transaction rejected because delta would be too large")]
     fn test_changelog_insert_delta_too_large() {
-        // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
-        let _restore_on_drop = temporarily_disable_chunkifying_large_values();
-
         let mut registry = Registry::new();
         let version = 1;
         let key = b"key";
@@ -1157,7 +1155,6 @@ mod tests {
     #[test]
     #[should_panic(expected = "[Registry] Transaction rejected because delta would be too large")]
     fn test_apply_mutations_delta_too_large() {
-        // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
         let _restore_on_drop = temporarily_disable_chunkifying_large_values();
 
         let mut registry = Registry::new();
@@ -1165,6 +1162,35 @@ mod tests {
         let key = b"key";
 
         let too_large_value = vec![0; max_mutation_value_size(version, key) + 1];
+        let mutations = vec![upsert(key, too_large_value)];
+
+        apply_mutations_skip_invariant_checks(&mut registry, mutations);
+    }
+
+    // This is like the previous test, except that chunking is enabled. As a
+    // result, there is supposed to be no panic.
+    #[test]
+    fn test_apply_mutations_delta_not_too_large_when_chunking_is_enabled() {
+        let _restore_on_drop = temporarily_enable_chunkifying_large_values();
+
+        let mut registry = Registry::new();
+
+        let key = b"key";
+        let too_large_value = vec![0; MAX_REGISTRY_DELTAS_SIZE];
+        let mutations = vec![upsert(key, too_large_value)];
+
+        apply_mutations_skip_invariant_checks(&mut registry, mutations);
+    }
+
+    #[test]
+    #[should_panic(expected = "Mutation too large. First key =")]
+    fn test_apply_mutations_too_large_even_when_chunking_is_enabled() {
+        let _restore_on_drop = temporarily_enable_chunkifying_large_values();
+
+        let mut registry = Registry::new();
+
+        let key = b"key";
+        let too_large_value = vec![0; MAX_CHUNKABLE_ATOMIC_MUTATION_LEN];
         let mutations = vec![upsert(key, too_large_value)];
 
         apply_mutations_skip_invariant_checks(&mut registry, mutations);
@@ -1194,23 +1220,18 @@ mod tests {
             .changelog
             .insert(EncodedVersion::from(version), req.encode_to_vec());
 
+        let content = match mutation.content.unwrap() {
+            high_capacity_registry_mutation::Content::Value(vec) => {
+                high_capacity_registry_value::Content::Value(vec)
+            }
+            _garbage => panic!(
+                "Upgrading and then downgrading from HighCapacity somehow \
+                 did not result in an inline Value.",
+            ),
+        };
         (*registry.store.entry(mutation.key).or_default()).push_back(HighCapacityRegistryValue {
             version,
-            content: mutation
-                .content
-                .map(|c| match c {
-                    high_capacity_registry_mutation::Content::Value(vec) => {
-                        high_capacity_registry_value::Content::Value(vec)
-                    }
-                    high_capacity_registry_mutation::Content::LargeValueChunkKeys(
-                        large_value_chunk_keys,
-                    ) => high_capacity_registry_value::Content::LargeValueChunkKeys(
-                        large_value_chunk_keys,
-                    ),
-                })
-                .or(Some(high_capacity_registry_value::Content::DeletionMarker(
-                    true,
-                ))),
+            content: Some(content),
             timestamp_nanoseconds: req.timestamp_nanoseconds,
         });
         registry.version = version;
@@ -1227,18 +1248,12 @@ mod tests {
 
     #[test]
     fn test_from_serializable_form_version1_max_size_delta() {
-        // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
-        let _restore_on_drop = temporarily_disable_chunkifying_large_values();
-
         test_from_serializable_form_impl(0)
     }
 
     #[test]
     #[should_panic(expected = "[Registry] Transaction rejected because delta would be too large")]
     fn test_from_serializable_form_version1_delta_too_large() {
-        // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
-        let _restore_on_drop = temporarily_disable_chunkifying_large_values();
-
         test_from_serializable_form_impl(1)
     }
 
