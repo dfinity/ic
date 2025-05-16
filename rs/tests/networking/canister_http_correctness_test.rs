@@ -2233,7 +2233,7 @@ where
     let principal: Principal = principal_id.into();
 
     let canister_response = agent
-        .update(&principal, "send_request_and_retrieve_refund")
+        .update(&principal, "send_request_with_refund_callback")
         .with_arg(args)
         .call_and_wait()
         .await;

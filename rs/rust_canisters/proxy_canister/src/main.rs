@@ -118,9 +118,10 @@ async fn run_continuous_request_loop(request: RemoteHttpRequest) {
     });
 }
 
-async fn make_http_request_with_refund_callback(
+#[update]
+async fn send_request_with_refund_callback(
     request: RemoteHttpRequest,
-) -> (Result<RemoteHttpResponse, (RejectionCode, String)>, u64) {
+) -> ResponseWithRefundedCycles {
     let RemoteHttpRequest { request, cycles } = request;
     let request_url = request.url.clone();
     println!("send_request making IC call.");
@@ -164,24 +165,16 @@ async fn make_http_request_with_refund_callback(
             Err((r, m))
         }
     };
-    let refund = ic_cdk::api::call::msg_cycles_refunded();
-    (result, refund)
+    let refunded_cycles = ic_cdk::api::call::msg_cycles_refunded();
+    ResponseWithRefundedCycles{result, refunded_cycles}
 }
 
 #[update]
 async fn send_request(
     request: RemoteHttpRequest,
 ) -> Result<RemoteHttpResponse, (RejectionCode, String)> {
-    let (result, _) = make_http_request_with_refund_callback(request).await;
+    let ResponseWithRefundedCycles { result, ..} = send_request_with_refund_callback(request).await;
     result
-}
-
-#[update]
-async fn send_request_and_retrieve_refund(
-    request: RemoteHttpRequest,
-) -> ResponseWithRefundedCycles {
-    let (result, refunded_cycles) = make_http_request_with_refund_callback(request).await;
-    ResponseWithRefundedCycles{result, refunded_cycles}
 }
 
 #[query]
