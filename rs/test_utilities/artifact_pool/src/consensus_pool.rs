@@ -40,7 +40,7 @@ pub struct TestConsensusPool {
     pool: ConsensusPoolImpl,
     time_source: Arc<dyn TimeSource>,
     dkg_payload_builder:
-        Box<dyn Fn(&dyn ConsensusPool, Block, &ValidationContext) -> consensus::dkg::Payload>,
+        Box<dyn Fn(&dyn ConsensusPool, Block, &ValidationContext) -> consensus::dkg::DkgPayload>,
     membership: Membership,
 }
 
@@ -144,7 +144,7 @@ fn dkg_payload_builder_fn(
     crypto: Arc<CryptoReturningOk>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
-) -> Box<dyn Fn(&dyn ConsensusPool, Block, &ValidationContext) -> consensus::dkg::Payload> {
+) -> Box<dyn Fn(&dyn ConsensusPool, Block, &ValidationContext) -> consensus::dkg::DkgPayload> {
     Box::new(move |cons_pool, parent, validation_context| {
         ic_consensus_dkg::create_payload(
             subnet_id,
@@ -271,8 +271,8 @@ impl TestConsensusPool {
         let idkg = block.payload.as_ref().as_idkg().cloned();
         let dkg_payload = (self.dkg_payload_builder)(self, parent.clone(), &block.context);
         let payload = match dkg_payload {
-            dkg::Payload::Summary(dkg) => BlockPayload::Summary(SummaryPayload { dkg, idkg }),
-            dkg::Payload::Data(dkg) => BlockPayload::Data(DataPayload {
+            dkg::DkgPayload::Summary(dkg) => BlockPayload::Summary(SummaryPayload { dkg, idkg }),
+            dkg::DkgPayload::Data(dkg) => BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
                 dkg,
                 idkg,

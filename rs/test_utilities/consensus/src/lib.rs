@@ -134,7 +134,7 @@ impl ConsensusPoolCache for FakeConsensusPoolCache {
 }
 
 /// Return the genesis BlockProposal and RandomBeacon made for the given height.
-pub fn make_genesis(summary: dkg::Summary) -> CatchUpPackage {
+pub fn make_genesis(summary: dkg::DkgSummary) -> CatchUpPackage {
     // Use the registry version and height, from which the summary package was
     // created.
     let registry_version = summary.registry_version;

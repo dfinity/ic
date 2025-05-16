@@ -1050,7 +1050,7 @@ mod tests {
             Payload::new(
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Summary(SummaryPayload {
-                    dkg: ic_types::consensus::dkg::Summary::fake()
+                    dkg: ic_types::consensus::dkg::DkgSummary::fake()
                         .with_current_transcripts(nidkg_transcripts),
                     idkg: Some(idkg),
                 }),

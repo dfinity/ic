@@ -8,7 +8,7 @@ use ic_interfaces::crypto::{ErrorReproducibility, LoadTranscriptResult, NiDkgAlg
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_types::{
-    consensus::{dkg::Summary, HasHeight},
+    consensus::{dkg::DkgSummary, HasHeight},
     crypto::threshold_sig::ni_dkg::{
         errors::load_transcript_error::DkgLoadTranscriptError, NiDkgId, NiDkgTag,
         NiDkgTargetSubnet, NiDkgTranscript,
@@ -302,7 +302,7 @@ impl DkgKeyManager {
     /// being loaded already. Note this functionality relies on the assumption,
     /// that CSP does not reload transcripts, which were successfully loaded
     /// before.
-    fn load_transcripts_from_summary(&mut self, summary: &Summary) {
+    fn load_transcripts_from_summary(&mut self, summary: &DkgSummary) {
         let transcripts_to_load: Vec<_> = {
             let current_interval_start = summary.height;
             let next_interval_start = summary.get_next_start_height();
@@ -478,7 +478,7 @@ impl DkgKeyManager {
 
     /// Uses the provided summary to update the DKG metrics. Should only be used on
     /// the summary for the last finalized DKG summary block.
-    fn update_dkg_metrics(&self, summary: &Summary) {
+    fn update_dkg_metrics(&self, summary: &DkgSummary) {
         self.metrics
             .consensus_membership_registry_version
             .set(summary.registry_version.get() as i64);
