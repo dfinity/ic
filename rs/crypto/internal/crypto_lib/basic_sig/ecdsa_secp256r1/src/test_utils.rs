@@ -24,7 +24,7 @@ pub fn new_keypair(
     rng: &mut (impl rand::RngCore + rand::CryptoRng),
 ) -> CryptoResult<(types::SecretKeyBytes, types::PublicKeyBytes)> {
     let (sk, pk) = {
-        let sk = ic_crypto_ecdsa_secp256r1::PrivateKey::generate_using_rng(rng);
+        let sk = ic_secp256r1::PrivateKey::generate_using_rng(rng);
         let encoded_pk = sk.public_key().serialize_sec1(false);
         let serialized_pk: [u8; 65] = encoded_pk
             .try_into()
@@ -53,13 +53,12 @@ fn secret_key_from_components(
 ) -> CryptoResult<types::SecretKeyBytes> {
     use ic_crypto_secrets_containers::SecretVec;
 
-    let sk =
-        ic_crypto_ecdsa_secp256r1::PrivateKey::deserialize_sec1(sk_raw_bytes).map_err(|e| {
-            CryptoError::MalformedSecretKey {
-                algorithm: AlgorithmId::EcdsaP256,
-                internal_error: format!("{:?}", e),
-            }
-        })?;
+    let sk = ic_secp256r1::PrivateKey::deserialize_sec1(sk_raw_bytes).map_err(|e| {
+        CryptoError::MalformedSecretKey {
+            algorithm: AlgorithmId::EcdsaP256,
+            internal_error: format!("{:?}", e),
+        }
+    })?;
 
     if pk.0 != sk.public_key().serialize_sec1(false) {
         return Err(CryptoError::MalformedPublicKey {
