@@ -366,7 +366,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.1.2",
             ),
             "cc": crate.spec(
-                version = "=1.1.37",
+                version = "^1.1.37",
             ),
             "cddl": crate.spec(
                 version = "^0.9.4",
@@ -457,7 +457,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^5.3.4",
             ),
             "dfx-core": crate.spec(
-                version = "^0.1.3",
+                version = "^0.1.4",
             ),
             "dyn-clone": crate.spec(
                 version = "^1.0.14",
@@ -597,7 +597,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.18.11",
             ),
             "ic-agent": crate.spec(
-                version = "^0.39.2",
+                version = "^0.40.1",
                 features = ["pem", "ring"],
             ),
             "ic-bn-lib": crate.spec(
@@ -648,7 +648,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "3.0.3",
             ),
             "ic-http-gateway": crate.spec(
-                version = "0.2.0",
+                version = "0.3.0",
             ),
             "ic-metrics-encoder": crate.spec(
                 version = "^1.1.1",
@@ -681,10 +681,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^3.0.0",
             ),
             "ic-transport-types": crate.spec(
-                version = "^0.39.3",
+                version = "^0.40.1",
             ),
             "ic-utils": crate.spec(
-                version = "^0.39.0",
+                version = "^0.40.1",
                 features = ["raw"],
             ),
             "ic-verify-bls-signature": crate.spec(
