@@ -1031,16 +1031,13 @@ fn ic0_canister_version_returns_correct_value() {
 
     test.uninstall_code(canister_id).unwrap();
     let memory_allocation = NumBytes::from(1024 * 1024 * 1024);
-    test.install_canister_with_allocation(
-        canister_id,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-        None,
-        Some(memory_allocation.get()),
-    )
-    .unwrap();
+    test.canister_update_allocations_settings(canister_id, None, Some(memory_allocation.get()))
+        .unwrap();
+    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    // Plus 3 for the previous ingress messages.
-    let expected_ctr: u64 = 7 + 3;
+    // Plus 4 for the previous ingress messages.
+    let expected_ctr: u64 = 7 + 4;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1050,8 +1047,8 @@ fn ic0_canister_version_returns_correct_value() {
     test.reinstall_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    // Plus 4 for the previous ingress messages.
-    let expected_ctr: u64 = 8 + 4;
+    // Plus 5 for the previous ingress messages.
+    let expected_ctr: u64 = 8 + 5;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1060,8 +1057,8 @@ fn ic0_canister_version_returns_correct_value() {
     test.update_freezing_threshold(canister_id, NumSeconds::from(1))
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    // Plus 5 for the previous ingress messages.
-    let expected_ctr: u64 = 9 + 5;
+    // Plus 6 for the previous ingress messages.
+    let expected_ctr: u64 = 9 + 6;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1070,8 +1067,8 @@ fn ic0_canister_version_returns_correct_value() {
     test.canister_update_allocations_settings(canister_id, None, None)
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    // Plus 6 for the previous ingress messages.
-    let expected_ctr: u64 = 10 + 6;
+    // Plus 7 for the previous ingress messages.
+    let expected_ctr: u64 = 10 + 7;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1080,8 +1077,8 @@ fn ic0_canister_version_returns_correct_value() {
     test.canister_update_allocations_settings(canister_id, Some(1000), None)
         .unwrap_err();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    // Plus 7 for the previous ingress messages.
-    let expected_ctr: u64 = 10 + 7;
+    // Plus 8 for the previous ingress messages.
+    let expected_ctr: u64 = 10 + 8;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1096,8 +1093,8 @@ fn ic0_canister_version_returns_correct_value() {
     test.start_canister(canister_id)
         .expect("The start canister should not fail.");
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    // Plus 8 for the previous (successful) ingress messages.
-    let expected_ctr: u64 = 13 + 8;
+    // Plus 9 for the previous (successful) ingress messages.
+    let expected_ctr: u64 = 13 + 9;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1106,8 +1103,8 @@ fn ic0_canister_version_returns_correct_value() {
     test.set_controller(canister_id, canister_id.into())
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    // Plus 9 for the previous ingress messages.
-    let expected_ctr: u64 = 14 + 9;
+    // Plus 10 for the previous ingress messages.
+    let expected_ctr: u64 = 14 + 10;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1116,8 +1113,8 @@ fn ic0_canister_version_returns_correct_value() {
     test.uninstall_code(canister_id)
         .expect_err("Uninstall code should fail as the controller has changed.");
     let result = test.ingress(canister_id, "update", ctr).unwrap();
-    // Plus 10 for the previous ingress messages.
-    let expected_ctr: u64 = 14 + 10;
+    // Plus 11 for the previous ingress messages.
+    let expected_ctr: u64 = 14 + 11;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -2946,11 +2943,15 @@ fn subnet_available_memory_is_not_updated_when_allocation_reserved() {
             (memory 1 20)
         )"#;
     let binary = wat::parse_str(wat).unwrap();
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
     let memory_allocation = NumBytes::from(1024 * 1024 * 1024);
-
-    test.install_canister_with_allocation(canister_id, binary, None, Some(memory_allocation.get()))
+    let canister_id = test
+        .create_canister_with_allocation(
+            Cycles::new(1_000_000_000_000),
+            None,
+            Some(memory_allocation.get()),
+        )
         .unwrap();
+    test.install_canister(canister_id, binary).unwrap();
     let initial_memory_used = test.state().memory_taken().execution();
     let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
     // canister history memory usage is not updated in SubnetAvailableMemory => we add it at RHS

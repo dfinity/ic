@@ -4115,7 +4115,7 @@ fn cycles_correct_if_upgrade_succeeds() {
 #[test]
 fn cycles_correct_if_upgrade_fails_at_validation() {
     let mut test = ExecutionTestBuilder::new()
-        .with_allocatable_compute_capacity_in_percent(50)
+        .with_rate_limiting_of_instructions()
         .build();
 
     let wat = r#"
@@ -4150,10 +4150,15 @@ fn cycles_correct_if_upgrade_fails_at_validation() {
         )
     );
 
+    // Set a large value for `install_code_debit` so the installation fails due
+    // to rate limiting.
+    test.canister_state_mut(id)
+        .scheduler_state
+        .install_code_debit = NumInstructions::from(u64::MAX);
+
     let cycles_before = test.canister_state(id).system_state.balance();
     let execution_cost_before = test.canister_execution_cost(id);
-    test.upgrade_canister_with_allocation(id, wasm, Some(100), None)
-        .unwrap_err();
+    test.upgrade_canister(id, wasm).unwrap_err();
     let execution_cost = test.canister_execution_cost(id) - execution_cost_before;
     assert_eq!(
         test.canister_state(id).system_state.balance(),
@@ -4383,9 +4388,7 @@ fn cycles_correct_if_install_succeeds() {
 
 #[test]
 fn cycles_correct_if_install_fails_at_validation() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_allocatable_compute_capacity_in_percent(50)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let wat = r#"
         (module
@@ -4406,19 +4409,37 @@ fn cycles_correct_if_install_fails_at_validation() {
     let initial_cycles = Cycles::new(1_000_000_000_000_000);
     let id = test.create_canister(initial_cycles);
 
-    test.install_canister_with_allocation(id, wasm, Some(100), None)
-        .unwrap_err();
+    test.install_canister(id, wasm.clone()).unwrap();
     assert_eq!(
         test.canister_state(id).system_state.balance(),
         initial_cycles - test.canister_execution_cost(id),
     );
-    assert_eq!(
+    let execution_cost_of_successful_installation = test.cycles_account_manager().execution_cost(
+        wasm_compilation_cost(&wasm) + NumInstructions::from(5 * *DROP_MEMORY_GROW_CONST_COST),
+        test.subnet_size(),
+        test.canister_wasm_execution_mode(id),
+    );
+    assert_delta!(
         test.canister_execution_cost(id),
-        test.cycles_account_manager().execution_cost(
-            NumInstructions::from(0),
-            test.subnet_size(),
-            test.canister_wasm_execution_mode(id),
-        )
+        execution_cost_of_successful_installation,
+        Cycles::new(10)
+    );
+
+    // Attempt to install the same canister again, should fail because it's non-empty.
+    test.install_canister(id, wasm).unwrap_err();
+    assert_eq!(
+        test.canister_state(id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(id),
+    );
+    let execution_cost_of_failed_installation = test.cycles_account_manager().execution_cost(
+        NumInstructions::from(0),
+        test.subnet_size(),
+        test.canister_wasm_execution_mode(id),
+    );
+    assert_delta!(
+        test.canister_execution_cost(id) - execution_cost_of_successful_installation,
+        execution_cost_of_failed_installation,
+        Cycles::new(10)
     );
 }
 
