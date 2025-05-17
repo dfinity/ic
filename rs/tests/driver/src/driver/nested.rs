@@ -25,7 +25,7 @@ use url::Url;
 
 pub const NESTED_VMS_DIR: &str = "nested_vms";
 pub const NESTED_VM_PATH: &str = "vm.json";
-pub const NESTED_CONFIGURED_IMAGE_PATH: &str = "config.img.zst";
+pub const NESTED_CONFIG_IMAGE_PATH: &str = "config.img.zst";
 pub const NESTED_NETWORK_PATH: &str = "ips.json";
 
 pub struct NestedNode {
@@ -57,9 +57,9 @@ impl NestedVm {
         self.env.read_json_object(vm_path)
     }
 
-    pub fn get_configured_setupos_image_path(&self) -> Result<PathBuf> {
+    pub fn get_setupos_config_image_path(&self) -> Result<PathBuf> {
         let rel_dir: PathBuf = [NESTED_VMS_DIR, &self.name].iter().collect();
-        let image_path = rel_dir.join(NESTED_CONFIGURED_IMAGE_PATH);
+        let image_path = rel_dir.join(NESTED_CONFIG_IMAGE_PATH);
 
         Ok(self.env.get_path(image_path))
     }
