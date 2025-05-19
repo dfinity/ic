@@ -1660,7 +1660,7 @@ impl Governance {
             randomness.seed_rng(rng_seed);
         }
 
-        Self {
+        let mut governance = Self {
             heap_data: heap_governance_proto,
             neuron_store: NeuronStore::new_restored(),
             env,
@@ -1673,7 +1673,11 @@ impl Governance {
             neuron_data_validator: NeuronDataValidator::new(),
             minting_node_provider_rewards: false,
             neuron_rate_limits: NeuronRateLimits::default(),
-        }
+        };
+
+        governance.back_fill_topics();
+
+        governance
     }
 
     /// After calling this method, the proto and neuron_store (the heap neurons at least)
@@ -1689,6 +1693,19 @@ impl Governance {
         let heap_governance_proto = self.heap_data.clone();
         let rng_seed = self.randomness.get_rng_seed();
         reassemble_governance_proto(neurons, heap_governance_proto, rng_seed)
+    }
+
+    fn back_fill_topics(&mut self) {
+        // Back fill the topics for all proposals.
+        for proposal_data in self.heap_data.proposals.values_mut() {
+            if proposal_data.topic() == Topic::Unspecified {
+                let topic = proposal_data
+                    .proposal
+                    .as_ref()
+                    .map_or(Topic::Unspecified, Proposal::compute_topic_at_creation);
+                proposal_data.topic = Some(topic as i32);
+            }
+        }
     }
 
     pub fn seed_rng(&mut self, seed: [u8; 32]) {
