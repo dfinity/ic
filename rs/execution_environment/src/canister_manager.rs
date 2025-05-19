@@ -1523,6 +1523,7 @@ impl CanisterManager {
         let new_snapshot = CanisterSnapshot::from_canister(canister, state.time())
             .map_err(CanisterManagerError::from)?;
 
+        // Delete old snapshot identified by `replace_snapshot`.
         if let Some(replace_snapshot) = replace_snapshot {
             self.remove_snapshot(canister, replace_snapshot, state, replace_snapshot_size);
         }
