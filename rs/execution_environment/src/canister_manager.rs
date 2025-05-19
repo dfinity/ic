@@ -1567,7 +1567,7 @@ impl CanisterManager {
         replace_snapshot: SnapshotId,
         state: &mut ReplicatedState,
     ) -> Result<NumBytes, CanisterManagerError> {
-        // Check that replace snapshot ID exists if provided.
+        // Check that `replace_snapshot` exists.
         match state.canister_snapshots.get(replace_snapshot) {
             None => {
                 // If not found, the operation fails due to invalid parameters.
@@ -2038,7 +2038,7 @@ impl CanisterManager {
         state: &mut ReplicatedState,
         snapshot_size: NumBytes,
     ) {
-        // Delete old snapshot identified by `replace_snapshot` ID.
+        // Delete old snapshot identified by `snapshot_id`.
         state.delete_snapshot(snapshot_id);
         canister.system_state.snapshots_memory_usage = canister
             .system_state
