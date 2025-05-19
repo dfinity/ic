@@ -1,0 +1,33 @@
+name: Repro check
+on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+    inputs:
+      github_sha:
+        description: Commit on which the repro check should be run
+        required: true
+        type: string
+  # Used as a reusable workflow within release-testing workflow
+  workflow_call:
+    inputs:
+      github_sha:
+        description: Commit on which the repro check should be run
+        required: true
+        type: string
+  # TODO: remove. This is used to register with github actions
+  push:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  repro-check:
+    name: Run repro-check for ${{ github.sha }}
+    runs-on:
+      labels: dind-small
+    steps:
+      - name: Repro check for ${{ event.sha }}
+        shell: bash
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/dfinity/ic/master/ci/tools/repro-check | python3 - -c ${{ github.sha }} --setupos --guestos --hostos
