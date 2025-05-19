@@ -22,8 +22,8 @@ concurrency:
 jobs:
   repro-check:
     name: Run repro-check for ${{ inputs.github_sha }}
-    runs-on:
-      labels: dind-small
+    runs-on: ubuntu-latest
+      # labels: dind-small
     steps:
       - name: Setup podman
         shell: bash
