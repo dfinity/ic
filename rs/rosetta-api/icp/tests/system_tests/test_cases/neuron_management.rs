@@ -15,8 +15,7 @@ use ic_icp_rosetta_client::{
     RosettaStakeMaturityArgs,
 };
 use ic_icrc1_test_utils::basic_identity_strategy;
-use ic_nns_governance_api::pb::v1::neuron::DissolveState;
-use ic_nns_governance_api::pb::v1::KnownNeuronData;
+use ic_nns_governance_api::{neuron::DissolveState, KnownNeuronData};
 use ic_rosetta_api::ledger_client::list_known_neurons_response::ListKnownNeuronsResponse;
 use ic_rosetta_api::ledger_client::list_neurons_response::ListNeuronsResponse;
 use ic_rosetta_api::ledger_client::neuron_response::NeuronResponse;

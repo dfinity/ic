@@ -2,7 +2,7 @@ use crate::dashboard::DashboardPaginationParameters;
 use candid::Nat;
 use dashboard::DashboardTemplate;
 use ic_canister_log::log;
-use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
+use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cketh_minter::address::{validate_address_as_destination, AddressValidationError};
 use ic_cketh_minter::deposit::scrape_logs;
 use ic_cketh_minter::endpoints::ckerc20::{
@@ -241,7 +241,7 @@ async fn get_minter_info() -> MinterInfo {
             deposit_with_subaccount_helper_contract_address,
             supported_ckerc20_tokens,
             minimum_withdrawal_amount: Some(s.cketh_minimum_withdrawal_amount.into()),
-            ethereum_block_height: Some(s.ethereum_block_height.into()),
+            ethereum_block_height: Some(s.ethereum_block_height.clone()),
             last_observed_block_number: s.last_observed_block_number.map(|n| n.into()),
             eth_balance: Some(s.eth_balance.eth_balance().into()),
             last_gas_fee_estimate: s.last_transaction_price_estimate.as_ref().map(
@@ -1016,8 +1016,6 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "Last max fee per gas",
                 )?;
 
-                ic_cketh_minter::eth_rpc::encode_metrics(w)?;
-
                 Ok(())
             })
         }
@@ -1025,6 +1023,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         match encode_metrics(&mut writer) {
             Ok(()) => HttpResponseBuilder::ok()
                 .header("Content-Type", "text/plain; version=0.0.4")
+                .header("Cache-Control", "no-store")
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {

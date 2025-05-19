@@ -77,7 +77,11 @@ fn setup_common() -> InternetComputer {
                     .into_iter()
                     .map(|key_id| KeyConfig {
                         max_queue_size: 20,
-                        pre_signatures_to_create_in_advance: 7,
+                        pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
+                            7
+                        } else {
+                            0
+                        },
                         key_id,
                     })
                     .collect(),
@@ -139,8 +143,6 @@ pub fn test_downgrade(env: TestEnv) {
     block_on(bless_public_replica_version(
         &nns_node,
         &mainnet_version,
-        UpdateImageType::Image,
-        UpdateImageType::Image,
         &log,
     ));
     test(env, initial_version, mainnet_version);

@@ -13,7 +13,7 @@ use ic_nns_constants::{
     ALL_NNS_CANISTER_IDS, CYCLES_LEDGER_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID,
     ROOT_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::{Governance, NetworkEconomics, Neuron};
+use ic_nns_governance_api::{Governance, NetworkEconomics, Neuron};
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_gtc_accounts::{ECT_ACCOUNTS, SEED_ROUND_ACCOUNTS};

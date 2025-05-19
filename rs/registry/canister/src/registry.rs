@@ -6,6 +6,7 @@ use crate::{
     storage::{chunkify_composite_mutation_if_too_large, with_chunks},
 };
 use ic_certified_map::RbTree;
+use ic_nervous_system_time_helpers::now_nanoseconds;
 use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_canister_chunkify::dechunkify_registry_value;
 use ic_registry_transport::{
@@ -198,7 +199,7 @@ impl Registry {
         let HighCapacityRegistryValue {
             version,
             content,
-            timestamp_seconds: _,
+            timestamp_nanoseconds: _,
         } = self.get_high_capacity(key, version)?;
 
         let value = content
@@ -269,7 +270,7 @@ impl Registry {
         }
 
         // Populate self.store (which is secondary to self.changelog).
-        let timestamp_seconds = composite_mutation.timestamp_seconds;
+        let timestamp_nanoseconds = composite_mutation.timestamp_nanoseconds;
         for prime_mutation in composite_mutation.mutations.clone() {
             let HighCapacityRegistryMutation {
                 mutation_type,
@@ -294,7 +295,7 @@ impl Registry {
             let registry_value = HighCapacityRegistryValue {
                 version,
                 content,
-                timestamp_seconds,
+                timestamp_nanoseconds,
             };
 
             self.store.entry(key).or_default().push_back(registry_value);
@@ -321,8 +322,8 @@ impl Registry {
             mutations,
             preconditions: vec![],
         };
-        let mutations = chunkify_composite_mutation_if_too_large(mutations);
-        // TODO(Nikola.Milosavljevic@dfinity.org): Populate mutations.timestamp_seconds field.
+        let mut mutations = chunkify_composite_mutation_if_too_large(mutations);
+        mutations.timestamp_nanoseconds = now_nanoseconds();
 
         self.increment_version();
         self.apply_mutations_as_version(mutations, self.version);
@@ -479,7 +480,7 @@ impl Registry {
                         let composite_mutation = HighCapacityRegistryAtomicMutateRequest {
                             mutations: vec![prime_mutation],
                             preconditions: vec![],
-                            timestamp_seconds: 0,
+                            timestamp_nanoseconds: 0,
                         };
 
                         self.apply_mutations_as_version(composite_mutation, i);
@@ -873,6 +874,7 @@ mod tests {
         );
 
         assert_eq!(
+            // Subtract 1 to prevent `mutation2` from fitting into the fitting deltas.
             registry.count_fitting_deltas(1, MAX_REGISTRY_DELTAS_SIZE - 1),
             0
         );
@@ -1116,11 +1118,17 @@ mod tests {
         let key = b"key";
 
         let too_large_value = vec![0; max_mutation_value_size(version, key) + 1];
-        let mutations = vec![upsert(key, too_large_value)];
-        let req = HighCapacityRegistryAtomicMutateRequest::from(RegistryAtomicMutateRequest {
+        let mutations = vec![HighCapacityRegistryMutation::from(upsert(
+            key,
+            too_large_value,
+        ))];
+        let req = HighCapacityRegistryAtomicMutateRequest {
             mutations,
             preconditions: vec![],
-        });
+            // Since the `too_large_value` is built with serializing maximum timestamp length to 10 bytes
+            // the tipping point of `+ 1` will be there only if we account the timestamp of full serialized 10 bytes.
+            timestamp_nanoseconds: u64::MAX,
+        };
 
         registry.changelog_insert(1, req);
     }
@@ -1174,11 +1182,12 @@ mod tests {
         let key = b"key";
 
         let value = vec![0; max_mutation_value_size(version, key) + bytes_above_max_size];
-        let mutation = upsert(key, value);
+        let mutation = HighCapacityRegistryMutation::from(upsert(key, value));
         let mutations = vec![mutation.clone()];
-        let req = RegistryAtomicMutateRequest {
+        let req = HighCapacityRegistryAtomicMutateRequest {
             mutations,
             preconditions: vec![],
+            timestamp_nanoseconds: now_nanoseconds(),
         };
         // Circumvent `changelog_insert()` to insert potentially oversized mutations.
         registry
@@ -1187,12 +1196,22 @@ mod tests {
 
         (*registry.store.entry(mutation.key).or_default()).push_back(HighCapacityRegistryValue {
             version,
-            content: Some(if mutation.mutation_type != Type::Delete as i32 {
-                high_capacity_registry_value::Content::Value(mutation.value)
-            } else {
-                DELETION_MARKER.unwrap()
-            }),
-            timestamp_seconds: 0,
+            content: mutation
+                .content
+                .map(|c| match c {
+                    high_capacity_registry_mutation::Content::Value(vec) => {
+                        high_capacity_registry_value::Content::Value(vec)
+                    }
+                    high_capacity_registry_mutation::Content::LargeValueChunkKeys(
+                        large_value_chunk_keys,
+                    ) => high_capacity_registry_value::Content::LargeValueChunkKeys(
+                        large_value_chunk_keys,
+                    ),
+                })
+                .or(Some(high_capacity_registry_value::Content::DeletionMarker(
+                    true,
+                ))),
+            timestamp_nanoseconds: req.timestamp_nanoseconds,
         });
         registry.version = version;
 
@@ -1311,9 +1330,13 @@ Average length of the values: {} (desired: {})",
     /// result in a delta of exactly `MAX_REGISTRY_DELTAS_SIZE` bytes.
     fn max_mutation_value_size(version: u64, key: &[u8]) -> usize {
         fn delta_size(version: u64, key: &[u8], value_size: usize) -> usize {
-            let req = RegistryAtomicMutateRequest {
-                mutations: vec![upsert(key, vec![0; value_size])],
+            let req = HighCapacityRegistryAtomicMutateRequest {
+                mutations: vec![HighCapacityRegistryMutation::from(upsert(
+                    key,
+                    vec![0; value_size],
+                ))],
                 preconditions: vec![],
+                timestamp_nanoseconds: now_nanoseconds(),
             };
 
             let version = EncodedVersion::from(version);
@@ -1325,7 +1348,7 @@ Average length of the values: {} (desired: {})",
         // Start off with an oversized delta.
         let too_large_delta_size = delta_size(version, key, MAX_REGISTRY_DELTAS_SIZE);
 
-        // Compoute the value size that will give us a delta of exactly
+        // Compute the value size that will give us a delta of exactly
         // MAX_REGISTRY_DELTAS_SIZE.
         let max_value_size = 2 * MAX_REGISTRY_DELTAS_SIZE - too_large_delta_size;
 
@@ -1358,7 +1381,9 @@ Average length of the values: {} (desired: {})",
             value: original_value.clone(),
         };
         let mut original_registry = Registry::new();
+        let timestamp_before_applying_mutation = now_nanoseconds();
         apply_mutations_skip_invariant_checks(&mut original_registry, vec![mutation]);
+        let timestamp_after_applying_mutation = now_nanoseconds();
 
         // Step 1.2: Verify contents of original Registry.
 
@@ -1394,8 +1419,15 @@ Average length of the values: {} (desired: {})",
                     large_value_chunk_keys,
                 )),
                 version: 1,
-                timestamp_seconds: 0,
+                // This part is tested later since its hard to get the exact
+                // timestamp before the actual function call.
+                timestamp_nanoseconds: registry_value.timestamp_nanoseconds,
             },
+        );
+
+        assert!(
+            timestamp_before_applying_mutation <= registry_value.timestamp_nanoseconds
+                && registry_value.timestamp_nanoseconds <= timestamp_after_applying_mutation
         );
 
         // Step 1.2.2: Verify original_registry.changelog.
@@ -1439,7 +1471,9 @@ Average length of the values: {} (desired: {})",
             composite_mutation,
             HighCapacityRegistryAtomicMutateRequest {
                 preconditions: vec![],
-                timestamp_seconds: 0,
+                // This part is tested later since its hard to get the exact
+                // timestamp before the actual function call.
+                timestamp_nanoseconds: composite_mutation.timestamp_nanoseconds,
                 mutations: vec![HighCapacityRegistryMutation {
                     key: b"this is key".to_vec(),
                     mutation_type: Type::Upsert as i32,
@@ -1450,6 +1484,10 @@ Average length of the values: {} (desired: {})",
                     ),
                 }],
             },
+        );
+        assert!(
+            timestamp_before_applying_mutation <= composite_mutation.timestamp_nanoseconds
+                && composite_mutation.timestamp_nanoseconds <= timestamp_after_applying_mutation
         );
 
         // Step 2: Call code under test. Simulate (Registry) canister upgrade.

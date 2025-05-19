@@ -341,6 +341,11 @@ impl CanisterSnapshot {
         }
     }
 
+    /// Creates a snapshot from a canister.
+    ///
+    /// This method fails early, before any expensive computations are
+    /// performed. If that changes, the instructions used in this method
+    /// have to be accounted for in the caller.
     pub fn from_canister(
         canister: &CanisterState,
         taken_at_timestamp: Time,

@@ -1,6 +1,7 @@
 # This Python script converts bazel's compact execution log (--execution_log_compact_file)
 # to a CSV file that contains a row per output file for every bazel target matching the given
-# --whitelist_pat regular expression. Each row contains the columns: target, path, and hash.
+# --whitelist_pat regular expression and not matching the --blacklist_pat.
+# Each row contains the columns: target, path, and hash.
 #
 # Example usage:
 #
@@ -49,6 +50,11 @@ def main():
         help="Regex to match target labels to include in the CSV. If omitted, all targets are included.",
     )
     parser.add_argument(
+        "--blacklist_pat",
+        default=None,
+        help="Regex to match target labels to exclude from the CSV.",
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="Log every ExecLogEntry to stderr. This is useful for debugging.",
@@ -84,7 +90,9 @@ def main():
                 id_to_entry[exec_log_entry.id] = exec_log_entry
             elif entry_type == "spawn":
                 label = exec_log_entry.spawn.target_label
-                if args.whitelist_pat is not None and not re.match(args.whitelist_pat, label):
+                if (args.whitelist_pat is not None and not re.match(args.whitelist_pat, label)) or (
+                    args.blacklist_pat is not None and re.match(args.blacklist_pat, label)
+                ):
                     continue
                 for output in exec_log_entry.spawn.outputs:
                     output_type = output.WhichOneof("type")

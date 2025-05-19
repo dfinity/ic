@@ -29,7 +29,7 @@ use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID,
     LEDGER_CANISTER_ID, LEDGER_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
+use ic_nns_governance_api::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::state_test_helpers::cmc_set_authorized_subnetworks_for_principal;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,

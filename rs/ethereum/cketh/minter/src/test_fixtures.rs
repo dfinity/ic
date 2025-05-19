@@ -49,12 +49,12 @@ pub fn valid_init_arg() -> InitArg {
 pub mod arb {
     use crate::checked_amount::CheckedAmountOf;
     use crate::eth_logs::LedgerSubaccount;
-    use crate::eth_rpc::{Block, Data, FeeHistory, FixedSizeData, Hash, LogEntry};
+    use crate::eth_rpc::{Data, FixedSizeData, Hash, LogEntry};
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
     use crate::numeric::BlockRangeInclusive;
     use candid::Principal;
     use evm_rpc_client::{
-        Hex, Hex20, Hex256, Hex32, HexByte, HttpOutcallError as EvmHttpOutcallError,
+        FeeHistory, Hex, Hex20, Hex256, Hex32, HexByte, HttpOutcallError as EvmHttpOutcallError,
         JsonRpcError as EvmJsonRpcError, Nat256, ProviderError as EvmProviderError,
         RpcError as EvmRpcError, ValidationError as EvmValidationError,
     };
@@ -139,15 +139,6 @@ pub mod arb {
         vec(any::<u8>(), 1..1000).prop_map(Data)
     }
 
-    pub fn arb_block() -> impl Strategy<Value = Block> {
-        (arb_checked_amount_of(), arb_checked_amount_of()).prop_map(|(number, base_fee_per_gas)| {
-            Block {
-                number,
-                base_fee_per_gas,
-            }
-        })
-    }
-
     pub fn arb_log_entry() -> impl Strategy<Value = LogEntry> {
         (
             arb_address(),
@@ -187,14 +178,18 @@ pub mod arb {
 
     pub fn arb_fee_history() -> impl Strategy<Value = FeeHistory> {
         (
-            arb_checked_amount_of(),
-            vec(arb_checked_amount_of(), 1..=10),
-            vec(vec(arb_checked_amount_of(), 1..=10), 1..=10),
+            arb_nat_256(),
+            vec(arb_nat_256(), 1..=10),
+            arb_gas_used_ratio(),
+            vec(vec(arb_nat_256(), 1..=10), 1..=10),
         )
-            .prop_map(|(oldest_block, base_fee_per_gas, reward)| FeeHistory {
-                oldest_block,
-                base_fee_per_gas,
-                reward,
+            .prop_map(|(oldest_block, base_fee_per_gas, gas_used_ratio, reward)| {
+                FeeHistory {
+                    oldest_block,
+                    base_fee_per_gas,
+                    gas_used_ratio,
+                    reward,
+                }
             })
     }
 

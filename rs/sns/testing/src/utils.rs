@@ -17,7 +17,7 @@ use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID,
     REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::{ListNeurons, Neuron};
+use ic_nns_governance_api::{ListNeurons, Neuron};
 use icp_ledger::{AccountIdBlob, Memo, Tokens, TransferArgs, TransferError, DEFAULT_TRANSFER_FEE};
 use k256::SecretKey;
 use lazy_static::lazy_static;

@@ -19,7 +19,7 @@ use ic_nns_constants::{
     LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
     ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     install_code::CanisterInstallMode, CreateServiceNervousSystem, GetNeuronsFundAuditInfoResponse,
     InstallCodeRequest, ListNeurons, ListNeuronsResponse, MakeProposalRequest,
     ManageNeuronCommandRequest, ManageNeuronResponse, NetworkEconomics, Neuron,
@@ -462,6 +462,11 @@ impl NnsInstaller {
 
     pub fn with_test_governance_canister(&mut self) -> &mut Self {
         self.with_test_governance_canister = true;
+        self
+    }
+
+    pub fn with_test_registry_canister(&mut self) -> &mut Self {
+        self.with_test_registry_canister = true;
         self
     }
 
@@ -2584,7 +2589,7 @@ pub mod sns {
     pub mod swap {
         use super::*;
         use ic_nervous_system_agent::sns::swap::SwapCanister;
-        use ic_nns_governance_api::pb::v1::create_service_nervous_system::SwapParameters;
+        use ic_nns_governance_api::create_service_nervous_system::SwapParameters;
         use ic_sns_swap::pb::v1::{GetOpenTicketResponse, SnsNeuronRecipe};
         use icp_ledger::DEFAULT_TRANSFER_FEE;
 

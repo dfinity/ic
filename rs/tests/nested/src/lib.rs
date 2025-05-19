@@ -47,7 +47,7 @@ pub fn config(env: TestEnv) {
         // So we temporarily require that this test is hosted in dm1 until the other Farm hosts are upgraded to Ubuntu 24.04.
         .with_required_host_features(vec![HostFeature::DC("dm1".to_string())])
         .add_fast_single_node_subnet(SubnetType::System)
-        .with_mainnet_config()
+        // .with_mainnet_config() TODO: uncomment in NODE-1518
         .with_api_boundary_nodes(1)
         .with_node_provider(principal)
         .with_node_operator(principal)

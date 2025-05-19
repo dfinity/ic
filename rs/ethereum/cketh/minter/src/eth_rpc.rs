@@ -1,18 +1,15 @@
 //! This module contains definitions for communicating with an Ethereum API using the [JSON RPC](https://ethereum.org/en/developers/docs/apis/json-rpc/)
 //! interface.
 
-use crate::endpoints::CandidBlockTag;
-use crate::numeric::{BlockNumber, LogIndex, Wei, WeiPerGas};
+use crate::numeric::{BlockNumber, LogIndex};
 use candid::CandidType;
 use ethnum;
 use evm_rpc_client::HttpOutcallError as EvmHttpOutcallError;
 use ic_cdk::api::call::RejectionCode;
 use ic_ethereum_types::Address;
-pub use metrics::encode as encode_metrics;
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::fmt;
 use std::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
 
 #[cfg(test)]
@@ -158,108 +155,8 @@ impl std::str::FromStr for Hash {
     }
 }
 
-/// Block tags.
-/// See <https://ethereum.org/en/developers/docs/apis/json-rpc/#default-block>
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum BlockTag {
-    /// The latest mined block.
-    #[default]
-    Latest,
-    /// The latest safe head block.
-    /// See
-    /// <https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels>
-    Safe,
-    /// The latest finalized block.
-    /// See
-    /// <https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels>
-    Finalized,
-}
-
-impl From<CandidBlockTag> for BlockTag {
-    fn from(block_tag: CandidBlockTag) -> BlockTag {
-        match block_tag {
-            CandidBlockTag::Latest => BlockTag::Latest,
-            CandidBlockTag::Safe => BlockTag::Safe,
-            CandidBlockTag::Finalized => BlockTag::Finalized,
-        }
-    }
-}
-
-impl From<BlockTag> for CandidBlockTag {
-    fn from(value: BlockTag) -> Self {
-        match value {
-            BlockTag::Latest => CandidBlockTag::Latest,
-            BlockTag::Safe => CandidBlockTag::Safe,
-            BlockTag::Finalized => CandidBlockTag::Finalized,
-        }
-    }
-}
-
-impl Display for BlockTag {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Latest => write!(f, "latest"),
-            Self::Safe => write!(f, "safe"),
-            Self::Finalized => write!(f, "finalized"),
-        }
-    }
-}
-
-/// The block specification indicating which block to query.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
-#[serde(untagged)]
-pub enum BlockSpec {
-    /// Query the block with the specified index.
-    Number(BlockNumber),
-    /// Query the block with the specified tag.
-    Tag(BlockTag),
-}
-
-impl Default for BlockSpec {
-    fn default() -> Self {
-        Self::Tag(BlockTag::default())
-    }
-}
-
-impl std::str::FromStr for BlockSpec {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.starts_with("0x") {
-            let block_number = BlockNumber::from_str_hex(s)
-                .map_err(|e| format!("failed to parse block number '{s}': {e}"))?;
-            return Ok(BlockSpec::Number(block_number));
-        }
-        Ok(BlockSpec::Tag(match s {
-            "latest" => BlockTag::Latest,
-            "safe" => BlockTag::Safe,
-            "finalized" => BlockTag::Finalized,
-            _ => return Err(format!("unknown block tag '{s}'")),
-        }))
-    }
-}
-
-/// Parameters of the [`eth_getLogs`](https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_getlogs) call.
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GetLogsParam {
-    /// Integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
-    pub from_block: BlockSpec,
-    /// Integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
-    pub to_block: BlockSpec,
-    /// Contract address or a list of addresses from which logs should originate.
-    pub address: Vec<Address>,
-    /// Array of 32 Bytes DATA topics.
-    /// Topics are order-dependent.
-    /// Each topic can also be an array of DATA with "or" options.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub topics: Vec<Topic>,
-}
-
 /// A topic is either a 32 Bytes DATA, or an array of 32 Bytes DATA with "or" options.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(untagged)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Topic {
     Single(FixedSizeData),
     Multiple(Vec<FixedSizeData>),
@@ -326,62 +223,6 @@ pub struct LogEntry {
     pub removed: bool,
 }
 
-/// Parameters of the [`eth_feeHistory`](https://ethereum.github.io/execution-apis/api-documentation/) call.
-#[derive(Clone, Debug, Serialize)]
-#[serde(into = "(Quantity, BlockSpec, Vec<u8>)")]
-pub struct FeeHistoryParams {
-    /// Number of blocks in the requested range.
-    /// Typically providers request this to be between 1 and 1024.
-    pub block_count: Quantity,
-    /// Highest block of the requested range.
-    /// Integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
-    pub highest_block: BlockSpec,
-    /// A monotonically increasing list of percentile values between 0 and 100.
-    /// For each block in the requested range, the transactions will be sorted in ascending order
-    /// by effective tip per gas and the corresponding effective tip for the percentile
-    /// will be determined, accounting for gas consumed.
-    pub reward_percentiles: Vec<u8>,
-}
-
-impl From<FeeHistoryParams> for (Quantity, BlockSpec, Vec<u8>) {
-    fn from(value: FeeHistoryParams) -> Self {
-        (
-            value.block_count,
-            value.highest_block,
-            value.reward_percentiles,
-        )
-    }
-}
-
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct FeeHistory {
-    /// Lowest number block of the returned range.
-    pub oldest_block: BlockNumber,
-    /// An array of block base fees per gas.
-    /// This includes the next block after the newest of the returned range,
-    /// because this value can be derived from the newest block.
-    /// Zeroes are returned for pre-EIP-1559 blocks.
-    pub base_fee_per_gas: Vec<WeiPerGas>,
-    /// A two-dimensional array of effective priority fees per gas at the requested block percentiles.
-    pub reward: Vec<Vec<WeiPerGas>>,
-}
-
-impl From<BlockNumber> for BlockSpec {
-    fn from(value: BlockNumber) -> Self {
-        BlockSpec::Number(value)
-    }
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Block {
-    ///The block number. `None` when its pending block.
-    pub number: BlockNumber,
-    /// Base fee value of this block
-    pub base_fee_per_gas: Wei,
-}
-
 /// An envelope for all JSON-RPC replies.
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -439,76 +280,3 @@ pub fn is_response_too_large(code: &RejectionCode, message: &str) -> bool {
 }
 
 pub type HttpOutcallResult<T> = Result<T, HttpOutcallError>;
-
-pub(super) mod metrics {
-    use ic_metrics_encoder::MetricsEncoder;
-    use std::cell::RefCell;
-    use std::collections::BTreeMap;
-
-    /// The max number of RPC call retries we expect to see (plus one).
-    const MAX_EXPECTED_RETRIES: usize = 20;
-
-    #[derive(Default)]
-    struct RetryHistogram {
-        /// The histogram of HTTP call retry counts.
-        /// The last bucket corresponds to the "infinite" value that exceeds the maximum number we
-        /// expect to see in practice.
-        retry_buckets: [u64; MAX_EXPECTED_RETRIES + 1],
-        retry_count: u64,
-    }
-
-    impl RetryHistogram {
-        /// Returns a iterator over the histrogram buckets in the format that ic-metrics-encoder
-        /// expects.
-        fn iter(&self) -> impl Iterator<Item = (f64, f64)> + '_ {
-            (0..MAX_EXPECTED_RETRIES)
-                .zip(self.retry_buckets[0..MAX_EXPECTED_RETRIES].iter().cloned())
-                .map(|(k, v)| (k as f64, v as f64))
-                .chain(std::iter::once((
-                    f64::INFINITY,
-                    self.retry_buckets[MAX_EXPECTED_RETRIES] as f64,
-                )))
-        }
-    }
-
-    #[derive(Default)]
-    pub struct HttpMetrics {
-        /// Retry counts histograms indexed by the ETH RCP method name.
-        retry_histogram_per_method: BTreeMap<String, RetryHistogram>,
-    }
-
-    impl HttpMetrics {
-        pub fn encode<W: std::io::Write>(
-            &self,
-            encoder: &mut MetricsEncoder<W>,
-        ) -> std::io::Result<()> {
-            if self.retry_histogram_per_method.is_empty() {
-                return Ok(());
-            }
-
-            let mut histogram_vec = encoder.histogram_vec(
-                "cketh_eth_rpc_call_retry_count",
-                "The number of ETH RPC call retries by method.",
-            )?;
-
-            for (method, histogram) in &self.retry_histogram_per_method {
-                histogram_vec = histogram_vec.histogram(
-                    &[("method", method.as_str())],
-                    histogram.iter(),
-                    histogram.retry_count as f64,
-                )?;
-            }
-
-            Ok(())
-        }
-    }
-
-    thread_local! {
-        static METRICS: RefCell<HttpMetrics> = RefCell::default();
-    }
-
-    /// Encodes the metrics related to ETH RPC method calls.
-    pub fn encode<W: std::io::Write>(encoder: &mut MetricsEncoder<W>) -> std::io::Result<()> {
-        METRICS.with(|metrics| metrics.borrow().encode(encoder))
-    }
-}

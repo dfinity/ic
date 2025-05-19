@@ -31,7 +31,7 @@ from pathlib import Path
 #
 class CustomFormatter(logging.Formatter):
     """
-    A custom logging formatter that preserves the original script’s
+    A custom logging formatter that preserves the original script's
     date/time format, color codes, and bracketed icons for each level.
     """
 
@@ -627,10 +627,16 @@ class ReproducibilityVerifier:
         """Prepares temporary and output directories."""
         if keep_temp:
             logger.debug("DEBUG mode => not automatically removing the tempdir.")
-        _tmpdir_obj = tempfile.TemporaryDirectory(prefix="repro-check_", delete=not keep_temp)
-        tmpdir = Path(_tmpdir_obj.name)
 
+        # Create temporary directory under cache location
+        tmpdir = Path(self.base_cache_dir / f"tmp-{int(time.time())}")
+        tmpdir.mkdir(parents=True, exist_ok=True)
         logger.info(f"Using temporary directory: {tmpdir}")
+
+        def cleanup():
+            if not keep_temp and tmpdir.exists():
+                logger.debug("Cleaning up temporary directory.")
+                shutil.rmtree(tmpdir)
         out_dir = tmpdir / "disk-images" / self.git_hash
 
         yield Dirs(
@@ -641,7 +647,7 @@ class ReproducibilityVerifier:
             out_dir / "proposal-img",
         )
         if not keep_temp:
-            logger.debug("Cleaning up temporary directory.")
+            cleanup()
 
     # --------------------------------------------------------------------------
     # Verification steps

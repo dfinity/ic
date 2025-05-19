@@ -8,7 +8,7 @@ use ic_nervous_system_common_test_keys::{
 use ic_nns_common::pb::v1::{self as nns_common_pb, ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_governance::governance::test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING;
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     governance_error::ErrorType,
     manage_neuron::{self, RegisterVote},
     manage_neuron_response,
