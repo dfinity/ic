@@ -25,6 +25,7 @@ use std::sync::RwLock;
 // Since we can only record limited number of them, the follow is
 // the range of ranks that are permitted to show up in metrics.
 const RANKS_TO_RECORD: [&str; 6] = ["0", "1", "2", "3", "4", "5"];
+const MB: f64 = 1024.0 * 1024.0;
 
 pub(crate) const CRITICAL_ERROR_PAYLOAD_TOO_LARGE: &str = "consensus_payload_too_large";
 pub(crate) const CRITICAL_ERROR_VALIDATION_NOT_PASSED: &str = "consensus_validation_not_passed";
@@ -157,6 +158,7 @@ impl BatchStats {
         self.xnet_bytes_delivered += payload.xnet.size_bytes();
         self.ingress_ids
             .extend(payload.ingress.message_ids().cloned());
+        self.canister_http.payload_bytes = payload.canister_http.len();
     }
 }
 
@@ -241,6 +243,8 @@ pub struct FinalizerMetrics {
     pub canister_http_success_delivered: IntCounter,
     pub canister_http_timeouts_delivered: IntCounter,
     pub canister_http_divergences_delivered: IntCounter,
+    // the size will be observed in MBs
+    pub canister_http_payload_size: Histogram,
 }
 
 impl FinalizerMetrics {
@@ -332,6 +336,12 @@ impl FinalizerMetrics {
                 "canister_http_divergences_delivered",
                 "Total number of canister http messages delivered as divergences",
             ),
+            canister_http_payload_size: metrics_registry.histogram(
+                "canister_http_payload_size", 
+                "The size of the canister http payload in MBs",
+                // 0MB, 0.25MB, 0.5MB, ..., 2.0MB, 2.25MB
+                linear_buckets(0.0, 0.25, 10),
+            ),
         }
     }
 
@@ -353,6 +363,8 @@ impl FinalizerMetrics {
             .inc_by(batch_stats.canister_http.timeouts as u64);
         self.canister_http_divergences_delivered
             .inc_by(batch_stats.canister_http.divergence_responses as u64);
+        self.canister_http_payload_size
+            .observe((batch_stats.canister_http.payload_bytes as f64) / MB);
 
         if let Some(idkg) = &block_stats.idkg_stats {
             let set = |metric: &IntGaugeVec, counts: &CounterPerMasterPublicKeyId| {

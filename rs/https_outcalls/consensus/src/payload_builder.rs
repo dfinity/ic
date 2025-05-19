@@ -56,12 +56,15 @@ mod proptests;
 mod tests;
 mod utils;
 
-/// Statistics about the number of canister http message types in a canister http payload
+/// Statistics about http messages. The stats contain data about 
+/// the number of canister http message types in a canister http payload
+/// but also data about the payload_size
 #[derive(Debug, Default)]
 pub struct CanisterHttpBatchStats {
     pub responses: usize,
     pub timeouts: usize,
     pub divergence_responses: usize,
+    pub payload_bytes: usize,
 }
 
 enum CandidateOrDivergence {
