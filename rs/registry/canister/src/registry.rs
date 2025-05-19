@@ -1342,9 +1342,10 @@ mod tests {
         test_from_serializable_form_impl(1)
     }
 
-    // This is a little more realistic than the previous two tests in the way
-    // that the original Registry gets populated. More precisely, instead of
-    // directly manipulating members, apply_mutations is called (via
+    // This is a little more realistic than the previous two tests
+    // (test_from_serializable_form_version1_(max_size_delta|delta_too_large))
+    // in the way that the original Registry gets populated. More precisely,
+    // instead of directly manipulating members, apply_mutations is called (via
     // apply_mutations_skip_invariant_checks, like many other tests).
     #[test]
     fn test_from_serializable_form_with_chunking() {
