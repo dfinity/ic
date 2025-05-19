@@ -167,16 +167,27 @@ pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 17] = [
     &NODE_REWARDS_CANISTER_ID,
 ];
 
-// The memory allocation for the ledger, governance and registry canisters
-// (4GiB)
-const NNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES: u64 = 4 * 1024 * 1024 * 1024;
-
-// We preallocate 10GB stable memory for NNS governance so that pre_upgrade never fails trying to
-// grow stable memory, and we might also have some other data occupying stable memory.
-const NNS_GOVERNANCE_CANISTER_MEMORY_ALLOCATION_IN_BYTES: u64 = 10 * 1024 * 1024 * 1024;
-
-// The default memory allocation to set for the remaining NNS canister (1GiB)
-const NNS_DEFAULT_CANISTER_MEMORY_ALLOCATION_IN_BYTES: u64 = 1024 * 1024 * 1024;
+pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 19] = [
+    &REGISTRY_CANISTER_ID,
+    &GOVERNANCE_CANISTER_ID,
+    &LEDGER_CANISTER_ID,
+    &ROOT_CANISTER_ID,
+    &CYCLES_MINTING_CANISTER_ID,
+    &LIFELINE_CANISTER_ID,
+    &GENESIS_TOKEN_CANISTER_ID,
+    &ICP_LEDGER_ARCHIVE_CANISTER_ID,
+    &LEDGER_INDEX_CANISTER_ID,
+    &ICP_LEDGER_ARCHIVE_1_CANISTER_ID,
+    &SUBNET_RENTAL_CANISTER_ID,
+    &ICP_LEDGER_ARCHIVE_2_CANISTER_ID,
+    &ICP_LEDGER_ARCHIVE_3_CANISTER_ID,
+    &NODE_REWARDS_CANISTER_ID,
+    &EXCHANGE_RATE_CANISTER_ID,
+    &BITCOIN_MAINNET_CANISTER_ID,
+    &BITCOIN_TESTNET_CANISTER_ID,
+    &CYCLES_LEDGER_CANISTER_ID,
+    &CYCLES_LEDGER_INDEX_CANISTER_ID,
+];
 
 /// The current value is 4 GiB, s.t. the SNS governance canister never hits the soft memory limit.
 /// This mitigates the risk that an SNS Governance canister runs out of memory and proposals cannot
@@ -186,14 +197,25 @@ pub const DEFAULT_SNS_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT: u64 = 1 << 32;
 /// This value is 3GiB, which will leave a comfortable buffer in the situation when a canister runs out of memory
 pub const DEFAULT_SNS_NON_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT: u64 = 3 * (1 << 30);
 
+const GB: u64 = 1024 * 1024 * 1024;
+
 /// Returns the memory allocation of the given nns canister.
 pub fn memory_allocation_of(canister_id: CanisterId) -> u64 {
-    if canister_id == GOVERNANCE_CANISTER_ID {
-        NNS_GOVERNANCE_CANISTER_MEMORY_ALLOCATION_IN_BYTES
-    } else if [LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID].contains(&canister_id) {
-        NNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES
+    if canister_id == ICP_LEDGER_ARCHIVE_CANISTER_ID {
+        8 * GB
+    } else if canister_id == LEDGER_CANISTER_ID {
+        4 * GB
+    } else if [
+        ROOT_CANISTER_ID,
+        CYCLES_MINTING_CANISTER_ID,
+        LIFELINE_CANISTER_ID,
+        GENESIS_TOKEN_CANISTER_ID,
+    ]
+    .contains(&canister_id)
+    {
+        GB
     } else {
-        NNS_DEFAULT_CANISTER_MEMORY_ALLOCATION_IN_BYTES
+        0 // "best-effort" memory allocation, i.e., no explicit memory allocation
     }
 }
 

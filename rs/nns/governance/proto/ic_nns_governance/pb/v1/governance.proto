@@ -1359,6 +1359,9 @@ message ProposalData {
   // amount of voting power that it exercised (so called "deciding" voting
   // power) in proportion to this.
   optional uint64 total_potential_voting_power = 22;
+
+  // The topic of the proposal.
+  optional Topic topic = 23;
 }
 
 // This structure contains data for settling the Neurons' Fund participation in an SNS token swap.

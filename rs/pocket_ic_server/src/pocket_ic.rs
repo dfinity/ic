@@ -923,14 +923,22 @@ impl PocketIc {
             topology
                 .subnet_configs
                 .into_values()
-                .map(|config| SubnetConfigInfo {
-                    ranges: config.subnet_config.ranges,
-                    alloc_range: config.subnet_config.alloc_range,
-                    subnet_id: Some(config.subnet_config.subnet_id),
-                    subnet_state_dir: None,
-                    subnet_kind: config.subnet_config.subnet_kind,
-                    instruction_config: config.subnet_config.instruction_config,
-                    time: config.time,
+                .map(|config| {
+                    range_gen
+                        .add_assigned(config.subnet_config.ranges.clone())
+                        .unwrap();
+                    if let Some(allocation_range) = config.subnet_config.alloc_range {
+                        range_gen.add_assigned(vec![allocation_range]).unwrap();
+                    }
+                    SubnetConfigInfo {
+                        ranges: config.subnet_config.ranges,
+                        alloc_range: config.subnet_config.alloc_range,
+                        subnet_id: Some(config.subnet_config.subnet_id),
+                        subnet_state_dir: None,
+                        subnet_kind: config.subnet_config.subnet_kind,
+                        instruction_config: config.subnet_config.instruction_config,
+                        time: config.time,
+                    }
                 })
                 .collect()
         } else {
