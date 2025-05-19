@@ -49,6 +49,7 @@ pub mod host_memory;
 /// pub for usage in fuzzing
 #[doc(hidden)]
 pub mod linker;
+mod memory_loader;
 mod signal_stack;
 pub mod system_api;
 pub mod system_api_complexity;
@@ -437,6 +438,7 @@ impl WasmtimeEmbedder {
                     .build(),
                 canister_backtrace: self.config.feature_flags.canister_backtrace,
                 accessed_main_memory_pages: None,
+                heap_memory_loader: None,
             },
         );
         store.limiter(|state| &mut state.limits);
@@ -613,15 +615,26 @@ impl WasmtimeEmbedder {
                 }
                 Some(current_memory_size_in_pages) => current_memory_size_in_pages,
             };
-            memories_to_track.insert(
-                memory_info.memory_type,
-                MemorySigSegvInfo {
-                    instance_memory,
-                    current_memory_size_in_pages: current_size,
-                    page_map: memory_info.memory.page_map.clone(),
-                    dirty_page_tracking: memory_info.dirty_page_tracking,
-                },
-            );
+            match memory_info.memory_type {
+                CanisterMemoryType::Heap => {
+                    let loader = memory_loader::MemoryLoader::new(
+                        memory_info.memory.page_map.clone(),
+                        start.0,
+                    );
+                    store.data_mut().heap_memory_loader = Some(loader);
+                }
+                CanisterMemoryType::Stable => {
+                    memories_to_track.insert(
+                        memory_info.memory_type,
+                        MemorySigSegvInfo {
+                            instance_memory,
+                            current_memory_size_in_pages: current_size,
+                            page_map: memory_info.memory.page_map.clone(),
+                            dirty_page_tracking: memory_info.dirty_page_tracking,
+                        },
+                    );
+                }
+            }
 
             if let Some(bytemap_name) = memory_info.bytemap_name {
                 self.bytemap_protect_read_write(
@@ -716,6 +729,10 @@ fn sigsegv_memory_tracker<S>(
         },
     ) in memories
     {
+        if mem_type == CanisterMemoryType::Heap {
+            continue;
+        }
+
         let base = instance_memory.data_ptr(&store);
         let size = instance_memory.data_size(&store);
 
@@ -766,6 +783,7 @@ pub struct StoreData {
     pub limits: StoreLimits,
     pub canister_backtrace: FlagStatus,
     pub accessed_main_memory_pages: Option<wasmtime::Global>,
+    pub heap_memory_loader: Option<memory_loader::MemoryLoader>,
 }
 
 impl StoreData {

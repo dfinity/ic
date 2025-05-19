@@ -2,6 +2,7 @@ use crate::{
     wasm_utils::instrumentation::WasmMemoryType,
     wasmtime_embedder::{
         convert_backtrace,
+        memory_loader::AccessType,
         system_api::SystemApiImpl,
         system_api_complexity::{overhead, overhead_native},
         StoreData, WASM_HEAP_BYTEMAP_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
@@ -18,7 +19,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
-use ic_sys::PAGE_SIZE;
+use ic_sys::{PageIndex, PAGE_SIZE};
 use ic_types::{Cycles, NumBytes, NumInstructions, Time};
 use ic_wasm_types::WasmEngineError;
 use num_traits::ops::saturating::SaturatingAdd;
@@ -26,6 +27,8 @@ use num_traits::ops::saturating::SaturatingAdd;
 use wasmtime::{AsContext, AsContextMut, Caller, Global, Linker, Val, WasmBacktrace};
 
 use std::convert::TryFrom;
+
+use super::memory_loader::MemoryLoader;
 
 /// The amount of instructions required to process a single byte in a payload.
 /// This includes the cost of memory as well as time passing the payload
@@ -1459,6 +1462,28 @@ pub fn syscalls<
         .unwrap();
 }
 
+fn with_memory_loader_and_bytemap<T>(
+    mut caller: &mut Caller<'_, StoreData>,
+    f: impl Fn(&MemoryLoader, &mut [u8]) -> HypervisorResult<T>,
+) -> Result<T, anyhow::Error> {
+    caller
+        .get_export(WASM_HEAP_BYTEMAP_MEMORY_NAME)
+        .ok_or_else(|| HypervisorError::ToolchainContractViolation {
+            error: "WebAssembly module must define memory bytemap".to_string(),
+        })
+        .and_then(|ext| {
+            ext.into_memory()
+                .ok_or_else(|| HypervisorError::ToolchainContractViolation {
+                    error: format!("export '{}' is not a memory", WASM_HEAP_BYTEMAP_MEMORY_NAME),
+                })
+        })
+        .and_then(|mem| {
+            let (mem, store) = mem.data_and_store_mut(&mut caller);
+            f(&store.heap_memory_loader.as_ref().unwrap(), mem)
+        })
+        .map_err(|e| process_err(&mut caller, e))
+}
+
 const NO_ACCESS: u8 = 0;
 const WRITE_ACCESS: u8 = 1;
 const READ_ONLY_ACCESS: u8 = 2;
@@ -1470,23 +1495,12 @@ fn main_read_page_guard(
     mut caller: &mut Caller<'_, StoreData>,
     page_index: usize,
 ) -> Result<(), anyhow::Error> {
-    let bytemap_mem = match caller.get_export(WASM_HEAP_BYTEMAP_MEMORY_NAME) {
-        Some(wasmtime::Extern::Memory(mem)) => mem,
-        _ => {
-            return Err(process_err(
-                caller,
-                HypervisorError::ToolchainContractViolation {
-                    error: "Failed to access heap bitmap".to_string(),
-                },
-            ))
-        }
-    };
-
-    let bytemap = bytemap_mem.data_mut(&mut caller);
-    if bytemap[page_index] == NO_ACCESS {
-        bytemap[page_index] = READ_ONLY_ACCESS;
-        first_access_on_main_memory_page(&mut caller)?;
-    }
+    with_memory_loader_and_bytemap(caller, |loader, bytemap| {
+        debug_assert!(bytemap[page_index] == NO_ACCESS);
+        loader.load_page(bytemap, PageIndex::new(page_index as u64), AccessType::Read);
+        Ok(())
+    })?;
+    first_access_on_main_memory_page(&mut caller)?;
     Ok(())
 }
 
@@ -1497,21 +1511,18 @@ fn main_write_page_guard(
     mut caller: &mut Caller<'_, StoreData>,
     page_index: usize,
 ) -> Result<(), anyhow::Error> {
-    let bytemap_mem = match caller.get_export(WASM_HEAP_BYTEMAP_MEMORY_NAME) {
-        Some(wasmtime::Extern::Memory(mem)) => mem,
-        _ => {
-            return Err(process_err(
-                caller,
-                HypervisorError::ToolchainContractViolation {
-                    error: "Failed to access heap bitmap".to_string(),
-                },
-            ))
+    let first_access = with_memory_loader_and_bytemap(caller, |loader, bytemap| {
+        let first_access = bytemap[page_index] == NO_ACCESS;
+        if !first_access {
+            debug_assert_eq!(bytemap[page_index], READ_ONLY_ACCESS);
         }
-    };
-
-    let bytemap = bytemap_mem.data_mut(&mut caller);
-    let first_access = bytemap[page_index] == NO_ACCESS;
-    bytemap[page_index] = WRITE_ACCESS;
+        loader.load_page(
+            bytemap,
+            PageIndex::new(page_index as u64),
+            AccessType::Write,
+        );
+        Ok(first_access)
+    })?;
     if first_access {
         first_access_on_main_memory_page(&mut caller)?;
     }
