@@ -133,6 +133,11 @@ startup_options=(
 
 log bazel "${startup_options[@]}" "${bazel_args[@]}"
 
+# Monitor tmp
+while sleep 1; do du -hs /var/tmp /tmp ; free -h; done &
+DF_PID=$!
+trap 'kill ${DF_PID}' EXIT
+
 if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
     bazel_bes "${startup_options[@]}" "${bazel_args[@]}"
 else
