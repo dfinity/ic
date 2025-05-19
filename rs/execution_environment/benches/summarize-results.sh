@@ -21,11 +21,10 @@ TMP_FILE="${TMP_FILE:-${MIN_FILE%.*}.tmp}"
 if [ ! -s "${MIN_FILE}" ]; then
     echo "    No results to summarize in ${MIN_FILE} (quick run?)" >&2 && exit 0
 fi
+# The min file name is expected to be in the format: `<name>.<host>@<commit_id>.min`
 BASELINE_FILE="${BASELINE_DIR}/${MIN_FILE##*/}"
-# Remove the commit id from the baseline file name.
-# This is needed to compare the baseline file with the current one.
-# The baseline file name is expected to be in the format:
-#   <name>.<host>@<commit_id>.min
+# Remove the commit id from the baseline file name, so we compare the min file name
+# `<name>.<host>@<commit_id>.min` to the baseline file `<baseline_dir>/<name>.<host>.min`.
 BASELINE_FILE="${BASELINE_FILE%@*.min}.min"
 if [ ! -s "${BASELINE_FILE}" ]; then
     # Return an error, so the calling script can retry.
@@ -41,7 +40,7 @@ echo_diff_ms_pct() {
             if (diff_pct ^ 2 <= ${NOISE_THRESHOLD_PCT} ^ 2) {
                 printf \"0 0\n\"
             } else {
-                printf \"%.1f %.1f\n\", diff_ms, diff_pct
+                printf \"%.2f %.2f\n\", diff_ms, diff_pct
             };
         }"
     else
@@ -71,7 +70,7 @@ while read min_bench; do
         total_baseline_ns=$((total_baseline_ns + baseline_result_ns))
         total_new_ns=$((total_new_ns + new_result_ns))
         read baseline_ms new_ms < <(awk "BEGIN {
-            printf \"%.1f %.1f\n\",
+            printf \"%.2f %.2f\n\",
                 ${baseline_result_ns} / 1000 / 1000, ${new_result_ns} / 1000 / 1000
         }")
         diff_ms_pct=$(echo_diff_ms_pct "${baseline_result_ns}" "${new_result_ns}")

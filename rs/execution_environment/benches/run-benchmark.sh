@@ -52,7 +52,7 @@ else
 
         if [ -z "${min_result_ns}" ] || [ "${new_result_ns}" -lt "${min_result_ns}" ]; then
             awk "BEGIN {
-                printf \"^ improved: ${name} (%.1f -> %.1f ms)\n\",
+                printf \"^ improved: ${name} (%.2f -> %.2f ms)\n\",
                     ${min_result_ns} / 1000 / 1000, ${new_result_ns} / 1000 / 1000
             }"
             min_bench="${new_bench}"
