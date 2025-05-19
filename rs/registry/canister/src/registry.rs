@@ -863,18 +863,24 @@ mod tests {
 
         let mut registry = Registry::new();
         let version = 1;
-        let key = b"key";
+        let key = b"this_is_large_but_not_chunkified";
 
-        let max_value = vec![0; max_mutation_value_size(version, key) - 50];
+        // The EXACT point when chunkification kicks in is not so precisely
+        // defined. Therefore, to COMFORTABLY avoid chunkification, ` - 50` is
+        // applied.
+        let max_value = vec![42; max_mutation_value_size(version, key) - 50];
 
         // This seems large, but this will get chunkified down to approximately
         // dozens of bytes. As a result, for the purposes of
         // count_fitting_deltas, this is actually small.
-        let chunkified_mutation = upsert([90; 50], [1; 2_000_000]);
+        let chunkified_mutation = upsert(b"this_is_chunkified", [43; 2_000_000]);
 
         let large_but_not_chunkified_mutation = upsert(key, max_value);
 
-        let not_large_mutation = upsert([89; 200], [1; 200]);
+        let not_large_mutation = upsert(
+            b"this_is_small_but_not_completely_negligible",
+            [44; 200],
+        );
 
         for mutation in [
             chunkified_mutation,
