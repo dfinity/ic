@@ -11,4 +11,4 @@ EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0"
 # stopped. This causes the system to behave differently than in either
 # "no SELinux" or "permissive" mode.
 #
-# EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=1"
+# EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=1 rootwait"
