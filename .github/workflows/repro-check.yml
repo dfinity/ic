@@ -53,6 +53,7 @@ jobs:
       - name: Repro check for ${{ inputs.github_sha }}
         shell: bash
         run: |
+          # Hermetic python interpreter requires a non-root user to be built.
           sudo -u ciuser bash -c '
             curl -fsSL https://raw.githubusercontent.com/dfinity/ic/master/ci/tools/repro-check |
             python3 - -c ${{ inputs.github_sha }} --setupos --guestos --hostos

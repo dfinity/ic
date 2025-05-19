@@ -160,5 +160,6 @@ jobs:
   repro-check:
     name: Repro check for ${{ github.sha }}
     uses: ./.github/workflows/repro-check.yml
+    needs: [ci-main]
     with:
       github_sha: ${{ github.sha }}
