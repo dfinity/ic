@@ -22,11 +22,15 @@ concurrency:
 jobs:
   repro-check:
     name: Run repro-check for ${{ inputs.github_sha }}
-    runs-on: ubuntu-latest
-      # labels: dind-small
+    runs-on:
+      labels: dind-small
     steps:
       - name: Setup podman
-        uses: gacts/install-podman@v1.1.1
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get -y upgrade
+          sudo apt-get -y install podman
 
       - name: Repro check for ${{ inputs.github_sha }}
         shell: bash
