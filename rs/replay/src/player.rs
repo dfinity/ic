@@ -935,7 +935,8 @@ impl Player {
         self.certify_state_with_dummy_certification();
 
         let perform_query = Arc::new(Mutex::new(self.query_handler.clone()));
-        get_changes_since(version, ingress_expiry, &self.runtime, &perform_query)
+        self.runtime
+            .block_on(get_changes_since(version, ingress_expiry, &perform_query))
     }
 
     /// Return the SubnetRecord of this subnet at the latest registry version.
@@ -1213,10 +1214,17 @@ impl PerformQuery for Arc<Mutex<QueryExecutionService>> {
     }
 }
 
-fn get_changes_since(
+pub async fn public_only_for_test_get_changes_since(
     version: u64,
     ingress_expiry: Time,
-    runtime: &Runtime,
+    perform_query: &(impl PerformQuery + Sync),
+) -> Result<Vec<RegistryTransportRecord>, String> {
+    get_changes_since(version, ingress_expiry, perform_query).await
+}
+
+async fn get_changes_since(
+    version: u64,
+    ingress_expiry: Time,
     perform_query: &(impl PerformQuery + Sync),
 ) -> Result<Vec<RegistryTransportRecord>, String> {
     let payload = serialize_get_changes_since_request(version).unwrap();
@@ -1230,10 +1238,7 @@ fn get_changes_since(
         method_name: "get_changes_since".to_string(),
         method_payload: payload,
     };
-    match runtime
-        .block_on(perform_query.perform_query(query))
-        .unwrap()
-    {
+    match perform_query.perform_query(query).await.unwrap() {
         Ok((Ok(wasm_result), _time)) => match wasm_result {
             WasmResult::Reply(v) => {
                 let (high_capacity_deltas, _version) = deserialize_get_changes_since_response(v)
@@ -1244,8 +1249,8 @@ fn get_changes_since(
                 for delta in high_capacity_deltas {
                     let get_chunk = GetChunkImpl { perform_query };
 
-                    let delta = runtime
-                        .block_on(dechunkify_delta(delta, &get_chunk))
+                    let delta = dechunkify_delta(delta, &get_chunk)
+                        .await
                         .map_err(|err| format!("{:?}", err))?;
 
                     inlined_deltas.push(delta);
@@ -1839,8 +1844,8 @@ mod tests {
     }
 
     // This test is maybe a bit of a mockery. Realistic testing is hard...
-    #[test]
-    fn test_get_changes_since() {
+    #[tokio::test]
+    async fn test_get_changes_since() {
         // Step 1: Prepare the world.
         //
         // This almost entirely consists of expecting that various Registry
@@ -2010,12 +2015,7 @@ mod tests {
 
         // Step 2: Run code under test (finally!).
 
-        let result = get_changes_since(
-            VERSION,
-            ingress_expiry,
-            &Runtime::new().unwrap(),
-            &perform_query,
-        );
+        let result = get_changes_since(VERSION, ingress_expiry, &perform_query).await;
 
         // Step 3: Verify result(s).
 
