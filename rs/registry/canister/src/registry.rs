@@ -1153,10 +1153,10 @@ mod tests {
         let req = HighCapacityRegistryAtomicMutateRequest {
             mutations,
             preconditions: vec![],
-            // Since the `too_large_value` is built with serializing maximum
-            // timestamp length to 10 bytes the tipping point of `+ 1` will be
-            // there only if we account the timestamp of full serialized 10
-            // bytes.
+            // max_mutation_value_size assumes that this field holds the maximum
+            // value. Therefore, in order for `req`'s encoded_len to be exactly
+            // 1 greater than what changelog_insert allows, we need this field
+            // to have the maximum value.
             timestamp_nanoseconds: u64::MAX,
         };
 
