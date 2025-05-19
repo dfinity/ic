@@ -1,6 +1,6 @@
 use candid::Principal;
 use ic_cdk::api::management_canister::http_request::{HttpMethod, HttpResponse, TransformArgs};
-use ic_cdk_macros::{init, post_upgrade, query, update};
+use ic_cdk::{init, post_upgrade, query, update};
 use ic_ckbtc_kyt::SetApiKeyArg;
 use ic_ckbtc_kyt::{
     Alert, AlertLevel, DepositRequest, Error, ExposureType, FetchAlertsResponse, KytMode,
@@ -661,6 +661,7 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
 
         http::HttpResponseBuilder::ok()
             .header("Content-Type", "text/plain; version=0.0.4")
+            .header("Cache-Control", "no-store")
             .with_body_and_content_length(writer.into_inner())
             .build()
     } else if req.path() == "/dashboard" {

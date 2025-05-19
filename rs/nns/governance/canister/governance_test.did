@@ -883,6 +883,7 @@ type ProposalData = record {
   executed_timestamp_seconds : nat64;
   original_total_community_fund_maturity_e8s_equivalent : opt nat64;
   total_potential_voting_power : opt nat64;
+  topic: opt int32;
 };
 
 type ProposalInfo = record {

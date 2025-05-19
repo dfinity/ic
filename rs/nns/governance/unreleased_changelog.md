@@ -13,6 +13,8 @@ on the process that this file is part of, see
 
 ## Changed
 
+* Proposal topics are persisted throughout its lifecycle instead of being recomputed every time.
+
 ## Deprecated
 
 ## Removed
@@ -20,3 +22,4 @@ on the process that this file is part of, see
 ## Fixed
 
 ## Security
+Enforce a lower bound for `min_participant_icp_e8s` of `1_000_000`.
