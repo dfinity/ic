@@ -49,7 +49,7 @@ enum Size {
     // while others regress ~5x. Yet, it is still a good approximation for the sake of
     // benchmarking speed.
     #[strum(serialize = "102m")]
-    Gigabyte = 102 * 1024 * 1024,
+    TenthOfGigabyte = 102 * 1024 * 1024,
 }
 
 #[derive(Copy, Clone, Display, EnumIter)]
@@ -117,14 +117,14 @@ fn heap_func_init_body(mem: Mem, size: Size, src: Src) -> String {
     }
 }
 
-fn loop_body(op: &str, dir: Dir, initial_offset: usize, size: Size, step: Step) -> String {
+fn loop_body(op: &str, dir: Dir, offset: usize, size: Size, step: Step) -> String {
     let step = step as usize;
-    let end = size as usize - 1;
     match dir {
         Dir::Fwd => {
+            let end = size as usize - 1;
             format!(
                 r#"
-                (local.set $address (i64.const {initial_offset}))
+                (local.set $address (i64.const {offset}))
                 (loop $loop
                     {op}
                     (local.set $address (i64.add (local.get $address) (i64.const {step})))
@@ -134,13 +134,14 @@ fn loop_body(op: &str, dir: Dir, initial_offset: usize, size: Size, step: Step) 
             )
         }
         Dir::Bwd => {
+            let end = size as usize - 1 - offset;
             format!(
                 r#"
                 (local.set $address (i64.const {end}))
                 (loop $loop
                     {op}
                     (local.set $address (i64.sub (local.get $address) (i64.const {step})))
-                    (br_if $loop (i64.ge_s (local.get $address) (i64.const {initial_offset})))
+                    (br_if $loop (i64.ge_s (local.get $address) (i64.const 0)))
                 )
             "#
             )
@@ -148,9 +149,12 @@ fn loop_body(op: &str, dir: Dir, initial_offset: usize, size: Size, step: Step) 
     }
 }
 
+/// Initializes canister heap memory by writing into every page.
+/// This function is executed once during the canister installation,
+/// and may follow up with a checkpoint if needed.
 fn heap_canister_init_body(mem: Mem, size: Size, src: Src) -> String {
     let op = heap_op(Op::Write, mem);
-    let loop_body = loop_body(&op, Dir::Fwd, 4096, size, Step::TwoPages);
+    let loop_body = loop_body(&op, Dir::Fwd, 0, size, Step::Page);
     match src {
         Src::Checkpoint | Src::PageDelta | Src::Mix => format!(
             r#"
@@ -161,9 +165,13 @@ fn heap_canister_init_body(mem: Mem, size: Size, src: Src) -> String {
     }
 }
 
-fn heap_canister_setup_body(mem: Mem, size: Size, src: Src) -> String {
+/// Writes into every second page in the heap memory.
+/// This function is executed once right before the `mixed` benchmarks
+/// and is used together with `heap_canister_init_body` to simulate pages
+/// coming from different sources.
+fn heap_canister_setup_body(mem: Mem, dir: Dir, size: Size, src: Src) -> String {
     let op = heap_op(Op::Write, mem);
-    let loop_body = loop_body(&op, Dir::Fwd, PAGE_SIZE, size, Step::TwoPages);
+    let loop_body = loop_body(&op, dir, PAGE_SIZE, size, Step::TwoPages);
     match src {
         Src::Mix => format!(
             r#"
@@ -193,7 +201,7 @@ fn bench(c: &mut C, mem: Mem, call: Call, op: Op, dir: Dir, size: Size, step: St
     let op = heap_op(op, mem);
     let loop_body = loop_body(&op, dir, 0, size, step);
     let canister_init_body = heap_canister_init_body(mem, size, src);
-    let canister_setup_body = heap_canister_setup_body(mem, size, src);
+    let canister_setup_body = heap_canister_setup_body(mem, dir, size, src);
     let memory_body = heap_memory_body(mem, size, src);
     let wat = format!(
         r#"
