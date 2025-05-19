@@ -2031,7 +2031,12 @@ impl Governance {
             Ok,
         )?;
         let num_recent_proposals = self.recent_proposals(time_window_seconds);
-        let last_transaction_timestamp = self.get_most_recent_tx_ts().await?;
+        let last_transaction_timestamp =
+            self.get_latest_block_timestamp_seconds()
+                .await
+                .map_err(|error_message| {
+                    GovernanceError::new_with_message(ErrorType::External, error_message)
+                });
 
         // transaction timestamps are in nanoseconds
         Ok(GetSnsStatusResponse {
@@ -2040,18 +2045,13 @@ impl Governance {
         })
     }
 
-    async fn get_most_recent_tx_ts(&self) -> Result<u64, GovernanceError> {
+    async fn get_latest_block_timestamp_seconds(&self) -> Result<u64, String> {
         let call_icrc3_get_blocks = |args: Vec<GetBlocksRequest>| async {
-            let result =
-                self.ledger
-                    .icrc3_get_blocks(args)
-                    .await
-                    .map_err(|nervous_system_error| {
-                        GovernanceError::new_with_message(
-                            ErrorType::External,
-                            nervous_system_error.error_message,
-                        )
-                    })?;
+            let result = self
+                .ledger
+                .icrc3_get_blocks(args)
+                .await
+                .map_err(|nervous_system_error| nervous_system_error.error_message)?;
 
             Ok::<GetBlocksResult, GovernanceError>(result)
         };
@@ -2078,7 +2078,9 @@ impl Governance {
         // TODO asserting/logging if blocks.len() != 1
         // We assume in each block we have 1 and only 1 transaction.
         // Block timestamps are in nano seconds
-        let ts_nanos = Self::get_block_ts_nanos(&last_block.blocks[0].block)?;
+        let ts_nanos = Self::get_block_timestamp_nanos(&last_block.blocks[0].block).map_err(
+            |error_message| GovernanceError::new_with_message(ErrorType::External, error_message),
+        )?;
         let ts = ts_nanos / Nat::from(ONE_SEC_NANOSEC);
 
         Ok(ts.0.to_u64_digits()[0])
@@ -2086,16 +2088,13 @@ impl Governance {
 
     // Shah-TODO it implies that blocks are always a mapping
     // Find how catually the blocks are created.
-    fn get_block_ts_nanos(block: &ICRC3Value) -> Result<Nat, GovernanceError> {
+    fn get_block_timestamp_nanos(block: &ICRC3Value) -> Result<Nat, String> {
         match block {
             ICRC3Value::Map(map) => map.get(TIMESTAMP).map_or(
                 Err(GovernanceError::new(ErrorType::PreconditionFailed)),
                 |value| match value {
                     ICRC3Value::Nat(ts) => Ok(ts.clone()),
-                    _ => Err(GovernanceError::new_with_message(
-                        ErrorType::PreconditionFailed,
-                        "Error parsing the block failed: missing timestamp".to_string(),
-                    )),
+                    _ => "Error parsing the block failed: missing timestamp".to_string(),
                 },
             ),
             _ => Err(GovernanceError::new_with_message(
@@ -6304,6 +6303,7 @@ fn get_neuron_id_from_memo_and_controller(
 
 #[test]
 fn test_decoding_nat() {
+    // Shah-TODO
     let mut num_nat = Nat::from(1234_u64);
     let mut val = num_nat
         .to_string()
