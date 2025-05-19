@@ -1303,8 +1303,8 @@ mod tests {
                 high_capacity_registry_value::Content::Value(vec)
             }
             _garbage => panic!(
-                "Upgrading and then downgrading from HighCapacity somehow \
-                 did not result in an inline Value.",
+                "Transcribing to a HighCapacity object somehow  did not result in an \
+                 inline Value (which is impossible, unless of course, bugs)."
             ),
         };
         (*registry.store.entry(mutation.key).or_default()).push_back(HighCapacityRegistryValue {
