@@ -392,8 +392,13 @@ fn test_canister_path(env: TestEnv) {
     let wasm = wasm_with_custom_sections(vec![]);
     block_on(wasm.install_with_retries_onto_canister(&mut installed_canister, None, None)).unwrap();
 
-    // for 2, 1 and 0 controllers...
-    for i in (0..=2).rev() {
+    // Test /module_hash and /controllers paths by setting canister controllers to:
+    // 1. [default_identity, random_identity]
+    // 2. [default_identity]
+    // 3. []
+    // Identities must be ordered such that the default identity (the one sending updates/requests)
+    // is removed last. Otherwise, it would fail to remove itself as the last controller.
+    for i in [2, 1, 0] {
         let controllers = identities[..i].to_vec();
 
         // Test `module_hash` and `controllers` endpoints for both canisters
