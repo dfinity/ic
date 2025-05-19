@@ -6,7 +6,7 @@ use crate::{
     utils::http_endpoint_to_url,
 };
 use candid::Encode;
-use ic_agent::{agent::AgentBuilder, export::Principal, NonceGenerator};
+use ic_agent::{export::Principal, Agent};
 use ic_config::{
     http_handler::Config as HttpConfig,
     initial_ipv4_config::IPv4Config as InitialIPv4Config,
@@ -686,34 +686,6 @@ fn process_domain_name(log: &ReplicaLogger, domain: &str) -> OrchestratorResult<
     }
 
     Ok(Some(domain.to_string()))
-}
-
-/// Create a nonce to be included with the ingress message sent to the node
-/// handler.
-struct NonceGeneratorImpl;
-impl NonceGenerator for NonceGeneratorImpl {
-    fn generate(&self) -> Option<Vec<u8>> {
-        Some(
-            SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-                .to_le_bytes()
-                .to_vec(),
-        )
-    }
-}
-
-/// Simple wrapper around ic_agent::agent::AgentBuilder to include a custom
-/// ingress expiry and nonce generator.
-struct Agent;
-impl Agent {
-    fn builder() -> AgentBuilder {
-        <AgentBuilder as Default>::default()
-            .with_ingress_expiry(Duration::from_secs(4 * 60))
-            .with_max_polling_time(Duration::from_secs(6 * 60))
-            .with_nonce_generator(NonceGeneratorImpl)
-    }
 }
 
 fn protobuf_to_vec<M: Message>(entry: M) -> Vec<u8> {
