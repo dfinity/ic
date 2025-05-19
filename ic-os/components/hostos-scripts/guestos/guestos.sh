@@ -58,6 +58,8 @@ function define_guestos() {
 }
 
 function is_guestos_running() {
+    # Space around guestos to avoid matching guestos as substring in the VM name
+    # (e.g. guestos-upgrader)
     virsh list --state-running | grep " guestos " >/dev/null
 }
 
