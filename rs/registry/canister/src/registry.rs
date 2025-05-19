@@ -1265,8 +1265,8 @@ mod tests {
 
     // This is like the previous test
     // (test_apply_mutations_delta_not_too_large_when_chunking_is_enabled),
-    // except that the mutation is approx 7.6x larger (closer to the 10 MiB
-    // limit, as opposed to 1.3 MiB).
+    // except that the mutation is approx close to 10 MiB limit, as opposed to
+    // 1.3 MiB.
     #[test]
     fn test_apply_mutations_delta_near_max_chunkable_len_when_chunking_is_enabled() {
         let _restore_on_drop = temporarily_enable_chunkifying_large_values();
