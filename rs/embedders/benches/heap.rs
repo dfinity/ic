@@ -95,9 +95,15 @@ fn setup_action(src: Src) -> SetupAction {
     }
 }
 
+/// Generates a Wasm code snippet for the specified operation and memory type.
+///
+/// The operation is suppose to read or write a single byte from the heap memory
+/// using a predefined 64-bit local variable `$address`.
 fn heap_op(op: Op, mem: Mem) -> String {
     match (op, mem) {
         (Op::Read, Mem::Wasm32) => {
+            // The `i64.load8_u` reads just one byte from the heap memory.
+            // The `i32.wrap_i64` converts the 64-bit `$address` to 32-bit.
             "(global.set $data (i64.load8_u (i32.wrap_i64 (local.get $address))))"
         }
         (Op::Read, Mem::Wasm64) => "(global.set $data (i64.load8_u (local.get $address)))",
@@ -109,23 +115,18 @@ fn heap_op(op: Op, mem: Mem) -> String {
     .into()
 }
 
-fn heap_func_init_body(mem: Mem, size: Size, src: Src) -> String {
-    let wasm_pages = (size as usize).div_ceil(WASM_PAGE_SIZE_IN_BYTES);
-    match src {
-        Src::Checkpoint | Src::PageDelta | Src::Mix => String::new(),
-        Src::NewAllocation => format!("(drop (memory.grow (i{mem}.const {wasm_pages})))"),
-    }
-}
-
-/// Wraps an operation `op` into a loop body that iterates over the heap memory
+/// Wraps an operation `op` into a loop that iterates over the heap memory
 /// of the specified size. The first iteration starts at the `offset` from
 /// the beginning or the end of the memory depending on the direction.
-/// Then each iteration is performed every `step` until the end or the beginning
-/// of the memory is reached.
+///
+/// Every iteration the operation is performed at the predefined 64-bit `$address`.
+/// Then the `$address` is increased or decreased by the `step` bytes,
+/// and the loop continues until the end or the beginning of the memory is reached.
 fn loop_body(op: &str, dir: Dir, offset: usize, size: Size, step: Step) -> String {
     let step = step as usize;
     match dir {
         Dir::Fwd => {
+            // Iterate forward starting from `offset` and up to (and including) address `size - 1`.
             let end = size as usize - 1;
             format!(
                 r#"
@@ -139,6 +140,7 @@ fn loop_body(op: &str, dir: Dir, offset: usize, size: Size, step: Step) -> Strin
             )
         }
         Dir::Bwd => {
+            // Iterate backward from `size - 1 - offset` and down to (and including) address `0`.
             let end = size as usize - 1 - offset;
             format!(
                 r#"
@@ -154,10 +156,26 @@ fn loop_body(op: &str, dir: Dir, offset: usize, size: Size, step: Step) -> Strin
     }
 }
 
-/// Initializes canister heap memory by writing into every page.
-/// This function is executed once during the canister installation,
-/// and may follow up with a checkpoint if needed.
-fn heap_canister_init_body(mem: Mem, size: Size, src: Src) -> String {
+/// Returns a Wasm code snippet to initialize the heap benchmark.
+///
+/// The code is executed right before the main benchmark loop, and hence
+/// its execution time is INCLUDED in the benchmark results.
+fn bench_init_body(mem: Mem, size: Size, src: Src) -> String {
+    let wasm_pages = (size as usize).div_ceil(WASM_PAGE_SIZE_IN_BYTES);
+    match src {
+        Src::Checkpoint | Src::PageDelta | Src::Mix => String::new(),
+        // Grow (allocate) the heap memory by the specified number of pages.
+        Src::NewAllocation => format!("(drop (memory.grow (i{mem}.const {wasm_pages})))"),
+    }
+}
+
+/// Returns a Wasm code snippet to initialize the canister.
+/// This code is executed during the canister installation,
+/// and for some page sources may follow up with a checkpoint.
+///
+/// See `setup_action` for more details.
+fn canister_init_body(mem: Mem, size: Size, src: Src) -> String {
+    // Write into every page in the heap memory for all page sources but `new_allocation`.
     let op = heap_op(Op::Write, mem);
     let loop_body = loop_body(&op, Dir::Fwd, 0, size, Step::Page);
     match src {
@@ -170,11 +188,16 @@ fn heap_canister_init_body(mem: Mem, size: Size, src: Src) -> String {
     }
 }
 
-/// Writes into every second page in the heap memory.
-/// This function is executed once right before the `mixed` benchmarks
-/// and is used together with `heap_canister_init_body` to simulate pages
-/// coming from different sources.
-fn heap_canister_setup_body(mem: Mem, dir: Dir, size: Size, src: Src) -> String {
+/// Returns a Wasm code snippet to setup the benchmark.
+/// This code is executed as an update call before the benchmark call,
+/// and simulates pages coming from different sources (together with
+/// the `canister_init_body` function).
+///
+/// The code execution time is NOT INCLUDED in the benchmark results.
+///
+/// See `setup_action` for more details.
+fn bench_setup_body(mem: Mem, dir: Dir, size: Size, src: Src) -> String {
+    // Write into every second page in the heap memory for `mixed` page source only.
     let op = heap_op(Op::Write, mem);
     let loop_body = loop_body(&op, dir, PAGE_SIZE, size, Step::TwoPages);
     match src {
@@ -187,10 +210,12 @@ fn heap_canister_setup_body(mem: Mem, dir: Dir, size: Size, src: Src) -> String 
     }
 }
 
+/// Returns a Wasm code snippet to initialize heap memory.
 fn heap_memory_body(mem: Mem, size: Size, src: Src) -> String {
     let wasm_pages = (size as usize).div_ceil(WASM_PAGE_SIZE_IN_BYTES);
     match src {
         Src::Checkpoint | Src::PageDelta | Src::Mix => format!("i{mem} {wasm_pages}"),
+        // The `new_allocation` page source will grow the memory during the benchmark.
         Src::NewAllocation => format!("i{mem} 0"),
     }
 }
@@ -202,21 +227,24 @@ fn bench(c: &mut C, mem: Mem, call: Call, op: Op, dir: Dir, size: Size, step: St
     let throughput = throughput(size, step);
     let setup_action = setup_action(src);
 
-    let func_init_body = heap_func_init_body(mem, size, src);
+    let bench_init_body = bench_init_body(mem, size, src);
     let op = heap_op(op, mem);
-    let loop_body = loop_body(&op, dir, 0, size, step);
-    let canister_init_body = heap_canister_init_body(mem, size, src);
-    let canister_setup_body = heap_canister_setup_body(mem, dir, size, src);
+    let bench_loop = loop_body(&op, dir, 0, size, step);
+    let canister_init_body = canister_init_body(mem, size, src);
+    let bench_setup_body = bench_setup_body(mem, dir, size, src);
     let memory_body = heap_memory_body(mem, size, src);
+    // The overall benchmark structure is:
+    // 1. `canister_init` function is executed during the canister installation.
+    // 2. `canister_update setup` function is executed before the benchmark call.
+    // 3. `canister_update update_empty` function is executed to sync the memory.
+    // 4. `canister_{call} {name}` benchmark function is executed and its total
+    //     execution time is the benchmark result.
     let wat = format!(
         r#"
         (module
             (import "ic0" "msg_reply" (func $msg_reply))
             (global $counter (mut i64) (i64.const 42))
             (global $data (mut i64) (i64.const 0))
-            (func (export "canister_update update_empty")
-                (call $msg_reply)
-            )
             (func (export "canister_init")
                 (local $address i64)
                 (global.set $counter (i64.add (global.get $counter) (i64.const 1)))
@@ -225,14 +253,17 @@ fn bench(c: &mut C, mem: Mem, call: Call, op: Op, dir: Dir, size: Size, step: St
             (func (export "canister_update setup")
                 (local $address i64)
                 (global.set $counter (i64.add (global.get $counter) (i64.const 1)))
-                {canister_setup_body}
+                {bench_setup_body}
+                (call $msg_reply)
+            )
+            (func (export "canister_update update_empty")
                 (call $msg_reply)
             )
             (func (export "canister_{call} {name}")
                 (local $address i64)
                 (global.set $counter (i64.add (global.get $counter) (i64.const 1)))
-                {func_init_body}
-                {loop_body}
+                {bench_init_body}
+                {bench_loop}
                 (call $msg_reply)
             )
             (memory {memory_body})
