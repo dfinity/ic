@@ -97,7 +97,7 @@ fn setup_action(src: Src) -> SetupAction {
 
 /// Generates a Wasm code snippet for the specified operation and memory type.
 ///
-/// The operation is suppose to read or write a single byte from the heap memory
+/// The operation is intended to read or write a single byte from heap memory
 /// using a predefined 64-bit local variable `$address`.
 fn heap_op(op: Op, mem: Mem) -> String {
     match (op, mem) {
@@ -234,11 +234,13 @@ fn bench(c: &mut C, mem: Mem, call: Call, op: Op, dir: Dir, size: Size, step: St
     let bench_setup_body = bench_setup_body(mem, dir, size, src);
     let memory_body = heap_memory_body(mem, size, src);
     // The overall benchmark structure is:
-    // 1. `canister_init` function is executed during the canister installation.
-    // 2. `canister_update setup` function is executed before the benchmark call.
-    // 3. `canister_update update_empty` function is executed to sync the memory.
-    // 4. `canister_{call} {name}` benchmark function is executed and its total
-    //     execution time is the benchmark result.
+    // 1. The `canister_init` function is executed during canister installation.
+    // 2. Optionally: A checkpoint is created.
+    // 3. Optionally: The `canister_update setup` function is executed.
+    // 4. The `canister_update update_empty` function is executed to sync the memory
+    //    between the replica and the sandbox process.
+    // 5. The `canister_{call} {name}` benchmark function is executed, and its total
+    //    execution time is the benchmark result.
     let wat = format!(
         r#"
         (module
