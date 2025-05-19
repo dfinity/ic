@@ -877,10 +877,7 @@ mod tests {
 
         let large_but_not_chunkified_mutation = upsert(key, max_value);
 
-        let not_large_mutation = upsert(
-            b"this_is_small_but_not_completely_negligible",
-            [44; 200],
-        );
+        let not_large_mutation = upsert(b"this_is_small_but_not_completely_negligible", [44; 200]);
 
         for mutation in [
             chunkified_mutation,
