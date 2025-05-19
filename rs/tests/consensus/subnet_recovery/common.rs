@@ -75,7 +75,7 @@ use std::{io::Read, time::Duration};
 use std::{io::Write, path::Path};
 use url::Url;
 
-const DKG_INTERVAL: u64 = 19;
+const DKG_INTERVAL: u64 = 24;
 const NNS_NODES: usize = 4;
 const APP_NODES: usize = 4;
 const UNASSIGNED_NODES: usize = 4;
