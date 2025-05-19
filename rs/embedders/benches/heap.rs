@@ -117,6 +117,11 @@ fn heap_func_init_body(mem: Mem, size: Size, src: Src) -> String {
     }
 }
 
+/// Wraps an operation `op` into a loop body that iterates over the heap memory
+/// of the specified size. The first iteration starts at the `offset` from
+/// the beginning or the end of the memory depending on the direction.
+/// Then each iteration is performed every `step` until the end or the beginning
+/// of the memory is reached.
 fn loop_body(op: &str, dir: Dir, offset: usize, size: Size, step: Step) -> String {
     let step = step as usize;
     match dir {
