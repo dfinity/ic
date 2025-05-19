@@ -467,6 +467,9 @@ mod tests {
             .prepare_canister_migration(payload)
             .expect_err("Canister migration preparation should fail");
 
-        assert_matches!(err, PrepareCanisterMigrationError::UnhostedCanisterIds);
+        assert_matches!(
+            err,
+            PrepareCanisterMigrationError::UnhostedCanisterIds { .. }
+        );
     }
 }

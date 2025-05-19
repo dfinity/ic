@@ -432,7 +432,8 @@ mod update_balance {
             num_pages: usize,
         ) {
             let mut responses =
-                std::iter::repeat_n(utxos, num_pages)
+                std::iter::repeat(utxos)
+                    .take(num_pages)
                     .enumerate()
                     .map(move |(idx, utxos)| {
                         let next_page = if idx == num_pages - 1 {

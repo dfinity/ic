@@ -1,3 +1,5 @@
+#[rustfmt::skip]
+
 use anyhow::{bail, Result};
 use ic_agent::Agent;
 use ic_registry_subnet_type::SubnetType;

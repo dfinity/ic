@@ -1,3 +1,5 @@
+#[rustfmt::skip]
+
 use anyhow::{anyhow, bail, Result};
 use candid::{Encode, Nat, Principal};
 use canister_test::{Canister, Runtime, Wasm};
