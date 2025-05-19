@@ -199,7 +199,7 @@ def icos_build(
         # 1. Dynamic args calculated at boot time in grub.cfg
         # 2. Static args stored in EXTRA_BOOT_ARGS on the boot partition
         #
-        # For stable and predicatable measurements with AMD SEV, we now precalculate and combine both parts
+        # For stable and predictable measurements with AMD SEV, we now pre-calculate and combine both parts
         # into a single complete kernel command line that is:
         # - Generated during image build
         # - Stored statically on the boot partition
