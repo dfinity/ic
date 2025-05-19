@@ -9,8 +9,8 @@ use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 
 use ic_cdk::api::instruction_counter;
 #[cfg(not(feature = "canbench-rs"))]
-use ic_cdk_macros::init;
-use ic_cdk_macros::{post_upgrade, pre_upgrade, query, update};
+use ic_cdk::init;
+use ic_cdk::{post_upgrade, pre_upgrade, query, update};
 use ic_icrc1::{
     endpoints::{convert_transfer_error, StandardRecord},
     Operation, Transaction,
@@ -561,6 +561,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         match encode_metrics(&mut writer) {
             Ok(()) => HttpResponseBuilder::ok()
                 .header("Content-Type", "text/plain; version=0.0.4")
+                .header("Cache-Control", "no-store")
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {
