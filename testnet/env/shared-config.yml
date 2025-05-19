@@ -68,7 +68,7 @@ nodes:
     orchestrator_metrics_listen_addr: "[{{ orchestrator_metrics_listen_ip }}]:{{ orchestrator_metrics_listen_port }}"
 
     elasticsearch_hosts:
-      - "elasticsearch.ch1-obsdev1.dfinity.network:443"
+      - "elasticsearch.testnet.dfinity.network:443"
 
 api:
   vars:
@@ -87,7 +87,7 @@ boundary:
   vars:
     api_listen_port: 443
     api_listen_protocol: https
-    elasticsearch_url: "https://elasticsearch.ch1-obsdev1.dfinity.network"
+    elasticsearch_url: "https://elasticsearch.testnet.dfinity.network"
     ipv4_http_ips: # See: https://www.cloudflare.com/ips-v4
       - "103.21.244.0/22" # Cloudflare: https://www.cloudflare.com/ips/
       - "103.22.200.0/22" # Cloudflare: https://www.cloudflare.com/ips/

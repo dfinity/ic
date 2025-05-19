@@ -7,4 +7,4 @@ documentation.workspace = true
 edition.workspace = true
 
 [dependencies]
-ic-cdk = "0.17.1"
+ic-cdk = { workspace = true }

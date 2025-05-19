@@ -1,7 +1,7 @@
 //! This module contains definitions for communicating with an Ethereum API using the [JSON RPC](https://ethereum.org/en/developers/docs/apis/json-rpc/)
 //! interface.
 
-use crate::numeric::{BlockNumber, LogIndex, WeiPerGas};
+use crate::numeric::{BlockNumber, LogIndex};
 use candid::CandidType;
 use ethnum;
 use evm_rpc_client::{
@@ -245,46 +245,6 @@ pub struct LogEntry {
     /// "false" if it's a valid log.
     #[serde(default)]
     pub removed: bool,
-}
-
-/// Parameters of the [`eth_feeHistory`](https://ethereum.github.io/execution-apis/api-documentation/) call.
-#[derive(Clone, Debug)]
-pub struct FeeHistoryParams {
-    /// Number of blocks in the requested range.
-    /// Typically providers request this to be between 1 and 1024.
-    pub block_count: Quantity,
-    /// Highest block of the requested range.
-    /// Integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
-    pub highest_block: BlockTag,
-    /// A monotonically increasing list of percentile values between 0 and 100.
-    /// For each block in the requested range, the transactions will be sorted in ascending order
-    /// by effective tip per gas and the corresponding effective tip for the percentile
-    /// will be determined, accounting for gas consumed.
-    pub reward_percentiles: Vec<u8>,
-}
-
-impl From<FeeHistoryParams> for (Quantity, BlockTag, Vec<u8>) {
-    fn from(value: FeeHistoryParams) -> Self {
-        (
-            value.block_count,
-            value.highest_block,
-            value.reward_percentiles,
-        )
-    }
-}
-
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct FeeHistory {
-    /// Lowest number block of the returned range.
-    pub oldest_block: BlockNumber,
-    /// An array of block base fees per gas.
-    /// This includes the next block after the newest of the returned range,
-    /// because this value can be derived from the newest block.
-    /// Zeroes are returned for pre-EIP-1559 blocks.
-    pub base_fee_per_gas: Vec<WeiPerGas>,
-    /// A two-dimensional array of effective priority fees per gas at the requested block percentiles.
-    pub reward: Vec<Vec<WeiPerGas>>,
 }
 
 /// An envelope for all JSON-RPC replies.

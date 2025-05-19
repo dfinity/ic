@@ -75,7 +75,7 @@ fn into_hash_tree(mut hash_trees: VecDeque<HashTree>) -> HashTree {
         };
     }
 
-    let mut combined_trees = VecDeque::with_capacity((hash_trees.len() + 1) / 2);
+    let mut combined_trees = VecDeque::with_capacity(hash_trees.len().div_ceil(2));
     while hash_trees.len() != 1 {
         while let Some(left) = hash_trees.pop_front() {
             match hash_trees.pop_front() {

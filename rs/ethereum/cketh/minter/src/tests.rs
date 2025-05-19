@@ -204,107 +204,15 @@ mod rlp_encoding {
     }
 }
 
-mod eth_fee_history {
-    use crate::eth_rpc::{into_nat, FeeHistory, Quantity};
-    use crate::numeric::{BlockNumber, WeiPerGas};
+mod eth_get_block_by_number {
+    use crate::eth_rpc::{into_nat, Quantity};
+
+    // TODO: MOVE THAT TO BETTER PLACE
 
     #[test]
     fn should_convert_quantity_to_nat() {
         let quantity = Quantity::new(0x4b85a0fcd); //20_272_779_213 wei
         let nat = into_nat(quantity);
         assert_eq!(nat.to_string(), "20_272_779_213")
-    }
-
-    #[test]
-    fn should_deserialize_eth_fee_history_response() {
-        const ETH_FEE_HISTORY: &str = r#"{
-        "baseFeePerGas": [
-            "0x729d3f3b3",
-            "0x766e503ea",
-            "0x75b51b620",
-            "0x74094f2b4",
-            "0x716724f03",
-            "0x73b467f76"
-        ],
-        "gasUsedRatio": [
-            0.6332004,
-            0.47556506666666665,
-            0.4432122666666667,
-            0.4092196,
-            0.5811903
-        ],
-        "oldestBlock": "0x10f73fc",
-        "reward": [
-            [
-                "0x5f5e100",
-                "0x5f5e100",
-                "0x68e7780"
-            ],
-            [
-                "0x55d4a80",
-                "0x5f5e100",
-                "0x5f5e100"
-            ],
-            [
-                "0x5f5e100",
-                "0x5f5e100",
-                "0x5f5e100"
-            ],
-            [
-                "0x5f5e100",
-                "0x5f5e100",
-                "0x5f5e100"
-            ],
-            [
-                "0x5f5e100",
-                "0x5f5e100",
-                "0x180789e0"
-            ]
-        ]
-    }"#;
-
-        let fee_history: FeeHistory = serde_json::from_str(ETH_FEE_HISTORY).unwrap();
-
-        assert_eq!(
-            fee_history,
-            FeeHistory {
-                oldest_block: BlockNumber::new(0x10f73fc),
-                base_fee_per_gas: vec![
-                    WeiPerGas::new(0x729d3f3b3),
-                    WeiPerGas::new(0x766e503ea),
-                    WeiPerGas::new(0x75b51b620),
-                    WeiPerGas::new(0x74094f2b4),
-                    WeiPerGas::new(0x716724f03),
-                    WeiPerGas::new(0x73b467f76)
-                ],
-                reward: vec![
-                    vec![
-                        WeiPerGas::new(0x5f5e100),
-                        WeiPerGas::new(0x5f5e100),
-                        WeiPerGas::new(0x68e7780)
-                    ],
-                    vec![
-                        WeiPerGas::new(0x55d4a80),
-                        WeiPerGas::new(0x5f5e100),
-                        WeiPerGas::new(0x5f5e100)
-                    ],
-                    vec![
-                        WeiPerGas::new(0x5f5e100),
-                        WeiPerGas::new(0x5f5e100),
-                        WeiPerGas::new(0x5f5e100)
-                    ],
-                    vec![
-                        WeiPerGas::new(0x5f5e100),
-                        WeiPerGas::new(0x5f5e100),
-                        WeiPerGas::new(0x5f5e100)
-                    ],
-                    vec![
-                        WeiPerGas::new(0x5f5e100),
-                        WeiPerGas::new(0x5f5e100),
-                        WeiPerGas::new(0x180789e0)
-                    ]
-                ],
-            }
-        )
     }
 }

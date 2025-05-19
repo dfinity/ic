@@ -21,7 +21,7 @@ impl AsInt for Key128 {
 
     #[inline]
     fn as_int(&self) -> u128 {
-        (self.0 as u128) << 64 | self.1 as u128
+        ((self.0 as u128) << 64) | self.1 as u128
     }
 }
 

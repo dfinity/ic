@@ -1,5 +1,5 @@
 use crate::eth_rpc::{
-    Data, FeeHistory, FeeHistoryParams, FixedSizeData, Hash, HttpOutcallError, LogEntry, Quantity,
+    Data, FixedSizeData, Hash, HttpOutcallError, LogEntry, Quantity,
     SendRawTransactionResult, HEADER_SIZE_LIMIT,
 };
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
@@ -7,9 +7,10 @@ use crate::lifecycle::EthereumNetwork;
 use crate::logs::{PrintProxySink, INFO, TRACE_HTTP};
 use crate::numeric::{BlockNumber, GasAmount, LogIndex, TransactionCount, WeiPerGas};
 use crate::state::State;
+use candid::Nat;
 use evm_rpc_client::{
     Block, BlockTag, ConsensusStrategy, EthSepoliaService, EvmRpcClient,
-    FeeHistory as EvmFeeHistory, FeeHistoryArgs as EvmFeeHistoryArgs, GetLogsArgs,
+    FeeHistory, FeeHistoryArgs, GetLogsArgs,
     GetTransactionCountArgs as EvmGetTransactionCountArgs, Hex20, IcRuntime,
     LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256, OverrideRpcConfig,
     RpcConfig as EvmRpcConfig, RpcError as EvmRpcError, RpcResult as EvmRpcResult,
@@ -127,14 +128,10 @@ impl EthRpcClient {
 
     pub async fn eth_fee_history(
         &self,
-        params: FeeHistoryParams,
+        params: FeeHistoryArgs,
     ) -> Result<FeeHistory, MultiCallError<FeeHistory>> {
         self.evm_rpc_client
-            .eth_fee_history(EvmFeeHistoryArgs {
-                block_count: Nat256::from_be_bytes(params.block_count.to_be_bytes()),
-                newest_block: params.highest_block,
-                reward_percentiles: Some(params.reward_percentiles),
-            })
+            .eth_fee_history(params)
             .await
             .reduce()
             .into()
@@ -486,39 +483,18 @@ impl Reduce for EvmMultiRpcResult<Vec<EvmLogEntry>> {
     }
 }
 
-impl Reduce for EvmMultiRpcResult<Option<EvmFeeHistory>> {
+impl Reduce for EvmMultiRpcResult<Option<FeeHistory>> {
     type Item = FeeHistory;
 
     fn reduce(self) -> ReducedResult<Self::Item> {
-        fn map_fee_history(fee_history: Option<EvmFeeHistory>) -> Result<FeeHistory, String> {
-            let fee_history = fee_history.ok_or("No fee history available")?;
-            Ok(FeeHistory {
-                oldest_block: BlockNumber::from(fee_history.oldest_block),
-                base_fee_per_gas: wei_per_gas_iter(fee_history.base_fee_per_gas),
-                reward: fee_history
-                    .reward
-                    .into_iter()
-                    .map(wei_per_gas_iter)
-                    .collect(),
-            })
-        }
-
-        fn wei_per_gas_iter(values: Vec<Nat256>) -> Vec<WeiPerGas> {
-            values.into_iter().map(WeiPerGas::from).collect()
-        }
-
-        ReducedResult::from_internal(self).map_reduce(&map_fee_history, |results| {
-            results.reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block)
-        })
-    }
-}
-
-impl Reduce for MultiCallResults<FeeHistory> {
-    type Item = FeeHistory;
-
-    fn reduce(self) -> ReducedResult<Self::Item> {
-        self.reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block)
-            .into()
+        ReducedResult::from_internal(self).map_reduce(
+            &|fee_history| fee_history.ok_or("No fee history available".to_string()),
+            |results| {
+                results.reduce_with_strict_majority_by_key(|fee_history| {
+                    Nat::from(fee_history.oldest_block.clone())
+                })
+            },
+        )
     }
 }
 
