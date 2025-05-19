@@ -1413,7 +1413,9 @@ mod tests {
             vec![insert(b"no_need_for_chunking_here_57", vec![57; 1024])],
         );
 
-        // Step 2: Run the code under test: Do a round-trip.
+        // Step 2: Run the code under test: Do a serialize-deserialize
+        // round-trip, like the canister does during an upgrade (in pre- and
+        // post- upgrade).
         let mut restored_registry = Registry::new();
         restored_registry.from_serializable_form(original_registry.serializable_form());
 
