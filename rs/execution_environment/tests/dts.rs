@@ -1019,7 +1019,8 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
         }
 
         let (method, args) = f(aborted_canister_id);
-        if method == Method::DeleteCanisterSnapshot {
+        if method == Method::DeleteCanisterSnapshot || method == Method::UploadCanisterSnapshotData
+        {
             env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(aborted_canister_id, None))
                 .unwrap();
         }
