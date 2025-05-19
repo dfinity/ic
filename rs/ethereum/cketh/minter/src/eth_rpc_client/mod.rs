@@ -1,17 +1,17 @@
 use crate::eth_rpc::{
-    Block, BlockSpec, BlockTag, Data, FixedSizeData, Hash, HttpOutcallError, LogEntry, Quantity,
-    SendRawTransactionResult, HEADER_SIZE_LIMIT,
+    Data, FixedSizeData, Hash, HttpOutcallError, LogEntry, Quantity, SendRawTransactionResult,
+    HEADER_SIZE_LIMIT,
 };
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;
 use crate::logs::{PrintProxySink, INFO, TRACE_HTTP};
-use crate::numeric::{BlockNumber, GasAmount, LogIndex, TransactionCount, Wei, WeiPerGas};
+use crate::numeric::{BlockNumber, GasAmount, LogIndex, TransactionCount, WeiPerGas};
 use crate::state::State;
 use candid::Nat;
 use evm_rpc_client::{
-    Block as EvmBlock, BlockTag as EvmBlockTag, ConsensusStrategy, EthSepoliaService, EvmRpcClient,
-    FeeHistory, FeeHistoryArgs, GetLogsArgs, GetTransactionCountArgs as EvmGetTransactionCountArgs,
-    Hex20, IcRuntime, LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256,
+    Block, BlockTag, ConsensusStrategy, EthSepoliaService, EvmRpcClient, FeeHistory,
+    FeeHistoryArgs, GetLogsArgs, GetTransactionCountArgs as EvmGetTransactionCountArgs, Hex20,
+    IcRuntime, LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256,
     OverrideRpcConfig, RpcConfig as EvmRpcConfig, RpcError as EvmRpcError,
     RpcResult as EvmRpcResult, RpcService as EvmRpcService, RpcServices as EvmRpcServices,
     SendRawTransactionStatus as EvmSendRawTransactionStatus,
@@ -105,10 +105,10 @@ impl EthRpcClient {
 
     pub async fn eth_get_block_by_number(
         &self,
-        block: BlockSpec,
+        block: BlockTag,
     ) -> Result<Block, MultiCallError<Block>> {
         self.evm_rpc_client
-            .eth_get_block_by_number(into_evm_block_tag(block))
+            .eth_get_block_by_number(block)
             .await
             .reduce()
             .into()
@@ -155,7 +155,7 @@ impl EthRpcClient {
             .evm_rpc_client
             .eth_get_transaction_count(EvmGetTransactionCountArgs {
                 address: Hex20::from(address.into_bytes()),
-                block: EvmBlockTag::Finalized,
+                block: BlockTag::Finalized,
             })
             .await;
         ReduceWithStrategy::<Equality>::reduce(results).into()
@@ -169,7 +169,7 @@ impl EthRpcClient {
             .evm_rpc_client
             .eth_get_transaction_count(EvmGetTransactionCountArgs {
                 address: Hex20::from(address.into_bytes()),
-                block: EvmBlockTag::Latest,
+                block: BlockTag::Latest,
             })
             .await;
         ReduceWithStrategy::<MinByKey>::reduce(results).into()
@@ -438,27 +438,14 @@ trait Reduce {
     fn reduce(self) -> ReducedResult<Self::Item>;
 }
 
-impl Reduce for EvmMultiRpcResult<EvmBlock> {
+impl Reduce for EvmMultiRpcResult<Block> {
     type Item = Block;
 
     fn reduce(self) -> ReducedResult<Self::Item> {
         ReducedResult::from_internal(self).map_reduce(
-            &|block: EvmBlock| {
-                Ok::<Block, String>(Block {
-                    number: BlockNumber::from(block.number),
-                    base_fee_per_gas: Wei::from(block.base_fee_per_gas.expect("BUG: must be present in blocks after the London Upgrade / EIP-1559, which pre-dates the ckETH minter")),
-                })
-            },
+            &|block: Block| Ok::<Block, String>(block),
             MultiCallResults::reduce_with_equality,
         )
-    }
-}
-
-impl Reduce for MultiCallResults<Block> {
-    type Item = Block;
-
-    fn reduce(self) -> ReducedResult<Self::Item> {
-        self.reduce_with_equality().into()
     }
 }
 
@@ -744,14 +731,5 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
                 }
             }
         }
-    }
-}
-
-fn into_evm_block_tag(block: BlockSpec) -> EvmBlockTag {
-    match block {
-        BlockSpec::Number(n) => EvmBlockTag::Number(Nat256::from(n)),
-        BlockSpec::Tag(BlockTag::Latest) => EvmBlockTag::Latest,
-        BlockSpec::Tag(BlockTag::Safe) => EvmBlockTag::Safe,
-        BlockSpec::Tag(BlockTag::Finalized) => EvmBlockTag::Finalized,
     }
 }

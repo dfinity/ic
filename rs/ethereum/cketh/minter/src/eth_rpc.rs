@@ -1,8 +1,7 @@
 //! This module contains definitions for communicating with an Ethereum API using the [JSON RPC](https://ethereum.org/en/developers/docs/apis/json-rpc/)
 //! interface.
 
-use crate::endpoints::CandidBlockTag;
-use crate::numeric::{BlockNumber, LogIndex, Wei};
+use crate::numeric::{BlockNumber, LogIndex};
 use candid::CandidType;
 use ethnum;
 use evm_rpc_client::{
@@ -14,7 +13,6 @@ use ic_ethereum_types::Address;
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::fmt;
 use std::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
 
 #[cfg(test)]
@@ -181,88 +179,6 @@ impl std::str::FromStr for Hash {
     }
 }
 
-/// Block tags.
-/// See <https://ethereum.org/en/developers/docs/apis/json-rpc/#default-block>
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum BlockTag {
-    /// The latest mined block.
-    #[default]
-    Latest,
-    /// The latest safe head block.
-    /// See
-    /// <https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels>
-    Safe,
-    /// The latest finalized block.
-    /// See
-    /// <https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels>
-    Finalized,
-}
-
-impl From<CandidBlockTag> for BlockTag {
-    fn from(block_tag: CandidBlockTag) -> BlockTag {
-        match block_tag {
-            CandidBlockTag::Latest => BlockTag::Latest,
-            CandidBlockTag::Safe => BlockTag::Safe,
-            CandidBlockTag::Finalized => BlockTag::Finalized,
-        }
-    }
-}
-
-impl From<BlockTag> for CandidBlockTag {
-    fn from(value: BlockTag) -> Self {
-        match value {
-            BlockTag::Latest => CandidBlockTag::Latest,
-            BlockTag::Safe => CandidBlockTag::Safe,
-            BlockTag::Finalized => CandidBlockTag::Finalized,
-        }
-    }
-}
-
-impl Display for BlockTag {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Latest => write!(f, "latest"),
-            Self::Safe => write!(f, "safe"),
-            Self::Finalized => write!(f, "finalized"),
-        }
-    }
-}
-
-/// The block specification indicating which block to query.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
-#[serde(untagged)]
-pub enum BlockSpec {
-    /// Query the block with the specified index.
-    Number(BlockNumber),
-    /// Query the block with the specified tag.
-    Tag(BlockTag),
-}
-
-impl Default for BlockSpec {
-    fn default() -> Self {
-        Self::Tag(BlockTag::default())
-    }
-}
-
-impl std::str::FromStr for BlockSpec {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.starts_with("0x") {
-            let block_number = BlockNumber::from_str_hex(s)
-                .map_err(|e| format!("failed to parse block number '{s}': {e}"))?;
-            return Ok(BlockSpec::Number(block_number));
-        }
-        Ok(BlockSpec::Tag(match s {
-            "latest" => BlockTag::Latest,
-            "safe" => BlockTag::Safe,
-            "finalized" => BlockTag::Finalized,
-            _ => return Err(format!("unknown block tag '{s}'")),
-        }))
-    }
-}
-
 /// A topic is either a 32 Bytes DATA, or an array of 32 Bytes DATA with "or" options.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Topic {
@@ -329,21 +245,6 @@ pub struct LogEntry {
     /// "false" if it's a valid log.
     #[serde(default)]
     pub removed: bool,
-}
-
-impl From<BlockNumber> for BlockSpec {
-    fn from(value: BlockNumber) -> Self {
-        BlockSpec::Number(value)
-    }
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Block {
-    ///The block number. `None` when its pending block.
-    pub number: BlockNumber,
-    /// Base fee value of this block
-    pub base_fee_per_gas: Wei,
 }
 
 /// An envelope for all JSON-RPC replies.
