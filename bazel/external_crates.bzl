@@ -602,7 +602,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-bn-lib": crate.spec(
                 git = "https://github.com/dfinity/ic-bn-lib",
-                rev = "f85fc84e1e608cdea7d60763cf202d74a7fd5050",
+                rev = "ec4a6b4abab2d94e09c4d5fee2d57d7bb1260835",
                 features = [
                     "acme_alpn",
                 ],
@@ -630,13 +630,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ic-cdk-timers": crate.spec(
                 version = "^0.11.0",
             ),
-            "ic-cdk-macros": crate.spec(
-                version = "^0.17.2",
-            ),
-            "ic-cdk-macros-next": crate.spec(
-                package = "ic-cdk-macros",
-                version = "^0.18.0",
-            ),
             "ic-certified-map": crate.spec(
                 version = "^0.3.1",
             ),
@@ -648,7 +641,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-gateway": crate.spec(
                 git = "https://github.com/dfinity/ic-gateway",
-                rev = "8248267091e8f3306808355d5556701ed15d777f",
+                rev = "ed8539d9edd45b97148c46b8020fa6d7ebd48c07",
                 default_features = False,
             ),
             "ic-http-certification": crate.spec(
@@ -1567,4 +1560,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
         splicing_config = splicing_config(
             resolver_version = "2",
         ),
+        supported_platform_triples =
+            [
+                "aarch64-apple-darwin",
+                "aarch64-unknown-linux-gnu",
+                "wasm32-unknown-unknown",
+                "x86_64-apple-darwin",
+                "x86_64-unknown-linux-gnu",
+            ],
     )

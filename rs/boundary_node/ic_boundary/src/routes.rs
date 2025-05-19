@@ -20,7 +20,8 @@ use bytes::Bytes;
 use candid::{CandidType, Decode, Principal};
 use http::header::{HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
 use ic_bn_lib::http::{
-    body::buffer_body, headers::*, proxy, Client as HttpClient, Error as IcBnError,
+    body::buffer_body, cache::CacheStatus, headers::*, proxy, Client as HttpClient,
+    Error as IcBnError,
 };
 pub use ic_bn_lib::types::RequestType;
 use ic_types::{
@@ -35,7 +36,6 @@ use tower_governor::errors::GovernorError;
 use url::Url;
 
 use crate::{
-    cache::CacheStatus,
     core::{decoder_config, MAX_REQUEST_BODY_SIZE},
     http::error_infer,
     persist::{RouteSubnet, Routes},
@@ -229,7 +229,7 @@ impl IntoResponse for ErrorClientFacing {
     }
 }
 
-#[derive(Clone, PartialEq, Hash, CandidType, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Hash, CandidType, Deserialize)]
 pub struct HttpRequest {
     pub method: String,
     pub url: String,
@@ -239,7 +239,7 @@ pub struct HttpRequest {
 }
 
 // Object that holds per-request information
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct RequestContext {
     pub request_type: RequestType,
     pub request_size: u32,

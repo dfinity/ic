@@ -25,7 +25,6 @@ package(default_visibility = ["//visibility:public"])
         proc_macro_deps = [
             # Keep sorted.
             "@crate_index//:async-trait",
-            "@crate_index//:ic-cdk-macros",
         ],
         rustc_env = {
             "LEDGER_CANISTER_WASM_PATH": "$(execpath //rs/ledger_suite/icrc1/ledger:" + ledger_canister + ")",
@@ -117,7 +116,6 @@ rust_test(
         opt = "z",
         proc_macro_deps = [
             # Keep sorted.
-            "@crate_index//:ic-cdk-macros",
         ],
         service_file = "ledger_suite_orchestrator.did",
         deps = [

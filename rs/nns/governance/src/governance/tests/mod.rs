@@ -867,6 +867,7 @@ mod metrics_tests {
                 no: 0,
                 total: 555,
             }),
+            topic: Some(Topic::Governance as i32),
             ..ProposalData::default()
         };
 
@@ -884,6 +885,7 @@ mod metrics_tests {
                 no: 0,
                 total: 1,
             }),
+            topic: Some(Topic::NeuronManagement as i32),
             ..ProposalData::default()
         };
         let governance = Governance::new(
@@ -926,6 +928,7 @@ mod metrics_tests {
                 action: Some(manage_neuron_action.clone()),
                 ..Proposal::default()
             }),
+            topic: Some(Topic::NeuronManagement as i32),
             ..ProposalData::default()
         };
 
@@ -937,6 +940,7 @@ mod metrics_tests {
                 ..Proposal::default()
             }),
             decided_timestamp_seconds: 1,
+            topic: Some(Topic::NeuronManagement as i32),
             ..ProposalData::default()
         };
 
@@ -947,6 +951,7 @@ mod metrics_tests {
                 action: Some(motion_action.clone()),
                 ..Proposal::default()
             }),
+            topic: Some(Topic::Governance as i32),
             ..ProposalData::default()
         };
 

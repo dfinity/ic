@@ -42,7 +42,6 @@ LIB_DEPS = [
 LIB_PROC_MACRO_DEPS = [
     # Keep sorted.
     "@crate_index//:async-trait",
-    "@crate_index//:ic-cdk-macros",
     "@crate_index//:minicbor-derive",
 ]
 
@@ -87,7 +86,6 @@ alias(
         crate_name = "ic_ckbtc_minter_canister",
         proc_macro_deps = [
             # Keep sorted.
-            "@crate_index//:ic-cdk-macros",
         ],
         rustc_env = {
             "CKBTC_MINTER_DID_PATH": "$(execpath :ckbtc_minter.did)",
