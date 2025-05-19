@@ -447,12 +447,12 @@ impl NodeRegistration {
             .with_url(nns_url)
             .with_identity(signer)
             .build()
-            .expect("Failed to create IC agent");
+            .map_err(|e| format!("Failed to create IC agent: {e}"))?;
         let update_node_payload = UpdateNodeDirectlyPayload {
             idkg_dealing_encryption_pk: Some(protobuf_to_vec(idkg_pk)),
         };
-        let update_node_encoded =
-            Encode!(&update_node_payload).expect("Could not encode payload for update_node-call.");
+        let update_node_encoded = Encode!(&update_node_payload)
+            .map_err(|e| format!("Could not encode payload for update_node-call: {e}"))?;
 
         agent
             .update(
