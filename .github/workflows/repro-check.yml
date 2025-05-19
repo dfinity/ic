@@ -28,6 +28,7 @@ jobs:
       - name: Setup podman
         shell: bash
         run:
+          sudo apt-get update && sudo apt-get upgrade
           sudo apt-get -y install podman
 
       - name: Repro check for ${{ inputs.github_sha }}
