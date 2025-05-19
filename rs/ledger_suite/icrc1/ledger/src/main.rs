@@ -876,7 +876,7 @@ fn supported_standards() -> Vec<StandardRecord> {
         },
         StandardRecord {
             name: "ICRC-103".to_string(),
-            url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-103/ICRC-103.md".to_string(),
+            url: "https://github.com/dfinity/ICRC/tree/main/ICRCs/ICRC-103".to_string(),
         },
     ];
     standards
