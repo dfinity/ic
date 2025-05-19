@@ -1169,8 +1169,9 @@ mod tests {
         let mut registry = Registry::new();
 
         // This is just (slightly) more elaborate+realistic version of the data
-        // in the previous test, but we are essentially doing the same thing:
-        // creating a mutation that should be rejected due to being too large.
+        // in the previous test (test_changelog_insert_delta_too_large), but we
+        // are essentially doing the same thing: creating a mutation that should
+        // be rejected due to being too large.
         let mutations = (0..1000)
             .map(|i| {
                 let i = i % (u8::MAX as u64 + 1);
@@ -1233,8 +1234,9 @@ mod tests {
         apply_mutations_skip_invariant_checks(&mut registry, mutations);
     }
 
-    // This is like the previous test, except that chunking is enabled. As a
-    // result, there is supposed to be no panic.
+    // This is like the previous test (test_apply_mutations_delta_too_large),
+    // except that chunking is enabled. As a result, there is supposed to be no
+    // panic.
     #[test]
     fn test_apply_mutations_delta_not_too_large_when_chunking_is_enabled() {
         let _restore_on_drop = temporarily_enable_chunkifying_large_values();
@@ -1248,8 +1250,10 @@ mod tests {
         apply_mutations_skip_invariant_checks(&mut registry, mutations);
     }
 
-    // This is like the previous test, except that the mutation is approx 7.6x
-    // larger (closer to the 10 MiB limit, as opposed to 1.3 MiB).
+    // This is like the previous test
+    // (test_apply_mutations_delta_not_too_large_when_chunking_is_enabled),
+    // except that the mutation is approx 7.6x larger (closer to the 10 MiB
+    // limit, as opposed to 1.3 MiB).
     #[test]
     fn test_apply_mutations_delta_near_max_chunkable_len_when_chunking_is_enabled() {
         let _restore_on_drop = temporarily_enable_chunkifying_large_values();
