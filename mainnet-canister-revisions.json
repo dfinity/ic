@@ -60,8 +60,8 @@
     "sha256": "9637743e1215a4db376a62ee807a0986faf20833be2b332df09b3d5dbdd7339e"
   },
   "cycles-minting": {
-    "rev": "2d4bcba47ea10520ff21ce54a8acb9cdb0629317",
-    "sha256": "4e4a6f907a3b4720bfeb4c45c5027d9b1379deb840e4ba0217876df9a4c5b193"
+    "rev": "8ac2131be1a86e1267e7774b0c94085fc107bad3",
+    "sha256": "c2fcf59b5c2edb3b0e334a9ed11d3dba24a032531e2e7707a265a8fe11e09bbd"
   },
   "genesis-token": {
     "rev": "4bed17bfc82cddc5691743db6228992cdc2740f4",
@@ -120,8 +120,8 @@
     "sha256": "3d808fa63a3d8ebd4510c0400aa078e99a31afaa0515f0b68778f929ce4b2a46"
   },
   "sns_root": {
-    "rev": "2d4bcba47ea10520ff21ce54a8acb9cdb0629317",
-    "sha256": "cbbc1ffdd911c58692409e942fafbddcf3e3445e1df99b26d83ae8ed5383af9a"
+    "rev": "8ac2131be1a86e1267e7774b0c94085fc107bad3",
+    "sha256": "142e3b6303ef41d55fcdfd9eb2a6e6e5641cbe86f8d145dca2689a3f847ee1f5"
   },
   "swap": {
     "rev": "c5dee3a11b79da7b5c433574f38605d75c9feaf5",
