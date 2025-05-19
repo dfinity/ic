@@ -523,8 +523,13 @@ mod tests {
         },
         storage::MAX_CHUNKABLE_ATOMIC_MUTATION_LEN,
     };
+    use ic_nervous_system_string::clamp_debug_len;
     use ic_registry_canister_chunkify::dechunkify;
-    use ic_registry_transport::{delete, insert, pb::v1::registry_mutation, update, upsert};
+    use ic_registry_transport::{
+        delete, insert,
+        pb::v1::{high_capacity_registry_mutation, registry_mutation},
+        update, upsert,
+    };
     use rand::{Rng, SeedableRng};
     use rand_distr::{Alphanumeric, Distribution, Poisson, Uniform};
 
@@ -547,6 +552,9 @@ mod tests {
         assert_eq!(restored, registry);
     }
 
+    /// Warning: You almost certainly want to assert that the return value is
+    /// empty. (This is an easy oversight to commit, since it is easy to
+    /// overlook the fact that this even has a return value in the first place.)
     fn apply_mutations_skip_invariant_checks(
         registry: &mut Registry,
         mutations: Vec<RegistryMutation>,
@@ -1325,6 +1333,84 @@ mod tests {
     #[should_panic(expected = "[Registry] Transaction rejected because delta would be too large")]
     fn test_from_serializable_form_version1_delta_too_large() {
         test_from_serializable_form_impl(1)
+    }
+
+    // This is a little more realistic than the previous two tests in the way
+    // that the original Registry gets populated. More precisely, instead of
+    // directly manipulating members, apply_mutations is called (via
+    // apply_mutations_skip_invariant_checks, like many other tests).
+    #[test]
+    fn test_from_serializable_form_with_chunking() {
+        // Step 1: Prepare the world.
+
+        let _restore_on_drop = temporarily_enable_chunkifying_large_values();
+        let mut original_registry = Registry::new();
+
+        // Add a chunkable singleton "composite" mutation to original_registry.
+        {
+            let errors = apply_mutations_skip_invariant_checks(
+                &mut original_registry,
+                vec![insert(b"this_gets_chunked_42", vec![42; 3_000_000])],
+            );
+            assert_eq!(errors, vec![]);
+        }
+
+        // Add a chunkable non-singleton composite mutation.
+        let mutations = (0_u64..100)
+            .map(|i| {
+                let key = format!("also_gets_chunked_{}", i);
+                let i = (i % (u8::MAX as u64 + 1)) as u8;
+                insert(key, vec![i; 14_000])
+            })
+            .collect();
+        {
+            let errors = apply_mutations_skip_invariant_checks(&mut original_registry, mutations);
+            assert_eq!(errors, vec![]);
+        }
+
+        // Double check that the above mutations ended up chunkified.
+        assert_eq!(
+            original_registry.changelog.iter().count(),
+            2,
+            "{}",
+            clamp_debug_len(
+                &original_registry
+                    .changelog
+                    .iter()
+                    .map(|(version, mutation)| (*version, mutation.clone()))
+                    .collect::<Vec<_>>(),
+                100,
+            ),
+        );
+        for (version, composite_mutation) in original_registry.changelog.iter() {
+            let composite_mutation =
+                HighCapacityRegistryAtomicMutateRequest::decode(&**composite_mutation).unwrap();
+            for mutation in &composite_mutation.mutations {
+                match &mutation.content {
+                    Some(high_capacity_registry_mutation::Content::LargeValueChunkKeys(_ok)) => (),
+                    garbage => panic!(
+                        "Not a LargeValueChunkKey! {}\nversion={:?}",
+                        clamp_debug_len(garbage, 100),
+                        version,
+                    ),
+                }
+            }
+        }
+
+        // This is thrown in "for good measure", just so that not all mutations
+        // NEED to be high-capacity/chunked. Otherwise, this is not a very
+        // interesting mutation, and is already covered by previous test(s).
+        apply_mutations_skip_invariant_checks(
+            &mut original_registry,
+            vec![insert(b"no_need_for_chunking_here_57", vec![57; 1024])],
+        );
+
+        // Step 2: Run the code under test: Do a round-trip.
+        let mut restored_registry = Registry::new();
+        restored_registry.from_serializable_form(original_registry.serializable_form());
+
+        // Step 3: Verify result(s).
+        assert_eq!(restored_registry, original_registry);
     }
 
     #[allow(unused_must_use)] // Required because insertion errors are ignored.
