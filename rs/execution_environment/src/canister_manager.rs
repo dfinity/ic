@@ -1455,9 +1455,9 @@ impl CanisterManager {
         validate_controller(canister, &sender)?;
 
         let replace_snapshot_size = match replace_snapshot {
-            Some(replace_snapshot_id) => {
-                self.get_replace_snapshot_size(canister, replace_snapshot_id, state)?
-            }
+            Some(replace_snapshot_id) => self
+                .get_snapshot(canister, replace_snapshot_id, state)?
+                .size(),
             None => {
                 // No replace snapshot ID provided, check whether the maximum number of snapshots
                 // has been reached.
@@ -1565,12 +1565,12 @@ impl CanisterManager {
     /// Returns the size of the snapshot that is to be replaced.
     /// Returns an error if the snapshot given by the snapshot ID does not
     /// belong to this canister.
-    fn get_replace_snapshot_size(
+    fn get_snapshot(
         &self,
         canister: &mut CanisterState,
         replace_snapshot: SnapshotId,
         state: &mut ReplicatedState,
-    ) -> Result<NumBytes, CanisterManagerError> {
+    ) -> Result<Arc<CanisterSnapshot>, CanisterManagerError> {
         // Check that `replace_snapshot` exists.
         match state.canister_snapshots.get(replace_snapshot) {
             None => {
@@ -1588,7 +1588,7 @@ impl CanisterManager {
                         snapshot_id: replace_snapshot,
                     });
                 }
-                Ok(snapshot.size())
+                Ok(Arc::clone(snapshot))
             }
         }
     }
@@ -2060,7 +2060,8 @@ impl CanisterManager {
             Some(replace_snapshot_id) => {
                 let replace_snapshot_id =
                     SnapshotId::try_from(&replace_snapshot_id.to_vec()).unwrap();
-                self.get_replace_snapshot_size(canister, replace_snapshot_id, state)?
+                self.get_snapshot(canister, replace_snapshot_id, state)?
+                    .size()
             }
             None => {
                 // No replace snapshot ID provided, check whether the maximum number of snapshots
@@ -2297,7 +2298,7 @@ impl CanisterManager {
         Ok(instructions)
     }
 
-    /// Remove the snapshot to be replaced and increase the subnet's available memory.
+    /// Remove the specified snapshot and increase the subnet's available memory.
     fn remove_snapshot(
         &self,
         canister: &mut CanisterState,
