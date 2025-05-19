@@ -34,7 +34,7 @@ jobs:
         run: |
           apt-get update
           apt-get -y upgrade
-          apt-get -y install podman
+          apt-get -y install podman curl
 
       # Taken from `ci-main.yml`
       - name: Checkout
