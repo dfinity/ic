@@ -2008,7 +2008,6 @@ impl Governance {
             .unwrap_or(u64::MAX);
     }
 
-    // Shah-TODO what error types should be used?
     pub async fn get_statistics(
         &self,
         request: GetSnsStatusRequest,
