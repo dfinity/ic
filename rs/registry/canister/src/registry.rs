@@ -862,20 +862,26 @@ mod tests {
         let _restore_on_drop = temporarily_enable_chunkifying_large_values();
 
         let mut registry = Registry::new();
-        let version = 1;
-        let key = b"this_is_large_but_not_chunkified";
-
-        // The EXACT point when chunkification kicks in is not so precisely
-        // defined. Therefore, to COMFORTABLY avoid chunkification, ` - 50` is
-        // applied.
-        let max_value = vec![42; max_mutation_value_size(version, key) - 50];
 
         // This seems large, but this will get chunkified down to approximately
         // dozens of bytes. As a result, for the purposes of
         // count_fitting_deltas, this is actually small.
         let chunkified_mutation = upsert(b"this_is_chunkified", [43; 2_000_000]);
 
-        let large_but_not_chunkified_mutation = upsert(key, max_value);
+        // This mutation is engineered so that the encoded_len of the
+        // HighCapacityRegistryAtomicMutateRequest is exactly
+        // MAX_REGISTRY_DELTAS_SIZE - 100.
+        //
+        // The point at which chunkification kicks in is close to (but less
+        // than) MAX_REGISTRY_DELTAS_SIZE. Furthermore, EXACT point is not so
+        // precisely defined. Therefore, to COMFORTABLY avoid chunkification,
+        // ` - 100` is applied here.
+        let version = 1;
+        let key = b"this_is_large_but_not_chunkified";
+        let large_but_not_chunkified_mutation = upsert(
+            key,
+            vec![42; max_mutation_value_size(version, key) - 100],
+        );
 
         let not_large_mutation = upsert(b"this_is_small_but_not_completely_negligible", [44; 200]);
 
@@ -890,26 +896,38 @@ mod tests {
             ));
         }
 
-        assert_eq!(registry.count_fitting_deltas(0, 100), 0);
+        // The first mutation (chunkified_mutation) takes up more than 32 bytes,
+        // because, that is how long a SHA-256 hash is, but it should not take
+        // up much more space than that.
+        assert_eq!(registry.count_fitting_deltas(0, 30), 0);
         assert_eq!(
-            registry.count_fitting_deltas(0, MAX_REGISTRY_DELTAS_SIZE),
-            1
+            registry.count_fitting_deltas(0, 250),
+            1,
         );
 
+        // The second mutation (large_but_not_chunkified_mutation) was
+        // specifically engineered to take up exactly MAX_REGISTRY_DELTAS_SIZE -
+        // 100 bytes.
         assert_eq!(
-            // Subtract a little bit to prevent `mutation2` from fitting into the fitting deltas.
-            registry.count_fitting_deltas(1, MAX_REGISTRY_DELTAS_SIZE - 51),
-            0
+            registry.count_fitting_deltas(1, MAX_REGISTRY_DELTAS_SIZE - 101),
+            0,
         );
         assert_eq!(
-            registry.count_fitting_deltas(1, MAX_REGISTRY_DELTAS_SIZE),
-            1
+            registry.count_fitting_deltas(1, MAX_REGISTRY_DELTAS_SIZE - 100),
+            1,
         );
 
-        assert_eq!(registry.count_fitting_deltas(2, 300), 0);
-        assert_eq!(registry.count_fitting_deltas(2, 1000), 1);
+        // Like the first mutation, but this one does not get chunkified.
+        assert_eq!(registry.count_fitting_deltas(2, 200), 0);
+        assert_eq!(registry.count_fitting_deltas(2, 300), 1);
 
-        assert_eq!(registry.count_fitting_deltas(3, 2000000), 0);
+        // Because there are no versions after 3 (yet)!
+        assert_eq!(registry.count_fitting_deltas(3, 999_999_999_999), 0);
+
+        assert_eq!(
+            registry.count_fitting_deltas(0, 100 + MAX_REGISTRY_DELTAS_SIZE + 300),
+            3,
+        );
     }
 
     #[test]
