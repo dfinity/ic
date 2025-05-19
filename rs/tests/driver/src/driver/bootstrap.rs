@@ -505,10 +505,7 @@ fn create_config_disk_image(
     };
     cmd.env("PATH", format!("{}:{}", "/usr/sbin", old_path));
 
-    let output = cmd.output()?;
-    std::io::stdout().write_all(&output.stdout)?;
-    std::io::stderr().write_all(&output.stderr)?;
-    if !output.status.success() {
+    if !cmd.status()?.success() {
         bail!("could not spawn image creation process");
     }
     let mut img_file = File::open(img_path)?;
@@ -678,27 +675,22 @@ fn create_setupos_config_image(
         }
     }
 
-    let output = cmd.output()?;
-    std::io::stdout().write_all(&output.stdout)?;
-    std::io::stderr().write_all(&output.stderr)?;
-    if !output.status.success() {
+    if !cmd.status()?.success() {
         bail!("could not create SetupOS config");
     }
 
     // Pack dirs into config image
     let config_image = nested_vm.get_setupos_config_image_path()?;
-    let mut cmd = Command::new(build_setupos_config_image);
     let path_key = "PATH";
     let new_path = format!("{}:{}", "/usr/sbin", std::env::var(path_key)?);
-    cmd.arg(config_dir)
+    let status = Command::new(build_setupos_config_image)
+        .arg(config_dir)
         .arg(data_dir)
         .arg(&config_image)
-        .env(path_key, &new_path);
+        .env(path_key, &new_path)
+        .status()?;
 
-    let output = cmd.output()?;
-    std::io::stdout().write_all(&output.stdout)?;
-    std::io::stderr().write_all(&output.stderr)?;
-    if !output.status.success() {
+    if !status.success() {
         bail!("could not inject configs into image");
     }
 
