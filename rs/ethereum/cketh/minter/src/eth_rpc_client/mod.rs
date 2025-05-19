@@ -1,6 +1,5 @@
 use crate::eth_rpc::{
-    Data, FixedSizeData, Hash, HttpOutcallError, LogEntry, Quantity,
-    HEADER_SIZE_LIMIT,
+    Data, FixedSizeData, Hash, HttpOutcallError, LogEntry, Quantity, HEADER_SIZE_LIMIT,
 };
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;

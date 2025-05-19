@@ -590,14 +590,13 @@ mod evm_rpc_conversion {
         HttpOutcallError, LogEntry, MultiCallError, MultiCallResults, Reduce, SingleCallError,
     };
     use crate::test_fixtures::arb::{
-        arb_evm_rpc_error, arb_hex20, arb_hex256, arb_hex32, arb_hex_byte, arb_log_entry,
-        arb_nat_256, arb_transaction_receipt,
+        arb_evm_rpc_error, arb_hex20, arb_hex256, arb_hex_byte, arb_log_entry, arb_nat_256,
+        arb_transaction_receipt,
     };
     use evm_rpc_client::{
         Hex, Hex20, Hex32, HttpOutcallError as EvmHttpOutcallError, LogEntry as EvmLogEntry,
         MultiRpcResult as EvmMultiRpcResult, Nat256, RpcApi as EvmRpcApi, RpcError as EvmRpcError,
-        RpcService as EvmRpcService,
-        TransactionReceipt as EvmTransactionReceipt,
+        RpcService as EvmRpcService, TransactionReceipt as EvmTransactionReceipt,
     };
     use proptest::{prelude::Strategy, prop_assert_eq, proptest};
     use std::collections::BTreeSet;
