@@ -114,7 +114,7 @@ struct FlattenedTransaction<Tokens: TokensType> {
     spender: Option<Account>,
 
     #[serde(rename = "amt")]
-    amount: Tokens,
+    amount: Option<Tokens>,
 
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -138,12 +138,16 @@ impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<T
                 from: value
                     .from
                     .ok_or("`from` field required for `burn` operation")?,
-                amount: value.amount,
+                amount: value
+                    .amount
+                    .ok_or("`amount` field required for `burn` operation")?,
                 spender: value.spender,
             },
             "mint" => Operation::Mint {
                 to: value.to.ok_or("`to` field required for `mint` operation")?,
-                amount: value.amount,
+                amount: value
+                    .amount
+                    .ok_or("`amount` field required for `mint` operation")?,
             },
             "xfer" => Operation::Transfer {
                 from: value
@@ -151,7 +155,9 @@ impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<T
                     .ok_or("`from` field required for `xfer` operation")?,
                 spender: value.spender,
                 to: value.to.ok_or("`to` field required for `xfer` operation")?,
-                amount: value.amount,
+                amount: value
+                    .amount
+                    .ok_or("`amount` field required for `xfer` operation")?,
                 fee: value.fee,
             },
             "approve" => Operation::Approve {
@@ -161,7 +167,9 @@ impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<T
                 spender: value
                     .spender
                     .ok_or("`spender` field required for `approve` operation")?,
-                amount: value.amount,
+                amount: value
+                    .amount
+                    .ok_or("`amount` field required for `approve` operation")?,
                 expected_allowance: value.expected_allowance,
                 expires_at: value.expires_at,
                 fee: value.fee,
@@ -207,7 +215,7 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 Burn { amount, .. }
                 | Mint { amount, .. }
                 | Transfer { amount, .. }
-                | Approve { amount, .. } => amount.clone(),
+                | Approve { amount, .. } => Some(amount.clone()),
             },
             fee: match &t.operation {
                 Transfer { fee, .. } | Approve { fee, .. } => fee.to_owned(),
