@@ -878,10 +878,8 @@ mod tests {
         // ` - 100` is applied here.
         let version = 1;
         let key = b"this_is_large_but_not_chunkified";
-        let large_but_not_chunkified_mutation = upsert(
-            key,
-            vec![42; max_mutation_value_size(version, key) - 100],
-        );
+        let large_but_not_chunkified_mutation =
+            upsert(key, vec![42; max_mutation_value_size(version, key) - 100]);
 
         let not_large_mutation = upsert(b"this_is_small_but_not_completely_negligible", [44; 200]);
 
@@ -900,10 +898,7 @@ mod tests {
         // because, that is how long a SHA-256 hash is, but it should not take
         // up much more space than that.
         assert_eq!(registry.count_fitting_deltas(0, 30), 0);
-        assert_eq!(
-            registry.count_fitting_deltas(0, 250),
-            1,
-        );
+        assert_eq!(registry.count_fitting_deltas(0, 250), 1);
 
         // The second mutation (large_but_not_chunkified_mutation) was
         // specifically engineered to take up exactly MAX_REGISTRY_DELTAS_SIZE -
