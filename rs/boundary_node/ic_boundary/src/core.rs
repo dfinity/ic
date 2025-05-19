@@ -18,7 +18,7 @@ use axum::{
     Router,
 };
 use axum_extra::middleware::option_layer;
-use candid::DecoderConfig;
+use candid::{DecoderConfig, Principal};
 use futures::TryFutureExt;
 use ic_bn_lib::{
     http::{
@@ -59,12 +59,17 @@ use crate::{
     dns::DnsResolver,
     errors::ErrorCause,
     firewall::{FirewallGenerator, SystemdReloader},
-    http::middleware::{
-        cache::{cache_middleware, CacheState},
-        geoip::{self},
-        process::{self},
-        retry::{retry_request, RetryParams},
-        validate::{self},
+    http::{
+        handlers::{self},
+        middleware::{
+            cache::{cache_middleware, CacheState},
+            geoip::{self},
+            process::{self},
+            retry::{retry_request, RetryParams},
+            validate::{self, UUID_REGEX},
+        },
+        PATH_CALL, PATH_CALL_V3, PATH_HEALTH, PATH_QUERY, PATH_READ_STATE, PATH_STATUS,
+        PATH_SUBNET_READ_STATE,
     },
     metrics::{
         self, HttpMetricParams, HttpMetricParamsStatus, MetricParams, MetricParamsCheck,
@@ -100,6 +105,8 @@ const METRICS_CACHE_CAPACITY: usize = 15 * MB;
 /// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
 /// The value of 10_000 follows the Candid recommendation.
 const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
+
+pub const ANONYMOUS_PRINCIPAL: Principal = Principal::anonymous();
 
 pub fn decoder_config() -> DecoderConfig {
     let mut config = DecoderConfig::new();
@@ -598,6 +605,9 @@ fn setup_registry(
     channel_snapshot_recv: watch::Receiver<Option<Arc<RegistrySnapshot>>>,
     runners: &mut Vec<Box<dyn Run>>,
 ) -> Result<(Option<RegistryReplicator>, Option<ThresholdSigPublicKey>), Error> {
+    // Init it early to avoid race conditions
+    lazy_static::initialize(&UUID_REGEX);
+
     // Snapshots
     let snapshot_runner = WithMetricsSnapshot(
         {
@@ -839,17 +849,17 @@ pub fn setup_router(
         proxy_router.clone() as Arc<dyn Health>,
     );
 
-    let query_route = Router::new().route(routes::PATH_QUERY, {
-        post(routes::handle_canister).with_state(proxy.clone())
+    let query_route = Router::new().route(PATH_QUERY, {
+        post(handlers::handle_canister).with_state(proxy.clone())
     });
 
     let call_route = {
         let mut route = Router::new()
-            .route(routes::PATH_CALL, {
-                post(routes::handle_canister).with_state(proxy.clone())
+            .route(PATH_CALL, {
+                post(handlers::handle_canister).with_state(proxy.clone())
             })
-            .route(routes::PATH_CALL_V3, {
-                post(routes::handle_canister).with_state(proxy.clone())
+            .route(PATH_CALL_V3, {
+                post(handlers::handle_canister).with_state(proxy.clone())
             });
 
         // will panic if ip_rate_limit is Some(0)
@@ -868,16 +878,16 @@ pub fn setup_router(
     };
 
     let status_route = Router::new()
-        .route(routes::PATH_STATUS, {
-            get(routes::status).with_state((root_key.clone(), health.clone()))
+        .route(PATH_STATUS, {
+            get(handlers::status).with_state((root_key.clone(), health.clone()))
         })
         .layer(middleware::from_fn_with_state(
             HttpMetricParamsStatus::new(metrics_registry),
             metrics::metrics_middleware_status,
         ));
 
-    let health_route = Router::new().route(routes::PATH_HEALTH, {
-        get(routes::health).with_state(health.clone())
+    let health_route = Router::new().route(PATH_HEALTH, {
+        get(handlers::health).with_state(health.clone())
     });
 
     let middleware_geoip = option_layer(cli.misc.geoip_db.as_ref().map(|x| {
@@ -1003,8 +1013,8 @@ pub fn setup_router(
         .layer(middleware_generic_limiter)
         .layer(middleware_retry);
 
-    let canister_read_state_route = Router::new().route(routes::PATH_READ_STATE, {
-        post(routes::handle_canister).with_state(proxy.clone())
+    let canister_read_state_route = Router::new().route(PATH_READ_STATE, {
+        post(handlers::handle_canister).with_state(proxy.clone())
     });
 
     let canister_read_call_query_routes = query_route
@@ -1013,8 +1023,8 @@ pub fn setup_router(
         .layer(service_canister_read_call_query);
 
     let subnet_read_state_route = Router::new()
-        .route(routes::PATH_SUBNET_READ_STATE, {
-            post(routes::handle_subnet).with_state(proxy.clone())
+        .route(PATH_SUBNET_READ_STATE, {
+            post(handlers::handle_subnet).with_state(proxy.clone())
         })
         .layer(service_subnet_read);
 

@@ -134,8 +134,8 @@ mod test {
         body::Body, extract::State, http::Request, middleware, response::IntoResponse,
         routing::method_routing::post, Router,
     };
-    use candid::Principal;
     use http::StatusCode;
+    use ic_bn_lib::principal;
     use ic_types::CanisterId;
     use tower::Service;
 
@@ -150,8 +150,8 @@ mod test {
     fn gen_request(request_type: RequestType) -> Request<Body> {
         let ctx = RequestContext {
             request_type,
-            canister_id: Some(Principal::from_text("f7crg-kabae").unwrap()),
-            sender: Some(Principal::from_text("f7crg-kabae").unwrap()),
+            canister_id: Some(principal!("f7crg-kabae")),
+            sender: Some(principal!("f7crg-kabae")),
             method_name: Some("foo".into()),
             ingress_expiry: Some(1),
             arg: Some(vec![1, 2, 3, 4]),

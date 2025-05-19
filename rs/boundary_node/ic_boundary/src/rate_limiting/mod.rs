@@ -123,7 +123,7 @@ mod test {
         Router,
     };
     use http::StatusCode;
-    use ic_bn_lib::http::ConnInfo;
+    use ic_bn_lib::{http::ConnInfo, principal};
     use ic_types::{
         messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope},
         CanisterId,
@@ -258,7 +258,7 @@ mod test {
     async fn test_subnet_rate_limit_with_router() -> Result<(), Error> {
         let (mut app, _) = setup_test_router(false, false, 10, 1, 1024, Some(1));
 
-        let sender = Principal::from_text("sqjm4-qahae-aq").unwrap();
+        let sender = principal!("sqjm4-qahae-aq");
         let canister_id = CanisterId::from_u64(100);
 
         let content = HttpCallContent::Call {
@@ -312,7 +312,7 @@ mod test {
     async fn test_subnet_rate_limit_with_router_v3() -> Result<(), Error> {
         let (mut app, _) = setup_test_router(false, false, 10, 1, 1024, Some(1));
 
-        let sender = Principal::from_text("sqjm4-qahae-aq").unwrap();
+        let sender = principal!("sqjm4-qahae-aq");
         let canister_id = CanisterId::from_u64(100);
 
         let content = HttpCallContent::Call {

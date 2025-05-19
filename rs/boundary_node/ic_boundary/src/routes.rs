@@ -8,46 +8,23 @@ use async_trait::async_trait;
 use axum::{
     body::Body,
     extract::{Request, State},
-    http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Response},
-    Extension,
 };
 use candid::{CandidType, Principal};
-use http::header::{CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
-use ic_bn_lib::http::{headers::*, proxy, Client as HttpClient};
+use ic_bn_lib::http::{proxy, Client as HttpClient};
 pub use ic_bn_lib::types::RequestType;
-use ic_types::{
-    messages::{HttpStatusResponse, ReplicaHealthStatus},
-    CanisterId, SubnetId,
-};
-use lazy_static::lazy_static;
-use regex::Regex;
-use serde::{Deserialize, Serialize};
+use ic_types::{messages::ReplicaHealthStatus, CanisterId, SubnetId};
+use serde::Deserialize;
 use url::Url;
 
 use crate::{
+    core::ANONYMOUS_PRINCIPAL,
     errors::{ApiError, ErrorCause},
     http::error_infer,
     persist::{RouteSubnet, Routes},
-    snapshot::{Node, RegistrySnapshot},
+    snapshot::RegistrySnapshot,
 };
-
-pub const ANONYMOUS_PRINCIPAL: Principal = Principal::anonymous();
-
-// Rust const/static concat is non-existent, so we have to repeat
-pub const PATH_STATUS: &str = "/api/v2/status";
-pub const PATH_QUERY: &str = "/api/v2/canister/{canister_id}/query";
-pub const PATH_CALL: &str = "/api/v2/canister/{canister_id}/call";
-pub const PATH_CALL_V3: &str = "/api/v3/canister/{canister_id}/call";
-pub const PATH_READ_STATE: &str = "/api/v2/canister/{canister_id}/read_state";
-pub const PATH_SUBNET_READ_STATE: &str = "/api/v2/subnet/{subnet_id}/read_state";
-pub const PATH_HEALTH: &str = "/health";
-
-lazy_static! {
-    pub static ref UUID_REGEX: Regex =
-        Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
-}
 
 #[derive(Debug, Clone, PartialEq, Hash, CandidType, Deserialize)]
 pub struct HttpRequest {
@@ -292,85 +269,6 @@ pub async fn lookup_subnet(
     Ok(response)
 }
 
-// Handler: emit an HTTP status code that signals the service's state
-pub async fn health(State(h): State<Arc<dyn Health>>) -> impl IntoResponse {
-    if h.health() == ReplicaHealthStatus::Healthy {
-        StatusCode::NO_CONTENT
-    } else {
-        StatusCode::SERVICE_UNAVAILABLE
-    }
-}
-
-// Handler: processes IC status call
-pub async fn status(
-    State((rk, h)): State<(Arc<dyn RootKey>, Arc<dyn Health>)>,
-) -> impl IntoResponse {
-    let health = h.health();
-
-    let status = HttpStatusResponse {
-        root_key: rk.root_key().map(|x| x.into()),
-        impl_version: None,
-        impl_hash: None,
-        replica_health_status: Some(health),
-        certified_height: None,
-    };
-
-    // Serialize to CBOR
-    let mut ser = serde_cbor::Serializer::new(Vec::new());
-    // These should not really fail, better to panic if something in serde changes which would cause them to fail
-    ser.self_describe().unwrap();
-    status.serialize(&mut ser).unwrap();
-    let cbor = ser.into_inner();
-
-    // Construct response and inject health status for middleware
-    let mut response = cbor.into_response();
-    response.extensions_mut().insert(health);
-    response
-        .headers_mut()
-        .insert(CONTENT_TYPE, CONTENT_TYPE_CBOR);
-    response
-        .headers_mut()
-        .insert(X_CONTENT_TYPE_OPTIONS, X_CONTENT_TYPE_OPTIONS_NO_SNIFF);
-    response
-        .headers_mut()
-        .insert(X_FRAME_OPTIONS, X_FRAME_OPTIONS_DENY);
-
-    response
-}
-
-// Handler: Unified handler for query/call/read_state calls
-pub async fn handle_canister(
-    State(p): State<Arc<dyn Proxy>>,
-    Extension(ctx): Extension<Arc<RequestContext>>,
-    Extension(canister_id): Extension<CanisterId>,
-    Extension(node): Extension<Arc<Node>>,
-    request: Request<Body>,
-) -> Result<impl IntoResponse, ApiError> {
-    let url = node
-        .build_url(ctx.request_type, canister_id.into())
-        .map_err(|e| ErrorCause::Other(format!("failed to build request url: {e}")))?;
-    // Proxy the request
-    let resp = p.proxy(request, url).await?;
-
-    Ok(resp)
-}
-
-pub async fn handle_subnet(
-    State(p): State<Arc<dyn Proxy>>,
-    Extension(ctx): Extension<Arc<RequestContext>>,
-    Extension(subnet_id): Extension<SubnetId>,
-    Extension(node): Extension<Arc<Node>>,
-    request: Request<Body>,
-) -> Result<impl IntoResponse, ApiError> {
-    let url = node
-        .build_url(ctx.request_type, subnet_id.get().into())
-        .map_err(|e| ErrorCause::Other(format!("failed to build request url: {e}")))?;
-    // Proxy the request
-    let resp = p.proxy(request, url).await?;
-
-    Ok(resp)
-}
-
 #[cfg(test)]
 pub(crate) mod test {
     use super::*;
@@ -380,26 +278,38 @@ pub(crate) mod test {
     use anyhow::Error;
     use axum::{body::Body, http::Request, routing::method_routing::get, Router};
     use ethnum::u256;
-    use http::header::{
-        HeaderName, HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS,
+    use http::{
+        header::{HeaderName, HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS},
+        StatusCode,
+    };
+    use ic_bn_lib::{
+        http::headers::{
+            X_IC_CANISTER_ID, X_IC_METHOD_NAME, X_IC_NODE_ID, X_IC_REQUEST_TYPE, X_IC_SENDER,
+            X_IC_SUBNET_ID, X_IC_SUBNET_TYPE,
+        },
+        principal,
     };
     use ic_types::{
         messages::{
             Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
-            HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery,
+            HttpReadStateContent, HttpRequestEnvelope, HttpStatusResponse, HttpUserQuery,
         },
         PrincipalId,
     };
     use tower::Service;
 
     use crate::{
+        http::{
+            handlers::{health, status},
+            PATH_HEALTH, PATH_STATUS,
+        },
         persist::{test::node, Persist, Persister},
-        snapshot::test::test_registry_snapshot,
+        snapshot::{test::test_registry_snapshot, Node},
         test_utils::{setup_test_router, TestHttpClient},
     };
 
     pub fn test_node(id: u64) -> Arc<Node> {
-        node(id, Principal::from_text("f7crg-kabae").unwrap())
+        node(id, principal!("f7crg-kabae"))
     }
 
     pub fn test_route_subnet_with_id(id: String, n: usize) -> RouteSubnet {
@@ -696,7 +606,7 @@ pub(crate) mod test {
         let (mut app, subnets) = setup_test_router(false, false, 10, 1, 1024, None);
         let node = subnets[0].nodes[0].clone();
 
-        let sender = Principal::from_text("sqjm4-qahae-aq").unwrap();
+        let sender = principal!("sqjm4-qahae-aq");
         let canister_id = CanisterId::from_u64(100);
 
         // Test query

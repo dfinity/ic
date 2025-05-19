@@ -11,13 +11,18 @@ use http::header::HeaderValue;
 use ic_bn_lib::http::headers::*;
 pub use ic_bn_lib::types::RequestType;
 use ic_types::{CanisterId, PrincipalId, SubnetId};
+use lazy_static::lazy_static;
+use regex::Regex;
 
 use crate::{
     errors::{ApiError, ErrorCause},
-    routes::{
-        PATH_CALL, PATH_CALL_V3, PATH_QUERY, PATH_READ_STATE, PATH_SUBNET_READ_STATE, UUID_REGEX,
-    },
+    http::{PATH_CALL, PATH_CALL_V3, PATH_QUERY, PATH_READ_STATE, PATH_SUBNET_READ_STATE},
 };
+
+lazy_static! {
+    pub static ref UUID_REGEX: Regex =
+        Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
+}
 
 pub async fn validate_canister_request(
     matched_path: MatchedPath,

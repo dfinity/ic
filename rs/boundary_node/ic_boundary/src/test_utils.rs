@@ -44,15 +44,6 @@ use crate::{
     snapshot::{node_test_id, subnet_test_id, RegistrySnapshot, Snapshot, Snapshotter, Subnet},
 };
 
-#[macro_export]
-macro_rules! principal {
-    ($id:expr) => {{
-        candid::Principal::from_text($id).unwrap()
-    }};
-}
-
-pub use principal;
-
 #[derive(Debug)]
 pub struct TestHttpClient(pub usize);
 

@@ -266,6 +266,7 @@ pub(crate) mod test {
     use arc_swap::ArcSwapOption;
     use candid::Principal;
     use ethnum::u256;
+    use ic_bn_lib::principal;
     use ic_registry_subnet_type::SubnetType;
 
     use crate::{
@@ -332,14 +333,11 @@ pub(crate) mod test {
 
     pub fn generate_test_subnets(offset: u64) -> Vec<Subnet> {
         let subnet_id_1 =
-            Principal::from_text("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
-                .unwrap();
+            principal!("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe");
         let subnet_id_2 =
-            Principal::from_text("uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe")
-                .unwrap();
+            principal!("uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe");
         let subnet_id_3 =
-            Principal::from_text("snjp4-xlbw4-mnbog-ddwy6-6ckfd-2w5a2-eipqo-7l436-pxqkh-l6fuv-vae")
-                .unwrap();
+            principal!("snjp4-xlbw4-mnbog-ddwy6-6ckfd-2w5a2-eipqo-7l436-pxqkh-l6fuv-vae");
 
         let node1 = node(1 + offset, subnet_id_1);
         let node2 = node(2 + offset, subnet_id_2);
@@ -350,12 +348,12 @@ pub(crate) mod test {
             subnet_type: SubnetType::Application,
             ranges: vec![
                 CanisterRange {
-                    start: Principal::from_text("f7crg-kabae").unwrap(),
-                    end: Principal::from_text("sxiki-5ygae-aq").unwrap(),
+                    start: principal!("f7crg-kabae"),
+                    end: principal!("sxiki-5ygae-aq"),
                 },
                 CanisterRange {
-                    start: Principal::from_text("t5his-7iiae-aq").unwrap(),
-                    end: Principal::from_text("jlzvg-byp77-7qcai").unwrap(),
+                    start: principal!("t5his-7iiae-aq"),
+                    end: principal!("jlzvg-byp77-7qcai"),
                 },
             ],
             nodes: vec![node1.clone()],
@@ -367,12 +365,12 @@ pub(crate) mod test {
             subnet_type: SubnetType::Application,
             ranges: vec![
                 CanisterRange {
-                    start: Principal::from_text("sqjm4-qahae-aq").unwrap(),
-                    end: Principal::from_text("sqjm4-qahae-aq").unwrap(),
+                    start: principal!("sqjm4-qahae-aq"),
+                    end: principal!("sqjm4-qahae-aq"),
                 },
                 CanisterRange {
-                    start: Principal::from_text("6l3jn-7icca-aaaai-b").unwrap(),
-                    end: Principal::from_text("ca5tg-macd7-776ai-b").unwrap(),
+                    start: principal!("6l3jn-7icca-aaaai-b"),
+                    end: principal!("ca5tg-macd7-776ai-b"),
                 },
             ],
             nodes: vec![node2.clone()],
@@ -383,8 +381,8 @@ pub(crate) mod test {
             id: subnet_id_3,
             subnet_type: SubnetType::Application,
             ranges: vec![CanisterRange {
-                start: Principal::from_text("zdpgc-saqaa-aacai").unwrap(),
-                end: Principal::from_text("fij4j-bi777-7qcai").unwrap(),
+                start: principal!("zdpgc-saqaa-aacai"),
+                end: principal!("fij4j-bi777-7qcai"),
             }],
             nodes: vec![node3.clone()],
             replica_version: "7742d96ddd30aa6b607c9d2d4093a7b714f5b25b".to_string(),
@@ -395,14 +393,11 @@ pub(crate) mod test {
 
     pub fn generate_test_routes(offset: u64) -> Routes {
         let subnet_id_1 =
-            Principal::from_text("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
-                .unwrap();
+            principal!("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe");
         let subnet_id_2 =
-            Principal::from_text("uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe")
-                .unwrap();
+            principal!("uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe");
         let subnet_id_3 =
-            Principal::from_text("snjp4-xlbw4-mnbog-ddwy6-6ckfd-2w5a2-eipqo-7l436-pxqkh-l6fuv-vae")
-                .unwrap();
+            principal!("snjp4-xlbw4-mnbog-ddwy6-6ckfd-2w5a2-eipqo-7l436-pxqkh-l6fuv-vae");
 
         let subnet1 = RouteSubnet {
             id: subnet_id_1,
@@ -497,7 +492,7 @@ pub(crate) mod test {
         let r = generate_test_routes(0);
 
         assert_eq!(
-            r.lookup_by_canister_id(Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap())
+            r.lookup_by_canister_id(principal!("ryjl3-tyaaa-aaaaa-aaaba-cai"))
                 .unwrap()
                 .id
                 .to_string(),
@@ -505,7 +500,7 @@ pub(crate) mod test {
         );
 
         assert_eq!(
-            r.lookup_by_canister_id(Principal::from_text("qjdve-lqaaa-aaaaa-aaaeq-cai").unwrap())
+            r.lookup_by_canister_id(principal!("qjdve-lqaaa-aaaaa-aaaeq-cai"))
                 .unwrap()
                 .id
                 .to_string(),
@@ -513,7 +508,7 @@ pub(crate) mod test {
         );
 
         assert_eq!(
-            r.lookup_by_canister_id(Principal::from_text("2b2k4-rqaaa-aaaaa-qaatq-cai").unwrap())
+            r.lookup_by_canister_id(principal!("2b2k4-rqaaa-aaaaa-qaatq-cai"))
                 .unwrap()
                 .id
                 .to_string(),
@@ -521,7 +516,7 @@ pub(crate) mod test {
         );
 
         assert_eq!(
-            r.lookup_by_canister_id(Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap())
+            r.lookup_by_canister_id(principal!("rdmx6-jaaaa-aaaaa-aaadq-cai"))
                 .unwrap()
                 .id
                 .to_string(),
@@ -529,7 +524,7 @@ pub(crate) mod test {
         );
 
         assert_eq!(
-            r.lookup_by_canister_id(Principal::from_text("sqjm4-qahae-aq").unwrap())
+            r.lookup_by_canister_id(principal!("sqjm4-qahae-aq"))
                 .unwrap()
                 .id
                 .to_string(),
@@ -537,7 +532,7 @@ pub(crate) mod test {
         );
 
         assert_eq!(
-            r.lookup_by_canister_id(Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap())
+            r.lookup_by_canister_id(principal!("rdmx6-jaaaa-aaaaa-aaadq-cai"))
                 .unwrap()
                 .id
                 .to_string(),
@@ -545,7 +540,7 @@ pub(crate) mod test {
         );
 
         assert_eq!(
-            r.lookup_by_canister_id(Principal::from_text("uc7f6-kaaaa-aaaaq-qaaaa-cai").unwrap())
+            r.lookup_by_canister_id(principal!("uc7f6-kaaaa-aaaaq-qaaaa-cai"))
                 .unwrap()
                 .id
                 .to_string(),
@@ -554,10 +549,10 @@ pub(crate) mod test {
 
         // Test failure
         assert!(r
-            .lookup_by_canister_id(Principal::from_text("32fn4-qqaaa-aaaak-ad65a-cai").unwrap())
+            .lookup_by_canister_id(principal!("32fn4-qqaaa-aaaak-ad65a-cai"))
             .is_none());
         assert!(r
-            .lookup_by_canister_id(Principal::from_text("3we4s-lyaaa-aaaak-aegrq-cai").unwrap())
+            .lookup_by_canister_id(principal!("3we4s-lyaaa-aaaak-aegrq-cai"))
             .is_none());
 
         Ok(())
