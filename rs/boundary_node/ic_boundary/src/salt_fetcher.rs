@@ -4,12 +4,12 @@ use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
 use candid::{Decode, Encode};
-use ic_canister_client::Agent;
-use ic_types::CanisterId;
-use prometheus::{
+use ic_bn_lib::prometheus::{
     register_int_counter_vec_with_registry, register_int_gauge_with_registry, IntCounterVec,
     IntGauge, Registry,
 };
+use ic_canister_client::Agent;
+use ic_types::CanisterId;
 use salt_sharing_api::{GetSaltError, GetSaltResponse};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{sync::Arc, time::Duration};

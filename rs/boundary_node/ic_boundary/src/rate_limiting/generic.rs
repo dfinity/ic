@@ -20,13 +20,13 @@ use axum::{
 };
 use candid::Principal;
 use ic_bn_lib::http::ConnInfo;
-use ic_canister_client::Agent;
-use ic_types::CanisterId;
-use ipnet::IpNet;
-use prometheus::{
+use ic_bn_lib::prometheus::{
     register_int_counter_vec_with_registry, register_int_gauge_with_registry, IntCounterVec,
     IntGauge, Registry,
 };
+use ic_canister_client::Agent;
+use ic_types::CanisterId;
+use ipnet::IpNet;
 use rate_limits_api::v1::{Action, IpPrefixes, RateLimitRule, RequestType as RequestTypeRule};
 use ratelimit::Ratelimiter;
 use strum::{Display, IntoStaticStr};
@@ -44,8 +44,9 @@ use super::{
 
 use crate::{
     core::Run,
+    errors::{ErrorCause, RateLimitCause},
     persist::RouteSubnet,
-    routes::{ErrorCause, RateLimitCause, RequestContext, RequestType},
+    routes::{RequestContext, RequestType},
     snapshot::RegistrySnapshot,
 };
 
@@ -497,13 +498,11 @@ pub async fn middleware(
 #[cfg(test)]
 mod test {
     use super::*;
+    use ic_bn_lib::principal;
     use indoc::indoc;
     use std::str::FromStr;
 
-    use crate::{
-        principal,
-        snapshot::{generate_stub_snapshot, ApiBoundaryNode},
-    };
+    use crate::snapshot::{generate_stub_snapshot, ApiBoundaryNode};
 
     struct BrokenFetcher;
 

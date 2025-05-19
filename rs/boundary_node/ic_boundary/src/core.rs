@@ -10,25 +10,27 @@ use anyhow::{anyhow, Context, Error};
 use arc_swap::ArcSwapOption;
 use async_scoped::TokioScope;
 use async_trait::async_trait;
-use axum::extract::Request;
 use axum::{
+    extract::Request,
     middleware,
     response::IntoResponse,
     routing::method_routing::{get, post},
     Router,
 };
 use axum_extra::middleware::option_layer;
-use candid::DecoderConfig;
+use candid::{DecoderConfig, Principal};
 use futures::TryFutureExt;
 use ic_bn_lib::{
     http::{
-        self,
+        self as bnhttp,
         shed::{
             sharded::{ShardedLittleLoadShedderLayer, ShardedOptions, TypeExtractor},
             system::{SystemInfo, SystemLoadShedderLayer},
             ShedResponse,
         },
     },
+    prometheus::Registry,
+    tls::verify::NoopServerCertVerifier,
     types::RequestType,
 };
 use ic_canister_client::{Agent, Sender};
@@ -43,7 +45,7 @@ use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, messages::MessageId};
 use nix::unistd::{getpgid, setpgid, Pid};
-use prometheus::Registry;
+use rustls::client::danger::ServerCertVerifier;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tower::{limit::ConcurrencyLimitLayer, util::MapResponseLayer, ServiceBuilder};
@@ -52,21 +54,31 @@ use tracing::{debug, error, warn};
 
 use crate::{
     bouncer,
-    cache::{cache_middleware, Cache},
     check::{Checker, Runner as CheckRunner},
     cli::Cli,
     dns::DnsResolver,
+    errors::ErrorCause,
     firewall::{FirewallGenerator, SystemdReloader},
-    geoip,
+    http::{
+        handlers::{self},
+        middleware::{
+            cache::{cache_middleware, CacheState},
+            geoip::{self},
+            process::{self},
+            retry::{retry_request, RetryParams},
+            validate::{self, UUID_REGEX},
+        },
+        PATH_CALL, PATH_CALL_V3, PATH_HEALTH, PATH_QUERY, PATH_READ_STATE, PATH_STATUS,
+        PATH_SUBNET_READ_STATE,
+    },
     metrics::{
         self, HttpMetricParams, HttpMetricParamsStatus, MetricParams, MetricParamsCheck,
         MetricParamsPersist, MetricParamsSnapshot, MetricsCache, MetricsRunner, WithMetrics,
-        WithMetricsCheck, WithMetricsPersist, WithMetricsSnapshot, HTTP_DURATION_BUCKETS,
+        WithMetricsCheck, WithMetricsPersist, WithMetricsSnapshot,
     },
     persist::{Persist, Persister, Routes},
     rate_limiting::{generic, RateLimit},
-    retry::{retry_request, RetryParams},
-    routes::{self, ErrorCause, Health, Lookup, Proxy, ProxyRouter, RootKey},
+    routes::{self, Health, Lookup, Proxy, ProxyRouter, RootKey},
     salt_fetcher::AnonymizationSaltFetcher,
     snapshot::{
         generate_stub_snapshot, generate_stub_subnet, RegistrySnapshot, SnapshotPersister,
@@ -93,6 +105,8 @@ const METRICS_CACHE_CAPACITY: usize = 15 * MB;
 /// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
 /// The value of 10_000 follows the Candid recommendation.
 const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
+
+pub const ANONYMOUS_PRINCIPAL: Principal = Principal::anonymous();
 
 pub fn decoder_config() -> DecoderConfig {
     let mut config = DecoderConfig::new();
@@ -142,10 +156,11 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let dns_resolver = DnsResolver::new(Arc::clone(&registry_snapshot));
 
     // TLS client
-    let tls_verifier = Arc::new(TlsVerifier::new(
-        Arc::clone(&registry_snapshot),
-        cli.misc.skip_replica_tls_verification,
-    ));
+    let tls_verifier: Arc<dyn ServerCertVerifier> = if cli.misc.skip_replica_tls_verification {
+        Arc::new(NoopServerCertVerifier::default())
+    } else {
+        Arc::new(TlsVerifier::new(Arc::clone(&registry_snapshot)))
+    };
 
     let mut tls_config_client =
         rustls::ClientConfig::builder_with_protocol_versions(&[&rustls::version::TLS13])
@@ -166,32 +181,25 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         4096 * cli.network.network_http_client_count as usize,
     );
 
-    let mut http_client_opts: http::client::Options<DnsResolver> = (&cli.http_client).into();
+    let mut http_client_opts: bnhttp::client::Options<DnsResolver> = (&cli.http_client).into();
     http_client_opts.user_agent = SERVICE_NAME.into();
     http_client_opts.tls_config = Some(tls_config_client);
     http_client_opts.dns_resolver = Some(dns_resolver);
 
     // HTTP client for health checks
-    let http_client_check = http::client::ReqwestClient::new(http_client_opts.clone())
+    let http_client_check = bnhttp::ReqwestClient::new(http_client_opts.clone())
         .context("unable to create HTTP client for checks")?;
     let http_client_check = Arc::new(http_client_check);
 
     // HTTP client for normal requests
-    let http_client = http::client::ReqwestClientLeastLoaded::new(
-        http_client_opts,
-        cli.network.network_http_client_count as usize,
-    )
-    .context("unable to create HTTP client")?;
-    let http_client = WithMetrics(
-        http_client,
-        MetricParams::new_with_opts(
-            &metrics_registry,
-            "http_client",
-            &["success", "status", "http_ver"],
-            Some(HTTP_DURATION_BUCKETS),
-        ),
+    let http_client = Arc::new(
+        bnhttp::ReqwestClientLeastLoaded::new(
+            http_client_opts,
+            cli.network.network_http_client_count as usize,
+            Some(&metrics_registry),
+        )
+        .context("unable to create HTTP client")?,
     );
-    let http_client = Arc::new(http_client);
 
     // Setup registry-related stuff
     let persister = Persister::new(Arc::clone(&routing_table));
@@ -263,17 +271,11 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     };
 
     // Caching
-    let cache = cli.cache.cache_size.map(|x| {
-        Arc::new(
-            Cache::new(
-                x,
-                cli.cache.cache_max_item_size,
-                cli.cache.cache_ttl,
-                cli.cache.cache_non_anonymous,
-            )
-            .expect("unable to initialize cache"),
-        )
-    });
+    let cache_state = if cli.cache.cache_size.is_some() {
+        Some(Arc::new(CacheState::new(&cli.cache, &metrics_registry)?))
+    } else {
+        None
+    };
 
     // Bouncer
     let bouncer = if cli.bouncer.bouncer_enable {
@@ -321,36 +323,34 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         generic_limiter.clone(),
         &cli,
         &metrics_registry,
-        cache.clone(),
+        cache_state.clone(),
         anonymization_salt.clone(),
     );
 
     // HTTP server metrics
-    let http_metrics = http::server::Metrics::new(&metrics_registry);
+    let http_metrics = bnhttp::server::Metrics::new(&metrics_registry);
 
     // HTTP server options
-    let server_opts: http::server::Options = (&cli.http_server).into();
+    let server_opts: bnhttp::server::Options = (&cli.http_server).into();
 
     // HTTP
     let server_http = cli.listen.listen_http_port.map(|x| {
-        http::Server::new(
-            http::server::Addr::Tcp(SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), x)),
-            router.clone(),
-            server_opts,
-            http_metrics.clone(),
-            None,
-        )
+        bnhttp::ServerBuilder::new(router.clone())
+            .listen_tcp(SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), x))
+            .with_options(server_opts)
+            .with_metrics(http_metrics.clone())
+            .build()
+            .expect("unable to build HTTP TCP server")
     });
 
     // HTTP Unix Socket
     let server_http_unix = cli.listen.listen_http_unix_socket.as_ref().map(|x| {
-        http::Server::new(
-            http::server::Addr::Unix(x.clone()),
-            router.clone(),
-            server_opts,
-            http_metrics.clone(),
-            None,
-        )
+        bnhttp::ServerBuilder::new(router.clone())
+            .listen_unix(x.clone())
+            .with_options(server_opts)
+            .with_metrics(http_metrics.clone())
+            .build()
+            .expect("unable to build HTTP Unix Socket server")
     });
 
     // HTTP loopback server.
@@ -358,16 +358,15 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     // Probably we can find some way of working w/o a dedicated port (e.g. over memory) but it would be hard
     // to adapt HTTP clients for it.
     let server_http_loopback = agent.is_some().then(|| {
-        http::Server::new(
-            http::server::Addr::Tcp(SocketAddr::new(
+        bnhttp::ServerBuilder::new(router.clone())
+            .listen_tcp(SocketAddr::new(
                 Ipv4Addr::LOCALHOST.into(),
                 cli.listen.listen_http_port_loopback,
-            )),
-            router.clone(),
-            server_opts,
-            http_metrics.clone(),
-            None,
-        )
+            ))
+            .with_options(server_opts)
+            .with_metrics(http_metrics.clone())
+            .build()
+            .expect("unable to build HTTP Loopback server")
     });
 
     // HTTPS
@@ -413,20 +412,20 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             cache: metrics_cache.clone(),
         });
 
-    let metrics_server = http::Server::new(
-        http::server::Addr::Tcp(cli.obs.obs_metrics_addr),
-        metrics_router,
-        server_opts,
-        http_metrics,
-        None,
-    );
+    let metrics_server = bnhttp::ServerBuilder::new(metrics_router)
+        .listen_tcp(cli.obs.obs_metrics_addr)
+        .with_options(server_opts)
+        .with_metrics(http_metrics)
+        .build()
+        .context("unable to build HTTP Metrics server")
+        .unwrap();
 
     let metrics_runner = WithThrottle(
         WithMetrics(
             MetricsRunner::new(
                 metrics_cache,
                 metrics_registry.clone(),
-                cache,
+                cache_state,
                 Arc::clone(&registry_snapshot),
             ),
             MetricParams::new(&metrics_registry, "run_metrics"),
@@ -600,12 +599,15 @@ fn setup_registry(
     registry_client: Arc<dyn RegistryClient>,
     registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     persister: WithMetricsPersist<Persister>,
-    http_client_check: Arc<dyn http::Client>,
+    http_client_check: Arc<dyn bnhttp::Client>,
     metrics_registry: &Registry,
     channel_snapshot_send: watch::Sender<Option<Arc<RegistrySnapshot>>>,
     channel_snapshot_recv: watch::Receiver<Option<Arc<RegistrySnapshot>>>,
     runners: &mut Vec<Box<dyn Run>>,
 ) -> Result<(Option<RegistryReplicator>, Option<ThresholdSigPublicKey>), Error> {
+    // Init it early to avoid race conditions
+    lazy_static::initialize(&UUID_REGEX);
+
     // Snapshots
     let snapshot_runner = WithMetricsSnapshot(
         {
@@ -735,9 +737,6 @@ fn setup_tls_resolver_acme(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>
     let opts = tls::acme::AcmeOptions::new(
         vec![hostname],
         path,
-        // Does not matter, rustls-acme renews after 45 days always
-        Duration::from_secs(1),
-        false,
         cli.tls_acme_staging,
         "mailto:boundary-nodes@dfinity.org".into(),
     );
@@ -778,17 +777,17 @@ fn setup_tls_resolver(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Err
 #[cfg(feature = "tls")]
 fn setup_https(
     router: Router,
-    opts: http::server::Options,
+    opts: bnhttp::server::Options,
     cli: &Cli,
     registry: &Registry,
-    metrics: http::server::Metrics,
-) -> Result<http::Server, Error> {
+    metrics: bnhttp::server::Metrics,
+) -> Result<bnhttp::Server, Error> {
     use ic_bn_lib::tls;
 
     let resolver = setup_tls_resolver(&cli.tls).context("unable to setup TLS resolver")?;
 
     let tls_opts = tls::Options {
-        additional_alpn: vec![http::ALPN_ACME.to_vec()],
+        additional_alpn: vec![bnhttp::ALPN_ACME.to_vec()],
         sessions_count: cli.http_server.http_server_tls_session_cache_size,
         sessions_tti: cli.http_server.http_server_tls_session_cache_tti,
         ticket_lifetime: cli.http_server.http_server_tls_ticket_lifetime,
@@ -797,16 +796,16 @@ fn setup_https(
 
     let rustls_config = tls::prepare_server_config(tls_opts, resolver, registry);
 
-    let server_https = http::Server::new(
-        http::server::Addr::Tcp(SocketAddr::new(
+    let server_https = bnhttp::ServerBuilder::new(router)
+        .listen_tcp(SocketAddr::new(
             Ipv6Addr::UNSPECIFIED.into(),
             cli.listen.listen_https_port.unwrap(),
-        )),
-        router,
-        opts,
-        metrics,
-        Some(rustls_config),
-    );
+        ))
+        .with_options(opts)
+        .with_metrics(metrics)
+        .with_rustls_config(rustls_config)
+        .build()
+        .context("unable to build HTTP TLS server")?;
 
     Ok(server_https)
 }
@@ -825,12 +824,12 @@ impl TypeExtractor for RequestTypeExtractor {
 pub fn setup_router(
     registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     routing_table: Arc<ArcSwapOption<Routes>>,
-    http_client: Arc<dyn http::Client>,
+    http_client: Arc<dyn bnhttp::Client>,
     bouncer: Option<Arc<bouncer::Bouncer>>,
     generic_limiter: Option<Arc<generic::GenericLimiter>>,
     cli: &Cli,
     metrics_registry: &Registry,
-    cache: Option<Arc<Cache>>,
+    cache_state: Option<Arc<CacheState>>,
     anonymization_salt: Arc<ArcSwapOption<Vec<u8>>>,
 ) -> Router {
     let proxy_router = ProxyRouter::new(
@@ -850,17 +849,17 @@ pub fn setup_router(
         proxy_router.clone() as Arc<dyn Health>,
     );
 
-    let query_route = Router::new().route(routes::PATH_QUERY, {
-        post(routes::handle_canister).with_state(proxy.clone())
+    let query_route = Router::new().route(PATH_QUERY, {
+        post(handlers::handle_canister).with_state(proxy.clone())
     });
 
     let call_route = {
         let mut route = Router::new()
-            .route(routes::PATH_CALL, {
-                post(routes::handle_canister).with_state(proxy.clone())
+            .route(PATH_CALL, {
+                post(handlers::handle_canister).with_state(proxy.clone())
             })
-            .route(routes::PATH_CALL_V3, {
-                post(routes::handle_canister).with_state(proxy.clone())
+            .route(PATH_CALL_V3, {
+                post(handlers::handle_canister).with_state(proxy.clone())
             });
 
         // will panic if ip_rate_limit is Some(0)
@@ -879,16 +878,16 @@ pub fn setup_router(
     };
 
     let status_route = Router::new()
-        .route(routes::PATH_STATUS, {
-            get(routes::status).with_state((root_key.clone(), health.clone()))
+        .route(PATH_STATUS, {
+            get(handlers::status).with_state((root_key.clone(), health.clone()))
         })
         .layer(middleware::from_fn_with_state(
             HttpMetricParamsStatus::new(metrics_registry),
             metrics::metrics_middleware_status,
         ));
 
-    let health_route = Router::new().route(routes::PATH_HEALTH, {
-        get(routes::health).with_state(health.clone())
+    let health_route = Router::new().route(PATH_HEALTH, {
+        get(handlers::health).with_state(health.clone())
     });
 
     let middleware_geoip = option_layer(cli.misc.geoip_db.as_ref().map(|x| {
@@ -991,31 +990,31 @@ pub fn setup_router(
         .layer(middleware_metrics)
         .layer(load_shedder_system_mw)
         .layer(middleware_concurrency)
-        .layer(middleware::from_fn(routes::postprocess_response))
-        .layer(middleware::from_fn(routes::preprocess_request))
+        .layer(middleware::from_fn(process::postprocess_response))
+        .layer(middleware::from_fn(process::preprocess_request))
         .layer(load_shedder_latency_mw);
 
     let service_canister_read_call_query = ServiceBuilder::new()
-        .layer(middleware::from_fn(routes::validate_request))
-        .layer(middleware::from_fn(routes::validate_canister_request))
+        .layer(middleware::from_fn(validate::validate_request))
+        .layer(middleware::from_fn(validate::validate_canister_request))
         .layer(common_service_layers.clone())
         .layer(middleware_subnet_lookup.clone())
         .layer(middleware_generic_limiter.clone())
-        .layer(option_layer(cache.map(|x| {
+        .layer(option_layer(cache_state.map(|x| {
             middleware::from_fn_with_state(x.clone(), cache_middleware)
         })))
         .layer(middleware_retry.clone());
 
     let service_subnet_read = ServiceBuilder::new()
-        .layer(middleware::from_fn(routes::validate_request))
-        .layer(middleware::from_fn(routes::validate_subnet_request))
+        .layer(middleware::from_fn(validate::validate_request))
+        .layer(middleware::from_fn(validate::validate_subnet_request))
         .layer(common_service_layers)
         .layer(middleware_subnet_lookup)
         .layer(middleware_generic_limiter)
         .layer(middleware_retry);
 
-    let canister_read_state_route = Router::new().route(routes::PATH_READ_STATE, {
-        post(routes::handle_canister).with_state(proxy.clone())
+    let canister_read_state_route = Router::new().route(PATH_READ_STATE, {
+        post(handlers::handle_canister).with_state(proxy.clone())
     });
 
     let canister_read_call_query_routes = query_route
@@ -1024,8 +1023,8 @@ pub fn setup_router(
         .layer(service_canister_read_call_query);
 
     let subnet_read_state_route = Router::new()
-        .route(routes::PATH_SUBNET_READ_STATE, {
-            post(routes::handle_subnet).with_state(proxy.clone())
+        .route(PATH_SUBNET_READ_STATE, {
+            post(handlers::handle_subnet).with_state(proxy.clone())
         })
         .layer(service_subnet_read);
 
