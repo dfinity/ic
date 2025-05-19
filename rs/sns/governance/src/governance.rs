@@ -2018,7 +2018,7 @@ impl Governance {
     }
 
     // Shah-TODO what error types should be used?
-    pub async fn get_sns_statistics(
+    pub async fn get_statistics(
         &self,
         request: GetSnsStatusRequest,
     ) -> Result<GetSnsStatusResponse, GovernanceError> {
@@ -2028,7 +2028,7 @@ impl Governance {
                 "Error: parsing the request failed on unwrapping `time_window_seconds` field"
                     .to_string(),
             )),
-            |time_window_seconds| Ok(time_window_seconds),
+            Ok,
         )?;
         let num_recent_proposals = self.recent_proposals(time_window_seconds);
         let last_transaction_timestamp = self.get_most_recent_tx_ts().await?;
