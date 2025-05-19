@@ -8,6 +8,8 @@ use ic_nervous_system_common::{
     ledger::compute_neuron_staking_subaccount_bytes, E8, ONE_DAY_SECONDS,
     START_OF_2022_TIMESTAMP_SECONDS,
 };
+use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
+use icrc_ledger_types::icrc3::blocks::GetBlocksResult;
 
 lazy_static! {
     pub(crate) static ref A_NEURON_PRINCIPAL_ID: PrincipalId = PrincipalId::new_user_test_id(956560);
