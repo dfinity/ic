@@ -879,13 +879,9 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> SendRawTransactionProcessWithdr
         self,
         mut override_mock: F,
     ) -> Self {
-        let default_eth_send_raw_transaction = if self.setup.as_ref().evm_rpc_id.is_none() {
+        let default_eth_send_raw_transaction =
             MockJsonRpcProviders::when(JsonRpcMethod::EthSendRawTransaction)
-                .respond_with(JsonRpcProvider::Provider1, send_raw_transaction_response())
-        } else {
-            MockJsonRpcProviders::when(JsonRpcMethod::EthSendRawTransaction)
-                .respond_for_all_with(send_raw_transaction_response())
-        };
+                .respond_for_all_with(send_raw_transaction_response());
         (override_mock)(default_eth_send_raw_transaction)
             .build()
             .expect_rpc_calls(&self.setup);

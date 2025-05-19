@@ -1145,6 +1145,7 @@ fn initial_state() -> State {
         minimum_withdrawal_amount: Nat::from(10_000_000_000_000_000_u64),
         next_transaction_nonce: TransactionNonce::ZERO.into(),
         last_scraped_block_number: candid::Nat::from(INITIAL_LAST_SCRAPED_BLOCK_NUMBER),
+        evm_rpc_id: None,
     })
     .expect("valid init args")
 }
