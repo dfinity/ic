@@ -1,8 +1,0 @@
-= Filebeat configuration
-
-The Filebeat configuration is performed using a file +filebeat.conf+ in
-the bootstrap tarball. It must contain lines of "key=value= statements,
-with the following keys supported:
-
-* elasticsearch_hosts:    space-separated list of logging hosts
-* elasticsearch_tags:     space-separated list of tags

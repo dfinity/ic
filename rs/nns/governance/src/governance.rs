@@ -584,12 +584,6 @@ impl NnsFunction {
 }
 
 impl Proposal {
-    /// Whether this proposal is restricted, that is, whether neuron voting
-    /// eligibility depends on the content of this proposal.
-    pub fn is_manage_neuron(&self) -> bool {
-        self.topic() == Topic::NeuronManagement
-    }
-
     /// If this is a [ManageNeuron] proposal, this returns the ID of
     /// the managed neuron.
     pub fn managed_neuron(&self) -> Option<NeuronIdOrSubaccount> {
@@ -602,10 +596,9 @@ impl Proposal {
         }
     }
 
-    /// Compute the topic that a given proposal belongs to. The topic
-    /// of a proposal governs what followers that are taken into
-    /// account when the proposal is voted on.
-    pub(crate) fn topic(&self) -> Topic {
+    /// Computes a topic to a given proposal at the creation time. The topic of a proposal governs
+    /// what followers that are taken into account when the proposal is voted on.
+    pub(crate) fn compute_topic_at_creation(&self) -> Topic {
         if let Some(action) = &self.action {
             match action {
                 Action::ManageNeuron(_) => Topic::NeuronManagement,
@@ -812,18 +805,6 @@ impl Action {
 }
 
 impl ProposalData {
-    pub fn topic(&self) -> Topic {
-        if let Some(proposal) = &self.proposal {
-            proposal.topic()
-        } else {
-            println!(
-                "{}ERROR: ProposalData has no proposal! {:#?}",
-                LOG_PREFIX, self
-            );
-            Topic::Unspecified
-        }
-    }
-
     /// Compute the 'status' of a proposal. See [ProposalStatus] for
     /// more information.
     pub fn status(&self) -> ProposalStatus {
@@ -845,9 +826,7 @@ impl ProposalData {
     /// Whether this proposal is restricted, that is, whether neuron voting
     /// eligibility depends on the content of this proposal.
     pub fn is_manage_neuron(&self) -> bool {
-        self.proposal
-            .as_ref()
-            .is_some_and(Proposal::is_manage_neuron)
+        self.topic() == Topic::NeuronManagement
     }
 
     pub fn reward_status(
@@ -3382,7 +3361,7 @@ impl Governance {
         match self.heap_data.proposals.get_mut(&pid) {
             Some(proposal_data) => {
                 // The proposal has to be adopted before it is executed.
-                assert!(proposal_data.status() == ProposalStatus::Adopted);
+                assert_eq!(proposal_data.status(), ProposalStatus::Adopted);
                 match result {
                     Ok(_) => {
                         println!(
@@ -3879,15 +3858,10 @@ impl Governance {
 
         // Stops borrowing proposal before mutating neurons.
         let action = proposal.proposal.as_ref().and_then(|x| x.action.clone());
-        let is_manage_neuron = proposal
-            .proposal
-            .as_ref()
-            .map(|x| x.is_manage_neuron())
-            .unwrap_or(false);
 
         // The proposal was adopted, return the rejection fee for non-ManageNeuron
         // proposals.
-        if !is_manage_neuron {
+        if !proposal.is_manage_neuron() {
             if let Some(nid) = proposal.proposer {
                 let rejection_cost = proposal.reject_cost_e8s;
                 self.with_neuron_mut(&nid, |neuron| {
@@ -4961,7 +4935,7 @@ impl Governance {
             }
         }
 
-        if proposal.topic() == Topic::Unspecified {
+        if proposal.compute_topic_at_creation() == Topic::Unspecified {
             Err(format!("Topic not specified. proposal: {:#?}", proposal))?;
         }
 
@@ -5278,7 +5252,7 @@ impl Governance {
         caller: &PrincipalId,
         proposal: &Proposal,
     ) -> Result<ProposalId, GovernanceError> {
-        let topic = proposal.topic();
+        let topic = proposal.compute_topic_at_creation();
         let now_seconds = self.env.now();
 
         // Validate proposal
@@ -5456,6 +5430,7 @@ impl Governance {
             ballots,
             wait_for_quiet_state,
             total_potential_voting_power: Some(total_potential_voting_power),
+            topic: Some(topic as i32),
             ..Default::default()
         };
 
@@ -5670,11 +5645,7 @@ impl Governance {
             .ok_or_else(||
             // Proposal not found.
             GovernanceError::new_with_message(ErrorType::NotFound, "Can't find proposal."))?;
-        let topic = proposal
-            .proposal
-            .as_ref()
-            .map(|p| p.topic())
-            .unwrap_or(Topic::Unspecified);
+        let topic = proposal.topic();
 
         let vote = Vote::try_from(*vote).unwrap_or(Vote::Unspecified);
         if vote == Vote::Unspecified {
