@@ -851,20 +851,31 @@ mod tests {
 
     #[test]
     fn test_count_fitting_deltas_max_size() {
+        let _restore_on_drop = temporarily_enable_chunkifying_large_values();
+
         let mut registry = Registry::new();
         let version = 1;
         let key = b"key";
 
-        let max_value = vec![0; max_mutation_value_size(version, key)];
+        let max_value = vec![0; max_mutation_value_size(version, key) - 50];
 
-        let mutation1 = upsert([90; 50], [1; 50]);
-        let mutation2 = upsert(key, max_value);
-        let mutation3 = upsert([89; 200], [1; 200]);
+        // This seems large, but this will get chunkified down to approximately
+        // dozens of bytes. As a result, for the purposes of
+        // count_fitting_deltas, this is actually small.
+        let chunkified_mutation = upsert([90; 50], [1; 2_000_000]);
 
-        for mutation in [&mutation1, &mutation2, &mutation3] {
+        let large_but_not_chunkified_mutation = upsert(key, max_value);
+
+        let not_large_mutation = upsert([89; 200], [1; 200]);
+
+        for mutation in [
+            chunkified_mutation,
+            large_but_not_chunkified_mutation,
+            not_large_mutation,
+        ] {
             assert_empty!(apply_mutations_skip_invariant_checks(
                 &mut registry,
-                vec![mutation.clone()]
+                vec![mutation]
             ));
         }
 
@@ -875,8 +886,8 @@ mod tests {
         );
 
         assert_eq!(
-            // Subtract 1 to prevent `mutation2` from fitting into the fitting deltas.
-            registry.count_fitting_deltas(1, MAX_REGISTRY_DELTAS_SIZE - 1),
+            // Subtract a little bit to prevent `mutation2` from fitting into the fitting deltas.
+            registry.count_fitting_deltas(1, MAX_REGISTRY_DELTAS_SIZE - 51),
             0
         );
         assert_eq!(
