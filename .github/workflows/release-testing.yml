@@ -182,6 +182,6 @@ jobs:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
   repro-check:
     name: Repro check for ${{ github.sha }}
-    uses: .github/workflows/repro-check.yml
+    uses: ./.github/workflows/repro-check.yml
     with:
       github_sha: ${{ github.sha }}
