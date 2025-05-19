@@ -291,21 +291,19 @@ fn output_requests_on_system_subnet_ignore_memory_limits() {
         .with_manual_execution()
         .build();
 
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000));
-    test.install_canister_with_allocation(
-        canister_id,
-        wat::parse_str(CALL_SIMPLE_WAT).unwrap(),
-        None,
-        Some(canister_memory as u64),
-    )
-    .unwrap();
+    let canister_id = test
+        .create_canister_with_allocation(
+            Cycles::new(1_000_000_000),
+            None,
+            Some(canister_memory as u64),
+        )
+        .unwrap();
+    test.install_canister(canister_id, wat::parse_str(CALL_SIMPLE_WAT).unwrap())
+        .unwrap();
     test.ingress_raw(canister_id, "test", vec![]);
     test.execute_message(canister_id);
 
-    assert_eq!(
-        test.subnet_available_memory().get_execution_memory(),
-        (size_of::<CanisterChange>() + size_of::<PrincipalId>()) as i64
-    );
+    assert_eq!(test.subnet_available_memory().get_execution_memory(), 0);
     assert_eq!(
         test.subnet_available_memory()
             .get_guaranteed_response_message_memory(),
@@ -797,10 +795,15 @@ fn get_canister_status_from_another_canister_when_memory_low() {
     let mut test = ExecutionTestBuilder::new().build();
     let controller = test.universal_canister().unwrap();
     let binary = wat::parse_str("(module)").unwrap();
-    let canister = test.create_canister(Cycles::new(1_000_000_000_000));
     let memory_allocation = NumBytes::from(450);
-    test.install_canister_with_allocation(canister, binary, None, Some(memory_allocation.get()))
+    let canister = test
+        .create_canister_with_allocation(
+            Cycles::new(1_000_000_000_000),
+            None,
+            Some(memory_allocation.get()),
+        )
         .unwrap();
+    test.install_canister(canister, binary).unwrap();
     let canister_status_args = Encode!(&CanisterIdRecord::from(canister)).unwrap();
     let get_canister_status = wasm()
         .call_simple(
