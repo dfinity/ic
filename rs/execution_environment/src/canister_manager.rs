@@ -1526,6 +1526,7 @@ impl CanisterManager {
         let new_snapshot = CanisterSnapshot::from_canister(canister, state.time())
             .map_err(CanisterManagerError::from)?;
 
+        // Delete old snapshot identified by `replace_snapshot`.
         if let Some(replace_snapshot) = replace_snapshot {
             self.remove_snapshot(canister, replace_snapshot, state, replace_snapshot_size);
         }
@@ -1570,7 +1571,7 @@ impl CanisterManager {
         replace_snapshot: SnapshotId,
         state: &mut ReplicatedState,
     ) -> Result<NumBytes, CanisterManagerError> {
-        // Check that replace snapshot ID exists if provided.
+        // Check that `replace_snapshot` exists.
         match state.canister_snapshots.get(replace_snapshot) {
             None => {
                 // If not found, the operation fails due to invalid parameters.
@@ -2304,7 +2305,7 @@ impl CanisterManager {
         state: &mut ReplicatedState,
         snapshot_size: NumBytes,
     ) {
-        // Delete old snapshot identified by `replace_snapshot` ID.
+        // Delete old snapshot identified by `snapshot_id`.
         state.delete_snapshot(snapshot_id);
         canister.system_state.snapshots_memory_usage = canister
             .system_state

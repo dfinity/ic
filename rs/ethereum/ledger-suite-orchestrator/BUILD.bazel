@@ -25,7 +25,6 @@ package(default_visibility = ["//visibility:public"])
         proc_macro_deps = [
             # Keep sorted.
             "@crate_index//:async-trait",
-            "@crate_index//:ic_cdk_macros_0_17_1",
         ],
         rustc_env = {
             "LEDGER_CANISTER_WASM_PATH": "$(execpath //rs/ledger_suite/icrc1/ledger:" + ledger_canister + ")",
@@ -48,11 +47,11 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:futures",
             "@crate_index//:hex",
             "@crate_index//:ic-canister-log",
+            "@crate_index//:ic-cdk",
             "@crate_index//:ic-management-canister-types",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:ic-stable-structures",
             "@crate_index//:ic0",
-            "@crate_index//:ic_cdk_0_17_1",
             "@crate_index//:num-traits",
             "@crate_index//:scopeguard",
             "@crate_index//:serde",
@@ -117,7 +116,6 @@ rust_test(
         opt = "z",
         proc_macro_deps = [
             # Keep sorted.
-            "@crate_index//:ic_cdk_macros_0_17_1",
         ],
         service_file = "ledger_suite_orchestrator.did",
         deps = [
@@ -127,8 +125,8 @@ rust_test(
             "@crate_index//:askama",
             "@crate_index//:candid",
             "@crate_index//:ic-canister-log",
+            "@crate_index//:ic-cdk",
             "@crate_index//:ic-metrics-encoder",
-            "@crate_index//:ic_cdk_0_17_1",
             "@crate_index//:serde",
             "@crate_index//:time",
         ],

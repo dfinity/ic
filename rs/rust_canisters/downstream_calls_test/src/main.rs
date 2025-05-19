@@ -1,6 +1,6 @@
 use downstream_calls_test::{CallOrResponse, State};
 use ic_cdk::call::Call;
-use ic_cdk_macros::update;
+use ic_cdk::update;
 
 fn main() {}
 
