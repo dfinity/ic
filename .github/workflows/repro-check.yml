@@ -14,8 +14,6 @@ on:
         description: Commit on which the repro check should be run
         required: true
         type: string
-  # TODO: remove. This is used to register with github actions
-  push:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -23,11 +21,11 @@ concurrency:
 
 jobs:
   repro-check:
-    name: Run repro-check for ${{ github.sha }}
+    name: Run repro-check for ${{ inputs.github_sha }}
     runs-on:
       labels: dind-small
     steps:
-      - name: Repro check for ${{ event.sha }}
+      - name: Repro check for ${{ inputs.github_sha }}
         shell: bash
         run: |
-          curl -fsSL https://raw.githubusercontent.com/dfinity/ic/master/ci/tools/repro-check | python3 - -c ${{ github.sha }} --setupos --guestos --hostos
+          curl -fsSL https://raw.githubusercontent.com/dfinity/ic/master/ci/tools/repro-check | python3 - -c ${{ inputs.github_sha }} --setupos --guestos --hostos
