@@ -177,10 +177,7 @@ fn join_errors_or_ok(results: Vec<Result<(), String>>) -> Result<(), String> {
     if results.iter().any(|r| r.is_err()) {
         Err(results
             .into_iter()
-            .flat_map(|result| match result {
-                Ok(_) => None,
-                Err(e) => Some(e),
-            })
+            .flat_map(|result| result.err())
             .collect::<Vec<_>>()
             .join("\n"))
     } else {
@@ -1310,10 +1307,7 @@ where
             .map(|(name, result)| {
                 result.map_err(|e| format!("Could not delete {} canister: {}", name, e))
             })
-            .flat_map(|result| match result {
-                Ok(_) => None,
-                Err(e) => Some(e),
-            })
+            .flat_map(|result| result.err())
             .collect::<Vec<_>>();
 
         let restore_dapp_canister_errors = match restore_dapp_canisters_result {
@@ -2090,7 +2084,7 @@ mod test {
             _wasm_memory_limit: u64,
         ) -> Result<CanisterId, String> {
             let mut errors = self.errors_on_create_canister.lock().unwrap();
-            if errors.len() > 0 {
+            if !errors.is_empty() {
                 if let Some(message) = errors.remove(0) {
                     return Err(message);
                 }
@@ -2106,7 +2100,7 @@ mod test {
             self.canisters_deleted.lock().unwrap().push(canister);
 
             let mut errors = self.errors_on_delete_canister.lock().unwrap();
-            if errors.len() > 0 {
+            if !errors.is_empty() {
                 if let Some(message) = errors.remove(0) {
                     return Err(message);
                 }
@@ -2127,7 +2121,7 @@ mod test {
                 .push((target_canister, wasm, init_payload));
 
             let mut errors = self.errors_on_install_wasms.lock().unwrap();
-            if errors.len() > 0 {
+            if !errors.is_empty() {
                 if let Some(message) = errors.remove(0) {
                     return Err(message);
                 }
@@ -2147,7 +2141,7 @@ mod test {
                 .push((canister, controllers));
 
             let mut errors = self.errors_on_set_controller.lock().unwrap();
-            if errors.len() > 0 {
+            if !errors.is_empty() {
                 if let Some(message) = errors.remove(0) {
                     return Err(message);
                 }

@@ -30,7 +30,7 @@ def launch_bare_metal(name, image_zst_file):
             "python3",
             "$(location :" + binary_name + ")",
             "--inject_configuration_tool",
-            "$(location //rs/ic_os/dev_test_tools/setupos-inject-configuration)",
+            "$(location //rs/ic_os/dev_test_tools/setupos-image-config:setupos-inject-config)",
             "--upload_img",
             "$(location " + image_zst_file + ")",
             "--idrac_script",
@@ -46,7 +46,7 @@ def launch_bare_metal(name, image_zst_file):
         data = [
             ":" + binary_name,
             image_zst_file,
-            "//rs/ic_os/dev_test_tools/setupos-inject-configuration",
+            "//rs/ic_os/dev_test_tools/setupos-image-config:setupos-inject-config",
             "//ic-os/dev-tools/bare_metal_deployment:redfish_scripts",
             "//ic-os/dev-tools/bare_metal_deployment:benchmark_runner.sh",
             "//ic-os/dev-tools/bare_metal_deployment:benchmark_driver.sh",

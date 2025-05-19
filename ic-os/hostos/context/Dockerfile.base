@@ -35,13 +35,13 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
 RUN cd /tmp/ && \
     curl -L -O https://download.qemu.org/qemu-6.2.0.tar.xz && \
     echo "68e15d8e45ac56326e0b9a4afa8b49a3dfe8aba3488221d098c84698bca65b45  qemu-6.2.0.tar.xz" > qemu.sha256 && \
-    shasum -c qemu.sha256
+    sha256sum -c qemu.sha256
 
 # Download and verify node_exporter
 RUN cd /tmp/ && \
     curl -L -O https://github.com/prometheus/node_exporter/releases/download/v1.8.1/node_exporter-1.8.1.linux-amd64.tar.gz && \
     echo "fbadb376afa7c883f87f70795700a8a200f7fd45412532cc1938a24d41078011  node_exporter-1.8.1.linux-amd64.tar.gz" > node_exporter.sha256 && \
-    shasum -c node_exporter.sha256
+    sha256sum -c node_exporter.sha256
 
 
 #

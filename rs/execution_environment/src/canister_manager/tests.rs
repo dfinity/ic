@@ -45,6 +45,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    canister_state::system_state::wasm_chunk_store::ChunkValidationResult,
     canister_state::system_state::{wasm_chunk_store, CyclesUseCase},
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
     page_map::TestPageAllocatorFileDescriptorImpl,
@@ -59,8 +60,8 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_execution_environment::{
     assert_delta, cycles_reserved_for_app_and_verified_app_subnets, get_reply,
-    get_routing_table_with_specified_ids_allocation_range, wasm_compilation_cost,
-    wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
+    get_routing_table_with_specified_ids_allocation_range, wasm_compilation_cost, wat_canister,
+    wat_compilation_cost, wat_fn, ExecutionTest, ExecutionTestBuilder,
 };
 use ic_test_utilities_state::{
     get_running_canister, get_stopped_canister, get_stopped_canister_with_controller,
@@ -2919,16 +2920,18 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
         .build();
 
     // Insert data to the chunk store to verify it is cleared on uninstall.
-    state
+    let store = &mut state
         .canister_state_mut(&canister_test_id(0))
         .unwrap()
         .system_state
-        .wasm_chunk_store
-        .insert_chunk(
-            canister_manager.config.wasm_chunk_store_max_size,
-            &[0x41; 200],
-        )
-        .unwrap();
+        .wasm_chunk_store;
+    let chunk = [0x41, 200].to_vec();
+    let result = store.can_insert_chunk(canister_manager.config.wasm_chunk_store_max_size, chunk);
+    let validated_chunk = match result {
+        ChunkValidationResult::Insert(validated_chunk) => validated_chunk,
+        res => panic!("Unexpected chunk validation result: {:?}", res),
+    };
+    store.insert_chunk(validated_chunk);
 
     assert!(state
         .canister_state(&canister_test_id(0))
@@ -4112,7 +4115,7 @@ fn cycles_correct_if_upgrade_succeeds() {
 #[test]
 fn cycles_correct_if_upgrade_fails_at_validation() {
     let mut test = ExecutionTestBuilder::new()
-        .with_allocatable_compute_capacity_in_percent(50)
+        .with_rate_limiting_of_instructions()
         .build();
 
     let wat = r#"
@@ -4147,10 +4150,15 @@ fn cycles_correct_if_upgrade_fails_at_validation() {
         )
     );
 
+    // Set a large value for `install_code_debit` so the installation fails due
+    // to rate limiting.
+    test.canister_state_mut(id)
+        .scheduler_state
+        .install_code_debit = NumInstructions::from(u64::MAX);
+
     let cycles_before = test.canister_state(id).system_state.balance();
     let execution_cost_before = test.canister_execution_cost(id);
-    test.upgrade_canister_with_allocation(id, wasm, Some(100), None)
-        .unwrap_err();
+    test.upgrade_canister(id, wasm).unwrap_err();
     let execution_cost = test.canister_execution_cost(id) - execution_cost_before;
     assert_eq!(
         test.canister_state(id).system_state.balance(),
@@ -4381,7 +4389,7 @@ fn cycles_correct_if_install_succeeds() {
 #[test]
 fn cycles_correct_if_install_fails_at_validation() {
     let mut test = ExecutionTestBuilder::new()
-        .with_allocatable_compute_capacity_in_percent(50)
+        .with_rate_limiting_of_instructions()
         .build();
 
     let wat = r#"
@@ -4403,8 +4411,13 @@ fn cycles_correct_if_install_fails_at_validation() {
     let initial_cycles = Cycles::new(1_000_000_000_000_000);
     let id = test.create_canister(initial_cycles);
 
-    test.install_canister_with_allocation(id, wasm, Some(100), None)
-        .unwrap_err();
+    // Set a large value for `install_code_debit` so the installation fails due
+    // to rate limiting.
+    test.canister_state_mut(id)
+        .scheduler_state
+        .install_code_debit = NumInstructions::from(u64::MAX);
+
+    test.install_canister(id, wasm.clone()).unwrap_err();
     assert_eq!(
         test.canister_state(id).system_state.balance(),
         initial_cycles - test.canister_execution_cost(id),
@@ -5099,7 +5112,7 @@ fn upgrade_reserves_cycles_on_memory_grow() {
 #[test]
 fn install_does_not_reserve_cycles_on_system_subnet() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
-    const CAPACITY: u64 = 20_000_000_000;
+    const CAPACITY: u64 = 4_000_000_000;
     const THRESHOLD: u64 = CAPACITY / 2;
     const USAGE: u64 = CAPACITY - THRESHOLD;
 
@@ -5110,24 +5123,27 @@ fn install_does_not_reserve_cycles_on_system_subnet() {
         .with_subnet_memory_threshold(THRESHOLD as i64)
         .build();
 
+    // Create a canister with a memory allocation of `THRESHOLD` bytes.
+    let canister_id = test
+        .create_canister_with_allocation(CYCLES, None, Some(THRESHOLD))
+        .unwrap();
+    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    // Create a second canister that attempts to grow its memory above the threshold
+    // where reservations would trigger. Because it's a system subnet we expect
+    // that no cycles reservation will be made.
     let canister_id = test.create_canister(CYCLES);
-
-    test.install_canister_with_allocation(
-        canister_id,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-        None,
-        Some(THRESHOLD),
-    )
-    .unwrap();
-
-    let canister_id = test.create_canister(CYCLES);
-
     let balance_before = test.canister_state(canister_id).system_state.balance();
-    test.install_canister_with_allocation(
+    test.install_canister(
         canister_id,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-        None,
-        Some(USAGE),
+        wat_canister()
+            .init(
+                wat_fn()
+                    .stable_grow((USAGE / WASM_PAGE_SIZE_IN_BYTES) as i32 - 1)
+                    .stable_read(0, 42),
+            )
+            .build_wasm(),
     )
     .unwrap();
     let balance_after = test.canister_state(canister_id).system_state.balance();
@@ -6006,6 +6022,14 @@ fn upload_chunk_fails_when_allocation_exceeded() {
     assert!(result.is_ok());
     let initial_subnet_available_memory = test.subnet_available_memory();
 
+    // Uploading the same chunk again succeeds.
+    let result = test.subnet_message("upload_chunk", upload_args.encode());
+    assert!(result.is_ok());
+    assert_eq!(
+        test.subnet_available_memory(),
+        initial_subnet_available_memory
+    );
+
     // Second chunk upload fails
     let chunk = vec![4, 4];
     let upload_args = UploadChunkArgs {
@@ -6047,6 +6071,14 @@ fn upload_chunk_fails_when_subnet_memory_exceeded() {
     assert!(result.is_ok());
     let initial_subnet_available_memory = test.subnet_available_memory();
 
+    // Uploading the same chunk again succeeds.
+    let result = test.subnet_message("upload_chunk", upload_args.encode());
+    assert!(result.is_ok());
+    assert_eq!(
+        test.subnet_available_memory(),
+        initial_subnet_available_memory
+    );
+
     // Second chunk upload fails
     let chunk = vec![4, 4];
     let upload_args = UploadChunkArgs {
@@ -6081,6 +6113,18 @@ fn upload_chunk_counts_to_memory_usage() {
         canister_id: canister_id.into(),
         chunk,
     };
+    let result = test.subnet_message("upload_chunk", upload_args.encode());
+    assert!(result.is_ok());
+    assert_eq!(
+        test.canister_state(canister_id).memory_usage(),
+        chunk_size + initial_memory_usage
+    );
+    assert_eq!(
+        test.subnet_available_memory().get_execution_memory(),
+        initial_subnet_available_memory - chunk_size.get() as i64
+    );
+
+    // Check memory usage after uploading the same chunk again.
     let result = test.subnet_message("upload_chunk", upload_args.encode());
     assert!(result.is_ok());
     assert_eq!(
@@ -6310,6 +6354,21 @@ fn upload_chunk_reserves_cycles() {
             "Reserved balance {} should be positive",
             reserved_balance
         );
+
+        // Uploading the same chunk again should not reserve any further cycles.
+        let _hash = test
+            .subnet_message("upload_chunk", upload_args.encode())
+            .unwrap();
+        let new_reserved_balance = test
+            .canister_state(canister_id)
+            .system_state
+            .reserved_balance()
+            .get();
+        assert_eq!(
+            new_reserved_balance, reserved_balance,
+            "The current reserved balance {} should match the previous reserved balance {}",
+            new_reserved_balance, reserved_balance
+        );
     });
 }
 
@@ -6484,6 +6543,11 @@ fn upload_chunk_fails_when_heap_delta_rate_limited() {
         .subnet_message("upload_chunk", upload_args.encode())
         .unwrap();
 
+    // Uploading the same chunk again will succeed
+    let _hash = test
+        .subnet_message("upload_chunk", upload_args.encode())
+        .unwrap();
+
     // Uploading the second chunk will fail because of rate limiting.
     let initial_subnet_available_memory = test.subnet_available_memory();
     let upload_args = UploadChunkArgs {
@@ -6525,6 +6589,16 @@ fn upload_chunk_increases_subnet_heap_delta() {
         test.state().metadata.heap_delta_estimate,
         wasm_chunk_store::chunk_size()
     );
+
+    // Uploading the same chunk again will not increase the delta.
+    let _hash = test
+        .subnet_message("upload_chunk", upload_args.encode())
+        .unwrap();
+
+    assert_eq!(
+        test.state().metadata.heap_delta_estimate,
+        wasm_chunk_store::chunk_size()
+    );
 }
 
 #[test]
@@ -6548,11 +6622,22 @@ fn upload_chunk_charges_canister_cycles() {
         test.subnet_size(),
         test.canister_wasm_execution_mode(canister_id),
     );
-    let _hash = test.subnet_message("upload_chunk", payload).unwrap();
+    let _hash = test
+        .subnet_message("upload_chunk", payload.clone())
+        .unwrap();
 
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         initial_balance - expected_charge,
+    );
+
+    // Uploading the same chunk again will decrease balance by the cycles corresponding to
+    // the instructions for uploading.
+    let _hash = test.subnet_message("upload_chunk", payload).unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_balance - expected_charge - expected_charge,
     );
 }
 
@@ -6684,7 +6769,7 @@ fn chunk_store_counts_against_subnet_memory_in_initial_round_computation() {
     // a second.
     let payload = UploadChunkArgs {
         canister_id: canister_id.into(),
-        chunk: vec![0x42; 1024 * 1024],
+        chunk: vec![0x43; 1024 * 1024],
     }
     .encode();
     let error = env
