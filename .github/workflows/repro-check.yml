@@ -32,9 +32,9 @@ jobs:
       - name: Setup podman
         shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get -y upgrade
-          sudo apt-get -y install podman
+          apt-get update
+          apt-get -y upgrade
+          apt-get -y install podman
 
       # Taken from `ci-main.yml`
       - name: Checkout
