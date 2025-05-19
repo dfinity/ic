@@ -118,7 +118,7 @@ pub fn init_ic(
             orchestrator_url: Url::parse("file:///opt/replica").unwrap(),
             orchestrator_hash: dummy_hash,
         });
-    info!(logger, "initial_replica: {:?}", initial_replica);
+    info!(logger, "Initial_replica: {:?}", initial_replica);
 
     // Note: NNS subnet should be selected from among the system subnets.
     // If there is no system subnet, fall back on choosing the first one.
@@ -292,7 +292,7 @@ pub fn setup_and_start_vms(
                 InfraProvider::K8s => {
                     let url = format!(
                         "{}/{}",
-                        tnet_node.config_url.clone().expect("missing config_url"),
+                        tnet_node.config_url.clone().expect("Missing config_url"),
                         mk_compressed_img_path()
                     );
                     info!(
@@ -305,13 +305,13 @@ pub fn setup_and_start_vms(
                         .expect("Failed to upload config image");
                     // wait for job pulling the disk to complete
                     block_on(wait_for_job_completion(&tnet_node.name.clone().unwrap()))
-                        .expect("waiting for job failed");
-                    block_on(tnet_node.start()).expect("starting vm failed");
+                        .expect("Waiting for job failed");
+                    block_on(tnet_node.start()).expect("Starting vm failed");
                     let node_name = tnet_node.name.unwrap();
-                    info!(t_farm.logger, "starting k8s vm: {}", node_name);
+                    info!(t_farm.logger, "Starting k8s vm: {}", node_name);
                     info!(
                         t_farm.logger,
-                        "vm {} console logs: {}",
+                        "VM {} console logs: {}",
                         node_name.clone(),
                         LOGS_URL.replace("{job}", &node_name)
                     );
@@ -342,10 +342,10 @@ pub fn setup_and_start_vms(
     let mut result = Ok(());
     // Wait for all threads to finish and return an error if any of them fails.
     for jh in join_handles {
-        if let Err(e) = jh.join().expect("waiting for a thread failed") {
-            warn!(farm.logger, "starting VM failed with: {:?}", e);
+        if let Err(e) = jh.join().expect("Waiting for a thread failed") {
+            warn!(farm.logger, "Starting VM failed with: {:?}", e);
             result = Err(anyhow::anyhow!(
-                "failed to set up and start a VM pool: {:?}",
+                "Failed to set up and start a VM pool: {:?}",
                 e
             ));
         }
@@ -383,7 +383,7 @@ fn create_config_disk_image(
     let mut cmd = Command::new(script_path);
     let local_store_path = test_env
         .prep_dir(ic_name)
-        .expect("no no-name IC")
+        .expect("No no-name IC")
         .registry_local_store_path();
     cmd.arg(img_path.clone())
         .args(["--node_reward_type", "type3.1"])
@@ -500,13 +500,13 @@ fn create_config_disk_image(
             val
         }
         Err(e) => {
-            bail!("couldn't interpret {}: {}", key, e)
+            bail!("Couldn't interpret {}: {}", key, e)
         }
     };
     cmd.env("PATH", format!("{}:{}", "/usr/sbin", old_path));
 
     if !cmd.status()?.success() {
-        bail!("could not spawn image creation process");
+        bail!("Could not spawn image creation process");
     }
     let mut img_file = File::open(img_path)?;
     let compressed_img_path = PathBuf::from(&node.node_path).join(mk_compressed_img_path());
@@ -521,13 +521,13 @@ fn create_config_disk_image(
     std::io::stdout().write_all(&output.stdout)?;
     std::io::stderr().write_all(&output.stderr)?;
     if !output.status.success() {
-        bail!("could not create sha256 of image");
+        bail!("Could not create sha256 of image");
     }
     Ok(())
 }
 
 fn node_to_config(node: &Node) -> NodeConfiguration {
-    let ipv6_addr = IpAddr::V6(node.ipv6.expect("missing ip_addr"));
+    let ipv6_addr = IpAddr::V6(node.ipv6.expect("Missing ip_addr"));
     let public_api = SocketAddr::new(ipv6_addr, AddrType::PublicApi.into());
     let xnet_api = SocketAddr::new(ipv6_addr, AddrType::Xnet.into());
     NodeConfiguration {
@@ -582,9 +582,9 @@ pub fn setup_nested_vms(
 
         // Wait for all threads to finish and return an error if any of them fails.
         for jh in join_handles {
-            if let Err(e) = jh.join().expect("waiting for a thread failed") {
-                warn!(farm.logger, "setting up VM failed with: {:?}", e);
-                result = Err(anyhow::anyhow!("failed to set up a VM pool"));
+            if let Err(e) = jh.join().expect("Waiting for a thread failed") {
+                warn!(farm.logger, "Setting up VM failed with: {:?}", e);
+                result = Err(anyhow::anyhow!("Failed to set up a VM pool"));
             }
         }
     });
@@ -676,7 +676,7 @@ fn create_setupos_config_image(
     }
 
     if !cmd.status()?.success() {
-        bail!("could not create SetupOS config");
+        bail!("Could not create SetupOS config");
     }
 
     // Pack dirs into config image
@@ -691,7 +691,7 @@ fn create_setupos_config_image(
         .status()?;
 
     if !status.success() {
-        bail!("could not inject configs into image");
+        bail!("Could not inject configs into image");
     }
 
     Ok(config_image)
