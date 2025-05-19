@@ -10,11 +10,11 @@ const TIMESTAMP: &str = "ts";
 const ONE_SEC_NANOSEC: u64 = 1_000_000_000;
 
 pub struct ICRCLedgerHelper<'a> {
-    ledger: &'a Box<dyn ICRC1Ledger>,
+    ledger: &'a dyn ICRC1Ledger,
 }
 
 impl<'a> ICRCLedgerHelper<'a> {
-    pub fn with_ledger(ledger: &'a Box<dyn ICRC1Ledger>) -> Self {
+    pub fn with_ledger(ledger: &'a dyn ICRC1Ledger) -> Self {
         Self { ledger }
     }
 

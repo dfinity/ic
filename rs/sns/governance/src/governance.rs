@@ -113,11 +113,7 @@ use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use ic_sns_governance_token_valuation::Valuation;
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
-use icrc_ledger_types::{
-    icrc::generic_value::ICRC3Value,
-    icrc1::account::{Account, Subaccount},
-    icrc3::blocks::{GetBlocksRequest, GetBlocksResult},
-};
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashset};
 use rust_decimal::Decimal;
@@ -2028,7 +2024,7 @@ impl Governance {
             Ok,
         )?;
         let num_recent_proposals = self.recent_proposals(time_window_seconds);
-        let icrc_ledger_helper = ICRCLedgerHelper::with_ledger(&self.ledger);
+        let icrc_ledger_helper = ICRCLedgerHelper::with_ledger(self.ledger.as_ref());
         let last_transaction_timestamp = icrc_ledger_helper
             .get_latest_block_timestamp_seconds()
             .await
