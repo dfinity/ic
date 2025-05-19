@@ -524,7 +524,7 @@ mod tests {
         storage::MAX_CHUNKABLE_ATOMIC_MUTATION_LEN,
     };
     use ic_registry_canister_chunkify::dechunkify;
-    use ic_registry_transport::{delete, insert, update, upsert};
+    use ic_registry_transport::{delete, insert, pb::v1::registry_mutation, update, upsert};
     use rand::{Rng, SeedableRng};
     use rand_distr::{Alphanumeric, Distribution, Poisson, Uniform};
 
@@ -1126,6 +1126,14 @@ mod tests {
         let version = 1;
         let key = b"key";
 
+        // This is not very realistic, because if a mutation is this large, it
+        // would get chunked before changelog_insert sees it. Nevertheless, this
+        // test is still valuable, because it shows that if (for whatever
+        // reason) changelog_insert sees a mutation that is too large, it
+        // refuses to add the mutation, which protects the system from storing
+        // mutations that are too large to later be read (due to ICP's message
+        // size limits). See the next test for a more realistic version of this
+        // test.
         let too_large_value = vec![0; max_mutation_value_size(version, key) + 1];
         let mutations = vec![HighCapacityRegistryMutation::from(upsert(
             key,
@@ -1134,8 +1142,44 @@ mod tests {
         let req = HighCapacityRegistryAtomicMutateRequest {
             mutations,
             preconditions: vec![],
-            // Since the `too_large_value` is built with serializing maximum timestamp length to 10 bytes
-            // the tipping point of `+ 1` will be there only if we account the timestamp of full serialized 10 bytes.
+            // Since the `too_large_value` is built with serializing maximum
+            // timestamp length to 10 bytes the tipping point of `+ 1` will be
+            // there only if we account the timestamp of full serialized 10
+            // bytes.
+            timestamp_nanoseconds: u64::MAX,
+        };
+
+        registry.changelog_insert(1, req);
+    }
+
+    #[test]
+    #[should_panic(expected = "[Registry] Transaction rejected because delta would be too large")]
+    fn test_changelog_insert_delta_too_large_but_no_prime_mutation_large() {
+        let mut registry = Registry::new();
+
+        // This is just (slightly) more elaborate+realistic version of the data
+        // in the previous test, but we are essentially doing the same thing:
+        // creating a mutation that should be rejected due to being too large.
+        let mutations = (0..1000)
+            .map(|i| {
+                let i = i % (u8::MAX as u64 + 1);
+                HighCapacityRegistryMutation {
+                    key: format!("key_{}", i).into_bytes(),
+                    mutation_type: registry_mutation::Type::Insert as i32,
+                    content: Some(high_capacity_registry_mutation::Content::Value(vec![
+                        i as u8;
+                        2_000
+                    ])),
+                }
+            })
+            .collect();
+        let req = HighCapacityRegistryAtomicMutateRequest {
+            mutations,
+            preconditions: vec![],
+            // Since the `too_large_value` is built with serializing maximum
+            // timestamp length to 10 bytes the tipping point of `+ 1` will be
+            // there only if we account the timestamp of full serialized 10
+            // bytes.
             timestamp_nanoseconds: u64::MAX,
         };
 
