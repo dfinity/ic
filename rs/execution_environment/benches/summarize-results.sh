@@ -25,7 +25,7 @@ BASELINE_FILE="${BASELINE_DIR}/${MIN_FILE##*/}"
 # Remove the commit id from the baseline file name.
 # This is needed to compare the baseline file with the current one.
 # The baseline file name is expected to be in the format:
-#   <name>.<flavor>@<commit_id>.min
+#   <name>.<host>@<commit_id>.min
 BASELINE_FILE="${BASELINE_FILE%@*.min}.min"
 if [ ! -s "${BASELINE_FILE}" ]; then
     # Return an error, so the calling script can retry.

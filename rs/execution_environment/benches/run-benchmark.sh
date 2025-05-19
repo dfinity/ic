@@ -23,7 +23,7 @@ bash -c "set -o pipefail; \
         2>&1 | tee '${LOG_FILE}' | rg '^(test .* )?bench:' --line-buffered \
         | awk '{
                 match(\$0, /^test (.+) ... bench: +([0-9]+) ns\/iter.*/, r)
-                printf \"> %s %.1f ms\n\", r[1], r[2] / 1000 / 1000; fflush();
+                printf \"> %s %.2f ms\n\", r[1], r[2] / 1000 / 1000; fflush();
             }'
         " \
     || (
