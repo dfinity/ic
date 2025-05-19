@@ -5,7 +5,7 @@ use crate::numeric::{BlockNumber, LogIndex};
 use candid::CandidType;
 use ethnum;
 use evm_rpc_client::{
-    BlockTag, HttpOutcallError as EvmHttpOutcallError,
+    HttpOutcallError as EvmHttpOutcallError,
     SendRawTransactionStatus as EvmSendRawTransactionStatus,
 };
 use ic_cdk::api::call::RejectionCode;

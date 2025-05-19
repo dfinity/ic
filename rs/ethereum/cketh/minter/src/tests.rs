@@ -1,9 +1,17 @@
 use crate::address::ecdsa_public_key_to_address;
 
 mod eth_get_logs {
+    use crate::eth_rpc::{into_nat, Quantity};
     use crate::numeric::{BlockNumber, LogIndex};
     use ic_ethereum_types::Address;
     use std::str::FromStr;
+
+    #[test]
+    fn should_convert_quantity_to_nat() {
+        let quantity = Quantity::new(0x4b85a0fcd); //20_272_779_213 wei
+        let nat = into_nat(quantity);
+        assert_eq!(nat.to_string(), "20_272_779_213")
+    }
 
     #[test]
     fn deserialize_get_logs() {
@@ -201,18 +209,5 @@ mod rlp_encoding {
             signed_transaction.hash().to_string(),
             "0x66a9a218ea720ac6d2c9e56f7e44836c1541c186b7627bda220857ce34e2df7f"
         );
-    }
-}
-
-mod eth_get_block_by_number {
-    use crate::eth_rpc::{into_nat, Quantity};
-
-    // TODO: MOVE THAT TO BETTER PLACE
-
-    #[test]
-    fn should_convert_quantity_to_nat() {
-        let quantity = Quantity::new(0x4b85a0fcd); //20_272_779_213 wei
-        let nat = into_nat(quantity);
-        assert_eq!(nat.to_string(), "20_272_779_213")
     }
 }

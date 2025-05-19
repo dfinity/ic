@@ -588,18 +588,16 @@ mod evm_rpc_conversion {
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
     use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
     use crate::eth_rpc_client::{
-        HttpOutcallError, LogEntry, MultiCallError, MultiCallResults, Reduce,
-        SingleCallError,
+        HttpOutcallError, LogEntry, MultiCallError, MultiCallResults, Reduce, SingleCallError,
     };
     use crate::test_fixtures::arb::{
-        arb_evm_rpc_error, arb_hex20, arb_hex256, arb_hex32,
-        arb_hex_byte, arb_log_entry, arb_nat_256, arb_transaction_receipt,
+        arb_evm_rpc_error, arb_hex20, arb_hex256, arb_hex32, arb_hex_byte, arb_log_entry,
+        arb_nat_256, arb_transaction_receipt,
     };
     use evm_rpc_client::{
-        Hex, Hex20, Hex32, HttpOutcallError as EvmHttpOutcallError,
-        LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256, RpcApi as EvmRpcApi,
-        RpcError as EvmRpcError, RpcService as EvmRpcService,
-        SendRawTransactionStatus as EvmSendRawTransactionStatus,
+        Hex, Hex20, Hex32, HttpOutcallError as EvmHttpOutcallError, LogEntry as EvmLogEntry,
+        MultiRpcResult as EvmMultiRpcResult, Nat256, RpcApi as EvmRpcApi, RpcError as EvmRpcError,
+        RpcService as EvmRpcService, SendRawTransactionStatus as EvmSendRawTransactionStatus,
         TransactionReceipt as EvmTransactionReceipt,
     };
     use proptest::{prelude::Strategy, prop_assert_eq, proptest};

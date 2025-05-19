@@ -1,6 +1,6 @@
 use crate::eth_rpc::{
-    Data, FixedSizeData, Hash, HttpOutcallError, LogEntry, Quantity,
-    SendRawTransactionResult, HEADER_SIZE_LIMIT,
+    Data, FixedSizeData, Hash, HttpOutcallError, LogEntry, Quantity, SendRawTransactionResult,
+    HEADER_SIZE_LIMIT,
 };
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;
@@ -9,12 +9,11 @@ use crate::numeric::{BlockNumber, GasAmount, LogIndex, TransactionCount, WeiPerG
 use crate::state::State;
 use candid::Nat;
 use evm_rpc_client::{
-    Block, BlockTag, ConsensusStrategy, EthSepoliaService, EvmRpcClient,
-    FeeHistory, FeeHistoryArgs, GetLogsArgs,
-    GetTransactionCountArgs as EvmGetTransactionCountArgs, Hex20, IcRuntime,
-    LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256, OverrideRpcConfig,
-    RpcConfig as EvmRpcConfig, RpcError as EvmRpcError, RpcResult as EvmRpcResult,
-    RpcService as EvmRpcService, RpcServices as EvmRpcServices,
+    Block, BlockTag, ConsensusStrategy, EthSepoliaService, EvmRpcClient, FeeHistory,
+    FeeHistoryArgs, GetLogsArgs, GetTransactionCountArgs as EvmGetTransactionCountArgs, Hex20,
+    IcRuntime, LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256,
+    OverrideRpcConfig, RpcConfig as EvmRpcConfig, RpcError as EvmRpcError,
+    RpcResult as EvmRpcResult, RpcService as EvmRpcService, RpcServices as EvmRpcServices,
     SendRawTransactionStatus as EvmSendRawTransactionStatus,
     TransactionReceipt as EvmTransactionReceipt,
 };
