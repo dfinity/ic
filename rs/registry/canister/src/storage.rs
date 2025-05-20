@@ -26,6 +26,16 @@ const CHUNKS_MEMORY_ID: MemoryId = MemoryId::new(1);
 /// Therefore, 5x the message size limit seems appropriate (for now).
 pub(crate) const MAX_CHUNKABLE_ATOMIC_MUTATION_LEN: usize = 10 * (1024 * 1024);
 
+/// The value of this is slightly less than MAX_REGISTRY_DELTAS to minimize when
+/// chunking is performed.
+///
+/// The reason this is not exactly equal to MAX_REGISTRY_DELTAS to allow for the
+/// addition of a timestamp, and other such incidental issues.
+///
+/// Notice that the amount by which this is less than MAX_REGISTRY_DELTAS is
+/// very small compared to MAX_REGISTRY_DELTAS itself: approx 1_300_000 vs. 100.
+const MIN_CHUNKABLE_ATOMIC_MUTATION_LEN: usize = MAX_REGISTRY_DELTAS_SIZE - 100;
+
 type VM = VirtualMemory<DefaultMemoryImpl>;
 
 thread_local! {
@@ -85,21 +95,12 @@ pub(crate) fn chunkify_composite_mutation_if_too_large(
     }
 
     // If the input is small, simply transcribe it.
-    const SIZE_OF_VERSION: usize = std::mem::size_of::<crate::registry::EncodedVersion>();
-    let is_small = original_mutation.encoded_len() + SIZE_OF_VERSION
-        < MAX_REGISTRY_DELTAS_SIZE
-        // This fudge factor is to account for the fact that
-        // HighCapacityRegistryAtomicMutateRequest will have its timestamp field
-        // populated later. Without this, we will fail to chunkify in cases
-        // where we really need to in order to avoid later blocking of mutations
-        // that are close to the MAX_REGISTRY_DELTAS_SIZE (but within the
-        // MAX_CHUNKABLE_ATOMIC_MUTATION_LEN limit).
-        - 25;
+    let is_small = original_mutation.encoded_len() < MIN_CHUNKABLE_ATOMIC_MUTATION_LEN;
     if is_small {
         return HighCapacityRegistryAtomicMutateRequest::from(original_mutation);
     }
 
-    // Otherwise, if the input is "large", chunkify it.
+    // Otherwise, the input is "large", so, chunkify it.
     CHUNKS.with(|chunks| {
         let mut chunks = chunks.borrow_mut();
         let chunks = &mut *chunks;

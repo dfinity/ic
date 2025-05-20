@@ -1274,7 +1274,7 @@ mod tests {
         let mut registry = Registry::new();
 
         let key = b"key";
-        let too_large_value = vec![0; MAX_CHUNKABLE_ATOMIC_MUTATION_LEN - 100];
+        let too_large_value = vec![0; MAX_CHUNKABLE_ATOMIC_MUTATION_LEN - 150];
         let mutations = vec![upsert(key, too_large_value)];
 
         apply_mutations_skip_invariant_checks(&mut registry, mutations);
