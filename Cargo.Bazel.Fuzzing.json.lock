@@ -1,5 +1,5 @@
 {
-  "checksum": "05a76d69f91189d692515d351451343c5a9da44afc021ca8b39c479d4c0a3a6c",
+  "checksum": "f535688286e23b36e7b31ab51594ef0081e8de8b9062854685adbe181c4d8f3c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -4392,69 +4392,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "async-scoped 0.8.0": {
-      "name": "async-scoped",
-      "version": "0.8.0",
-      "package_url": "https://github.com/rmanoka/async-scoped",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/async-scoped/0.8.0/download",
-          "sha256": "2bb5d44cd33a5095cf47aa2a90455ea3f9141f45e24d092425fef2bf4fd9c98e"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "async_scoped",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "async_scoped",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "tokio",
-            "use-tokio"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "futures 0.3.31",
-              "target": "futures"
-            },
-            {
-              "id": "pin-project 1.1.3",
-              "target": "pin_project"
-            },
-            {
-              "id": "tokio 1.45.0",
-              "target": "tokio"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.8.0"
-      },
-      "license": "Apache-2.0/MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
     },
     "async-socks5 0.6.0": {
       "name": "async-socks5",
@@ -20064,10 +20001,6 @@
               "target": "assert_matches"
             },
             {
-              "id": "async-scoped 0.8.0",
-              "target": "async_scoped"
-            },
-            {
               "id": "async-stream 0.3.6",
               "target": "async_stream"
             },
@@ -21220,7 +21153,7 @@
               "target": "tower_test"
             },
             {
-              "id": "tower_governor 0.5.0",
+              "id": "tower_governor 0.7.0",
               "target": "tower_governor"
             },
             {
@@ -21364,6 +21297,10 @@
             {
               "id": "async-trait 0.1.83",
               "target": "async_trait"
+            },
+            {
+              "id": "derive-new 0.7.0",
+              "target": "derive_new"
             },
             {
               "id": "educe 0.4.23",
@@ -79077,91 +79014,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "tower_governor 0.5.0": {
-      "name": "tower_governor",
-      "version": "0.5.0",
-      "package_url": "https://github.com/benwis/tower-governor",
-      "repository": {
-        "Git": {
-          "remote": "https://github.com/benwis/tower-governor",
-          "commitish": {
-            "Rev": "bc9a6eacafcaec1e732886ceae8ae324bbd327df"
-          }
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "tower_governor",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "tower_governor",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "axum",
-            "default"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "axum 0.8.4",
-              "target": "axum"
-            },
-            {
-              "id": "forwarded-header-value 0.1.1",
-              "target": "forwarded_header_value"
-            },
-            {
-              "id": "governor 0.8.1",
-              "target": "governor"
-            },
-            {
-              "id": "http 1.3.1",
-              "target": "http"
-            },
-            {
-              "id": "pin-project 1.1.3",
-              "target": "pin_project"
-            },
-            {
-              "id": "thiserror 2.0.12",
-              "target": "thiserror"
-            },
-            {
-              "id": "tower 0.5.2",
-              "target": "tower"
-            },
-            {
-              "id": "tracing 0.1.41",
-              "target": "tracing"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.5.0"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "tower_governor 0.7.0": {
       "name": "tower_governor",
       "version": "0.7.0",
@@ -91554,7 +91406,6 @@
     "assert_cmd 2.0.16",
     "assert_matches 1.5.0",
     "async-recursion 1.0.5",
-    "async-scoped 0.8.0",
     "async-stream 0.3.6",
     "async-trait 0.1.83",
     "axum 0.8.4",
@@ -91610,6 +91461,7 @@
     "cvt 0.1.2",
     "darling 0.20.11",
     "dashmap 5.5.3",
+    "derive-new 0.7.0",
     "dfx-core 0.1.3",
     "dyn-clone 1.0.14",
     "ed25519-dalek 2.1.1",
@@ -91852,7 +91704,7 @@
     "tower-http 0.6.4",
     "tower-request-id 0.3.0",
     "tower-test 0.4.0",
-    "tower_governor 0.5.0",
+    "tower_governor 0.7.0",
     "tracing 0.1.41",
     "tracing-appender 0.2.3",
     "tracing-flame 0.2.0",
