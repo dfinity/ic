@@ -1,5 +1,32 @@
 GitHub CI for the IC Repo
 
+## Workflows & Jobs
+
+### CI Main
+
+| Job Name                  | Runner / Image                   | Secrets Required                      | When Invoked                                                                                               | Purpose                                                                                      |
+|---------------------------|----------------------------------|---------------------------------------|------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|
+| config                    | ubuntu-latest                    | None                                  | On any trigger (push, PR, merge_group, workflow_dispatch, workflow_call)                                   | Sets up and infers configuration for later jobs                                              |
+| bazel-test-all            | group: zh1, dind-large, dfinity/ic-build | CLOUD_CREDENTIALS_CONTENT, GPG_PASSPHRASE | On push to master/dev-gh-*, PRs (except hotfix-*), merge_group, workflow_dispatch, workflow_call           | Run all Bazel tests (with config for skipping long tests, etc.)                              |
+| bazel-test-macos-intel    | macOS, dfinity/ic-build          | CLOUD_CREDENTIALS_CONTENT             | On protected branches, or with CI_MACOS_INTEL label, and only in dfinity/ic (public)                      | Run Bazel tests for macOS Intel builds                                                       |
+| bazel-build-fuzzers       | dind-large, dfinity/ic-build     | GPG_PASSPHRASE                        | Same as workflow triggers                                                                                   | Build fuzzers using Bazel with libfuzzer                                                     |
+| bazel-build-fuzzers-afl   | dind-large, dfinity/ic-build     | GPG_PASSPHRASE                        | Same as workflow triggers                                                                                   | Build fuzzers using Bazel with AFL                                                           |
+| python-ci-tests           | dind-small, dfinity/ic-build     | None                                  | Same as workflow triggers                                                                                   | Run Python CI tests (pytest)                                                                 |
+| build-ic                  | dind-small, dfinity/ic-build     | None                                  | On all triggers except merge_group                                                                          | Build the Internet Computer (IC) binaries                                                    |
+| build-determinism         | ubuntu-latest                    | None                                  | After build-ic and bazel-test-all complete                                                                 | Check for build determinism between cache and no-cache builds                                |
+| cargo-clippy-linux        | dind-small, dfinity/ic-build     | None                                  | On PR/merge_group affecting Rust files, schedule, or workflow_dispatch                                      | Run Rust linter (clippy)                                                                     |
+| cargo-build-release-linux | dind-small, dfinity/ic-build     | None                                  | On PR/merge_group affecting Rust files, schedule, or workflow_dispatch                                      | Build Rust crates in release mode                                                            |
+
+### CI PR Only
+
+| Job Name                    | Runner / Image        | Secrets Required                                               | When Invoked                                                          | Purpose                                                      |
+|-----------------------------|----------------------|----------------------------------------------------------------|-----------------------------------------------------------------------|--------------------------------------------------------------|
+| bazel-build-fuzzers-archives| dind-large, dfinity/ic-build | None                                                           | PR (opened, synchronize, reopened); not merge_group                   | Build and archive all fuzzers for PRs                        |
+| lock-generate               | dind-small, dfinity/ic-build | PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY (for GitHub App Token)    | PR (opened, synchronize, reopened); not merge_group                   | Generate lock files and related dependencies for PRs          |
+| generate-config-fixtures    | dind-small, dfinity/ic-build | PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY (for GitHub App Token)    | PR (opened, synchronize, reopened); not merge_group                   | Generate config fixture files for config_types changes        |
+| dependencies-check          | dind-small, dfinity/ic-build | GITHUB_TOKEN, JIRA_API_TOKEN, SLACK_PSEC_BOT_OAUTH_TOKEN       | PR (opened, synchronize, reopened); not merge_group                   | Dependency scanning (Rust, Bazel, lock/toml changes)          |
+| bazel-test-coverage         | dind-large, dfinity/ic-build | None                                                           | PR with label `CI_COVERAGE`                                           | Run Bazel test coverage and upload HTML report                |
+
 ## Using custom CI labels
 Note that setting custom CI logic via the pull request title has been deprecated and we now use labels instead. See labels below for custom logic that can be enabled:
 
