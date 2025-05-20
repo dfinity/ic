@@ -364,11 +364,9 @@ async fn get_statistics(
 
     match query_result {
         Ok(query_result) => get_sns_status_response::GetSnsStatusResponse::from(query_result),
-        Err(query_error) => get_sns_status_response::GetSnsStatusResponse {
-            get_sns_status_result: Some(get_sns_status_response::GetSnsStatusResult::Err(
-                query_error.error_message.clone(),
-            )),
-        },
+        Err(query_error) => {
+            get_sns_status_response::GetSnsStatusResponse::Err(query_error.error_message.clone())
+        }
     }
 }
 

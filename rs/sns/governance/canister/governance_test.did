@@ -266,13 +266,9 @@ type SnsStatus = record {
   last_transaction_timestamp : opt nat64;
 };
 
-type GetSnsStatusResult = variant {
+type GetSnsStatusResponse = variant {
   Ok : SnsStatus;
   Err : text;
-};
-
-type GetSnsStatusResponse = record {
-  get_sns_status_reult : opt GetSnsStatusResult
 };
 
 type GetModeResponse = record {

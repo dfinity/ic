@@ -1659,15 +1659,9 @@ pub mod get_sns_status_response {
     }
 
     #[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
-    pub enum GetSnsStatusResult {
+    pub enum GetSnsStatusResponse {
         Ok(SnsStatus),
         Err(String),
-    }
-
-    /// Response message for 'get_metadata'.
-    #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
-    pub struct GetSnsStatusResponse {
-        pub get_sns_status_result: Option<GetSnsStatusResult>,
     }
 }
 

@@ -1834,19 +1834,17 @@ impl From<pb::GetSnsStatusResponse> for pb_api::get_sns_status_response::GetSnsS
             &value.num_recent_proposals,
             &value.last_transaction_timestamp,
         ) {
-            (Some(num_recent_proposals), Some(last_transaction_timestamp)) => Self {
-                get_sns_status_result: Some(
-                    pb_api::get_sns_status_response::GetSnsStatusResult::Ok(
-                        pb_api::get_sns_status_response::SnsStatus {
-                            num_recent_proposals: Some(*num_recent_proposals),
-                            last_transaction_timestamp: Some(*last_transaction_timestamp),
-                        },
-                    ),
-                ),
-            },
-            _ => Self {
-                get_sns_status_result: None,
-            },
+            (Some(num_recent_proposals), Some(last_transaction_timestamp)) => {
+                Self::Ok(pb_api::get_sns_status_response::SnsStatus {
+                    num_recent_proposals: Some(*num_recent_proposals),
+                    last_transaction_timestamp: Some(*last_transaction_timestamp),
+                })
+            }
+            (Some(_), None) => Self::Err(format!("Missing `last_transaction_timestamp`")),
+            (None, Some(_)) => Self::Err(format!("Missing `num_recent_proposals`")),
+            (None, None) => Self::Err(format!(
+                "Missing `num_recent_proposals` & `last_transaction_timestamp`"
+            )),
         }
     }
 }
