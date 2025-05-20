@@ -7,8 +7,8 @@ use syn::{Ident, Token, Expr};
 
 struct TlaUpdateArgs {
     update_expr: Expr, // The positional argument
-    snapshotter_fn_arg_name: Option<Expr>, // Name of the function arg to use for snapshotter
-    is_async_fn: bool,
+    snapshotter_expr: Expr, // Name of the function arg to use for snapshotter
+    force_async_fn: bool,
 }
 
 /// Marks the method as the starting point of a TLA transition (or more concretely, a PlusCal process).
@@ -23,7 +23,7 @@ struct TlaUpdateArgs {
 /// 2. A snapshotter function which takes a pointer to the canister and returns a `GlobalState`
 ///
 /// It also supports the following keyword arguments:
-/// 1. is_async_fn, a boolean indicating whether the function is async even if it doesn't use the
+/// 1. force_async_fn, a boolean indicating whether the function is async even if it doesn't use
 ///    the async keyword. This is useful for async_trait functions, which are desugared into
 ///    functions that return a Pin<Box<dyn Future<...>>>, but are not async themselves.
 ///
@@ -52,24 +52,26 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let original_name = sig.ident.to_string();
 
-    let has_self = sig
-        .inputs
-        .iter()
-        .any(|arg| matches!(arg, syn::FnArg::Receiver(_)));
-
-    // Creating the modified original function which calls f_impl
+   // Creating the modified original function which calls f_impl
     let args: Vec<_> = sig
         .inputs
         .iter()
-        .filter_map(|arg| match arg {
-            syn::FnArg::Receiver(_) => None,
-            syn::FnArg::Typed(pat_type) => Some(&*pat_type.pat),
+        .map(|arg| match arg {
+            syn::FnArg::Receiver(_) => {
+                quote! {
+                    self
+                }
+            }
+            syn::FnArg::Typed(pat_type) => {
+                let pat = &pat_type.pat;
+                quote! { #pat }
+            }
         })
         .collect();
 
     let asyncness = sig.asyncness;
 
-    let noninstrumented_invocation = if macro_args.is_async_fn {
+    let noninstrumented_invocation = if macro_args.force_async_fn {
         quote! {
             #body.await
         }
@@ -87,43 +89,27 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     };
 
-    let set_snapshotter = match &macro_args.snapshotter_fn_arg_name {
-        None => {
-            // Default case: use raw pointer logic
-            if has_self {
-                quote! {
-                 let raw_ptr = ::tla_instrumentation::UnsafeSendPtr(self as *const _);
-                 let snapshotter: ::std::sync::Arc<::std::sync::Mutex<dyn Fn() -> ::tla_instrumentation::GlobalState + Send + 'static>> = ::std::sync::Arc::new(::std::sync::Mutex::new(move || { tla_get_globals!(&raw_ptr) }));
-                }
-            } else {
-                return syn::Error::new(sig.ident.span(), "Default snapshotter logic assumes a method that takes a 'self' parameter, and a `tla_get_globals` macro in scope. Provide `snapshotter = ...` for non-method functions.")
-                    .to_compile_error()
-                    .into();
-
-            }
-       }
-        Some(expr) => match expr {
-            Expr::Path(expr_path) => {
+    let snapshotter = match &macro_args.snapshotter_expr {
+           Expr::Path(expr_path) => {
                 // User provided path: call it to get the snapshotter *value*
-                quote! { let snapshotter = #expr_path(#(#args),*); }
+                quote! { #expr_path(#(#args),*) }
             }
             Expr::Macro(expr_macro) => {
                 // User provided macro: invoke it to get the snapshotter *value*
                 let mac_path = &expr_macro.mac.path;
-                quote! { let snapshotter = #mac_path!(#(#args),*); }
+                quote! { #mac_path!(#(#args),*) }
             }
-            _ => {
+            expr => {
                 return syn::Error::new_spanned(
                     expr,
-                    "Expected 'snapshotter' to be a function path (e.g., `my_func`) or a macro invocation ending in `!()` (e.g., `my_macro! A()`)",
+                    "Expected the snapshotter (second argument) to be a function path (e.g., `my_func`) or a macro invocation ending in `!()` (e.g., `my_macro! A()`)",
                 )
                     .to_compile_error()
                     .into();
-            }
         }
     };
 
-    let instrumented_invocation = if asyncness.is_some() || macro_args.is_async_fn {
+    let instrumented_invocation = if asyncness.is_some() || macro_args.force_async_fn {
         quote! {
             {
                 let mut pinned = Box::pin(TLA_INSTRUMENTATION_STATE.scope(
@@ -168,7 +154,7 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let with_instrumentation = quote! {
          let update = #update;
-         #set_snapshotter;
+         let snapshotter = #snapshotter;
          let globals = (*snapshotter.lock().expect("Couldn't lock the snaphshotter in tla_update_method before instrumented invocation"))();
          let start_location = tla_instrumentation::SourceLocation { file: "Unknown file".to_string(), line: format!("Start of {}", #original_name) };
          let end_location = tla_instrumentation::SourceLocation { file: "Unknown file".to_string(), line: format!("End of {}", #original_name) };
@@ -196,7 +182,7 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
          res
     };
 
-    let output = if macro_args.is_async_fn {
+    let output = if macro_args.force_async_fn {
         quote! {
             #(#attrs)* #vis #sig {
                 Box::pin(async move {
@@ -251,15 +237,29 @@ pub fn tla_function(attr: TokenStream, item: TokenStream) -> TokenStream {
     modified_fn.sig.ident = mangled_name.clone();
 
     let asyncness = sig.asyncness;
-    let mut async_trait_fn = false;
+    let mut force_async_fn = false;
 
     // Examine each attribute argument
     for arg in args {
         if let NestedMeta::Meta(Meta::NameValue(name_value)) = arg {
-            if name_value.path.is_ident("async_trait_fn") {
+            if name_value.path.is_ident("force_async_fn") {
                 if let Lit::Bool(lit_bool) = name_value.lit {
-                    async_trait_fn = lit_bool.value();
+                    force_async_fn = lit_bool.value();
+                } else {
+                    return syn::Error::new_spanned(
+                        name_value.path,
+                        "Expected a boolean literal for 'force_async_fn'",
+                    )
+                        .to_compile_error()
+                        .into();
                 }
+            } else {
+                return syn::Error::new_spanned(
+                    name_value.path,
+                    "The only supported argument is 'force_async_fn'",
+                )
+                    .to_compile_error()
+                    .into();
             }
         }
     }
@@ -270,7 +270,7 @@ pub fn tla_function(attr: TokenStream, item: TokenStream) -> TokenStream {
     // the function itself is not async. The other is when the function is async,
     // in which case we want to await the result. The last is when the function is
     // synchronous, in which case we just want to call it.
-    let call = if async_trait_fn {
+    let call = if force_async_fn {
         quote! {
             #body.await
         }
@@ -311,7 +311,7 @@ pub fn tla_function(attr: TokenStream, item: TokenStream) -> TokenStream {
        res
     };
 
-    let output = if async_trait_fn {
+    let output = if force_async_fn {
         quote! {
             #(#attrs)* #vis #sig {
                 Box::pin(async move {
@@ -370,10 +370,10 @@ pub fn with_tla_trace_check(_attr: TokenStream, item: TokenStream) -> TokenStrea
 impl Parse for TlaUpdateArgs {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let update_expr: Expr = input.parse()?;
+        input.parse::<Token![,]>()?;
+        let snapshotter_expr: Expr = input.parse()?;
 
-        let mut snapshotter_fn_arg_name = None;
-
-        let mut is_async_trait_fn = false;
+        let mut force_async_fn = false;
 
         while !input.is_empty() {
             input.parse::<Token![,]>()?;
@@ -384,20 +384,15 @@ impl Parse for TlaUpdateArgs {
             input.parse::<Token![=]>()?;
             let value: Expr = input.parse()?; // Expecting an identifier for the function argument name
 
-            if key == "snapshotter" {
-                if snapshotter_fn_arg_name.is_some() {
-                    return Err(syn::Error::new(key.span(), "Duplicate 'snapshotter' argument"));
-                }
-                snapshotter_fn_arg_name = Some(value);
-            } else if key == "is_async_fn" {
+            if key == "force_async_fn" {
                 if let Expr::Lit(lit) = value {
                     if let Lit::Bool(lit_bool) = lit.lit {
-                        is_async_trait_fn = lit_bool.value();
+                        force_async_fn = lit_bool.value();
                     } else {
-                        return Err(syn::Error::new(key.span(), "Expected a boolean literal for 'async_trait_fn'"));
+                        return Err(syn::Error::new(key.span(), "Expected a boolean literal for 'force_async_fn'"));
                     }
                 } else {
-                    return Err(syn::Error::new(key.span(), "Expected a boolean literal for 'async_trait_fn'"));
+                    return Err(syn::Error::new(key.span(), "Expected a boolean literal for 'force_async_fn'"));
                 }
             }
             else {
@@ -406,8 +401,8 @@ impl Parse for TlaUpdateArgs {
         }
         Ok(TlaUpdateArgs {
             update_expr,
-            snapshotter_fn_arg_name,
-            is_async_fn: is_async_trait_fn,
+            snapshotter_expr,
+            force_async_fn,
         })
     }
 }

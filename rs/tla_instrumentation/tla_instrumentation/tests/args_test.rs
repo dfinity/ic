@@ -27,7 +27,7 @@ mod tla_stuff {
     use std::collections::BTreeSet;
     use std::thread::LocalKey;
     use candid::Int;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Mutex;
     use tla_instrumentation::{GlobalState, InstrumentationState, Label, TlaConstantAssignment, TlaValue, ToTla, UnsafeSendPtr, Update, UpdateTrace, VarAssignment};
 
     pub const PID: &str = "Multiple_Calls";
@@ -124,7 +124,7 @@ trait CallMakerTrait {
 
 #[async_trait]
 impl CallMakerTrait for CallMaker {
-    #[tla_function(async_trait_fn = true)]
+    #[tla_function(force_async_fn = true)]
     async fn call_maker(&self) {
         tla_log_request!(
             "WaitForResponse",
@@ -141,7 +141,7 @@ impl CallMakerTrait for CallMaker {
         );
     }
 }
-#[tla_update_method(my_f_desc(), snapshotter=snapshotter!())]
+#[tla_update_method(my_f_desc(), snapshotter!())]
 pub async fn my_method(state: &'static LocalKey<RefCell<u64>>) {
     state.with_borrow_mut(|s| *s += 1);
     let call_maker = CallMaker {};

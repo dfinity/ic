@@ -28,11 +28,12 @@ mod tla_stuff {
 
     use local_key::task_local;
     use std::{collections::BTreeMap, sync::RwLock};
+    use std::sync::{Arc, Mutex};
     use tla_instrumentation::{GlobalState, InstrumentationState, Label, TlaConstantAssignment, TlaValue, ToTla, UnsafeSendPtr, Update, UpdateTrace, VarAssignment};
 
     task_local! {
         pub static TLA_INSTRUMENTATION_STATE: InstrumentationState;
-        pub static TLA_TRACES_LKEY: std::sync::Arc<std::sync::Mutex<Vec<UpdateTrace>>>;
+        pub static TLA_TRACES_LKEY: Arc<Mutex<Vec<UpdateTrace>>>;
     }
 
     pub static TLA_TRACES_MUTEX: Option<RwLock<Vec<UpdateTrace>>> = Some(RwLock::new(Vec::new()));
@@ -47,8 +48,11 @@ mod tla_stuff {
 
     // #[macro_export]
     macro_rules! tla_get_globals {
-        ($self:expr) => {
-            tla_stuff::tla_get_globals($self)
+        ($self:expr $(, $_:expr)*) => {
+            {
+                let raw_ptr = tla_instrumentation::UnsafeSendPtr($self as *const _);
+                ::std::sync::Arc::new(::std::sync::Mutex::new(move || { tla_stuff::tla_get_globals(&raw_ptr) }))
+            }
         };
     }
 
@@ -137,13 +141,13 @@ fn call_maker() {
 
 #[async_trait]
 trait MyTrait {
-    async fn my_method(&mut self);
+    async fn my_method(&mut self, ignored_arg: u64);
 }
 
 #[async_trait]
 impl MyTrait for StructCanister {
-    #[tla_update_method(my_f_desc(), is_async_fn = true)]
-    async fn my_method(&mut self) {
+    #[tla_update_method(my_f_desc(), tla_get_globals!(), force_async_fn = true)]
+    async fn my_method(&mut self, _ignored_arg: u64) {
         self.counter += 1;
         let mut my_local: u64 = self.counter;
         tla_log_locals! {my_local: my_local};
@@ -160,7 +164,7 @@ impl MyTrait for StructCanister {
 fn struct_test() {
     unsafe {
         let canister = &mut *addr_of_mut!(GLOBAL);
-        tokio_test::block_on(canister.my_method());
+        tokio_test::block_on(canister.my_method(1));
     }
     let trace = &TLA_TRACES_MUTEX.as_ref().unwrap().read().unwrap()[0];
     assert_eq!(
@@ -283,5 +287,5 @@ fn tla_check_traces() {
 #[with_tla_trace_check]
 fn annotated_test() {
     let canister = &mut StructCanister { counter: 0 };
-    tokio_test::block_on(canister.my_method());
+    tokio_test::block_on(canister.my_method(2));
 }

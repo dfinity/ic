@@ -22,7 +22,7 @@ use common::check_tla_trace;
 mod tla_stuff {
     use crate::StructCanister;
     use std::collections::BTreeSet;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Mutex;
 
     use candid::Int;
 
@@ -35,7 +35,7 @@ mod tla_stuff {
 
     task_local! {
         pub static TLA_INSTRUMENTATION_STATE: InstrumentationState;
-        pub static TLA_TRACES_LKEY: Arc<Mutex<Vec<UpdateTrace>>>;
+        pub static TLA_TRACES_LKEY: Mutex<Vec<UpdateTrace>>;
     }
 
     pub static TLA_TRACES_MUTEX: Option<RwLock<Vec<UpdateTrace>>> = Some(RwLock::new(Vec::new()));
@@ -51,7 +51,10 @@ mod tla_stuff {
     // #[macro_export]
     macro_rules! tla_get_globals {
         ($self:expr) => {
-            tla_stuff::tla_get_globals($self)
+            {
+                let raw_ptr = ::tla_instrumentation::UnsafeSendPtr($self as *const _);
+                ::std::sync::Arc::new(::std::sync::Mutex::new(move || { tla_stuff::tla_get_globals(&raw_ptr) }))
+            }
         };
     }
 
@@ -131,7 +134,7 @@ trait CallMakerTrait {
 
 #[async_trait]
 impl CallMakerTrait for CallMaker {
-    #[tla_function(async_trait_fn = true)]
+    #[tla_function(force_async_fn = true)]
     async fn call_maker(&self) {
         tla_log_request!(
             "WaitForResponse",
@@ -150,7 +153,7 @@ impl CallMakerTrait for CallMaker {
 }
 
 impl StructCanister {
-    #[tla_update_method(my_f_desc())]
+    #[tla_update_method(my_f_desc(), tla_get_globals!())]
     pub async fn my_method(&mut self) {
         self.counter += 1;
         let call_maker = CallMaker {};
