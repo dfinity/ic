@@ -23,7 +23,7 @@ jobs:
   repro-check:
     name: Run repro-check for ${{ inputs.github_sha }}
     runs-on:
-      labels: dind-small
+      labels: dind-large
     container:
       image: ubuntu:24.04
       options: >-
