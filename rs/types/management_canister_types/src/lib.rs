@@ -4124,6 +4124,7 @@ impl UploadCanisterSnapshotMetadataArgs {
             .map(|bytes| SnapshotId::try_from(&bytes.clone().into_vec()).unwrap())
     }
 
+    /// Returns the size of this snapshot, excluding the size of the wasm chunk store.
     pub fn snapshot_size_bytes(&self) -> NumBytes {
         let num_bytes = self.wasm_module_size
             + self.wasm_memory_size
