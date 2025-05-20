@@ -19,7 +19,6 @@ use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::MessageId;
 use ic_types::{
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-    MAX_MEMORY_ALLOCATION,
 };
 use ic_types_test_utils::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
@@ -61,39 +60,6 @@ const DTS_INSTALL_WAT: &str = r#"
         (start $start)
         (memory 0 20)
     )"#;
-
-#[test]
-fn install_code_fails_on_invalid_compute_allocation() {
-    let mut test = ExecutionTestBuilder::new().build();
-    let binary = wat::parse_str("(module)").unwrap();
-    let canister = test.create_canister(Cycles::new(1_000_000_000_000));
-    let err = test
-        .install_canister_with_allocation(canister, binary, Some(1_000), None)
-        .unwrap_err();
-    assert_eq!(ErrorCode::CanisterContractViolation, err.code());
-    assert_eq!(
-        "ComputeAllocation expected to be in the range [0..100], got 1_000",
-        err.description()
-    );
-}
-
-#[test]
-fn install_code_fails_on_invalid_memory_allocation() {
-    let mut test = ExecutionTestBuilder::new().build();
-    let binary = wat::parse_str("(module)").unwrap();
-    let canister = test.create_canister(Cycles::new(1_000_000_000_000));
-    let err = test
-        .install_canister_with_allocation(canister, binary, None, Some(u64::MAX))
-        .unwrap_err();
-    assert_eq!(ErrorCode::CanisterContractViolation, err.code());
-    assert_eq!(
-        format!(
-            "MemoryAllocation expected to be in the range [0..{}], got 18_446_744_073_709_551_615",
-            candid::Nat(MAX_MEMORY_ALLOCATION.get().into())
-        ),
-        err.description()
-    );
-}
 
 #[test]
 fn dts_resume_works_in_install_code() {
@@ -220,95 +186,6 @@ fn dts_abort_works_in_install_code() {
     let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
     assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
-}
-
-#[test]
-fn install_code_validate_input_compute_allocation() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_install_code_instruction_limit(1_000_000)
-        .with_install_code_slice_instruction_limit(1_000)
-        .with_manual_execution()
-        .build();
-    test.create_canister_with_allocation(Cycles::new(2_000_000_000_000_000), Some(50), None)
-        .unwrap();
-
-    let canister_id = test
-        .create_canister_with_allocation(Cycles::new(2_000_000_000_000_000), Some(40), None)
-        .unwrap();
-    let payload = InstallCodeArgs {
-        mode: CanisterInstallMode::Install,
-        canister_id: canister_id.get(),
-        wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
-        arg: vec![],
-        compute_allocation: Some(candid::Nat::from(90u64)),
-        memory_allocation: None,
-        sender_canister_version: None,
-    };
-
-    let message_id = test.subnet_message_raw(Method::InstallCode, payload.encode());
-    assert_eq!(
-        test.canister_state(canister_id).next_execution(),
-        NextExecution::None,
-    );
-
-    // Start execution of install code.
-    test.execute_subnet_message();
-    let result = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
-    result.assert_contains(
-        ErrorCode::SubnetOversubscribed,
-        "Canister requested a compute allocation of 90% which cannot be satisfied \
-            because the Subnet's remaining compute capacity is 49%.",
-    );
-}
-
-#[test]
-fn install_code_validate_input_memory_allocation() {
-    let mib: u64 = 1024 * 1024;
-    let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(500 * mib as i64)
-        .with_subnet_memory_reservation(0)
-        .with_install_code_instruction_limit(1_000_000)
-        .with_install_code_slice_instruction_limit(1_000)
-        .with_manual_execution()
-        .build();
-    test.create_canister_with_allocation(
-        Cycles::new(20_000_000_000_000_000),
-        None,
-        Some(250 * mib),
-    )
-    .unwrap();
-
-    let canister_id = test
-        .create_canister_with_allocation(
-            Cycles::new(20_000_000_000_000_000),
-            Some(40),
-            Some(240 * mib),
-        )
-        .unwrap();
-    let payload = InstallCodeArgs {
-        mode: CanisterInstallMode::Install,
-        canister_id: canister_id.get(),
-        wasm_module: vec![],
-        arg: vec![],
-        compute_allocation: None,
-        memory_allocation: Some(candid::Nat::from(260 * mib)),
-        sender_canister_version: None,
-    };
-
-    let message_id = test.subnet_message_raw(Method::InstallCode, payload.encode());
-    assert_eq!(
-        test.canister_state(canister_id).next_execution(),
-        NextExecution::None,
-    );
-
-    // Start execution of install code.
-    test.execute_subnet_message();
-    let result = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
-    result.assert_contains(
-        ErrorCode::SubnetOversubscribed,
-        "Canister requested 260.00 MiB of memory but only 250.00 MiB \
-         are available in the subnet.",
-    );
 }
 
 #[test]

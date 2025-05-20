@@ -243,7 +243,11 @@ pub struct InstallCodeContext {
     pub canister_id: CanisterId,
     pub wasm_source: WasmSource,
     pub arg: Vec<u8>,
+    // EXC-370: The following fields will be removed once `compute_allocation`
+    // `memory_allocation` are removed from `InstallCodeArgs`.
+    #[allow(dead_code)]
     pub compute_allocation: Option<ComputeAllocation>,
+    #[allow(dead_code)]
     pub memory_allocation: Option<MemoryAllocation>,
 }
 
