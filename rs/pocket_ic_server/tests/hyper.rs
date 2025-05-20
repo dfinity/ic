@@ -49,4 +49,5 @@ async fn test() {
     let body = String::from_utf8(buffer).unwrap();
 
     println!("hyper body: {}", body);
+    assert!(body.contains("Hello, World!"));
 }
