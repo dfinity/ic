@@ -65,7 +65,7 @@ use ic_system_test_driver::{
     util::{block_on, get_app_subnet_and_node, runtime_from_url, MessageCanister},
 };
 use ic_types::{Cycles, Height};
-use ic_vetkd_utils::{
+use ic_vetkeys::{
     DerivedPublicKey, EncryptedVetKey, IBECiphertext, TransportSecretKey, VetKey,
 };
 use rand::Rng;
