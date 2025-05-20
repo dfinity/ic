@@ -381,8 +381,9 @@ pub(crate) fn flush_canister_snapshots_and_page_maps(
         // will have PageMaps that need to be flushed. They will have a corresponding `CreateSnapshot` or `UploadSnapshotData`
         // in the unflushed operations list.
         // Note that here, snapshot creation from metadata is also represented as `UnflushedCheckpointOp::TakeSnapshot`.
-        if let UnflushedCheckpointOp::TakeSnapshot(_canister_id, snapshot_id)
-        | UnflushedCheckpointOp::UploadSnapshotData(_canister_id, snapshot_id) = op
+        if let UnflushedCheckpointOp::TakeSnapshot(.., snapshot_id)
+        | UnflushedCheckpointOp::UploadSnapshotData(snapshot_id)
+        | UnflushedCheckpointOp::UploadSnapshotMetadata(snapshot_id) = op
         {
             // If we can't find the CanisterSnapshot they must have been already deleted again. Nothing to flush in this case.
             if let Some(canister_snapshot) = tip_state.canister_snapshots.get_mut(*snapshot_id) {

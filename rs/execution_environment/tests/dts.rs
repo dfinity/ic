@@ -1020,12 +1020,26 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
 
         let (method, args) = f(aborted_canister_id);
         if method == Method::DeleteCanisterSnapshot
-            || method == Method::UploadCanisterSnapshotData
             || method == Method::ReadCanisterSnapshotMetadata
             || method == Method::ReadCanisterSnapshotData
         {
             env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(aborted_canister_id, None))
                 .unwrap();
+        }
+
+        if method == Method::UploadCanisterSnapshotData {
+            env.upload_canister_snapshot_metadata(&UploadCanisterSnapshotMetadataArgs {
+                canister_id: aborted_canister_id.into(),
+                replace_snapshot: None,
+                wasm_module_size: 1024,
+                exported_globals: vec![],
+                wasm_memory_size: 1 << 16,
+                stable_memory_size: 1 << 16,
+                certified_data: vec![],
+                global_timer: None,
+                on_low_wasm_memory_hook_status: None,
+            })
+            .unwrap();
         }
 
         let args = args
@@ -1088,7 +1102,6 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
     }
 
     for method in Method::iter() {
-        println!("method: {:?}", method);
         match method {
             // Supported methods accepting just one argument.
             Method::CanisterStatus | Method::DepositCycles | Method::StartCanister => {
@@ -1246,10 +1259,10 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
                 let args = UploadCanisterSnapshotMetadataArgs::new(
                     aborted_canister_id,
                     None,
-                    0,
+                    1024,
                     vec![],
-                    0,
-                    0,
+                    1 << 16,
+                    1 << 16,
                     vec![],
                     Some(GlobalTimer::Inactive),
                     Some(OnLowWasmMemoryHookStatus::ConditionNotSatisfied),
@@ -1261,8 +1274,8 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
                 let args = UploadCanisterSnapshotDataArgs::new(
                     aborted_canister_id,
                     (aborted_canister_id, 0).into(),
-                    CanisterSnapshotDataOffset::WasmChunk,
-                    vec![],
+                    CanisterSnapshotDataOffset::WasmModule { offset: 0 },
+                    vec![42; 42],
                 )
                 .encode();
                 (method, call_args().other_side(args))

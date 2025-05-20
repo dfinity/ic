@@ -2152,7 +2152,7 @@ impl CanisterManager {
 
         let snapshot_id =
             SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
-        state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
+        state.create_snapshot_from_metadata(snapshot_id, Arc::new(new_snapshot));
         canister.system_state.snapshots_memory_usage = canister
             .system_state
             .snapshots_memory_usage
@@ -2289,10 +2289,7 @@ impl CanisterManager {
                 chunk_bytes.get()
             }
         };
-        state.record_snapshot_data_upload(
-            CanisterId::try_from(args.canister_id).unwrap(),
-            snapshot_id,
-        );
+        state.record_snapshot_data_upload(snapshot_id);
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
             canister.scheduler_state.heap_delta_debit += NumBytes::new(num_bytes);
         }

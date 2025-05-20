@@ -50,7 +50,8 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types_private::{
     self as ic00, CanisterIdRecord, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
-    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs,
 };
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
@@ -3341,6 +3342,55 @@ impl StateMachine {
             WasmResult::Reply(data) => Ok(data),
             WasmResult::Reject(reason) => {
                 panic!("read_canister_snapshot_data call rejected: {}", reason)
+            }
+        })?
+    }
+
+    pub fn upload_canister_snapshot_metadata(
+        &self,
+        args: &UploadCanisterSnapshotMetadataArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        let state = self.state_manager.get_latest_state().take();
+        let sender = state
+            .canister_state(&args.get_canister_id())
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap_or_else(PrincipalId::new_anonymous);
+        self.execute_ingress_as(
+            sender,
+            ic00::IC_00,
+            Method::UploadCanisterSnapshotMetadata,
+            args.encode(),
+        )
+        .map(|res| match res {
+            WasmResult::Reply(data) => Ok(data),
+            WasmResult::Reject(reason) => {
+                panic!(
+                    "upload_canister_snapshot_metadata call rejected: {}",
+                    reason
+                )
+            }
+        })?
+    }
+
+    pub fn upload_canister_snapshot_data(
+        &self,
+        args: &UploadCanisterSnapshotDataArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        let state = self.state_manager.get_latest_state().take();
+        let sender = state
+            .canister_state(&args.get_canister_id())
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap_or_else(PrincipalId::new_anonymous);
+        self.execute_ingress_as(
+            sender,
+            ic00::IC_00,
+            Method::UploadCanisterSnapshotData,
+            args.encode(),
+        )
+        .map(|res| match res {
+            WasmResult::Reply(data) => Ok(data),
+            WasmResult::Reject(reason) => {
+                panic!("upload_canister_snapshot_data call rejected: {}", reason)
             }
         })?
     }
