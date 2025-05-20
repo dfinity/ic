@@ -291,6 +291,17 @@ where
 /// It's assumed that the corresponding model is called `<PID>_Apalache.tla`, where PID is the
 /// `process_id`` field used in the `Update` value for the corresponding method.
 pub fn check_traces() {
+  let traces = {
+        let t_mutex =TLA_TRACES_LKEY.get() ;
+        let mut t = t_mutex.lock().expect("Couldn't lock the traces in check_traces");
+        std::mem::take(&mut (*t))
+    };
+
+    perform_trace_check(traces)
+
+}
+
+pub fn perform_trace_check(traces: Vec<UpdateTrace>) {
     // Large states make Apalache time and memory consumption explode. We'll look at
     // improving that later, for now we introduce a hard limit on the state size, and
     // skip checking states larger than the limit. The limit is a somewhat arbitrary
@@ -322,13 +333,6 @@ pub fn check_traces() {
             total_pairs, STATE_PAIR_COUNT_LIMIT
         )
     }
-
-    let traces = {
-        let t_mutex =TLA_TRACES_LKEY.get() ;
-        let mut t = t_mutex.lock().expect("Couldn't lock the traces in check_traces");
-        std::mem::take(&mut (*t))
-    };
-
     print_stats(&traces);
 
     let mut all_pairs = traces

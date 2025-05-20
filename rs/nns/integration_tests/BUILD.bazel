@@ -151,6 +151,7 @@ DEV_DATA = [
     "//rs/nns/cmc:cycles-minting-canister",
     "//rs/nns/governance:governance-canister",
     "//rs/nns/governance:governance-canister-test",
+    "//rs/nns/governance:tla_models",
     "//rs/nns/gtc:genesis-token-canister",
     "//rs/nns/handlers/lifeline/impl:lifeline_canister",
     "//rs/nns/handlers/root/impl:root-canister",
@@ -257,6 +258,10 @@ rust_ic_test_suite_with_extra_srcs(
         ],
     ),
     aliases = ALIASES,
+    crate_features = select({
+        "//rs/nns/governance:tla_disabled": [],
+        "//conditions:default": ["tla"],
+    }),
     data = DEV_DATA,
     env = DEV_ENV,
     extra_srcs = ["src/lib.rs"],

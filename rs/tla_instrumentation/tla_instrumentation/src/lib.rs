@@ -5,14 +5,14 @@ use std::fmt::Formatter;
 use std::mem;
 use std::sync::{Arc, Mutex};
 
-use candid::CandidType;
+use candid::{CandidType, Deserialize};
 pub use tla_state::*;
 pub use tla_value::*;
 
 pub struct UnsafeSendPtr<T: ?Sized>(pub *const T);
 unsafe impl<T: ?Sized> Send for UnsafeSendPtr<T> {}
 
-#[derive(Clone, Debug, CandidType)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct SourceLocation {
     pub file: String,
     pub line: String,
@@ -45,7 +45,7 @@ pub struct Update {
 }
 
 
-#[derive(Debug, Clone, CandidType)]
+#[derive(Debug, Clone, CandidType, Deserialize)]
 pub struct UpdateTrace {
     pub model_name: String,
     pub state_pairs: Vec<ResolvedStatePair>,
