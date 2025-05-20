@@ -554,7 +554,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.0.1",
             ),
             "http-body-util": crate.spec(
-                version = "^0.1.2",
+                version = "^0.1.3",
             ),
             "hmac": crate.spec(
                 version = "^0.12",
@@ -571,7 +571,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.1.1",
             ),
             "hyper": crate.spec(
-                version = "^1.5.1",
+                version = "^1.6.0",
                 features = ["full"],
             ),
             "hyper-socks2": crate.spec(
@@ -579,12 +579,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "hyper-util": crate.spec(
-                version = "^0.1.10",
+                version = "^0.1.12",
                 features = ["full"],
             ),
             "hyper-rustls": crate.spec(
                 default_features = False,
-                version = "^0.27.3",
+                version = "^0.27.5",
                 features = [
                     "http1",
                     "http2",
@@ -1067,7 +1067,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.11.0",
             ),
             "reqwest": crate.spec(
-                version = "^0.12.12",
+                version = "^0.12.15",
                 default_features = False,
                 features = [
                     "blocking",
