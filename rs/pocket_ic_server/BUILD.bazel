@@ -215,8 +215,7 @@ rust_test(
     # returns an unexpected 400 Bad Request error on the /instances endpoint.
     target_compatible_with = select({
         "@platforms//os:osx": ["@platforms//cpu:arm64"],
-        "@platforms//os:linux": [],
-        "//conditions:default": ["@platforms//:incompatible"],
+        "//conditions:default": [],
     }),
     deps = TEST_DEPENDENCIES,
 )
@@ -279,8 +278,7 @@ rust_test(
     # returns an unexpected 400 Bad Request error on the /instances endpoint.
     target_compatible_with = select({
         "@platforms//os:osx": ["@platforms//cpu:arm64"],
-        "@platforms//os:linux": [],
-        "//conditions:default": ["@platforms//:incompatible"],
+        "//conditions:default": [],
     }),
     deps = TEST_DEPENDENCIES,
 )
