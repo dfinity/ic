@@ -256,6 +256,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "backoff": crate.spec(
                 version = "^0.4.0",
             ),
+            "ureq": crate.spec(
+                version = "^3.0.11",
+            ),
             "backon": crate.spec(
                 version = "^0.4.1",
             ),

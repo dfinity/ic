@@ -783,6 +783,7 @@ x509-parser = { version = "0.16.0" }
 zeroize = { version = "1.8.1", features = ["zeroize_derive"] }
 zstd = "0.13.2"
 isahc = { version = "1.7.2" }
+ureq = { version = "3.0.11" }
 
 [workspace.dependencies.ic-wasm]
 default-features = false

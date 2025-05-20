@@ -1,5 +1,5 @@
 {
-  "checksum": "606d7f9bb26db5ebd6726dbbbb13695ed718faf3fd43fcd9afc7c64d25b99742",
+  "checksum": "f7aa270b0c56aae071ea17ed7f98a18c4c6ed33b0a0536aafdf09f9e836e0904",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -949,7 +949,7 @@
               "target": "language_tags"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -1136,7 +1136,7 @@
               "target": "futures_core"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -4115,7 +4115,7 @@
               "target": "httparse"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             }
           ],
@@ -4840,7 +4840,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -8691,7 +8691,7 @@
               "target": "jsonrpc"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -8833,7 +8833,7 @@
               "alias": "bitcoincore_rpc"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -12361,7 +12361,7 @@
               "target": "lexical_core"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -15116,7 +15116,7 @@
               "target": "jsonrpc"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -15651,7 +15651,7 @@
               "target": "hashbrown"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -15978,7 +15978,7 @@
               "target": "cranelift_codegen"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -21424,6 +21424,10 @@
               "target": "turmoil"
             },
             {
+              "id": "ureq 3.0.11",
+              "target": "ureq"
+            },
+            {
               "id": "url 2.5.4",
               "target": "url"
             },
@@ -23165,7 +23169,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             }
           ],
@@ -23578,7 +23582,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             }
           ],
@@ -23632,7 +23636,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -23688,7 +23692,7 @@
               "target": "env_filter"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             }
           ],
@@ -24219,7 +24223,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -28886,7 +28890,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -30895,7 +30899,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -31856,7 +31860,7 @@
               "target": "hyper"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -31967,7 +31971,7 @@
               "target": "hyper_util"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -35119,7 +35123,7 @@
               "target": "leb128"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -38171,7 +38175,7 @@
               "target": "itoa"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -38285,7 +38289,7 @@
               "target": "itoa"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -39094,7 +39098,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -39598,7 +39602,7 @@
               "target": "jni_sys"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -44270,14 +44274,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "log 0.4.20": {
+    "log 0.4.27": {
       "name": "log",
-      "version": "0.4.20",
+      "version": "0.4.27",
       "package_url": "https://github.com/rust-lang/log",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/log/0.4.20/download",
-          "sha256": "b5e6163cb8c49088c2c36f57875e58ccd8c87c7427f7fbd50ea6710b2f3f2e8f"
+          "url": "https://static.crates.io/crates/log/0.4.27/download",
+          "sha256": "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
         }
       },
       "targets": [
@@ -44305,8 +44309,8 @@
           ],
           "selects": {}
         },
-        "edition": "2015",
-        "version": "0.4.20"
+        "edition": "2021",
+        "version": "0.4.27"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -45070,7 +45074,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -45388,7 +45392,7 @@
               "target": "ipnetwork"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -45453,7 +45457,7 @@
               "target": "ipnetwork"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -46113,7 +46117,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -46631,7 +46635,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -46723,7 +46727,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             }
           ],
@@ -47123,7 +47127,7 @@
               "target": "hyper_util"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -47434,7 +47438,7 @@
               "target": "httparse"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -47570,7 +47574,7 @@
               "target": "libc"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             }
           ],
@@ -53231,7 +53235,7 @@
               "target": "libc"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -55442,7 +55446,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -55976,7 +55980,7 @@
               "target": "libc"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -56362,7 +56366,7 @@
               "target": "arrayvec"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -58151,7 +58155,7 @@
               "target": "itertools"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -58257,7 +58261,7 @@
               "target": "itertools"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -59067,7 +59071,7 @@
               "target": "cranelift_bitset"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -59360,7 +59364,7 @@
               "target": "env_logger"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -61951,7 +61955,7 @@
               "target": "hashbrown"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -62810,7 +62814,7 @@
                 "target": "ipnet"
               },
               {
-                "id": "log 0.4.20",
+                "id": "log 0.4.27",
                 "target": "log"
               },
               {
@@ -63174,7 +63178,7 @@
                 "target": "ipnet"
               },
               {
-                "id": "log 0.4.20",
+                "id": "log 0.4.27",
                 "target": "log"
               },
               {
@@ -65575,7 +65579,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -65681,7 +65685,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -65806,7 +65810,7 @@
               "target": "brotli_decompressor"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -65943,7 +65947,7 @@
               "target": "http"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -66408,7 +66412,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -68564,7 +68568,7 @@
               "target": "fxhash"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -71075,7 +71079,7 @@
               "target": "colored"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -71188,7 +71192,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -71565,7 +71569,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -71773,7 +71777,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -73932,7 +73936,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -78410,7 +78414,7 @@
               "target": "futures_util"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -79857,7 +79861,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -80218,7 +80222,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -81106,7 +81110,7 @@
               "target": "httparse"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -82323,6 +82327,168 @@
       ],
       "license_file": "LICENSE.txt"
     },
+    "ureq 3.0.11": {
+      "name": "ureq",
+      "version": "3.0.11",
+      "package_url": "https://github.com/algesten/ureq",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ureq/3.0.11/download",
+          "sha256": "b7a3e9af6113ecd57b8c63d3cd76a385b2e3881365f1f489e54f49801d0c83ea"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ureq",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ureq",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "_ring",
+            "_rustls",
+            "_tls",
+            "default",
+            "gzip",
+            "rustls",
+            "rustls-no-provider"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "base64 0.22.1",
+              "target": "base64"
+            },
+            {
+              "id": "flate2 1.0.31",
+              "target": "flate2"
+            },
+            {
+              "id": "log 0.4.27",
+              "target": "log"
+            },
+            {
+              "id": "percent-encoding 2.3.1",
+              "target": "percent_encoding"
+            },
+            {
+              "id": "rustls 0.23.27",
+              "target": "rustls"
+            },
+            {
+              "id": "rustls-pemfile 2.2.0",
+              "target": "rustls_pemfile"
+            },
+            {
+              "id": "rustls-pki-types 1.12.0",
+              "target": "rustls_pki_types"
+            },
+            {
+              "id": "ureq-proto 0.4.1",
+              "target": "ureq_proto"
+            },
+            {
+              "id": "utf-8 0.7.6",
+              "target": "utf8"
+            },
+            {
+              "id": "webpki-roots 0.26.8",
+              "target": "webpki_roots"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "3.0.11"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "ureq-proto 0.4.1": {
+      "name": "ureq-proto",
+      "version": "0.4.1",
+      "package_url": "https://github.com/algesten/ureq-proto",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ureq-proto/0.4.1/download",
+          "sha256": "fadf18427d33828c311234884b7ba2afb57143e6e7e69fda7ee883b624661e36"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ureq_proto",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ureq_proto",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "client"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "base64 0.22.1",
+              "target": "base64"
+            },
+            {
+              "id": "http 1.3.1",
+              "target": "http"
+            },
+            {
+              "id": "httparse 1.10.1",
+              "target": "httparse"
+            },
+            {
+              "id": "log 0.4.27",
+              "target": "log"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.4.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-MIT.txt"
+    },
     "uriparse 0.6.4": {
       "name": "uriparse",
       "version": "0.6.4",
@@ -83286,7 +83452,7 @@
               "target": "leb128"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -83495,7 +83661,7 @@
               "target": "hyper"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -83798,7 +83964,7 @@
               "target": "bumpalo"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -84893,7 +85059,7 @@
               "target": "libc"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -85182,7 +85348,7 @@
               "target": "itertools"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -85295,7 +85461,7 @@
               "target": "indexmap"
             },
             {
-              "id": "log 0.4.20",
+              "id": "log 0.4.27",
               "target": "log"
             },
             {
@@ -92587,6 +92753,7 @@
     "tracing-subscriber 0.3.19",
     "trust-dns-resolver 0.22.0",
     "turmoil 0.6.4",
+    "ureq 3.0.11",
     "url 2.5.4",
     "uuid 1.12.1",
     "vsock 0.4.0",
