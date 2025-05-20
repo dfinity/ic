@@ -397,46 +397,51 @@ impl MapFilter<SubnetId, Stream> for StreamsFilter {
     }
 }
 
-fn streams_as_tree(
-    streams: &StreamMap,
+fn streams_as_tree<'a>(
+    streams: &'a StreamMap,
     own_subnet_id: SubnetId,
     certification_version: CertificationVersion,
-) -> LazyTree<'_> {
-    fork(MapTransformFork {
-        map: streams,
-        map_filter: StreamsFilter {
-            own_subnet_id: if certification_version < CertificationVersion::V20 {
-                // Do not filter out any streams before V20.
-                SubnetId::new(CanisterId::ic_00().get())
-            } else {
-                // Starting with V20, filter out the loopback stream.
-                own_subnet_id
-            },
-        },
-        certification_version,
-        mk_tree: |_subnet_id, stream, certification_version| {
-            fork(
-                FiniteMap::default()
-                    .with_tree(
-                        "header",
-                        blob(move || {
-                            let stream_header: StreamHeader = stream.header();
-                            encode_stream_header(&stream_header, certification_version)
-                        }),
-                    )
-                    .with_tree(
-                        "messages",
-                        fork(StreamQueueFork {
-                            queue: stream.messages(),
-                            certification_version,
-                            mk_tree: |_idx, msg, certification_version| {
-                                blob(move || encode_message(msg, certification_version))
-                            },
-                        }),
-                    ),
-            )
-        },
-    })
+) -> LazyTree<'a> {
+    let mk_tree = |_subnet_id, stream: &'a Stream, certification_version| {
+        fork(
+            FiniteMap::default()
+                .with_tree(
+                    "header",
+                    blob(move || {
+                        let stream_header: StreamHeader = stream.header();
+                        encode_stream_header(&stream_header, certification_version)
+                    }),
+                )
+                .with_tree(
+                    "messages",
+                    fork(StreamQueueFork {
+                        queue: stream.messages(),
+                        certification_version,
+                        mk_tree: |_idx, msg, certification_version| {
+                            blob(move || encode_message(msg, certification_version))
+                        },
+                    }),
+                ),
+        )
+    };
+
+    if certification_version >= CertificationVersion::V20 {
+        // Starting with `V20`, filter out the loopback stream.
+        fork(MapTransformFork {
+            map: streams,
+            map_filter: StreamsFilter { own_subnet_id },
+            certification_version,
+            mk_tree,
+        })
+    } else {
+        // Before `V20`, output all streams.
+        fork(MapTransformFork {
+            map: streams,
+            map_filter: NoFilter,
+            certification_version,
+            mk_tree,
+        })
+    }
 }
 
 fn system_metadata_as_tree(
