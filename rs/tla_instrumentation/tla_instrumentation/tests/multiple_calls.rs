@@ -22,6 +22,7 @@ use common::check_tla_trace;
 mod tla_stuff {
     use crate::StructCanister;
     use std::collections::BTreeSet;
+    use std::sync::{Arc, Mutex};
 
     use candid::Int;
 
@@ -30,20 +31,18 @@ mod tla_stuff {
 
     use local_key::task_local;
     use std::{collections::BTreeMap, sync::RwLock};
-    use tla_instrumentation::{
-        GlobalState, InstrumentationState, Label, TlaConstantAssignment, TlaValue, ToTla, Update,
-        UpdateTrace, VarAssignment,
-    };
+    use tla_instrumentation::{GlobalState, InstrumentationState, Label, TlaConstantAssignment, TlaValue, ToTla, UnsafeSendPtr, Update, UpdateTrace, VarAssignment};
 
     task_local! {
         pub static TLA_INSTRUMENTATION_STATE: InstrumentationState;
-        pub static TLA_TRACES_LKEY: std::cell::RefCell<Vec<UpdateTrace>>;
+        pub static TLA_TRACES_LKEY: Arc<Mutex<Vec<UpdateTrace>>>;
     }
 
     pub static TLA_TRACES_MUTEX: Option<RwLock<Vec<UpdateTrace>>> = Some(RwLock::new(Vec::new()));
 
-    pub fn tla_get_globals(c: &StructCanister) -> GlobalState {
+    pub fn tla_get_globals(p: &UnsafeSendPtr<StructCanister>) -> GlobalState {
         let mut state = GlobalState::new();
+        let c = unsafe { &*(p.0) };
         state.add("counter", c.counter.to_tla_value());
         state.add("empty_fun", TlaValue::Function(BTreeMap::new()));
         state

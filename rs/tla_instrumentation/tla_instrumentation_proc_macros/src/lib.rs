@@ -8,19 +8,25 @@ use syn::{Ident, Token, Expr};
 struct TlaUpdateArgs {
     update_expr: Expr, // The positional argument
     snapshotter_fn_arg_name: Option<Expr>, // Name of the function arg to use for snapshotter
-    globals_fn_arg_name: Option<Expr>,     // Name of the function arg to use for globals
+    is_async_fn: bool,
 }
-
 
 /// Marks the method as the starting point of a TLA transition (or more concretely, a PlusCal process).
 /// Assumes that the following are in scope:
-/// 1. TLA_INSTRUMENTATION_STATE LocalKey storing a Rc<RefCell<InstrumentationState>>
-/// 2. TLA_TRACES_MUTEX Option<RwLock> storing a Vec<UpdateTrace>
-/// 3. TLA_TRACES_LKEY LocalKey storing a RefCell<Vec<UpdateTrace>>
-/// 4. tla_instrumentation crate
+/// 1. TLA_INSTRUMENTATION_STATE LocalKey storing a InstrumentationState
+/// 2. TLA_TRACES_MUTEX Option<RwLock<Vec<UpdateTrace>>>
+/// 3. TLA_TRACES_LKEY LocalKey storing a Mutex<Vec<UpdateTrace>>
+/// 4. The tla_instrumentation crate
 ///
-/// It also requires the following keyword arguments:
-/// 1. globals, a macro or function which takes the arguments self parameter iff this is a method
+/// The macro REQUIRES two arguments:
+/// 1. An expression of type `tla_instrumentation::Update` which describes the update method.
+/// 2. A snapshotter function which takes a pointer to the canister and returns a `GlobalState`
+///
+/// It also supports the following keyword arguments:
+/// 1. is_async_fn, a boolean indicating whether the function is async even if it doesn't use the
+///    the async keyword. This is useful for async_trait functions, which are desugared into
+///    functions that return a Pin<Box<dyn Future<...>>>, but are not async themselves.
+///
 ///
 /// It records the trace (sequence of states) resulting from `tla_log_request!` and `tla_log_response!`
 /// macro calls in either:
@@ -33,21 +39,18 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
     // let arg = parse_macro_input!(attr as Expr);
     // Convert proc_macro::TokenStream to proc_macro2::TokenStream
     // let attr2: TokenStream2 = attr.into();
-    let macro_args = parse_macro_input!(attr as TlaUpdateArgs);
-
-    let mut modified_fn = input_fn.clone();
+    let attr_clone = attr.clone();
+    let macro_args = parse_macro_input!(attr_clone as TlaUpdateArgs);
 
     // Deconstruct the function elements
     let ItemFn {
         attrs,
         vis,
         sig,
-        block: _,
+        block: body,
     } = input_fn;
 
     let original_name = sig.ident.to_string();
-    let mangled_name = syn::Ident::new(&format!("_tla_impl_{}", sig.ident), sig.ident.span());
-    modified_fn.sig.ident = mangled_name.clone();
 
     let has_self = sig
         .inputs
@@ -66,63 +69,21 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let asyncness = sig.asyncness;
 
-    let noninstrumented_invocation =  match (has_self, asyncness.is_some()) {
-        (true, true) => {
-            quote! {
-                self.#mangled_name(#(#args),*).await
-            }
+    let noninstrumented_invocation = if macro_args.is_async_fn {
+        quote! {
+            #body.await
         }
-        (true, false) => {
-            quote! {
-                self.#mangled_name(#(#args),*)
-            }
+    } else if asyncness.is_some() {
+        quote! {
+            (|| async move {
+                #body
+            })().await
         }
-        (false, true) => {
-            quote! {
-                #mangled_name(#(#args),*).await
-            }
-        }
-        (false, false) => {
-            quote! {
-                #mangled_name(#(#args),*)
-            }
-        }
-    };
-
-    let globals_invocation = match &macro_args.globals_fn_arg_name {
-        None => {
-            // Default case: use tla_get_globals!(self) or appropriate fallback
-            if has_self {
-                quote! { tla_get_globals!(self) }
-            } else {
-                // If no 'self' and no explicit globals, what should happen? Error maybe?
-                // For now, assume tla_get_globals!() might exist for non-self cases
-                // Or require it explicitly if no self? Let's error for now.
-                return syn::Error::new(sig.ident.span(), "Default globals logic assumes a method that takes a 'self' parameter, and a `tla_get_globals` macro in scope. Provide `globals = ...` for non-method functions or define `tla_get_globals!()`.")
-                    .to_compile_error()
-                    .into();
-                // Alternatively: quote! { tla_get_globals!() }
-            }
-        }
-        Some(expr) => match expr {
-            Expr::Path(expr_path) => {
-                // User provided a path like `my_func`: call it as a function
-                quote! { #expr_path(#(#args),*) }
-            }
-            Expr::Macro(expr_macro) => {
-                // User provided a macro like `my_macro!()`: invoke the macro path with args
-                let mac_path = &expr_macro.mac.path;
-                quote! { #mac_path!(#(#args),*) }
-            }
-            _ => {
-                // User provided something else (a function call `my_func()`, literal, etc.)
-                return syn::Error::new_spanned(
-                    expr,
-                    "Expected 'globals' to be a function path (e.g., `my_func`) or a macro invocation ending in `!()` (e.g., `my_macro! A()`)",
-                )
-                    .to_compile_error()
-                    .into();
-            }
+    } else {
+        quote! {
+            (move || {
+                #body
+            })()
         }
     };
 
@@ -131,8 +92,8 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
             // Default case: use raw pointer logic
             if has_self {
                 quote! {
-                 let raw_ptr = self as *const _;
-                 let snapshotter = ::std::rc::Rc::new(move || { unsafe { tla_get_globals!(&*raw_ptr) } });
+                 let raw_ptr = ::tla_instrumentation::UnsafeSendPtr(self as *const _);
+                 let snapshotter: ::std::sync::Arc<::std::sync::Mutex<dyn Fn() -> ::tla_instrumentation::GlobalState + Send + 'static>> = ::std::sync::Arc::new(::std::sync::Mutex::new(move || { tla_get_globals!(&raw_ptr) }));
                 }
             } else {
                 return syn::Error::new(sig.ident.span(), "Default snapshotter logic assumes a method that takes a 'self' parameter, and a `tla_get_globals` macro in scope. Provide `snapshotter = ...` for non-method functions.")
@@ -162,35 +123,38 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     };
 
-    let instrumented_invocation = if asyncness.is_some() {
-        quote! { {
-            let mut pinned = Box::pin(TLA_INSTRUMENTATION_STATE.scope(
-                tla_instrumentation::InstrumentationState::new(update.clone(), globals, snapshotter, start_location),
-                async move {
-                    let res = #noninstrumented_invocation;
-                    let globals = #globals_invocation;
-                    let state: InstrumentationState = TLA_INSTRUMENTATION_STATE.get();
-                    let mut handler_state = state.handler_state.borrow_mut();
-                    let state_pair = tla_instrumentation::log_method_return(&mut handler_state, globals, end_location);
-                    let mut state_pairs = state.state_pairs.borrow_mut();
-                    state_pairs.push(state_pair);
-                    res
-                }
-            ));
-            let res = pinned.as_mut().await;
-            let trace = pinned.as_mut().take_value().expect("No TLA trace in the future!");
-            let pairs = trace.state_pairs.borrow_mut().clone();
-            (pairs, res)
-        } }
+    let instrumented_invocation = if asyncness.is_some() || macro_args.is_async_fn {
+        quote! {
+            {
+                let mut pinned = Box::pin(TLA_INSTRUMENTATION_STATE.scope(
+                    tla_instrumentation::InstrumentationState::new(update.clone(), globals, snapshotter.clone(), start_location),
+                    async move {
+                        let res = #noninstrumented_invocation;
+                        let globals = (*snapshotter.lock().expect("Couldn't lock snapshotter in tla_update_method after invocation"))();
+                        let state: InstrumentationState = TLA_INSTRUMENTATION_STATE.get();
+                        let mut handler_state = state.handler_state.lock().expect("Couldn't obtain the lock on the handler state in tla_update_method");
+                        let state_pair = tla_instrumentation::log_method_return(&mut handler_state, globals, end_location);
+                        let mut state_pairs = state.state_pairs.lock().expect("Couldn't obtain the lock on the state pairs in tla_update_method");
+                        state_pairs.push(state_pair);
+                        res
+                    }
+                ));
+                let res = pinned.as_mut().await;
+                let trace = pinned.as_mut().take_value().expect("No TLA trace in the future!");
+                let pairs = trace.state_pairs.lock().expect("Couldn't obtain the lock on the trace state pairs in tla_update_method").clone();
+                (pairs, res)
+            }
+        }
     } else {
         quote! {
             TLA_INSTRUMENTATION_STATE.sync_scope(
-                tla_instrumentation::InstrumentationState::new(update.clone(), globals, snapshotter, start_location),
+                tla_instrumentation::InstrumentationState::new(update.clone(), globals, snapshotter.clone(), start_location),
                 || {
+                    println!("Calling a sync scope for some reason");
                     let res = #noninstrumented_invocation;
-                    let globals = #globals_invocation;
+                    let globals = (*snapshotter.lock().expect("Couldn't lock snapshotter in tla_update_method after invocation"))();
                     let state: InstrumentationState = TLA_INSTRUMENTATION_STATE.get();
-                    let mut handler_state = state.handler_state.borrow_mut();
+                    let mut handler_state = state.handler_state.lock().expect("Couldn't obtain the lock on the handler state in tla_update_method");
                     let state_pair = tla_instrumentation::log_method_return(&mut handler_state, globals, end_location);
                     let mut state_pairs = state.state_pairs.borrow_mut();
                     state_pairs.push(state_pair);
@@ -202,43 +166,58 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let update = macro_args.update_expr;
 
-    let output = {
-        quote! {
-            #modified_fn
+    let with_instrumentation = quote! {
+         let update = #update;
+         #set_snapshotter;
+         let globals = (*snapshotter.lock().expect("Couldn't lock the snaphshotter in tla_update_method before instrumented invocation"))();
+         let start_location = tla_instrumentation::SourceLocation { file: "Unknown file".to_string(), line: format!("Start of {}", #original_name) };
+         let end_location = tla_instrumentation::SourceLocation { file: "Unknown file".to_string(), line: format!("End of {}", #original_name) };
+         let (mut pairs, res) = #instrumented_invocation;
 
+         let constants = (update.post_process)(&mut pairs);
+
+         let trace = tla_instrumentation::UpdateTrace {
+             model_name: update.process_id.clone(),
+             state_pairs: pairs,
+             constants,
+         };
+         match TLA_TRACES_LKEY.try_with(|t| {
+             let mut traces = t.lock().expect("Couldn't obtain the lock on the TLA traces in tla_update_method");
+             traces.push(trace.clone());
+         }) {
+             Ok(_) => (),
+             Err(_) => {
+                 // We can unwrap here, because we checked earlier that either
+                 // we're in a TLA_TRACES_LKEY scope, or that TLA_TRACES_MUTEX isn't None
+                 let mut traces = TLA_TRACES_MUTEX.as_ref().unwrap().write().unwrap();
+                 traces.push(trace);
+             },
+         }
+         res
+    };
+
+    let output = if macro_args.is_async_fn {
+        quote! {
+            #(#attrs)* #vis #sig {
+                Box::pin(async move {
+                    let enabled = TLA_TRACES_LKEY.try_with(|_| ()).is_ok() || TLA_TRACES_MUTEX.is_some();
+                    if !enabled {
+                        #noninstrumented_invocation
+                    } else {
+                        #with_instrumentation
+                    }
+                })
+            }
+        }
+    } else {
+        quote! {
             #(#attrs)* #vis #sig {
                 let enabled = TLA_TRACES_LKEY.try_with(|_| ()).is_ok() || TLA_TRACES_MUTEX.is_some();
                 if !enabled {
-                    return #noninstrumented_invocation;
+                    #noninstrumented_invocation
+                } else {
+                    #with_instrumentation
                 }
-
-                let globals = #globals_invocation;
-                #set_snapshotter;
-                let update = #update;
-                let start_location = tla_instrumentation::SourceLocation { file: "Unknown file".to_string(), line: format!("Start of {}", #original_name) };
-                let end_location = tla_instrumentation::SourceLocation { file: "Unknown file".to_string(), line: format!("End of {}", #original_name) };
-                let (mut pairs, res) = #instrumented_invocation;
-
-                let constants = (update.post_process)(&mut pairs);
-
-                let trace = tla_instrumentation::UpdateTrace {
-                    model_name: update.process_id.clone(),
-                    state_pairs: pairs,
-                    constants,
-                };
-                match TLA_TRACES_LKEY.try_with(|t| {
-                    let mut traces = t.borrow_mut();
-                    traces.push(trace.clone());
-                }) {
-                    Ok(_) => (),
-                    Err(_) => {
-                        // We can unwrap here, because we checked earlier that either
-                        // we're in a TLA_TRACES_LKEY scope, or that TLA_TRACES_MUTEX isn't None
-                        let mut traces = TLA_TRACES_MUTEX.as_ref().unwrap().write().unwrap();
-                        traces.push(trace);
-                    },
-                }
-                res
             }
         }
     };
@@ -312,7 +291,7 @@ pub fn tla_function(attr: TokenStream, item: TokenStream) -> TokenStream {
     let with_instrumentation = quote! {
        TLA_INSTRUMENTATION_STATE.try_with(|state| {
             {
-                let mut handler_state = state.handler_state.borrow_mut();
+                let mut handler_state = state.handler_state.lock().expect("Couldn't obtain the lock on the handler state in tla_function");
                 handler_state.context.call_function();
             }
        }).unwrap_or_else(|e| {
@@ -322,7 +301,7 @@ pub fn tla_function(attr: TokenStream, item: TokenStream) -> TokenStream {
        let res = #call;
        TLA_INSTRUMENTATION_STATE.try_with(|state| {
             {
-                let mut handler_state = state.handler_state.borrow_mut();
+                let mut handler_state = state.handler_state.lock().expect("Couldn't obtain the lock on the handler state in tla_function");
                 handler_state.context.return_from_function();
             }
        }).unwrap_or_else(|e|
@@ -378,7 +357,7 @@ pub fn with_tla_trace_check(_attr: TokenStream, item: TokenStream) -> TokenStrea
         #modified_fn
 
         #(#attrs)* #vis #sig {
-            TLA_TRACES_LKEY.sync_scope(::std::cell::RefCell::new(Vec::new()), || {
+            TLA_TRACES_LKEY.sync_scope(::std::sync::Arc::new(::std::sync::Mutex::new(Vec::new())), || {
                 let res = #mangled_name(#(#args),*);
                 tla_check_traces();
                 res
@@ -387,12 +366,14 @@ pub fn with_tla_trace_check(_attr: TokenStream, item: TokenStream) -> TokenStrea
     };
     output.into()
 }
+
 impl Parse for TlaUpdateArgs {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let update_expr: Expr = input.parse()?;
 
         let mut snapshotter_fn_arg_name = None;
-        let mut globals_fn_arg_name = None;
+
+        let mut is_async_trait_fn = false;
 
         while !input.is_empty() {
             input.parse::<Token![,]>()?;
@@ -408,19 +389,25 @@ impl Parse for TlaUpdateArgs {
                     return Err(syn::Error::new(key.span(), "Duplicate 'snapshotter' argument"));
                 }
                 snapshotter_fn_arg_name = Some(value);
-            } else if key == "globals" {
-                if globals_fn_arg_name.is_some() {
-                    return Err(syn::Error::new(key.span(), "Duplicate 'globals' argument"));
+            } else if key == "is_async_fn" {
+                if let Expr::Lit(lit) = value {
+                    if let Lit::Bool(lit_bool) = lit.lit {
+                        is_async_trait_fn = lit_bool.value();
+                    } else {
+                        return Err(syn::Error::new(key.span(), "Expected a boolean literal for 'async_trait_fn'"));
+                    }
+                } else {
+                    return Err(syn::Error::new(key.span(), "Expected a boolean literal for 'async_trait_fn'"));
                 }
-                globals_fn_arg_name = Some(value);
-            } else {
+            }
+            else {
                 return Err(syn::Error::new(key.span(), "Unknown keyword argument"));
             }
         }
         Ok(TlaUpdateArgs {
             update_expr,
             snapshotter_fn_arg_name,
-            globals_fn_arg_name,
+            is_async_fn: is_async_trait_fn,
         })
     }
 }

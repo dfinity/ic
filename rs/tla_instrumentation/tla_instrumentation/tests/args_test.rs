@@ -27,39 +27,31 @@ mod tla_stuff {
     use std::collections::BTreeSet;
     use std::thread::LocalKey;
     use candid::Int;
-    use tla_instrumentation::{
-        GlobalState, InstrumentationState, Label, TlaConstantAssignment, TlaValue, ToTla, Update,
-        UpdateTrace, VarAssignment,
-    };
+    use std::sync::{Arc, Mutex};
+    use tla_instrumentation::{GlobalState, InstrumentationState, Label, TlaConstantAssignment, TlaValue, ToTla, UnsafeSendPtr, Update, UpdateTrace, VarAssignment};
 
     pub const PID: &str = "Multiple_Calls";
     pub const CAN_NAME: &str = "mycan";
 
     task_local! {
         pub static TLA_INSTRUMENTATION_STATE: InstrumentationState;
-        pub static TLA_TRACES_LKEY: std::cell::RefCell<Vec<UpdateTrace>>;
+        pub static TLA_TRACES_LKEY: Mutex<Vec<UpdateTrace>>;
     }
     pub static TLA_TRACES_MUTEX: Option<RwLock<Vec<UpdateTrace>>> = Some(RwLock::new(Vec::new()));
 
-    pub fn my_get_globals(counter: &'static LocalKey<RefCell<u64>>) -> GlobalState {
+    pub fn my_get_globals(p: &UnsafeSendPtr<LocalKey<RefCell<u64>>>) -> GlobalState {
         let mut state = GlobalState::new();
+        let counter = unsafe { &*(p.0) };
         state.add("counter", counter.with_borrow(|c|  c.to_tla_value()));
         state.add("empty_fun", TlaValue::Function(BTreeMap::new()));
         state
     }
 
-    // #[macro_export]
-    macro_rules! my_get_globals_macro {
-        ($state_arg:expr $(, $_rest:tt)*) => {
-            tla_stuff::my_get_globals($state_arg)
-        };
-    }
-
-    macro_rules! snapshotter {
+   macro_rules! snapshotter {
         ($first_arg:expr $(, $_rest:tt)* ) => {
             { // Use a block to potentially shadow variables and contain the logic
-                let raw_ptr = $first_arg as *const _;
-                ::std::rc::Rc::new(move || { unsafe { my_get_globals(&*raw_ptr) } })
+                let raw_ptr = ::tla_instrumentation::UnsafeSendPtr($first_arg as *const _);
+                ::std::sync::Arc::new(::std::sync::Mutex::new(move || { my_get_globals(&raw_ptr) }))
             }
         }
     }
@@ -149,7 +141,7 @@ impl CallMakerTrait for CallMaker {
         );
     }
 }
-#[tla_update_method(my_f_desc(), globals=my_get_globals_macro!(), snapshotter=snapshotter!())]
+#[tla_update_method(my_f_desc(), snapshotter=snapshotter!())]
 pub async fn my_method(state: &'static LocalKey<RefCell<u64>>) {
     state.with_borrow_mut(|s| *s += 1);
     let call_maker = CallMaker {};

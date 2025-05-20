@@ -1,13 +1,16 @@
 pub mod checker;
 pub mod tla_state;
 pub mod tla_value;
-use std::cell::RefCell;
 use std::fmt::Formatter;
 use std::mem;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
+
 use candid::CandidType;
 pub use tla_state::*;
 pub use tla_value::*;
+
+pub struct UnsafeSendPtr<T: ?Sized>(pub *const T);
+unsafe impl<T: ?Sized> Send for UnsafeSendPtr<T> {}
 
 #[derive(Clone, Debug, CandidType)]
 pub struct SourceLocation {
@@ -153,22 +156,22 @@ impl MessageHandlerState {
 
 #[derive(Clone)]
 pub struct InstrumentationState {
-    pub handler_state: Rc<RefCell<MessageHandlerState>>,
-    pub state_pairs: Rc<RefCell<Vec<ResolvedStatePair>>>,
-    pub globals_snapshotter: Rc<dyn Fn() -> GlobalState>,
+    pub handler_state: Arc<Mutex<MessageHandlerState>>,
+    pub state_pairs: Arc<Mutex<Vec<ResolvedStatePair>>>,
+    pub globals_snapshotter: Arc<Mutex<dyn Fn() -> GlobalState + Send>>,
 }
 
 impl InstrumentationState {
     pub fn new(
         update: Update,
         global: GlobalState,
-        globals_snapshotter: Rc<dyn Fn() -> GlobalState>,
+        globals_snapshotter: Arc<Mutex<dyn Fn() -> GlobalState + Send>>,
         source_location: SourceLocation,
     ) -> Self {
         let state = MessageHandlerState::new(update, global, source_location);
         Self {
-            handler_state: Rc::new(RefCell::new(state)),
-            state_pairs: Rc::new(RefCell::new(Vec::new())),
+            handler_state: Arc::new(Mutex::new(state)),
+            state_pairs: Arc::new(Mutex::new(Vec::new())),
             globals_snapshotter,
         }
     }
@@ -313,7 +316,7 @@ macro_rules! tla_log_locals {
                 locals.push((stringify!($name), $value.to_tla_value()));
             )*
             let res = TLA_INSTRUMENTATION_STATE.try_with(|state| {
-                let mut handler_state = state.handler_state.borrow_mut();
+                let mut handler_state = state.handler_state.lock().expect("Failed to lock handler state in log_locals");
                 $crate::log_locals(&mut handler_state, locals.clone());
             });
             match res {
@@ -354,7 +357,7 @@ macro_rules! tla_log_all_globals {
     ($self:expr) => {{
         let mut globals = tla_get_globals!($self);
         let state_with_pairs = TLA_INSTRUMENTATION_STATE.get();
-        let mut state = state_with_pairs.state.borrow_mut();
+        let mut state = state_with_pairs.state.lock().expect("Failed to lock handler state in log_globals");
         $crate::log_globals(&mut state, globals);
     }};
 }
@@ -370,11 +373,11 @@ macro_rules! tla_log_request {
     ($label:expr, $to:expr, $method:expr, $message:expr) => {{
         let message = $message.to_tla_value();
         let res = TLA_INSTRUMENTATION_STATE.try_with(|state| {
-            let mut handler_state = state.handler_state.borrow_mut();
-            let globals = (*state.globals_snapshotter)();
+            let mut handler_state = state.handler_state.lock().expect("Failed to lock handler state in log_request");
+            let globals = (*state.globals_snapshotter.lock().expect("Couldn't lock the snapshotter in the_log_request"))();
             let location = $crate::SourceLocation { file: file!().to_string(), line: line!().to_string() };
             let new_state_pair = $crate::log_request(&mut handler_state, $label, $to, $method, message.clone(), globals, location);
-            let mut state_pairs = state.state_pairs.borrow_mut();
+            let mut state_pairs = state.state_pairs.lock().expect("Failed to lock state pairs in log_request");
             state_pairs.push(new_state_pair);
         });
         match res {
@@ -397,8 +400,8 @@ macro_rules! tla_log_response {
         let message = $message.to_tla_value();
         let location = $crate::SourceLocation { file: file!().to_string(), line: line!().to_string() };
         let res = TLA_INSTRUMENTATION_STATE.try_with(|state| {
-            let mut handler_state = state.handler_state.borrow_mut();
-            let globals = (*state.globals_snapshotter)();
+            let mut handler_state = state.handler_state.lock().expect("Failed to lock handler state in log_response");
+            let globals = (*state.globals_snapshotter.lock().expect("Couldn't lock the snapshotter in tla_log_response"))();
             $crate::log_response(&mut handler_state, $from, message.clone(), globals, location);
         });
         match res {
@@ -428,7 +431,7 @@ macro_rules! tla_log_method_call {
 macro_rules! tla_log_label {
     ($label:expr) => {{
         let res = TLA_INSTRUMENTATION_STATE.try_with(|state| {
-            let mut handler_state = state.handler_state.borrow_mut();
+            let mut handler_state = state.handler_state.lock().expect("Failed to lock handler state in log_label");
             $crate::log_label(&mut handler_state, $label);
         });
         match res {

@@ -2,7 +2,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     ptr::addr_of_mut,
 };
-
+use async_trait::async_trait;
 // Also possible to define a wrapper macro, in order to ensure that logging is only
 // done when certain crate features are enabled
 use tla_instrumentation::{
@@ -28,20 +28,18 @@ mod tla_stuff {
 
     use local_key::task_local;
     use std::{collections::BTreeMap, sync::RwLock};
-    use tla_instrumentation::{
-        GlobalState, InstrumentationState, Label, TlaConstantAssignment, TlaValue, ToTla, Update,
-        UpdateTrace, VarAssignment,
-    };
+    use tla_instrumentation::{GlobalState, InstrumentationState, Label, TlaConstantAssignment, TlaValue, ToTla, UnsafeSendPtr, Update, UpdateTrace, VarAssignment};
 
     task_local! {
         pub static TLA_INSTRUMENTATION_STATE: InstrumentationState;
-        pub static TLA_TRACES_LKEY: std::cell::RefCell<Vec<UpdateTrace>>;
+        pub static TLA_TRACES_LKEY: std::sync::Arc<std::sync::Mutex<Vec<UpdateTrace>>>;
     }
 
     pub static TLA_TRACES_MUTEX: Option<RwLock<Vec<UpdateTrace>>> = Some(RwLock::new(Vec::new()));
 
-    pub fn tla_get_globals(c: &StructCanister) -> GlobalState {
+    pub fn tla_get_globals(p: &UnsafeSendPtr<StructCanister>) -> GlobalState {
         let mut state = GlobalState::new();
+        let c = unsafe { &*(p.0) };
         state.add("counter", c.counter.to_tla_value());
         state.add("empty_fun", TlaValue::Function(BTreeMap::new()));
         state
@@ -137,9 +135,15 @@ fn call_maker() {
     );
 }
 
-impl StructCanister {
-    #[tla_update_method(my_f_desc())]
-    pub async fn my_method(&mut self) {
+#[async_trait]
+trait MyTrait {
+    async fn my_method(&mut self);
+}
+
+#[async_trait]
+impl MyTrait for StructCanister {
+    #[tla_update_method(my_f_desc(), is_async_fn = true)]
+    async fn my_method(&mut self) {
         self.counter += 1;
         let mut my_local: u64 = self.counter;
         tla_log_locals! {my_local: my_local};
@@ -269,7 +273,7 @@ fn struct_test() {
 
 fn tla_check_traces() {
     let traces = TLA_TRACES_LKEY.get();
-    let traces = traces.borrow();
+    let traces = traces.lock().expect("Couldn't lock traces in tla_check_traces");
     for t in &*traces {
         check_tla_trace(t)
     }
