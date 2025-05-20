@@ -142,6 +142,7 @@ pub(crate) struct MemoryLoader {
 
 impl MemoryLoader {
     pub fn new(page_map: PageMap, base_addr: usize) -> Self {
+        // println!("Setting up memory at base address {:x}", base_addr);
         let result = Self {
             page_map,
             base_addr,
@@ -155,14 +156,16 @@ impl MemoryLoader {
     }
 
     fn initial_setup(&self) {
+        // println!("mprotecting up to {WASM32_MAX_SIZE:x}");
         unsafe {
             mprotect(
                 self.base_addr as *mut c_void,
                 WASM32_MAX_SIZE as usize,
-                ProtFlags::PROT_READ & ProtFlags::PROT_WRITE,
+                ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
             )
         }
         .unwrap();
+        // std::thread::sleep(std::time::Duration::MAX);
         let instructions = self.page_map.get_base_memory_instructions();
         self.apply_instructions(instructions);
     }
@@ -237,7 +240,7 @@ impl MemoryLoader {
                         mmap(
                             self.page_start_addr(range.start),
                             range_size_in_bytes(&range),
-                            ProtFlags::PROT_READ & ProtFlags::PROT_WRITE,
+                            ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
                             MapFlags::MAP_PRIVATE | MapFlags::MAP_FIXED,
                             file_descriptor.fd,
                             offset as i64,

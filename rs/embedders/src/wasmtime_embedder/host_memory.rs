@@ -177,6 +177,7 @@ impl MmapMemory {
         let wasm_memory =
             unsafe { (start as *mut u8).add(prologue_guard_size_in_bytes) as *mut c_void };
 
+        // println!("Created memory with start {start:p}, size {size_in_bytes:x} and wasm memory {wasm_memory:p}");
         Self {
             start,
             size_in_bytes,

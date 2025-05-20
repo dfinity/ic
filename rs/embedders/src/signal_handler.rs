@@ -62,6 +62,8 @@ pub(crate) fn sigsegv_memory_tracker_handler(
         let (access_kind, si_addr) =
             unsafe { signal_access_kind_and_address(siginfo_ptr, ucontext_ptr) };
 
+        println!("Got signal at {si_addr:p} of type {access_kind:?}");
+
         // Find the last memory with base address below the signal address and
         // just take the first memory if none is found.
         //
