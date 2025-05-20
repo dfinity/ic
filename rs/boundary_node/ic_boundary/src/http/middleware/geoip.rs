@@ -11,7 +11,7 @@ use http::HeaderValue;
 use ic_bn_lib::http::headers::{X_IC_COUNTRY_CODE, X_REAL_IP};
 use maxminddb::geoip2;
 
-use crate::routes::ApiError;
+use crate::errors::ApiError;
 
 #[derive(Clone)]
 pub struct GeoData {

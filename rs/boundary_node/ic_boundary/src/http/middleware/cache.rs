@@ -20,7 +20,8 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     cli,
-    routes::{ApiError, ErrorCause, RequestContext},
+    errors::{ApiError, ErrorCause},
+    routes::RequestContext,
 };
 
 #[derive(Debug, Clone)]
@@ -36,6 +37,7 @@ impl KeyExtractor for KeyExtractorContext {
             .ok_or_else(|| {
                 CacheError::ExtractKey("unable to get RequestContext extension".into())
             })?;
+
         Ok(ctx.clone())
     }
 }
@@ -135,10 +137,13 @@ mod test {
     };
     use candid::Principal;
     use http::StatusCode;
-    use ic_bn_lib::http::cache::{CacheBypassReason, CacheStatus};
+    use ic_bn_lib::{
+        http::cache::{CacheBypassReason, CacheStatus},
+        principal,
+    };
     use tower::Service;
 
-    use crate::routes::ANONYMOUS_PRINCIPAL;
+    use crate::core::ANONYMOUS_PRINCIPAL;
 
     const CANISTER_1: &str = "sqjm4-qahae-aq";
     const MAX_RESP_SIZE: usize = 1024;
@@ -162,7 +167,7 @@ mod test {
             sender: Some(if anonymous {
                 ANONYMOUS_PRINCIPAL
             } else {
-                Principal::from_text("f7crg-kabae").unwrap()
+                principal!("f7crg-kabae")
             }),
             method_name: Some("foo".into()),
             ingress_expiry: Some(ingress_expiry),
