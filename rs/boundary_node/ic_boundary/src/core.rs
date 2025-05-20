@@ -988,33 +988,6 @@ pub fn setup_router(
         .merge(health_route)
 }
 
-// #[async_trait]
-// impl<T: Run> Run for WithMetrics<T> {
-//     async fn run(&mut self) -> Result<(), Error> {
-//         let start_time = Instant::now();
-//         let out = self.0.run().await;
-//         let duration = start_time.elapsed().as_secs_f64();
-//         let status = if out.is_ok() { "ok" } else { "fail" };
-
-//         let MetricParams {
-//             action,
-//             counter,
-//             recorder,
-//         } = &self.1;
-
-//         counter.with_label_values(&[status]).inc();
-//         recorder.with_label_values(&[status]).observe(duration);
-
-//         if out.is_err() {
-//             error!(action, status, duration, error = ?out.as_ref().err());
-//         } else {
-//             debug!(action, status, duration, error = ?out.as_ref().err());
-//         }
-
-//         out
-//     }
-// }
-
 // Process error chain trying to find given error type
 pub fn error_source<E: StdError + 'static>(error: &impl StdError) -> Option<&E> {
     let mut source = error.source();
