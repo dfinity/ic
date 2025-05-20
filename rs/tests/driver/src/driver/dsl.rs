@@ -1,5 +1,11 @@
 #![allow(dead_code)]
-use std::{collections::BTreeMap, panic::UnwindSafe, path::Path};
+#[rustfmt::skip]
+
+use std::{
+    collections::BTreeMap,
+    panic::UnwindSafe,
+    path::{Path},
+};
 
 use crate::driver::{
     pot_dsl::{PotSetupFn, SysTestFn},

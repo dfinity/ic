@@ -1,4 +1,6 @@
 #![allow(dead_code)]
+#[rustfmt::skip]
+use walkdir::WalkDir;
 use crate::driver::constants;
 use crate::driver::{
     farm::{Farm, HostFeature},
@@ -25,7 +27,6 @@ use crate::driver::{
 };
 use crate::k8s::tnet::TNet;
 use crate::util::block_on;
-use walkdir::WalkDir;
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
