@@ -825,6 +825,7 @@ pub(crate) mod test {
             Duration::from_millis(1),
             Arc::new(checker),
             persister,
+            #[allow(clippy::disallowed_types)]
             Mutex::new(channel_recv),
         );
         tokio::spawn(async move {
@@ -873,6 +874,7 @@ pub(crate) mod test {
             Duration::from_millis(1),
             Arc::new(checker),
             persister,
+            #[allow(clippy::disallowed_types)]
             Mutex::new(channel_recv),
         );
         tokio::spawn(async move {
@@ -958,6 +960,7 @@ pub(crate) mod test {
             Duration::from_millis(1),
             Arc::new(checker),
             persister,
+            #[allow(clippy::disallowed_types)]
             Mutex::new(channel_recv),
         );
 
