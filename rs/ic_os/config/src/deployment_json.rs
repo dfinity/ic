@@ -24,6 +24,8 @@ pub struct Deployment {
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct Logging {
     pub hosts: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<String>,
 }
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
