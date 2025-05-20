@@ -5523,10 +5523,12 @@ pub mod metadata {
 
 pub mod archiving {
     use super::*;
+    use ic_ledger_canister_core::ledger::MAX_BLOCKS_TO_ARCHIVE;
     use ic_ledger_canister_core::range_utils;
     use ic_types::ingress::{IngressState, IngressStatus};
     use ic_types::messages::MessageId;
     use icp_ledger::{GetEncodedBlocksResult, QueryEncodedBlocksResponse};
+    use icrc_ledger_types::icrc1::transfer::NumTokens;
     use icrc_ledger_types::icrc3::blocks::BlockWithId;
     use std::cmp::Ordering;
     use std::fmt::Debug;
@@ -5904,10 +5906,9 @@ pub mod archiving {
             .unwrap();
     }
 
-    /// Test that when archiving lots of blocks at once, the ledger hits the instruction limit when
-    /// purging the archived blocks from the ledger, even though sending the blocks to the archive
-    /// is done in chunks.
-    pub fn test_archiving_hits_instruction_limit_purging_blocks_from_ledger<T, B>(
+    /// Test that when trying to archiving lots of blocks at once, the ledger respects the upper
+    /// limit for `num_blocks_to_archive`.
+    pub fn test_archiving_respects_num_blocks_to_archive_upper_limit<T, B>(
         ledger_wasm: Vec<u8>,
         encode_init_args: fn(InitArgs) -> T,
         num_initial_balances: u64,
@@ -5958,52 +5959,70 @@ pub mod archiving {
 
         let initial_chain_length = get_blocks_fn(&env, ledger_id, 0, 1).chain_length;
 
-        // Perform a transaction. This should spawn an archive, and archive `num_blocks_to_archive`,
-        // but since there are so many blocks to archive, the archiving will be done in chunks.
-        // Finally, the blocks that were archived should be purged from the ledger - however, since
-        // blocks are purged from the stable BTreeMap one at a time, this consumes so many
-        // instructions that the instruction limit is hit, and the response to the transfer is an
-        // error.
-        let transfer_error = env
-            .execute_ingress_as(
-                p1,
-                ledger_id,
-                "icrc1_transfer",
-                encode_transfer_args(p1.0, p2.0, 12_344),
-            )
-            .expect_err("transfer should not fit in the instruction limit");
-        assert_eq!(
-            transfer_error.code(),
-            ErrorCode::CanisterInstructionLimitExceeded
+        // Perform a transaction to trigger archiving.
+        let transfer_block_id = send_transfer(
+            &env,
+            ledger_id,
+            p1.0,
+            &TransferArg {
+                from_subaccount: None,
+                to: Account::from(p2.0),
+                fee: None,
+                created_at_time: None,
+                memo: None,
+                amount: NumTokens::from(12_345u64),
+            },
+        )
+        .expect("transfer should succeed");
+
+        assert_eq!(transfer_block_id, initial_chain_length);
+
+        // The maximum number of blocks that will be returned from the ledger in a get_blocks/
+        // icrc3_get_blocks response.
+        const MAX_BLOCKS_PER_RESPONSE: usize = 100;
+        const BLOCKS_EXPECTED_FROM_ARCHIVE: usize = 5;
+        const BLOCKS_EXPECTED_FROM_LEDGER: usize =
+            MAX_BLOCKS_PER_RESPONSE - BLOCKS_EXPECTED_FROM_ARCHIVE;
+
+        // Try to retrieve up to MAX_BLOCKS_PER_RESPONSE from the ledger.
+        let get_blocks_response = get_blocks_fn(
+            &env,
+            ledger_id,
+            (MAX_BLOCKS_TO_ARCHIVE - BLOCKS_EXPECTED_FROM_ARCHIVE) as u64,
+            MAX_BLOCKS_PER_RESPONSE,
         );
-
-        // However, since the archiving is done using asynchronous inter-canister calls, the
-        // transfer actually succeeded and was committed.
-        let chain_length = get_blocks_fn(&env, ledger_id, initial_chain_length, 1).chain_length;
-        assert_eq!(initial_chain_length + 1, chain_length);
-
-        // Since a number of blocks were sent to the archive, but not successfully purged from the
-        // ledger, it is possible to get some of them from either location. In particular, block 0
-        // should appear in both locations.
-        let ledger_blocks_res = get_blocks_fn(&env, ledger_id, 0, 1);
+        // The ledger should contain blocks from index MAX_BLOCKS_TO_ARCHIVE onwards, so the above
+        // request should return BLOCKS_EXPECTED_FROM_LEDGER blocks
+        // from the ledger, and point to the archive for the rest.
+        assert_eq!(
+            get_blocks_response.blocks.len(),
+            BLOCKS_EXPECTED_FROM_LEDGER
+        );
+        // The archive should contain exactly MAX_BLOCKS_TO_ARCHIVE blocks, and the archived range
+        // should be (MAX_BLOCKS_TO_ARCHIVE - BLOCKS_EXPECTED_FROM_ARCHIVE)..MAX_BLOCKS_TO_ARCHIVE.
+        let archive_info = get_blocks_response
+            .archived_ranges
+            .first()
+            .expect("the archive should have some blocks");
+        let expected_archive_range = range_utils::make_range(
+            (MAX_BLOCKS_TO_ARCHIVE - BLOCKS_EXPECTED_FROM_ARCHIVE) as u64,
+            BLOCKS_EXPECTED_FROM_ARCHIVE,
+        );
+        assert_eq!(expected_archive_range, archive_info.archived_range);
+        // Block (MAX_BLOCKS_TO_ARCHIVE-1) should be in the archive.
         let archive_ids = get_archives(&env, ledger_id);
         let archive_blocks_res = archive_get_blocks_fn(
             &env,
             CanisterId::unchecked_from_principal(PrincipalId::from(
                 *archive_ids.first().expect("should have one archive"),
             )),
-            0,
+            (MAX_BLOCKS_TO_ARCHIVE - 1) as u64,
             1,
         );
+        assert_eq!(archive_blocks_res.blocks.len(), 1);
         assert_eq!(
-            ledger_blocks_res
-                .blocks
-                .first()
-                .expect("ledger should contain block 0"),
-            archive_blocks_res
-                .blocks
-                .first()
-                .expect("archive should contain block 0")
+            archive_blocks_res.first_block_index,
+            (MAX_BLOCKS_TO_ARCHIVE - 1) as u64
         );
     }
 
