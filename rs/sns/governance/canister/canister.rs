@@ -37,14 +37,14 @@ use ic_sns_governance_api::pb::v1::{
     topics::{ListTopicsRequest, ListTopicsResponse},
     ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
     FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
-    GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
-    GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
+    GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMetricsRequest,
+    GetMode, GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
     GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
     GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
-    GetSnsStatusRequest, GetUpgradeJournalRequest, GetUpgradeJournalResponse,
-    Governance as GovernanceApi, ListNervousSystemFunctionsResponse, ListNeurons,
-    ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron, ManageNeuronResponse,
-    NervousSystemParameters, RewardEvent, SetMode, SetModeResponse,
+    GetUpgradeJournalRequest, GetUpgradeJournalResponse, Governance as GovernanceApi,
+    ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
+    ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
+    RewardEvent, SetMode, SetModeResponse,
 };
 #[cfg(feature = "test")]
 use ic_sns_governance_api::pb::v1::{
@@ -354,20 +354,8 @@ fn get_metadata(request: GetMetadataRequest) -> GetMetadataResponse {
 
 /// Returns statistics of the SNS
 #[query]
-async fn get_statistics(
-    request: GetSnsStatusRequest,
-) -> get_sns_status_response::GetSnsStatusResponse {
-    log!(INFO, "get_statistics");
-    let query_result = governance()
-        .get_statistics(sns_gov_pb::GetSnsStatusRequest::from(request))
-        .await;
-
-    match query_result {
-        Ok(query_result) => get_sns_status_response::GetSnsStatusResponse::from(query_result),
-        Err(query_error) => {
-            get_sns_status_response::GetSnsStatusResponse::Err(query_error.error_message.clone())
-        }
-    }
+async fn get_metrics(_request: GetMetricsRequest) -> get_sns_status_response::GetMetricsResponse {
+    unimplemented!()
 }
 
 /// Returns the initialization parameters used to spawn an SNS

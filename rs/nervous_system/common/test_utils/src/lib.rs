@@ -124,13 +124,6 @@ impl ICRC1Ledger for InterleavingTestLedger {
     fn canister_id(&self) -> CanisterId {
         CanisterId::from_u64(1)
     }
-
-    async fn icrc3_get_blocks(
-        &self,
-        _args: Vec<icrc_ledger_types::icrc3::blocks::GetBlocksRequest>,
-    ) -> Result<icrc_ledger_types::icrc3::blocks::GetBlocksResult, NervousSystemError> {
-        panic!("InterleavingTestLedger::icrc3_get_blocks()")
-    }
 }
 
 /// Drains an UnboundedReceiver channel by sending `Ok()` signals for all incoming
@@ -265,13 +258,6 @@ impl ICRC1Ledger for SpyLedger {
     fn canister_id(&self) -> CanisterId {
         CanisterId::from_u64(1)
     }
-
-    async fn icrc3_get_blocks(
-        &self,
-        _args: Vec<icrc_ledger_types::icrc3::blocks::GetBlocksRequest>,
-    ) -> Result<icrc_ledger_types::icrc3::blocks::GetBlocksResult, NervousSystemError> {
-        panic!("Spyledger::icrc3_get_blocks()")
-    }
 }
 
 #[async_trait]
@@ -341,13 +327,6 @@ impl IcpLedger for SpyLedger {
     }
 
     fn canister_id(&self) -> CanisterId {
-        unimplemented!()
-    }
-
-    async fn icrc3_get_blocks(
-        &self,
-        _args: Vec<icrc_ledger_types::icrc3::blocks::GetBlocksRequest>,
-    ) -> Result<icrc_ledger_types::icrc3::blocks::GetBlocksResult, NervousSystemError> {
         unimplemented!()
     }
 }

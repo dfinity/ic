@@ -11,7 +11,6 @@ use icrc_ledger_types::icrc1::{
     account::{Account, Subaccount},
     transfer::{Memo, TransferArg},
 };
-use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use num_traits::ToPrimitive;
 
 // A ICRC1 client runtime that uses dfn_* functionalities
@@ -114,13 +113,5 @@ impl ICRC1Ledger for LedgerCanister {
     fn canister_id(&self) -> CanisterId {
         let principal_id = PrincipalId::from(self.client.ledger_canister_id);
         CanisterId::unchecked_from_principal(principal_id)
-    }
-
-    // Shah-TODO: if this function should be implemented?
-    async fn icrc3_get_blocks(
-        &self,
-        _args: Vec<GetBlocksRequest>,
-    ) -> Result<GetBlocksResult, NervousSystemError> {
-        unimplemented!()
     }
 }

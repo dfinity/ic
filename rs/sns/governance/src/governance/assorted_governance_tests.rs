@@ -50,8 +50,6 @@ use ic_sns_governance_api::pb::v1::topics::Topic;
 use ic_sns_governance_token_valuation::{Token, ValuationFactors};
 use ic_sns_test_utils::itest_helpers::UserInfo;
 use ic_test_utilities_types::ids::canister_test_id;
-use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
-use icrc_ledger_types::icrc3::blocks::GetBlocksResult;
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
 use proptest::prelude::{prop_assert, proptest};
@@ -85,13 +83,6 @@ impl ICRC1Ledger for AlwaysSucceedingLedger {
 
     fn canister_id(&self) -> CanisterId {
         CanisterId::from_u64(42)
-    }
-
-    async fn icrc3_get_blocks(
-        &self,
-        _args: Vec<GetBlocksRequest>,
-    ) -> Result<GetBlocksResult, NervousSystemError> {
-        unimplemented!()
     }
 }
 
@@ -169,13 +160,6 @@ async fn test_perform_transfer_sns_treasury_funds_execution_fails_when_another_c
         }
 
         fn canister_id(&self) -> CanisterId {
-            unimplemented!()
-        }
-
-        async fn icrc3_get_blocks(
-            &self,
-            _args: Vec<GetBlocksRequest>,
-        ) -> Result<GetBlocksResult, NervousSystemError> {
             unimplemented!()
         }
     }
@@ -304,13 +288,6 @@ async fn test_neuron_operations_exclude_one_another() {
         }
 
         fn canister_id(&self) -> CanisterId {
-            unimplemented!()
-        }
-
-        async fn icrc3_get_blocks(
-            &self,
-            _args: Vec<GetBlocksRequest>,
-        ) -> Result<GetBlocksResult, NervousSystemError> {
             unimplemented!()
         }
     }

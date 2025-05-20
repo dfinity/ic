@@ -55,16 +55,15 @@ use crate::{
             GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
             GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse,
             GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
-            GetSnsInitializationParametersResponse, GetSnsStatusRequest, GetSnsStatusResponse,
-            Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
-            ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
-            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
-            ManageSnsMetadata, MintSnsTokens, MintTokensRequest, MintTokensResponse,
-            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
-            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
-            ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
-            RewardEvent, SetTopicsForCustomProposals, Tally, Topic, TransferSnsTreasuryFunds,
-            UpgradeSnsControlledCanister, Vote, WaitForQuietState,
+            GetSnsInitializationParametersResponse, Governance as GovernanceProto, GovernanceError,
+            ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
+            ListProposalsResponse, ManageDappCanisterSettings, ManageLedgerParameters,
+            ManageNeuron, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens,
+            MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
+            Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
+            Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
+            RegisterDappCanisters, RewardEvent, SetTopicsForCustomProposals, Tally, Topic,
+            TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, Vote, WaitForQuietState,
         },
     },
     proposal::{
@@ -2006,40 +2005,6 @@ impl Governance {
             })
             .min()
             .unwrap_or(u64::MAX);
-    }
-
-    pub async fn get_statistics(
-        &self,
-        request: GetSnsStatusRequest,
-    ) -> Result<GetSnsStatusResponse, GovernanceError> {
-        let time_window_seconds =
-            request
-                .time_window_seconds
-                .ok_or(GovernanceError::new_with_message(
-                    ErrorType::PreconditionFailed,
-                    "Error: parsing the request failed on unwrapping `time_window_seconds` field"
-                        .to_string(),
-                ))?;
-        let num_recent_proposals = self.recent_proposals(time_window_seconds);
-        let last_transaction_timestamp = 0;
-
-        Ok(GetSnsStatusResponse {
-            num_recent_proposals: Some(num_recent_proposals),
-            last_transaction_timestamp: Some(last_transaction_timestamp),
-        })
-    }
-
-    fn recent_proposals(&self, time_window_seconds: u64) -> u64 {
-        self.proto
-            .proposals
-            .values()
-            .filter(|proposal_data| {
-                self.env
-                    .now()
-                    .saturating_sub(proposal_data.proposal_creation_timestamp_seconds)
-                    <= time_window_seconds
-            })
-            .count() as u64
     }
 
     /// Starts execution of the given proposal in the background.

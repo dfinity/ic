@@ -1199,13 +1199,6 @@ async fn zero_total_reward_shares() {
         fn canister_id(&self) -> CanisterId {
             CanisterId::from_u64(1)
         }
-
-        async fn icrc3_get_blocks(
-            &self,
-            _args: Vec<icrc_ledger_types::icrc3::blocks::GetBlocksRequest>,
-        ) -> Result<icrc_ledger_types::icrc3::blocks::GetBlocksResult, NervousSystemError> {
-            unimplemented!()
-        }
     }
 
     let environment = NativeEnvironment::default();
@@ -1377,13 +1370,6 @@ async fn couple_of_neurons_who_voted_get_rewards() {
 
         fn canister_id(&self) -> CanisterId {
             CanisterId::from_u64(1)
-        }
-
-        async fn icrc3_get_blocks(
-            &self,
-            _args: Vec<icrc_ledger_types::icrc3::blocks::GetBlocksRequest>,
-        ) -> Result<icrc_ledger_types::icrc3::blocks::GetBlocksResult, NervousSystemError> {
-            unimplemented!()
         }
     }
 

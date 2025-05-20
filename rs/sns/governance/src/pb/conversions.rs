@@ -1821,34 +1821,6 @@ impl From<pb_api::GetMetadataRequest> for pb::GetMetadataRequest {
     }
 }
 
-impl From<pb_api::GetSnsStatusRequest> for pb::GetSnsStatusRequest {
-    fn from(value: pb_api::GetSnsStatusRequest) -> Self {
-        Self {
-            time_window_seconds: value.time_window_seconds,
-        }
-    }
-}
-impl From<pb::GetSnsStatusResponse> for pb_api::get_sns_status_response::GetSnsStatusResponse {
-    fn from(value: pb::GetSnsStatusResponse) -> Self {
-        match (
-            &value.num_recent_proposals,
-            &value.last_transaction_timestamp,
-        ) {
-            (Some(num_recent_proposals), Some(last_transaction_timestamp)) => {
-                Self::Ok(pb_api::get_sns_status_response::SnsStatus {
-                    num_recent_proposals: Some(*num_recent_proposals),
-                    last_transaction_timestamp: Some(*last_transaction_timestamp),
-                })
-            }
-            (Some(_), None) => Self::Err("Missing `last_transaction_timestamp`".to_string()),
-            (None, Some(_)) => Self::Err("Missing `num_recent_proposals`".to_string()),
-            (None, None) => Self::Err(
-                "Missing `num_recent_proposals` & `last_transaction_timestamp`".to_string(),
-            ),
-        }
-    }
-}
-
 impl From<pb::GetMetadataResponse> for pb_api::GetMetadataResponse {
     fn from(item: pb::GetMetadataResponse) -> Self {
         Self {

@@ -323,13 +323,6 @@ impl ICRC1Ledger for MockLedger {
     fn canister_id(&self) -> CanisterId {
         CanisterId::from_u64(1)
     }
-
-    async fn icrc3_get_blocks(
-        &self,
-        _args: Vec<icrc_ledger_types::icrc3::blocks::GetBlocksRequest>,
-    ) -> Result<icrc_ledger_types::icrc3::blocks::GetBlocksResult, NervousSystemError> {
-        unimplemented!()
-    }
 }
 
 pub fn spy_clients() -> CanisterClients<

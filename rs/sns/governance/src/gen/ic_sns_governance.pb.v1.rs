@@ -2218,36 +2218,6 @@ pub struct GetMetadataResponse {
     #[prost(string, optional, tag = "4")]
     pub description: ::core::option::Option<::prost::alloc::string::String>,
 }
-/// Request message for 'get_sns_status'
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
-    Clone,
-    Copy,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct GetSnsStatusRequest {
-    #[prost(uint64, optional, tag = "1")]
-    pub time_window_seconds: ::core::option::Option<u64>,
-}
-/// Response message for 'get_sns_status'
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
-    Clone,
-    Copy,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct GetSnsStatusResponse {
-    #[prost(uint64, optional, tag = "1")]
-    pub num_recent_proposals: ::core::option::Option<u64>,
-    #[prost(uint64, optional, tag = "2")]
-    pub last_transaction_timestamp: ::core::option::Option<u64>,
-}
 /// Request message for 'get_sns_initialization_parameters'
 #[derive(
     candid::CandidType,
