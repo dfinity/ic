@@ -41,7 +41,6 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:clap",
     "@crate_index//:dashmap",
-    "@crate_index//:derive-new",
     "@crate_index//:ethnum",
     "@crate_index//:futures",
     "@crate_index//:futures-util",
@@ -95,6 +94,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:async-trait",
+    "@crate_index//:derive-new",
 ]
 
 DEV_DEPENDENCIES = [
