@@ -1,3 +1,95 @@
+# ICRC-1 Rosetta API Python Client
+
+This Python client library provides tools for interacting with ICRC-1 tokens on the Internet Computer blockchain through the Rosetta API. It offers functionality for account balance queries, token transfers, block data retrieval, and more.
+
+## Features
+
+- **Automatic Token Discovery**: The client automatically discovers token information (symbol and decimals) using multiple methods:
+  1. Network options API
+  2. Block history scanning
+  3. Fallback to defaults (ICRC1, 8 decimals)
+
+- **Account Management**: Create and manage accounts with principal IDs and optional subaccounts
+
+- **Balance Queries**: Fetch token balances for any account
+
+- **Transaction Processing**: Transfer tokens between accounts with appropriate fee handling
+
+- **Block Data Retrieval**: Read block data, search for transactions, and examine the chain state
+
+## Code Design
+
+The client is designed with simplicity and maintainability in mind:
+
+- **Helper Methods**: Complex functionality is broken down into smaller, focused helper methods
+- **Clean Structure**: Early returns are used instead of deep nesting to improve readability
+- **Clear Abstractions**: Each component has a single responsibility
+- **Robust Testing**: Unit tests with mocking validate the functionality without network calls
+- **Consistent Patterns**: Standardized error handling and response formatting throughout
+
+This approach makes the code easier to maintain, extend, and understand.
+
+## Usage Examples
+
+### Basic Client Initialization
+
+```python
+from rosetta_client import RosettaClient
+
+# Initialize the client
+client = RosettaClient(
+    node_address="http://localhost:8080",
+    canister_id="3jkp5-oyaaa-aaaaj-azwqa-cai"
+)
+
+# The client automatically discovers token information
+print(f"Token: {client.token_info['symbol']} (decimals: {client.token_info['decimals']})")
+```
+
+### Checking Account Balance
+
+```python
+# Get account balance (with auto-discovered token info)
+balance = client.get_balance(principal="abc123...")
+print(f"Balance: {int(balance['balances'][0]['value']) / 10**balance['balances'][0]['currency']['decimals']} {balance['balances'][0]['currency']['symbol']}")
+```
+
+### Making a Transfer
+
+```python
+# Setup with private key (for signing transactions)
+client.setup_keys(private_key_path="./my_key.pem")
+
+# Transfer tokens
+result = client.transfer(
+    from_principal="sender-principal",
+    to_principal="recipient-principal",
+    amount=1000000,  # Raw token amount
+    fee=10000,       # Transaction fee
+    private_key_path="./my_key.pem"
+)
+
+print(f"Transaction hash: {result['transaction_identifier']['hash']}")
+```
+
+## Available Tools
+
+- **get_token_info.py**: Shows token information discovery process
+- **get_account_balance.py**: Displays account balance with human-readable formatting
+- **transfer.py**: Transfers tokens between accounts
+- **test_token_info.py**: Demonstrates and tests token info discovery process
+
+## Token Information Discovery
+
+The client implements multiple ways to discover token information:
+
+1. **Network Options**: First tries to get token info from the `/network/options` endpoint
+2. **Block History**: If network options don't contain token info, examines recent blocks (transactions)
+3. **Default Fallback**: Uses ICRC1 symbol and 8 decimals if no other information is available
+4. **Manual Override**: Allows explicit setting via `client.token_override = {"symbol": "...", "decimals": ...}`
+
+This multi-layered approach ensures the client always has access to token information for proper formatting and display of token amounts.
+
 # Internet Computer ICRC-1 Rosetta API Python Examples
 
 This repository contains Python examples demonstrating how to interact with ICRC-1 tokens on the Internet Computer through the Rosetta API.
@@ -5,7 +97,6 @@ This repository contains Python examples demonstrating how to interact with ICRC
 ## Table of Contents
 - [Overview](#overview)
 - [Setup](#setup)
-- [Generating ECDSA Keys](#generating-ecdsa-keys)
 - [Running the Examples](#running-the-examples)
 - [Example Scripts](#example-scripts)
   - [Account Balances](#account-balances)
@@ -25,32 +116,10 @@ The ICRC Rosetta API provides a standardized interface for blockchain interactio
 
 ## Setup
 
-1. **Install dependencies**
-
-```sh
-pip3 install -r requirements.txt
-```
-
-2. **Access to a Rosetta node**
-
-You'll need access to an ICRC Rosetta API endpoint, either:
-- Local node running at http://localhost:8082
-- Public endpoint (if available)
-
-## Generating ECDSA Keys
-
-To sign transactions (required for transfers), you need an ECDSA private key. Here's how to generate one:
-
-```sh
-# Generate a private key in PEM format
-openssl ecparam -name secp256k1 -genkey -noout -out my_private_key.pem
-
-# View the private key (optional)
-openssl ec -in my_private_key.pem -text -noout
-
-# Generate corresponding public key
-openssl ec -in my_private_key.pem -pubout -out my_public_key.pem
-```
+Please refer to the [common setup instructions](../../README.md) for:
+- Installing dependencies
+- Generating keys (both Ed25519 and secp256k1 are supported for ICRC-1 tokens)
+- Accessing a Rosetta node
 
 ## Running the Examples
 

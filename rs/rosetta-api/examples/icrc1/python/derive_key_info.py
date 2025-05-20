@@ -50,7 +50,7 @@ def main():
 
     try:
         # Use the static method to derive key information
-        key_info = RosettaClient.derive_key_info(args.private_key_path, args.verbose)
+        key_info = RosettaClient.derive_key_info(private_key_path=args.private_key_path, verbose=args.verbose)
 
         # Display results
         if args.json:

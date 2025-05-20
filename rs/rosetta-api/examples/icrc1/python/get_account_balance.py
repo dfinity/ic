@@ -38,32 +38,42 @@ def main():
     )
     parser.add_argument("--canister-id", type=str, required=True, help="ICRC-1 canister ID")
     parser.add_argument("--principal-id", type=str, required=True, help="Principal ID to check balance for")
-    parser.add_argument("--sub-account", type=str, help="Optional subaccount in hex format (default: none)")
+    parser.add_argument("--sub-account", type=str, help="Optional subaccount in hex format")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
     parser.add_argument("--raw", action="store_true", help="Output raw JSON response")
 
     args = parser.parse_args()
 
     # Initialize the Rosetta client
-    client = RosettaClient(args.node_address, args.canister_id)
+    client = RosettaClient(node_address=args.node_address, canister_id=args.canister_id, verbose=args.verbose)
+
+    if args.verbose:
+        print(f"Auto-discovered token: {client.token_info['symbol']} (decimals: {client.token_info['decimals']})")
 
     # Get the balance
     try:
-        balance_response = client.get_balance(
-            principal=args.principal_id, subaccount=args.sub_account, verbose=args.verbose
-        )
+        # Handle optional subaccount
+        subaccount = args.sub_account if args.sub_account else None
+
+        balance_response = client.get_balance(principal=args.principal_id, subaccount=subaccount, verbose=args.verbose)
 
         # Display the results
         if args.raw:
             print(json.dumps(balance_response, indent=2))
         else:
+            # Get token information
+            currency = balance_response["balances"][0]["currency"]
+            symbol = currency["symbol"]
+            decimals = currency["decimals"]
+            raw_balance = int(balance_response["balances"][0]["value"])
+            human_balance = raw_balance / (10**decimals)
+
             print("\nAccount Balance:")
             print(f"  Principal: {args.principal_id}")
             if args.sub_account:
                 print(f"  Subaccount: {args.sub_account}")
-            print(
-                f"  Balance: {balance_response['balances'][0]['value']} {balance_response['balances'][0]['currency']['symbol']}"
-            )
+            print(f"  Token: {symbol} (decimals: {decimals})")
+            print(f"  Balance: {human_balance} {symbol} ({raw_balance} raw units)")
             print(f"  Block Index: {balance_response['block_identifier']['index']}")
     except Exception as e:
         print(f"Error: {e}")

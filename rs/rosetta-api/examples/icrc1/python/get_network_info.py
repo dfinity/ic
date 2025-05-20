@@ -51,7 +51,7 @@ def main():
 
     args = parser.parse_args()
 
-    client = RosettaClient(args.node_address, args.canister_id)
+    client = RosettaClient(node_address=args.node_address, canister_id=args.canister_id, verbose=args.verbose)
 
     # Get network list
     print("Fetching available networks...")
@@ -152,7 +152,7 @@ def main():
                 print(f"    - {error_code}: {error_message} (Retriable: {retriable})")
 
         # Show supported currencies
-        if "allow" in options and "currency" in options["allow"]:
+        if "allow" in options and "currencies" in options["allow"]:
             currencies = options["allow"].get("currencies", [])
             if currencies:
                 print("\n  Supported Currencies:")

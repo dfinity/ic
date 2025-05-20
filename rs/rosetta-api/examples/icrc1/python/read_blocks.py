@@ -51,7 +51,21 @@ def format_operation(op):
         value = amount.get("value", "0")
         currency = amount.get("currency", {})
         symbol = currency.get("symbol", "Unknown")
-        return f"{op['type']} {value} {symbol} ({status})"
+        decimals = currency.get("decimals", 0)
+
+        # Convert value to float and adjust according to decimals
+        try:
+            numeric_value = int(value)
+            adjusted_value = numeric_value / (10**decimals)
+            formatted_value = (
+                f"{adjusted_value:.{decimals}f}".rstrip("0").rstrip(".")
+                if "." in f"{adjusted_value:.{decimals}f}"
+                else f"{adjusted_value:.0f}"
+            )
+        except ValueError:
+            formatted_value = value
+
+        return f"{op['type']} {formatted_value} {symbol} ({status})"
     else:
         return f"{op['type']} ({status})"
 
@@ -94,6 +108,10 @@ def format_block(block, show_txs=True):
     """Format a block for display"""
     result = []
 
+    # The response from the API contains a 'block' field that contains the actual block data
+    if "block" in block:
+        block = block["block"]
+
     # Get block identifier
     block_id = block.get("block_identifier", {})
     block_parent = block.get("parent_block_identifier", {})
@@ -133,14 +151,14 @@ def main():
     parser.add_argument("--canister-id", type=str, required=True, help="ICRC-1 canister ID")
     parser.add_argument("--block-index", type=int, help="Specific block index to fetch")
     parser.add_argument("--block-hash", type=str, help="Specific block hash to fetch")
-    parser.add_argument("--count", type=int, default=1, help="Number of blocks to fetch (default: 1, from latest)")
+    parser.add_argument("--count", type=int, default=1, help="Number of blocks to fetch (default: 1)")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
     parser.add_argument("--raw", action="store_true", help="Output raw JSON response")
 
     args = parser.parse_args()
 
     # Initialize the Rosetta client
-    client = RosettaClient(args.node_address, args.canister_id)
+    client = RosettaClient(node_address=args.node_address, canister_id=args.canister_id, verbose=args.verbose)
 
     # Track blocks we've fetched
     fetched_blocks = []
@@ -148,12 +166,12 @@ def main():
     try:
         # Case 1: Fetch by specific hash
         if args.block_hash:
-            block = client.get_block(block_hash=args.block_hash, verbose=args.verbose)
+            block = client.get_block(block_index=None, block_hash=args.block_hash, verbose=args.verbose)
             fetched_blocks.append(block)
 
         # Case 2: Fetch specific block index
         elif args.block_index is not None:
-            block = client.get_block(block_index=args.block_index, verbose=args.verbose)
+            block = client.get_block(block_index=args.block_index, block_hash=None, verbose=args.verbose)
             fetched_blocks.append(block)
 
         # Case 3: Fetch latest block and potentially previous ones
@@ -169,7 +187,7 @@ def main():
                 latest_index = status["current_block_identifier"]["index"]
             else:
                 # If we can't determine the latest index, try to get the latest block directly
-                block = client.get_block(verbose=args.verbose)
+                block = client.get_block(block_index=None, block_hash=None, verbose=args.verbose)
                 if (
                     "block" in block
                     and "block_identifier" in block["block"]
@@ -184,7 +202,7 @@ def main():
                 idx = latest_index - i
                 if idx < 0:
                     break
-                block = client.get_block(block_index=idx, verbose=args.verbose)
+                block = client.get_block(block_index=idx, block_hash=None, verbose=args.verbose)
                 fetched_blocks.append(block)
     except Exception as e:
         print(f"Error: {e}")
