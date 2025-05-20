@@ -135,7 +135,7 @@ mod test {
                 name: "mainnet".to_string(),
                 mgmt_mac: None,
             },
-            logging: Logging { hosts },
+            logging: Logging { hosts, tags: None },
             nns: Nns {
                 url: vec![
                     Url::parse("https://icp-api.io").unwrap(),
