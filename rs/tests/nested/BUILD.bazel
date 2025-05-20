@@ -51,7 +51,7 @@ genrule(
 system_test_nns(
     name = "registration",
     env = MAINNET_ENV,
-    extra_head_nns_tags = ["system_test_hourly"],
+    extra_head_nns_tags = [],
     flaky = True,  # flakiness rate of over 2% over the month from 2025-02-11 till 2025-03-11.
     tags = ["system_test_hourly"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -74,7 +74,7 @@ rust_binary(
 system_test_nns(
     name = "hostos_upgrade_smoke_test",
     env = MAINNET_ENV,
-    extra_head_nns_tags = ["system_test_hourly"],
+    extra_head_nns_tags = [],
     flaky = True,
     tags = ["system_test_hourly"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -94,7 +94,7 @@ system_test_nns(
     env = MAINNET_ENV | {
         "NODE_OPERATOR_PRIV_KEY_PATH": "$(rootpath //ic-os/setupos:config/node_operator_private_key.pem)",
     },
-    extra_head_nns_tags = ["system_test_hourly"],
+    extra_head_nns_tags = [],
     flaky = True,  # flakiness rate of 5% over the month from 2025-02-11 till 2025-03-11.
     tags = ["system_test_hourly"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -116,7 +116,7 @@ system_test_nns(
     env = MAINNET_ENV | {
         "NODE_OPERATOR_PRIV_KEY_PATH": "$(rootpath //ic-os/setupos:config/node_operator_private_key.pem)",
     },
-    extra_head_nns_tags = ["system_test_hourly"],
+    extra_head_nns_tags = [],
     flaky = True,
     tags = ["manual"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
