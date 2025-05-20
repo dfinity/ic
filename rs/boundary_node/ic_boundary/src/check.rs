@@ -9,10 +9,12 @@ use anyhow::Error;
 use async_trait::async_trait;
 use bytes::Buf;
 use http::Method;
-use ic_bn_lib::http::Client;
+use ic_bn_lib::{http::Client, tasks::Run};
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
 use simple_moving_average::{SumTreeSMA, SMA};
+#[allow(clippy::disallowed_types)]
+use tokio::sync::Mutex;
 use tokio::{
     select,
     sync::{mpsc, watch},
@@ -22,7 +24,6 @@ use tracing::{debug, warn};
 use url::Url;
 
 use crate::{
-    core::Run,
     metrics::{MetricParamsCheck, WithMetricsCheck},
     persist::Persist,
     snapshot::RegistrySnapshot,
@@ -484,82 +485,74 @@ impl GlobalActor {
 }
 
 // Runner receives new registry snapshots and restarts GlobalActor
+#[derive(derive_new::new)]
+#[allow(clippy::disallowed_types)]
 pub struct Runner {
     max_height_lag: u64,
     check_interval: Duration,
     update_interval: Duration,
-    tracker: TaskTracker,
-    token: CancellationToken,
     checker: Arc<dyn Check>,
     persister: Arc<dyn Persist>,
-    channel_snapshot: watch::Receiver<Option<Arc<RegistrySnapshot>>>,
+    // Tokio mutex is used because its MutexGuard is Send
+    channel_snapshot: Mutex<watch::Receiver<Option<Arc<RegistrySnapshot>>>>,
 }
 
 impl Runner {
-    pub fn new(
-        channel_snapshot: watch::Receiver<Option<Arc<RegistrySnapshot>>>,
-        max_height_lag: u64,
-        persister: Arc<dyn Persist>,
-        checker: Arc<dyn Check>,
-        check_interval: Duration,
-        update_interval: Duration,
-    ) -> Self {
-        Self {
-            max_height_lag,
-            tracker: TaskTracker::new(),
-            token: CancellationToken::new(),
-            persister,
-            checker,
-            check_interval,
-            update_interval,
-            channel_snapshot,
-        }
-    }
-
     // Start global actor
-    fn start(&mut self) {
-        self.tracker = TaskTracker::new();
-        self.token = CancellationToken::new();
-
-        // Read the latest snapshot, if it was updated then it's always Some()
-        let snapshot = self.channel_snapshot.borrow_and_update().clone().unwrap();
-
+    fn start(&self, tracker: &TaskTracker, token: &CancellationToken, subnets: Vec<Subnet>) {
         // Create & spawn new global actor
         let mut actor = GlobalActor::new(
-            snapshot.subnets.clone(),
+            subnets,
             self.check_interval,
             self.update_interval,
             self.max_height_lag,
             self.checker.clone(),
             self.persister.clone(),
-            self.token.child_token(),
+            token.child_token(),
         );
 
-        self.tracker.spawn(async move {
+        tracker.spawn(async move {
             actor.run().await;
         });
-    }
-
-    // Stop global actor
-    async fn stop(&mut self) {
-        self.token.cancel();
-        self.tracker.close();
-        self.tracker.wait().await;
     }
 }
 
 #[async_trait]
 impl Run for Runner {
-    async fn run(&mut self) -> Result<(), Error> {
-        // Watch for snapshot updates and restart global actor
-        while self.channel_snapshot.changed().await.is_ok() {
-            warn!("New registry snapshot - restarting health check actors");
-            self.stop().await;
-            self.start();
-            warn!("Health check actors restarted");
-        }
+    async fn run(&self, token: CancellationToken) -> Result<(), Error> {
+        let mut tracker = TaskTracker::new();
+        let mut actor_token = CancellationToken::new();
+        let mut snapshot_lock = self.channel_snapshot.lock().await;
 
-        Ok(())
+        // Watch for snapshot updates and restart global actor
+        loop {
+            select! {
+                _ = token.cancelled() => {
+                    return Ok(());
+                }
+
+                Ok(_) = snapshot_lock.changed() => {
+                    warn!("New registry snapshot - restarting health check actors");
+
+                    // Read the latest snapshot, if it was updated then it's always Some()
+                    let snapshot = snapshot_lock
+                        .borrow_and_update()
+                        .clone()
+                        .unwrap();
+
+                    // Stop the current actor
+                    actor_token.cancel();
+                    tracker.close();
+                    tracker.wait().await;
+
+                    // Start the new one
+                    tracker = TaskTracker::new();
+                    actor_token = CancellationToken::new();
+                    self.start(&tracker, &actor_token, snapshot.subnets.clone());
+                    warn!("Health check actors restarted");
+                }
+            }
+        }
     }
 }
 
@@ -826,16 +819,16 @@ pub(crate) mod test {
             .returning(|_| Ok(check_result(500)));
 
         let (channel_send, channel_recv) = watch::channel(None);
-        let mut runner = Runner::new(
-            channel_recv,
+        let runner = Runner::new(
             10,
-            persister,
-            Arc::new(checker),
             Duration::from_millis(100),
             Duration::from_millis(1),
+            Arc::new(checker),
+            persister,
+            Mutex::new(channel_recv),
         );
         tokio::spawn(async move {
-            let _ = runner.run().await;
+            let _ = runner.run(CancellationToken::new()).await;
         });
 
         let snapshot = generate_custom_registry_snapshot(2, 2, 0);
@@ -874,16 +867,16 @@ pub(crate) mod test {
             .returning(|_| Ok(check_result(1000)));
 
         let (channel_send, channel_recv) = watch::channel(None);
-        let mut runner = Runner::new(
-            channel_recv,
+        let runner = Runner::new(
             10,
-            persister,
-            Arc::new(checker),
             Duration::from_millis(100),
             Duration::from_millis(1),
+            Arc::new(checker),
+            persister,
+            Mutex::new(channel_recv),
         );
         tokio::spawn(async move {
-            let _ = runner.run().await;
+            let _ = runner.run(CancellationToken::new()).await;
         });
 
         // Generate & apply snapshot with 4 nodes first
@@ -959,17 +952,17 @@ pub(crate) mod test {
         let persister = Arc::new(Persister::new(Arc::clone(&routes)));
 
         let (channel_send, channel_recv) = watch::channel(None);
-        let mut runner = Runner::new(
-            channel_recv,
+        let runner = Runner::new(
             10,
-            persister,
-            Arc::new(checker),
             Duration::from_millis(100),
             Duration::from_millis(1),
+            Arc::new(checker),
+            persister,
+            Mutex::new(channel_recv),
         );
 
         tokio::spawn(async move {
-            let _ = runner.run().await;
+            let _ = runner.run(CancellationToken::new()).await;
         });
 
         // Send the snapshot
