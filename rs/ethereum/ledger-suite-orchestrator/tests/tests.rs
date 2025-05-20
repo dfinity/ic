@@ -80,6 +80,14 @@ fn should_spawn_ledger_with_correct_init_args() {
                 LedgerMetadataValue::from(80_u64),
             ),
             (
+                "icrc103:public_allowances".to_string(),
+                LedgerMetadataValue::from("true"),
+            ),
+            (
+                "icrc103:max_take_value".to_string(),
+                LedgerMetadataValue::from(500u64),
+            ),
+            (
                 "icrc106:index_principal".to_string(),
                 LedgerMetadataValue::from("ryjl3-tyaaa-aaaaa-aaaba-cai"),
             ),

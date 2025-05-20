@@ -36,22 +36,13 @@ use ic_types::{
 };
 use reqwest;
 
-use crate::cache::CacheState;
 use crate::{
     cli::Cli,
     core::setup_router,
+    http::middleware::cache::CacheState,
     persist::{Persist, Persister, Routes},
     snapshot::{node_test_id, subnet_test_id, RegistrySnapshot, Snapshot, Snapshotter, Subnet},
 };
-
-#[macro_export]
-macro_rules! principal {
-    ($id:expr) => {{
-        candid::Principal::from_text($id).unwrap()
-    }};
-}
-
-pub use principal;
 
 #[derive(Debug)]
 pub struct TestHttpClient(pub usize);
@@ -296,7 +287,7 @@ pub fn setup_test_router(
 
     if enable_cache {
         args.push("--cache-size");
-        args.push("1048576");
+        args.push("104857600");
     }
 
     #[cfg(not(feature = "tls"))]
@@ -315,7 +306,7 @@ pub fn setup_test_router(
 
     let (registry_client, _, _) = create_fake_registry_client(subnet_count, nodes_per_subnet, None);
     let (channel_send, _) = tokio::sync::watch::channel(None);
-    let mut snapshotter = Snapshotter::new(
+    let snapshotter = Snapshotter::new(
         registry_snapshot.clone(),
         channel_send,
         Arc::new(registry_client),

@@ -33,8 +33,6 @@ use ic_ledger_hash_of::HashOf;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{storable::Bound, Storable};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
-use icrc_ledger_types::icrc3::transactions::Transaction as Tx;
-use icrc_ledger_types::icrc3::{blocks::GetBlocksResponse, transactions::GetTransactionsResponse};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
     icrc3::archive::{ArchivedRange, QueryBlockArchiveFn, QueryTxArchiveFn},
@@ -46,6 +44,13 @@ use icrc_ledger_types::{
         archive::{GetArchivesArgs, GetArchivesResult, ICRC3ArchiveInfo, QueryArchiveFn},
         blocks::{ArchivedBlocks, GetBlocksRequest, GetBlocksResult},
     },
+};
+use icrc_ledger_types::{
+    icrc103::get_allowances::Allowance as Allowance103,
+    icrc3::{blocks::GetBlocksResponse, transactions::GetTransactionsResponse},
+};
+use icrc_ledger_types::{
+    icrc103::get_allowances::Allowances, icrc3::transactions::Transaction as Tx,
 };
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
@@ -70,6 +75,9 @@ const METADATA_NAME: &str = "icrc1:name";
 const METADATA_SYMBOL: &str = "icrc1:symbol";
 const METADATA_FEE: &str = "icrc1:fee";
 const METADATA_MAX_MEMO_LENGTH: &str = "icrc1:max_memo_length";
+const METADATA_PUBLIC_ALLOWANCES: &str = "icrc103:public_allowances";
+const METADATA_MAX_TAKE_ALLOWANCES: &str = "icrc103:max_take_value";
+const MAX_TAKE_ALLOWANCES: u64 = 500;
 
 #[cfg(not(feature = "u256-tokens"))]
 pub type Tokens = ic_icrc1_tokens_u64::U64;
@@ -631,12 +639,14 @@ fn default_decimals() -> u8 {
 }
 
 fn map_metadata_or_trap(arg_metadata: Vec<(String, Value)>) -> Vec<(String, StoredValue)> {
-    const DISALLOWED_METADATA_FIELDS: [&str; 5] = [
+    const DISALLOWED_METADATA_FIELDS: [&str; 7] = [
         METADATA_DECIMALS,
         METADATA_NAME,
         METADATA_SYMBOL,
         METADATA_FEE,
         METADATA_MAX_MEMO_LENGTH,
+        METADATA_PUBLIC_ALLOWANCES,
+        METADATA_MAX_TAKE_ALLOWANCES,
     ];
     arg_metadata
         .into_iter()
@@ -890,6 +900,10 @@ impl Ledger {
         self.index_principal
     }
 
+    pub fn max_take_allowances(&self) -> u64 {
+        MAX_TAKE_ALLOWANCES
+    }
+
     pub fn metadata(&self) -> Vec<(String, Value)> {
         let mut records: Vec<(String, Value)> = self
             .metadata
@@ -905,6 +919,15 @@ impl Ledger {
             METADATA_MAX_MEMO_LENGTH,
             self.max_memo_length() as u64,
         ));
+        records.push(Value::entry(METADATA_PUBLIC_ALLOWANCES, "true"));
+        records.push(Value::entry(
+            METADATA_MAX_TAKE_ALLOWANCES,
+            Nat::from(self.max_take_allowances()),
+        ));
+        // When adding new entries that cannot be set by the user
+        // (e.g. because they are fixed or computed dynamically)
+        // please also add them to `map_metadata_or_trap` to prevent
+        // the entry being set using init or upgrade arguments.
         if let Some(index_principal) = self.index_principal() {
             records.push(Value::entry(
                 "icrc106:index_principal",
@@ -1206,6 +1229,57 @@ pub fn clear_stable_blocks_data() {
 
 pub fn balances_len() -> u64 {
     BALANCES_MEMORY.with_borrow(|balances| balances.len())
+}
+
+pub fn get_allowances(
+    from: Account,
+    spender: Option<Account>,
+    max_results: u64,
+    now: u64,
+) -> Allowances {
+    let mut result = vec![];
+    let start_account_spender = match spender {
+        Some(spender) => AccountSpender {
+            account: from,
+            spender,
+        },
+        None => AccountSpender {
+            account: from,
+            spender: Account {
+                owner: Principal::from_slice(&[0u8; 0]),
+                subaccount: None,
+            },
+        },
+    };
+    ALLOWANCES_MEMORY.with_borrow(|allowances| {
+        for (account_spender, storable_allowance) in
+            allowances.range(start_account_spender.clone()..)
+        {
+            if spender.is_some() && account_spender == start_account_spender {
+                continue;
+            }
+            if result.len() >= max_results as usize {
+                break;
+            }
+            if account_spender.account.owner != from.owner {
+                break;
+            }
+            if let Some(expires_at) = storable_allowance.expires_at {
+                if expires_at.as_nanos_since_unix_epoch() <= now {
+                    continue;
+                }
+            }
+            result.push(Allowance103 {
+                from_account: account_spender.account,
+                to_spender: account_spender.spender,
+                allowance: Nat::from(storable_allowance.amount),
+                expires_at: storable_allowance
+                    .expires_at
+                    .map(|t| t.as_nanos_since_unix_epoch()),
+            });
+        }
+    });
+    result
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
