@@ -442,7 +442,7 @@ impl NodeRegistration {
             })
         };
 
-        let signer = NodeSender::new(node_pub_key.key_value, Arc::new(sign_cmd));
+        let signer = NodeSender::new(node_pub_key, Arc::new(sign_cmd))?;
         let agent = Agent::builder()
             .with_url(nns_url)
             .with_identity(signer)

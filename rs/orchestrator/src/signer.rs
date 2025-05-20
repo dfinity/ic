@@ -1,6 +1,7 @@
 use ic_agent::{
     agent::EnvelopeContent, export::Principal, identity::Secp256k1Identity, Identity, Signature,
 };
+use ic_protobuf::registry::crypto::v1::{AlgorithmId, PublicKey};
 use ic_sys::utility_command::{UtilityCommand, UtilityCommandResult};
 use ic_types::messages::MessageId;
 use std::{path::Path, sync::Arc};
@@ -99,24 +100,21 @@ pub struct NodeSender {
 }
 
 impl NodeSender {
-    pub fn new(mut pub_key: Vec<u8>, sign: SignMessageId) -> Self {
-        // The constant is the prefix of the DER encoding of the ASN.1
-        // SubjectPublicKeyInfo data structure. It can be read as follows:
-        // 0x30 0x2A: Sequence of length 42 bytes
-        //   0x30 0x05: Sequence of length 5 bytes
-        //     0x06 0x03 0x2B 0x65 0x70: OID of length 3 bytes, 1.3.101.112 (where 43 =
-        //              1 * 40 + 3)
-        //   0x03 0x21: Bit string of length 33 bytes
-        //     0x00 [raw key]: No padding [raw key]
-        let mut der_encoded_pub_key: Vec<u8> = vec![
-            0x30, 0x2A, 0x30, 0x05, 0x06, 0x03, 0x2B, 0x65, 0x70, 0x03, 0x21, 0x00,
-        ];
-        der_encoded_pub_key.append(&mut pub_key);
+    pub fn new(pub_key: PublicKey, sign: SignMessageId) -> Result<Self, String> {
+        if pub_key.algorithm() != AlgorithmId::Ed25519 {
+            return Err(format!(
+                "Unsupported algorithm: {}",
+                pub_key.algorithm().as_str_name()
+            ));
+        }
 
-        Self {
+        let der_encoded_pub_key = ic_ed25519::PublicKey::convert_raw_to_der(&pub_key.key_value)
+            .map_err(|err| err.to_string())?;
+
+        Ok(Self {
             der_encoded_pub_key,
             sign,
-        }
+        })
     }
 }
 
