@@ -1,6 +1,6 @@
 [package]
 name = "ic-error-types"
-version = "0.1.0"
+version = "0.2.0"
 license = "Apache-2.0"
 description = "Error types of the Internet Computer"
 repository = "https://github.com/dfinity/ic"
