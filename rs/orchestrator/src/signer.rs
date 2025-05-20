@@ -34,7 +34,7 @@ impl Signer for Hsm {
             res
         }
         Ok(Box::new(ExternalHsmSender {
-            pub_key,
+            der_encoded_pub_key: pub_key,
             sign: Arc::new(get_sign_command),
         }))
     }
@@ -44,18 +44,20 @@ impl Signer for Hsm {
 /// through the provided function reference.
 struct ExternalHsmSender {
     /// DER encoded public key
-    pub_key: Vec<u8>,
+    der_encoded_pub_key: Vec<u8>,
     /// Function that abstracts the external HSM.
     sign: SignBytes,
 }
 
 impl Identity for ExternalHsmSender {
     fn sender(&self) -> Result<Principal, String> {
-        Ok(Principal::self_authenticating(self.pub_key.as_slice()))
+        Ok(Principal::self_authenticating(
+            self.der_encoded_pub_key.as_slice(),
+        ))
     }
 
     fn public_key(&self) -> Option<Vec<u8>> {
-        Some(self.pub_key.clone())
+        Some(self.der_encoded_pub_key.clone())
     }
 
     fn sign(&self, content: &EnvelopeContent) -> Result<Signature, String> {
@@ -91,7 +93,7 @@ impl Signer for NodeProviderSigner {
 /// Signed from the node itself, with its key.
 pub struct NodeSender {
     /// DER encoded public key
-    pub_key: Vec<u8>,
+    der_encoded_pub_key: Vec<u8>,
     /// Function that signs the message id
     sign: SignMessageId,
 }
@@ -106,13 +108,13 @@ impl NodeSender {
         //              1 * 40 + 3)
         //   0x03 0x21: Bit string of length 33 bytes
         //     0x00 [raw key]: No padding [raw key]
-        let mut der_encoded: Vec<u8> = vec![
+        let mut der_encoded_pub_key: Vec<u8> = vec![
             0x30, 0x2A, 0x30, 0x05, 0x06, 0x03, 0x2B, 0x65, 0x70, 0x03, 0x21, 0x00,
         ];
-        der_encoded.append(&mut pub_key);
+        der_encoded_pub_key.append(&mut pub_key);
 
         Self {
-            pub_key: der_encoded,
+            der_encoded_pub_key,
             sign,
         }
     }
@@ -120,11 +122,13 @@ impl NodeSender {
 
 impl Identity for NodeSender {
     fn sender(&self) -> Result<Principal, String> {
-        Ok(Principal::self_authenticating(self.pub_key.as_slice()))
+        Ok(Principal::self_authenticating(
+            self.der_encoded_pub_key.as_slice(),
+        ))
     }
 
     fn public_key(&self) -> Option<Vec<u8>> {
-        Some(self.pub_key.clone())
+        Some(self.der_encoded_pub_key.clone())
     }
 
     fn sign(&self, content: &EnvelopeContent) -> Result<Signature, String> {
