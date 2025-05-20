@@ -5616,10 +5616,7 @@ pub mod archiving {
             get_blocks_res
         );
         // Verify that the ledger response contained no archive info.
-        assert_eq!(
-            check_if_block_in_ledger_and_archive(&env, 0, &get_blocks_res, get_blocks_fn),
-            BlockInLedgerAndArchive::NoArchiveInfo
-        );
+        assert!(get_blocks_res.archived_ranges.is_empty());
         // Verify that the block was already archived. Since the archiving is done in chunks, the
         // archiving is not yet completed, so the ledger reports the block `0` to be present only
         // in the ledger, even though it is also present in the archive by now.
@@ -5957,7 +5954,12 @@ pub mod archiving {
             .install_canister(ledger_wasm.clone(), args, None)
             .unwrap();
 
-        let initial_chain_length = get_blocks_fn(&env, ledger_id, 0, 1).chain_length;
+        let get_blocks_res = get_blocks_fn(&env, ledger_id, (MAX_BLOCKS_TO_ARCHIVE - 1) as u64, 1);
+        let initial_chain_length = get_blocks_res.chain_length;
+        let block_in_ledger = get_blocks_res
+            .blocks
+            .first()
+            .expect("ledger should contain block");
 
         // Perform a transaction to trigger archiving.
         let transfer_block_id = send_transfer(
@@ -6019,11 +6021,12 @@ pub mod archiving {
             (MAX_BLOCKS_TO_ARCHIVE - 1) as u64,
             1,
         );
+        let block_in_archive = archive_blocks_res
+            .blocks
+            .first()
+            .expect("archive should contain block");
+        assert_eq!(block_in_ledger, block_in_archive);
         assert_eq!(archive_blocks_res.blocks.len(), 1);
-        assert_eq!(
-            archive_blocks_res.first_block_index,
-            (MAX_BLOCKS_TO_ARCHIVE - 1) as u64
-        );
     }
 
     // ----- Helper structures -----
@@ -6272,46 +6275,6 @@ pub mod archiving {
             range_utils::range_len(&effective_range),
             total_blocks_returned
         )
-    }
-
-    #[derive(Debug, Eq, PartialEq)]
-    enum BlockInLedgerAndArchive {
-        True,
-        NoArchiveInfo,
-    }
-
-    fn check_if_block_in_ledger_and_archive<B>(
-        env: &StateMachine,
-        block_id: u64,
-        icrc3_get_blocks_result: &GenericGetBlocksResponse<B>,
-        get_blocks_fn: fn(&StateMachine, CanisterId, u64, usize) -> GenericGetBlocksResponse<B>,
-    ) -> BlockInLedgerAndArchive
-    where
-        B: Eq + Debug,
-    {
-        assert_eq!(block_id, icrc3_get_blocks_result.first_block_index);
-        // Verify that the ledger also reported that the first block exists in the archive.
-        let Some(archive_info) = icrc3_get_blocks_result.archived_ranges.first() else {
-            return BlockInLedgerAndArchive::NoArchiveInfo;
-        };
-        assert_eq!(archive_info.archived_range.start, block_id);
-        assert_eq!(range_utils::range_len(&archive_info.archived_range), 1);
-        let archive_blocks_res = get_blocks_fn(
-            env,
-            CanisterId::try_from(PrincipalId::from(archive_info.canister_id)).unwrap(),
-            block_id,
-            1,
-        );
-        let first_block_from_archive = archive_blocks_res
-            .blocks
-            .first()
-            .expect("archive should return one block");
-        let first_block_from_ledger = icrc3_get_blocks_result
-            .blocks
-            .first()
-            .expect("ledger should return one block");
-        assert_eq!(first_block_from_ledger, first_block_from_archive);
-        BlockInLedgerAndArchive::True
     }
 
     fn encode_transfer_args(

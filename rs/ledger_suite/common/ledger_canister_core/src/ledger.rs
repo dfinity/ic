@@ -434,7 +434,7 @@ pub async fn archive_blocks<LA: LedgerAccess>(sink: impl Sink + Clone, max_messa
 
 // The maximum blocks to archive at once. Note that chunking may still split up the blocks that are
 // being archived into multiple messages to the archive canister.
-pub const MAX_BLOCKS_TO_ARCHIVE: usize = 10_000;
+pub const MAX_BLOCKS_TO_ARCHIVE: usize = 18_000;
 
 pub fn blocks_to_archive<LA: LedgerAccess>(
     sink: &impl Sink,
