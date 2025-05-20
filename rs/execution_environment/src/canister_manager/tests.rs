@@ -60,8 +60,8 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_execution_environment::{
     assert_delta, cycles_reserved_for_app_and_verified_app_subnets, get_reply,
-    get_routing_table_with_specified_ids_allocation_range, wasm_compilation_cost,
-    wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
+    get_routing_table_with_specified_ids_allocation_range, wasm_compilation_cost, wat_canister,
+    wat_compilation_cost, wat_fn, ExecutionTest, ExecutionTestBuilder,
 };
 use ic_test_utilities_state::{
     get_running_canister, get_stopped_canister, get_stopped_canister_with_controller,
@@ -4115,7 +4115,7 @@ fn cycles_correct_if_upgrade_succeeds() {
 #[test]
 fn cycles_correct_if_upgrade_fails_at_validation() {
     let mut test = ExecutionTestBuilder::new()
-        .with_allocatable_compute_capacity_in_percent(50)
+        .with_rate_limiting_of_instructions()
         .build();
 
     let wat = r#"
@@ -4150,10 +4150,15 @@ fn cycles_correct_if_upgrade_fails_at_validation() {
         )
     );
 
+    // Set a large value for `install_code_debit` so the installation fails due
+    // to rate limiting.
+    test.canister_state_mut(id)
+        .scheduler_state
+        .install_code_debit = NumInstructions::from(u64::MAX);
+
     let cycles_before = test.canister_state(id).system_state.balance();
     let execution_cost_before = test.canister_execution_cost(id);
-    test.upgrade_canister_with_allocation(id, wasm, Some(100), None)
-        .unwrap_err();
+    test.upgrade_canister(id, wasm).unwrap_err();
     let execution_cost = test.canister_execution_cost(id) - execution_cost_before;
     assert_eq!(
         test.canister_state(id).system_state.balance(),
@@ -4384,7 +4389,7 @@ fn cycles_correct_if_install_succeeds() {
 #[test]
 fn cycles_correct_if_install_fails_at_validation() {
     let mut test = ExecutionTestBuilder::new()
-        .with_allocatable_compute_capacity_in_percent(50)
+        .with_rate_limiting_of_instructions()
         .build();
 
     let wat = r#"
@@ -4406,8 +4411,13 @@ fn cycles_correct_if_install_fails_at_validation() {
     let initial_cycles = Cycles::new(1_000_000_000_000_000);
     let id = test.create_canister(initial_cycles);
 
-    test.install_canister_with_allocation(id, wasm, Some(100), None)
-        .unwrap_err();
+    // Set a large value for `install_code_debit` so the installation fails due
+    // to rate limiting.
+    test.canister_state_mut(id)
+        .scheduler_state
+        .install_code_debit = NumInstructions::from(u64::MAX);
+
+    test.install_canister(id, wasm.clone()).unwrap_err();
     assert_eq!(
         test.canister_state(id).system_state.balance(),
         initial_cycles - test.canister_execution_cost(id),
@@ -5102,7 +5112,7 @@ fn upgrade_reserves_cycles_on_memory_grow() {
 #[test]
 fn install_does_not_reserve_cycles_on_system_subnet() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
-    const CAPACITY: u64 = 20_000_000_000;
+    const CAPACITY: u64 = 4_000_000_000;
     const THRESHOLD: u64 = CAPACITY / 2;
     const USAGE: u64 = CAPACITY - THRESHOLD;
 
@@ -5113,24 +5123,27 @@ fn install_does_not_reserve_cycles_on_system_subnet() {
         .with_subnet_memory_threshold(THRESHOLD as i64)
         .build();
 
+    // Create a canister with a memory allocation of `THRESHOLD` bytes.
+    let canister_id = test
+        .create_canister_with_allocation(CYCLES, None, Some(THRESHOLD))
+        .unwrap();
+    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    // Create a second canister that attempts to grow its memory above the threshold
+    // where reservations would trigger. Because it's a system subnet we expect
+    // that no cycles reservation will be made.
     let canister_id = test.create_canister(CYCLES);
-
-    test.install_canister_with_allocation(
-        canister_id,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-        None,
-        Some(THRESHOLD),
-    )
-    .unwrap();
-
-    let canister_id = test.create_canister(CYCLES);
-
     let balance_before = test.canister_state(canister_id).system_state.balance();
-    test.install_canister_with_allocation(
+    test.install_canister(
         canister_id,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-        None,
-        Some(USAGE),
+        wat_canister()
+            .init(
+                wat_fn()
+                    .stable_grow((USAGE / WASM_PAGE_SIZE_IN_BYTES) as i32 - 1)
+                    .stable_read(0, 42),
+            )
+            .build_wasm(),
     )
     .unwrap();
     let balance_after = test.canister_state(canister_id).system_state.balance();
