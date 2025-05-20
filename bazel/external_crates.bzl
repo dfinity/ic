@@ -570,6 +570,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "humantime-serde": crate.spec(
                 version = "^1.1.1",
             ),
+            "isahc": crate.spec(
+                version = "^1.7.2",
+            ),
             "hyper": crate.spec(
                 version = "^1.5.1",
                 features = ["full"],

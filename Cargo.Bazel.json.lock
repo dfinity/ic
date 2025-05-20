@@ -1,5 +1,5 @@
 {
-  "checksum": "c7d08251c929976f85582974cc6e06e81e2c94139c212f88471177a66327530b",
+  "checksum": "606d7f9bb26db5ebd6726dbbbb13695ed718faf3fd43fcd9afc7c64d25b99742",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -12111,6 +12111,44 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "castaway 0.1.2": {
+      "name": "castaway",
+      "version": "0.1.2",
+      "package_url": "https://github.com/sagebind/castaway",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/castaway/0.1.2/download",
+          "sha256": "a2698f953def977c68f935bb0dfa959375ad4638570e969e2f1e9f433cbf1af6"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "castaway",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "castaway",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "0.1.2"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "cc 1.1.37": {
       "name": "cc",
       "version": "1.1.37",
@@ -17593,6 +17631,311 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "curl 0.4.47": {
+      "name": "curl",
+      "version": "0.4.47",
+      "package_url": "https://github.com/alexcrichton/curl-rust",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/curl/0.4.47/download",
+          "sha256": "d9fb4d13a1be2b58f14d60adba57c9834b78c62fd86c3e76a148f732686e9265"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "curl",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "curl",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "http2",
+            "openssl-probe",
+            "openssl-sys",
+            "ssl",
+            "static-curl"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "curl 0.4.47",
+              "target": "build_script_build"
+            },
+            {
+              "id": "curl-sys 0.4.80+curl-8.12.1",
+              "target": "curl_sys"
+            },
+            {
+              "id": "libc 0.2.170",
+              "target": "libc"
+            },
+            {
+              "id": "socket2 0.5.7",
+              "target": "socket2"
+            }
+          ],
+          "selects": {
+            "aarch64-unknown-linux-gnu": [
+              {
+                "id": "openssl-probe 0.1.5",
+                "target": "openssl_probe"
+              },
+              {
+                "id": "openssl-sys 0.9.107",
+                "target": "openssl_sys"
+              }
+            ],
+            "cfg(target_env = \"msvc\")": [
+              {
+                "id": "schannel 0.1.22",
+                "target": "schannel"
+              },
+              {
+                "id": "windows-sys 0.52.0",
+                "target": "windows_sys"
+              }
+            ],
+            "x86_64-unknown-linux-gnu": [
+              {
+                "id": "openssl-probe 0.1.5",
+                "target": "openssl_probe"
+              },
+              {
+                "id": "openssl-sys 0.9.107",
+                "target": "openssl_sys"
+              }
+            ]
+          }
+        },
+        "edition": "2018",
+        "version": "0.4.47"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "link_deps": {
+          "common": [
+            {
+              "id": "curl-sys 0.4.80+curl-8.12.1",
+              "target": "curl_sys"
+            }
+          ],
+          "selects": {
+            "aarch64-unknown-linux-gnu": [
+              {
+                "id": "openssl-sys 0.9.107",
+                "target": "openssl_sys"
+              }
+            ],
+            "x86_64-unknown-linux-gnu": [
+              {
+                "id": "openssl-sys 0.9.107",
+                "target": "openssl_sys"
+              }
+            ]
+          }
+        }
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "curl-sys 0.4.80+curl-8.12.1": {
+      "name": "curl-sys",
+      "version": "0.4.80+curl-8.12.1",
+      "package_url": "https://github.com/alexcrichton/curl-rust",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/curl-sys/0.4.80+curl-8.12.1/download",
+          "sha256": "55f7df2eac63200c3ab25bde3b2268ef2ee56af3d238e76d61f01c3c49bff734"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "curl_sys",
+            "crate_root": "lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "curl_sys",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "http2",
+            "libnghttp2-sys",
+            "openssl-sys",
+            "ssl",
+            "static-curl"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "curl-sys 0.4.80+curl-8.12.1",
+              "target": "build_script_build"
+            },
+            {
+              "id": "libc 0.2.170",
+              "target": "libc"
+            },
+            {
+              "id": "libnghttp2-sys 0.1.11+1.64.0",
+              "target": "libnghttp2_sys"
+            },
+            {
+              "id": "libz-sys 1.1.9",
+              "target": "libz_sys"
+            }
+          ],
+          "selects": {
+            "aarch64-unknown-linux-gnu": [
+              {
+                "id": "openssl-sys 0.9.107",
+                "target": "openssl_sys"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "windows-sys 0.52.0",
+                "target": "windows_sys"
+              }
+            ],
+            "x86_64-unknown-linux-gnu": [
+              {
+                "id": "openssl-sys 0.9.107",
+                "target": "openssl_sys"
+              }
+            ]
+          }
+        },
+        "edition": "2018",
+        "version": "0.4.80+curl-8.12.1"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cc 1.1.37",
+              "target": "cc"
+            },
+            {
+              "id": "pkg-config 0.3.27",
+              "target": "pkg_config"
+            }
+          ],
+          "selects": {
+            "cfg(target_env = \"msvc\")": [
+              {
+                "id": "vcpkg 0.2.15",
+                "target": "vcpkg"
+              }
+            ]
+          }
+        },
+        "link_deps": {
+          "common": [
+            {
+              "id": "libnghttp2-sys 0.1.11+1.64.0",
+              "target": "libnghttp2_sys"
+            },
+            {
+              "id": "libz-sys 1.1.9",
+              "target": "libz_sys"
+            }
+          ],
+          "selects": {
+            "aarch64-unknown-linux-gnu": [
+              {
+                "id": "openssl-sys 0.9.107",
+                "target": "openssl_sys"
+              }
+            ],
+            "x86_64-unknown-linux-gnu": [
+              {
+                "id": "openssl-sys 0.9.107",
+                "target": "openssl_sys"
+              }
+            ]
+          }
+        },
+        "links": "curl"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "curve25519-dalek 4.1.3": {
       "name": "curve25519-dalek",
       "version": "4.1.3",
@@ -20401,6 +20744,10 @@
             {
               "id": "ipnet 2.10.1",
               "target": "ipnet"
+            },
+            {
+              "id": "isahc 1.7.2",
+              "target": "isahc"
             },
             {
               "id": "isocountry 0.3.2",
@@ -26652,6 +26999,91 @@
         "version": "0.3.31"
       },
       "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "futures-lite 1.13.0": {
+      "name": "futures-lite",
+      "version": "1.13.0",
+      "package_url": "https://github.com/smol-rs/futures-lite",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/futures-lite/1.13.0/download",
+          "sha256": "49a9d51ce47660b1e808d3c990b4709f2f415d928835a17dfd16991515c46bce"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "futures_lite",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "futures_lite",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "default",
+            "fastrand",
+            "futures-io",
+            "memchr",
+            "parking",
+            "std",
+            "waker-fn"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "fastrand 1.9.0",
+              "target": "fastrand"
+            },
+            {
+              "id": "futures-core 0.3.31",
+              "target": "futures_core"
+            },
+            {
+              "id": "futures-io 0.3.31",
+              "target": "futures_io"
+            },
+            {
+              "id": "memchr 2.7.4",
+              "target": "memchr"
+            },
+            {
+              "id": "parking 2.1.0",
+              "target": "parking"
+            },
+            {
+              "id": "pin-project-lite 0.2.13",
+              "target": "pin_project_lite"
+            },
+            {
+              "id": "waker-fn 1.2.0",
+              "target": "waker_fn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "1.13.0"
+      },
+      "license": "Apache-2.0 OR MIT",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -38567,6 +38999,172 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "isahc 1.7.2": {
+      "name": "isahc",
+      "version": "1.7.2",
+      "package_url": "https://github.com/sagebind/isahc",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/isahc/1.7.2/download",
+          "sha256": "334e04b4d781f436dc315cb1e7515bd96826426345d498149e4bde36b67f8ee9"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "isahc",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "isahc",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "encoding_rs",
+            "http2",
+            "mime",
+            "static-curl",
+            "text-decoding"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "async-channel 1.9.0",
+              "target": "async_channel"
+            },
+            {
+              "id": "castaway 0.1.2",
+              "target": "castaway"
+            },
+            {
+              "id": "crossbeam-utils 0.8.19",
+              "target": "crossbeam_utils"
+            },
+            {
+              "id": "curl 0.4.47",
+              "target": "curl"
+            },
+            {
+              "id": "curl-sys 0.4.80+curl-8.12.1",
+              "target": "curl_sys"
+            },
+            {
+              "id": "encoding_rs 0.8.32",
+              "target": "encoding_rs"
+            },
+            {
+              "id": "event-listener 2.5.3",
+              "target": "event_listener"
+            },
+            {
+              "id": "futures-lite 1.13.0",
+              "target": "futures_lite"
+            },
+            {
+              "id": "http 0.2.12",
+              "target": "http"
+            },
+            {
+              "id": "isahc 1.7.2",
+              "target": "build_script_build"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "mime 0.3.17",
+              "target": "mime"
+            },
+            {
+              "id": "once_cell 1.21.3",
+              "target": "once_cell"
+            },
+            {
+              "id": "polling 2.8.0",
+              "target": "polling"
+            },
+            {
+              "id": "slab 0.4.8",
+              "target": "slab"
+            },
+            {
+              "id": "sluice 0.5.5",
+              "target": "sluice"
+            },
+            {
+              "id": "tracing 0.1.41",
+              "target": "tracing"
+            },
+            {
+              "id": "tracing-futures 0.2.5",
+              "target": "tracing_futures"
+            },
+            {
+              "id": "url 2.5.4",
+              "target": "url"
+            },
+            {
+              "id": "waker-fn 1.2.0",
+              "target": "waker_fn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "1.7.2"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "link_deps": {
+          "common": [
+            {
+              "id": "curl-sys 0.4.80+curl-8.12.1",
+              "target": "curl_sys"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "isocountry 0.3.2": {
       "name": "isocountry",
       "version": "0.3.2",
@@ -42243,6 +42841,91 @@
         ]
       },
       "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "libnghttp2-sys 0.1.11+1.64.0": {
+      "name": "libnghttp2-sys",
+      "version": "0.1.11+1.64.0",
+      "package_url": "https://github.com/alexcrichton/nghttp2-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/libnghttp2-sys/0.1.11+1.64.0/download",
+          "sha256": "1b6c24e48a7167cffa7119da39d577fa482e66c688a4aac016bee862e1a713c4"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "libnghttp2_sys",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "libnghttp2_sys",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "libc 0.2.170",
+              "target": "libc"
+            },
+            {
+              "id": "libnghttp2-sys 0.1.11+1.64.0",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "0.1.11+1.64.0"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cc 1.1.37",
+              "target": "cc"
+            }
+          ],
+          "selects": {}
+        },
+        "links": "nghttp2"
+      },
+      "license": "MIT/Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -54703,6 +55386,126 @@
         "Apache-2.0"
       ],
       "license_file": "LICENSE"
+    },
+    "polling 2.8.0": {
+      "name": "polling",
+      "version": "2.8.0",
+      "package_url": "https://github.com/smol-rs/polling",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/polling/2.8.0/download",
+          "sha256": "4b2d323e8ca7996b3e23126511a523f7e62924d93ecd5ae73b333815b0eb3dce"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "polling",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "polling",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "polling 2.8.0",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {
+            "cfg(any(unix, target_os = \"fuchsia\", target_os = \"vxworks\"))": [
+              {
+                "id": "libc 0.2.170",
+                "target": "libc"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "bitflags 1.3.2",
+                "target": "bitflags"
+              },
+              {
+                "id": "concurrent-queue 2.5.0",
+                "target": "concurrent_queue"
+              },
+              {
+                "id": "pin-project-lite 0.2.13",
+                "target": "pin_project_lite"
+              },
+              {
+                "id": "windows-sys 0.48.0",
+                "target": "windows_sys"
+              }
+            ]
+          }
+        },
+        "edition": "2018",
+        "version": "2.8.0"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "autocfg 1.1.0",
+              "target": "autocfg"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
     },
     "polling 3.7.4": {
       "name": "polling",
@@ -71146,6 +71949,61 @@
       ],
       "license_file": "LICENSE"
     },
+    "sluice 0.5.5": {
+      "name": "sluice",
+      "version": "0.5.5",
+      "package_url": "https://github.com/sagebind/sluice",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/sluice/0.5.5/download",
+          "sha256": "6d7400c0eff44aa2fcb5e31a5f24ba9716ed90138769e4977a2ba6014ae63eb5"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "sluice",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "sluice",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "async-channel 1.9.0",
+              "target": "async_channel"
+            },
+            {
+              "id": "futures-core 0.3.31",
+              "target": "futures_core"
+            },
+            {
+              "id": "futures-io 0.3.31",
+              "target": "futures_io"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.5.5"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "smallvec 1.13.2": {
       "name": "smallvec",
       "version": "1.13.2",
@@ -79255,6 +80113,65 @@
         },
         "edition": "2018",
         "version": "0.2.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "tracing-futures 0.2.5": {
+      "name": "tracing-futures",
+      "version": "0.2.5",
+      "package_url": "https://github.com/tokio-rs/tracing",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tracing-futures/0.2.5/download",
+          "sha256": "97d095ae15e245a057c8e8451bab9b3ee1e1f68e9ba2b4fbc18d0ac5237835f2"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tracing_futures",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tracing_futures",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "pin-project",
+            "std",
+            "std-future"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "pin-project 1.1.2",
+              "target": "pin_project"
+            },
+            {
+              "id": "tracing 0.1.41",
+              "target": "tracing"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.2.5"
       },
       "license": "MIT",
       "license_ids": [
@@ -91494,6 +92411,7 @@
     "instant-acme 0.7.2",
     "intmap 1.1.0",
     "ipnet 2.10.1",
+    "isahc 1.7.2",
     "isocountry 0.3.2",
     "itertools 0.12.0",
     "json-patch 0.2.7",
