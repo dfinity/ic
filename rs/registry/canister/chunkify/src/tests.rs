@@ -205,12 +205,12 @@ fn test_decode_high_capacity_registry_value() {
         ),
     ] {
         version += 1;
-        let timestamp_seconds = version + 123_000_000;
+        let timestamp_nanoseconds = version + 123_000_000;
 
         let input = HighCapacityRegistryValue {
             version,
             content,
-            timestamp_seconds,
+            timestamp_nanoseconds,
         };
 
         let observed_output: Option<Precondition> =

@@ -34,4 +34,5 @@ artifact_bundle(
     name = "bundle",
     inputs = [":prod"],
     prefix = "guest-os/update-img",
+    visibility = ["//visibility:public"],
 )
