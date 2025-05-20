@@ -9760,6 +9760,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_bytes",
+ "test-strategy 0.4.0",
  "thiserror 2.0.12",
 ]
 
@@ -9867,6 +9868,7 @@ dependencies = [
  "proptest 1.6.0",
  "serde",
  "serde_bytes",
+ "test-strategy 0.4.0",
 ]
 
 [[package]]
@@ -9908,6 +9910,7 @@ dependencies = [
  "num-traits",
  "proptest 1.6.0",
  "serde",
+ "test-strategy 0.4.0",
 ]
 
 [[package]]
@@ -9922,6 +9925,7 @@ dependencies = [
  "num-traits",
  "proptest 1.6.0",
  "serde",
+ "test-strategy 0.4.0",
 ]
 
 [[package]]
