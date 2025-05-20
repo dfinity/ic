@@ -1263,6 +1263,17 @@ impl ReplicatedState {
         self.canister_snapshots.push(snapshot_id, snapshot)
     }
 
+    /// This records a data upload event such that the data can be flushed to disk before a checkpoint.
+    pub fn record_snapshot_data_upload(
+        &mut self,
+        canister_id: CanisterId,
+        snapshot_id: SnapshotId,
+    ) {
+        self.metadata
+            .unflushed_checkpoint_ops
+            .upload_data(canister_id, snapshot_id);
+    }
+
     /// Delete a snapshot from the list of snapshots.
     pub fn delete_snapshot(&mut self, snapshot_id: SnapshotId) -> Option<Arc<CanisterSnapshot>> {
         let result = self.canister_snapshots.remove(snapshot_id);

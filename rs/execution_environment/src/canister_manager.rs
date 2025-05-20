@@ -2289,6 +2289,10 @@ impl CanisterManager {
                 chunk_bytes.get()
             }
         };
+        state.record_snapshot_data_upload(
+            CanisterId::try_from(args.canister_id).unwrap(),
+            snapshot_id,
+        );
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
             canister.scheduler_state.heap_delta_debit += NumBytes::new(num_bytes);
         }

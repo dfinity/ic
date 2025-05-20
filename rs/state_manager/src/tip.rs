@@ -667,7 +667,8 @@ fn flush_unflushed_checkpoint_ops<T>(
             UnflushedCheckpointOp::DeleteSnapshot(snapshot_id) => {
                 layout.snapshot(&snapshot_id)?.delete_dir()?;
             }
-            UnflushedCheckpointOp::TakeSnapshot(canister_id, snapshot_id) => {
+            UnflushedCheckpointOp::TakeSnapshot(canister_id, snapshot_id)
+            | UnflushedCheckpointOp::UploadSnapshotData(canister_id, snapshot_id) => {
                 backup(log, layout, canister_id, snapshot_id)?;
             }
             UnflushedCheckpointOp::LoadSnapshot(canister_id, snapshot_id) => {
