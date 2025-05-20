@@ -1426,9 +1426,10 @@ mod tests {
             vec![insert(b"no_need_for_chunking_here_57", vec![57; 1024])],
         );
 
-        // Step 2: Run the code under test: Do a serialize-deserialize
-        // round-trip, like the canister does during an upgrade (in pre- and
-        // post- upgrade).
+        // Step 2: Run the code under test: Serialize original_registry into a
+        // blob. Then, deserialize it into restored_registry, like what happens
+        // in a canister upgrade (during pre- and post- ugprade). In short, do a
+        // serialization+deserialization round trip.
         let mut restored_registry = Registry::new();
         restored_registry.from_serializable_form(original_registry.serializable_form());
 
