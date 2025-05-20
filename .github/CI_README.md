@@ -1,4 +1,4 @@
-GitHub CI for the IC Repo
+# GitHub CI for the IC Repo
 
 ## Workflows & Jobs
 
