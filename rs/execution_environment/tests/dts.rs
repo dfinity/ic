@@ -11,13 +11,11 @@ use ic_config::{
 };
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoRequest, CanisterInstallMode, CanisterInstallModeV2,
-    CanisterSettingsArgsBuilder, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
-    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, EmptyBlob, GlobalTimer,
-    InstallChunkedCodeArgs, InstallCodeArgs, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    Method, OnLowWasmMemoryHookStatus, Payload, ReadCanisterSnapshotDataArgs,
-    ReadCanisterSnapshotMetadataArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
-    UninstallCodeArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs, IC_00,
+    CanisterSettingsArgsBuilder, CanisterSnapshotDataKind, ClearChunkStoreArgs,
+    DeleteCanisterSnapshotArgs, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgs,
+    ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, Payload,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, StoredChunksArgs,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::{execution_state::NextScheduledMethod, NextExecution};
@@ -1019,7 +1017,10 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
         }
 
         let (method, args) = f(aborted_canister_id);
-        if method == Method::DeleteCanisterSnapshot || method == Method::UploadCanisterSnapshotData
+        if method == Method::DeleteCanisterSnapshot
+            || method == Method::UploadCanisterSnapshotData
+            || method == Method::ReadCanisterSnapshotMetadata
+            || method == Method::ReadCanisterSnapshotData
         {
             env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(aborted_canister_id, None))
                 .unwrap();
@@ -1085,6 +1086,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
     }
 
     for method in Method::iter() {
+        println!("method: {:?}", method);
         match method {
             // Supported methods accepting just one argument.
             Method::CanisterStatus | Method::DepositCycles | Method::StartCanister => {
@@ -1120,6 +1122,8 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             | Method::NodeMetricsHistory
             | Method::SubnetInfo
             | Method::ProvisionalCreateCanisterWithCycles
+            | Method::UploadCanisterSnapshotMetadata
+            | Method::UploadCanisterSnapshotData
             | Method::ProvisionalTopUpCanister => {}
             // Unsupported methods accepting just one argument.
             // Deleting an aborted canister requires to stop it first.
@@ -1234,31 +1238,6 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
                     aborted_canister_id,
                     (aborted_canister_id, 0).into(),
                     CanisterSnapshotDataKind::WasmModule { size: 0, offset: 0 },
-                )
-                .encode();
-                (method, call_args().other_side(args))
-            }),
-            Method::UploadCanisterSnapshotMetadata => test_supported(|aborted_canister_id| {
-                let args = UploadCanisterSnapshotMetadataArgs::new(
-                    aborted_canister_id,
-                    None,
-                    0,
-                    vec![],
-                    0,
-                    0,
-                    vec![],
-                    Some(GlobalTimer::Inactive),
-                    Some(OnLowWasmMemoryHookStatus::Ready),
-                )
-                .encode();
-                (method, call_args().other_side(args))
-            }),
-            Method::UploadCanisterSnapshotData => test_supported(|aborted_canister_id| {
-                let args = UploadCanisterSnapshotDataArgs::new(
-                    aborted_canister_id,
-                    (aborted_canister_id, 0).into(),
-                    CanisterSnapshotDataOffset::WasmChunk,
-                    vec![],
                 )
                 .encode();
                 (method, call_args().other_side(args))
