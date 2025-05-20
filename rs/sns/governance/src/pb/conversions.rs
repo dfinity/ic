@@ -1840,11 +1840,11 @@ impl From<pb::GetSnsStatusResponse> for pb_api::get_sns_status_response::GetSnsS
                     last_transaction_timestamp: Some(*last_transaction_timestamp),
                 })
             }
-            (Some(_), None) => Self::Err(format!("Missing `last_transaction_timestamp`")),
-            (None, Some(_)) => Self::Err(format!("Missing `num_recent_proposals`")),
-            (None, None) => Self::Err(format!(
-                "Missing `num_recent_proposals` & `last_transaction_timestamp`"
-            )),
+            (Some(_), None) => Self::Err("Missing `last_transaction_timestamp`".to_string()),
+            (None, Some(_)) => Self::Err("Missing `num_recent_proposals`".to_string()),
+            (None, None) => Self::Err(
+                "Missing `num_recent_proposals` & `last_transaction_timestamp`".to_string(),
+            ),
         }
     }
 }
