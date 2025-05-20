@@ -40,7 +40,7 @@ process (Disburse_Maturity_Timer \in Disburse_Maturity_Timer_Process_Ids)
         either {
             goto Disburse_Maturity_Timer_Start;
         } or {
-            with(nid \in 
+            with(nid \in
                 { nid \in DOMAIN(neuron) \ locks : neuron[nid].maturity_disbursements_in_progress # <<>> };
                 disbursement = Head(neuron[neuron_id].maturity_disbursements_in_progress);
                 amount_to_disburse = (disbursement.amount * (BASIS_POINTS_PER_UNITY + MATURITY_BASIS_POINTS)) \div BASIS_POINTS_PER_UNITY
@@ -53,7 +53,7 @@ process (Disburse_Maturity_Timer \in Disburse_Maturity_Timer_Process_Ids)
                     request(self, transfer(Minting_Account_Id, disbursement.account_id, amount_to_disburse, 0)));
             }
         };
-    Disburse_Maturity_Wait_For_Reponse:
+    Disburse_Maturity_WaitForTransfer:
         with(answer \in { resp \in ledger_to_governance: resp.caller = self };
             \* Work around PlusCal not being able to assing to the same variable twice in the same block
         ) {
@@ -71,14 +71,15 @@ process (Disburse_Maturity_Timer \in Disburse_Maturity_Timer_Process_Ids)
             }
         };
         current_disbursement := DUMMY_DISBURSEMENT;
+        goto Disburse_Maturity_Timer_Start;
     }
 }
 *)
 \* BEGIN TRANSLATION (chksum(pcal) = "31afff12" /\ chksum(tla) = "4e54011c")
-VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger, 
+VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger,
           ledger_to_governance, neuron_id, current_disbursement
 
-vars == << pc, neuron, neuron_id_by_account, locks, governance_to_ledger, 
+vars == << pc, neuron, neuron_id_by_account, locks, governance_to_ledger,
            ledger_to_governance, neuron_id, current_disbursement >>
 
 ProcSet == (Disburse_Maturity_Timer_Process_Ids)
@@ -107,7 +108,7 @@ Disburse_Maturity_Timer_Start(self) == /\ pc[self] = "Disburse_Maturity_Timer_St
                                                       /\ governance_to_ledger' =                     Append(governance_to_ledger,
                                                                                  request(self, transfer(Minting_Account_Id, disbursement.account_id, amount_to_disburse, 0)))
                                              /\ pc' = [pc EXCEPT ![self] = "Disburse_Maturity_Wait_For_Reponse"]
-                                       /\ UNCHANGED << neuron_id_by_account, 
+                                       /\ UNCHANGED << neuron_id_by_account,
                                                        ledger_to_governance >>
 
 Disburse_Maturity_Wait_For_Reponse(self) == /\ pc[self] = "Disburse_Maturity_Wait_For_Reponse"
@@ -122,8 +123,8 @@ Disburse_Maturity_Wait_For_Reponse(self) == /\ pc[self] = "Disburse_Maturity_Wai
                                                             /\ UNCHANGED neuron
                                             /\ current_disbursement' = [current_disbursement EXCEPT ![self] = DUMMY_DISBURSEMENT]
                                             /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                            /\ UNCHANGED << neuron_id_by_account, 
-                                                            governance_to_ledger, 
+                                            /\ UNCHANGED << neuron_id_by_account,
+                                                            governance_to_ledger,
                                                             neuron_id >>
 
 Disburse_Maturity_Timer(self) == Disburse_Maturity_Timer_Start(self)

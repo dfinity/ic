@@ -401,9 +401,14 @@ pub fn perform_trace_check(traces: Vec<UpdateTrace>) {
                 pair,
                 constants,
             ).map_err(|e| {
-                println!("Possible divergence from the TLA model detected when interacting with the ledger!");
-                println!("If you did not expect to change the interaction between governance and the ledger, reconsider whether your change is safe. You can find additional data on the step that triggered the error below.");
-                println!("If you are confident that your change is correct, please contact the #formal-models Slack channel and describe the problem.");
+                if e.apalache_error.is_likely_mismatch() {
+                    println!("Possible divergence from the TLA model detected when interacting with the ledger!");
+                    println!("If you did not expect to change the interaction between governance and the ledger, reconsider whether your change is safe. You can find additional data on the step that triggered the error below.");
+                    println!("If you are confident that your change is correct, please contact the #formal-models Slack channel and describe the problem.");
+                } else {
+                    println!("An error detected while checking the TLA model.");
+                    println!("The types may have diverged, or there might be something wrong with the TLA/Apalache setup");
+                }
                 println!("You can edit nns/governance/feature_flags.bzl to disable TLA checks in the CI and get on with your business.");
                 println!("-------------------");
                 println!("Error occured in TLA model {:?} and state pair:\n{:#?}\nwith constants:\n{:#?}", e.model, e.pair, e.constants);

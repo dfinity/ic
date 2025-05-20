@@ -1,14 +1,10 @@
-use crate::{
-    governance::{ledger_helper::MintIcpOperation, Governance},
-    neuron_store::NeuronStore,
-    pb::v1::{
-        governance::{neuron_in_flight_command::Command, NeuronInFlightCommand},
-        governance_error::ErrorType,
-        manage_neuron::DisburseMaturity,
-        Account, FinalizeDisburseMaturity, GovernanceError, MaturityDisbursement, NeuronState,
-        Subaccount,
-    },
-};
+use crate::{governance::{ledger_helper::MintIcpOperation, Governance}, neuron_store::NeuronStore, pb::v1::{
+    governance::{neuron_in_flight_command::Command, NeuronInFlightCommand},
+    governance_error::ErrorType,
+    manage_neuron::DisburseMaturity,
+    Account, FinalizeDisburseMaturity, GovernanceError, MaturityDisbursement, NeuronState,
+    Subaccount,
+}, tla_log_label};
 
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_nervous_system_governance::maturity_modulation::{
@@ -603,10 +599,11 @@ async fn try_finalize_maturity_disbursement(
         current_disbursement: TlaValue::Record(BTreeMap::from(
             [
                 ("account_id".to_string(), account_to_tla(icp_ledger::AccountIdentifier::from(account))),
-                ("amount_e8s".to_string(), maturity_disbursement_in_progress.amount_e8s.to_tla_value()),
+                ("amount".to_string(), maturity_disbursement_in_progress.amount_e8s.to_tla_value()),
             ]
         ))
     };
+    tla_log_label!("Disburse_Maturity");
     let mint_result = mint_icp_operation
         .mint_icp_with_ledger(ledger.as_ref(), now_seconds)
         .await;

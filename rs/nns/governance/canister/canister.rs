@@ -587,7 +587,7 @@ fn main() {
 #[query(hidden = true)]
 fn get_tla_traces() -> Vec<tla_instrumentation::UpdateTrace> {
     use ic_nns_governance::governance::tla::TLA_TRACES_MUTEX;
-    let mut traces = TLA_TRACES_MUTEX.as_ref().unwrap().write().unwrap();
+    let mut traces = TLA_TRACES_MUTEX.as_ref().expect("TLA_TRACES_MUTEX is None in get_tla_traces").write().expect("Couldn't acquire TLA_TRACES_MUTEX write lock in get_tla_traces");
     let mut result = Vec::new();
     std::mem::swap(&mut result, &mut *traces);
     result.into_iter().map(|t| t.into()).collect()
