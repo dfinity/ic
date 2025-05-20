@@ -18,7 +18,7 @@ pub(crate) fn http_endpoint_to_url(http: &ConnectionEndpoint, log: &ReplicaLogge
         }
     };
 
-    let url = format!("http://{}:{}/", host_str, http.port);
+    let url = format!("https://{}:{}/", host_str, http.port);
     match Url::parse(&url) {
         Ok(v) => Some(v),
         Err(e) => {
