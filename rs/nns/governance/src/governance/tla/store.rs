@@ -1,6 +1,5 @@
 use local_key::task_local;
-use std::cell::RefCell;
-use std::sync::RwLock;
+use std::sync::{Arc, Mutex, RwLock};
 pub use tla_instrumentation::{InstrumentationState, UpdateTrace};
 
 // The entire module should only ever be imported if the tla feature is enabled,
@@ -9,7 +8,7 @@ pub use tla_instrumentation::{InstrumentationState, UpdateTrace};
 #[cfg(feature = "tla")]
 task_local! {
     pub static TLA_INSTRUMENTATION_STATE: InstrumentationState;
-    pub static TLA_TRACES_LKEY: RefCell<Vec<UpdateTrace>>;
+    pub static TLA_TRACES_LKEY: Arc<Mutex<Vec<UpdateTrace>>>;
 }
 
 #[cfg(feature = "tla")]

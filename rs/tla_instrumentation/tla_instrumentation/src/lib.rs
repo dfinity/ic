@@ -45,7 +45,7 @@ pub struct Update {
 }
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, CandidType)]
 pub struct UpdateTrace {
     pub model_name: String,
     pub state_pairs: Vec<ResolvedStatePair>,

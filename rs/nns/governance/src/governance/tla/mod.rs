@@ -9,7 +9,6 @@ use crate::storage::{with_stable_neuron_indexes, with_stable_neuron_store};
 pub use tla_instrumentation::{
     Destination, GlobalState, InstrumentationState, Label, ResolvedStatePair,
     TlaConstantAssignment, TlaValue, ToTla, Update, UpdateTrace, VarAssignment,
-    UpdateTraceReport,
 };
 pub use tla_instrumentation_proc_macros::{tla_function, tla_update_method};
 
@@ -48,6 +47,7 @@ pub use refresh_neuron::REFRESH_NEURON_DESC;
 pub use spawn_neuron::SPAWN_NEURON_DESC;
 pub use spawn_neurons::SPAWN_NEURONS_DESC;
 pub use split_neuron::SPLIT_NEURON_DESC;
+use tla_instrumentation::UnsafeSendPtr;
 
 fn neuron_global() -> TlaValue {
     let neuron_map: BTreeMap<u64, TlaValue> = with_stable_neuron_store(|store| {
@@ -129,7 +129,8 @@ fn neuron_id_by_account() -> TlaValue {
     })
 }
 
-pub fn get_tla_globals(gov: &Governance) -> GlobalState {
+pub fn get_tla_globals(p: &UnsafeSendPtr<Governance>) -> GlobalState {
+    let gov = unsafe { &*(p.0) };
     let mut state = GlobalState::new();
     state.add(
         "locks",
@@ -313,7 +314,7 @@ pub fn check_traces() {
             let under_limit_len = t.state_pairs.iter().filter(|p| is_under_limit(p)).count();
             println!(
                 "TLA/Apalache checks: keeping {}/{} state pairs for update {}",
-                under_limit_len, total_len, t.update.process_id
+                under_limit_len, total_len, t.model_name
             );
         }
         println!(
@@ -323,8 +324,8 @@ pub fn check_traces() {
     }
 
     let traces = {
-        let t = TLA_TRACES_LKEY.get();
-        let mut t = t.borrow_mut();
+        let t_mutex =TLA_TRACES_LKEY.get() ;
+        let mut t = t_mutex.lock().expect("Couldn't lock the traces in check_traces");
         std::mem::take(&mut (*t))
     };
 
@@ -336,14 +337,14 @@ pub fn check_traces() {
             t.state_pairs
                 .into_iter()
                 .filter(is_under_limit)
-                .map(move |p| (t.update.clone(), t.constants.clone(), p))
+                .map(move |p| (t.model_name.clone(), t.constants.clone(), p))
         })
         .collect();
 
     // A quick check that we don't have any duplicate state pairs. We assume the constants should
-    // be the same anyways and look at just the process ID and the state sthemselves.
-    dedup_by_key(&mut all_pairs, |(u, _c, p)| {
-        (u.process_id.clone(), p.start.clone(), p.end.clone())
+    // be the same anyways and look at just the model name and the state sthemselves.
+    dedup_by_key(&mut all_pairs, |(model_name, _c, p)| {
+        (model_name.clone(), p.start.clone(), p.end.clone())
     });
 
     all_pairs.truncate(STATE_PAIR_COUNT_LIMIT);
@@ -364,7 +365,7 @@ pub fn check_traces() {
     const MAX_THREADS: usize = 20;
     let mut running_threads = 0;
     let (thread_freed_tx, thread_freed_rx) = mpsc::channel::<bool>();
-    for (i, (update, constants, pair)) in all_pairs.iter().enumerate() {
+    for (i, (model_name, constants, pair)) in all_pairs.iter().enumerate() {
         println!("Checking state pair #{}", i + 1);
         if running_threads >= MAX_THREADS {
             if thread_freed_rx
@@ -381,7 +382,7 @@ pub fn check_traces() {
         let constants = constants.clone();
         let pair = pair.clone();
         // NOTE: We adopt the convention to reuse the 'process_id" as the tla module name
-        let tla_module = format!("{}_Apalache.tla", update.process_id);
+        let tla_module = format!("{}_Apalache.tla", model_name);
         let tla_module = get_tla_module_path(&tla_module);
 
         running_threads += 1;

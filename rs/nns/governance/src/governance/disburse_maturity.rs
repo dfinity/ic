@@ -503,26 +503,20 @@ fn next_maturity_disbursement_to_finalize(
 }
 
 #[cfg(feature = "tla")]
-fn get_globals(governance: &'static LocalKey<RefCell<Governance>>) -> GlobalState {
-    let ptr: *const Governance = { governance.with(|g| g.as_ptr()) };
-
-    unsafe { get_tla_globals(&*ptr) }
-}
-
-#[cfg(feature = "tla")]
-fn get_snapshotter(governance: &'static LocalKey<RefCell<Governance>>) -> ::std::rc::Rc<dyn Fn() -> GlobalState> {
-    let ptr: *const Governance = { governance.with(|g| g.as_ptr()) };
-
-    // let raw_ptr = governance.with_borrow(|g| {&g as *const _});
-    // ::std::rc::Rc::new(move || unsafe { get_tla_globals(*raw_ptr) })
-    ::std::rc::Rc::new(move || unsafe { get_tla_globals(&*ptr) })
+macro_rules! tla_snapshotter {
+    ($first_arg:expr $(, $_rest:tt)* ) => {
+        { // Use a block to potentially shadow variables and contain the logic
+            let raw_ptr = ::tla_instrumentation::UnsafeSendPtr($first_arg.with(|g| g.as_ptr()));
+            ::std::sync::Arc::new(::std::sync::Mutex::new(move || { $crate::governance::tla::get_tla_globals(&raw_ptr) }))
+        }
+    }
 }
 
 /// Finalizes the maturity disbursement for a neuron. See
 /// `ic_nns_governance::pb::v1::manage_neuron::DisburseMaturity` for more information. Returns the
 /// delay until the time when the finalization should be run again.
 // TODO: finish instrumenting this
-#[cfg_attr(feature = "tla", tla_update_method(FINALIZE_MATURITY_DISBURSEMENT_DESC.clone(), globals=get_globals, snapshotter=get_snapshotter))]
+#[cfg_attr(feature = "tla", tla_update_method(FINALIZE_MATURITY_DISBURSEMENT_DESC.clone(), tla_snapshotter!()))]
 pub async fn finalize_maturity_disbursement(
     governance: &'static LocalKey<RefCell<Governance>>,
 ) -> Duration {

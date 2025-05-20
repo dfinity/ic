@@ -136,13 +136,12 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
             TLA_INSTRUMENTATION_STATE.sync_scope(
                 tla_instrumentation::InstrumentationState::new(update.clone(), globals, snapshotter.clone(), start_location),
                 || {
-                    println!("Calling a sync scope for some reason");
                     let res = #noninstrumented_invocation;
                     let globals = (*snapshotter.lock().expect("Couldn't lock snapshotter in tla_update_method after invocation"))();
                     let state: InstrumentationState = TLA_INSTRUMENTATION_STATE.get();
                     let mut handler_state = state.handler_state.lock().expect("Couldn't obtain the lock on the handler state in tla_update_method");
                     let state_pair = tla_instrumentation::log_method_return(&mut handler_state, globals, end_location);
-                    let mut state_pairs = state.state_pairs.borrow_mut();
+                    let mut state_pairs = state.state_pairs.lock().expect("Couldn't obtain the lock on the state pairs in tla_update_method");
                     state_pairs.push(state_pair);
                     (state_pairs.clone(), res)
                 }
