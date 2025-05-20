@@ -56,6 +56,7 @@ go_deps.bzl               @dfinity/idx
 /packages/ic-http-types/                @dfinity/cross-chain-team
 /packages/ic-metrics-assert/            @dfinity/cross-chain-team
 /packages/ic-secp256k1/                 @dfinity/crypto-team
+/packages/ic-secp256r1/                 @dfinity/crypto-team
 /packages/ic-sha3/                      @dfinity/crypto-team
 /packages/ic-signature-verification/    @dfinity/crypto-team
 /packages/ic-vetkd-utils/               @dfinity/crypto-team
