@@ -164,7 +164,7 @@ rust_library(
     ]),
     crate_name = "pocket_ic_server",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "9.0.1",
+    version = "9.0.2",
     deps = LIB_DEPENDENCIES + [":build_script"],
 )
 
@@ -211,6 +211,11 @@ rust_test(
         "requires-network",
         "test_macos",
     ],
+    # We temporarily disable the test on x86_64-darwin because the hyper HTTP client runs into issues on that platform.
+    target_compatible_with = select({
+        "@platforms//os:osx": ["@platforms//cpu:arm64"],
+        "//conditions:default": [],
+    }),
     deps = TEST_DEPENDENCIES,
 )
 
@@ -268,5 +273,10 @@ rust_test(
         "requires-network",
         "test_macos",
     ],
+    # We temporarily disable the test on x86_64-darwin because the hyper HTTP client runs into issues on that platform.
+    target_compatible_with = select({
+        "@platforms//os:osx": ["@platforms//cpu:arm64"],
+        "//conditions:default": [],
+    }),
     deps = TEST_DEPENDENCIES,
 )

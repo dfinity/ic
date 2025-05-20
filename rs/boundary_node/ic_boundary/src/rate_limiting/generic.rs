@@ -44,8 +44,9 @@ use super::{
 
 use crate::{
     core::Run,
+    errors::{ErrorCause, RateLimitCause},
     persist::RouteSubnet,
-    routes::{ErrorCause, RateLimitCause, RequestContext, RequestType},
+    routes::{RequestContext, RequestType},
     snapshot::RegistrySnapshot,
 };
 
@@ -497,13 +498,11 @@ pub async fn middleware(
 #[cfg(test)]
 mod test {
     use super::*;
+    use ic_bn_lib::principal;
     use indoc::indoc;
     use std::str::FromStr;
 
-    use crate::{
-        principal,
-        snapshot::{generate_stub_snapshot, ApiBoundaryNode},
-    };
+    use crate::snapshot::{generate_stub_snapshot, ApiBoundaryNode};
 
     struct BrokenFetcher;
 
