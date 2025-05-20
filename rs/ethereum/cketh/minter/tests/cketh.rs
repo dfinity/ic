@@ -1,6 +1,7 @@
 use assert_matches::assert_matches;
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
+use ic_cketh_minter::blocklist::SAMPLE_BLOCKED_ADDRESS;
 use ic_cketh_minter::endpoints::events::{
     EventPayload, EventSource, TransactionReceipt, TransactionStatus, UnsignedTransaction,
 };
@@ -214,9 +215,7 @@ fn should_retrieve_cache_transaction_price() {
 #[test]
 fn should_block_deposit_from_blocked_address() {
     let cketh = CkEthSetup::default_with_maybe_evm_rpc();
-    let from_address_blocked: Address = "0x01e2919679362dFBC9ee1644Ba9C6da6D6245BB1"
-        .parse()
-        .unwrap();
+    let from_address_blocked: Address = SAMPLE_BLOCKED_ADDRESS;
 
     cketh
         .deposit(DepositCkEthParams {
@@ -290,7 +289,7 @@ fn should_block_withdrawal_to_blocked_address() {
     let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
-    let blocked_address = "0x01e2919679362dFBC9ee1644Ba9C6da6D6245BB1".to_string();
+    let blocked_address = SAMPLE_BLOCKED_ADDRESS.to_string();
 
     cketh
         .deposit(DepositParams::default())
