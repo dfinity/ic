@@ -251,8 +251,7 @@ impl LedgerSuiteConfig {
             Err(err) => {
                 panic!(
                     "Failed to get index principal for ledger {}: {:?}",
-                    ledger_canister_id.to_string(),
-                    err
+                    ledger_canister_id, err
                 );
             }
         }
