@@ -57,10 +57,10 @@ impl CanisterSnapshots {
         }
     }
 
-    /// Inserts a chunk into a snaphot and updates its `size` and the `CanisterSnapshots`'
-    /// `memory_usage` by the maximum chunk size.
-    /// Returns `None` if the given snapshot ID could not be found. In this case, the method
-    /// has no effect.
+    /// Inserts a chunk into a snaphot's chunk store and updates its `size` and
+    /// the `CanisterSnapshots`' `memory_usage` by the maximum chunk size.
+    /// Returns `None` if the given snapshot ID could not be found. In this case,
+    /// the method has no effect.
     pub fn insert_chunk(
         &mut self,
         snapshot_id: SnapshotId,
