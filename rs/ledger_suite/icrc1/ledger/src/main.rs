@@ -310,7 +310,7 @@ struct LedgerSuite {
     pub index: &'static str,
 }
 
-const LEDGER_SUITES: &[LedgerSuite; 54] = &[
+const LEDGER_SUITES: &[LedgerSuite; 55] = &[
     // Chain fusion ledger suites
     LedgerSuite {
         name: "ckBTC",
@@ -553,6 +553,11 @@ const LEDGER_SUITES: &[LedgerSuite; 54] = &[
         name: "POKEDBOTS",
         ledger: "np5km-uyaaa-aaaaq-aadrq-cai",
         index: "n535v-yiaaa-aaaaq-aadsq-cai",
+    },
+    LedgerSuite {
+        name: "SEERS",
+        ledger: "rffwt-piaaa-aaaaq-aabqq-cai",
+        index: "rlh33-uyaaa-aaaaq-aabrq-cai",
     },
     LedgerSuite {
         name: "SNEED",

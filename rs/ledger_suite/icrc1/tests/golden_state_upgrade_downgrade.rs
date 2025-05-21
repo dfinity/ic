@@ -724,20 +724,20 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         "ux4b6-7qaaa-aaaaq-aaboa-cai",
         "Catalyze",
     );
+    const CECIL_THE_LION_DAO_LEDGER_SUITE: (&str, &str, &str) = (
+        "jg2ra-syaaa-aaaaq-aaewa-cai",
+        "jiy4i-jiaaa-aaaaq-aaexa-cai",
+        "Cecil The Lion DAO",
+    );
     const DECIDEAI_LEDGER_SUITE: (&str, &str, &str) = (
         "xsi2v-cyaaa-aaaaq-aabfq-cai",
         "xaonm-oiaaa-aaaaq-aabgq-cai",
         "DecideAI",
     );
-    const DOGMI_LEDGER_SUITE: (&str, &str, &str) = (
-        "np5km-uyaaa-aaaaq-aadrq-cai",
-        "n535v-yiaaa-aaaaq-aadsq-cai",
-        "DOGMI",
-    );
     const DOLR_AI_LEDGER_SUITE: (&str, &str, &str) = (
         "6rdgd-kyaaa-aaaaq-aaavq-cai",
         "6dfr2-giaaa-aaaaq-aaawq-cai",
-        "YRAL",
+        "DOLR",
     );
     const DRAGGINZ_LEDGER_SUITE: (&str, &str, &str) = (
         "zfcdd-tqaaa-aaaaq-aaaga-cai",
@@ -769,10 +769,15 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         "efv5g-kqaaa-aaaaq-aacaa-cai",
         "GoldDAO",
     );
-    const ICGHOST_LEDGER_SUITE: (&str, &str, &str) = (
-        "4c4fd-caaaa-aaaaq-aaa3a-cai",
-        "5ithz-aqaaa-aaaaq-aaa4a-cai",
-        "ICGhost",
+    const IC_EXPLORER_LEDGER_SUITE: (&str, &str, &str) = (
+        "ifwyg-gaaaa-aaaaq-aaeqq-cai",
+        "iluvo-5qaaa-aaaaq-aaerq-cai",
+        "IC Explorer",
+    );
+    const ICFC_LEDGER_SUITE: (&str, &str, &str) = (
+        "ddsp7-7iaaa-aaaaq-aacqq-cai",
+        "dnqcx-eyaaa-aaaaq-aacrq-cai",
+        "ICFC",
     );
     const ICLIGHTHOUSE_LEDGER_SUITE: (&str, &str, &str) = (
         "hhaaz-2aaaa-aaaaq-aacla-cai",
@@ -784,10 +789,10 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         "c3324-riaaa-aaaaq-aacuq-cai",
         "ICPanda DAO",
     );
-    const ICPCC_LEDGER_SUITE: (&str, &str, &str) = (
-        "lrtnw-paaaa-aaaaq-aadfa-cai",
-        "ldv2p-dqaaa-aaaaq-aadga-cai",
-        "ICPCC DAO LLC",
+    const ICPEX_LEDGER_SUITE: (&str, &str, &str) = (
+        "lvfsa-2aaaa-aaaaq-aaeyq-cai",
+        "l3h7i-bqaaa-aaaaq-aaezq-cai",
+        "ICPEX",
     );
     const ICPSWAP_LEDGER_SUITE: (&str, &str, &str) = (
         "ca6gz-lqaaa-aaaaq-aacwa-cai",
@@ -808,6 +813,11 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         "o7oak-iyaaa-aaaaq-aadzq-cai",
         "onixt-eiaaa-aaaaq-aad2q-cai",
         "KongSwap",
+    );
+    const MIMIC_LEDGER_SUITE: (&str, &str, &str) = (
+        "4c4fd-caaaa-aaaaq-aaa3a-cai",
+        "5ithz-aqaaa-aaaaq-aaa4a-cai",
+        "Mimic",
     );
     const MOTOKO_LEDGER_SUITE: (&str, &str, &str) = (
         "k45jy-aiaaa-aaaaq-aadcq-cai",
@@ -834,15 +844,20 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         "2awyi-oyaaa-aaaaq-aaanq-cai",
         "OpenChat",
     );
-    const OPENFPL_LEDGER_SUITE: (&str, &str, &str) = (
-        "ddsp7-7iaaa-aaaaq-aacqq-cai",
-        "dnqcx-eyaaa-aaaaq-aacrq-cai",
-        "OpenFPL",
-    );
     const ORIGYN_LEDGER_SUITE: (&str, &str, &str) = (
         "lkwrt-vyaaa-aaaaq-aadhq-cai",
         "jqkzp-liaaa-aaaaq-aadiq-cai",
         "Origyn",
+    );
+    const PERSONAL_DAO_LEDGER_SUITE: (&str, &str, &str) = (
+        "ixqp7-kqaaa-aaaaq-aaetq-cai",
+        "j57nf-iaaaa-aaaaq-aaeuq-cai",
+        "Personal DAO",
+    );
+    const POKEDBOTS_LEDGER_SUITE: (&str, &str, &str) = (
+        "np5km-uyaaa-aaaaq-aadrq-cai",
+        "n535v-yiaaa-aaaaq-aadsq-cai",
+        "PokedBots",
     );
     const SEERS_LEDGER_SUITE: (&str, &str, &str) = (
         "rffwt-piaaa-aaaaq-aabqq-cai",
@@ -858,6 +873,11 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         "qbizb-wiaaa-aaaaq-aabwq-cai",
         "qpkuj-nyaaa-aaaaq-aabxq-cai",
         "Sonic",
+    );
+    const SWAMPIES_LEDGER_SUITE: (&str, &str, &str) = (
+        "lrtnw-paaaa-aaaaq-aadfa-cai",
+        "ldv2p-dqaaa-aaaaq-aadga-cai",
+        "Swampies",
     );
     const TRAX_LEDGER_SUITE: (&str, &str, &str) = (
         "emww2-4yaaa-aaaaq-aacbq-cai",
@@ -886,8 +906,8 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         ALICE_LEDGER_SUITE,
         BOOMDAO_LEDGER_SUITE,
         CATALYZE_LEDGER_SUITE,
+        CECIL_THE_LION_DAO_LEDGER_SUITE,
         DECIDEAI_LEDGER_SUITE,
-        DOGMI_LEDGER_SUITE,
         DOLR_AI_LEDGER_SUITE,
         DRAGGINZ_LEDGER_SUITE,
         ELNAAI_LEDGER_SUITE,
@@ -895,23 +915,27 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         FOMOWELL_LEDGER_SUITE,
         // FUEL_EV_LEDGER_SUITE, // Skipping FuelEV for now, as the index canister was uninstalled
         GOLDDAO_LEDGER_SUITE,
-        ICGHOST_LEDGER_SUITE,
+        IC_EXPLORER_LEDGER_SUITE,
+        ICFC_LEDGER_SUITE,
         ICLIGHTHOUSE_LEDGER_SUITE,
         ICPANDA_LEDGER_SUITE,
-        ICPCC_LEDGER_SUITE,
+        ICPEX_LEDGER_SUITE,
         ICPSWAP_LEDGER_SUITE,
         ICVC_LEDGER_SUITE,
         KINIC_LEDGER_SUITE,
         KONG_SWAP_LEDGER_SUITE,
+        MIMIC_LEDGER_SUITE,
         MOTOKO_LEDGER_SUITE,
         NEUTRINITE_LEDGER_SUITE,
         NFID_WALLET_LEDGER_SUITE,
         NUANCE_LEDGER_SUITE,
-        OPENFPL_LEDGER_SUITE,
         ORIGYN_LEDGER_SUITE,
+        PERSONAL_DAO_LEDGER_SUITE,
+        POKEDBOTS_LEDGER_SUITE,
         SEERS_LEDGER_SUITE,
         SNEED_LEDGER_SUITE,
         SONIC_LEDGER_SUITE,
+        SWAMPIES_LEDGER_SUITE,
         TRAX_LEDGER_SUITE,
         WATERNEURON_LEDGER_SUITE,
         YUKU_LEDGER_SUITE,
