@@ -74,6 +74,11 @@ Compute_Next_State(new_height, new_state) ==
     /\ new_height \in Compute_Next_State_Heights
     \* If the preceding height is a checkpoint height, we block producing the new state until we have a checkpoint.
     \* This models the current process where checkpointing blocks the state machine.
+    \* TODO: there are now two different kinds of checkpoints; we should probably model this here:
+    \* 1. Verified checkpoint
+    \* 2. Unverified checkpoint; this may be further refined into several subtypes
+    \* Check whether this should be added to the model; this differs in behavior in
+    \* case of restart
     /\  IS_CHECKPOINT_HEIGHT(previous_height)
         => previous_height \in DOMAIN checkpoints
     /\ 
