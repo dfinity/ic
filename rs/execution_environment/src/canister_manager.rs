@@ -2203,11 +2203,27 @@ impl CanisterManager {
                 args.chunk.len() as u64
             }
             CanisterSnapshotDataOffset::MainMemory { offset } => {
+                let max_size_bytes =
+                    snapshot_inner.wasm_memory().size.get() * WASM_PAGE_SIZE_IN_BYTES;
+                if max_size_bytes < args.chunk.len().saturating_add(offset as usize) {
+                    return Err(CanisterManagerError::InvalidSubslice {
+                        offset,
+                        size: args.chunk.len() as u64,
+                    });
+                }
                 let mut buffer = Buffer::new(snapshot_inner.wasm_memory().page_map.clone());
                 buffer.write(&args.chunk, offset as usize);
                 args.chunk.len() as u64
             }
             CanisterSnapshotDataOffset::StableMemory { offset } => {
+                let max_size_bytes =
+                    snapshot_inner.stable_memory().size.get() * WASM_PAGE_SIZE_IN_BYTES;
+                if max_size_bytes < args.chunk.len().saturating_add(offset as usize) {
+                    return Err(CanisterManagerError::InvalidSubslice {
+                        offset,
+                        size: args.chunk.len() as u64,
+                    });
+                }
                 let mut buffer = Buffer::new(snapshot_inner.stable_memory().page_map.clone());
                 buffer.write(&args.chunk, offset as usize);
                 args.chunk.len() as u64
