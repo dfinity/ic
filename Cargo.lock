@@ -13751,6 +13751,7 @@ dependencies = [
  "backon",
  "base64 0.13.1",
  "bincode",
+ "bootstrap_config",
  "candid",
  "canister-test",
  "chrono",

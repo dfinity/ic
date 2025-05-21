@@ -14,9 +14,8 @@ use crate::{
         resource::{AllocatedVm, HOSTOS_MEMORY_KIB_PER_VM, HOSTOS_VCPUS_PER_VM},
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
-            get_dependency_path, get_dependency_path_from_env, get_elasticsearch_hosts,
-            get_ic_os_update_img_sha256, get_ic_os_update_img_url,
-            get_mainnet_ic_os_update_img_url, get_mainnet_nns_revision,
+            get_dependency_path_from_env, get_elasticsearch_hosts, get_ic_os_update_img_sha256,
+            get_ic_os_update_img_url, get_mainnet_ic_os_update_img_url, get_mainnet_nns_revision,
             get_malicious_ic_os_update_img_sha256, get_malicious_ic_os_update_img_url,
             read_dependency_from_env_to_string, HasIcDependencies, HasTopologySnapshot, HasVmName,
             IcNodeContainer, InitialReplicaVersion, NodesInfo,
@@ -519,6 +518,7 @@ fn create_config_disk_image(
         ic_registry_local_store: Some(local_store_path),
         ic_state: Some(node.state_path()),
         ic_crypto: Some(node.crypto_path()),
+        malicious_behavior,
         ..Default::default()
     };
 
@@ -542,10 +542,6 @@ fn create_config_disk_image(
         bootstrap_options
             .nns_urls
             .push(format!("http://[{}]:8080", node.get_ip_addr()));
-    }
-
-    if let Some(malicious_behavior) = malicious_behavior {
-        bootstrap_options.malicious_behavior = malicious_behavior;
     }
 
     if let Some(query_stats_epoch_length) = query_stats_epoch_length {

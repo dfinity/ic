@@ -13,6 +13,7 @@ async-trait = { workspace = true }
 backon = "0.4.1"
 base64 = { workspace = true }
 bincode = { workspace = true }
+bootstrap_config = { path = "../../ic_os/bootstrap_config", features = ["dev"] }
 candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 chrono = { workspace = true }
