@@ -3987,7 +3987,20 @@ pub struct ReadCanisterSnapshotDataArgs {
     pub kind: CanisterSnapshotDataKind,
 }
 
-impl Payload<'_> for ReadCanisterSnapshotDataArgs {}
+// TODO: EXC-1997.
+impl<'a> Payload<'a> for ReadCanisterSnapshotDataArgs {
+    fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
+        let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
+        // Verify that snapshot ID has the correct format.
+        if let Err(err) = SnapshotId::try_from(&args.snapshot_id) {
+            return Err(UserError::new(
+                ErrorCode::InvalidManagementPayload,
+                format!("Payload deserialization error: {err:?}"),
+            ));
+        }
+        Ok(args)
+    }
+}
 
 impl ReadCanisterSnapshotDataArgs {
     pub fn new(
