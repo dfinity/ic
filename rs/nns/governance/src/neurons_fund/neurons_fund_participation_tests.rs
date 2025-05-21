@@ -1,5 +1,4 @@
 use super::*;
-use ic_cdk::println;
 use ic_neurons_fund::test_functions::SimpleLinearFunction;
 
 fn nid(id: u64) -> NeuronId {
