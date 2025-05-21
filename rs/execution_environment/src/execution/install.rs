@@ -82,7 +82,7 @@ pub(crate) fn execute_install(
     let mut helper = InstallCodeHelper::new(&clean_canister, &original);
 
     // Stage 0: validate input.
-    if let Err(err) = helper.validate_input(&original, &round, round_limits) {
+    if let Err(err) = helper.validate_input(&original) {
         let instructions_left = helper.instructions_left();
         return finish_err(
             clean_canister,
@@ -129,7 +129,6 @@ pub(crate) fn execute_install(
             stable_memory_handling: MemoryHandling::Replace,
             main_memory_handling: MemoryHandling::Replace,
         },
-        &original,
     ) {
         let instructions_left = helper.instructions_left();
         return finish_err(
@@ -394,7 +393,6 @@ impl PausedInstallCodeExecution for PausedInitExecution {
             self.paused_helper,
             &self.original,
             &round,
-            round_limits,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {
@@ -497,7 +495,6 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
             self.paused_helper,
             &self.original,
             &round,
-            round_limits,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {

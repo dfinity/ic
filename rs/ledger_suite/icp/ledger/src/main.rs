@@ -584,10 +584,6 @@ fn block(block_index: BlockIndex) -> Option<Result<EncodedBlock, CanisterId>> {
         Some(Err(result))
     // Or the block may be in the ledger, or the block may not exist
     } else {
-        print(format!(
-            "[ledger] Checking the ledger for block [{}]",
-            block_index
-        ));
         state.blockchain.get(block_index).map(Ok)
     }
 }

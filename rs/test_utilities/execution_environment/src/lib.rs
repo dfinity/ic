@@ -825,26 +825,6 @@ impl ExecutionTest {
         Ok(())
     }
 
-    pub fn install_canister_with_allocation(
-        &mut self,
-        canister_id: CanisterId,
-        wasm_binary: Vec<u8>,
-        compute_allocation: Option<u64>,
-        memory_allocation: Option<u64>,
-    ) -> Result<(), UserError> {
-        let args = InstallCodeArgs::new(
-            CanisterInstallMode::Install,
-            canister_id,
-            wasm_binary,
-            vec![],
-            compute_allocation,
-            memory_allocation,
-        );
-        let result = self.install_code(args)?;
-        assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
-        Ok(())
-    }
-
     /// Re-installs the given canister with the given Wasm binary.
     pub fn reinstall_canister(
         &mut self,
