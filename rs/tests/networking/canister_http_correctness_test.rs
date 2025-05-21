@@ -60,7 +60,6 @@ const MAX_HEADER_NAME_LENGTH: usize = 8 * 1024;
 const MAX_HEADER_VALUE_LENGTH: usize = 8 * 1024;
 const TOTAL_HEADER_NAME_AND_VALUE_LENGTH: usize = 48 * 1024;
 const HTTP_HEADERS_MAX_NUMBER: usize = 64;
-const RESPONSE_OVERHEAD: u64 = 256;
 const HTTP_REQUEST_CYCLE_PAYMENT: u64 = 500_000_000_000;
 
 // httpbin-rs returns 5 headers in addition to the requested headers:
@@ -764,16 +763,24 @@ fn test_post_request(env: TestEnv) {
 fn test_http_endpoint_response_is_within_limits_with_custom_max_response_bytes(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
-    let max_response_bytes: u64 = 1_000_000;
+
+    let n = 1_000_000;
+
+    //   { Response headers
+    //       date: Jan 1 1970 00:00:00 GMT
+    //       content-type: application/octet-stream
+    //       content-length: 11
+    //       access-control-allow-origin: *
+    //       access-control-allow-credentials: true
+    //   }
+    let header_size = 142;
+    let max_response_bytes: u64 = n - header_size;
 
     let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!(
-                    "https://[{webserver_ipv6}]:20443/bytes/{}",
-                    max_response_bytes
-                ),
+                url: format!("https://[{webserver_ipv6}]:20443/bytes/{}", n),
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
@@ -784,9 +791,7 @@ fn test_http_endpoint_response_is_within_limits_with_custom_max_response_bytes(e
                     }),
                     context: vec![0, 1, 2],
                 }),
-                // Note: the whole response will contain more than 1_000_000 bytes, it also contains a status code + headers etc.
-                // a 256B leeway is decent..
-                max_response_bytes: Some(max_response_bytes + RESPONSE_OVERHEAD),
+                max_response_bytes: Some(max_response_bytes),
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -799,16 +804,24 @@ fn test_http_endpoint_response_is_within_limits_with_custom_max_response_bytes(e
 fn test_http_endpoint_response_is_too_large_with_custom_max_response_bytes(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
-    let max_response_bytes = 1_000_000;
+
+    let n = 1_000_000;
+
+    //   { Response headers
+    //       date: Jan 1 1970 00:00:00 GMT
+    //       content-type: application/octet-stream
+    //       content-length: 11
+    //       access-control-allow-origin: *
+    //       access-control-allow-credentials: true
+    //   }
+    let header_size = 142;
+    let max_response_bytes = n - header_size;
 
     let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!(
-                    "https://[{webserver_ipv6}]:20443/bytes/{}",
-                    max_response_bytes + 1
-                ),
+                url: format!("https://[{webserver_ipv6}]:20443/bytes/{}", n + 1),
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
@@ -838,16 +851,21 @@ fn test_http_endpoint_response_is_within_limits_with_default_max_response_bytes(
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
+    //   { Response headers
+    //       date: Jan 1 1970 00:00:00 GMT
+    //       content-type: application/octet-stream
+    //       content-length: 11
+    //       access-control-allow-origin: *
+    //       access-control-allow-credentials: true
+    //   }
+    let header_size = 142;
+    let n = DEFAULT_MAX_RESPONSE_BYTES - header_size;
+
     let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                // Note: the whole response will contain more than (DEFAULT_MAX_RESPONSE_BYTES - 256) bytes, it also contains a status code + headers etc.
-                // a 256B leeway is decent..
-                url: format!(
-                    "https://[{webserver_ipv6}]:20443/bytes/{}",
-                    DEFAULT_MAX_RESPONSE_BYTES - RESPONSE_OVERHEAD
-                ),
+                url: format!("https://[{webserver_ipv6}]:20443/bytes/{}", n),
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
@@ -872,14 +890,21 @@ fn test_http_endpoint_response_is_too_large_with_default_max_response_bytes(env:
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
+    //   { Response headers
+    //       date: Jan 1 1970 00:00:00 GMT
+    //       content-type: application/octet-stream
+    //       content-length: 11
+    //       access-control-allow-origin: *
+    //       access-control-allow-credentials: true
+    //   }
+    let header_size = 142;
+    let n = DEFAULT_MAX_RESPONSE_BYTES - header_size;
+
     let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!(
-                    "https://[{webserver_ipv6}]:20443/bytes/{}",
-                    DEFAULT_MAX_RESPONSE_BYTES + 1
-                ),
+                url: format!("https://[{webserver_ipv6}]:20443/bytes/{}", n + 1),
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
