@@ -380,7 +380,6 @@ pub(crate) fn flush_canister_snapshots_and_page_maps(
         // Only CanisterSnapshots that are new since the last flush and CanisterSnapshots that have had binary data uploaded
         // will have PageMaps that need to be flushed. They will have a corresponding `CreateSnapshot` or `UploadSnapshotData`
         // in the unflushed operations list.
-        // Note that here, snapshot creation from metadata is also represented as `UnflushedCheckpointOp::TakeSnapshot`.
         if let UnflushedCheckpointOp::TakeSnapshot(.., snapshot_id)
         | UnflushedCheckpointOp::UploadSnapshotData(snapshot_id)
         | UnflushedCheckpointOp::UploadSnapshotMetadata(snapshot_id) = op

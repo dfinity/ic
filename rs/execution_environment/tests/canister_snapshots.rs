@@ -26,7 +26,6 @@ fn upload_snapshot_with_checkpoint() {
         ))
         .unwrap();
 
-    println!("{:02x?}", module_dl);
     assert_eq!(counter_canister_wasm, module_dl);
 }
 
