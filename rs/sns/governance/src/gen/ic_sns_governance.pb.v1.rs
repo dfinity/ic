@@ -2228,7 +2228,7 @@ pub struct GetMetadataResponse {
     PartialEq,
     ::prost::Message,
 )]
-pub struct GetSnsStatusRequest {
+pub struct GetMetricsRequest {
     #[prost(uint64, optional, tag = "1")]
     pub time_window_seconds: ::core::option::Option<u64>,
 }
@@ -2242,7 +2242,7 @@ pub struct GetSnsStatusRequest {
     PartialEq,
     ::prost::Message,
 )]
-pub struct GetSnsStatusResponse {
+pub struct GetMetricsResponse {
     #[prost(uint64, optional, tag = "1")]
     pub num_recent_proposals: ::core::option::Option<u64>,
     #[prost(uint64, optional, tag = "2")]

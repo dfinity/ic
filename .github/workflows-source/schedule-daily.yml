@@ -22,9 +22,7 @@ anchors:
     container:
       <<: *image
       options: >-
-        -e NODE_NAME
-        --privileged --cgroupns host
-        -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 120
   checkout: &checkout
     name: Checkout

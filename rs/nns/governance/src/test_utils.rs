@@ -246,7 +246,7 @@ impl Environment for MockEnvironment {
         _proposal_id: u64,
         _update: &ExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
-        unimplemented!();
+        Ok(())
     }
 
     fn heap_growth_potential(&self) -> HeapGrowthPotential {

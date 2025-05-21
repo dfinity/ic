@@ -6,7 +6,7 @@ use ic_bn_lib::{
         self,
         shed::cli::{ShedSharded, ShedSystem},
     },
-    parse_size,
+    parse_size, parse_size_usize,
     types::RequestType,
 };
 use ic_config::crypto::CryptoConfig;
@@ -316,8 +316,8 @@ pub struct Cache {
     pub cache_size: Option<u64>,
 
     /// Maximum size of a single cached response item in bytes
-    #[clap(env, long, default_value = "10MB", value_parser = parse_size)]
-    pub cache_max_item_size: u64,
+    #[clap(env, long, default_value = "10MB", value_parser = parse_size_usize)]
+    pub cache_max_item_size: usize,
 
     /// Time-to-live for cache entries
     #[clap(env, long, default_value = "1s", value_parser = parse_duration)]
