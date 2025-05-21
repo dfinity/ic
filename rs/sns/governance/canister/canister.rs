@@ -352,7 +352,7 @@ fn get_metadata(request: GetMetadataRequest) -> GetMetadataResponse {
     )
 }
 
-/// Returns statistics of the SNS
+/// Returns aggregate SNS metrics.
 #[query]
 async fn get_metrics(_request: GetMetricsRequest) -> get_sns_status_response::GetMetricsResponse {
     unimplemented!()

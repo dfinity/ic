@@ -262,8 +262,8 @@ type GetMetricsRequest = record {
 };
 
 type Metrics = record {
-  num_recent_proposals : opt nat64;
-  last_transaction_timestamp : opt nat64;
+  num_recently_submitted_proposals : opt nat64;
+  last_ledger_block_timestamp : opt nat64;
 };
 
 type GetMetricsResult = variant {
