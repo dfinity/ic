@@ -1572,26 +1572,21 @@ impl CanisterManager {
         snapshot_id: SnapshotId,
         state: &ReplicatedState,
     ) -> Result<Arc<CanisterSnapshot>, CanisterManagerError> {
-        // Check that `replace_snapshot` exists.
-        match state.canister_snapshots.get(snapshot_id) {
-            None => {
-                // If not found, the operation fails due to invalid parameters.
-                Err(CanisterManagerError::CanisterSnapshotNotFound {
-                    canister_id,
-                    snapshot_id,
-                })
-            }
-            Some(snapshot) => {
-                // Verify the provided replacement snapshot belongs to this canister.
-                if snapshot.canister_id() != canister_id {
-                    return Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
-                        canister_id,
-                        snapshot_id,
-                    });
-                }
-                Ok(Arc::clone(snapshot))
-            }
+        // If not found, the operation fails due to invalid parameters.
+        let Some(snapshot) = state.canister_snapshots.get(snapshot_id) else {
+            return Err(CanisterManagerError::CanisterSnapshotNotFound {
+                canister_id,
+                snapshot_id,
+            });
+        };
+        // Verify the provided `snapshot_id` belongs to this canister.
+        if snapshot.canister_id() != canister_id {
+            return Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
+                canister_id,
+                snapshot_id,
+            });
         }
+        Ok(Arc::clone(snapshot))
     }
 
     /// Returns a mutable Arc to the snapshot, if it exists.
@@ -2225,13 +2220,8 @@ impl CanisterManager {
                     .can_insert_chunk(self.config.wasm_chunk_store_max_size, args.chunk.clone())
                 {
                     ChunkValidationResult::Insert(validated_chunk) => validated_chunk,
-                    ChunkValidationResult::AlreadyExists(hash) => {
-                        return Err(CanisterManagerError::WasmChunkStoreError {
-                            message: format!(
-                                "Chunk with hash {:02x?} already present in chunk store.",
-                                hash
-                            ),
-                        })
+                    ChunkValidationResult::AlreadyExists(_hash) => {
+                        return Ok(NumInstructions::new(0))
                     }
                     ChunkValidationResult::ValidationError(err) => {
                         return Err(CanisterManagerError::WasmChunkStoreError { message: err })
