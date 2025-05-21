@@ -13,7 +13,6 @@ use candid::{Decode, Encode, Nat};
 use futures::{future::join_all, join};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
-use ic_cdk::eprintln;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::CanisterStatusResultV2,
@@ -880,6 +879,7 @@ async fn get_owned_canister_summary(
 mod tests {
     use super::*;
     use crate::pb::v1::{set_dapp_controllers_request::CanisterIds, ListSnsCanistersResponse};
+    use ic_cdk::eprintln;
     use ic_nervous_system_clients::{
         canister_status::CanisterStatusResultFromManagementCanister,
         management_canister_client::{
