@@ -612,13 +612,7 @@ fn test_max_response_bytes_2_mb_returns_ok(env: TestEnv) {
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
-                transform: Some(TransformContext {
-                    function: TransformFunc(candid::Func {
-                        principal: get_proxy_canister_id(&env).into(),
-                        method: "transform".to_string(),
-                    }),
-                    context: vec![0, 1, 2],
-                }),
+                transform: None,
                 max_response_bytes: Some((MAX_MAX_RESPONSE_BYTES) as u64),
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
@@ -640,13 +634,7 @@ fn test_max_response_bytes_too_large(env: TestEnv) {
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
-                transform: Some(TransformContext {
-                    function: TransformFunc(candid::Func {
-                        principal: get_proxy_canister_id(&env).into(),
-                        method: "transform".to_string(),
-                    }),
-                    context: vec![0, 1, 2],
-                }),
+                transform: None,
                 max_response_bytes: Some((MAX_MAX_RESPONSE_BYTES + 1) as u64),
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
@@ -827,13 +815,7 @@ fn test_http_endpoint_response_is_within_limits_with_custom_max_response_bytes(e
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
-                transform: Some(TransformContext {
-                    function: TransformFunc(candid::Func {
-                        principal: get_proxy_canister_id(&env).into(),
-                        method: "transform".to_string(),
-                    }),
-                    context: vec![0, 1, 2],
-                }),
+                transform: None,
                 max_response_bytes: Some(max_response_bytes),
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
@@ -868,13 +850,7 @@ fn test_http_endpoint_response_is_too_large_with_custom_max_response_bytes(env: 
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
-                transform: Some(TransformContext {
-                    function: TransformFunc(candid::Func {
-                        principal: get_proxy_canister_id(&env).into(),
-                        method: "transform".to_string(),
-                    }),
-                    context: vec![0, 1, 2],
-                }),
+                transform: None,
                 max_response_bytes: Some(max_response_bytes),
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
@@ -912,13 +888,7 @@ fn test_http_endpoint_response_is_within_limits_with_default_max_response_bytes(
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
-                transform: Some(TransformContext {
-                    function: TransformFunc(candid::Func {
-                        principal: get_proxy_canister_id(&env).into(),
-                        method: "transform".to_string(),
-                    }),
-                    context: vec![0, 1, 2],
-                }),
+                transform: None,
                 max_response_bytes: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
@@ -951,13 +921,7 @@ fn test_http_endpoint_response_is_too_large_with_default_max_response_bytes(env:
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
-                transform: Some(TransformContext {
-                    function: TransformFunc(candid::Func {
-                        principal: get_proxy_canister_id(&env).into(),
-                        method: "transform".to_string(),
-                    }),
-                    context: vec![0, 1, 2],
-                }),
+                transform: None,
                 max_response_bytes: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
