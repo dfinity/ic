@@ -3322,14 +3322,6 @@ impl ExecutionEnvironment {
                 }
             };
 
-        // Track whether the deprecated fields in install_code were used.
-        if install_context.compute_allocation.is_some() {
-            self.metrics.compute_allocation_in_install_code_total.inc();
-        }
-        if install_context.memory_allocation.is_some() {
-            self.metrics.memory_allocation_in_install_code_total.inc();
-        }
-
         let call_id = match call_id {
             None => {
                 // Call ID is not provided only if the current
