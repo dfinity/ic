@@ -53,7 +53,7 @@ system_test_nns(
     env = MAINNET_ENV,
     extra_head_nns_tags = [],
     flaky = True,  # flakiness rate of over 2% over the month from 2025-02-11 till 2025-03-11.
-    tags = ["system_test_hourly"],
+    tags = ["long_test"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
     use_empty_image = True,
