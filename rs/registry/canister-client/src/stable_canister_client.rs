@@ -1,6 +1,7 @@
 use crate::stable_memory::{RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue};
 use crate::CanisterRegistryClient;
 use async_trait::async_trait;
+use ic_cdk::println;
 use ic_interfaces_registry::{
     empty_zero_registry_record, RegistryClientResult, RegistryClientVersionedResult,
     RegistryTransportRecord, ZERO_REGISTRY_VERSION,
@@ -172,14 +173,14 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
 
             match current_local_version.cmp(&remote_latest_version) {
                 Ordering::Less => {
-                    ic_cdk::println!(
+                    println!(
                         "Registry version local {} < remote {}",
                         current_local_version,
                         remote_latest_version
                     );
                 }
                 Ordering::Equal => {
-                    ic_cdk::println!(
+                    println!(
                         "Local Registry version {} is up to date",
                         current_local_version
                     );
