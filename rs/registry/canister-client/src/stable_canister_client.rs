@@ -175,8 +175,7 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
                 Ordering::Less => {
                     println!(
                         "Registry version local {} < remote {}",
-                        current_local_version,
-                        remote_latest_version
+                        current_local_version, remote_latest_version
                     );
                 }
                 Ordering::Equal => {

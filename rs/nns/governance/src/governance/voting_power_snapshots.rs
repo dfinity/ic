@@ -51,8 +51,7 @@ fn insert_and_truncate<Value: Storable>(
         eprintln!(
             "{}Somehow the voting power snapshot is taken multiple times at \
 	            the same timestamp {}",
-            LOG_PREFIX,
-            timestamp_seconds,
+            LOG_PREFIX, timestamp_seconds,
         );
     }
 
@@ -177,8 +176,7 @@ impl VotingPowerSnapshots {
             eprintln!(
                 "{}Voting power map not found for timestamp {} while the totals \
                 are found. This should not happen.",
-                LOG_PREFIX,
-                timestamp_with_minimum_total_potential_voting_power,
+                LOG_PREFIX, timestamp_with_minimum_total_potential_voting_power,
             );
             return None;
         };
