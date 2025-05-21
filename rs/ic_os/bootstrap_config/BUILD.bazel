@@ -5,8 +5,10 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/types/types",
     "@crate_index//:anyhow",
     "@crate_index//:regex",
+    "@crate_index//:serde_json",
     "@crate_index//:tempfile",
 ]
 
@@ -31,5 +33,6 @@ rust_library(
 rust_test(
     name = "bootstrap_config_test",
     crate = ":bootstrap_config_dev",
+    crate_features = ["dev"],
     deps = DEV_DEPENDENCIES,
 )

@@ -1538,6 +1538,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "bootstrap_config"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "ic-types",
+ "regex",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "borsh"
 version = "1.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -16095,6 +16106,7 @@ checksum = "d4345964bb142484797b161f473a503a434de77149dd8c7427788c6e13379388"
 name = "launch-single-vm"
 version = "0.1.0"
 dependencies = [
+ "bootstrap_config",
  "clap 4.5.27",
  "config",
  "config_types",

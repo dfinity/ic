@@ -545,7 +545,7 @@ fn create_config_disk_image(
     }
 
     if let Some(malicious_behavior) = malicious_behavior {
-        bootstrap_options.malicious_behavior = Some(serde_json::to_string(&malicious_behavior)?);
+        bootstrap_options.malicious_behavior = malicious_behavior;
     }
 
     if let Some(query_stats_epoch_length) = query_stats_epoch_length {
