@@ -19,14 +19,8 @@ use slog::{o, Drain};
 use std::collections::BTreeMap;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
-use std::process::Command;
 use tempfile::tempdir;
 use url::Url;
-
-use config::generate_testnet_config::{
-    generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
-};
-use config_types::DeploymentEnvironment;
 const FARM_BASE_URL: &str = "https://farm.dfinity.systems";
 
 /// Deploy a single ICOS VM to Farm
@@ -41,9 +35,6 @@ struct Args {
     /// Image SHA256SUM
     #[clap(long)]
     sha256: String,
-    /// Path to `build-bootstrap-config-image.sh` script
-    #[clap(long)]
-    build_bootstrap_script: PathBuf,
     /// Key to be used for `admin` SSH
     #[clap(long)]
     ssh_key_path: Option<PathBuf>,
@@ -67,7 +58,6 @@ fn main() {
     let version = ReplicaVersion::try_from(args.version).unwrap();
     let url = args.url;
     let sha256 = args.sha256;
-    let build_bootstrap_script = args.build_bootstrap_script;
     let ssh_key_path = args.ssh_key_path;
 
     let test_name = "test_single_vm";
@@ -238,18 +228,15 @@ fn main() {
         let filename = "config.tar.gz";
         let config_path = tempdir.as_ref().join(filename);
         let local_store = prep_dir.join("ic_registry_local_store");
-        Command::new(build_bootstrap_script)
-            .arg(&config_path)
-            .arg("--guestos_config")
-            .arg(guestos_config_json_path)
-            .arg("--ic_crypto")
-            .arg(node.crypto_path())
-            .arg("--ic_registry_local_store")
-            .arg(&local_store)
-            .arg("--accounts_ssh_authorized_keys")
-            .arg(&keys_dir)
-            .status()
-            .unwrap();
+        let bootstrap_options = BootstrapOptions {
+            guestos_config: Some(guestos_config_json_path),
+            ic_crypto: Some(node.crypto_path()),
+            ic_registry_local_store: Some(local_store),
+            accounts_ssh_authorized_keys: Some(keys_dir),
+            ..Default::default()
+        };
+
+        build_bootstrap_config_image(&config_path, &bootstrap_options).unwrap();
 
         // Upload config image
         let image_id = farm

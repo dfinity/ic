@@ -1,0 +1,35 @@
+# In bootstrap_config/BUILD.bazel
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:anyhow",
+    "@crate_index//:regex",
+    "@crate_index//:tempfile",
+]
+
+DEV_DEPENDENCIES = []
+
+rust_library(
+    name = "bootstrap_config",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "bootstrap_config",
+    deps = DEPENDENCIES,
+)
+
+# Dev version for testing that should only be enabled in dev builds (unsafe for prod).
+rust_library(
+    name = "bootstrap_config_dev",
+    srcs = glob(["src/**/*.rs"]),
+    crate_features = ["dev"],
+    crate_name = "bootstrap_config",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "bootstrap_config_test",
+    crate = ":bootstrap_config_dev",
+    deps = DEV_DEPENDENCIES,
+)

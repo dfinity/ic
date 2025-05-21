@@ -347,7 +347,6 @@ EOF
         srcs = ["//ic-os:dev-tools/launch-remote-vm.sh"],
         data = [
             "//rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm",
-            "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
             ":disk-img.tar.zst",
             "//rs/tests/nested:empty-disk-img.tar.zst",
             ":version.txt",
@@ -356,7 +355,6 @@ EOF
         env = {
             "BIN": "$(location //rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm)",
             "UPLOAD_SYSTEST_DEP": "$(location //bazel:upload_systest_dep)",
-            "SCRIPT": "$(location //ic-os/components:hostos-scripts/build-bootstrap-config-image.sh)",
             "VERSION_FILE": "$(location :version.txt)",
             "DISK_IMG": "$(location :disk-img.tar.zst)",
             "EMPTY_DISK_IMG_PATH": "$(location //rs/tests/nested:empty-disk-img.tar.zst)",
