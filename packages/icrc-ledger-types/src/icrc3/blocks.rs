@@ -50,7 +50,7 @@ pub struct GetBlocksResult {
 /// [ICRC-3 `icrc3_get_blocks`](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-3/README.md#icrc3_get_blocks)
 /// endpoint.
 #[derive(
-    CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Default,
+    CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord,
 )]
 pub struct GetBlocksRequest {
     pub start: BlockIndex,
