@@ -2283,17 +2283,14 @@ impl CanisterManager {
 
                 self.memory_usage_updates(canister, round_limits, validated_memory_usage);
 
-                snapshot_inner
-                    .chunk_store_mut()
-                    .insert_chunk(validated_chunk);
+                state
+                    .canister_snapshots
+                    .insert_chunk(snapshot_id, validated_chunk);
 
                 canister.system_state.snapshots_memory_usage = canister
                     .system_state
                     .snapshots_memory_usage
                     .saturating_add(&chunk_bytes);
-                state
-                    .canister_snapshots
-                    .update_snapshot_memory(snapshot_id, chunk_bytes);
 
                 chunk_bytes.get()
             }
