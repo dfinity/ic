@@ -1,5 +1,5 @@
 {
-  "checksum": "868c7b76459820b83556244173f3c0593c289fdaeb5f45fe785491ba245f1bd3",
+  "checksum": "c4e9767fddc4091cd8f1e2d99b6470de16945166a2adcc15eb8ec17d45099041",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -79717,7 +79717,7 @@
         "deps": {
           "common": [
             {
-              "id": "cfg-if 0.1.10",
+              "id": "cfg-if 1.0.0",
               "target": "cfg_if"
             },
             {
