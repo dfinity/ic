@@ -26,8 +26,8 @@ DEPENDENCIES = [
 
 rust_library(
     name = "audit",
-    crate_name = "ic_sns_audit",
     srcs = ["src/lib.rs"],
+    crate_name = "ic_sns_audit",
     deps = DEPENDENCIES,
 )
 
