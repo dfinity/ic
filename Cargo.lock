@@ -758,17 +758,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-scoped"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4042078ea593edffc452eef14e99fdb2b120caa4ad9618bcdeabc4a023b98740"
-dependencies = [
- "futures",
- "pin-project",
- "tokio",
-]
-
-[[package]]
 name = "async-socks5"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6298,7 +6287,6 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "arc-swap",
- "async-scoped",
  "async-trait",
  "axum 0.8.1",
  "axum-extra",
@@ -6307,6 +6295,7 @@ dependencies = [
  "clap 4.5.27",
  "criterion",
  "dashmap",
+ "derive-new",
  "ethnum",
  "futures",
  "futures-util",
@@ -6377,7 +6366,7 @@ dependencies = [
  "tokio-util",
  "tower 0.5.2",
  "tower-http 0.6.2",
- "tower_governor 0.5.0",
+ "tower_governor",
  "tracing",
  "tracing-serde 0.1.3",
  "tracing-slog",
@@ -7596,7 +7585,6 @@ dependencies = [
  "ic-base-types",
  "ic-certification-test-utils",
  "ic-config",
- "ic-crypto-ecdsa-secp256r1",
  "ic-crypto-for-verification-only",
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-internal-basic-sig-der-utils",
@@ -7654,6 +7642,7 @@ dependencies = [
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
  "ic-secp256k1",
+ "ic-secp256r1",
  "ic-test-utilities-in-memory-logger",
  "ic-test-utilities-registry",
  "ic-test-utilities-time",
@@ -7679,27 +7668,6 @@ dependencies = [
  "strum_macros 0.26.4",
  "tempfile",
  "tokio",
-]
-
-[[package]]
-name = "ic-crypto-ecdsa-secp256r1"
-version = "0.9.0"
-dependencies = [
- "hex",
- "hex-literal",
- "hmac",
- "ic-crypto-sha2",
- "ic-crypto-test-utils-reproducible-rng",
- "lazy_static",
- "num-bigint 0.4.6",
- "p256",
- "pem 1.1.1",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
- "sha2 0.10.8",
- "simple_asn1",
- "wycheproof",
- "zeroize",
 ]
 
 [[package]]
@@ -7786,12 +7754,12 @@ dependencies = [
  "assert_matches",
  "base64 0.13.1",
  "hex",
- "ic-crypto-ecdsa-secp256r1",
  "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
  "ic-crypto-sha2",
  "ic-crypto-test-utils-reproducible-rng",
+ "ic-secp256r1",
  "ic-types",
  "p256",
  "rand 0.8.5",
@@ -8333,7 +8301,6 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "hex",
- "ic-crypto-ecdsa-secp256r1",
  "ic-crypto-iccsa",
  "ic-crypto-internal-basic-sig-cose",
  "ic-crypto-internal-basic-sig-der-utils",
@@ -8346,6 +8313,7 @@ dependencies = [
  "ic-crypto-sha2",
  "ic-crypto-test-utils-canister-sigs",
  "ic-crypto-test-utils-reproducible-rng",
+ "ic-secp256r1",
  "ic-types",
  "p256",
  "rand 0.8.5",
@@ -8570,7 +8538,6 @@ dependencies = [
 name = "ic-crypto-test-utils-tls"
 version = "0.9.0"
 dependencies = [
- "ic-crypto-ecdsa-secp256r1",
  "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-reproducible-rng",
@@ -8581,6 +8548,7 @@ dependencies = [
  "ic-registry-client-fake",
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
+ "ic-secp256r1",
  "ic-types",
  "pkcs8 0.10.2",
  "rand 0.8.5",
@@ -9158,7 +9126,7 @@ dependencies = [
  "tokio-util",
  "tower 0.5.2",
  "tower-http 0.6.2",
- "tower_governor 0.7.0",
+ "tower_governor",
  "tracing",
  "tracing-core",
  "tracing-serde 0.2.0",
@@ -10297,6 +10265,7 @@ dependencies = [
  "icrc-ledger-types",
  "icrc1-test-env",
  "icrc1-test-suite",
+ "num-bigint 0.4.6",
  "num-traits",
  "proptest 1.6.0",
 ]
@@ -10955,6 +10924,7 @@ name = "ic-nervous-system-proxied-canister-calls-tracker"
 version = "0.9.0"
 dependencies = [
  "ic-base-types",
+ "ic-cdk 0.17.2",
  "maplit",
  "pretty_assertions",
  "tokio",
@@ -11067,6 +11037,7 @@ name = "ic-neurons-fund"
 version = "0.0.1"
 dependencies = [
  "assert_matches",
+ "ic-cdk 0.17.2",
  "ic-nervous-system-common",
  "lazy_static",
  "proptest 1.6.0",
@@ -12203,6 +12174,7 @@ name = "ic-registry-node-provider-rewards"
 version = "0.9.0"
 dependencies = [
  "ic-base-types",
+ "ic-cdk 0.17.2",
  "ic-protobuf",
  "maplit",
  "pretty_assertions",
@@ -12760,6 +12732,25 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "secp256k1 0.22.2",
+ "sha2 0.10.8",
+ "simple_asn1",
+ "wycheproof",
+ "zeroize",
+]
+
+[[package]]
+name = "ic-secp256r1"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "hex-literal",
+ "hmac",
+ "lazy_static",
+ "num-bigint 0.4.6",
+ "p256",
+ "pem 1.1.1",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "sha2 0.10.8",
  "simple_asn1",
  "wycheproof",
@@ -15188,7 +15179,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-types"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "assert_matches",
  "base32",
@@ -23169,21 +23160,6 @@ dependencies = [
  "tokio-test",
  "tower-layer",
  "tower-service",
-]
-
-[[package]]
-name = "tower_governor"
-version = "0.5.0"
-source = "git+https://github.com/benwis/tower-governor?rev=bc9a6eacafcaec1e732886ceae8ae324bbd327df#bc9a6eacafcaec1e732886ceae8ae324bbd327df"
-dependencies = [
- "axum 0.8.1",
- "forwarded-header-value",
- "governor",
- "http 1.3.1",
- "pin-project",
- "thiserror 2.0.12",
- "tower 0.5.2",
- "tracing",
 ]
 
 [[package]]

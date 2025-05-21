@@ -584,21 +584,19 @@ mod eth_get_transaction_count {
 }
 
 mod evm_rpc_conversion {
-    use crate::eth_rpc::SendRawTransactionResult;
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
     use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
     use crate::eth_rpc_client::{
         HttpOutcallError, LogEntry, MultiCallError, MultiCallResults, Reduce, SingleCallError,
     };
     use crate::test_fixtures::arb::{
-        arb_evm_rpc_error, arb_hex20, arb_hex256, arb_hex32, arb_hex_byte, arb_log_entry,
-        arb_nat_256, arb_transaction_receipt,
+        arb_evm_rpc_error, arb_hex20, arb_hex256, arb_hex_byte, arb_log_entry, arb_nat_256,
+        arb_transaction_receipt,
     };
     use evm_rpc_client::{
         Hex, Hex20, Hex32, HttpOutcallError as EvmHttpOutcallError, LogEntry as EvmLogEntry,
         MultiRpcResult as EvmMultiRpcResult, Nat256, RpcApi as EvmRpcApi, RpcError as EvmRpcError,
-        RpcService as EvmRpcService, SendRawTransactionStatus as EvmSendRawTransactionStatus,
-        TransactionReceipt as EvmTransactionReceipt,
+        RpcService as EvmRpcService, TransactionReceipt as EvmTransactionReceipt,
     };
     use proptest::{prelude::Strategy, prop_assert_eq, proptest};
     use std::collections::BTreeSet;
@@ -651,20 +649,6 @@ mod evm_rpc_conversion {
         ) {
             let (minter_tx_receipt, evm_rpc_tx_receipt) = transaction_receipts;
             test_consistency_between_minter_and_evm_rpc(minter_tx_receipt, evm_rpc_tx_receipt, first_error, second_error, third_error)?;
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn should_have_consistent_send_raw_transaction_result_between_minter_and_evm_rpc
-        (
-            evm_tx_status in arb_evm_rpc_send_raw_transaction_status(),
-            first_error in arb_evm_rpc_error(),
-            second_error in arb_evm_rpc_error(),
-            third_error in arb_evm_rpc_error(),
-        ) {
-            let minter_tx_result = SendRawTransactionResult::from(evm_tx_status.clone());
-            test_consistency_between_minter_and_evm_rpc(minter_tx_result, evm_tx_status, first_error, second_error, third_error)?;
         }
     }
 
@@ -932,19 +916,5 @@ mod evm_rpc_conversion {
                 )
                 .boxed(),
         }
-    }
-
-    fn arb_evm_rpc_send_raw_transaction_status(
-    ) -> impl Strategy<Value = EvmSendRawTransactionStatus> {
-        use proptest::{
-            option,
-            prelude::{prop_oneof, Just},
-        };
-        prop_oneof![
-            option::of(arb_hex32()).prop_map(EvmSendRawTransactionStatus::Ok),
-            Just(EvmSendRawTransactionStatus::InsufficientFunds),
-            Just(EvmSendRawTransactionStatus::NonceTooLow),
-            Just(EvmSendRawTransactionStatus::NonceTooHigh),
-        ]
     }
 }

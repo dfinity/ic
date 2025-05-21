@@ -29,7 +29,7 @@ ed25519-dalek = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }
-humantime = "2.0"
+humantime = { workspace = true }
 humantime-serde = { workspace = true }
 hyper = { workspace = true }
 ic-agent = { workspace = true }

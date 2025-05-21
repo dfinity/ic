@@ -220,7 +220,7 @@ def progress(
         done_width = size - progress_width
         if prev_progress_width != progress_width:
             print(
-                f"{pre}[{'█'*progress_width}{('.'*done_width)}]{post}",
+                f"{pre}[{'█' * progress_width}{('.' * done_width)}]{post}",
                 end="\r",
                 file=out,
                 flush=True,
@@ -230,7 +230,7 @@ def progress(
     def callme(progress: float) -> None:
         if sys.stderr.isatty() and len(progress_hidden) == 0:
             if progress >= 1.0:
-                print(f"\r{' '*(termsize())}", end="\r", flush=True, file=out)
+                print(f"\r{' ' * (termsize())}", end="\r", flush=True, file=out)
             else:
                 show(progress)
 
@@ -263,11 +263,7 @@ def fetch_url_to_file(url: str, dest_path: Path) -> Path:
                         return Path
         if length is not None and length != sofar:
             raise RuntimeError(
-                "Error downloading %s -> %s. File is supposed to be %s bytes, is %s bytes.",
-                url,
-                dest_path,
-                length,
-                sofar,
+                f"Error downloading {url} -> {dest_path}. File is supposed to be {length} bytes, is {sofar} bytes."
             )
         tmp_file.rename(dest_path)
         logger.info("Downloaded %s to %s", url, dest_path)
@@ -275,7 +271,7 @@ def fetch_url_to_file(url: str, dest_path: Path) -> Path:
     except Exception as e:
         if tmp_file.is_file():
             tmp_file.unlink()
-        raise RuntimeError("Could not download %s -> %s. Error: %s", url, dest_path, e)
+        raise RuntimeError(f"Could not download {url} -> {dest_path}. Error: {e}")
 
 
 # ------------------------------------------------------------------------------
@@ -637,6 +633,7 @@ class ReproducibilityVerifier:
             if not keep_temp and tmpdir.exists():
                 logger.debug("Cleaning up temporary directory.")
                 shutil.rmtree(tmpdir)
+
         out_dir = tmpdir / "disk-images" / self.git_hash
 
         yield Dirs(

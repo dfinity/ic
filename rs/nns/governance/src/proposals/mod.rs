@@ -3,6 +3,7 @@ use crate::{
     pb::v1::{governance_error::ErrorType, GovernanceError, ProposalData, Topic, Vote},
 };
 use ic_base_types::CanisterId;
+use ic_cdk::println;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{PROTOCOL_CANISTER_IDS, SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use std::collections::HashMap;

@@ -1,6 +1,7 @@
 use crate::governance::{Governance, LOG_PREFIX};
 use async_trait::async_trait;
 use candid::{Decode, Encode};
+use ic_cdk::println;
 use ic_management_canister_types_private::IC_00;
 use ic_nervous_system_timer_task::RecurringAsyncTask;
 use std::{cell::RefCell, thread::LocalKey, time::Duration};
