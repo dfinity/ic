@@ -2162,7 +2162,7 @@ impl CanisterManager {
         Ok((snapshot_id, instructions))
     }
 
-    /// Writes `args.chunk` to the wasm module, main/stable memory or to the wasm chunk store.
+    /// Writes `args.chunk` to the wasm module, main/stable memory or inserts `args.chunk` to the wasm chunk store.
     /// Fails if the arguments are incompatible with the memory sizes given in the metadata.
     /// The memory used is already accounted for during `create_snapshot_from_metadata` (except
     /// for the wasm chunk store), but the instructions used to write the data must be taken
