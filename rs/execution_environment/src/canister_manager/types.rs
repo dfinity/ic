@@ -652,8 +652,8 @@ impl AsErrorHelp for CanisterManagerError {
                 doc_link: "canister-snapshot-limit-exceeded".to_string(),
             },
             CanisterManagerError::CanisterSnapshotNotEnoughCycles { .. } => ErrorHelp::UserError {
-                suggestion: "".to_string(),
-                doc_link: "".to_string(),
+                suggestion: "Try sending more cycles with the request.".to_string(),
+                doc_link: "canister-snapshot-not-enough-cycles".to_string(),
             },
             CanisterManagerError::LongExecutionAlreadyInProgress { .. } => ErrorHelp::UserError {
                 suggestion: "Try waiting for the long execution to complete.".to_string(),
@@ -972,7 +972,7 @@ impl From<CanisterManagerError> for UserError {
             CanisterSnapshotNotEnoughCycles(err) => {
                 Self::new(
                 ErrorCode::CanisterOutOfCycles,
-                    format!("Canister snapshotting failed with `{}`{additional_help}", err),
+                    format!("Canister snapshotting failed with: `{}`{additional_help}", err),
                 )
             }
             LongExecutionAlreadyInProgress { canister_id } => {
