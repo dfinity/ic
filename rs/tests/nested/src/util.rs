@@ -113,26 +113,19 @@ pub(crate) fn setup_nested_vm(env: TestEnv, name: &str) {
             .expect("Unable to write nested VM.");
     }
 
-    let api_boundary_node = env
+    let nns_url = env
         .topology_snapshot()
-        .api_boundary_nodes()
+        .root_subnet()
+        .nodes()
         .next()
-        .expect("No API BN present");
-    let api_bn_url = Url::parse(&format!("https://[{}]/", api_boundary_node.get_ip_addr()))
-        .expect("Could not parse Url");
+        .expect("No NNS node present")
+        .get_public_url();
 
     let nns_public_key =
         std::fs::read_to_string(env.prep_dir("").unwrap().root_public_key_path()).unwrap();
 
-    setup_nested_vms(
-        &nodes,
-        &env,
-        &farm,
-        &group_name,
-        &api_bn_url,
-        &nns_public_key,
-    )
-    .expect("Unable to setup nested VMs.");
+    setup_nested_vms(&nodes, &env, &farm, &group_name, &nns_url, &nns_public_key)
+        .expect("Unable to setup nested VMs.");
 }
 
 pub(crate) fn start_nested_vm(env: TestEnv) {

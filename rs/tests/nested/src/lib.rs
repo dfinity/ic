@@ -48,7 +48,6 @@ pub fn config(env: TestEnv) {
         .with_required_host_features(vec![HostFeature::DC("dm1".to_string())])
         .add_fast_single_node_subnet(SubnetType::System)
         // .with_mainnet_config() TODO: uncomment in NODE-1518
-        .with_api_boundary_nodes(1)
         .with_node_provider(principal)
         .with_node_operator(principal)
         .setup_and_start(&env)
