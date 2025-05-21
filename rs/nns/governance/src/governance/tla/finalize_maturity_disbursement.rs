@@ -1,48 +1,13 @@
 use super::{account_to_tla, extract_common_constants, function_domain_union, post_process_trace};
+use super::common::get_maturity_disbursement_in_progress_account_ids;
 use crate::governance::governance_minting_account;
 use lazy_static::lazy_static;
 use std::collections::{BTreeMap, BTreeSet};
 use std::iter::once;
 use tla_instrumentation::{
-    Label, ResolvedStatePair, TlaConstantAssignment, TlaValue, ToTla, Update, VarAssignment,
+    Label, TlaConstantAssignment, TlaValue, ToTla, Update, VarAssignment,
 };
 
-fn get_maturity_disbursement_in_progress_account_ids(
-    pair: &ResolvedStatePair,
-) -> BTreeSet<TlaValue> {
-    match (pair.start.get("neuron"), pair.end.get("neuron")) {
-        (Some(TlaValue::Function(start)), Some(TlaValue::Function(end))) => {
-            let neurons = start.values().chain(end.values());
-            neurons
-                .map(|n| match n {
-                    TlaValue::Record(r) => match r.get("maturity_disbursements_in_progress") {
-                        Some(TlaValue::Seq(vs)) => vs.iter().map(|v| match v {
-                            TlaValue::Record(r) => r
-                                .get("account_id")
-                                .expect("account_id not found in the record")
-                                .clone(),
-                            _ => panic!("Field account_id not a record: {}", v),
-                        }),
-                        _ => panic!(
-                            "maturity_disbursements_in_progress not found in the neuron record {}",
-                            n
-                        ),
-                    },
-                    _ => panic!("Field neuron not a record: {}", n),
-                })
-                .flatten()
-                .collect()
-        }
-        _ => {
-            panic!(
-                "Error getting maturity_disbursement_in_progress_acount_ids; field neuron not found in the start or end state, or not a function, in pair {:?}",
-                pair
-            );
-        }
-    }
-}
-
-// TODO: document the convention that the model has to be called Disburse_Maturity.tla
 const PID: &str = "Disburse_Maturity_Timer";
 lazy_static! {
     pub static ref FINALIZE_MATURITY_DISBURSEMENT_DESC: Update = {
@@ -92,8 +57,7 @@ lazy_static! {
                     .insert(maturity_modulation.0, maturity_modulation.1);
                 let disbursements_in_progress_account_ids: BTreeSet<TlaValue> = trace
                     .iter()
-                    .map(get_maturity_disbursement_in_progress_account_ids)
-                    .flatten()
+                    .flat_map(get_maturity_disbursement_in_progress_account_ids)
                     .collect();
 
                 let all_accounts = function_domain_union(trace, "neuron_id_by_account")

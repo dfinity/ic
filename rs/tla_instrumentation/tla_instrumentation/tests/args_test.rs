@@ -16,7 +16,7 @@ use async_trait::async_trait;
 use std::thread::LocalKey;
 
 thread_local! {
-    pub static COUNTER: RefCell<u64> = RefCell::new(0);
+    pub static COUNTER: RefCell<u64> = const { RefCell::new(0) };
 }
 
 #[macro_use]

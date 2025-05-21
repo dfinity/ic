@@ -598,7 +598,7 @@ async fn try_finalize_maturity_disbursement(
 
     // Step 3: call ledger to perform the minting. If this fails, the neuron mutation needs to
     // be reversed.
-    let mint_icp_operation = MintIcpOperation::new(account.clone(), amount_to_mint_e8s);
+    let mint_icp_operation = MintIcpOperation::new(account, amount_to_mint_e8s);
     let ledger = governance.with_borrow(|governance| governance.get_ledger());
     tla_log_locals! {
         neuron_id: neuron_id.id,
