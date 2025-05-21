@@ -144,12 +144,12 @@ mod test {
     use std::time::Duration;
 
     use candid::Encode;
+    use ic_bn_lib::principal;
     use indoc::indoc;
     use rate_limits_api::*;
     use regex::Regex;
 
     use super::*;
-    use crate::test_utils::principal;
 
     struct FakeConfigFetcherOk;
 

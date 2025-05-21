@@ -228,12 +228,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "async-recursion": crate.spec(
                 version = "^1.0.5",
             ),
-            "async-scoped": crate.spec(
-                version = "^0.8.0",
-                features = [
-                    "use-tokio",
-                ],
-            ),
             "async-stream": crate.spec(
                 version = "^0.3.6",
             ),
@@ -456,6 +450,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "dashmap": crate.spec(
                 version = "^5.3.4",
             ),
+            "derive-new": crate.spec(
+                version = "^0.7.0",
+            ),
             "dfx-core": crate.spec(
                 version = "^0.1.3",
             ),
@@ -565,7 +562,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = ["p384", "alloc"],
             ),
             "humantime": crate.spec(
-                version = "^2.1.0",
+                version = "^2.2.0",
             ),
             "humantime-serde": crate.spec(
                 version = "^1.1.1",
@@ -1402,10 +1399,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "tracing",
                 ],
             ),
-            # axum 0.8 support not yet released, use git
             "tower_governor": crate.spec(
-                git = "https://github.com/benwis/tower-governor",
-                rev = "bc9a6eacafcaec1e732886ceae8ae324bbd327df",
+                version = "^0.7.0",
             ),
             "tower-request-id": crate.spec(
                 version = "^0.3.0",

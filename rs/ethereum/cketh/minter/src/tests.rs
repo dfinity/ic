@@ -1,4 +1,21 @@
 use crate::address::ecdsa_public_key_to_address;
+use crate::{EVM_RPC_ID_PRODUCTION, EVM_RPC_ID_STAGING};
+
+#[test]
+fn test_evm_rpc_id_mainnet_value() {
+    assert_eq!(
+        EVM_RPC_ID_PRODUCTION.to_string(),
+        "7hfb6-caaaa-aaaar-qadga-cai"
+    );
+}
+
+#[test]
+fn test_evm_rpc_id_staging_value() {
+    assert_eq!(
+        EVM_RPC_ID_STAGING.to_string(),
+        "xhcuo-6yaaa-aaaar-qacqq-cai"
+    );
+}
 
 mod eth_get_logs {
     use crate::eth_rpc::{into_nat, Quantity};
