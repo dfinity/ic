@@ -519,6 +519,27 @@ fn create_config_disk_image(
         ic_state: Some(node.state_path()),
         ic_crypto: Some(node.crypto_path()),
         malicious_behavior,
+        query_stats_epoch_length,
+        domain: domain_name,
+        elasticsearch_hosts,
+
+        // The bitcoind address specifies the local bitcoin node that the bitcoin adapter should
+        // connect to in the system test environment.
+        bitcoind_addr: test_env
+            .read_json_object::<String, _>(BITCOIND_ADDR_PATH)
+            .ok(),
+
+        // The jaeger address specifies the local Jaeger node that the nodes should connect to in
+        // the system test environment.
+        jaeger_addr: test_env
+            .read_json_object::<String, _>(JAEGER_ADDR_PATH)
+            .ok(),
+
+        // The socks proxy configuration indicates that a socks proxy is available to the system
+        // test environment.
+        socks_proxy: test_env
+            .read_json_object::<String, _>(SOCKS_PROXY_PATH)
+            .ok(),
         ..Default::default()
     };
 
@@ -544,10 +565,6 @@ fn create_config_disk_image(
             .push(format!("http://[{}]:8080", node.get_ip_addr()));
     }
 
-    if let Some(query_stats_epoch_length) = query_stats_epoch_length {
-        bootstrap_options.query_stats_epoch_length = Some(query_stats_epoch_length);
-    }
-
     if let Some(ipv4_config) = ipv4_config {
         bootstrap_options.ipv4_address = Some(format!(
             "{}/{:?}",
@@ -555,29 +572,6 @@ fn create_config_disk_image(
             ipv4_config.prefix_length()
         ));
         bootstrap_options.ipv4_gateway = Some(ipv4_config.gateway_ip_addr().to_string());
-    }
-
-    if let Some(domain_name) = domain_name {
-        bootstrap_options.domain = Some(domain_name);
-    }
-
-    if !elasticsearch_hosts.is_empty() {
-        bootstrap_options.elasticsearch_hosts = elasticsearch_hosts.clone();
-    }
-
-    // The bitcoind address specifies the local bitcoin node that the bitcoin adapter should connect to in the system test environment.
-    if let Ok(arg) = test_env.read_json_object::<String, _>(BITCOIND_ADDR_PATH) {
-        bootstrap_options.bitcoind_addr = Some(arg);
-    }
-
-    // The jaeger address specifies the local Jaeger node that the nodes should connect to in the system test environment.
-    if let Ok(arg) = test_env.read_json_object::<String, _>(JAEGER_ADDR_PATH) {
-        bootstrap_options.jaeger_addr = Some(arg);
-    }
-
-    // The socks proxy configuration indicates that a socks proxy is available to the system test environment.
-    if let Ok(arg) = test_env.read_json_object::<String, _>(SOCKS_PROXY_PATH) {
-        bootstrap_options.socks_proxy = Some(arg);
     }
 
     build_bootstrap_config_image(&img_path, &bootstrap_options)
