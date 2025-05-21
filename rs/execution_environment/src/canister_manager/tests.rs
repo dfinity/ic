@@ -484,10 +484,10 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
     let mb = 1 << 20;
     let memory_capacity = 1000 * mb;
     // canister1 is created with `memory_used` memory allocation;
-    // => SubnetAvailableMemory decreases by `memory_used - canister_history_memory_usage`
-    // after canister1 code change and then SubnetAvailableMemory is equal to
-    // `memory_capacity - (memory_used - canister_history_memory_usage)`;
-    // we want this quantity to be `10 * mb` and derive the value of `memory_used` from there.
+    // => SubnetAvailableMemory decreases by `memory_used`
+    // after canister1 is created and then SubnetAvailableMemory is equal to
+    // `memory_capacity - (memory_used)`; we want this quantity to be `10 * mb`
+    // and derive the value of `memory_used` from there.
     let memory_used = memory_capacity - 10 * mb;
 
     let wat = r#"
@@ -4256,6 +4256,9 @@ fn install_does_not_reserve_cycles_when_memory_allocation_is_set() {
         test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD))
             .unwrap();
 
+        let subnet_memory_usage =
+            CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
+
         let canister_id = test
             .create_canister_with_settings(
                 CYCLES,
@@ -4265,10 +4268,20 @@ fn install_does_not_reserve_cycles_when_memory_allocation_is_set() {
                     .build(),
             )
             .unwrap();
+
+        let memory_usage_after = NumBytes::from(USAGE);
         let reserved_cycles = test
             .canister_state(canister_id)
             .system_state
             .reserved_balance();
+        assert_eq!(
+            reserved_cycles,
+            test.cycles_account_manager().storage_reservation_cycles(
+                memory_usage_after,
+                &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
+                test.subnet_size(),
+            )
+        );
 
         let wat = r#"
             (module
