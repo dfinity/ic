@@ -1,6 +1,7 @@
 use crate::{
     canister_state::{
-        execution_state::Memory, system_state::wasm_chunk_store::WasmChunkStore,
+        execution_state::Memory,
+        system_state::wasm_chunk_store::{self, ValidatedChunk, WasmChunkStore},
         WASM_PAGE_SIZE_IN_BYTES,
     },
     page_map::{Buffer, PageAllocatorFileDescriptor},
@@ -54,6 +55,27 @@ impl CanisterSnapshots {
             snapshot_ids,
             memory_usage,
         }
+    }
+
+    /// Inserts a chunk into a snaphot's chunk store and updates its `size` and
+    /// the `CanisterSnapshots`' `memory_usage` by the maximum chunk size.
+    /// Returns `None` if the given snapshot ID could not be found. In this case,
+    /// the method has no effect.
+    pub fn insert_chunk(
+        &mut self,
+        snapshot_id: SnapshotId,
+        validated_chunk: ValidatedChunk,
+    ) -> Option<()> {
+        let snapshot = self.get_mut(snapshot_id)?;
+        let snapshot_inner = Arc::make_mut(snapshot);
+        snapshot_inner
+            .chunk_store_mut()
+            .insert_chunk(validated_chunk);
+        // use the maximum chunk size
+        let amount = wasm_chunk_store::chunk_size();
+        snapshot_inner.size += amount;
+        self.memory_usage += amount;
+        Some(())
     }
 
     /// Adds new snapshot in the collection and assigns a `SnapshotId`.
