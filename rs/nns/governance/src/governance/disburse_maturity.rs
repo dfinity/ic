@@ -10,7 +10,6 @@ use crate::{
     },
 };
 
-
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_nervous_system_governance::maturity_modulation::{
     apply_maturity_modulation, MIN_MATURITY_MODULATION_PERMYRIAD,

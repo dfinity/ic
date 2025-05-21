@@ -30,10 +30,13 @@ lazy_static! {
                     "MIN_DISBURSEMENT".to_string(),
                     crate::governance::disburse_maturity::MINIMUM_DISBURSEMENT_E8S.to_tla_value(),
                 );
-                let disbursements_in_progress_account_ids: BTreeSet<TlaValue> = trace.iter().flat_map(
-                    get_maturity_disbursement_in_progress_account_ids).collect();
+                let disbursements_in_progress_account_ids: BTreeSet<TlaValue> = trace
+                    .iter()
+                    .flat_map(get_maturity_disbursement_in_progress_account_ids)
+                    .collect();
 
-                let all_accounts = function_domain_union(trace, "neuron_id_by_account").iter()
+                let all_accounts = function_domain_union(trace, "neuron_id_by_account")
+                    .iter()
                     .filter(|account| **account != "".to_tla_value())
                     .chain(once(&account_to_tla(governance_minting_account())))
                     .chain(disbursements_in_progress_account_ids.iter())
