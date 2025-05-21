@@ -1,5 +1,6 @@
 use crate::lifecycle::init::InitArg;
 use crate::state::State;
+use crate::EVM_RPC_ID_STAGING;
 use candid::{Nat, Principal};
 
 pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
@@ -43,6 +44,7 @@ pub fn valid_init_arg() -> InitArg {
         minimum_withdrawal_amount: Nat::from(10_000_000_000_000_000_u64),
         next_transaction_nonce: Default::default(),
         last_scraped_block_number: Default::default(),
+        evm_rpc_id: Some(EVM_RPC_ID_STAGING),
     }
 }
 

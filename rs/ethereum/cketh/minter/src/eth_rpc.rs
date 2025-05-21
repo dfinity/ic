@@ -4,10 +4,7 @@
 use crate::numeric::{BlockNumber, LogIndex};
 use candid::CandidType;
 use ethnum;
-use evm_rpc_client::{
-    HttpOutcallError as EvmHttpOutcallError,
-    SendRawTransactionStatus as EvmSendRawTransactionStatus,
-};
+use evm_rpc_client::HttpOutcallError as EvmHttpOutcallError;
 use ic_cdk::api::call::RejectionCode;
 use ic_ethereum_types::Address;
 use minicbor::{Decode, Encode};
@@ -106,27 +103,6 @@ impl LowerHex for FixedSizeData {
 impl UpperHex for FixedSizeData {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "0x{}", hex::encode_upper(self.0))
-    }
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
-pub enum SendRawTransactionResult {
-    Ok,
-    InsufficientFunds,
-    NonceTooLow,
-    NonceTooHigh,
-}
-
-impl From<EvmSendRawTransactionStatus> for SendRawTransactionResult {
-    fn from(value: EvmSendRawTransactionStatus) -> Self {
-        match value {
-            EvmSendRawTransactionStatus::Ok(_) => SendRawTransactionResult::Ok,
-            EvmSendRawTransactionStatus::InsufficientFunds => {
-                SendRawTransactionResult::InsufficientFunds
-            }
-            EvmSendRawTransactionStatus::NonceTooLow => SendRawTransactionResult::NonceTooLow,
-            EvmSendRawTransactionStatus::NonceTooHigh => SendRawTransactionResult::NonceTooHigh,
-        }
     }
 }
 
