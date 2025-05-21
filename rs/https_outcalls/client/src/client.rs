@@ -248,8 +248,14 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                                     request_sender,
                                     max_response_size_bytes
                                 );
+                                let err_msg = format!(
+                                    "Transformed http response exceeds limit: {}",
+                                    max_response_size_bytes
+                                );
+                                return Err((RejectCode::SysFatal, err_msg));
                             }
-                            transform_result?
+
+                            transform_result
                         }
                         None => Encode!(&canister_http_payload).map_err(|encode_error| {
                             (
@@ -260,26 +266,12 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                                     encode_error
                                 ),
                             )
-                        })?,
+                        }),
                     };
 
                     transform_timer.observe_duration();
-                    if transform_response.len() > (max_response_size_bytes as usize) {
-                        let err_msg = match request_transform {
-                            Some(_) => format!(
-                                "Transformed http response exceeds limit: {}",
-                                max_response_size_bytes
-                            ),
-                            None => format!(
-                                "Http response exceeds limit: {}. \
-                                Apply a transform function to the http response.",
-                                max_response_size_bytes
-                            ),
-                        };
-                        return Err((RejectCode::SysFatal, err_msg));
-                    }
 
-                    Ok(transform_response)
+                    transform_response
                 });
 
             // Drive created future to completion and make response available on the channel.
