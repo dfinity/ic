@@ -50,8 +50,8 @@ const MAX_HEADER_LIST_SIZE: u32 = 52 * 1024;
 /// The maximum number of times we will try to connect to a SOCKS proxy.
 const MAX_SOCKS_PROXY_TRIES: usize = 2;
 
-/// TODO(NET-1765): Make this 100.
-const NEW_SOCKS_PROXY_ROLLOUT: u32 = 50;
+/// TODO(NET-1765): Inline this constant into the code and remove the feature flag.
+const NEW_SOCKS_PROXY_ROLLOUT: u32 = 100;
 
 type OutboundRequestBody = Full<Bytes>;
 
