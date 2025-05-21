@@ -42,7 +42,7 @@ process (Disburse_Maturity_Timer \in Disburse_Maturity_Timer_Process_Ids)
         } or {
             with(nid \in
                 { nid \in DOMAIN(neuron) \ locks : neuron[nid].maturity_disbursements_in_progress # <<>> };
-                disbursement = Head(neuron[neuron_id].maturity_disbursements_in_progress);
+                disbursement = Head(neuron[nid].maturity_disbursements_in_progress);
                 amount_to_disburse = (disbursement.amount * (BASIS_POINTS_PER_UNITY + MATURITY_BASIS_POINTS)) \div BASIS_POINTS_PER_UNITY
             ) {
                 neuron_id := nid;
@@ -53,7 +53,7 @@ process (Disburse_Maturity_Timer \in Disburse_Maturity_Timer_Process_Ids)
                     request(self, transfer(Minting_Account_Id, disbursement.account_id, amount_to_disburse, 0)));
             }
         };
-    Disburse_Maturity_WaitForTransfer:
+    Disburse_Maturity_Timer_WaitForTransfer:
         with(answer \in { resp \in ledger_to_governance: resp.caller = self };
             \* Work around PlusCal not being able to assing to the same variable twice in the same block
         ) {
@@ -75,7 +75,7 @@ process (Disburse_Maturity_Timer \in Disburse_Maturity_Timer_Process_Ids)
     }
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "31afff12" /\ chksum(tla) = "4e54011c")
+\* BEGIN TRANSLATION (chksum(pcal) = "1fe45d68" /\ chksum(tla) = "9438b486")
 VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger,
           ledger_to_governance, neuron_id, current_disbursement
 
@@ -99,7 +99,7 @@ Disburse_Maturity_Timer_Start(self) == /\ pc[self] = "Disburse_Maturity_Timer_St
                                        /\ \/ /\ pc' = [pc EXCEPT ![self] = "Disburse_Maturity_Timer_Start"]
                                              /\ UNCHANGED <<neuron, locks, governance_to_ledger, neuron_id, current_disbursement>>
                                           \/ /\ \E nid \in { nid \in DOMAIN(neuron) \ locks : neuron[nid].maturity_disbursements_in_progress # <<>> }:
-                                                  LET disbursement == Head(neuron[neuron_id[self]].maturity_disbursements_in_progress) IN
+                                                  LET disbursement == Head(neuron[nid].maturity_disbursements_in_progress) IN
                                                     LET amount_to_disburse == (disbursement.amount * (BASIS_POINTS_PER_UNITY + MATURITY_BASIS_POINTS)) \div BASIS_POINTS_PER_UNITY IN
                                                       /\ neuron_id' = [neuron_id EXCEPT ![self] = nid]
                                                       /\ neuron' = [neuron EXCEPT ![neuron_id'[self]].maturity_disbursements_in_progress = Tail(@) ]
@@ -107,28 +107,28 @@ Disburse_Maturity_Timer_Start(self) == /\ pc[self] = "Disburse_Maturity_Timer_St
                                                       /\ current_disbursement' = [current_disbursement EXCEPT ![self] = disbursement]
                                                       /\ governance_to_ledger' =                     Append(governance_to_ledger,
                                                                                  request(self, transfer(Minting_Account_Id, disbursement.account_id, amount_to_disburse, 0)))
-                                             /\ pc' = [pc EXCEPT ![self] = "Disburse_Maturity_Wait_For_Reponse"]
+                                             /\ pc' = [pc EXCEPT ![self] = "Disburse_Maturity_Timer_WaitForTransfer"]
                                        /\ UNCHANGED << neuron_id_by_account,
                                                        ledger_to_governance >>
 
-Disburse_Maturity_Wait_For_Reponse(self) == /\ pc[self] = "Disburse_Maturity_Wait_For_Reponse"
-                                            /\ \E answer \in { resp \in ledger_to_governance: resp.caller = self }:
-                                                 /\ ledger_to_governance' = ledger_to_governance \ {answer}
-                                                 /\ IF answer.response = Variant("Fail", UNIT)
-                                                       THEN /\ \/ /\ neuron' = [neuron EXCEPT ![neuron_id[self]].maturity_disbursements_in_progress = << current_disbursement[self] >> \o @ ]
-                                                                  /\ locks' = locks \ {neuron_id[self]}
-                                                               \/ /\ TRUE
-                                                                  /\ UNCHANGED <<neuron, locks>>
-                                                       ELSE /\ locks' = locks \ {neuron_id[self]}
-                                                            /\ UNCHANGED neuron
-                                            /\ current_disbursement' = [current_disbursement EXCEPT ![self] = DUMMY_DISBURSEMENT]
-                                            /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                            /\ UNCHANGED << neuron_id_by_account,
-                                                            governance_to_ledger,
-                                                            neuron_id >>
+Disburse_Maturity_Timer_WaitForTransfer(self) == /\ pc[self] = "Disburse_Maturity_Timer_WaitForTransfer"
+                                                 /\ \E answer \in { resp \in ledger_to_governance: resp.caller = self }:
+                                                      /\ ledger_to_governance' = ledger_to_governance \ {answer}
+                                                      /\ IF answer.response = Variant("Fail", UNIT)
+                                                            THEN /\ \/ /\ neuron' = [neuron EXCEPT ![neuron_id[self]].maturity_disbursements_in_progress = << current_disbursement[self] >> \o @ ]
+                                                                       /\ locks' = locks \ {neuron_id[self]}
+                                                                    \/ /\ TRUE
+                                                                       /\ UNCHANGED <<neuron, locks>>
+                                                            ELSE /\ locks' = locks \ {neuron_id[self]}
+                                                                 /\ UNCHANGED neuron
+                                                 /\ current_disbursement' = [current_disbursement EXCEPT ![self] = DUMMY_DISBURSEMENT]
+                                                 /\ pc' = [pc EXCEPT ![self] = "Disburse_Maturity_Timer_Start"]
+                                                 /\ UNCHANGED << neuron_id_by_account,
+                                                                 governance_to_ledger,
+                                                                 neuron_id >>
 
 Disburse_Maturity_Timer(self) == Disburse_Maturity_Timer_Start(self)
-                                    \/ Disburse_Maturity_Wait_For_Reponse(self)
+                                    \/ Disburse_Maturity_Timer_WaitForTransfer(self)
 
 (* Allow infinite stuttering to prevent deadlock on termination. *)
 Terminating == /\ \A self \in ProcSet: pc[self] = "Done"

@@ -52,14 +52,15 @@ use std::{boxed::Box, time::Duration};
 #[cfg(feature = "test")]
 use ic_nns_governance::governance::TimeWarp as GovTimeWarp;
 
-#[cfg(not(feature = "tla"))]
-use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
 use ic_nns_governance::canister_state::{with_governance, CanisterRandomnessGenerator};
 
 #[cfg(feature = "tla")]
 mod tla_ledger;
+
 #[cfg(feature = "tla")]
 use tla_ledger::LoggingIcpLedgerCanister as IcpLedgerCanister;
+#[cfg(not(feature = "tla"))]
+use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
 
 
 /// WASM memory equivalent to 4GiB, which we want to reserve for upgrades memory. The heap memory

@@ -603,7 +603,7 @@ async fn try_finalize_maturity_disbursement(
             ]
         ))
     };
-    tla_log_label!("Disburse_Maturity");
+    tla_log_label!("Disburse_Maturity_Timer");
     let mint_result = mint_icp_operation
         .mint_icp_with_ledger(ledger.as_ref(), now_seconds)
         .await;
