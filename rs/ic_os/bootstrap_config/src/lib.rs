@@ -412,9 +412,11 @@ mod tests {
     #[test]
     fn test_is_valid_hostname() {
         fn is_valid_hostname(hostname: &str) -> bool {
-            let mut config = BootstrapOptions::default();
-            config.hostname = Some(hostname.to_string());
-            valid_hostname_or_error(&config).is_ok()
+            valid_hostname_or_error(&BootstrapOptions {
+                hostname: Some(hostname.to_string()),
+                ..Default::default()
+            })
+            .is_ok()
         }
 
         // Valid hostnames
@@ -447,11 +449,14 @@ mod tests {
         let tmp_dir = tempfile::tempdir()?;
         let out_file = tmp_dir.path().join("bootstrap.img");
 
-        let mut config = BootstrapOptions::default();
-        config.hostname = Some("testhostname".to_string());
-        config.ipv6_address = Some("2001:db8::1/64".to_string());
-
-        build_bootstrap_config_image(&out_file, &config)?;
+        build_bootstrap_config_image(
+            &out_file,
+            &BootstrapOptions {
+                hostname: Some("testhostname".to_string()),
+                ipv6_address: Some("2001:db8::1/64".to_string()),
+                ..Default::default()
+            },
+        )?;
 
         assert!(out_file.exists());
         assert!(fs::metadata(&out_file)?.len() > 0);
