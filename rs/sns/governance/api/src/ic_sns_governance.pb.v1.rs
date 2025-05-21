@@ -1647,21 +1647,28 @@ pub struct GetMetadataResponse {
 }
 /// Request message for 'get_metadata'.
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, Copy, PartialEq)]
-pub struct GetSnsStatusRequest {
+pub struct GetMetricsRequest {
     pub time_window_seconds: Option<u64>,
 }
 
 pub mod get_sns_status_response {
+    use super::GovernanceError;
+
     #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
-    pub struct SnsStatus {
+    pub struct Metrics {
         pub num_recent_proposals: Option<u64>,
         pub last_transaction_timestamp: Option<u64>,
     }
 
     #[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
-    pub enum GetSnsStatusResponse {
-        Ok(SnsStatus),
-        Err(String),
+    pub enum GetMetricsResult {
+        Ok(Metrics),
+        Err(GovernanceError),
+    }
+
+    #[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+    pub struct GetMetricsResponse {
+        pub get_metrics_result: Option<GetMetricsResult>,
     }
 }
 

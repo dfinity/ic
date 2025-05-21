@@ -53,9 +53,9 @@ use crate::{
             DisburseMaturityInProgress, Empty, ExecuteGenericNervousSystemFunction,
             FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse,
             GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
-            GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse,
-            GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
-            GetSnsInitializationParametersResponse, GetSnsStatusRequest, GetSnsStatusResponse,
+            GetMetadataResponse, GetMetricsRequest, GetMetricsResponse, GetMode, GetModeResponse,
+            GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
+            GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
             Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
             ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
             ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
@@ -2010,8 +2010,8 @@ impl Governance {
 
     pub async fn get_statistics(
         &self,
-        request: GetSnsStatusRequest,
-    ) -> Result<GetSnsStatusResponse, GovernanceError> {
+        request: GetMetricsRequest,
+    ) -> Result<GetMetricsResponse, GovernanceError> {
         let time_window_seconds =
             request
                 .time_window_seconds
@@ -2023,7 +2023,7 @@ impl Governance {
         let num_recent_proposals = self.recent_proposals(time_window_seconds);
         let last_transaction_timestamp = 0;
 
-        Ok(GetSnsStatusResponse {
+        Ok(GetMetricsResponse {
             num_recent_proposals: Some(num_recent_proposals),
             last_transaction_timestamp: Some(last_transaction_timestamp),
         })
