@@ -124,10 +124,10 @@ pub fn cmd_add_neuron(time: Time, cmd: &WithNeuronCmd) -> Result<Vec<IngressWith
     })
     .expect("Couldn't candid-encode ledger transfer");
 
-    let governance_agent = agent_with_principal_as_sender(&GOVERNANCE_CANISTER_ID.get())?;
+    let governance_agent = &agent_with_principal_as_sender(&GOVERNANCE_CANISTER_ID.get())?;
     msgs.push(IngressWithPrinter {
         ingress: make_signed_ingress(
-            &governance_agent,
+            governance_agent,
             LEDGER_CANISTER_ID,
             "send_dfx",
             payload,
@@ -278,10 +278,10 @@ pub fn cmd_add_ledger_account(
     })
     .expect("Couldn't candid-encode ledger transfer");
 
-    let governance_agent = agent_with_principal_as_sender(&GOVERNANCE_CANISTER_ID.get())?;
+    let governance_agent = &agent_with_principal_as_sender(&GOVERNANCE_CANISTER_ID.get())?;
 
     Ok(vec![make_signed_ingress(
-        &governance_agent,
+        governance_agent,
         LEDGER_CANISTER_ID,
         "send_dfx",
         payload,
