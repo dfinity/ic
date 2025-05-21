@@ -5,6 +5,7 @@ use crate::{
     pb::v1::{Ballot, NeuronIdToVotingPowerMap, VotingPowerTotal},
 };
 
+use ic_cdk::eprintln;
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_stable_structures::{
     memory_manager::VirtualMemory, storable::Bound, DefaultMemoryImpl, StableBTreeMap, Storable,
@@ -47,7 +48,7 @@ fn insert_and_truncate<Value: Storable>(
     // Log if we just clobbered an existing entry, because it is a exceedingly unlikely
     // that this would happen in practice.
     if let Some(existing_value) = existing_value {
-        ic_cdk::eprintln!(
+        eprintln!(
             "{}Somehow the voting power snapshot is taken multiple times at \
 	            the same timestamp {}",
             LOG_PREFIX,
@@ -161,7 +162,7 @@ impl VotingPowerSnapshots {
             total_potential_voting_power,
         )
         else {
-            ic_cdk::eprintln!(
+            eprintln!(
                 "{}Voting power totals are empty. No voting power spike detected.",
                 LOG_PREFIX,
             );
@@ -173,7 +174,7 @@ impl VotingPowerSnapshots {
             .neuron_id_to_voting_power_maps
             .get(&timestamp_with_minimum_total_potential_voting_power)
         else {
-            ic_cdk::eprintln!(
+            eprintln!(
                 "{}Voting power map not found for timestamp {} while the totals \
                 are found. This should not happen.",
                 LOG_PREFIX,

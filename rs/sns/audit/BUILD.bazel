@@ -25,7 +25,7 @@ DEPENDENCIES = [
 ]
 
 rust_library(
-    name = "ic-sns-audit",
+    name = "audit",
     srcs = ["src/lib.rs"],
     deps = DEPENDENCIES,
 )
@@ -34,7 +34,7 @@ rust_binary(
     name = "sns-audit",
     srcs = ["src/main.rs"],
     deps = DEPENDENCIES + [
-        ":ic-sns-audit",
+        ":audit",
         "@crate_index//:anyhow",
     ],
 )
