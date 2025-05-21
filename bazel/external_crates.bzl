@@ -1447,6 +1447,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "serde",
                 ],
             ),
+	    "userfaultfd": crate.spec(
+                version = "^0.8.1",
+	    ),
             # DO NOT upgrade to >=1.13 unless you are ready to deal with problems.
             # This breaks `wasm32-unknown-unknown` compatibility.
             # Read https://github.com/uuid-rs/uuid/releases/tag/1.13.0

@@ -1,5 +1,5 @@
 {
-  "checksum": "9286f7e1cc3c1e5ef9503cc0a9ec592a5061b3f8833c81ec052a54dd0e0217b5",
+  "checksum": "848cc56638c6e6fba1f799b73db9c2b839527ecc09efa63f0dbe33cc0e623188",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -7167,6 +7167,139 @@
             {
               "id": "prettyplease 0.2.15",
               "target": "prettyplease"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "BSD-3-Clause",
+      "license_ids": [
+        "BSD-3-Clause"
+      ],
+      "license_file": "LICENSE"
+    },
+    "bindgen 0.68.1": {
+      "name": "bindgen",
+      "version": "0.68.1",
+      "package_url": "https://github.com/rust-lang/rust-bindgen",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/bindgen/0.68.1/download",
+          "sha256": "726e4313eb6ec35d2730258ad4e15b547ee75d6afaa1361a922e78e59b7d8078"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bindgen",
+            "crate_root": "lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "bindgen",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "runtime"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bindgen 0.68.1",
+              "target": "build_script_build"
+            },
+            {
+              "id": "bitflags 2.9.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "cexpr 0.6.0",
+              "target": "cexpr"
+            },
+            {
+              "id": "clang-sys 1.6.1",
+              "target": "clang_sys"
+            },
+            {
+              "id": "lazy_static 1.5.0",
+              "target": "lazy_static"
+            },
+            {
+              "id": "lazycell 1.3.0",
+              "target": "lazycell"
+            },
+            {
+              "id": "peeking_take_while 0.1.2",
+              "target": "peeking_take_while"
+            },
+            {
+              "id": "proc-macro2 1.0.95",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.40",
+              "target": "quote"
+            },
+            {
+              "id": "regex 1.11.1",
+              "target": "regex"
+            },
+            {
+              "id": "rustc-hash 1.1.0",
+              "target": "rustc_hash"
+            },
+            {
+              "id": "shlex 1.3.0",
+              "target": "shlex"
+            },
+            {
+              "id": "syn 2.0.101",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.68.1"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "link_deps": {
+          "common": [
+            {
+              "id": "clang-sys 1.6.1",
+              "target": "clang_sys"
             }
           ],
           "selects": {}
@@ -21012,6 +21145,10 @@
             {
               "id": "url 2.5.4",
               "target": "url"
+            },
+            {
+              "id": "userfaultfd 0.8.1",
+              "target": "userfaultfd"
             },
             {
               "id": "uuid 1.12.1",
@@ -81421,6 +81558,174 @@
       ],
       "license_file": "LICENSE"
     },
+    "userfaultfd 0.8.1": {
+      "name": "userfaultfd",
+      "version": "0.8.1",
+      "package_url": "https://github.com/bytecodealliance/userfaultfd-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/userfaultfd/0.8.1/download",
+          "sha256": "18d8b176d4d3e420685e964f87c25df5fdd5b26d7eb0d0e7c892d771f5b81035"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "userfaultfd",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "userfaultfd",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.9.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "libc 0.2.170",
+              "target": "libc"
+            },
+            {
+              "id": "nix 0.27.1",
+              "target": "nix"
+            },
+            {
+              "id": "thiserror 1.0.68",
+              "target": "thiserror"
+            },
+            {
+              "id": "userfaultfd-sys 0.5.0",
+              "target": "userfaultfd_sys"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.8.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "userfaultfd-sys 0.5.0": {
+      "name": "userfaultfd-sys",
+      "version": "0.5.0",
+      "package_url": "https://github.com/bytecodealliance/userfaultfd-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/userfaultfd-sys/0.5.0/download",
+          "sha256": "d75595d2a62b7db16bd47f5a1ce14e1fe05ccbe27d6c96721a958e0a027cad41"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "userfaultfd_sys",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "userfaultfd_sys",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "userfaultfd-sys 0.5.0",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.5.0"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bindgen 0.68.1",
+              "target": "bindgen"
+            },
+            {
+              "id": "cc 1.1.37",
+              "target": "cc"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "utf-8 0.7.6": {
       "name": "utf-8",
       "version": "0.7.6",
@@ -90827,6 +91132,7 @@
     "trust-dns-resolver 0.22.0",
     "turmoil 0.6.4",
     "url 2.5.4",
+    "userfaultfd 0.8.1",
     "uuid 1.12.1",
     "vsock 0.4.0",
     "walkdir 2.5.0",

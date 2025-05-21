@@ -15,6 +15,7 @@ use std::{
     ops::Range,
     sync::atomic::{AtomicU64, AtomicUsize, Ordering},
 };
+use userfaultfd::{ReadWrite, Uffd};
 
 // The upper bound on the number of pages that are memory mapped from the
 // checkpoint file per signal handler call. Higher value gives higher
@@ -328,7 +329,7 @@ impl SigsegvMemoryTracker {
             // Restrict to tracked range before applying
             instructions.restrict_to_range(&tracker.page_range());
 
-            apply_memory_instructions(&tracker, ProtFlags::PROT_NONE, instructions);
+            apply_memory_instructions(&tracker, None, ProtFlags::PROT_NONE, instructions);
         } else {
             unsafe { mprotect(addr, size.get() as usize, ProtFlags::PROT_NONE)? }
             tracker
@@ -651,6 +652,7 @@ pub fn sigsegv_fault_handler_new(
                 .restrict_range_to_predicted(faulting_page, max_prefetch_range.clone());
             let prefetch_range = map_unaccessed_pages(
                 tracker,
+                None,
                 ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
                 min_prefetch_range,
                 max_prefetch_range,
@@ -668,6 +670,7 @@ pub fn sigsegv_fault_handler_new(
                 .restrict_range_to_predicted(faulting_page, max_prefetch_range.clone());
             let prefetch_range = map_unaccessed_pages(
                 tracker,
+                None,
                 ProtFlags::PROT_READ,
                 min_prefetch_range,
                 max_prefetch_range,
@@ -727,6 +730,7 @@ pub fn sigsegv_fault_handler_new(
                     dirty_bitmap.restrict_range_to_predicted(faulting_page, prefetch_range);
                 let prefetch_range = map_unaccessed_pages(
                     tracker,
+                    None,
                     ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
                     prefetch_range.clone(),
                     prefetch_range,
@@ -738,6 +742,123 @@ pub fn sigsegv_fault_handler_new(
         }
     }
     true
+}
+
+pub fn uffd_handler(
+    tracker: &SigsegvMemoryTracker,
+    uffd: &Uffd,
+    access_kind: ReadWrite,
+    fault_address: *mut libc::c_void,
+) {
+    if !tracker.memory_area.is_within(fault_address) {
+        // This memory tracker is not responsible for handling this address.
+        return;
+    };
+
+    let faulting_page = tracker.page_index_from(fault_address);
+    let mut accessed_bitmap = tracker.accessed_bitmap.borrow_mut();
+
+    match (access_kind, tracker.dirty_page_tracking) {
+        (_, DirtyPageTracking::Ignore) => {
+            // We don't care about dirty pages here, so we can set up the page mapping for
+            // for multiple pages as read/write right away.
+            let prefetch_range =
+                range_from_count(faulting_page, NumOsPages::new(MAX_PAGES_TO_MAP as u64));
+            let max_prefetch_range =
+                accessed_bitmap.restrict_range_to_unmarked(faulting_page, prefetch_range);
+            let min_prefetch_range = accessed_bitmap
+                .restrict_range_to_predicted(faulting_page, max_prefetch_range.clone());
+            let prefetch_range = map_unaccessed_pages(
+                tracker,
+                Some(uffd),
+                ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
+                min_prefetch_range,
+                max_prefetch_range,
+            );
+            accessed_bitmap.mark_range(&prefetch_range);
+        }
+        (ReadWrite::Read, DirtyPageTracking::Track) => {
+            // Set up the page mapping as read-only in order to get a signal on subsequent
+            // write accesses to track dirty pages. We can do this for multiple pages.
+            let prefetch_range =
+                range_from_count(faulting_page, NumOsPages::new(MAX_PAGES_TO_MAP as u64));
+            let max_prefetch_range =
+                accessed_bitmap.restrict_range_to_unmarked(faulting_page, prefetch_range);
+            let min_prefetch_range = accessed_bitmap
+                .restrict_range_to_predicted(faulting_page, max_prefetch_range.clone());
+            let prefetch_range = map_unaccessed_pages(
+                tracker,
+                Some(uffd),
+                ProtFlags::PROT_READ,
+                min_prefetch_range,
+                max_prefetch_range,
+            );
+            accessed_bitmap.mark_range(&prefetch_range);
+        }
+        (ReadWrite::Write, DirtyPageTracking::Track) => {
+            let mut dirty_bitmap = tracker.dirty_bitmap.borrow_mut();
+            assert!(!dirty_bitmap.is_marked(faulting_page));
+            let prefetch_range =
+                range_from_count(faulting_page, NumOsPages::new(MAX_PAGES_TO_MAP as u64));
+            // Ensure that we don't overwrite an already dirty page.
+            let prefetch_range =
+                dirty_bitmap.restrict_range_to_unmarked(faulting_page, prefetch_range);
+            if accessed_bitmap.is_marked(faulting_page) {
+                tracker
+                    .read_before_write_stats
+                    .read_before_write_count
+                    .fetch_add(1, Ordering::Relaxed);
+                // Ensure that all pages in the range have already been accessed because we are
+                // going to simply `mprotect` the range.
+                let prefetch_range =
+                    accessed_bitmap.restrict_range_to_marked(faulting_page, prefetch_range);
+                // Amortize the prefetch work based on the previously written pages.
+                let prefetch_range =
+                    dirty_bitmap.restrict_range_to_predicted(faulting_page, prefetch_range);
+                let page_start_addr = tracker.page_start_addr_from(prefetch_range.start);
+                unsafe {
+                    mprotect(
+                        page_start_addr,
+                        range_size_in_bytes(&prefetch_range),
+                        ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
+                    )
+                    .map_err(print_enomem_help)
+                    .unwrap()
+                };
+                tracker
+                    .memory_instructions_stats
+                    .mprotect_count
+                    .fetch_add(1, Ordering::Relaxed);
+                dirty_bitmap.mark_range(&prefetch_range);
+                tracker.add_dirty_pages(faulting_page, prefetch_range);
+            } else {
+                tracker
+                    .read_before_write_stats
+                    .direct_write_count
+                    .fetch_add(1, Ordering::Relaxed);
+                // The first access to the page is a write access. This is a good case because
+                // it allows us to set up read/write mapping right away.
+                // Ensure that all pages in the range have not been accessed yet because we are
+                // going to set up a new mapping. Note that this implies that all pages in the
+                // range have not been written to.
+                let prefetch_range =
+                    accessed_bitmap.restrict_range_to_unmarked(faulting_page, prefetch_range);
+                // Amortize the prefetch work based on the previously written pages.
+                let prefetch_range =
+                    dirty_bitmap.restrict_range_to_predicted(faulting_page, prefetch_range);
+                let prefetch_range = map_unaccessed_pages(
+                    tracker,
+                    Some(uffd),
+                    ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
+                    prefetch_range.clone(),
+                    prefetch_range,
+                );
+                accessed_bitmap.mark_range(&prefetch_range);
+                dirty_bitmap.mark_range(&prefetch_range);
+                tracker.add_dirty_pages(faulting_page, prefetch_range);
+            }
+        }
+    }
 }
 
 /// Sets up page mapping for a given range. This function takes two ranges, `min_prefetch_range`
@@ -752,6 +873,7 @@ pub fn sigsegv_fault_handler_new(
 ///      to the pages according to the PageMap.
 fn map_unaccessed_pages(
     tracker: &SigsegvMemoryTracker,
+    uffd: Option<&Uffd>,
     page_protection_flags: ProtFlags,
     min_prefetch_range: Range<PageIndex>,
     max_prefetch_range: Range<PageIndex>,
@@ -770,7 +892,7 @@ fn map_unaccessed_pages(
 
     let range = instructions.range.clone();
 
-    apply_memory_instructions(tracker, page_protection_flags, instructions);
+    apply_memory_instructions(tracker, uffd, page_protection_flags, instructions);
 
     range
 }
@@ -779,6 +901,7 @@ fn map_unaccessed_pages(
 /// Precondition: The protection level of the entire `prefetch_range` is PROT_NONE
 fn apply_memory_instructions(
     tracker: &SigsegvMemoryTracker,
+    uffd: Option<&Uffd>,
     page_protection_flags: ProtFlags,
     memory_instructions: MemoryInstructions,
 ) {
@@ -842,11 +965,22 @@ fn apply_memory_instructions(
                 }
                 unsafe {
                     debug_assert_eq!(data.len(), range_size_in_bytes(&range));
-                    std::ptr::copy_nonoverlapping(
-                        data.as_ptr() as *const libc::c_void,
-                        tracker.page_start_addr_from(range.start),
-                        range_size_in_bytes(&range),
-                    )
+                    match uffd {
+                        Some(uffd) => {
+                            uffd.copy(
+                                data.as_ptr() as *const libc::c_void,
+                                tracker.page_start_addr_from(range.start),
+                                range_size_in_bytes(&range),
+                                true,
+                            )
+                            .expect("uffd copy failed");
+                        }
+                        None => std::ptr::copy_nonoverlapping(
+                            data.as_ptr() as *const libc::c_void,
+                            tracker.page_start_addr_from(range.start),
+                            range_size_in_bytes(&range),
+                        ),
+                    }
                 }
             }
         }

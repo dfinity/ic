@@ -10,8 +10,8 @@ use std::{
 
 use ic_management_canister_types_private::Global;
 use wasmtime::{
-    unix::StoreExt, Engine, Instance, InstancePre, Linker, Memory, Module, Mutability, Store,
-    StoreLimits, StoreLimitsBuilder, Val, ValType,
+    Engine, Instance, InstancePre, Linker, Memory, Module, Mutability, Store, StoreLimits,
+    StoreLimitsBuilder, Val, ValType,
 };
 
 pub use host_memory::WasmtimeMemoryCreator;
@@ -30,7 +30,7 @@ use ic_types::{
     CanisterId, NumBytes, NumInstructions, NumOsPages, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
-use memory_tracker::{DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
+use memory_tracker::{uffd_handler, DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
 use signal_stack::WasmtimeSignalStack;
 
 use crate::wasm_utils::instrumentation::{
@@ -40,6 +40,8 @@ use crate::wasm_utils::instrumentation::{
 use crate::{
     serialized_module::SerializedModuleBytes, wasm_utils::validation::wasmtime_validation_config,
 };
+use std::{sync::MutexGuard, thread};
+use userfaultfd::{Event, UffdBuilder};
 
 use super::InstanceRunResult;
 
@@ -704,7 +706,6 @@ fn sigsegv_memory_tracker<S>(
     store: &mut wasmtime::Store<S>,
     log: ReplicaLogger,
 ) -> HashMap<CanisterMemoryType, Arc<Mutex<SigsegvMemoryTracker>>> {
-    let mut tracked_memories = vec![];
     let mut result = HashMap::new();
     for (
         mem_type,
@@ -719,20 +720,20 @@ fn sigsegv_memory_tracker<S>(
         let base = instance_memory.data_ptr(&store);
         let size = instance_memory.data_size(&store);
 
-        let sigsegv_memory_tracker = {
-            // For both SIGSEGV and in the future UFFD memory tracking we need
-            // the base address of the heap and its size
-            let base = base as *mut libc::c_void;
-            if base as usize % PAGE_SIZE != 0 {
-                fatal!(log, "[EXC-BUG] Memory tracker - Heap must be page aligned.");
-            }
-            if size % PAGE_SIZE != 0 {
-                fatal!(
-                    log,
-                    "[EXC-BUG] Memory tracker - Heap size must be a multiple of page size."
-                );
-            }
+        // For both SIGSEGV and in the future UFFD memory tracking we need
+        // the base address of the heap and its size
+        let base = base as *mut libc::c_void;
+        if base as usize % PAGE_SIZE != 0 {
+            fatal!(log, "[EXC-BUG] Memory tracker - Heap must be page aligned.");
+        }
+        if size % PAGE_SIZE != 0 {
+            fatal!(
+                log,
+                "[EXC-BUG] Memory tracker - Heap size must be a multiple of page size."
+            );
+        }
 
+        let sigsegv_memory_tracker = {
             Arc::new(Mutex::new(
                 SigsegvMemoryTracker::new(
                     base,
@@ -744,15 +745,78 @@ fn sigsegv_memory_tracker<S>(
                 .expect("failed to instantiate SIGSEGV memory tracker"),
             ))
         };
+
+        let uffd = UffdBuilder::new()
+            .close_on_exec(true)
+            .non_blocking(true)
+            .user_mode_only(true)
+            .create()
+            .expect("Failed to create userfaultfd");
+        uffd.register(
+            base,
+            PAGE_SIZE * (*current_memory_size_in_pages).load(Ordering::SeqCst),
+        )
+        .expect("Failed to register region");
+
         result.insert(mem_type, Arc::clone(&sigsegv_memory_tracker));
-        tracked_memories.push((sigsegv_memory_tracker, current_memory_size_in_pages));
+
+        thread::spawn(move || {
+            loop {
+                let event = uffd.read_event().expect("Failed to read uffd event");
+
+                match event {
+                    Some(Event::Pagefault {
+                        addr: fault_addr,
+                        rw,
+                        ..
+                    }) => {
+                        println!(
+                            "Page fault at address: {:p}",
+                            fault_addr as *mut libc::c_void
+                        );
+
+                        let memory_tracker = sigsegv_memory_tracker.lock().unwrap();
+
+                        let check_if_expanded =
+                            move |tracker: &MutexGuard<SigsegvMemoryTracker>,
+                                fault_addr: *mut libc::c_void,
+                                current_size_in_pages: &MemoryPageSize| unsafe {
+                            let page_count = current_size_in_pages.load(Ordering::SeqCst);
+                            let heap_size = page_count * (WASM_PAGE_SIZE_IN_BYTES as usize);
+                            let heap_start = tracker.area().addr() as *mut libc::c_void;
+                            if (heap_start <= fault_addr) && (fault_addr < { heap_start.add(heap_size) }) {
+                                Some(heap_size)
+                            } else {
+                                None
+                            }
+                        };
+
+                        if !memory_tracker.area().is_within(fault_addr) {
+                            // The heap has expanded. Update tracked memory area.
+                            if let Some(heap_size) = check_if_expanded(
+                                &memory_tracker,
+                                fault_addr,
+                                &current_memory_size_in_pages,
+                            ) {
+                                let delta =
+                                    NumBytes::new(heap_size as u64) - memory_tracker.area().size();
+                                memory_tracker.expand(delta);
+                            }
+                        }
+
+                        uffd_handler(&memory_tracker, &uffd, rw, fault_addr);
+                    }
+                    _ => {}
+                }
+            }
+        });
     }
 
-    let handler = crate::signal_handler::sigsegv_memory_tracker_handler(tracked_memories);
-    // http://man7.org/linux/man-pages/man7/signal-safety.7.html
-    unsafe {
-        store.set_signal_handler(handler);
-    };
+    // let handler = crate::signal_handler::sigsegv_memory_tracker_handler(tracked_memories);
+    // // http://man7.org/linux/man-pages/man7/signal-safety.7.html
+    // unsafe {
+    //     store.set_signal_handler(handler);
+    // };
     result
 }
 

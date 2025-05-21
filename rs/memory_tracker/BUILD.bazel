@@ -14,6 +14,7 @@ DEPENDENCIES = [
     "@crate_index//:libc",
     "@crate_index//:nix",
     "@crate_index//:slog",
+    "@crate_index//:userfaultfd",
 ]
 
 rust_library(
