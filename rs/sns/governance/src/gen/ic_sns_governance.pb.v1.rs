@@ -2229,8 +2229,8 @@ pub struct GetMetadataResponse {
     ::prost::Message,
 )]
 pub struct GetMetricsRequest {
-    #[prost(uint64, optional, tag = "1")]
-    pub time_window_seconds: ::core::option::Option<u64>,
+    #[prost(uint64, tag = "1")]
+    pub time_window_seconds: u64,
 }
 /// Response message for 'get_sns_status'
 #[derive(

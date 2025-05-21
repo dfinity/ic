@@ -2012,7 +2012,10 @@ impl Governance {
         &self,
         _request: GetMetricsRequest,
     ) -> Result<GetMetricsResponse, GovernanceError> {
-        unimplemented!()
+        Err(GovernanceError {
+            error_type: 42,
+            error_message: "Unimplemented".to_string(),
+        })
     }
 
     /// Starts execution of the given proposal in the background.
