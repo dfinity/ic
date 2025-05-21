@@ -131,7 +131,6 @@ Usage:
       successfully. Calling it under any other circumstances is illegal and
       will result in a wrong (possibly failing) boot.
 
-
     confirm
       Confirm that the current system booted fine (required after first
       boot of newly installed upgrade to prevent bootloader falling back
