@@ -22,7 +22,6 @@ use ic_system_test_driver::{
 use ic_types::{hostos_version::HostosVersion, NodeId};
 
 use slog::info;
-use url::Url;
 
 /// Use an SSH channel to check the version on the running HostOS.
 pub(crate) fn check_hostos_version(node: &NestedVm) -> String {
