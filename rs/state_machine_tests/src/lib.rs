@@ -49,9 +49,11 @@ use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types_private::{
-    self as ic00, CanisterIdRecord, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
-    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs,
+    self as ic00, CanisterIdRecord, CanisterSnapshotDataKind, InstallCodeArgs, MasterPublicKeyId,
+    Method, Payload, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotDataResponse,
+    ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    UploadCanisterSnapshotMetadataResponse,
 };
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
@@ -193,6 +195,8 @@ use tower::ServiceExt;
 /// The size of the channel used to communicate between the [`IngressWatcher`] and
 /// execution. Mirrors the size used in production defined in `setup_ic_stack.rs`
 const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
+
+const SNAPSHOT_DATA_CHUNK_SIZE: u64 = 1_000_000;
 
 #[cfg(test)]
 mod tests;
@@ -3303,7 +3307,7 @@ impl StateMachine {
     pub fn read_canister_snapshot_metadata(
         &self,
         args: &ReadCanisterSnapshotMetadataArgs,
-    ) -> Result<Vec<u8>, UserError> {
+    ) -> Result<ReadCanisterSnapshotMetadataResponse, UserError> {
         let state = self.state_manager.get_latest_state().take();
         let sender = state
             .canister_state(&args.get_canister_id())
@@ -3316,7 +3320,7 @@ impl StateMachine {
             args.encode(),
         )
         .map(|res| match res {
-            WasmResult::Reply(data) => Ok(data),
+            WasmResult::Reply(data) => ReadCanisterSnapshotMetadataResponse::decode(&data),
             WasmResult::Reject(reason) => {
                 panic!("read_canister_snapshot_metadata call rejected: {}", reason)
             }
@@ -3326,7 +3330,7 @@ impl StateMachine {
     pub fn read_canister_snapshot_data(
         &self,
         args: &ReadCanisterSnapshotDataArgs,
-    ) -> Result<Vec<u8>, UserError> {
+    ) -> Result<ReadCanisterSnapshotDataResponse, UserError> {
         let state = self.state_manager.get_latest_state().take();
         let sender = state
             .canister_state(&args.get_canister_id())
@@ -3339,17 +3343,43 @@ impl StateMachine {
             args.encode(),
         )
         .map(|res| match res {
-            WasmResult::Reply(data) => Ok(data),
+            WasmResult::Reply(data) => ReadCanisterSnapshotDataResponse::decode(&data),
             WasmResult::Reject(reason) => {
                 panic!("read_canister_snapshot_data call rejected: {}", reason)
             }
         })?
     }
 
+    /// Helper to download the whole snapshot canister module.
+    pub fn get_snapshot_canister_module(
+        &self,
+        args: &ReadCanisterSnapshotMetadataArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        let md = self.read_canister_snapshot_metadata(args)?;
+        let mut res = vec![];
+        let module_size = md.wasm_module_size;
+        let mut start = 0;
+        while start < module_size {
+            let size = u64::min(SNAPSHOT_DATA_CHUNK_SIZE, module_size - start);
+            let args = ReadCanisterSnapshotDataArgs {
+                canister_id: args.canister_id,
+                snapshot_id: args.snapshot_id.clone(),
+                kind: CanisterSnapshotDataKind::WasmModule {
+                    offset: start,
+                    size,
+                },
+            };
+            start += size;
+            let mut bytes = self.read_canister_snapshot_data(&args)?.chunk;
+            res.append(&mut bytes);
+        }
+        Ok(res)
+    }
+
     pub fn upload_canister_snapshot_metadata(
         &self,
         args: &UploadCanisterSnapshotMetadataArgs,
-    ) -> Result<Vec<u8>, UserError> {
+    ) -> Result<UploadCanisterSnapshotMetadataResponse, UserError> {
         let state = self.state_manager.get_latest_state().take();
         let sender = state
             .canister_state(&args.get_canister_id())
@@ -3362,7 +3392,7 @@ impl StateMachine {
             args.encode(),
         )
         .map(|res| match res {
-            WasmResult::Reply(data) => Ok(data),
+            WasmResult::Reply(data) => UploadCanisterSnapshotMetadataResponse::decode(&data),
             WasmResult::Reject(reason) => {
                 panic!(
                     "upload_canister_snapshot_metadata call rejected: {}",
@@ -3375,7 +3405,7 @@ impl StateMachine {
     pub fn upload_canister_snapshot_data(
         &self,
         args: &UploadCanisterSnapshotDataArgs,
-    ) -> Result<Vec<u8>, UserError> {
+    ) -> Result<(), UserError> {
         let state = self.state_manager.get_latest_state().take();
         let sender = state
             .canister_state(&args.get_canister_id())
@@ -3388,11 +3418,11 @@ impl StateMachine {
             args.encode(),
         )
         .map(|res| match res {
-            WasmResult::Reply(data) => Ok(data),
+            WasmResult::Reply(data) => Decode!(&data, ()).unwrap(),
             WasmResult::Reject(reason) => {
                 panic!("upload_canister_snapshot_data call rejected: {}", reason)
             }
-        })?
+        })
     }
 
     /// Upload a chunk to the wasm chunk store.
