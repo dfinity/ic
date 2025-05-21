@@ -255,7 +255,7 @@ fn build_bootstrap_tar(out_file: &Path, options: &BootstrapOptions) -> Result<()
     }
 
     if let Some(backup_retention_time) = options.backup_retention_time_sec {
-        let mut backup_conf = File::create(&bootstrap_dir.path().join("backup.conf"))
+        let mut backup_conf = File::create(bootstrap_dir.path().join("backup.conf"))
             .context("Failed to create backup.conf")?;
 
         writeln!(
@@ -465,18 +465,20 @@ mod tests {
         let tmp_dir = tempfile::tempdir()?;
         let out_file = tmp_dir.path().join("bootstrap.tar");
 
-        // Create a minimal valid configuration
-        let mut config = BootstrapOptions::default();
-        config.hostname = Some("testhostname".to_string());
-        config.ipv6_address = Some("2001:db8::1/64".to_string());
-
         // Create a test file to be included in the tar
         let test_config_path = tmp_dir.path().join("test_config.json");
         fs::write(&test_config_path, r#"{"test": "value"}"#)?;
-        config.guestos_config = Some(test_config_path);
 
         // Build the tar file
-        build_bootstrap_tar(&out_file, &config)?;
+        build_bootstrap_tar(
+            &out_file,
+            &BootstrapOptions {
+                hostname: Some("testhostname".to_string()),
+                ipv6_address: Some("2001:db8::1/64".to_string()),
+                guestos_config: Some(test_config_path),
+                ..BootstrapOptions::default()
+            },
+        )?;
 
         // Extract the tar file to verify contents
         let extract_dir = tmp_dir.path().join("extract");
