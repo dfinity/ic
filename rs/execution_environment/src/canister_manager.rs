@@ -2035,10 +2035,10 @@ impl CanisterManager {
     }
 
     /// Creates a new snapshot based on the provided metadata and returns the new snapshot ID.
-    /// The main/stable memory and the wasm chunk store are initialized empty, and the
-    /// wasm module is initialized as an all-zero blob.
+    /// The main/stable memory and wasm module are initialized as all-zero blobs of given sizes,
+    /// and the wasm chunk store is initialized empty.
     ///
-    /// The content of these memories has to be uploaded in slices via `write_snapshot_data`.
+    /// The content of the all-zero blobs has to be uploaded in slices via `write_snapshot_data`.
     ///
     /// The new snapshot's memory size is determined by the metadata, and the canister is charged
     /// for the full snapshot memory usage from the beginning, as if it had the wasm module and
@@ -2163,7 +2163,7 @@ impl CanisterManager {
         Ok((snapshot_id, instructions))
     }
 
-    /// Writes `args.chunk` to the wasm module, main/stable memory or to the wasm chunk store.
+    /// Writes `args.chunk` to the wasm module, main/stable memory or inserts `args.chunk` to the wasm chunk store.
     /// Fails if the arguments are incompatible with the memory sizes given in the metadata.
     /// The memory used is already accounted for during `create_snapshot_from_metadata` (except
     /// for the wasm chunk store), but the instructions used to write the data must be taken
