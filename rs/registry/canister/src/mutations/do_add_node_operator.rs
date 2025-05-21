@@ -75,6 +75,7 @@ impl From<AddNodeOperatorPayload> for NodeOperatorRecord {
             dc_id: val.dc_id.to_lowercase(),
             rewardable_nodes: val.rewardable_nodes,
             ipv6: val.ipv6,
+            max_rewardable_nodes: BTreeMap::new(),
         }
     }
 }

@@ -62,6 +62,8 @@ struct AddNodeOperatorPayload {
     node_provider_principal_id: Option<PrincipalId>,
     dc_id: String,
     rewardable_nodes: BTreeMap<String, u32>,
+    ipv6: Option<String>,
+    max_rewardable_nodes: BTreeMap<String, u32>
 }
 ```
 

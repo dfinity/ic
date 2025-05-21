@@ -221,6 +221,7 @@ pub struct NodeOperatorEntry {
     dc_id: String,
     rewardable_nodes: BTreeMap<String, u32>,
     ipv6: Option<String>,
+    max_rewardable_nodes: BTreeMap<String, u32>,
 }
 
 // We must be able to inject a values of type NodeOperatorEntry into the
@@ -237,6 +238,7 @@ impl From<NodeOperatorEntry> for NodeOperatorRecord {
             dc_id: item.dc_id.to_lowercase(),
             rewardable_nodes: item.rewardable_nodes,
             ipv6: item.ipv6,
+            max_rewardable_nodes: item.max_rewardable_nodes,
         }
     }
 }
@@ -481,6 +483,7 @@ impl IcConfig {
                     dc_id: "".into(),
                     rewardable_nodes: BTreeMap::new(),
                     ipv6: None,
+                    max_rewardable_nodes: BTreeMap::new(),
                 });
         }
 
@@ -926,6 +929,7 @@ impl IcConfig {
                 dc_id: name.into(),
                 rewardable_nodes: BTreeMap::new(),
                 ipv6: None,
+                max_rewardable_nodes: BTreeMap::new(),
             });
         }
 

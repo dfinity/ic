@@ -192,6 +192,7 @@ fn test_accepted_proposal_mutates_the_registry() {
                 rewardable_nodes,
                 node_provider_principal_id: (*TEST_NEURON_2_OWNER_PRINCIPAL).to_vec(),
                 ipv6: Some("0:0:0:0:0:0:0:0".into()),
+                max_rewardable_nodes: btreemap! {},
             },
         );
 

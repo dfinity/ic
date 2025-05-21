@@ -5059,6 +5059,7 @@ async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
                     pub dc_id: String,
                     pub rewardable_nodes: std::collections::BTreeMap<String, u32>,
                     pub ipv6: Option<String>,
+                    pub max_rewardable_nodes: std::collections::BTreeMap<String, u32>
                 }
                 let record = NodeOperatorRecord::decode(&bytes[..])
                     .expect("Error decoding value from registry.");
@@ -5075,6 +5076,7 @@ async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
                     dc_id: record.dc_id,
                     rewardable_nodes: record.rewardable_nodes,
                     ipv6: record.ipv6,
+                    max_rewardable_nodes: record.max_rewardable_nodes
                 };
                 print_value(
                     &std::str::from_utf8(&key)
