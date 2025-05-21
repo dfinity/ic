@@ -82,7 +82,7 @@ use ic_types::{
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset};
-use more_asserts::{assert_ge, assert_le, assert_lt};
+use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use serde::Deserialize;
 use std::{collections::BTreeSet, convert::TryFrom, mem::size_of, path::Path, sync::Arc};
 
@@ -4274,6 +4274,7 @@ fn install_does_not_reserve_cycles_when_memory_allocation_is_set() {
             .canister_state(canister_id)
             .system_state
             .reserved_balance();
+        assert_gt!(reserved_cycles, Cycles::zero());
         assert_eq!(
             reserved_cycles,
             test.cycles_account_manager().storage_reservation_cycles(
@@ -4367,6 +4368,7 @@ fn install_reserves_cycles_on_memory_grow() {
             .system_state
             .reserved_balance();
 
+        assert_gt!(reserved_cycles, Cycles::zero());
         assert_eq!(
             reserved_cycles,
             test.cycles_account_manager().storage_reservation_cycles(
@@ -4445,6 +4447,7 @@ fn upgrade_reserves_cycles_on_memory_grow() {
             .system_state
             .reserved_balance();
 
+        assert_gt!(reserved_cycles, Cycles::zero());
         assert_eq!(
             reserved_cycles - reserved_cycles_before,
             test.cycles_account_manager().storage_reservation_cycles(
@@ -4555,6 +4558,7 @@ fn create_canister_reserves_cycles_for_memory_allocation() {
             .system_state
             .reserved_balance();
 
+        assert_gt!(reserved_cycles, Cycles::zero());
         assert_eq!(
             reserved_cycles,
             test.cycles_account_manager().storage_reservation_cycles(
@@ -4625,6 +4629,7 @@ fn update_settings_reserves_cycles_for_memory_allocation() {
             .system_state
             .reserved_balance();
 
+        assert_gt!(reserved_cycles, Cycles::zero());
         assert_eq!(
             reserved_cycles,
             test.cycles_account_manager().storage_reservation_cycles(
@@ -4754,6 +4759,7 @@ fn resource_saturation_scaling_works_in_create_canister() {
         .system_state
         .reserved_balance();
 
+    assert_gt!(reserved_cycles, Cycles::zero());
     assert_eq!(
         reserved_cycles,
         test.cycles_account_manager().storage_reservation_cycles(
@@ -4828,6 +4834,7 @@ fn resource_saturation_scaling_works_in_install_code() {
         .system_state
         .reserved_balance();
 
+    assert_gt!(reserved_cycles, Cycles::zero());
     assert_eq!(
         reserved_cycles,
         test.cycles_account_manager().storage_reservation_cycles(
