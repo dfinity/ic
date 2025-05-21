@@ -408,7 +408,32 @@ impl CanisterSnapshot {
         taken_at_timestamp: Time,
         canister_version: u64,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-    ) -> Self {
+    ) -> Result<Self, CanisterSnapshotError> {
+        // Validate
+        // - wasm module must be non-empty
+        // - stable and heap memory sizes must be multiples of WASM page size
+        if metadata.wasm_module_size == 0 {
+            return Err(CanisterSnapshotError::InvalidMetadata {
+                reason: "Wasm module size cannot be 0.".to_string(),
+            });
+        }
+        if metadata.stable_memory_size as usize % WASM_PAGE_SIZE_IN_BYTES != 0 {
+            return Err(CanisterSnapshotError::InvalidMetadata {
+                reason: format!(
+                    "Stable memory size must be a multiple of {}.",
+                    WASM_PAGE_SIZE_IN_BYTES
+                ),
+            });
+        }
+        if metadata.wasm_memory_size as usize % WASM_PAGE_SIZE_IN_BYTES != 0 {
+            return Err(CanisterSnapshotError::InvalidMetadata {
+                reason: format!(
+                    "Wasm memory size must be a multiple of {}.",
+                    WASM_PAGE_SIZE_IN_BYTES
+                ),
+            });
+        }
+
         let stable_memory = PageMemory {
             page_map: PageMap::new(Arc::clone(&fd_factory)),
             size: NumWasmPages::new(
@@ -431,7 +456,7 @@ impl CanisterSnapshot {
             on_low_wasm_memory_hook_status: metadata.on_low_wasm_memory_hook_status,
         };
         let chunk_store = WasmChunkStore::new(Arc::clone(&fd_factory));
-        Self {
+        Ok(Self {
             canister_id: CanisterId::try_from(metadata.canister_id).unwrap(),
             source: SnapshotSource::MetadataUpload,
             taken_at_timestamp,
@@ -440,7 +465,7 @@ impl CanisterSnapshot {
             certified_data: metadata.certified_data.clone(),
             chunk_store,
             execution_snapshot,
-        }
+        })
     }
 
     pub fn canister_id(&self) -> CanisterId {
@@ -555,6 +580,8 @@ pub enum CanisterSnapshotError {
     EmptyExecutionState(CanisterId),
     /// Offset and size exceed module or memory bounds.
     InvalidSubslice { offset: u64, size: u64 },
+    /// Metadata is invalid.
+    InvalidMetadata { reason: String },
 }
 
 #[cfg(test)]

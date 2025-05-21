@@ -2121,7 +2121,7 @@ impl CanisterManager {
             state.time(),
             canister.system_state.canister_version,
             Arc::clone(&self.fd_factory),
-        );
+        )?;
 
         self.memory_usage_updates(canister, round_limits, validated_memory_usage);
 

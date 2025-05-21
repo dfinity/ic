@@ -1029,6 +1029,9 @@ impl From<CanisterSnapshotError> for CanisterManagerError {
             CanisterSnapshotError::InvalidSubslice { offset, size } => {
                 CanisterManagerError::InvalidSubslice { offset, size }
             }
+            CanisterSnapshotError::InvalidMetadata { reason } => {
+                CanisterManagerError::InvalidSettings { message: reason }
+            }
         }
     }
 }
