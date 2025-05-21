@@ -2643,7 +2643,6 @@ dependencies = [
  "canister_http",
  "ic-agent 0.39.3",
  "ic-base-types",
- "ic-canister-client",
  "ic-management-canister-types-private",
  "ic-nns-constants",
  "ic-protobuf",
