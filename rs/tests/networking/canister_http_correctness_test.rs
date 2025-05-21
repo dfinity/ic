@@ -160,6 +160,9 @@ fn main() -> Result<()> {
                 ))
                 .add_test(systest!(test_transform_that_bloats_on_the_2mb_limit))
                 .add_test(systest!(
+                    test_transform_that_bloats_on_the_2mb_limit_with_custom_max_response_bytes
+                ))
+                .add_test(systest!(
                     reference_transform_function_exposed_by_different_canister
                 ))
                 .add_test(systest!(test_non_existent_transform_function))
@@ -689,6 +692,46 @@ fn test_transform_that_bloats_on_the_2mb_limit(env: TestEnv) {
     ));
 
     assert_matches!(response, Ok(r) if r.status==200);
+}
+
+fn test_transform_that_bloats_on_the_2mb_limit_with_custom_max_response_bytes(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+
+    let max_response_bytes = 1_000_000;
+
+    let (response, refunded_cycles) = block_on(submit_outcall(
+        &handlers,
+        RemoteHttpRequest {
+            request: UnvalidatedCanisterHttpRequestArgs {
+                url: format!("https://[{webserver_ipv6}]:20443"),
+                headers: vec![],
+                method: HttpMethod::GET,
+                body: Some("".as_bytes().to_vec()),
+                transform: Some(TransformContext {
+                    function: TransformFunc(candid::Func {
+                        principal: get_proxy_canister_id(&env).into(),
+                        method: "very_large_but_allowed_transform".to_string(),
+                    }),
+                    context: vec![0, 1, 2],
+                }),
+                max_response_bytes: Some(max_response_bytes),
+            },
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
+        },
+    ));
+
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::SysFatal,
+            ..
+        })
+    );
+    assert_ne!(
+        refunded_cycles,
+        RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT)
+    );
 }
 
 fn test_transform_that_bloats_response_above_2mb_limit(env: TestEnv) {
