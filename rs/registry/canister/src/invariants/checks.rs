@@ -283,6 +283,7 @@ mod tests {
             dc_id: "".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: None,
+            max_rewardable_nodes: BTreeMap::new(),
         }
         .encode_to_vec();
         let registry = Registry::new();
@@ -334,6 +335,7 @@ mod tests {
             dc_id: "".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: None,
+            max_rewardable_nodes: BTreeMap::new(),
         }
         .encode_to_vec();
 
@@ -362,6 +364,7 @@ mod tests {
             dc_id: "".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: None,
+            max_rewardable_nodes: BTreeMap::new(),
         }
         .encode_to_vec();
         let mut mutations = vec![insert(key.as_bytes(), &value)];

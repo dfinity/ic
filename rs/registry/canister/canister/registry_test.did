@@ -248,6 +248,7 @@ type MigrateCanistersResponse = record {};
 
 type NodeOperatorRecord = record {
   ipv6 : opt text;
+  max_rewardable_nodes : vec record { text; nat32 };
   node_operator_principal_id : blob;
   node_allowance : nat64;
   rewardable_nodes : vec record { text; nat32 };
