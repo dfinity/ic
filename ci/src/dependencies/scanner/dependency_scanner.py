@@ -175,7 +175,10 @@ class DependencyScanner:
                 )
                 for subscriber in self.subscribers:
                     subscriber.on_scan_job_failed(
-                        self.dependency_manager.get_scanner_id() + f"_{repository.name}", ScannerJobType.PERIODIC_SCAN, self.job_id, str(err)
+                        self.dependency_manager.get_scanner_id() + f"_{repository.name}",
+                        ScannerJobType.PERIODIC_SCAN,
+                        self.job_id,
+                        str(err),
                     )
         for subscriber in self.subscribers:
             subscriber.on_scan_job_succeeded(
