@@ -778,17 +778,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-scoped"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2bb5d44cd33a5095cf47aa2a90455ea3f9141f45e24d092425fef2bf4fd9c98e"
-dependencies = [
- "futures",
- "pin-project",
- "tokio",
-]
-
-[[package]]
 name = "async-socks5"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3385,7 +3374,6 @@ dependencies = [
  "assert_cmd",
  "assert_matches",
  "async-recursion",
- "async-scoped",
  "async-stream",
  "async-trait",
  "axum 0.8.1",
@@ -3441,6 +3429,7 @@ dependencies = [
  "cvt",
  "darling 0.20.11",
  "dashmap 5.5.0",
+ "derive-new",
  "dfx-core",
  "dyn-clone",
  "ed25519-dalek",
@@ -3683,7 +3672,7 @@ dependencies = [
  "tower-http 0.6.2",
  "tower-request-id",
  "tower-test",
- "tower_governor 0.5.0",
+ "tower_governor",
  "tracing",
  "tracing-appender",
  "tracing-flame",
@@ -5919,7 +5908,7 @@ dependencies = [
  "tokio-util",
  "tower 0.5.2",
  "tower-http 0.6.2",
- "tower_governor 0.7.0",
+ "tower_governor",
  "tracing",
  "tracing-core",
  "tracing-serde 0.2.0",
@@ -13122,21 +13111,6 @@ dependencies = [
  "tokio-test",
  "tower-layer",
  "tower-service",
-]
-
-[[package]]
-name = "tower_governor"
-version = "0.5.0"
-source = "git+https://github.com/benwis/tower-governor?rev=bc9a6eacafcaec1e732886ceae8ae324bbd327df#bc9a6eacafcaec1e732886ceae8ae324bbd327df"
-dependencies = [
- "axum 0.8.1",
- "forwarded-header-value",
- "governor",
- "http 1.3.1",
- "pin-project",
- "thiserror 2.0.12",
- "tower 0.5.2",
- "tracing",
 ]
 
 [[package]]

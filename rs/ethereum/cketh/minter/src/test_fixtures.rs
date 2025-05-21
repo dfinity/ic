@@ -1,5 +1,6 @@
 use crate::lifecycle::init::InitArg;
 use crate::state::State;
+use crate::EVM_RPC_ID_STAGING;
 use candid::{Nat, Principal};
 
 pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
@@ -43,13 +44,14 @@ pub fn valid_init_arg() -> InitArg {
         minimum_withdrawal_amount: Nat::from(10_000_000_000_000_000_u64),
         next_transaction_nonce: Default::default(),
         last_scraped_block_number: Default::default(),
+        evm_rpc_id: Some(EVM_RPC_ID_STAGING),
     }
 }
 
 pub mod arb {
     use crate::checked_amount::CheckedAmountOf;
     use crate::eth_logs::LedgerSubaccount;
-    use crate::eth_rpc::{Block, Data, FixedSizeData, Hash, LogEntry};
+    use crate::eth_rpc::{Data, FixedSizeData, Hash, LogEntry};
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
     use crate::numeric::BlockRangeInclusive;
     use candid::Principal;
@@ -137,15 +139,6 @@ pub mod arb {
 
     pub fn arb_data() -> impl Strategy<Value = Data> {
         vec(any::<u8>(), 1..1000).prop_map(Data)
-    }
-
-    pub fn arb_block() -> impl Strategy<Value = Block> {
-        (arb_checked_amount_of(), arb_checked_amount_of()).prop_map(|(number, base_fee_per_gas)| {
-            Block {
-                number,
-                base_fee_per_gas,
-            }
-        })
     }
 
     pub fn arb_log_entry() -> impl Strategy<Value = LogEntry> {

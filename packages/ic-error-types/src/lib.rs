@@ -29,12 +29,12 @@ pub enum RejectCode {
 
 impl std::fmt::Display for RejectCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_str())
+        write!(f, "{}", self.as_str())
     }
 }
 
 impl RejectCode {
-    fn to_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             RejectCode::SysFatal => "SYS_FATAL",
             RejectCode::SysTransient => "SYS_TRANSIENT",
@@ -338,7 +338,11 @@ impl UserError {
     /// Panics if the error doesn't have the expected code and description.
     /// Useful for tests to avoid matching exact error messages.
     pub fn assert_contains(&self, code: ErrorCode, description: &str) {
-        assert_eq!(self.code, code);
+        assert_eq!(
+            self.code, code,
+            "Failed to match actual error \"{:?}\" with expected \"{}, {}\"",
+            self, code, description
+        );
         assert!(
             self.description.contains(description),
             "Error matching description \"{}\" with \"{}\"",

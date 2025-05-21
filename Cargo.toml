@@ -16,6 +16,7 @@ members = [
     "packages/ic-http-types",
     "packages/ic-metrics-assert",
     "packages/ic-secp256k1",
+    "packages/ic-secp256r1",
     "packages/ic-sha3",
     "packages/ic-ledger-hash-of",
     "packages/ic-signature-verification",
@@ -75,7 +76,6 @@ members = [
     "rs/consensus/utils",
     "rs/criterion_time",
     "rs/crypto",
-    "rs/crypto/ecdsa_secp256r1",
     "rs/crypto/for_verification_only",
     "rs/crypto/iccsa",
     "rs/crypto/internal/crypto_lib/basic_sig/der_utils",
@@ -547,6 +547,7 @@ curve25519-dalek = { version = "4.1.3", features = [
     "group",
     "precomputed-tables",
 ] }
+derive-new = "0.7.0"
 dfx-core = { version = "0.1.4" }
 ed25519-dalek = { version = "2.1.1", features = [
     "std",
@@ -566,6 +567,7 @@ hex = { version = "0.4.3", features = ["serde"] }
 http = "1.3.1"
 http-body = "1.0.1"
 http-body-util = "0.1.2"
+humantime = "2.2"
 humantime-serde = "1.1.1"
 hyper = { version = "1.5.1", features = ["full"] }
 hyper-rustls = { version = "0.27.3", default-features = false, features = [
