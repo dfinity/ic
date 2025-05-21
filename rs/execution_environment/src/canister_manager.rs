@@ -2164,7 +2164,7 @@ impl CanisterManager {
     }
 
     /// Writes `args.chunk` to the wasm module, main/stable memory or inserts `args.chunk` to the wasm chunk store.
-    /// Fails if the arguments are incompatible with the memory sizes given in the metadata.
+    /// Fails if the arguments are incompatible with the memory sizes given in the metadata or if the wasm chunk store is already full.
     /// The memory used is already accounted for during `create_snapshot_from_metadata` (except
     /// for the wasm chunk store), but the instructions used to write the data must be taken
     /// into account here in any case.  
@@ -2212,7 +2212,7 @@ impl CanisterManager {
         }
 
         // Write data to the appropriate location, as specified by the `CanisterSnapshotDataOffset` variant.
-        // Memory has already been paid for by `create_snapshot_from_metadata`,
+        // Memory has already been reserved by `create_snapshot_from_metadata`,
         // but the instructions used to copy the data still need to be accounted for.
         let snapshot_inner = Arc::make_mut(snapshot);
         let num_bytes = match args.kind {
@@ -2240,8 +2240,8 @@ impl CanisterManager {
                 args.chunk.len() as u64
             }
             CanisterSnapshotDataOffset::WasmChunk => {
-                // The chunk store is initialized as empty, and no memory cost has been charged yet.
-                // So we charge for both memory and instructions here.
+                // The chunk store is initialized as empty, and no memory for it has been reserved yet.
+                // So we check and charge for the extra memory here.
                 let validated_chunk = match snapshot_inner
                     .chunk_store_mut()
                     .can_insert_chunk(self.config.wasm_chunk_store_max_size, args.chunk.clone())
