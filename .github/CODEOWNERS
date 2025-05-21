@@ -56,6 +56,7 @@ go_deps.bzl               @dfinity/idx
 /packages/ic-http-types/                @dfinity/cross-chain-team
 /packages/ic-metrics-assert/            @dfinity/cross-chain-team
 /packages/ic-secp256k1/                 @dfinity/crypto-team
+/packages/ic-secp256r1/                 @dfinity/crypto-team
 /packages/ic-sha3/                      @dfinity/crypto-team
 /packages/ic-signature-verification/    @dfinity/crypto-team
 /packages/ic-vetkd-utils/               @dfinity/crypto-team
@@ -212,6 +213,7 @@ go_deps.bzl               @dfinity/idx
 /rs/rosetta-api/                                        @dfinity/finint
 /rs/rust_canisters/                                     @dfinity/nns-team
 /rs/rust_canisters/backtrace_canister                   @dfinity/execution
+/rs/rust_canisters/call_loop_canister                   @dfinity/execution
 /rs/rust_canisters/memory_test/                         @dfinity/execution
 /rs/rust_canisters/call_tree_test/                      @dfinity/execution
 /rs/rust_canisters/proxy_canister/                      @dfinity/consensus
