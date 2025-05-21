@@ -135,7 +135,7 @@ extract_upgrade() {
 install_upgrade() {
     local tmpdir="$1"
     echo "Installing upgrade..."
-    
+
     echo "=== Recovery Upgrader Mode ==="
     echo "Grubenv file: ${grubdir}/grubenv"
     echo "Boot device: ${boot_target}"
