@@ -6,7 +6,7 @@
 4. Motoko needs to be updated: [Motoko](https://github.com/dfinity/motoko). Inform *@eng-motoko* of the work required.
 5. Add any new types or update existing ones in `types/management_canister_types`.
 6. Implement the new API in `execution_environment` crate. Main parts that need to be updated: the core implementation in the `canister_manager` module as well as wiring up the new API in `ExecutionEnvironment` so that it is accessible from the outside.
-Except for the `install_code`/`install_chunked_code` endpoints that have dedicated logic for dealing with rollback after failures, there should always be a clear point during execution of every other endpoint so that
+Except for endpoints that have dedicated logic for dealing with rollback after failures (e.g., the `install_code`/`install_chunked_code` endpoints), there should always be a clear point during execution of every other endpoint so that
   - no changes are performed before that point (only `&self` access to `CanisterManager`);
   - no failure can happen after that point (the execution is guaranteed to succeed and return a reply).
 7. Tests: add any required tests to cover the new or updated functionality. Typically, these tests can be written using the `ExecutionTest` framework. In some cases, you might need to use the `StateMachine` framework, e.g., if you would need to test things like inter-canister calls or special features like HTTPS outcalls or threshold signatures that require (mocked) outputs of the Consensus layer to be injected in the test or checkpointing that requires a state manager provided by the `StateMachine` framework.
