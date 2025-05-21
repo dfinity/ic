@@ -1,6 +1,5 @@
 use candid::candid_method;
-use ic_cdk::api::call;
-use ic_cdk_macros::update;
+use ic_cdk::{api::call, update};
 use ic_principal::Principal;
 
 const MB: usize = 1024 * 1024;
