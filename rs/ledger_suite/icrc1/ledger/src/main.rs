@@ -310,7 +310,7 @@ struct LedgerSuite {
     pub index: &'static str,
 }
 
-const LEDGER_SUITES: &[LedgerSuite; 49] = &[
+const LEDGER_SUITES: &[LedgerSuite; 54] = &[
     // Chain fusion ledger suites
     LedgerSuite {
         name: "ckBTC",
@@ -376,6 +376,32 @@ const LEDGER_SUITES: &[LedgerSuite; 49] = &[
         name: "ckOCT",
         ledger: "ebo5g-cyaaa-aaaar-qagla-cai",
         index: "egp3s-paaaa-aaaar-qaglq-cai",
+    },
+    // Chain fusion test tokens
+    LedgerSuite {
+        name: "ckTestBTC",
+        ledger: "mc6ru-gyaaa-aaaar-qaaaq-cai",
+        index: "mm444-5iaaa-aaaar-qaabq-cai",
+    },
+    LedgerSuite {
+        name: "ckSepoliaETH",
+        ledger: "apia6-jaaaa-aaaar-qabma-cai",
+        index: "sh5u2-cqaaa-aaaar-qacna-cai",
+    },
+    LedgerSuite {
+        name: "ckSepoliaUSDC",
+        ledger: "yfumr-cyaaa-aaaar-qaela-cai",
+        index: "ycvkf-paaaa-aaaar-qaelq-cai",
+    },
+    LedgerSuite {
+        name: "ckSepoliaLINK",
+        ledger: "r52mc-qaaaa-aaaar-qafzq-cai",
+        index: "ri55p-riaaa-aaaar-qaf2a-cai",
+    },
+    LedgerSuite {
+        name: "ckSepoliaPEPE",
+        ledger: "hw4ru-taaaa-aaaar-qagdq-cai",
+        index: "g3sv2-4iaaa-aaaar-qagea-cai",
     },
     // SNSs
     LedgerSuite {
