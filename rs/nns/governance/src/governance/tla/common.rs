@@ -69,3 +69,37 @@ pub fn function_range_union(
     }
     ).collect()
 }
+
+pub fn get_maturity_disbursement_in_progress_account_ids(
+    pair: &ResolvedStatePair,
+) -> BTreeSet<TlaValue> {
+    match (pair.start.get("neuron"), pair.end.get("neuron")) {
+        (Some(TlaValue::Function(start)), Some(TlaValue::Function(end))) => {
+            let neurons = start.values().chain(end.values());
+            neurons
+                .flat_map(|n| match n {
+                    TlaValue::Record(r) => match r.get("maturity_disbursements_in_progress") {
+                        Some(TlaValue::Seq(vs)) => vs.iter().map(|v| match v {
+                            TlaValue::Record(r) => r
+                                .get("account_id")
+                                .expect("account_id not found in the record")
+                                .clone(),
+                            _ => panic!("Field account_id not a record: {}", v),
+                        }),
+                        _ => panic!(
+                            "maturity_disbursements_in_progress not found in the neuron record {}",
+                            n
+                        ),
+                    },
+                    _ => panic!("Field neuron not a record: {}", n),
+                })
+                .collect()
+        }
+        _ => {
+            panic!(
+                "Error getting maturity_disbursement_in_progress_acount_ids; field neuron not found in the start or end state, or not a function, in pair {:?}",
+                pair
+            );
+        }
+    }
+}

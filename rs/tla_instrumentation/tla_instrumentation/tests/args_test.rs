@@ -1,10 +1,3 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    ptr::addr_of_mut,
-};
-
-// Also possible to define a wrapper macro, in order to ensure that logging is only
-// done when certain crate features are enabled
 use tla_instrumentation::{
     tla_log_label, tla_log_locals, tla_log_request, tla_log_response,
     tla_value::{TlaValue, ToTla},
@@ -12,52 +5,56 @@ use tla_instrumentation::{
 };
 use tla_instrumentation_proc_macros::{tla_function, tla_update_method};
 
-use async_trait::async_trait;
-
 mod common;
 use common::check_tla_trace;
 
-// Example of how to separate as much of the instrumentation code as possible from the main code
+use std::cell::RefCell;
+use std::collections::{BTreeMap, BTreeSet};
+use std::thread_local;
+
+use async_trait::async_trait;
+use std::thread::LocalKey;
+
+thread_local! {
+    pub static COUNTER: RefCell<u64> = const { RefCell::new(0) };
+}
+
 #[macro_use]
 mod tla_stuff {
-    use crate::StructCanister;
+    use candid::Int;
+    use local_key::task_local;
+    use std::cell::RefCell;
     use std::collections::BTreeSet;
     use std::sync::Mutex;
-
-    use candid::Int;
-
-    pub const PID: &str = "Multiple_Calls";
-    pub const CAN_NAME: &str = "mycan";
-
-    use local_key::task_local;
+    use std::thread::LocalKey;
     use std::{collections::BTreeMap, sync::RwLock};
     use tla_instrumentation::{
         GlobalState, InstrumentationState, Label, TlaConstantAssignment, TlaValue, ToTla,
         UnsafeSendPtr, Update, UpdateTrace, VarAssignment,
     };
 
+    pub const PID: &str = "Multiple_Calls";
+    pub const CAN_NAME: &str = "mycan";
+
     task_local! {
         pub static TLA_INSTRUMENTATION_STATE: InstrumentationState;
         pub static TLA_TRACES_LKEY: Mutex<Vec<UpdateTrace>>;
     }
-
     pub static TLA_TRACES_MUTEX: Option<RwLock<Vec<UpdateTrace>>> = Some(RwLock::new(Vec::new()));
 
-    pub fn tla_get_globals(p: &UnsafeSendPtr<StructCanister>) -> GlobalState {
+    pub fn my_get_globals(p: &UnsafeSendPtr<LocalKey<RefCell<u64>>>) -> GlobalState {
         let mut state = GlobalState::new();
-        let c = unsafe { &*(p.0) };
-        state.add("counter", c.counter.to_tla_value());
+        let counter = unsafe { &*(p.0) };
+        state.add("counter", counter.with_borrow(|c| c.to_tla_value()));
         state.add("empty_fun", TlaValue::Function(BTreeMap::new()));
         state
     }
 
-    // #[macro_export]
-    macro_rules! tla_get_globals {
-        ($self:expr) => {{
-            let raw_ptr = ::tla_instrumentation::UnsafeSendPtr($self as *const _);
-            ::std::sync::Arc::new(::std::sync::Mutex::new(move || {
-                tla_stuff::tla_get_globals(&raw_ptr)
-            }))
+    macro_rules! snapshotter {
+        ($first_arg:expr $(, $_rest:tt)* ) => {{
+            // Use a block to potentially shadow variables and contain the logic
+            let raw_ptr = ::tla_instrumentation::UnsafeSendPtr($first_arg as *const _);
+            ::std::sync::Arc::new(::std::sync::Mutex::new(move || my_get_globals(&raw_ptr)))
         }};
     }
 
@@ -119,14 +116,9 @@ mod tla_stuff {
 }
 
 use tla_stuff::{
-    my_f_desc, CAN_NAME, PID, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
+    my_f_desc, my_get_globals, CAN_NAME, PID, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY,
+    TLA_TRACES_MUTEX,
 };
-
-struct StructCanister {
-    pub counter: u64,
-}
-
-static mut GLOBAL: StructCanister = StructCanister { counter: 0 };
 
 struct CallMaker {}
 
@@ -154,35 +146,29 @@ impl CallMakerTrait for CallMaker {
         );
     }
 }
-
-impl StructCanister {
-    #[tla_update_method(my_f_desc(), tla_get_globals!())]
-    pub async fn my_method(&mut self) {
-        self.counter += 1;
-        let call_maker = CallMaker {};
-        let mut my_local: u64 = self.counter;
-        tla_log_locals! {my_local: my_local};
-        tla_log_label!("Phase1");
-        call_maker.call_maker().await;
-        self.counter += 1;
-        my_local = self.counter;
-        tla_log_locals! {my_local: my_local};
-        tla_log_label!("Phase2");
-        call_maker.call_maker().await;
-        self.counter += 1;
-        my_local = self.counter;
-        // Note that this would not be necessary (and would be an error) if
-        // we defined my_local in default_end_locals in my_f_desc
-        tla_log_locals! {my_local: my_local};
-    }
+#[tla_update_method(my_f_desc(), snapshotter!())]
+pub async fn my_method(state: &'static LocalKey<RefCell<u64>>) {
+    state.with_borrow_mut(|s| *s += 1);
+    let call_maker = CallMaker {};
+    let mut my_local: u64 = state.with_borrow(|s| *s);
+    tla_log_locals! {my_local: my_local};
+    tla_log_label!("Phase1");
+    call_maker.call_maker().await;
+    state.with_borrow_mut(|s| *s += 1);
+    my_local = state.with_borrow(|s| *s);
+    tla_log_locals! {my_local: my_local};
+    tla_log_label!("Phase2");
+    call_maker.call_maker().await;
+    state.with_borrow_mut(|s| *s += 1);
+    my_local = state.with_borrow(|s| *s);
+    // Note that this would not be necessary (and would be an error) if
+    // we defined my_local in default_end_locals in my_f_desc
+    tla_log_locals! {my_local: my_local};
 }
 
 #[test]
 fn multiple_calls_test() {
-    unsafe {
-        let canister = &mut *addr_of_mut!(GLOBAL);
-        tokio_test::block_on(canister.my_method());
-    }
+    tokio_test::block_on(my_method(&COUNTER));
     let trace = &TLA_TRACES_MUTEX.as_ref().unwrap().read().unwrap()[0];
     assert_eq!(
         trace.constants.to_map().get("MAX_COUNTER"),

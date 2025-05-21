@@ -11,6 +11,10 @@ use ic_nns_governance::governance::tla::{
     self as tla, account_to_tla, opt_subaccount_to_tla, Destination, ToTla,
     TLA_INSTRUMENTATION_STATE,
 };
+
+#[cfg(feature = "tla")]
+use tla_instrumentation_proc_macros::tla_function;
+
 use ic_nns_governance::{tla_log_request, tla_log_response};
 use std::collections::BTreeMap;
 
@@ -24,6 +28,7 @@ impl<Rt: Runtime + Send + Sync> LoggingIcpLedgerCanister<Rt> {
 
 #[async_trait]
 impl<Rt: Runtime + Send + Sync> IcpLedger for LoggingIcpLedgerCanister<Rt> {
+    #[cfg_attr(feature = "tla", tla_function(force_async_fn = true))]
     async fn transfer_funds(
         &self,
         amount_e8s: u64,

@@ -8,7 +8,8 @@ EXTENDS TLC
 @typeAlias: methodCall = Transfer({ from: $account, to: $account, amount: Int, fee: Int}) | AccountBalance({ account: $account });
 @typeAlias: methodResponse = Fail(UNIT) | TransferOk(UNIT) | BalanceQueryOk(Int);
 @typeAlias: neuronState = NotSpawning(UNIT) | Spawning(UNIT);
-@typeAlias: neurons = $neuronId -> {cached_stake: Int, account: $account, maturity: Int, fees: Int, state: $neuronState};
+@typeAlias: disbursement = { account_id: $account, amount: Int };
+@typeAlias: neurons = $neuronId -> {cached_stake: Int, account: $account, maturity: Int, fees: Int, state: $neuronState, maturity_disbursements_in_progress: Seq($disbursement)};
 *)
 _type_alias_dummy == TRUE
 

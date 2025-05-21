@@ -40,7 +40,10 @@ rust_test(
         "TLA_APALACHE_BIN": "$(rootpath @tla_apalache//:bin/apalache-mc)",
         "TLA_MODULES": "$(locations :tla_models)",
     },
-    proc_macro_deps = [":proc_macros"],
+    proc_macro_deps = [
+        ":proc_macros",
+        "@crate_index//:async-trait",
+    ],
     toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],
     deps = [
         ":local_key",
@@ -54,6 +57,36 @@ rust_test(
     name = "basic_tests",
     srcs = ["tla_instrumentation/tests/basic_tests.rs"],
     deps = [":tla_instrumentation"],
+)
+
+rust_test(
+    name = "args_test",
+    srcs = [
+        "tla_instrumentation/tests/args_test.rs",
+        "tla_instrumentation/tests/common.rs",
+    ],
+    crate_root = "tla_instrumentation/tests/args_test.rs",
+    data = [
+        ":tla_models",
+        "@bazel_tools//tools/jdk:current_java_runtime",
+        "@tla_apalache//:bin/apalache-mc",
+    ],
+    env = {
+        "JAVABASE": "$(JAVABASE)",
+        "TLA_APALACHE_BIN": "$(rootpath @tla_apalache//:bin/apalache-mc)",
+        "TLA_MODULES": "$(locations :tla_models)",
+    },
+    proc_macro_deps = [
+        ":proc_macros",
+        "@crate_index//:async-trait",
+    ],
+    toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],
+    deps = [
+        ":local_key",
+        ":tla_instrumentation",
+        "@crate_index//:candid",
+        "@crate_index//:tokio-test",
+    ],
 )
 
 rust_test(
