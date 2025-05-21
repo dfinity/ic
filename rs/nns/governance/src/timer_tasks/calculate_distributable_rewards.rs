@@ -45,7 +45,7 @@ fn delay_until_next_run(
     Duration::from_secs(next.saturating_sub(now))
 }
 
-#[async_trait(?Send)]
+#[async_trait]
 impl RecurringAsyncTask for CalculateDistributableRewardsTask {
     async fn execute(self) -> (Duration, Self) {
         let total_supply = self

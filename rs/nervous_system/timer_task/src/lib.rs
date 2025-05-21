@@ -199,7 +199,7 @@ pub trait RecurringSyncTask: Sized + 'static {
     const NAME: &'static str;
 }
 
-#[async_trait(?Send)]
+#[async_trait]
 pub trait RecurringAsyncTask: Sized + 'static {
     async fn execute(self) -> (Duration, Self);
     fn initial_delay(&self) -> Duration;

@@ -17,7 +17,7 @@ impl FinalizeMaturityDisbursementsTask {
     }
 }
 
-#[async_trait(?Send)]
+#[async_trait]
 impl RecurringAsyncTask for FinalizeMaturityDisbursementsTask {
     async fn execute(self) -> (Duration, Self) {
         let delay = finalize_maturity_disbursement(self.governance).await;
