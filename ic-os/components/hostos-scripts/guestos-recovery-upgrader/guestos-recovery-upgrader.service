@@ -6,7 +6,7 @@ Requires=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/opt/ic/bin/recovery-upgrader.sh
+ExecStart=/opt/ic/bin/guestos-recovery-upgrader.sh
 RemainAfterExit=yes
 
 [Install]
