@@ -7585,7 +7585,6 @@ dependencies = [
  "ic-base-types",
  "ic-certification-test-utils",
  "ic-config",
- "ic-crypto-ecdsa-secp256r1",
  "ic-crypto-for-verification-only",
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-internal-basic-sig-der-utils",
@@ -7643,6 +7642,7 @@ dependencies = [
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
  "ic-secp256k1",
+ "ic-secp256r1",
  "ic-test-utilities-in-memory-logger",
  "ic-test-utilities-registry",
  "ic-test-utilities-time",
@@ -7668,27 +7668,6 @@ dependencies = [
  "strum_macros 0.26.4",
  "tempfile",
  "tokio",
-]
-
-[[package]]
-name = "ic-crypto-ecdsa-secp256r1"
-version = "0.9.0"
-dependencies = [
- "hex",
- "hex-literal",
- "hmac",
- "ic-crypto-sha2",
- "ic-crypto-test-utils-reproducible-rng",
- "lazy_static",
- "num-bigint 0.4.6",
- "p256",
- "pem 1.1.1",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
- "sha2 0.10.8",
- "simple_asn1",
- "wycheproof",
- "zeroize",
 ]
 
 [[package]]
@@ -7775,12 +7754,12 @@ dependencies = [
  "assert_matches",
  "base64 0.13.1",
  "hex",
- "ic-crypto-ecdsa-secp256r1",
  "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
  "ic-crypto-sha2",
  "ic-crypto-test-utils-reproducible-rng",
+ "ic-secp256r1",
  "ic-types",
  "p256",
  "rand 0.8.5",
@@ -8322,7 +8301,6 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "hex",
- "ic-crypto-ecdsa-secp256r1",
  "ic-crypto-iccsa",
  "ic-crypto-internal-basic-sig-cose",
  "ic-crypto-internal-basic-sig-der-utils",
@@ -8335,6 +8313,7 @@ dependencies = [
  "ic-crypto-sha2",
  "ic-crypto-test-utils-canister-sigs",
  "ic-crypto-test-utils-reproducible-rng",
+ "ic-secp256r1",
  "ic-types",
  "p256",
  "rand 0.8.5",
@@ -8559,7 +8538,6 @@ dependencies = [
 name = "ic-crypto-test-utils-tls"
 version = "0.9.0"
 dependencies = [
- "ic-crypto-ecdsa-secp256r1",
  "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-reproducible-rng",
@@ -8570,6 +8548,7 @@ dependencies = [
  "ic-registry-client-fake",
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
+ "ic-secp256r1",
  "ic-types",
  "pkcs8 0.10.2",
  "rand 0.8.5",
@@ -12750,6 +12729,25 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "secp256k1 0.22.2",
+ "sha2 0.10.8",
+ "simple_asn1",
+ "wycheproof",
+ "zeroize",
+]
+
+[[package]]
+name = "ic-secp256r1"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "hex-literal",
+ "hmac",
+ "lazy_static",
+ "num-bigint 0.4.6",
+ "p256",
+ "pem 1.1.1",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "sha2 0.10.8",
  "simple_asn1",
  "wycheproof",
@@ -17900,7 +17898,8 @@ dependencies = [
  "hyper 1.6.0",
  "hyper-rustls 0.27.5",
  "hyper-util",
- "ic-agent 0.39.3",
+ "ic-canister-client",
+ "ic-canister-client-sender",
  "ic-config",
  "ic-consensus",
  "ic-consensus-dkg",
@@ -17913,7 +17912,6 @@ dependencies = [
  "ic-crypto-test-utils-tls",
  "ic-crypto-tls-interfaces",
  "ic-dashboard",
- "ic-ed25519",
  "ic-http-endpoints-async-utils",
  "ic-http-endpoints-metrics",
  "ic-http-utils",
