@@ -2038,7 +2038,7 @@ impl CanisterManager {
     /// The main/stable memory and wasm module are initialized as all-zero blobs of given sizes,
     /// and the wasm chunk store is initialized empty.
     ///
-    /// The content of these memories has to be uploaded in slices via `write_snapshot_data`.
+    /// The content of the all-zero blobs has to be uploaded in slices via `write_snapshot_data`.
     ///
     /// The new snapshot's memory size is determined by the metadata, and the canister is charged
     /// for the full snapshot memory usage from the beginning, as if it had the wasm module and
