@@ -264,16 +264,16 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     };
 
                     transform_timer.observe_duration();
-                    if transform_response.len() > (MAX_CANISTER_HTTP_RESPONSE_BYTES as usize) {
+                    if transform_response.len() > (max_response_size_bytes as usize) {
                         let err_msg = match request_transform {
                             Some(_) => format!(
                                 "Transformed http response exceeds limit: {}",
-                                MAX_CANISTER_HTTP_RESPONSE_BYTES
+                                max_response_size_bytes
                             ),
                             None => format!(
                                 "Http response exceeds limit: {}. \
                                 Apply a transform function to the http response.",
-                                MAX_CANISTER_HTTP_RESPONSE_BYTES
+                                max_response_size_bytes
                             ),
                         };
                         return Err((RejectCode::SysFatal, err_msg));
