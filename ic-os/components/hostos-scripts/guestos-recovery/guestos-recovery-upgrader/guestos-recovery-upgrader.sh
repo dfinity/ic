@@ -14,8 +14,47 @@ ROOT_PARTITION_B=8
 VAR_PARTITION_B=9
 
 GUESTOS_DEVICE="/dev/hostlvm/guestos"
-MANAGEBOOT_SCRIPT="/opt/ic/bin/manageboot.sh"
 IC_DOWNLOAD_BASE="https://download.dfinity.systems/ic"
+
+# Reads properties "boot_alternative" and "boot_cycle" from the grubenv
+# file. The properties are stored as global variables.
+#
+# Arguments:
+# $1 - name of grubenv file
+read_grubenv() {
+    local GRUBENV_FILE="$1"
+
+    while IFS="=" read -r key value; do
+        case "$key" in
+            '#'*) ;;
+            'boot_alternative' | 'boot_cycle')
+                eval "$key=\"$value\""
+                ;;
+            *) ;;
+        esac
+    done <"$GRUBENV_FILE"
+}
+
+# Writes "boot_alternative" and "boot_cycle" global variables to grubenv file
+#
+# Arguments:
+# $1 - name of grubenv file
+write_grubenv() {
+    local GRUBENV_FILE="$1"
+
+    TMP_FILE=$(mktemp /tmp/grubenv-XXXXXXXXXXXX)
+    (
+        echo "# GRUB Environment Block"
+        echo boot_alternative="$boot_alternative"
+        echo boot_cycle="$boot_cycle"
+        # Fill to make sure we will have 1024 bytes
+        echo -n "################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################"
+    ) >"${TMP_FILE}"
+    # Truncate to arrive at precisely 1024 bytes
+    truncate --size=1024 "${TMP_FILE}"
+    cat "${TMP_FILE}" >"${GRUBENV_FILE}"
+    rm "${TMP_FILE}"
+}
 
 # Helper function to extract a value from /proc/cmdline
 get_cmdline_var() {
@@ -95,14 +134,59 @@ extract_upgrade() {
 
 install_upgrade() {
     local tmpdir="$1"
-    echo "Installing upgrade using manageboot..."
-    ${MANAGEBOOT_SCRIPT} guestos upgrade-recovery \
-        "${grubdir}/grubenv" \
-        "${boot_target}" \
-        "${root_target}" \
-        "${var_target}" \
-        "$tmpdir/boot.img" \
-        "$tmpdir/root.img"
+    echo "Installing upgrade..."
+    
+    echo "=== Recovery Upgrader Mode ==="
+    echo "Grubenv file: ${grubdir}/grubenv"
+    echo "Boot device: ${boot_target}"
+    echo "Root device: ${root_target}"
+    echo "Var device: ${var_target}"
+    echo "Boot image: $tmpdir/boot.img"
+    echo "Root image: $tmpdir/root.img"
+
+    echo "Reading grubenv configuration..."
+    read_grubenv "${grubdir}/grubenv"
+    echo "Current boot alternative: ${boot_alternative}"
+    echo "Current boot cycle: ${boot_cycle}"
+
+    echo "Writing boot image to ${boot_target}..."
+    dd if="$tmpdir/boot.img" of="${boot_target}" bs=1M status=progress
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Failed to write boot image"
+        exit 1
+    fi
+    echo "Boot image written successfully"
+
+    echo "Writing root image to ${root_target}..."
+    dd if="$tmpdir/root.img" of="${root_target}" bs=1M status=progress
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Failed to write root image"
+        exit 1
+    fi
+    echo "Root image written successfully"
+
+    echo "Wiping var partition header on ${var_target}..."
+    dd if=/dev/zero of="${var_target}" bs=1M count=16 status=progress
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Failed to wipe var partition header"
+        exit 1
+    fi
+    echo "Var partition header wiped successfully"
+
+    echo "Updating grubenv to prepare for next boot..."
+    if [[ "${boot_target}" == *"p7" ]]; then
+        boot_alternative="B"
+    elif [[ "${boot_target}" == *"p4" ]]; then
+        boot_alternative="A"
+    else
+        echo "ERROR: Invalid boot device partition number"
+        exit 1
+    fi
+    boot_cycle=first_boot
+    echo "Setting boot_alternative to ${boot_alternative} and boot_cycle to ${boot_cycle}"
+    write_grubenv "${grubdir}/grubenv"
+    echo "Grubenv updated successfully"
+
     echo "Upgrade installation complete"
 }
 
