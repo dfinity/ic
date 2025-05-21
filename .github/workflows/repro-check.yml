@@ -36,6 +36,9 @@ jobs:
           apt-get -y upgrade
           apt-get -y install curl sudo git podman
 
+          # Create a new non-root user with home directory
+          useradd -m -s /bin/bash ciuser
+          
           # Create a passwordless sudo rule for the current user (usually root in containers, but safe to include)
           # Required because the repro check uses it.
           echo "ciuser ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/nopasswd
@@ -49,7 +52,7 @@ jobs:
         shell: bash
         run: |
           # Hermetic python interpreter requires a non-root user to be built.
-          sudo -u ubuntu bash -c '
+          sudo -u ciuser bash -c '
             curl -fsSL https://raw.githubusercontent.com/dfinity/ic/master/ci/tools/repro-check |
             python3 - -c ${{ inputs.github_sha }} --setupos --guestos --hostos
           '
