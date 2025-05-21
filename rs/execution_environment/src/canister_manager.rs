@@ -2043,6 +2043,8 @@ impl CanisterManager {
     /// The new snapshot's memory size is determined by the metadata, and the canister is charged
     /// for the full snapshot memory usage from the beginning, as if it had the wasm module and
     /// main/stable memories as described in the metadata.
+    ///
+    /// Note that the new snapshot's memory size can increase later by uploading chunks to the wasm chunk store.
     pub(crate) fn create_snapshot_from_metadata(
         &self,
         sender: PrincipalId,
