@@ -1562,7 +1562,7 @@ impl CanisterManager {
         ))
     }
 
-    /// Returns the size of the snapshot that is to be replaced.
+    /// Returns an Arc to the snapshot, if it exists.
     /// Returns an error if the snapshot given by the snapshot ID does not
     /// belong to this canister.
     fn get_snapshot(
