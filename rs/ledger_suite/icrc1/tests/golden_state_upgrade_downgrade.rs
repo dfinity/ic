@@ -1,6 +1,6 @@
 use crate::common::{index_ng_wasm, ledger_wasm, load_wasm_using_env_var};
 use crate::index::verify_ledger_archive_and_index_block_parity;
-use candid::{Encode, Nat, Principal};
+use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::Block;
@@ -16,6 +16,7 @@ use ic_ledger_suite_state_machine_tests::{
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic;
 use ic_state_machine_tests::{StateMachine, UserError};
 use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc106::errors::Icrc106Error;
 use lazy_static::lazy_static;
 use std::str::FromStr;
 
@@ -211,6 +212,8 @@ impl LedgerSuiteConfig {
                 previous_ledger_state,
             ));
         }
+        // Verify that the index principal was set in the ledger
+        self.check_index_principal(state_machine, ledger_canister_id, index_canister_id);
         // Downgrade back to the mainnet canister versions
         self.downgrade_to_mainnet(state_machine);
         if self.extended_testing {
@@ -221,6 +224,37 @@ impl LedgerSuiteConfig {
                 self.burns_without_spender.clone(),
                 previous_ledger_state,
             );
+        }
+    }
+
+    fn check_index_principal(
+        &self,
+        env: &StateMachine,
+        ledger_canister_id: CanisterId,
+        index_canister_id: CanisterId,
+    ) {
+        match Decode!(
+            &env.query(ledger_canister_id, "icrc106_get_index_principal", Encode!().unwrap())
+                .expect("failed to query icrc106_get_index_principal")
+                .bytes(),
+            Result<Principal, Icrc106Error>
+        )
+        .expect("failed to decode icrc106_get_index_principal response")
+        {
+            Ok(index_principal) => {
+                assert_eq!(
+                    index_principal,
+                    index_canister_id.get().0,
+                    "Index principal does not match index canister id"
+                )
+            }
+            Err(err) => {
+                panic!(
+                    "Failed to get index principal for ledger {}: {:?}",
+                    ledger_canister_id.to_string(),
+                    err
+                );
+            }
         }
     }
 

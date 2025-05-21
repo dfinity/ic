@@ -260,6 +260,8 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
 
     initialize_total_volume();
 
+    set_index_principal();
+
     if upgrade_from_version < 3 {
         set_ledger_state(LedgerState::Migrating(LedgerField::Blocks));
         log_message(format!("Upgrading from version {upgrade_from_version} which does not store blocks in stable structures, clearing stable blocks data.").as_str());
@@ -299,6 +301,295 @@ fn initialize_total_volume() {
     TOTAL_VOLUME_DENOMINATOR.with(|n| *n.borrow_mut() = denominator);
     if fee != Tokens::ZERO {
         TOTAL_VOLUME_FEE_IN_DECIMALS.with(|n| *n.borrow_mut() = tokens_to_f64(fee) / denominator);
+    }
+}
+
+struct LedgerSuite {
+    pub name: &'static str,
+    pub ledger: &'static str,
+    pub index: &'static str,
+}
+
+const LEDGER_SUITES: &[LedgerSuite; 49] = &[
+    // Chain fusion ledger suites
+    LedgerSuite {
+        name: "ckBTC",
+        ledger: "mxzaz-hqaaa-aaaar-qaada-cai",
+        index: "n5wcd-faaaa-aaaar-qaaea-cai",
+    },
+    LedgerSuite {
+        name: "ckETH",
+        ledger: "ss2fx-dyaaa-aaaar-qacoq-cai",
+        index: "s3zol-vqaaa-aaaar-qacpa-cai",
+    },
+    LedgerSuite {
+        name: "ckEURC",
+        ledger: "pe5t5-diaaa-aaaar-qahwa-cai",
+        index: "pd4vj-oqaaa-aaaar-qahwq-cai",
+    },
+    LedgerSuite {
+        name: "ckUNI",
+        ledger: "ilzky-ayaaa-aaaar-qahha-cai",
+        index: "imymm-naaaa-aaaar-qahhq-cai",
+    },
+    LedgerSuite {
+        name: "ckWBTC",
+        ledger: "bptq2-faaaa-aaaar-qagxq-cai",
+        index: "dso6s-wiaaa-aaaar-qagya-cai",
+    },
+    LedgerSuite {
+        name: "ckLINK",
+        ledger: "g4tto-rqaaa-aaaar-qageq-cai",
+        index: "gvqys-hyaaa-aaaar-qagfa-cai",
+    },
+    LedgerSuite {
+        name: "ckXAUT",
+        ledger: "nza5v-qaaaa-aaaar-qahzq-cai",
+        index: "nmhmy-riaaa-aaaar-qah2a-cai",
+    },
+    LedgerSuite {
+        name: "ckPEPE",
+        ledger: "etik7-oiaaa-aaaar-qagia-cai",
+        index: "eujml-dqaaa-aaaar-qagiq-cai",
+    },
+    LedgerSuite {
+        name: "ckWSTETH",
+        ledger: "j2tuh-yqaaa-aaaar-qahcq-cai",
+        index: "jtq73-oyaaa-aaaar-qahda-cai",
+    },
+    LedgerSuite {
+        name: "ckSHIB",
+        ledger: "fxffn-xiaaa-aaaar-qagoa-cai",
+        index: "fqedz-2qaaa-aaaar-qagoq-cai",
+    },
+    LedgerSuite {
+        name: "ckUSDC",
+        ledger: "xevnm-gaaaa-aaaar-qafnq-cai",
+        index: "xrs4b-hiaaa-aaaar-qafoa-cai",
+    },
+    LedgerSuite {
+        name: "ckUSDT",
+        ledger: "cngnf-vqaaa-aaaar-qag4q-cai",
+        index: "cefgz-dyaaa-aaaar-qag5a-cai",
+    },
+    LedgerSuite {
+        name: "ckOCT",
+        ledger: "ebo5g-cyaaa-aaaar-qagla-cai",
+        index: "egp3s-paaaa-aaaar-qaglq-cai",
+    },
+    // SNSs
+    LedgerSuite {
+        name: "ALICE",
+        ledger: "oj6if-riaaa-aaaaq-aaeha-cai",
+        index: "mtcaz-pyaaa-aaaaq-aaeia-cai",
+    },
+    LedgerSuite {
+        name: "BOOM-DAO",
+        ledger: "vtrom-gqaaa-aaaaq-aabia-cai",
+        index: "v5tde-5aaaa-aaaaq-aabja-cai",
+    },
+    LedgerSuite {
+        name: "CATALYZE",
+        ledger: "uf2wh-taaaa-aaaaq-aabna-cai",
+        index: "ux4b6-7qaaa-aaaaq-aaboa-cai",
+    },
+    LedgerSuite {
+        name: "CECIL-THE-LION-DAO",
+        ledger: "jg2ra-syaaa-aaaaq-aaewa-cai",
+        index: "jiy4i-jiaaa-aaaaq-aaexa-cai",
+    },
+    LedgerSuite {
+        name: "DECIDEAI-DAO",
+        ledger: "xsi2v-cyaaa-aaaaq-aabfq-cai",
+        index: "xaonm-oiaaa-aaaaq-aabgq-cai",
+    },
+    LedgerSuite {
+        name: "DOLR-AI",
+        ledger: "6rdgd-kyaaa-aaaaq-aaavq-cai",
+        index: "6dfr2-giaaa-aaaaq-aaawq-cai",
+    },
+    LedgerSuite {
+        name: "DRAGGINZ",
+        ledger: "zfcdd-tqaaa-aaaaq-aaaga-cai",
+        index: "zlaol-iaaaa-aaaaq-aaaha-cai",
+    },
+    LedgerSuite {
+        name: "ELNA-AI",
+        ledger: "gemj7-oyaaa-aaaaq-aacnq-cai",
+        index: "gwk6g-ciaaa-aaaaq-aacoq-cai",
+    },
+    LedgerSuite {
+        name: "ESTATEDAO",
+        ledger: "bliq2-niaaa-aaaaq-aac4q-cai",
+        index: "bfk5s-wyaaa-aaaaq-aac5q-cai",
+    },
+    LedgerSuite {
+        name: "FOMOWELL",
+        ledger: "o4zzi-qaaaa-aaaaq-aaeeq-cai",
+        index: "os3ua-lqaaa-aaaaq-aaefq-cai",
+    },
+    LedgerSuite {
+        name: "FUELEV",
+        ledger: "nfjys-2iaaa-aaaaq-aaena-cai",
+        index: "nxppl-wyaaa-aaaaq-aaeoa-cai",
+    },
+    LedgerSuite {
+        name: "GOLD-DAO",
+        ledger: "tyyy3-4aaaa-aaaaq-aab7a-cai",
+        index: "efv5g-kqaaa-aaaaq-aacaa-cai",
+    },
+    LedgerSuite {
+        name: "IC-EXPLORER",
+        ledger: "ifwyg-gaaaa-aaaaq-aaeqq-cai",
+        index: "iluvo-5qaaa-aaaaq-aaerq-cai",
+    },
+    LedgerSuite {
+        name: "ICFC",
+        ledger: "ddsp7-7iaaa-aaaaq-aacqq-cai",
+        index: "dnqcx-eyaaa-aaaaq-aacrq-cai",
+    },
+    LedgerSuite {
+        name: "ICLIGHTHOUSE-DAO",
+        ledger: "hhaaz-2aaaa-aaaaq-aacla-cai",
+        index: "gnpcd-yqaaa-aaaaq-aacma-cai",
+    },
+    LedgerSuite {
+        name: "ICPANDA",
+        ledger: "druyg-tyaaa-aaaaq-aactq-cai",
+        index: "c3324-riaaa-aaaaq-aacuq-cai",
+    },
+    LedgerSuite {
+        name: "ICPEX",
+        ledger: "lvfsa-2aaaa-aaaaq-aaeyq-cai",
+        index: "l3h7i-bqaaa-aaaaq-aaezq-cai",
+    },
+    LedgerSuite {
+        name: "ICPSWAP",
+        ledger: "ca6gz-lqaaa-aaaaq-aacwa-cai",
+        index: "co4lr-qaaaa-aaaaq-aacxa-cai",
+    },
+    LedgerSuite {
+        name: "ICVC",
+        ledger: "m6xut-mqaaa-aaaaq-aadua-cai",
+        index: "mqvz3-xaaaa-aaaaq-aadva-cai",
+    },
+    LedgerSuite {
+        name: "KINIC",
+        ledger: "73mez-iiaaa-aaaaq-aaasq-cai",
+        index: "7vojr-tyaaa-aaaaq-aaatq-cai",
+    },
+    LedgerSuite {
+        name: "KONGSWAP",
+        ledger: "o7oak-iyaaa-aaaaq-aadzq-cai",
+        index: "onixt-eiaaa-aaaaq-aad2q-cai",
+    },
+    LedgerSuite {
+        name: "MIMIC",
+        ledger: "4c4fd-caaaa-aaaaq-aaa3a-cai",
+        index: "5ithz-aqaaa-aaaaq-aaa4a-cai",
+    },
+    LedgerSuite {
+        name: "MOTOKO",
+        ledger: "k45jy-aiaaa-aaaaq-aadcq-cai",
+        index: "ks7eq-3yaaa-aaaaq-aaddq-cai",
+    },
+    LedgerSuite {
+        name: "NEUTRINITE",
+        ledger: "f54if-eqaaa-aaaaq-aacea-cai",
+        index: "ft6fn-7aaaa-aaaaq-aacfa-cai",
+    },
+    LedgerSuite {
+        name: "NFID-WALLET",
+        ledger: "mih44-vaaaa-aaaaq-aaekq-cai",
+        index: "mgfru-oqaaa-aaaaq-aaelq-cai",
+    },
+    LedgerSuite {
+        name: "NUANCE",
+        ledger: "rxdbk-dyaaa-aaaaq-aabtq-cai",
+        index: "q5mdq-biaaa-aaaaq-aabuq-cai",
+    },
+    LedgerSuite {
+        name: "OPENCHAT",
+        ledger: "2ouva-viaaa-aaaaq-aaamq-cai",
+        index: "2awyi-oyaaa-aaaaq-aaanq-cai",
+    },
+    LedgerSuite {
+        name: "ORIGYN",
+        ledger: "lkwrt-vyaaa-aaaaq-aadhq-cai",
+        index: "jqkzp-liaaa-aaaaq-aadiq-cai",
+    },
+    LedgerSuite {
+        name: "PERSONAL-DAO",
+        ledger: "ixqp7-kqaaa-aaaaq-aaetq-cai",
+        index: "j57nf-iaaaa-aaaaq-aaeuq-cai",
+    },
+    LedgerSuite {
+        name: "POKEDBOTS",
+        ledger: "np5km-uyaaa-aaaaq-aadrq-cai",
+        index: "n535v-yiaaa-aaaaq-aadsq-cai",
+    },
+    LedgerSuite {
+        name: "SNEED",
+        ledger: "hvgxa-wqaaa-aaaaq-aacia-cai",
+        index: "h3e2i-naaaa-aaaaq-aacja-cai",
+    },
+    LedgerSuite {
+        name: "SONIC",
+        ledger: "qbizb-wiaaa-aaaaq-aabwq-cai",
+        index: "qpkuj-nyaaa-aaaaq-aabxq-cai",
+    },
+    LedgerSuite {
+        name: "SWAMPIES",
+        ledger: "lrtnw-paaaa-aaaaq-aadfa-cai",
+        index: "ldv2p-dqaaa-aaaaq-aadga-cai",
+    },
+    LedgerSuite {
+        name: "TRAX",
+        ledger: "emww2-4yaaa-aaaaq-aacbq-cai",
+        index: "e6qbd-qiaaa-aaaaq-aaccq-cai",
+    },
+    LedgerSuite {
+        name: "WATERNEURON",
+        ledger: "jcmow-hyaaa-aaaaq-aadlq-cai",
+        index: "iidmm-fiaaa-aaaaq-aadmq-cai",
+    },
+    LedgerSuite {
+        name: "YUKU-AI",
+        ledger: "atbfz-diaaa-aaaaq-aacyq-cai",
+        index: "a5dir-yyaaa-aaaaq-aaczq-cai",
+    },
+];
+
+/// Set the principal of the index canister corresponding to this ledger canister.
+/// This will only set the index principal if:
+/// - The index principal is not already set.
+/// - The ledger principal of the current canister is found in the list of ledgers.
+fn set_index_principal() {
+    let index_principal = Access::with_ledger(|ledger| ledger.index_principal());
+    if index_principal.is_none() {
+        let ledger_canister_id = ic_cdk::api::id().to_string();
+        for suite in LEDGER_SUITES {
+            if ledger_canister_id == suite.ledger {
+                Access::with_ledger_mut(|ledger| {
+                    let index_principal = Principal::from_text(suite.index).unwrap_or_else(|err| {
+                        ic_cdk::trap(&format!(
+                            "unable to parse index principal for {} from {}: {}",
+                            suite.name, suite.index, err
+                        ))
+                    });
+                    ledger.set_index_principal(index_principal);
+                    log_message(&format!(
+                        "Set index principal of ledger canister {} for {} to {}",
+                        suite.ledger, suite.name, suite.index
+                    ));
+                });
+                return;
+            }
+        }
+        log_message(&format!(
+            "Not setting index principal of ledger canister {}",
+            ledger_canister_id
+        ));
     }
 }
 
