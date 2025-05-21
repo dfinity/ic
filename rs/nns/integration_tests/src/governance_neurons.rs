@@ -13,7 +13,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
+use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::governance::INITIAL_NEURON_DISSOLVE_DELAY;
 use ic_nns_governance_api::{
     governance_error::ErrorType,
@@ -39,6 +39,9 @@ use ic_nns_test_utils::{
 use icp_ledger::{tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Tokens};
 use icrc_ledger_types::icrc1::account::Account;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+#[cfg(feature = "tla")]
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 
 #[test]
 fn test_merge_neurons_and_simulate_merge_neurons() {

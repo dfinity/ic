@@ -594,7 +594,7 @@ fn get_tla_traces() -> Vec<tla_instrumentation::UpdateTrace> {
         .expect("Couldn't acquire TLA_TRACES_MUTEX write lock in get_tla_traces");
     let mut result = Vec::new();
     std::mem::swap(&mut result, &mut *traces);
-    result.into_iter().map(|t| t.into()).collect()
+    result
 }
 
 // In order for some of the test(s) within this mod to work,
