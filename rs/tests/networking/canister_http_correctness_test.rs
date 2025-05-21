@@ -807,7 +807,7 @@ fn test_http_endpoint_response_is_within_limits_with_custom_max_response_bytes(e
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let n = 1_100_000;
+    let n = 1_000_000;
 
     //   { Response headers
     //       date: Jan 1 1970 00:00:00 GMT
@@ -817,7 +817,7 @@ fn test_http_endpoint_response_is_within_limits_with_custom_max_response_bytes(e
     //       access-control-allow-credentials: true
     //   }
     let header_size = 148;
-    let max_response_bytes: u64 = n - header_size;
+    let max_response_bytes: u64 = n + header_size;
 
     let (response, _) = block_on(submit_outcall(
         &handlers,
@@ -848,7 +848,7 @@ fn test_http_endpoint_response_is_too_large_with_custom_max_response_bytes(env: 
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let n = 1_100_000;
+    let n = 1_000_000;
 
     //   { Response headers
     //       date: Jan 1 1970 00:00:00 GMT
@@ -858,7 +858,7 @@ fn test_http_endpoint_response_is_too_large_with_custom_max_response_bytes(env: 
     //       access-control-allow-credentials: true
     //   }
     let header_size = 148;
-    let max_response_bytes = n - header_size;
+    let max_response_bytes = n + header_size;
 
     let (response, _) = block_on(submit_outcall(
         &handlers,
