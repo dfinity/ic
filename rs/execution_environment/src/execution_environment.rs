@@ -2953,13 +2953,14 @@ impl ExecutionEnvironment {
             ));
         }
 
-        let dpk = ic_vetkeys::MasterPublicKey::deserialize(&subnet_public_key.public_key)
-            .map_err(|err| {
+        let dpk = ic_vetkeys::MasterPublicKey::deserialize(&subnet_public_key.public_key).map_err(
+            |err| {
                 UserError::new(
                     ErrorCode::CanisterRejectedMessage,
                     format!("Invalid VetKD subnet key: {:?}", err),
                 )
-            })?;
+            },
+        )?;
 
         Ok(dpk
             .derive_canister_key(caller.as_slice())
