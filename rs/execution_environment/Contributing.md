@@ -5,10 +5,14 @@
 3. The Rust CDK needs to be updated: [Rust Canister Development Kit](https://github.com/dfinity/cdk-rs). Inform *@eng-sdk* of the work required.
 4. Motoko needs to be updated: [Motoko](https://github.com/dfinity/motoko). Inform *@eng-motoko* of the work required.
 5. Add any new types or update existing ones in `types/management_canister_types`.
-6. Implement the new API in `execution_environment` crate. Main parts that need to be updated: the core implementation in the `canister_manager` module as well as wiring up the new API in `ExecutionEnvironment` so that it is accessible from the outside.
-Note: Some management methods, such as `install_code` and `install_chunked_code`, include dedicated logic to handle rollback after failures. However, for the majority of methods, there should be a clearly defined point during execution at which changes become permanent and rollback is no longer possible. Specifically:
+6. Implement the new API in `execution_environment` crate. Main parts that need to be updated are:
+- the core implementation in the `canister_manager` module;
+- wiring up the new API in `ExecutionEnvironment` to expose it externally.
+Note: Some management methods (e.g., `install_code` and `install_chunked_code`) include dedicated logic to handle rollback after failures. However, for the majority of methods, there should be a clearly defined point during execution at which changes become permanent and rollback is no longer possible. Specifically:
   - no changes are performed before that point (only `&self` access to `CanisterManager`);
   - no failure can happen after that point (the execution is guaranteed to succeed and return a reply).
-7. Tests: add any required tests to cover the new or updated functionality. Typically, these tests can be written using the `ExecutionTest` framework. In some cases, you might need to use the `StateMachine` framework, e.g., if you would need to test things like inter-canister calls or special features like HTTPS outcalls or threshold signatures that require (mocked) outputs of the Consensus layer to be injected in the test or checkpointing that requires a state manager provided by the `StateMachine` framework.
+7. Write tests to cover the new or updated functionality:
+- Use the `ExecutionTest` framework by default.
+- Use the `StateMachine` framework if the feature involves inter-canister calls, canister HTTPS outcalls, threshold signatures, or checkpointing. These require mocked Consensus layer outputs or a full state manager.
 8. Once the *Interface Spec* PR has been agreed on, the public Management Canister [types](https://crates.io/crates/ic-management-canister-types), [Motoko](https://github.com/dfinity/motoko), and [Rust CDK](https://github.com/dfinity/cdk-rs) can be updated to use the new API on a feature branch. Coordinate with *@eng-sdk* and *@eng-motoko* as needed.
 9. Once the implementation is rolled out fully on mainnet, the Interface Spec PR, public Management Canister types, Rust CDK, and Motoko changes can be merged to master.
