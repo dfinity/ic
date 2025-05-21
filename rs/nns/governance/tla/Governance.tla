@@ -20,6 +20,8 @@ POSSIBLE_DISBURSE_AMOUNTS(neurons, nid) == 0..neurons[nid].cached_stake + 1
 
 CONSTANTS
     Claim_Neuron_Process_Ids,
+    Disburse_Maturity_Process_Ids,
+    Disburse_Maturity_Timer_Process_Ids,
     Disburse_Neuron_Process_Ids,
     Disburse_To_Neuron_Process_Ids,
     Merge_Neurons_Process_Ids,
@@ -47,11 +49,11 @@ VARIABLES pc,
           \* Merge_Neuron
           source_neuron_id, target_neuron_id, fees_amount, amount_to_target,
           \* Claim_Neuron
-          account, 
+          account,
           \* Claim_Neuron and Disburse_Neuron
           neuron_id,
           \* Disburse_Neuron and Disburse_To_Neuron
-          disburse_amount, 
+          disburse_amount,
           \* Disburse_Neuron
           to_account,
           \* Disburse_To_Neuron
@@ -62,9 +64,9 @@ VARIABLES pc,
           sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id
 
 global_non_ledger_vars == << neuron, neuron_id_by_account, locks, spawning_neurons >>
-local_vars == << 
+local_vars == <<
     pc,
-    source_neuron_id, target_neuron_id, fees_amount, amount_to_target, account, neuron_id, disburse_amount, to_account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, 
+    source_neuron_id, target_neuron_id, fees_amount, amount_to_target, account, neuron_id, disburse_amount, to_account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id,
     sn_child_account_id >>
 
 Claim == INSTANCE Claim_Neuron
@@ -80,13 +82,13 @@ Split == INSTANCE Split_Neuron
 \* Environment (ledger, rest of governance canister)
 \*******************************************************************************
 
-CONSTANTS 
+CONSTANTS
     NUMBER_OF_TRANSFERS_CAP,
     INITIAL_MAX_BALANCE,
     MAX_NEURON_FEE,
     MAX_MATURITY
 
-CONSTANTS 
+CONSTANTS
     User_Account_Ids
 
 VARIABLES
@@ -108,7 +110,7 @@ Ledger_Init ==
 
 response(caller, response_val) == [caller |-> caller, response |-> response_val]
 
-Ledger_Process_Governance_Request == 
+Ledger_Process_Governance_Request ==
     /\ governance_to_ledger /= <<>>
     /\ governance_to_ledger' = Tail(governance_to_ledger)
     /\
@@ -116,15 +118,15 @@ Ledger_Process_Governance_Request ==
         req == Head(governance_to_ledger)
       IN
         \* Spontaneous rejection, regardless of what the request was
-        \/ 
+        \/
             /\ ledger_to_governance' = ledger_to_governance \union {response(req.caller, Variant("Fail", UNIT))}
             /\ UNCHANGED << minted, burned, balances, nr_transfers, total_rewards >>
         \* Actual processing of messages
         \/
-          LET 
+          LET
             margs == req.method_and_args
             t == VariantTag(margs)
-            caller == req.caller 
+            caller == req.caller
           IN
             \/
                 /\ t = "AccountBalance"
@@ -141,14 +143,14 @@ Ledger_Process_Governance_Request ==
             \/
                 /\ t = "Transfer"
                 /\ UNCHANGED << nr_transfers, total_rewards >>
-                /\  
-                  LET 
+                /\
+                  LET
                     arg == VariantGetUnsafe(t, margs)
                     from_acc == arg.from
                     to_acc == arg.to
                     amnt == arg.amount
                     fee == arg.fee
-                    is_invalid_transfer == 
+                    is_invalid_transfer ==
                         \/
                           /\ from_acc /= Minting_Account_Id
                           /\ to_acc /= Minting_Account_Id
@@ -157,7 +159,7 @@ Ledger_Process_Governance_Request ==
                         \/ from_acc = Minting_Account_Id /\ fee /= 0
                         \/ to_acc = Minting_Account_Id /\ fee /= 0
                         \/ to_acc = Minting_Account_Id /\ amnt < TRANSACTION_FEE
-                        \/ fee + amnt > balances[from_acc] 
+                        \/ fee + amnt > balances[from_acc]
                   IN
                     \/
                         /\ is_invalid_transfer
@@ -165,7 +167,7 @@ Ledger_Process_Governance_Request ==
                         /\ UNCHANGED << minted, burned, balances >>
                     \/
                         /\ ~is_invalid_transfer
-                        /\ balances' = [balances EXCEPT 
+                        /\ balances' = [balances EXCEPT
                                 ![from_acc] = @ - (fee + amnt),
                                 ![to_acc] = @ + amnt]
                         /\ ledger_to_governance' = (ledger_to_governance \union {response(caller, Variant("TransferOk", UNIT))})
@@ -315,9 +317,9 @@ Ready_To_Spawn_Ids_Exist == (UNION Range(ready_to_spawn_ids)) \subseteq DOMAIN(n
 \* Symmetry optimizations for model checking
 \*******************************************************************************
 
-Symmetry_Sets == { Claim_Neuron_Process_Ids, 
-    \* Refresh_Neuron_Process_Ids, 
-    Disburse_Neuron_Process_Ids, 
+Symmetry_Sets == { Claim_Neuron_Process_Ids,
+    \* Refresh_Neuron_Process_Ids,
+    Disburse_Neuron_Process_Ids,
     Spawn_Neuron_Process_Ids,
     Disburse_To_Neuron_Process_Ids,
     Split_Neuron_Process_Ids,

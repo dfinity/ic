@@ -71,11 +71,12 @@ process (Disburse_Maturity_Timer \in Disburse_Maturity_Timer_Process_Ids)
             }
         };
         current_disbursement := DUMMY_DISBURSEMENT;
+        neuron_id := 0;
         goto Disburse_Maturity_Timer_Start;
     }
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "1fe45d68" /\ chksum(tla) = "9438b486")
+\* BEGIN TRANSLATION (chksum(pcal) = "1bdda2ab" /\ chksum(tla) = "f4d6f297")
 VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger,
           ledger_to_governance, neuron_id, current_disbursement
 
@@ -122,10 +123,10 @@ Disburse_Maturity_Timer_WaitForTransfer(self) == /\ pc[self] = "Disburse_Maturit
                                                             ELSE /\ locks' = locks \ {neuron_id[self]}
                                                                  /\ UNCHANGED neuron
                                                  /\ current_disbursement' = [current_disbursement EXCEPT ![self] = DUMMY_DISBURSEMENT]
+                                                 /\ neuron_id' = [neuron_id EXCEPT ![self] = 0]
                                                  /\ pc' = [pc EXCEPT ![self] = "Disburse_Maturity_Timer_Start"]
                                                  /\ UNCHANGED << neuron_id_by_account,
-                                                                 governance_to_ledger,
-                                                                 neuron_id >>
+                                                                 governance_to_ledger >>
 
 Disburse_Maturity_Timer(self) == Disburse_Maturity_Timer_Start(self)
                                     \/ Disburse_Maturity_Timer_WaitForTransfer(self)

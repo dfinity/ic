@@ -66,7 +66,7 @@ impl LocationStack {
             .iter()
             .map(|e| match e {
                 LocationStackElem::Label(l) => l.clone(),
-                _ => panic!("Placeholder found in the location stack while trying to merge labels"),
+                _ => panic!("Placeholder found in the location stack while trying to merge labels {:?}. You may have too many nested `tla_function` attributes. Make sure to have one log_label or log_request/response for each function in the call stack", self.0),
             })
             .reduce(|acc, l| acc.merge(&l))
             .expect("No labels in the location stack")
