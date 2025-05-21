@@ -1522,14 +1522,14 @@ impl CanisterManager {
             )
             .map_err(CanisterManagerError::CanisterSnapshotNotEnoughCycles)?;
 
-        // Create new snapshot.
-        let new_snapshot = CanisterSnapshot::from_canister(canister, state.time())
-            .map_err(CanisterManagerError::from)?;
-
         // Delete old snapshot identified by `replace_snapshot`.
         if let Some(replace_snapshot) = replace_snapshot {
             self.remove_snapshot(canister, replace_snapshot, state, replace_snapshot_size);
         }
+
+        // Create new snapshot.
+        let new_snapshot = CanisterSnapshot::from_canister(canister, state.time())
+            .map_err(CanisterManagerError::from)?;
 
         self.memory_usage_updates(canister, round_limits, validated_memory_usage);
 
@@ -2127,6 +2127,11 @@ impl CanisterManager {
             )
             .map_err(CanisterManagerError::CanisterSnapshotNotEnoughCycles)?;
 
+        // Delete old snapshot identified by `replace_snapshot`.
+        if let Some(replace_snapshot) = args.replace_snapshot() {
+            self.remove_snapshot(canister, replace_snapshot, state, replace_snapshot_size);
+        }
+
         // Create new snapshot.
         let new_snapshot = CanisterSnapshot::from_metadata(
             &args,
@@ -2134,10 +2139,6 @@ impl CanisterManager {
             canister.system_state.canister_version,
             Arc::clone(&self.fd_factory),
         );
-
-        if let Some(replace_snapshot) = args.replace_snapshot() {
-            self.remove_snapshot(canister, replace_snapshot, state, replace_snapshot_size);
-        }
 
         self.memory_usage_updates(canister, round_limits, validated_memory_usage);
 
