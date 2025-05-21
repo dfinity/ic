@@ -1453,10 +1453,11 @@ impl CanisterManager {
     ) -> Result<(CanisterSnapshotResponse, NumInstructions), CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
+        let canister_id = canister.canister_id();
 
         let replace_snapshot_size = match replace_snapshot {
             Some(replace_snapshot_id) => self
-                .get_snapshot(canister, replace_snapshot_id, state)?
+                .get_snapshot(canister_id, replace_snapshot_id, state)?
                 .size(),
             None => {
                 // No replace snapshot ID provided, check whether the maximum number of snapshots
@@ -1567,30 +1568,56 @@ impl CanisterManager {
     /// belong to this canister.
     fn get_snapshot(
         &self,
-        canister: &mut CanisterState,
-        replace_snapshot: SnapshotId,
-        state: &mut ReplicatedState,
+        canister_id: CanisterId,
+        snapshot_id: SnapshotId,
+        state: &ReplicatedState,
     ) -> Result<Arc<CanisterSnapshot>, CanisterManagerError> {
         // Check that `replace_snapshot` exists.
-        match state.canister_snapshots.get(replace_snapshot) {
+        match state.canister_snapshots.get(snapshot_id) {
             None => {
                 // If not found, the operation fails due to invalid parameters.
                 Err(CanisterManagerError::CanisterSnapshotNotFound {
-                    canister_id: canister.canister_id(),
-                    snapshot_id: replace_snapshot,
+                    canister_id,
+                    snapshot_id,
                 })
             }
             Some(snapshot) => {
                 // Verify the provided replacement snapshot belongs to this canister.
-                if snapshot.canister_id() != canister.canister_id() {
+                if snapshot.canister_id() != canister_id {
                     return Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
-                        canister_id: canister.canister_id(),
-                        snapshot_id: replace_snapshot,
+                        canister_id,
+                        snapshot_id,
                     });
                 }
                 Ok(Arc::clone(snapshot))
             }
         }
+    }
+
+    /// Returns a mutable Arc to the snapshot, if it exists.
+    /// Returns an error if the snapshot given by the snapshot ID does not
+    /// belong to this canister.
+    pub fn get_snapshot_mut<'a>(
+        &self,
+        canister_id: CanisterId,
+        snapshot_id: SnapshotId,
+        state: &'a mut ReplicatedState,
+    ) -> Result<&'a mut Arc<CanisterSnapshot>, CanisterManagerError> {
+        // If not found, the operation fails due to invalid parameters.
+        let Some(snapshot) = state.canister_snapshots.get_mut(snapshot_id) else {
+            return Err(CanisterManagerError::CanisterSnapshotNotFound {
+                canister_id,
+                snapshot_id,
+            });
+        };
+        // Verify the provided `snapshot_id` belongs to this canister.
+        if snapshot.canister_id() != canister_id {
+            return Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
+                canister_id,
+                snapshot_id,
+            });
+        }
+        Ok(snapshot)
     }
 
     pub(crate) fn load_canister_snapshot(
@@ -1847,24 +1874,9 @@ impl CanisterManager {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
 
-        match state.canister_snapshots.get(delete_snapshot_id) {
-            None => {
-                // If not found, the operation fails due to invalid parameters.
-                return Err(CanisterManagerError::CanisterSnapshotNotFound {
-                    canister_id: canister.canister_id(),
-                    snapshot_id: delete_snapshot_id,
-                });
-            }
-            Some(delete_snapshot) => {
-                // Verify the provided `delete_snapshot_id` belongs to this canister.
-                if delete_snapshot.canister_id() != canister.canister_id() {
-                    return Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
-                        canister_id: canister.canister_id(),
-                        snapshot_id: delete_snapshot_id,
-                    });
-                }
-            }
-        }
+        // perform access validation, but don't use the result
+        let _ = self.get_snapshot(canister.canister_id(), delete_snapshot_id, state)?;
+
         let old_snapshot = state.delete_snapshot(delete_snapshot_id);
         // Already confirmed that `old_snapshot` exists.
         let old_snapshot_size = old_snapshot.unwrap().size();
@@ -1898,20 +1910,7 @@ impl CanisterManager {
     ) -> Result<ReadCanisterSnapshotMetadataResponse, CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
-        // If not found, the operation fails due to invalid parameters.
-        let Some(snapshot) = state.canister_snapshots.get(snapshot_id) else {
-            return Err(CanisterManagerError::CanisterSnapshotNotFound {
-                canister_id: canister.canister_id(),
-                snapshot_id,
-            });
-        };
-        // Verify the provided `snapshot_id` belongs to this canister.
-        if snapshot.canister_id() != canister.canister_id() {
-            return Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
-                canister_id: canister.canister_id(),
-                snapshot_id,
-            });
-        }
+        let snapshot = self.get_snapshot(canister.canister_id(), snapshot_id, state)?;
 
         Ok(ReadCanisterSnapshotMetadataResponse {
             source: snapshot.source(),
@@ -1951,19 +1950,7 @@ impl CanisterManager {
     ) -> Result<ReadCanisterSnapshotDataResponse, CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
-        let Some(snapshot) = state.canister_snapshots.get(snapshot_id) else {
-            return Err(CanisterManagerError::CanisterSnapshotNotFound {
-                canister_id: canister.canister_id(),
-                snapshot_id,
-            });
-        };
-        // Verify the provided `snapshot_id` belongs to this canister.
-        if snapshot.canister_id() != canister.canister_id() {
-            return Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
-                canister_id: canister.canister_id(),
-                snapshot_id,
-            });
-        }
+        let snapshot = self.get_snapshot(canister.canister_id(), snapshot_id, state)?;
 
         // Charge upfront for the baseline plus the maximum possible size of the returned slice or fail.
         let num_response_bytes = match &kind {
@@ -2057,12 +2044,13 @@ impl CanisterManager {
     ) -> Result<(SnapshotId, NumInstructions), CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
+        let canister_id = canister.canister_id();
 
         let replace_snapshot_size = match args.replace_snapshot() {
             Some(replace_snapshot_id) => {
                 let replace_snapshot_id =
                     SnapshotId::try_from(&replace_snapshot_id.to_vec()).unwrap();
-                self.get_snapshot(canister, replace_snapshot_id, state)?
+                self.get_snapshot(canister_id, replace_snapshot_id, state)?
                     .size()
             }
             None => {
@@ -2181,20 +2169,10 @@ impl CanisterManager {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
         let snapshot_id = args.get_snapshot_id();
-        // If not found, the operation fails due to invalid parameters.
-        let Some(snapshot) = state.canister_snapshots.get_mut(snapshot_id) else {
-            return Err(CanisterManagerError::CanisterSnapshotNotFound {
-                canister_id: canister.canister_id(),
-                snapshot_id,
-            });
-        };
-        // Verify the provided `snapshot_id` belongs to this canister.
-        if snapshot.canister_id() != canister.canister_id() {
-            return Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
-                canister_id: canister.canister_id(),
-                snapshot_id,
-            });
-        }
+
+        let snapshot: &mut Arc<CanisterSnapshot> =
+            self.get_snapshot_mut(canister.canister_id(), snapshot_id, state)?;
+
         // Ensure the snapshot was created via metadata upload, not from the canister.
         if snapshot.source() != SnapshotSource::MetadataUpload {
             return Err(CanisterManagerError::CanisterSnapshotImmutable);
