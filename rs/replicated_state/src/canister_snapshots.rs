@@ -56,6 +56,21 @@ impl CanisterSnapshots {
         }
     }
 
+    /// Updates a snapshot's `size` and the `CanisterSnapshots`' `memory_usage` by `amount`.
+    /// Returns `None` if the given snapshot ID could not be found. In this case, the method
+    /// has no effect.
+    pub fn update_snapshot_memory(
+        &mut self,
+        snapshot_id: SnapshotId,
+        amount: NumBytes,
+    ) -> Option<()> {
+        let snapshot = self.get_mut(snapshot_id)?;
+        let snapshot_inner = Arc::make_mut(snapshot);
+        snapshot_inner.size += amount;
+        self.memory_usage += amount;
+        Some(())
+    }
+
     /// Adds new snapshot in the collection and assigns a `SnapshotId`.
     ///
     /// External callers should call `ReplicatedState::take_snapshot` instead.
