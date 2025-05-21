@@ -22,7 +22,7 @@ struct TlaUpdateArgs {
 /// 1. An expression of type `tla_instrumentation::Update` which describes the update method.
 /// 2. A snapshotter function which takes a pointer to the canister and returns a `GlobalState`
 ///
-/// It also supports the following keyword arguments:
+/// It also supports the following keyword argument(s):
 /// 1. force_async_fn, a boolean indicating whether the function is async even if it doesn't use
 ///    the async keyword. This is useful for async_trait functions, which are desugared into
 ///    functions that return a Pin<Box<dyn Future<...>>>, but are not async themselves.
@@ -152,8 +152,7 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
     let update = macro_args.update_expr;
 
     let with_instrumentation = quote! {
-         let update = #update;
-         let snapshotter = #snapshotter;
+         let (update, snapshotter) = (#update, #snapshotter);
          let globals = (*snapshotter.lock().expect("Couldn't lock the snaphshotter in tla_update_method before instrumented invocation"))();
          let start_location = tla_instrumentation::SourceLocation { file: "Unknown file".to_string(), line: format!("Start of {}", #original_name) };
          let end_location = tla_instrumentation::SourceLocation { file: "Unknown file".to_string(), line: format!("End of {}", #original_name) };
@@ -185,8 +184,7 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
         quote! {
             #(#attrs)* #vis #sig {
                 Box::pin(async move {
-                    let enabled = TLA_TRACES_LKEY.try_with(|_| ()).is_ok() || TLA_TRACES_MUTEX.is_some();
-                    if !enabled {
+                    if !(TLA_TRACES_LKEY.try_with(|_| ()).is_ok() || TLA_TRACES_MUTEX.is_some()) {
                         #noninstrumented_invocation
                     } else {
                         #with_instrumentation
@@ -332,7 +330,7 @@ pub fn tla_function(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// An annotation for tests whose TLA traces should be checked.
 /// Assumes that the following are in scope:
 /// 1. a LocalKey variable `TLA_TRACES_LKEY` of type Vec<UpdateTrace>,and
-/// 2. a function tla_check_traces() (presumably looking at the `TLA_TRACES_LKEY`
+/// 2. a function tla_check_traces() (presumably fetching the contents at the `TLA_TRACES_LKEY`)
 #[proc_macro_attribute]
 pub fn with_tla_trace_check(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // Parse the input tokens of the attribute and the function

@@ -8,8 +8,17 @@ use crate::{
         Account, FinalizeDisburseMaturity, GovernanceError, MaturityDisbursement, NeuronState,
         Subaccount,
     },
-    tla_log_label,
 };
+
+
+use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
+use ic_nervous_system_governance::maturity_modulation::{
+    apply_maturity_modulation, MIN_MATURITY_MODULATION_PERMYRIAD,
+};
+use ic_nns_common::pb::v1::NeuronId;
+use ic_types::PrincipalId;
+use icrc_ledger_types::icrc1::account::Account as Icrc1Account;
+use std::{cell::RefCell, collections::HashMap, fmt::Display, thread::LocalKey, time::Duration};
 
 #[cfg(feature = "tla")]
 pub use crate::governance::{
@@ -20,17 +29,9 @@ pub use crate::governance::{
         TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
     },
 };
-use crate::tla_log_locals;
-use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
-use ic_nervous_system_governance::maturity_modulation::{
-    apply_maturity_modulation, MIN_MATURITY_MODULATION_PERMYRIAD,
-};
-use ic_nns_common::pb::v1::NeuronId;
-use ic_types::PrincipalId;
-use icrc_ledger_types::icrc1::account::Account as Icrc1Account;
+use crate::{tla_log_label, tla_log_locals};
 #[cfg(feature = "tla")]
 use std::collections::BTreeMap;
-use std::{cell::RefCell, collections::HashMap, fmt::Display, thread::LocalKey, time::Duration};
 
 /// The delay in seconds between initiating a maturity disbursement and the actual disbursement.
 const DISBURSEMENT_DELAY_SECONDS: u64 = ONE_DAY_SECONDS * 7;
@@ -506,7 +507,6 @@ fn next_maturity_disbursement_to_finalize(
 #[cfg(feature = "tla")]
 macro_rules! tla_snapshotter {
     ($first_arg:expr $(, $_rest:tt)* ) => {{
-        // Use a block to potentially shadow variables and contain the logic
         let raw_ptr = ::tla_instrumentation::UnsafeSendPtr($first_arg.with(|g| g.as_ptr()));
         ::std::sync::Arc::new(::std::sync::Mutex::new(move || {
             $crate::governance::tla::get_tla_globals(&raw_ptr)

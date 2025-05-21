@@ -583,7 +583,8 @@ fn main() {
     // This block is intentionally left blank.
 }
 
-#[cfg(feature = "tla")]
+// A query method to get the TLA traces collected in a test run.
+#[cfg(all(feature = "tla", feature = "test"))]
 #[query(hidden = true)]
 fn get_tla_traces() -> Vec<tla_instrumentation::UpdateTrace> {
     use ic_nns_governance::governance::tla::TLA_TRACES_MUTEX;

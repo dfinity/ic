@@ -30,7 +30,6 @@ lazy_static! {
                     "MIN_DISBURSEMENT".to_string(),
                     crate::governance::disburse_maturity::MINIMUM_DISBURSEMENT_E8S.to_tla_value(),
                 );
-                // TODO: need to include all the account_ids from maturity_disbursements_in_progress of all neurons
                 let disbursements_in_progress_account_ids: BTreeSet<TlaValue> = trace.iter().flat_map(
                     get_maturity_disbursement_in_progress_account_ids).collect();
 
