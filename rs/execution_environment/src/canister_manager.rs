@@ -2035,8 +2035,8 @@ impl CanisterManager {
     }
 
     /// Creates a new snapshot based on the provided metadata and returns the new snapshot ID.
-    /// The main/stable memory and the wasm chunk store are initialized empty, and the
-    /// wasm module is initialized as an all-zero blob.
+    /// The main/stable memory and wasm module are initialized as all-zero blobs of given sizes,
+    /// and the wasm chunk store is initialized empty.
     ///
     /// The content of these memories has to be uploaded in slices via `write_snapshot_data`.
     ///
