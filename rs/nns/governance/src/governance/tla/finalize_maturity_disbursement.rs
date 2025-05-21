@@ -1,12 +1,10 @@
-use super::{account_to_tla, extract_common_constants, function_domain_union, post_process_trace};
 use super::common::get_maturity_disbursement_in_progress_account_ids;
+use super::{account_to_tla, extract_common_constants, function_domain_union, post_process_trace};
 use crate::governance::governance_minting_account;
 use lazy_static::lazy_static;
 use std::collections::{BTreeMap, BTreeSet};
 use std::iter::once;
-use tla_instrumentation::{
-    Label, TlaConstantAssignment, TlaValue, ToTla, Update, VarAssignment,
-};
+use tla_instrumentation::{Label, TlaConstantAssignment, TlaValue, ToTla, Update, VarAssignment};
 
 const PID: &str = "Disburse_Maturity_Timer";
 lazy_static! {
