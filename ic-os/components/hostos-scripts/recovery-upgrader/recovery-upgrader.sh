@@ -77,8 +77,8 @@ download_and_verify_upgrade() {
     local actual_short_hash=${actual_hash:0:6}
     if [ "$actual_short_hash" != "$short_hash" ]; then
         echo "ERROR: Hash verification failed"
-        echo "Expected short hash: $short_hash"
-        echo "Got short hash: $actual_short_hash"
+        echo "Expected short 6-character hash: $short_hash"
+        echo "Got short 6-character hash: $actual_short_hash"
         echo "Full hash: $actual_hash"
         exit 1
     fi
