@@ -842,28 +842,38 @@ fn test_http_endpoint_response_is_too_large_with_custom_max_response_bytes(env: 
     let header_size = 148;
     let max_response_bytes = n + header_size;
 
-    let (response, _) = block_on(submit_outcall(
-        &handlers,
-        RemoteHttpRequest {
-            request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!("https://[{webserver_ipv6}]:20443/bytes/{}", n + 1),
-                headers: vec![],
-                method: HttpMethod::GET,
-                body: Some("".as_bytes().to_vec()),
-                transform: None,
-                max_response_bytes: Some(max_response_bytes),
-            },
-            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
-        },
-    ));
+    let const_transform = TransformContext {
+        function: TransformFunc(candid::Func {
+            principal: get_proxy_canister_id(&env).into(),
+            method: "transform".to_string(),
+        }),
+        context: vec![0, 1, 2],
+    };
 
-    assert_matches!(
-        response,
-        Err(RejectResponse {
-            reject_code: RejectCode::SysFatal,
-            ..
-        })
-    );
+    for transform in [None, Some(const_transform)] {
+        let (response, _) = block_on(submit_outcall(
+            &handlers,
+            RemoteHttpRequest {
+                request: UnvalidatedCanisterHttpRequestArgs {
+                    url: format!("https://[{webserver_ipv6}]:20443/bytes/{}", n + 1),
+                    headers: vec![],
+                    method: HttpMethod::GET,
+                    body: Some("".as_bytes().to_vec()),
+                    transform,
+                    max_response_bytes: Some(max_response_bytes),
+                },
+                cycles: HTTP_REQUEST_CYCLE_PAYMENT,
+            },
+        ));
+
+        assert_matches!(
+            response,
+            Err(RejectResponse {
+                reject_code: RejectCode::SysFatal,
+                ..
+            })
+        );
+    }
 }
 
 fn test_http_endpoint_response_is_within_limits_with_default_max_response_bytes(env: TestEnv) {
@@ -913,28 +923,38 @@ fn test_http_endpoint_response_is_too_large_with_default_max_response_bytes(env:
     let header_size = 148;
     let n = DEFAULT_MAX_RESPONSE_BYTES - header_size;
 
-    let (response, _) = block_on(submit_outcall(
-        &handlers,
-        RemoteHttpRequest {
-            request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!("https://[{webserver_ipv6}]:20443/bytes/{}", n + 1),
-                headers: vec![],
-                method: HttpMethod::GET,
-                body: Some("".as_bytes().to_vec()),
-                transform: None,
-                max_response_bytes: None,
-            },
-            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
-        },
-    ));
+    let const_transform = TransformContext {
+        function: TransformFunc(candid::Func {
+            principal: get_proxy_canister_id(&env).into(),
+            method: "transform".to_string(),
+        }),
+        context: vec![0, 1, 2],
+    };
 
-    assert_matches!(
-        response,
-        Err(RejectResponse {
-            reject_code: RejectCode::SysFatal,
-            ..
-        })
-    );
+    for transform in [None, Some(const_transform)] {
+        let (response, _) = block_on(submit_outcall(
+            &handlers,
+            RemoteHttpRequest {
+                request: UnvalidatedCanisterHttpRequestArgs {
+                    url: format!("https://[{webserver_ipv6}]:20443/bytes/{}", n + 1),
+                    headers: vec![],
+                    method: HttpMethod::GET,
+                    body: Some("".as_bytes().to_vec()),
+                    transform,
+                    max_response_bytes: None,
+                },
+                cycles: HTTP_REQUEST_CYCLE_PAYMENT,
+            },
+        ));
+
+        assert_matches!(
+            response,
+            Err(RejectResponse {
+                reject_code: RejectCode::SysFatal,
+                ..
+            })
+        );
+    }
 }
 
 fn test_http_endpoint_with_delayed_response_is_rejected(env: TestEnv) {
