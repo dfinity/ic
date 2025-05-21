@@ -115,33 +115,15 @@ pub trait RootKey: Sync + Send {
     fn root_key(&self) -> Option<Vec<u8>>;
 }
 
-// Router that helps handlers do their job by looking up in routing table
-// and owning HTTP client for outgoing requests
-#[derive(Clone)]
+/// Router that helps handlers do their job by looking up in routing table
+/// and owning HTTP client for outgoing requests
+#[derive(Clone, derive_new::new)]
 pub struct ProxyRouter {
     http_client: Arc<dyn HttpClient>,
     published_routes: Arc<ArcSwapOption<Routes>>,
     published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     subnets_alive_threshold: f64,
     nodes_per_subnet_alive_threshold: f64,
-}
-
-impl ProxyRouter {
-    pub fn new(
-        http_client: Arc<dyn HttpClient>,
-        published_routes: Arc<ArcSwapOption<Routes>>,
-        published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
-        subnets_alive_threshold: f64,
-        nodes_per_subnet_alive_threshold: f64,
-    ) -> Self {
-        Self {
-            http_client,
-            published_routes,
-            published_registry_snapshot,
-            subnets_alive_threshold,
-            nodes_per_subnet_alive_threshold,
-        }
-    }
 }
 
 #[async_trait]

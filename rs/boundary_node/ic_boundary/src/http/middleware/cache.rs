@@ -37,6 +37,7 @@ impl KeyExtractor for KeyExtractorContext {
             .ok_or_else(|| {
                 CacheError::ExtractKey("unable to get RequestContext extension".into())
             })?;
+
         Ok(ctx.clone())
     }
 }

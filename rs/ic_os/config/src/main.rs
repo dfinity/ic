@@ -213,7 +213,11 @@ pub fn main() -> Result<()> {
                 node_reward_type,
                 mgmt_mac,
                 deployment_environment: deployment_json_settings.deployment.name.parse()?,
-                logging: Logging::default(),
+                logging: Logging {
+                    elasticsearch_hosts: Some(deployment_json_settings.logging.hosts)
+                        .filter(|v| !v.is_empty()),
+                    elasticsearch_tags: deployment_json_settings.logging.tags,
+                },
                 use_nns_public_key: Path::new("/data/nns_public_key.pem").exists(),
                 nns_urls: deployment_json_settings.nns.url.clone(),
                 use_node_operator_private_key: Path::new("/config/node_operator_private_key.pem")

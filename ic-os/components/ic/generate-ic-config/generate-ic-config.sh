@@ -179,5 +179,6 @@ if [[ -n "${GENERATE_IC_BOUNDARY_TLS_CERT}" ]] && [ "${GENERATE_IC_BOUNDARY_TLS_
         -keyout "${TLS_KEY_PATH}" \
         -out "${TLS_CERT_PATH}" -sha256 -days 3650 -nodes \
         -subj /C=CH/ST=Zurich/L=Zurich/O=InternetComputer/OU=ApiBoundaryNodes/CN=${GENERATE_IC_BOUNDARY_TLS_CERT}
+    chown ic-replica:nogroup "${TLS_KEY_PATH}" "${TLS_CERT_PATH}"
     chmod 644 "${TLS_KEY_PATH}" "${TLS_CERT_PATH}"
 fi
