@@ -119,7 +119,11 @@ impl WatCall {
     fn stable_read(dst: i32, offset: i32, size: i32) -> Self {
         Self {
             func: "ic0_stable_read".to_string(),
-            params: vec![WatConst::I32(dst), WatConst::I32(offset), WatConst::I32(size)],
+            params: vec![
+                WatConst::I32(dst),
+                WatConst::I32(offset),
+                WatConst::I32(size),
+            ],
             drop_result: false,
         }
     }
