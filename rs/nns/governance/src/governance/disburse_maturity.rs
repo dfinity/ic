@@ -1,11 +1,26 @@
-use crate::{governance::{ledger_helper::MintIcpOperation, Governance}, neuron_store::NeuronStore, pb::v1::{
-    governance::{neuron_in_flight_command::Command, NeuronInFlightCommand},
-    governance_error::ErrorType,
-    manage_neuron::DisburseMaturity,
-    Account, FinalizeDisburseMaturity, GovernanceError, MaturityDisbursement, NeuronState,
-    Subaccount,
-}, tla_log_label};
+use crate::{
+    governance::{ledger_helper::MintIcpOperation, Governance},
+    neuron_store::NeuronStore,
+    pb::v1::{
+        governance::{neuron_in_flight_command::Command, NeuronInFlightCommand},
+        governance_error::ErrorType,
+        manage_neuron::DisburseMaturity,
+        Account, FinalizeDisburseMaturity, GovernanceError, MaturityDisbursement, NeuronState,
+        Subaccount,
+    },
+    tla_log_label,
+};
 
+#[cfg(feature = "tla")]
+pub use crate::governance::{
+    tla,
+    tla::{
+        account_to_tla, get_tla_globals, tla_update_method, GlobalState, InstrumentationState,
+        TlaValue, ToTla, FINALIZE_MATURITY_DISBURSEMENT_DESC, TLA_INSTRUMENTATION_STATE,
+        TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
+    },
+};
+use crate::tla_log_locals;
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_nervous_system_governance::maturity_modulation::{
     apply_maturity_modulation, MIN_MATURITY_MODULATION_PERMYRIAD,
@@ -13,19 +28,9 @@ use ic_nervous_system_governance::maturity_modulation::{
 use ic_nns_common::pb::v1::NeuronId;
 use ic_types::PrincipalId;
 use icrc_ledger_types::icrc1::account::Account as Icrc1Account;
-use std::{cell::RefCell, collections::HashMap, fmt::Display, thread::LocalKey, time::Duration};
 #[cfg(feature = "tla")]
 use std::collections::BTreeMap;
-use crate::{tla_log_locals};
-#[cfg(feature = "tla")]
-pub use crate::governance::{tla::{
-    account_to_tla,
-    tla_update_method, InstrumentationState, ToTla, TlaValue,
-    TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, FINALIZE_MATURITY_DISBURSEMENT_DESC,
-    TLA_TRACES_MUTEX,
-    get_tla_globals,
-    GlobalState
-}, tla};
+use std::{cell::RefCell, collections::HashMap, fmt::Display, thread::LocalKey, time::Duration};
 
 /// The delay in seconds between initiating a maturity disbursement and the actual disbursement.
 const DISBURSEMENT_DELAY_SECONDS: u64 = ONE_DAY_SECONDS * 7;
@@ -500,12 +505,13 @@ fn next_maturity_disbursement_to_finalize(
 
 #[cfg(feature = "tla")]
 macro_rules! tla_snapshotter {
-    ($first_arg:expr $(, $_rest:tt)* ) => {
-        { // Use a block to potentially shadow variables and contain the logic
-            let raw_ptr = ::tla_instrumentation::UnsafeSendPtr($first_arg.with(|g| g.as_ptr()));
-            ::std::sync::Arc::new(::std::sync::Mutex::new(move || { $crate::governance::tla::get_tla_globals(&raw_ptr) }))
-        }
-    }
+    ($first_arg:expr $(, $_rest:tt)* ) => {{
+        // Use a block to potentially shadow variables and contain the logic
+        let raw_ptr = ::tla_instrumentation::UnsafeSendPtr($first_arg.with(|g| g.as_ptr()));
+        ::std::sync::Arc::new(::std::sync::Mutex::new(move || {
+            $crate::governance::tla::get_tla_globals(&raw_ptr)
+        }))
+    }};
 }
 
 /// Finalizes the maturity disbursement for a neuron. See

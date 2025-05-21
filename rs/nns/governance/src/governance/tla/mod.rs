@@ -291,14 +291,15 @@ where
 /// It's assumed that the corresponding model is called `<PID>_Apalache.tla`, where PID is the
 /// `process_id`` field used in the `Update` value for the corresponding method.
 pub fn check_traces() {
-  let traces = {
-        let t_mutex =TLA_TRACES_LKEY.get() ;
-        let mut t = t_mutex.lock().expect("Couldn't lock the traces in check_traces");
+    let traces = {
+        let t_mutex = TLA_TRACES_LKEY.get();
+        let mut t = t_mutex
+            .lock()
+            .expect("Couldn't lock the traces in check_traces");
         std::mem::take(&mut (*t))
     };
 
     perform_trace_check(traces)
-
 }
 
 pub fn perform_trace_check(traces: Vec<UpdateTrace>) {

@@ -3,10 +3,10 @@ use quote::quote;
 use syn::{parse_macro_input, AttributeArgs, ItemFn, Lit, Meta, NestedMeta};
 
 use syn::parse::{Parse, ParseStream};
-use syn::{Ident, Token, Expr};
+use syn::{Expr, Ident, Token};
 
 struct TlaUpdateArgs {
-    update_expr: Expr, // The positional argument
+    update_expr: Expr,      // The positional argument
     snapshotter_expr: Expr, // Name of the function arg to use for snapshotter
     force_async_fn: bool,
 }
@@ -52,7 +52,7 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let original_name = sig.ident.to_string();
 
-   // Creating the modified original function which calls f_impl
+    // Creating the modified original function which calls f_impl
     let args: Vec<_> = sig
         .inputs
         .iter()
@@ -90,17 +90,17 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     let snapshotter = match &macro_args.snapshotter_expr {
-           Expr::Path(expr_path) => {
-                // User provided path: call it to get the snapshotter *value*
-                quote! { #expr_path(#(#args),*) }
-            }
-            Expr::Macro(expr_macro) => {
-                // User provided macro: invoke it to get the snapshotter *value*
-                let mac_path = &expr_macro.mac.path;
-                quote! { #mac_path!(#(#args),*) }
-            }
-            expr => {
-                return syn::Error::new_spanned(
+        Expr::Path(expr_path) => {
+            // User provided path: call it to get the snapshotter *value*
+            quote! { #expr_path(#(#args),*) }
+        }
+        Expr::Macro(expr_macro) => {
+            // User provided macro: invoke it to get the snapshotter *value*
+            let mac_path = &expr_macro.mac.path;
+            quote! { #mac_path!(#(#args),*) }
+        }
+        expr => {
+            return syn::Error::new_spanned(
                     expr,
                     "Expected the snapshotter (second argument) to be a function path (e.g., `my_func`) or a macro invocation ending in `!()` (e.g., `my_macro! A()`)",
                 )
@@ -249,16 +249,16 @@ pub fn tla_function(attr: TokenStream, item: TokenStream) -> TokenStream {
                         name_value.path,
                         "Expected a boolean literal for 'force_async_fn'",
                     )
-                        .to_compile_error()
-                        .into();
+                    .to_compile_error()
+                    .into();
                 }
             } else {
                 return syn::Error::new_spanned(
                     name_value.path,
                     "The only supported argument is 'force_async_fn'",
                 )
-                    .to_compile_error()
-                    .into();
+                .to_compile_error()
+                .into();
             }
         }
     }
@@ -376,7 +376,8 @@ impl Parse for TlaUpdateArgs {
 
         while !input.is_empty() {
             input.parse::<Token![,]>()?;
-            if input.is_empty() { // Allow trailing comma
+            if input.is_empty() {
+                // Allow trailing comma
                 break;
             }
             let key: Ident = input.parse()?;
@@ -388,13 +389,18 @@ impl Parse for TlaUpdateArgs {
                     if let Lit::Bool(lit_bool) = lit.lit {
                         force_async_fn = lit_bool.value();
                     } else {
-                        return Err(syn::Error::new(key.span(), "Expected a boolean literal for 'force_async_fn'"));
+                        return Err(syn::Error::new(
+                            key.span(),
+                            "Expected a boolean literal for 'force_async_fn'",
+                        ));
                     }
                 } else {
-                    return Err(syn::Error::new(key.span(), "Expected a boolean literal for 'force_async_fn'"));
+                    return Err(syn::Error::new(
+                        key.span(),
+                        "Expected a boolean literal for 'force_async_fn'",
+                    ));
                 }
-            }
-            else {
+            } else {
                 return Err(syn::Error::new(key.span(), "Unknown keyword argument"));
             }
         }

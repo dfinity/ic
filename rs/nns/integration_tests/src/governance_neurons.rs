@@ -420,16 +420,21 @@ fn test_neuron_disburse_maturity() {
     check_state_machine_tla_traces(&state_machine, GOVERNANCE_CANISTER_ID);
 }
 
-#[cfg(feature="tla")]
-fn check_state_machine_tla_traces(sm: &ic_state_machine_tests::StateMachine, gov_canister_id: ic_base_types::CanisterId) {
-    use ic_nns_governance::governance::tla::{UpdateTrace, perform_trace_check};
-    use candid::{Encode, Decode};
+#[cfg(feature = "tla")]
+fn check_state_machine_tla_traces(
+    sm: &ic_state_machine_tests::StateMachine,
+    gov_canister_id: ic_base_types::CanisterId,
+) {
+    use candid::{Decode, Encode};
     use canister_test::WasmResult;
-    let wasm_res = sm.query(
-        gov_canister_id,
-        "get_tla_traces",
-        Encode!(&()).expect("Couldn't encode get_tla_traces request"),
-    ).expect("Couldn't call get_tla_traces");
+    use ic_nns_governance::governance::tla::{perform_trace_check, UpdateTrace};
+    let wasm_res = sm
+        .query(
+            gov_canister_id,
+            "get_tla_traces",
+            Encode!(&()).expect("Couldn't encode get_tla_traces request"),
+        )
+        .expect("Couldn't call get_tla_traces");
     let traces = match wasm_res {
         WasmResult::Reject(r) => panic!("get_tla_traces failed: {}", r),
         WasmResult::Reply(r) => {

@@ -31,7 +31,10 @@ mod tla_stuff {
 
     use local_key::task_local;
     use std::{collections::BTreeMap, sync::RwLock};
-    use tla_instrumentation::{GlobalState, InstrumentationState, Label, TlaConstantAssignment, TlaValue, ToTla, UnsafeSendPtr, Update, UpdateTrace, VarAssignment};
+    use tla_instrumentation::{
+        GlobalState, InstrumentationState, Label, TlaConstantAssignment, TlaValue, ToTla,
+        UnsafeSendPtr, Update, UpdateTrace, VarAssignment,
+    };
 
     task_local! {
         pub static TLA_INSTRUMENTATION_STATE: InstrumentationState;
@@ -50,12 +53,12 @@ mod tla_stuff {
 
     // #[macro_export]
     macro_rules! tla_get_globals {
-        ($self:expr) => {
-            {
-                let raw_ptr = ::tla_instrumentation::UnsafeSendPtr($self as *const _);
-                ::std::sync::Arc::new(::std::sync::Mutex::new(move || { tla_stuff::tla_get_globals(&raw_ptr) }))
-            }
-        };
+        ($self:expr) => {{
+            let raw_ptr = ::tla_instrumentation::UnsafeSendPtr($self as *const _);
+            ::std::sync::Arc::new(::std::sync::Mutex::new(move || {
+                tla_stuff::tla_get_globals(&raw_ptr)
+            }))
+        }};
     }
 
     pub fn my_f_desc() -> Update {

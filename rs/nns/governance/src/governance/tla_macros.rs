@@ -24,14 +24,14 @@ macro_rules! tla_log_locals {
 
 #[macro_export]
 macro_rules! tla_snapshotter {
-    ($first_arg:expr $(, $_rest:tt)* ) => {
-        { // Use a block to potentially shadow variables and contain the logic
-            let raw_ptr = ::tla_instrumentation::UnsafeSendPtr($first_arg as *const _);
-            ::std::sync::Arc::new(::std::sync::Mutex::new(move || { $crate::governance::tla::get_tla_globals(&raw_ptr) }))
-        }
-    }
+    ($first_arg:expr $(, $_rest:tt)* ) => {{
+        // Use a block to potentially shadow variables and contain the logic
+        let raw_ptr = ::tla_instrumentation::UnsafeSendPtr($first_arg as *const _);
+        ::std::sync::Arc::new(::std::sync::Mutex::new(move || {
+            $crate::governance::tla::get_tla_globals(&raw_ptr)
+        }))
+    }};
 }
-
 
 #[macro_export]
 macro_rules! tla_log_label {

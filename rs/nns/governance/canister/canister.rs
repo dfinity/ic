@@ -57,11 +57,10 @@ use ic_nns_governance::canister_state::{with_governance, CanisterRandomnessGener
 #[cfg(feature = "tla")]
 mod tla_ledger;
 
-#[cfg(feature = "tla")]
-use tla_ledger::LoggingIcpLedgerCanister as IcpLedgerCanister;
 #[cfg(not(feature = "tla"))]
 use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
-
+#[cfg(feature = "tla")]
+use tla_ledger::LoggingIcpLedgerCanister as IcpLedgerCanister;
 
 /// WASM memory equivalent to 4GiB, which we want to reserve for upgrades memory. The heap memory
 /// limit is 4GiB but its serialized form with prost should be smaller, so we reserve for 4GiB. This
@@ -588,7 +587,11 @@ fn main() {
 #[query(hidden = true)]
 fn get_tla_traces() -> Vec<tla_instrumentation::UpdateTrace> {
     use ic_nns_governance::governance::tla::TLA_TRACES_MUTEX;
-    let mut traces = TLA_TRACES_MUTEX.as_ref().expect("TLA_TRACES_MUTEX is None in get_tla_traces").write().expect("Couldn't acquire TLA_TRACES_MUTEX write lock in get_tla_traces");
+    let mut traces = TLA_TRACES_MUTEX
+        .as_ref()
+        .expect("TLA_TRACES_MUTEX is None in get_tla_traces")
+        .write()
+        .expect("Couldn't acquire TLA_TRACES_MUTEX write lock in get_tla_traces");
     let mut result = Vec::new();
     std::mem::swap(&mut result, &mut *traces);
     result.into_iter().map(|t| t.into()).collect()

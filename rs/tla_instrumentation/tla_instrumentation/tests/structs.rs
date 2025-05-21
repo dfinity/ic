@@ -1,8 +1,8 @@
+use async_trait::async_trait;
 use std::{
     collections::{BTreeMap, BTreeSet},
     ptr::addr_of_mut,
 };
-use async_trait::async_trait;
 // Also possible to define a wrapper macro, in order to ensure that logging is only
 // done when certain crate features are enabled
 use tla_instrumentation::{
@@ -27,9 +27,12 @@ mod tla_stuff {
     pub const CAN_NAME: &str = "mycan";
 
     use local_key::task_local;
-    use std::{collections::BTreeMap, sync::RwLock};
     use std::sync::{Arc, Mutex};
-    use tla_instrumentation::{GlobalState, InstrumentationState, Label, TlaConstantAssignment, TlaValue, ToTla, UnsafeSendPtr, Update, UpdateTrace, VarAssignment};
+    use std::{collections::BTreeMap, sync::RwLock};
+    use tla_instrumentation::{
+        GlobalState, InstrumentationState, Label, TlaConstantAssignment, TlaValue, ToTla,
+        UnsafeSendPtr, Update, UpdateTrace, VarAssignment,
+    };
 
     task_local! {
         pub static TLA_INSTRUMENTATION_STATE: InstrumentationState;
@@ -48,12 +51,12 @@ mod tla_stuff {
 
     // #[macro_export]
     macro_rules! tla_get_globals {
-        ($self:expr $(, $_:expr)*) => {
-            {
-                let raw_ptr = tla_instrumentation::UnsafeSendPtr($self as *const _);
-                ::std::sync::Arc::new(::std::sync::Mutex::new(move || { tla_stuff::tla_get_globals(&raw_ptr) }))
-            }
-        };
+        ($self:expr $(, $_:expr)*) => {{
+            let raw_ptr = tla_instrumentation::UnsafeSendPtr($self as *const _);
+            ::std::sync::Arc::new(::std::sync::Mutex::new(move || {
+                tla_stuff::tla_get_globals(&raw_ptr)
+            }))
+        }};
     }
 
     pub fn my_f_desc() -> Update {
@@ -277,7 +280,9 @@ fn struct_test() {
 
 fn tla_check_traces() {
     let traces = TLA_TRACES_LKEY.get();
-    let traces = traces.lock().expect("Couldn't lock traces in tla_check_traces");
+    let traces = traces
+        .lock()
+        .expect("Couldn't lock traces in tla_check_traces");
     for t in &*traces {
         check_tla_trace(t)
     }

@@ -8,12 +8,12 @@ use tla_instrumentation_proc_macros::{tla_function, tla_update_method};
 mod common;
 use common::check_tla_trace;
 
-use std::thread_local;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
+use std::thread_local;
 
-use std::thread::LocalKey;
 use async_trait::async_trait;
+use std::thread::LocalKey;
 
 thread_local! {
     pub static COUNTER: RefCell<u64> = RefCell::new(0);
@@ -21,14 +21,17 @@ thread_local! {
 
 #[macro_use]
 mod tla_stuff {
+    use candid::Int;
     use local_key::task_local;
-    use std::{collections::BTreeMap, sync::RwLock};
     use std::cell::RefCell;
     use std::collections::BTreeSet;
-    use std::thread::LocalKey;
-    use candid::Int;
     use std::sync::Mutex;
-    use tla_instrumentation::{GlobalState, InstrumentationState, Label, TlaConstantAssignment, TlaValue, ToTla, UnsafeSendPtr, Update, UpdateTrace, VarAssignment};
+    use std::thread::LocalKey;
+    use std::{collections::BTreeMap, sync::RwLock};
+    use tla_instrumentation::{
+        GlobalState, InstrumentationState, Label, TlaConstantAssignment, TlaValue, ToTla,
+        UnsafeSendPtr, Update, UpdateTrace, VarAssignment,
+    };
 
     pub const PID: &str = "Multiple_Calls";
     pub const CAN_NAME: &str = "mycan";
@@ -42,18 +45,17 @@ mod tla_stuff {
     pub fn my_get_globals(p: &UnsafeSendPtr<LocalKey<RefCell<u64>>>) -> GlobalState {
         let mut state = GlobalState::new();
         let counter = unsafe { &*(p.0) };
-        state.add("counter", counter.with_borrow(|c|  c.to_tla_value()));
+        state.add("counter", counter.with_borrow(|c| c.to_tla_value()));
         state.add("empty_fun", TlaValue::Function(BTreeMap::new()));
         state
     }
 
-   macro_rules! snapshotter {
-        ($first_arg:expr $(, $_rest:tt)* ) => {
-            { // Use a block to potentially shadow variables and contain the logic
-                let raw_ptr = ::tla_instrumentation::UnsafeSendPtr($first_arg as *const _);
-                ::std::sync::Arc::new(::std::sync::Mutex::new(move || { my_get_globals(&raw_ptr) }))
-            }
-        }
+    macro_rules! snapshotter {
+        ($first_arg:expr $(, $_rest:tt)* ) => {{
+            // Use a block to potentially shadow variables and contain the logic
+            let raw_ptr = ::tla_instrumentation::UnsafeSendPtr($first_arg as *const _);
+            ::std::sync::Arc::new(::std::sync::Mutex::new(move || my_get_globals(&raw_ptr)))
+        }};
     }
 
     pub fn my_f_desc() -> Update {
@@ -113,7 +115,10 @@ mod tla_stuff {
     }
 }
 
-use tla_stuff::{my_f_desc, TLA_TRACES_MUTEX, TLA_TRACES_LKEY, TLA_INSTRUMENTATION_STATE, PID, CAN_NAME, my_get_globals};
+use tla_stuff::{
+    my_f_desc, my_get_globals, CAN_NAME, PID, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY,
+    TLA_TRACES_MUTEX,
+};
 
 struct CallMaker {}
 
@@ -160,7 +165,6 @@ pub async fn my_method(state: &'static LocalKey<RefCell<u64>>) {
     // we defined my_local in default_end_locals in my_f_desc
     tla_log_locals! {my_local: my_local};
 }
-
 
 #[test]
 fn multiple_calls_test() {
@@ -214,7 +218,7 @@ fn multiple_calls_test() {
                     }
                 )
             ]))]
-                .to_tla_value()
+            .to_tla_value()
         )
     );
 
@@ -254,7 +258,7 @@ fn multiple_calls_test() {
                     }
                 )
             ]))])
-                .to_tla_value()
+            .to_tla_value()
         )
     );
     assert_eq!(
@@ -279,7 +283,7 @@ fn multiple_calls_test() {
                     }
                 )
             ]))]
-                .to_tla_value()
+            .to_tla_value()
         )
     );
 
@@ -310,7 +314,7 @@ fn multiple_calls_test() {
                     }
                 )
             ]))])
-                .to_tla_value()
+            .to_tla_value()
         )
     );
     assert_eq!(

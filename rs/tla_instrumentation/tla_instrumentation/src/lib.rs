@@ -44,7 +44,6 @@ pub struct Update {
     pub post_process: fn(&mut Vec<ResolvedStatePair>) -> TlaConstantAssignment,
 }
 
-
 #[derive(Debug, Clone, CandidType, Deserialize)]
 pub struct UpdateTrace {
     pub model_name: String,
@@ -357,7 +356,10 @@ macro_rules! tla_log_all_globals {
     ($self:expr) => {{
         let mut globals = tla_get_globals!($self);
         let state_with_pairs = TLA_INSTRUMENTATION_STATE.get();
-        let mut state = state_with_pairs.state.lock().expect("Failed to lock handler state in log_globals");
+        let mut state = state_with_pairs
+            .state
+            .lock()
+            .expect("Failed to lock handler state in log_globals");
         $crate::log_globals(&mut state, globals);
     }};
 }
@@ -431,7 +433,10 @@ macro_rules! tla_log_method_call {
 macro_rules! tla_log_label {
     ($label:expr) => {{
         let res = TLA_INSTRUMENTATION_STATE.try_with(|state| {
-            let mut handler_state = state.handler_state.lock().expect("Failed to lock handler state in log_label");
+            let mut handler_state = state
+                .handler_state
+                .lock()
+                .expect("Failed to lock handler state in log_label");
             $crate::log_label(&mut handler_state, $label);
         });
         match res {
