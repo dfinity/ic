@@ -1,6 +1,5 @@
 // TODO: Jira ticket NNS1-3556
 #![allow(static_mut_refs)]
-
 use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
@@ -30,9 +29,9 @@ use ic_sns_governance::{
     types::{Environment, HeapGrowthPotential},
     upgrade_journal::serve_journal,
 };
+use ic_sns_governance_api::pb::v1::get_sns_status_response;
 use ic_sns_governance_api::pb::v1::{
     get_running_sns_version_response::UpgradeInProgress,
-    get_sns_status_response,
     governance::Version,
     topics::{ListTopicsRequest, ListTopicsResponse},
     ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
@@ -354,8 +353,20 @@ fn get_metadata(request: GetMetadataRequest) -> GetMetadataResponse {
 
 /// Returns statistics of the SNS
 #[query]
-async fn get_metrics(_request: GetMetricsRequest) -> get_sns_status_response::GetMetricsResponse {
-    unimplemented!()
+async fn get_metrics(request: GetMetricsRequest) -> get_sns_status_response::GetMetricsResponse {
+    log!(INFO, "get_metrics");
+    let result = governance()
+        .get_metrics(sns_gov_pb::GetMetricsRequest::from(request))
+        .await;
+
+    match result {
+        Ok(get_metrics_response) => {
+            get_sns_status_response::GetMetricsResponse::from(get_metrics_response)
+        }
+        Err(error) => get_sns_status_response::GetMetricsResponse {
+            get_metrics_result: Some(get_sns_status_response::GetMetricsResult::Err(error.into())),
+        },
+    }
 }
 
 /// Returns the initialization parameters used to spawn an SNS

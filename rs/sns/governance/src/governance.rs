@@ -2010,7 +2010,7 @@ impl Governance {
             .unwrap_or(u64::MAX);
     }
 
-    pub async fn get_statistics(
+    pub async fn get_metrics(
         &self,
         request: GetMetricsRequest,
     ) -> Result<GetMetricsResponse, GovernanceError> {
