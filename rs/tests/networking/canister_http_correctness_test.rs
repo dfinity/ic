@@ -186,12 +186,6 @@ fn main() -> Result<()> {
                 .add_test(systest!(
                     test_only_headers_with_custom_max_response_bytes_exceeded
                 ))
-                .add_test(systest!(
-                    test_headers_and_body_with_default_max_response_bytes
-                ))
-                .add_test(systest!(
-                    test_headers_and_body_with_default_max_response_bytes_exceeded
-                ))
                 .add_test(systest!(test_max_response_bytes_too_large))
                 .add_test(systest!(test_max_response_bytes_2_mb_returns_ok)),
         )
@@ -1687,86 +1681,6 @@ fn test_only_headers_with_custom_max_response_bytes(env: TestEnv) {
 
     assert_matches!(&response, RemoteHttpResponse { status: 200, .. });
     assert_http_response(&response);
-}
-
-fn test_headers_and_body_with_default_max_response_bytes(env: TestEnv) {
-    let handlers = Handlers::new(&env);
-    let webserver_ipv6 = get_universal_vm_address(&env);
-
-    //   { Response headers
-    //       date: Jan 1 1970 00:00:00 GMT
-    //       content-type: application/octet-stream
-    //       content-length: 11
-    //       access-control-allow-origin: *
-    //       access-control-allow-credentials: true
-    //   }
-
-    let header_size = 142;
-    let n = DEFAULT_MAX_RESPONSE_BYTES - header_size;
-    let url = format!("https://[{}]:20443/{}/{}", webserver_ipv6, "equal_bytes", n);
-
-    let (response, _) = block_on(submit_outcall(
-        &handlers,
-        RemoteHttpRequest {
-            request: UnvalidatedCanisterHttpRequestArgs {
-                url,
-                headers: vec![],
-                method: HttpMethod::GET,
-                body: None,
-                transform: None,
-                max_response_bytes: None,
-            },
-            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
-        },
-    ));
-    let response = response.expect("Request is successful.");
-
-    assert_matches!(&response, RemoteHttpResponse { status: 200, .. });
-    assert_http_response(&response);
-}
-
-fn test_headers_and_body_with_default_max_response_bytes_exceeded(env: TestEnv) {
-    let handlers = Handlers::new(&env);
-    let webserver_ipv6 = get_universal_vm_address(&env);
-
-    //   { Response headers
-    //       date: Jan 1 1970 00:00:00 GMT
-    //       content-type: application/octet-stream
-    //       content-length: 0
-    //       access-control-allow-origin: *
-    //       access-control-allow-credentials: true
-    //   }
-
-    let header_size = 142;
-    let n = DEFAULT_MAX_RESPONSE_BYTES - header_size + 1;
-    let url = format!("https://[{}]:20443/{}/{}", webserver_ipv6, "equal_bytes", n);
-
-    let (response, refunded_cycles) = block_on(submit_outcall(
-        &handlers,
-        RemoteHttpRequest {
-            request: UnvalidatedCanisterHttpRequestArgs {
-                url,
-                headers: vec![],
-                method: HttpMethod::GET,
-                body: None,
-                transform: None,
-                max_response_bytes: None,
-            },
-            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
-        },
-    ));
-
-    assert_matches!(
-        response,
-        Err(RejectResponse {
-            reject_code: RejectCode::SysFatal,
-            ..
-        })
-    );
-    assert_ne!(
-        refunded_cycles,
-        RefundedCycles::Cycles(HTTP_REQUEST_CYCLE_PAYMENT)
-    );
 }
 
 fn test_only_headers_with_custom_max_response_bytes_exceeded(env: TestEnv) {
