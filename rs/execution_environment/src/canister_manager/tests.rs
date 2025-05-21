@@ -4493,11 +4493,7 @@ fn install_does_not_reserve_cycles_on_system_subnet() {
     test.install_canister(
         canister_id,
         wat_canister()
-            .init(
-                wat_fn()
-                    .stable_grow((USAGE / WASM_PAGE_SIZE_IN_BYTES) as i32 - 1)
-                    .stable_read(0, 42),
-            )
+            .init(wat_fn().stable_grow((USAGE / WASM_PAGE_SIZE_IN_BYTES) as i32 - 1))
             .build_wasm(),
     )
     .unwrap();
