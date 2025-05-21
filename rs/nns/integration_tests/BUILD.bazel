@@ -263,7 +263,7 @@ rust_ic_test_suite_with_extra_srcs(
     }),
     data = DEV_DATA + [
         "//rs/nns/governance:tla_models",
-        # "@bazel_tools//tools/jdk:current_java_runtime",
+        "@bazel_tools//tools/jdk:current_java_runtime",
         "@tla_apalache//:bin/apalache-mc",
     ],
     env = DEV_ENV | {
