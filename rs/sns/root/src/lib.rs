@@ -879,7 +879,6 @@ async fn get_owned_canister_summary(
 mod tests {
     use super::*;
     use crate::pb::v1::{set_dapp_controllers_request::CanisterIds, ListSnsCanistersResponse};
-    use ic_cdk::eprintln;
     use ic_nervous_system_clients::{
         canister_status::CanisterStatusResultFromManagementCanister,
         management_canister_client::{
