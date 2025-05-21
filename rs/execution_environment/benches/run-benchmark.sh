@@ -4,6 +4,9 @@ set -ue
 ## Helper script to run the specified `BENCH`
 ## and store the best (minimum) results in the `MIN_FILE`.
 ##
+## Please use the top-level `run-all-benchmarks.sh` to run all or just
+## some benchmarks.
+##
 
 DEPENDENCIES="awk bash bazel rg sed tail tee"
 which ${DEPENDENCIES} >/dev/null || (echo "Error checking dependencies: ${DEPENDENCIES}" >&2 && exit 1)
