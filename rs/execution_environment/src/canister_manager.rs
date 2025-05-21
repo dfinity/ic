@@ -605,8 +605,6 @@ impl CanisterManager {
             time,
             compilation_cost_handling,
             subnet_size,
-            requested_compute_allocation: context.compute_allocation,
-            requested_memory_allocation: context.memory_allocation,
             sender: context.sender(),
             canister_id: canister.canister_id(),
             log_dirty_pages,
