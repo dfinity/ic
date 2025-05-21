@@ -807,16 +807,16 @@ fn test_http_endpoint_response_is_within_limits_with_custom_max_response_bytes(e
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let n = 1_000_000;
+    let n = 1_100_000;
 
     //   { Response headers
     //       date: Jan 1 1970 00:00:00 GMT
     //       content-type: application/octet-stream
-    //       content-length: 11
+    //       content-length: 1xxxxxx
     //       access-control-allow-origin: *
     //       access-control-allow-credentials: true
     //   }
-    let header_size = 142;
+    let header_size = 148;
     let max_response_bytes: u64 = n - header_size;
 
     let (response, _) = block_on(submit_outcall(
@@ -848,16 +848,16 @@ fn test_http_endpoint_response_is_too_large_with_custom_max_response_bytes(env: 
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let n = 1_000_000;
+    let n = 1_100_000;
 
     //   { Response headers
     //       date: Jan 1 1970 00:00:00 GMT
     //       content-type: application/octet-stream
-    //       content-length: 11
+    //       content-length: 1xxxxxx
     //       access-control-allow-origin: *
     //       access-control-allow-credentials: true
     //   }
-    let header_size = 142;
+    let header_size = 148;
     let max_response_bytes = n - header_size;
 
     let (response, _) = block_on(submit_outcall(
@@ -897,11 +897,11 @@ fn test_http_endpoint_response_is_within_limits_with_default_max_response_bytes(
     //   { Response headers
     //       date: Jan 1 1970 00:00:00 GMT
     //       content-type: application/octet-stream
-    //       content-length: 11
+    //       content-length: 1xxxxxx
     //       access-control-allow-origin: *
     //       access-control-allow-credentials: true
     //   }
-    let header_size = 142;
+    let header_size = 148;
     let n = DEFAULT_MAX_RESPONSE_BYTES - header_size;
 
     let (response, _) = block_on(submit_outcall(
@@ -936,11 +936,11 @@ fn test_http_endpoint_response_is_too_large_with_default_max_response_bytes(env:
     //   { Response headers
     //       date: Jan 1 1970 00:00:00 GMT
     //       content-type: application/octet-stream
-    //       content-length: 11
+    //       content-length: 1xxxxxx
     //       access-control-allow-origin: *
     //       access-control-allow-credentials: true
     //   }
-    let header_size = 142;
+    let header_size = 148;
     let n = DEFAULT_MAX_RESPONSE_BYTES - header_size;
 
     let (response, _) = block_on(submit_outcall(
