@@ -63,6 +63,12 @@ pub struct DeploymentConfig {
 
     #[arg(long)]
     pub deployment_environment: Option<String>,
+
+    #[arg(long)]
+    pub elasticsearch_hosts: Option<String>,
+
+    #[arg(long)]
+    pub elasticsearch_tags: Option<String>,
 }
 
 pub async fn write_config(path: &Path, cfg: &ConfigIni) -> Result<(), Error> {
@@ -146,6 +152,14 @@ pub async fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<()
 
     if let Some(deployment_environment) = &cfg.deployment_environment {
         deployment_json.deployment.name = deployment_environment.to_owned();
+    }
+
+    if let Some(elasticsearch_hosts) = &cfg.elasticsearch_hosts {
+        deployment_json.logging.hosts = elasticsearch_hosts.to_owned();
+    }
+
+    if let Some(elasticsearch_tags) = &cfg.elasticsearch_tags {
+        deployment_json.logging.tags = Some(elasticsearch_tags.to_owned());
     }
 
     let mut f = File::create(path).context("failed to open deployment config file")?;

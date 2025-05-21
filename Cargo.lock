@@ -10913,6 +10913,7 @@ name = "ic-nervous-system-proxied-canister-calls-tracker"
 version = "0.9.0"
 dependencies = [
  "ic-base-types",
+ "ic-cdk 0.17.2",
  "maplit",
  "pretty_assertions",
  "tokio",
@@ -11025,6 +11026,7 @@ name = "ic-neurons-fund"
 version = "0.0.1"
 dependencies = [
  "assert_matches",
+ "ic-cdk 0.17.2",
  "ic-nervous-system-common",
  "lazy_static",
  "proptest 1.6.0",
@@ -12161,6 +12163,7 @@ name = "ic-registry-node-provider-rewards"
 version = "0.9.0"
 dependencies = [
  "ic-base-types",
+ "ic-cdk 0.17.2",
  "ic-protobuf",
  "maplit",
  "pretty_assertions",
@@ -17887,7 +17890,8 @@ dependencies = [
  "hyper 1.6.0",
  "hyper-rustls 0.27.5",
  "hyper-util",
- "ic-agent 0.39.3",
+ "ic-canister-client",
+ "ic-canister-client-sender",
  "ic-config",
  "ic-consensus",
  "ic-consensus-dkg",
@@ -17900,7 +17904,6 @@ dependencies = [
  "ic-crypto-test-utils-tls",
  "ic-crypto-tls-interfaces",
  "ic-dashboard",
- "ic-ed25519",
  "ic-http-endpoints-async-utils",
  "ic-http-endpoints-metrics",
  "ic-http-utils",

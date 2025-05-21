@@ -6,8 +6,10 @@ use environment::Environment;
 use exchange_rate_canister::{
     RealExchangeRateCanisterClient, UpdateExchangeRateError, UpdateExchangeRateState,
 };
-use ic_cdk::api::call::{arg_data_raw, reply_raw, CallResult, ManualReply};
-use ic_cdk::{heartbeat, init, post_upgrade, pre_upgrade, query, spawn, update};
+use ic_cdk::{
+    api::call::{arg_data_raw, reply_raw, CallResult, ManualReply},
+    heartbeat, init, post_upgrade, pre_upgrade, println, query, spawn, update,
+};
 use ic_crypto_tree_hash::{
     flatmap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
     WitnessGeneratorImpl,

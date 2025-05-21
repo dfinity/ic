@@ -1,6 +1,14 @@
-///
-/// Benchmark System API performance in `execute_query()`
-///
+//! Benchmark System API performance in `execute_query()`.
+//!
+//! This benchmark runs nightly in CI, and the results are available in Grafana.
+//! See: `schedule-rust-bench.yml`
+//!
+//! To run the benchmark locally:
+//!
+//! ```shell
+//! bazel run //rs/execution_environment:execute_query_bench
+//! ```
+
 use criterion::{criterion_group, criterion_main, Criterion};
 use execution_environment_bench::{common, wat::*};
 use ic_execution_environment::{
