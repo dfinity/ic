@@ -47,6 +47,7 @@ jobs:
     name: Bazel System Tests Hourly
     <<: *dind-large-setup
     runs-on:
+      group: zh1
       labels: dind-large
     steps:
       - <<: *checkout
@@ -64,6 +65,7 @@ jobs:
     name: Bazel Run Fuzzers Hourly
     <<: *dind-large-setup
     runs-on:
+      group: zh1
       labels: dind-large
     steps:
       - <<: *checkout
