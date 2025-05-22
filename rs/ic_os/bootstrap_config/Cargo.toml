@@ -1,6 +1,6 @@
 [package]
 name = "bootstrap_config"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
