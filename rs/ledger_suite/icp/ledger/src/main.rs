@@ -584,10 +584,6 @@ fn block(block_index: BlockIndex) -> Option<Result<EncodedBlock, CanisterId>> {
         Some(Err(result))
     // Or the block may be in the ledger, or the block may not exist
     } else {
-        print(format!(
-            "[ledger] Checking the ledger for block [{}]",
-            block_index
-        ));
         state.blockchain.get(block_index).map(Ok)
     }
 }
@@ -1421,6 +1417,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         match encode_metrics(&mut writer) {
             Ok(()) => HttpResponseBuilder::ok()
                 .header("Content-Type", "text/plain; version=0.0.4")
+                .header("Cache-Control", "no-store")
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {

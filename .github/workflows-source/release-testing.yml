@@ -35,7 +35,7 @@ anchors:
       options: >-
         -e NODE_NAME
         --privileged --cgroupns host
-        -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
+        -v /cache:/cache
     timeout-minutes: 180 # 3 hours
   checkout: &checkout
     name: Checkout
@@ -156,3 +156,10 @@ jobs:
           BAZEL_COMMAND: test --config=ci --config=systest --keep_going --test_timeout=7200 --test_env=OLD_VERSION=${{ matrix.version }}
           BAZEL_TARGETS: "//rs/tests/dre:guest_os_qualification"
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+  repro-check:
+    name: Repro check for ${{ github.sha }}
+    uses: ./.github/workflows/repro-check.yml
+    needs: [ci-main]
+    with:
+      github_sha: ${{ github.sha }}
