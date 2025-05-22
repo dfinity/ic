@@ -22,8 +22,8 @@ use ic_replicated_state::ReplicatedState;
 use ic_test_utilities::crypto::CryptoReturningOk;
 use ic_test_utilities_consensus::fake::*;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-use ic_types::signature::*;
 use ic_types::{artifact::ConsensusMessageId, batch::ValidationContext};
+use ic_types::{consensus::dkg::DkgPayload, signature::*};
 use ic_types::{consensus::*, crypto::*, *};
 use ic_types::{
     crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
@@ -39,8 +39,7 @@ pub struct TestConsensusPool {
     registry_client: Arc<dyn RegistryClient>,
     pool: ConsensusPoolImpl,
     time_source: Arc<dyn TimeSource>,
-    dkg_payload_builder:
-        Box<dyn Fn(&dyn ConsensusPool, Block, &ValidationContext) -> DkgPayload>,
+    dkg_payload_builder: Box<dyn Fn(&dyn ConsensusPool, Block, &ValidationContext) -> DkgPayload>,
     membership: Membership,
 }
 

@@ -53,7 +53,7 @@ use ic_test_utilities_types::{
 };
 use ic_types::{
     batch::{BatchPayload, IngressPayload, ValidationContext},
-    consensus::{certification::*, *},
+    consensus::{certification::*, dkg::DkgSummary, *},
     crypto::Signed,
     ingress::{IngressState, IngressStatus},
     signature::*,

@@ -17,7 +17,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        dkg::{self, DkgDataPayload, DkgPayload, DkgPayloadCreationError, DkgSummary},
+        dkg::{DkgDataPayload, DkgPayload, DkgPayloadCreationError, DkgSummary},
         get_faults_tolerated, Block,
     },
     crypto::threshold_sig::ni_dkg::{

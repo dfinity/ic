@@ -13,6 +13,7 @@ use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::v1 as pb;
+use ic_types::consensus::dkg::DkgSummary;
 use ic_types::{
     artifact::{CertificationMessageId, ConsensusMessageId, IDkgMessageId},
     batch::BatchPayload,
@@ -20,7 +21,7 @@ use ic_types::{
         certification::{
             Certification, CertificationMessage, CertificationMessageHash, CertificationShare,
         },
-        dkg::{self, DkgDataPayload},
+        dkg::DkgDataPayload,
         idkg::{
             EcdsaSigShare, IDkgArtifactId, IDkgArtifactIdData, IDkgArtifactIdDataOf, IDkgMessage,
             IDkgMessageType, IDkgPrefix, IDkgPrefixOf, IterationPattern, SchnorrSigShare, SigShare,

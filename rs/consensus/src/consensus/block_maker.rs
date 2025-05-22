@@ -22,7 +22,7 @@ use ic_types::{
     batch::{BatchPayload, ValidationContext},
     consensus::{
         block_maker::SubnetRecords,
-        dkg::{self, DkgDataPayload},
+        dkg::{DkgDataPayload, DkgPayload},
         hashed, Block, BlockMetadata, BlockPayload, BlockProposal, DataPayload, HasHeight, HasRank,
         HashedBlock, Payload, RandomBeacon, Rank, SummaryPayload,
     },

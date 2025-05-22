@@ -9,11 +9,11 @@ use ic_interfaces::{
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
     batch::ValidationContext,
-    consensus::idkg::{IDkgBlockReader, IDkgStats, RequestId},
     consensus::{
-        dkg, Block, BlockPayload, CatchUpContent, CatchUpPackage, ConsensusMessageHashable,
-        HasHeight, HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent, Rank,
-        SummaryPayload,
+        dkg::DkgSummary,
+        idkg::{IDkgBlockReader, IDkgStats, RequestId},
+        Block, BlockPayload, CatchUpContent, CatchUpPackage, ConsensusMessageHashable, HasHeight,
+        HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent, Rank, SummaryPayload,
     },
     crypto::{
         canister_threshold_sig::idkg::{IDkgDealingSupport, IDkgTranscriptParams},
