@@ -9,7 +9,7 @@ RequiresMountsFor=/var
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/opt/ic/bin/generate-guestos-config.sh
+ExecStart=/opt/ic/bin/generate-guestos-config
 
 [Install]
 WantedBy=multi-user.target
