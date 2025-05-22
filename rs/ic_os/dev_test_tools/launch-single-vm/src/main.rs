@@ -1,4 +1,4 @@
-use bootstrap_config::{build_bootstrap_config_image, BootstrapOptions};
+use bootstrap_config::BootstrapOptions;
 use clap::Parser;
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
@@ -242,7 +242,9 @@ fn main() {
             accounts_ssh_authorized_keys: Some(keys_dir),
             ..Default::default()
         };
-        build_bootstrap_config_image(&config_path, &bootstrap_options).unwrap();
+        bootstrap_options
+            .build_bootstrap_config_image(&config_path)
+            .unwrap();
 
         // Upload config image
         let image_id = farm
