@@ -44,6 +44,7 @@ use ic_types::{
     MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use more_asserts::assert_gt;
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 use proptest::prelude::*;
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
@@ -7015,6 +7016,7 @@ fn stable_memory_grow_reserves_cycles() {
             .system_state
             .reserved_balance();
 
+        assert_gt!(reserved_cycles, Cycles::zero());
         assert_eq!(
             reserved_cycles,
             test.cycles_account_manager().storage_reservation_cycles(
@@ -7095,6 +7097,7 @@ fn wasm_memory_grow_reserves_cycles() {
             .system_state
             .reserved_balance();
 
+        assert_gt!(reserved_cycles, Cycles::zero());
         assert_eq!(
             reserved_cycles,
             test.cycles_account_manager().storage_reservation_cycles(
@@ -7173,6 +7176,7 @@ fn set_reserved_cycles_limit_below_existing_fails() {
         .system_state
         .reserved_balance();
 
+    assert_gt!(reserved_cycles, Cycles::zero());
     assert_eq!(
         reserved_cycles,
         test.cycles_account_manager().storage_reservation_cycles(
@@ -7298,6 +7302,7 @@ fn resource_saturation_scaling_works_in_regular_execution() {
         .system_state
         .reserved_balance();
 
+    assert_gt!(reserved_cycles, Cycles::zero());
     assert_eq!(
         reserved_cycles,
         test.cycles_account_manager().storage_reservation_cycles(

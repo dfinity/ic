@@ -15,21 +15,24 @@ use axum::{
     Extension,
 };
 use http::header::CONTENT_TYPE;
-use ic_bn_lib::http::{body::CountingBody, cache::CacheStatus, http_version, ConnInfo};
 use ic_bn_lib::prometheus::{
     proto::MetricFamily, register_histogram_vec_with_registry,
     register_int_counter_vec_with_registry, register_int_gauge_vec_with_registry,
     register_int_gauge_with_registry, Encoder, HistogramOpts, HistogramVec, IntCounterVec,
     IntGauge, IntGaugeVec, Registry, TextEncoder,
 };
+use ic_bn_lib::{
+    http::{body::CountingBody, cache::CacheStatus, http_version, ConnInfo},
+    tasks::Run,
+};
 use ic_types::{messages::ReplicaHealthStatus, CanisterId, SubnetId};
 use sha3::{Digest, Sha3_256};
 use tikv_jemalloc_ctl::{epoch, stats};
+use tokio_util::sync::CancellationToken;
 use tower_http::request_id::RequestId;
 use tracing::info;
 
 use crate::{
-    core::Run,
     errors::ErrorCause,
     http::middleware::{cache::CacheState, geoip, retry::RetryResult},
     persist::RouteSubnet,
@@ -170,7 +173,7 @@ impl MetricsRunner {
 
 #[async_trait]
 impl Run for MetricsRunner {
-    async fn run(&mut self) -> Result<(), Error> {
+    async fn run(&self, _: CancellationToken) -> Result<(), Error> {
         // Record jemalloc memory usage
         epoch::advance().unwrap();
         self.mem_allocated
@@ -197,55 +200,6 @@ impl Run for MetricsRunner {
             .encode(&metric_families, &mut metrics_cache.buffer)?;
 
         Ok(())
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct WithMetrics<T>(pub T, pub MetricParams);
-
-#[derive(Clone, Debug)]
-pub struct MetricParams {
-    pub action: String,
-    pub counter: IntCounterVec,
-    pub recorder: HistogramVec,
-}
-
-impl MetricParams {
-    pub fn new(registry: &Registry, action: &str) -> Self {
-        Self::new_with_opts(registry, action, &["status"], None)
-    }
-
-    pub fn new_with_opts(
-        registry: &Registry,
-        action: &str,
-        labels: &[&str],
-        buckets: Option<&[f64]>,
-    ) -> Self {
-        let mut recorder_opts = HistogramOpts::new(
-            format!("{action}_duration_sec"),
-            format!("Records the duration of {action} calls in seconds"),
-        );
-
-        if let Some(b) = buckets {
-            recorder_opts.buckets = b.to_vec();
-        }
-
-        Self {
-            action: action.to_string(),
-
-            // Count
-            counter: register_int_counter_vec_with_registry!(
-                format!("{action}_total"),
-                format!("Counts occurrences of {action} calls"),
-                labels,
-                registry
-            )
-            .unwrap(),
-
-            // Duration
-            recorder: register_histogram_vec_with_registry!(recorder_opts, labels, registry)
-                .unwrap(),
-        }
     }
 }
 

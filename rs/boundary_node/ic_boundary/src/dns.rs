@@ -78,7 +78,7 @@ mod test {
         let dns_resolver = DnsResolver::new(Arc::clone(&snapshot));
 
         let (channel_send, _) = tokio::sync::watch::channel(None);
-        let mut snapshotter =
+        let snapshotter =
             Snapshotter::new(Arc::clone(&snapshot), channel_send, reg, Duration::ZERO);
         snapshotter.snapshot()?;
 

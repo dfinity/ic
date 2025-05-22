@@ -4,7 +4,7 @@ on:
   pull_request:
     types:
       - review_requested
-      
+
 permissions:
   pull-requests: write
 
@@ -14,11 +14,11 @@ jobs:
     steps:
       - uses: actions/github-script@v6
         id: mainStep
-        # If the PR requires nns-team to approve, GitHub will force nns-team to
+        # If the PR requires governance-team to approve, GitHub will force governance-team to
         # be in requested_teams. Therefore, the following condition is always
-        # met when nns-team must approve. (Further filtering takes place in the
+        # met when governance-team must approve. (Further filtering takes place in the
         # script itself.)
-        if: contains(github.event.pull_request.requested_teams.*.name, 'nns-team')
+        if: contains(github.event.pull_request.requested_teams.*.name, 'governance-team')
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           retries: 3
