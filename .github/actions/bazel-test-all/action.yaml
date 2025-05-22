@@ -77,6 +77,13 @@ runs:
               bazel_targets+=( "$tgt" )
             done
 
+            if [ $(uname -o) != "Darwin" ]; then
+              if [[ $release_build == "true" ]]; then
+                bazel build "${bazel_args[@]}" @@jemalloc//:libjemalloc --config=release
+              else
+                bazel build "${bazel_args[@]}" @@jemalloc//:libjemalloc
+              fi
+            fi
 
             if [[ $diff_only == "true" ]]; then
                 target_pattern_file=$(mktemp)
