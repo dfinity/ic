@@ -1,3 +1,4 @@
+use crate::icrc_ledger_helper::ICRCLedgerHelper;
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
@@ -80,6 +81,7 @@ use crate::{
     },
     types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock, Wasm},
 };
+
 use candid::{Decode, Encode};
 #[cfg(not(target_arch = "wasm32"))]
 use futures::FutureExt;
@@ -2010,12 +2012,35 @@ impl Governance {
 
     pub async fn get_metrics(
         &self,
-        _request: GetMetricsRequest,
+        request: GetMetricsRequest,
     ) -> Result<GetMetricsResponse, GovernanceError> {
-        Err(GovernanceError {
-            error_type: 42,
-            error_message: "Unimplemented".to_string(),
+        let num_recent_proposals = self.recent_proposals(request.time_window_seconds);
+        let icrc_ledger_helper = ICRCLedgerHelper::with_ledger(self.ledger.as_ref());
+        let last_transaction_timestamp = icrc_ledger_helper
+            .get_latest_block_timestamp_seconds()
+            .await
+            .map_err(|error_mesage| {
+                GovernanceError::new_with_message(ErrorType::External, error_mesage)
+            })?;
+
+        // transaction timestamps are in nanoseconds
+        Ok(GetMetricsResponse {
+            num_recent_proposals: Some(num_recent_proposals),
+            last_transaction_timestamp: Some(last_transaction_timestamp),
         })
+    }
+
+    fn recent_proposals(&self, time_window_seconds: u64) -> u64 {
+        self.proto
+            .proposals
+            .values()
+            .filter(|proposal_data| {
+                self.env
+                    .now()
+                    .saturating_sub(proposal_data.proposal_creation_timestamp_seconds)
+                    <= time_window_seconds
+            })
+            .count() as u64
     }
 
     /// Starts execution of the given proposal in the background.
