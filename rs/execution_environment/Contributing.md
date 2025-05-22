@@ -8,6 +8,7 @@
 6. Implement the new API in `execution_environment` crate. Main parts that need to be updated are:
 - the core implementation in the `canister_manager` module;
 - wiring up the new API in `ExecutionEnvironment` to expose it externally.
+Make sure to implement robust input validation and think of various (security-relevant) edge cases.
 Note: Some management methods (e.g., `install_code` and `install_chunked_code`) include dedicated logic to handle rollback after failures. However, for the majority of methods, there should be a clearly defined point during execution at which changes become permanent and rollback is no longer possible. Specifically:
   - no changes are performed before that point (only `&self` access to `CanisterManager`);
   - no failure can happen after that point (the execution is guaranteed to succeed and return a reply).
