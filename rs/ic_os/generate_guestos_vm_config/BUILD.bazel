@@ -1,0 +1,43 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/ic_os/config:config_lib",
+    "//rs/ic_os/config_types",
+    "//rs/ic_os/deterministic_ips",
+    "//rs/ic_os/metrics_tool",
+    "@crate_index//:anyhow",
+    "@crate_index//:askama",
+    "@crate_index//:clap",
+    "@crate_index//:macaddr",
+    "@crate_index//:serde_json",
+]
+
+DEV_DEPENDENCIES = []
+
+rust_binary(
+    name = "generate_guestos_vm_config",
+    srcs = glob(["src/**/*.rs"]),
+    compile_data = ["templates/guestos_vm_template.xml"],
+    crate_name = "generate_guestos_vm_config",
+    deps = DEPENDENCIES + ["//rs/ic_os/bootstrap_config"],
+)
+
+# Dev version for testing that should only be enabled in dev builds (unsafe for prod).
+rust_binary(
+    name = "generate_guestos_vm_config_dev",
+    srcs = glob(["src/**/*.rs"]),
+    compile_data = ["templates/guestos_vm_template.xml"],
+    crate_features = ["dev"],
+    crate_name = "generate_guestos_vm_config",
+    deps = DEPENDENCIES + ["//rs/ic_os/bootstrap_config:bootstrap_config_dev"],
+)
+
+rust_test(
+    name = "generate_guestos_vm_config_test",
+    crate = ":generate_guestos_vm_config_dev",
+    crate_features = ["dev"],
+    deps = DEV_DEPENDENCIES,
+)

@@ -7,11 +7,11 @@ use config::{
     serialize_and_write_config, DEFAULT_HOSTOS_CONFIG_OBJECT_PATH,
     DEFAULT_HOSTOS_GUESTOS_CONFIG_OBJECT_PATH,
 };
-use config_types::{HostOSConfig, Ipv6Config};
+use config_types::{GuestOSConfig, HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant};
+use ic_metrics_tool::{Metric, MetricsWriter};
 use macaddr::MacAddr6;
-use serde_json;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -34,20 +34,6 @@ struct Args {
     config: PathBuf,
 }
 
-/// Write a metric using the provided metrics script
-fn write_metric(name: &str, value: &str, description: &str, metric_type: &str) -> Result<()> {
-    // run_command_status(
-    //     Command::new("/opt/ic/bin/metrics.sh")
-    //         .arg("write_metric")
-    //         .arg(name)
-    //         .arg(value)
-    //         .arg(description)
-    //         .arg(metric_type),
-    // )?;
-
-    Ok(())
-}
-
 /// Get the IPv6 gateway from the configuration
 fn get_ipv6_gateway(config: &HostOSConfig) -> Result<String> {
     match &config.network_settings.ipv6_config {
@@ -66,15 +52,28 @@ fn assemble_config_media(hostos_config: &HostOSConfig, media_path: &Path) -> Res
         Path::new(DEFAULT_HOSTOS_GUESTOS_CONFIG_OBJECT_PATH),
         &guestos_config,
     )?;
+    println!("GuestOSConfig has been written to {DEFAULT_HOSTOS_GUESTOS_CONFIG_OBJECT_PATH}");
+
+    let bootstrap_options = make_bootstrap_options(&hostos_config, guestos_config)?;
+
+    build_bootstrap_config_image(media_path, &bootstrap_options)?;
+
     println!(
-        "GuestOSConfig has been written to {}",
-        DEFAULT_HOSTOS_GUESTOS_CONFIG_OBJECT_PATH
+        "Assembling config media for GuestOS: {}",
+        media_path.display()
     );
 
-    let mut bootstrap_options = BootstrapOptions::default();
+    Ok(())
+}
 
-    bootstrap_options.guestos_config =
-        Some(PathBuf::from(DEFAULT_HOSTOS_GUESTOS_CONFIG_OBJECT_PATH));
+fn make_bootstrap_options(
+    hostos_config: &HostOSConfig,
+    guestos_config: GuestOSConfig,
+) -> Result<BootstrapOptions> {
+    let mut bootstrap_options = BootstrapOptions {
+        guestos_config: Some(PathBuf::from(DEFAULT_HOSTOS_GUESTOS_CONFIG_OBJECT_PATH)),
+        ..Default::default()
+    };
 
     // Set SSH authorized keys (only in dev builds)
     #[cfg(feature = "dev")]
@@ -92,8 +91,8 @@ fn assemble_config_media(hostos_config: &HostOSConfig, media_path: &Path) -> Res
             Some(PathBuf::from("/boot/config/node_operator_private_key.pem"));
     }
 
-    let guestos_address = match &guestos_config.network_settings.ipv6_config {
-        &Ipv6Config::Fixed(ref ip_config) => ip_config.address.clone(),
+    let guestos_address = match guestos_config.network_settings.ipv6_config {
+        Ipv6Config::Fixed(ip_config) => ip_config.address,
         _ => bail!(
             "Expected GuestOS IPv6 address to be fixed but was {:?}",
             guestos_config.network_settings.ipv6_config
@@ -135,14 +134,7 @@ fn assemble_config_media(hostos_config: &HostOSConfig, media_path: &Path) -> Res
         .map(|url| url.to_string())
         .collect();
 
-    build_bootstrap_config_image(media_path, &bootstrap_options)?;
-
-    println!(
-        "Assembling config media for GuestOS: {}",
-        media_path.display()
-    );
-
-    Ok(())
+    Ok(bootstrap_options)
 }
 
 fn generate_vm_config(config: &HostOSConfig, media_path: &Path) -> Result<String> {
@@ -185,6 +177,10 @@ fn generate_vm_config(config: &HostOSConfig, media_path: &Path) -> Result<String
 fn main() -> Result<()> {
     let args = Args::parse();
 
+    let metrics_writer = MetricsWriter::new(
+        "/run/node_exporter/collector_textfile/hostos_generate_guestos_config.prom",
+    );
+
     let hostos_config: HostOSConfig =
         serde_json::from_reader(File::open(&args.config).context("Failed to open config file")?)
             .context("Failed to parse config file")?;
@@ -193,12 +189,11 @@ fn main() -> Result<()> {
         .context("Failed to assemble config media")?;
 
     if args.output.exists() {
-        write_metric(
+        metrics_writer.write_metrics(&[Metric::with_annotation(
             "hostos_generate_guestos_config",
-            "0",
+            0.0,
             "HostOS generate GuestOS config",
-            "gauge",
-        )?;
+        )])?;
 
         bail!(
             "GuestOS configuration file already exists: {}",
@@ -235,12 +230,11 @@ fn main() -> Result<()> {
         output_path.display(),
     );
 
-    write_metric(
+    metrics_writer.write_metrics(&[Metric::with_annotation(
         "hostos_generate_guestos_config",
-        "1",
+        1.0,
         "HostOS generate GuestOS config",
-        "gauge",
-    )?;
+    )])?;
 
     Ok(())
 }

@@ -4921,6 +4921,7 @@ dependencies = [
  "config",
  "config_types",
  "deterministic_ips",
+ "ic-metrics-tool",
  "macaddr",
  "serde_json",
 ]
