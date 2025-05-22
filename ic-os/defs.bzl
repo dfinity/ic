@@ -188,8 +188,7 @@ def icos_build(
                     image_deps["bootfs"].items() + [
                         (version_txt, "/version.txt:0644"),
                         (extra_boot_args, "/extra_boot_args:0644"),
-                        (boot_args, "/boot_args:0644"),
-                    ]
+                    ] + ([(boot_args, "/boot_args:0644")] if "boot_args_template" in image_deps else [])
                 )
             },
             tags = ["manual", "no-cache"],
@@ -265,10 +264,11 @@ def icos_build(
         tags = tags,
     )
 
-    native.alias(
-        name = "boot_args_template",
-        actual = image_deps["boot_args_template"],
-    )
+    if "boot_args_template" in image_deps:
+        native.alias(
+            name = "boot_args_template",
+            actual = image_deps["boot_args_template"],
+        )
 
     # -------------------- Assemble disk partitions ---------------
 
