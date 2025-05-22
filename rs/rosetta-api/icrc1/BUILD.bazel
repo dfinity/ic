@@ -112,6 +112,14 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
+rust_test(
+    name = "storage-operations-tests",
+    srcs = ["src/common/storage/storage_operations_test.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":ic-icrc-rosetta"],
+)
+
 LOCAL_REPLICA_DATA = [
     "//rs/canister_sandbox",
     "//rs/canister_sandbox:sandbox_launcher",
