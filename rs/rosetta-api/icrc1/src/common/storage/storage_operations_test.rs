@@ -4,7 +4,6 @@ use ic_icrc_rosetta::common::storage::types::{
     IcrcBlock, IcrcOperation, IcrcTransaction, RosettaBlock,
 };
 use icrc_ledger_types::icrc1::account::Account;
-use num_bigint::BigUint;
 use rusqlite::{params, Connection};
 use tempfile::tempdir;
 
