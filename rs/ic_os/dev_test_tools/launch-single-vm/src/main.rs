@@ -1,4 +1,9 @@
+use bootstrap_config::{build_bootstrap_config_image, BootstrapOptions};
 use clap::Parser;
+use config::generate_testnet_config::{
+    generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
+};
+use config_types::DeploymentEnvironment;
 use ic_prep_lib::{
     internet_computer::{IcConfig, TopologyConfig},
     node::NodeConfiguration,
@@ -21,6 +26,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 use tempfile::tempdir;
 use url::Url;
+
 const FARM_BASE_URL: &str = "https://farm.dfinity.systems";
 
 /// Deploy a single ICOS VM to Farm
@@ -228,6 +234,7 @@ fn main() {
         let filename = "config.tar.gz";
         let config_path = tempdir.as_ref().join(filename);
         let local_store = prep_dir.join("ic_registry_local_store");
+
         let bootstrap_options = BootstrapOptions {
             guestos_config: Some(guestos_config_json_path),
             ic_crypto: Some(node.crypto_path()),
@@ -235,7 +242,6 @@ fn main() {
             accounts_ssh_authorized_keys: Some(keys_dir),
             ..Default::default()
         };
-
         build_bootstrap_config_image(&config_path, &bootstrap_options).unwrap();
 
         // Upload config image
