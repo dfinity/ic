@@ -421,13 +421,11 @@ mod tests {
     }
 
     #[test]
-    fn test_build_bootstrap_config_image_fails_with_default_options() {
+    fn test_build_bootstrap_config_image_succeeds_with_default_options() {
         let tmp_dir = tempfile::tempdir().unwrap();
         let out_file = tmp_dir.path().join("bootstrap.tar");
 
-        let config = BootstrapOptions::default();
-
-        assert!(build_bootstrap_config_image(&out_file, &config).is_err());
+        assert!(build_bootstrap_config_image(&out_file, &BootstrapOptions::default()).is_ok());
     }
 
     #[test]
