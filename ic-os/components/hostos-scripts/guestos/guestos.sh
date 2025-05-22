@@ -9,28 +9,28 @@ source /opt/ic/bin/metrics.sh
 
 SCRIPT="$(basename $0)[$$]"
 
-# Get keyword arguments
+CONFIG="/var/lib/libvirt/guestos.xml"
+
 for argument in "${@}"; do
     case ${argument} in
         -h | --help)
-            echo 'Usage:
-Start GuestOS virtual machine
+            echo "Usage:
+Run GuestOS virtual machine. The script starts the GuestOS virtual machine and
+keeps running indefinitely. If the VM is killed, the script exits with a failure.
+If the script's process is terminated with SIGTERM, the VM is stopped and the script
+exits with a success.
 
 Arguments:
-  -c=, --config=        specify the GuestOS configuration file (Default: /var/lib/libvirt/guestos.xml)
   -h, --help            show this help message and exit
-'
+"
             exit 1
             ;;
         *)
-            echo "Error: Argument is not supported."
+            echo "Error: Argument '${argument}' is not supported."
             exit 1
             ;;
     esac
 done
-
-# Set arguments if undefined
-CONFIG="${CONFIG:=/var/lib/libvirt/guestos.xml}"
 
 write_tty1_log() {
     local message=$1
@@ -119,7 +119,7 @@ function start_guestos() {
                 write_tty1_log "No /var/log/libvirt/qemu/guestos-serial.log file found."
             fi
 
-            write_tty1_log "Exiting start-guestos.sh so that systemd can restart guestos.service in 5 minutes."
+            write_tty1_log "Exiting guestos.sh so that systemd can restart guestos.service."
             exit 1
         fi
 
