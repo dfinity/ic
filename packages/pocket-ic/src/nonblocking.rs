@@ -1567,7 +1567,8 @@ impl PocketIc {
                             }
                         }
                         if let Some(max_request_time_ms) = self.max_request_time_ms {
-                            if start.elapsed().unwrap() > Duration::from_millis(max_request_time_ms)
+                            if start.elapsed().unwrap_or_default()
+                                > Duration::from_millis(max_request_time_ms)
                             {
                                 panic!("request to PocketIC server timed out.");
                             }
@@ -1576,7 +1577,8 @@ impl PocketIc {
                 }
             }
             if let Some(max_request_time_ms) = self.max_request_time_ms {
-                if start.elapsed().unwrap() > Duration::from_millis(max_request_time_ms) {
+                if start.elapsed().unwrap_or_default() > Duration::from_millis(max_request_time_ms)
+                {
                     panic!("request to PocketIC server timed out.");
                 }
             }

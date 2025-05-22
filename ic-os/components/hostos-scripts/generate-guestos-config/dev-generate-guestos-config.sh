@@ -131,7 +131,7 @@ EOF
     if [ ! -f "${OUTPUT}" ]; then
         mkdir -p "$(dirname "$OUTPUT")"
         sed -e "s@{{ resources_memory }}@${vm_memory}@" \
-            -e "s@{{ nr_of_vcpus }}@${vm_nr_of_vcpus:-64}@" \
+            -e "s@{{ nr_of_vcpus }}@${vm_nr_of_vcpus}@" \
             -e "s@{{ mac_address }}@${MAC_ADDRESS}@" \
             -e "s@{{ cpu_domain }}@${CPU_DOMAIN}@" \
             -e "/{{ cpu_spec }}/{r ${CPU_SPEC}" -e "d" -e "}" \

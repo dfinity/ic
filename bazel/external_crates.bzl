@@ -192,7 +192,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "aide": crate.spec(
-                version = "^0.14.1",
+                version = "^0.14.2",
                 features = [
                     "axum",
                     "axum-json",
@@ -235,14 +235,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.1.83",
             ),
             "axum": crate.spec(
-                version = "^0.8.1",
+                version = "^0.8.4",
             ),
             "axum-extra": crate.spec(
-                version = "^0.10.0",
+                version = "^0.10.1",
                 features = ["typed-header"],
             ),
             "axum-server": crate.spec(
-                version = "^0.7.1",
+                version = "^0.7.2",
                 features = [
                     "tls-rustls-no-provider",
                 ],
@@ -554,7 +554,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.0.1",
             ),
             "http-body-util": crate.spec(
-                version = "^0.1.2",
+                version = "^0.1.3",
             ),
             "hmac": crate.spec(
                 version = "^0.12",
@@ -571,7 +571,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.1.1",
             ),
             "hyper": crate.spec(
-                version = "^1.5.1",
+                version = "^1.6.0",
                 features = ["full"],
             ),
             "hyper-socks2": crate.spec(
@@ -579,12 +579,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "hyper-util": crate.spec(
-                version = "^0.1.10",
+                version = "^0.1.12",
                 features = ["full"],
             ),
             "hyper-rustls": crate.spec(
                 default_features = False,
-                version = "^0.27.3",
+                version = "^0.27.5",
                 features = [
                     "http1",
                     "http2",
@@ -693,6 +693,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "alloc",
                 ],
                 default_features = False,
+            ),
+            "ic-vetkeys": crate.spec(
+                git = "https://github.com/dfinity/vetkeys",
+                rev = "5885675b6ccb5269cfac9740dc3da6f14f75347f",
             ),
             "ic-wasm": crate.spec(
                 version = "^0.8.4",
@@ -1067,7 +1071,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.11.0",
             ),
             "reqwest": crate.spec(
-                version = "^0.12.12",
+                version = "^0.12.15",
                 default_features = False,
                 features = [
                     "blocking",
@@ -1199,7 +1203,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.9.33",
             ),
             "sha2": crate.spec(
-                version = "^0.10.8",
+                version = "^0.10.9",
             ),
             "sha3": crate.spec(
                 version = "^0.10.8",
@@ -1387,11 +1391,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.12.3",
             ),
             "tower": crate.spec(
-                version = "^0.5.1",
+                version = "^0.5.2",
                 features = ["full"],
             ),
             "tower-http": crate.spec(
-                version = "^0.6.2",
+                version = "^0.6.4",
                 features = [
                     "cors",
                     "limit",
