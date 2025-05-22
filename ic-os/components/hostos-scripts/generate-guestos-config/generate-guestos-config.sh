@@ -72,8 +72,7 @@ function read_config_variables() {
 }
 
 function assemble_config_media() {
-    ipv6_address="$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type GuestOS)"
-    /opt/ic/bin/config generate-guestos-config --guestos-ipv6-address "$ipv6_address"
+    /opt/ic/bin/config generate-guestos-config
 
     cmd=(/opt/ic/bin/build-bootstrap-config-image.sh ${MEDIA})
     cmd+=(--guestos_config "/boot/config/config-guestos.json")
