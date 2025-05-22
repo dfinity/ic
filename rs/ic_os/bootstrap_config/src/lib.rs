@@ -11,7 +11,7 @@ use std::process::Command;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 
 /// Configuration options for bootstrap image/tar creation
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Eq, PartialEq)]
 pub struct BootstrapOptions {
     /// The serialized GuestOS config object.
     pub guestos_config: Option<PathBuf>,

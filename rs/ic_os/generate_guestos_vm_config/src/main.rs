@@ -3,10 +3,7 @@ use askama::Template;
 use bootstrap_config::{build_bootstrap_config_image, BootstrapOptions};
 use clap::Parser;
 use config::guestos_config::generate_guestos_config;
-use config::{
-    serialize_and_write_config, DEFAULT_HOSTOS_CONFIG_OBJECT_PATH,
-    DEFAULT_HOSTOS_GUESTOS_CONFIG_OBJECT_PATH,
-};
+use config::{serialize_and_write_config, DEFAULT_HOSTOS_CONFIG_OBJECT_PATH};
 use config_types::{GuestOSConfig, HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant};
@@ -34,6 +31,74 @@ struct Args {
     config: PathBuf,
 }
 
+pub fn main() -> Result<()> {
+    let args = Args::parse();
+
+    let metrics_writer = MetricsWriter::new(
+        "/run/node_exporter/collector_textfile/hostos_generate_guestos_config.prom",
+    );
+
+    let hostos_config: HostOSConfig = serde_json::from_reader(
+        File::open(&args.config).context("Failed to open HostOS config file")?,
+    )
+    .context("Failed to parse config file")?;
+
+    run(&args, &metrics_writer, &hostos_config, restorecon)
+}
+
+fn run(
+    args: &Args,
+    metrics_writer: &MetricsWriter,
+    hostos_config: &HostOSConfig,
+    // We pass a functor to allow mocking in tests.
+    restorecon: impl Fn(&Path) -> Result<()>,
+) -> Result<()> {
+    assemble_config_media(hostos_config, &args.media).context("Failed to assemble config media")?;
+
+    if args.output.exists() {
+        metrics_writer.write_metrics(&[Metric::with_annotation(
+            "hostos_generate_guestos_config",
+            0.0,
+            "HostOS generate GuestOS config",
+        )])?;
+
+        bail!(
+            "GuestOS configuration file already exists: {}",
+            args.output.display()
+        );
+    }
+
+    let output_path = &args.output;
+
+    // Create parent directory if it doesn't exist
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent).context("Failed to create output directory")?;
+    }
+
+    File::create(output_path)
+        .context("Failed to create output file")?
+        .write_all(generate_vm_config(hostos_config, &args.media)?.as_bytes())
+        .context("Failed to write output file")?;
+
+    // Restore SELinux security context
+    if let Some(parent) = output_path.parent() {
+        restorecon(parent)?
+    }
+
+    println!(
+        "Generating GuestOS configuration file: {}",
+        output_path.display(),
+    );
+
+    metrics_writer.write_metrics(&[Metric::with_annotation(
+        "hostos_generate_guestos_config",
+        1.0,
+        "HostOS generate GuestOS config",
+    )])?;
+
+    Ok(())
+}
+
 /// Get the IPv6 gateway from the configuration
 fn get_ipv6_gateway(config: &HostOSConfig) -> Result<String> {
     match &config.network_settings.ipv6_config {
@@ -45,16 +110,19 @@ fn get_ipv6_gateway(config: &HostOSConfig) -> Result<String> {
     }
 }
 
-/// Assemble the configuration media
 fn assemble_config_media(hostos_config: &HostOSConfig, media_path: &Path) -> Result<()> {
-    let guestos_config = generate_guestos_config(hostos_config)?;
-    serialize_and_write_config(
-        Path::new(DEFAULT_HOSTOS_GUESTOS_CONFIG_OBJECT_PATH),
-        &guestos_config,
-    )?;
-    println!("GuestOSConfig has been written to {DEFAULT_HOSTOS_GUESTOS_CONFIG_OBJECT_PATH}");
+    let guestos_config_file = tempfile::NamedTempFile::new()?;
+    let guestos_config =
+        generate_guestos_config(hostos_config).context("Failed to generate GuestOS config")?;
+    serialize_and_write_config(guestos_config_file.path(), &guestos_config).with_context(|| {
+        format!(
+            "Failed to write GuestOS config to {}",
+            guestos_config_file.path().display()
+        )
+    })?;
 
-    let bootstrap_options = make_bootstrap_options(&hostos_config, guestos_config)?;
+    let bootstrap_options =
+        make_bootstrap_options(hostos_config, guestos_config, guestos_config_file.path())?;
 
     build_bootstrap_config_image(media_path, &bootstrap_options)?;
 
@@ -69,9 +137,10 @@ fn assemble_config_media(hostos_config: &HostOSConfig, media_path: &Path) -> Res
 fn make_bootstrap_options(
     hostos_config: &HostOSConfig,
     guestos_config: GuestOSConfig,
+    guestos_config_path: &Path,
 ) -> Result<BootstrapOptions> {
     let mut bootstrap_options = BootstrapOptions {
-        guestos_config: Some(PathBuf::from(DEFAULT_HOSTOS_GUESTOS_CONFIG_OBJECT_PATH)),
+        guestos_config: Some(guestos_config_path.to_path_buf()),
         ..Default::default()
     };
 
@@ -174,67 +243,247 @@ fn generate_vm_config(config: &HostOSConfig, media_path: &Path) -> Result<String
     .context("Failed to render GuestOS template")
 }
 
-fn main() -> Result<()> {
-    let args = Args::parse();
+fn restorecon(path: &Path) -> Result<()> {
+    Command::new("restorecon")
+        .arg("-R")
+        .arg(path)
+        .status()?
+        .success()
+        .then_some(())
+        .context("Failed to run restorecon")
+}
 
-    let metrics_writer = MetricsWriter::new(
-        "/run/node_exporter/collector_textfile/hostos_generate_guestos_config.prom",
-    );
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use config_types::{
+        DeploymentEnvironment, DeterministicIpv6Config, FixedIpv6Config, HostOSConfig,
+        HostOSSettings, ICOSSettings, Ipv4Config, Ipv6Config, Logging, NetworkSettings,
+    };
+    use goldenfile::Mint;
+    use std::env;
+    use std::path::Path;
+    use tempfile::tempdir;
 
-    let hostos_config: HostOSConfig =
-        serde_json::from_reader(File::open(&args.config).context("Failed to open config file")?)
-            .context("Failed to parse config file")?;
-
-    assemble_config_media(&hostos_config, &args.media)
-        .context("Failed to assemble config media")?;
-
-    if args.output.exists() {
-        metrics_writer.write_metrics(&[Metric::with_annotation(
-            "hostos_generate_guestos_config",
-            0.0,
-            "HostOS generate GuestOS config",
-        )])?;
-
-        bail!(
-            "GuestOS configuration file already exists: {}",
-            args.output.display()
-        );
-    }
-
-    let output_path = &args.output;
-
-    // Create parent directory if it doesn't exist
-    if let Some(parent) = output_path.parent() {
-        fs::create_dir_all(parent).context("Failed to create output directory")?;
-    }
-
-    File::create(output_path)
-        .context("Failed to create output file")?
-        .write_all(generate_vm_config(&hostos_config, &args.media)?.as_bytes())
-        .context("Failed to write output file")?;
-
-    // Restore SELinux security context
-    if let Some(parent) = output_path.parent() {
-        if !Command::new("restorecon")
-            .arg("-R")
-            .arg(parent)
-            .status()?
-            .success()
-        {
-            bail!("Failed to run restorecon");
+    fn create_test_hostos_config() -> HostOSConfig {
+        HostOSConfig {
+            config_version: "1.0".to_string(),
+            network_settings: NetworkSettings {
+                ipv6_config: Ipv6Config::Deterministic(DeterministicIpv6Config {
+                    prefix: "2001:db8::".to_string(),
+                    prefix_length: 64,
+                    gateway: "2001:db8::ffff".parse().unwrap(),
+                }),
+                ipv4_config: Some(Ipv4Config {
+                    address: "192.168.1.2".parse().unwrap(),
+                    gateway: "192.168.1.1".parse().unwrap(),
+                    prefix_length: 24,
+                }),
+                domain_name: Some("test.domain".to_string()),
+            },
+            icos_settings: ICOSSettings {
+                node_reward_type: Some("test-reward".to_string()),
+                mgmt_mac: "00:11:22:33:44:55".parse().unwrap(),
+                deployment_environment: DeploymentEnvironment::Testnet,
+                logging: Logging {
+                    elasticsearch_hosts: None,
+                    elasticsearch_tags: None,
+                },
+                use_nns_public_key: false,
+                nns_urls: vec![url::Url::parse("https://example.com").unwrap()],
+                use_node_operator_private_key: false,
+                use_ssh_authorized_keys: false,
+                icos_dev_settings: Default::default(),
+            },
+            hostos_settings: HostOSSettings {
+                vm_memory: 490,
+                vm_cpu: "qemu".to_string(),
+                vm_nr_of_vcpus: 56,
+                verbose: false,
+            },
+            guestos_settings: Default::default(),
         }
     }
 
-    println!(
-        "Generating GuestOS configuration file: {}",
-        output_path.display(),
-    );
+    fn mock_restorecon(_path: &Path) -> Result<()> {
+        Ok(())
+    }
 
-    metrics_writer.write_metrics(&[Metric::with_annotation(
-        "hostos_generate_guestos_config",
-        1.0,
-        "HostOS generate GuestOS config",
-    )])?;
+    #[test]
+    fn test_make_bootstrap_options() {
+        let mut config = create_test_hostos_config();
+        config.icos_settings.use_nns_public_key = true;
+        config.icos_settings.use_ssh_authorized_keys = true;
+        config.icos_settings.use_node_operator_private_key = true;
 
-    Ok(())
+        let guestos_config = generate_guestos_config(&config).unwrap();
+
+        let options =
+            make_bootstrap_options(&config, guestos_config, Path::new("/tmp/test")).unwrap();
+
+        assert_eq!(
+            options,
+            BootstrapOptions {
+                ipv6_address: Some("2001:db8::6801:aeff:fe1a:9bb/64".to_string()),
+                ipv6_gateway: Some("2001:db8::ffff".to_string()),
+                ipv4_address: Some("192.168.1.2/24".to_string()),
+                ipv4_gateway: Some("192.168.1.1".to_string()),
+                domain: Some("test.domain".to_string()),
+                node_reward_type: Some("test-reward".to_string()),
+                hostname: Some("guest-001122334455".to_string()),
+                nns_urls: vec!["https://example.com/".to_string()],
+                guestos_config: Some(PathBuf::from("/tmp/test")),
+                nns_public_key: Some(PathBuf::from("/boot/config/nns_public_key.pem")),
+                node_operator_private_key: Some(PathBuf::from(
+                    "/boot/config/node_operator_private_key.pem"
+                )),
+                accounts_ssh_authorized_keys: Some(PathBuf::from(
+                    "/boot/config/ssh_authorized_keys"
+                )),
+                ..Default::default()
+            }
+        );
+    }
+
+    fn goldenfiles_path() -> PathBuf {
+        let mut path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+        path.push("golden");
+        path
+    }
+
+    #[test]
+    fn test_generate_vm_config_qemu() {
+        let mut mint = Mint::new(goldenfiles_path());
+        let mut config = create_test_hostos_config();
+
+        config.hostos_settings = HostOSSettings {
+            vm_memory: 490,
+            vm_cpu: "qemu".to_string(),
+            vm_nr_of_vcpus: 56,
+            verbose: true,
+        };
+
+        let vm_config = generate_vm_config(&config, Path::new("/tmp/config.img")).unwrap();
+
+        fs::write(
+            mint.new_goldenpath("guestos_vm_qemu.xml").unwrap(),
+            vm_config,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_generate_vm_config_kvm() {
+        let mut mint = Mint::new(goldenfiles_path());
+        let mut config = create_test_hostos_config();
+        config.hostos_settings = HostOSSettings {
+            vm_memory: 490,
+            vm_cpu: "kvm".to_string(),
+            vm_nr_of_vcpus: 56,
+            verbose: false,
+        };
+
+        let vm_config = generate_vm_config(&config, Path::new("/tmp/config.img")).unwrap();
+
+        fs::write(
+            mint.new_goldenpath("guestos_vm_kvm.xml").unwrap(),
+            vm_config,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_run_success() {
+        let temp_dir = tempdir().unwrap();
+        let media_path = temp_dir.path().join("config.img");
+        let output_path = temp_dir.path().join("guestos.xml");
+        let metrics_path = temp_dir.path().join("metrics.prom");
+
+        let args = Args {
+            media: media_path.clone(),
+            output: output_path.clone(),
+            config: PathBuf::from("/non/existent/path"),
+        };
+
+        let metrics_writer = MetricsWriter::new(metrics_path.to_str().unwrap());
+        let config = create_test_hostos_config();
+
+        let result = run(&args, &metrics_writer, &config, mock_restorecon);
+        assert!(result.is_ok(), "{result:?}");
+
+        assert_eq!(
+            fs::read_to_string(metrics_path).unwrap(),
+            "# HELP hostos_generate_guestos_config HostOS generate GuestOS config\n\
+             # TYPE hostos_generate_guestos_config counter\n\
+             hostos_generate_guestos_config 1\n"
+        )
+    }
+
+    #[test]
+    fn test_run_existing_output_file() {
+        let temp_dir = tempdir().unwrap();
+        let metrics_path = temp_dir.path().join("metrics.prom");
+        let media_path = temp_dir.path().join("config.img");
+        let output_path = temp_dir.path().join("guestos.xml");
+
+        // Create the output file so it already exists
+        fs::write(&output_path, "test").unwrap();
+
+        let args = Args {
+            media: media_path,
+            output: output_path,
+            config: PathBuf::from("/path/to/config"),
+        };
+
+        let metrics_writer = MetricsWriter::new(metrics_path.to_str().unwrap());
+        let config = create_test_hostos_config();
+
+        let result_err = run(&args, &metrics_writer, &config, mock_restorecon).unwrap_err();
+
+        assert!(
+            result_err.to_string().contains("already exists"),
+            "{result_err:?}"
+        );
+
+        assert_eq!(
+            fs::read_to_string(metrics_path).unwrap(),
+            "# HELP hostos_generate_guestos_config HostOS generate GuestOS config\n\
+             # TYPE hostos_generate_guestos_config counter\n\
+             hostos_generate_guestos_config 0\n"
+        )
+    }
+
+    #[test]
+    fn test_get_ipv6_gateway_fixed() {
+        let mut config = create_test_hostos_config();
+        config.network_settings.ipv6_config = Ipv6Config::Fixed(FixedIpv6Config {
+            address: "2001:db9::1/64".to_string(),
+            gateway: "2001:db9::ffff".parse().unwrap(),
+        });
+        let gateway = get_ipv6_gateway(&config).unwrap();
+        assert_eq!(gateway, "2001:db9::ffff");
+    }
+
+    #[test]
+    fn test_get_ipv6_gateway_deterministic() {
+        let mut config = create_test_hostos_config();
+        config.network_settings.ipv6_config = Ipv6Config::Deterministic(DeterministicIpv6Config {
+            prefix: "2001:db8::".to_string(),
+            prefix_length: 64,
+            gateway: "2001:db8::1".parse().unwrap(),
+        });
+        let gateway = get_ipv6_gateway(&config).unwrap();
+        assert_eq!(gateway, "2001:db8::1");
+    }
+
+    #[test]
+    fn test_get_ipv6_gateway_router_advertisement_error() {
+        let mut config = create_test_hostos_config();
+        config.network_settings.ipv6_config = Ipv6Config::RouterAdvertisement;
+        let result = get_ipv6_gateway(&config).unwrap_err();
+        assert!(
+            result.to_string().contains("does not have a gateway"),
+            "{result:?}"
+        );
+    }
 }

@@ -13,9 +13,13 @@ DEPENDENCIES = [
     "@crate_index//:clap",
     "@crate_index//:macaddr",
     "@crate_index//:serde_json",
+    "@crate_index//:tempfile",
 ]
 
-DEV_DEPENDENCIES = []
+DEV_DEPENDENCIES = [
+    "@crate_index//:url",
+    "@crate_index//:goldenfile",
+]
 
 rust_binary(
     name = "generate_guestos_vm_config",
@@ -39,5 +43,9 @@ rust_test(
     name = "generate_guestos_vm_config_test",
     crate = ":generate_guestos_vm_config_dev",
     crate_features = ["dev"],
+    data = glob(["golden/*"]),
+    env = {"CARGO_MANIFEST_DIR": "rs/ic_os/generate_guestos_vm_config"},
+    # Run without sandbox so that goldenfiles can be updated by passing "--test_env UPDATE_GOLDENFILES=1"
+    tags = ["local"],
     deps = DEV_DEPENDENCIES,
 )
