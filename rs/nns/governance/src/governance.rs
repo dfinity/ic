@@ -6232,7 +6232,7 @@ impl Governance {
             Some(Command::MergeMaturity(_)) => Self::merge_maturity_removed_error(),
             Some(Command::StakeMaturity(s)) => self
                 .stake_maturity_of_neuron(&id, caller, s)
-                .map(|response| ManageNeuronResponse::stake_maturity_response(response)),
+                .map(ManageNeuronResponse::stake_maturity_response),
             Some(Command::Split(s)) => self
                 .split_neuron(&id, caller, s)
                 .await
