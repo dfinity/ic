@@ -10,7 +10,7 @@ use num_traits::ToPrimitive;
 use serde_bytes::ByteBuf;
 use std::{cmp, collections::HashMap, ops::RangeInclusive, sync::Arc, time::Duration};
 use tokio::sync::Mutex as AsyncMutex;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 // Interval for reporting progress of the synchronization process for each token.
 const PROGRESS_REPORT_INTERVAL: Duration = Duration::from_secs(5);
@@ -64,7 +64,7 @@ async fn verify_and_fix_gaps(
     archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
 ) -> anyhow::Result<()> {
     let sync_ranges = derive_synchronization_gaps(storage_client.clone())?;
-    let tip_block_index = get_tip_block_index_and_hash(agent.clone()).await?.1;
+    let (_tip_block_hash, tip_block_index) = get_tip_block_hash_and_index(agent.clone()).await?;
 
     for sync_range in sync_ranges {
         sync_blocks_interval(
@@ -97,7 +97,7 @@ fn derive_synchronization_gaps(
     if gap.len() > 1 {
         bail!("The database has {} gaps. More than one gap means the database has been tampered with and can no longer be guaranteed to contain valid blocks",gap.len());
     } else if gap.is_empty() {
-        warn!("The database has a gap but the list of gaps is empty. This should not happen. Resetting the blocks counter by counting the actual number of synced blocks.");
+        // The block counter is off
         storage_client.reset_blocks_counter()?;
     }
 
@@ -160,14 +160,17 @@ pub async fn start_synching_blocks(
             archive_canister_ids.clone(),
         )
         .await;
-        if let Err(e) = result {
-            error!("Error while verifying and fixing gaps: {}", e);
-            current_failure_streak += 1;
-        } else {
-            current_failure_streak = 0;
+        match result {
+            Ok(_) => {
+                current_failure_streak = 0;
+            }
+            Err(e) => {
+                error!("Error while verifying and fixing gaps: {}", e);
+                current_failure_streak += 1;
+            }
         }
 
-        if let Err(e) = sync_from_the_tip(
+        match sync_from_the_tip(
             agent.clone(),
             storage_client.clone(),
             maximum_blocks_per_request,
@@ -175,20 +178,26 @@ pub async fn start_synching_blocks(
         )
         .await
         {
-            error!("Error while syncing blocks: {}", e);
-            current_failure_streak += 1;
-        } else {
-            current_failure_streak = 0;
-            is_initial_sync = false;
+            Ok(_) => {
+                current_failure_streak = 0;
+                is_initial_sync = false;
+            }
+            Err(e) => {
+                error!("Error while syncing blocks: {}", e);
+                current_failure_streak += 1;
+            }
         }
 
         // Update the account balances. When queried for its status, the ledger will return the
         // highest block index for which the account balances have been processed.
-        if let Err(e) = storage_client.update_account_balances() {
-            error!("Error while updating account balances: {}", e);
-            current_failure_streak += 1;
-        } else {
-            current_failure_streak = 0;
+        match storage_client.update_account_balances() {
+            Ok(_) => {
+                current_failure_streak = 0;
+            }
+            Err(e) => {
+                error!("Error while updating account balances: {}", e);
+                current_failure_streak += 1;
+            }
         }
 
         match recurrency_mode {
@@ -205,7 +214,7 @@ pub async fn start_synching_blocks(
     Ok(())
 }
 
-pub async fn get_tip_block_index_and_hash(
+pub async fn get_tip_block_hash_and_index(
     agent: Arc<Icrc1Agent>,
 ) -> anyhow::Result<([u8; 32], u64)> {
     let (tip_block_hash, tip_block_index) = match agent
@@ -235,7 +244,7 @@ pub async fn sync_from_the_tip(
     maximum_blocks_per_request: u64,
     archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
 ) -> anyhow::Result<()> {
-    let (tip_block_hash, tip_block_index) = get_tip_block_index_and_hash(agent.clone()).await?;
+    let (tip_block_hash, tip_block_index) = get_tip_block_hash_and_index(agent.clone()).await?;
 
     storage_client
         .get_metrics()
