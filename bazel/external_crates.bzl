@@ -692,7 +692,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "ic-vetkeys": crate.spec(
-                git = "https://github.com/dfinity/vetkd-devkit",
+                git = "https://github.com/dfinity/vetkeys",
                 rev = "5885675b6ccb5269cfac9740dc3da6f14f75347f",
             ),
             "ic-wasm": crate.spec(

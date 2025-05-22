@@ -599,7 +599,7 @@ ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
 ic-transport-types = { version = "0.39.2" }
 ic-utils = { version = "0.39", features = ["raw"] }
-ic-vetkeys = { git = "https://github.com/dfinity/vetkd-devkit", rev = "5885675b6ccb5269cfac9740dc3da6f14f75347f" }
+ic-vetkeys = { git = "https://github.com/dfinity/vetkeys", rev = "5885675b6ccb5269cfac9740dc3da6f14f75347f" }
 ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
     "groups",
     "pairings",
