@@ -29,6 +29,7 @@ use ic_management_canister_types_private::{
     UploadChunkReply,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
+use ic_replicated_state::canister_snapshots::ValidatedSnapshotMetadata;
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::{
     ChunkValidationResult, WasmChunkHash, CHUNK_SIZE,
 };
@@ -2037,6 +2038,18 @@ impl CanisterManager {
         round_limits: &mut RoundLimits,
         resource_saturation: &ResourceSaturation,
     ) -> Result<(SnapshotId, NumInstructions), CanisterManagerError> {
+        // validate args:
+        let wasm_mode = canister
+            .execution_state
+            .map(|x| x.wasm_execution_mode)
+            .unwrap_or_else(|| WasmExecutionMode::Wasm32);
+        let valid_args = ValidatedSnapshotMetadata::validate(args, wasm_mode).map_err(|e| {
+            UserError::new(
+                ErrorCode::InvalidManagementPayload,
+                format!("Snapshot Metadata contains invalid data: {:?}", e),
+            )
+        })?;
+
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
         let canister_id = canister.canister_id();
@@ -2117,11 +2130,11 @@ impl CanisterManager {
 
         // Create new snapshot.
         let new_snapshot = CanisterSnapshot::from_metadata(
-            &args,
+            &valid_args,
             state.time(),
             canister.system_state.canister_version,
             Arc::clone(&self.fd_factory),
-        )?;
+        );
 
         self.memory_usage_updates(canister, round_limits, validated_memory_usage);
 

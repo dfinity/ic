@@ -54,6 +54,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    canister_snapshots::ValidatedSnapshotMetadata,
     canister_state::{
         execution_state::WasmExecutionMode,
         system_state::{CyclesUseCase, PausedExecutionId},

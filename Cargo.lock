@@ -12558,6 +12558,7 @@ dependencies = [
  "rayon",
  "scoped_threadpool",
  "serde",
+ "serde_bytes",
  "serde_cbor",
  "slog",
  "static_assertions",
