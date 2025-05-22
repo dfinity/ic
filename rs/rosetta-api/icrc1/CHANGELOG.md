@@ -8,11 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.2.2] - 2025-06-15
 ### Fixed
-- Fixed timestamp overflow in blocks table for values exceeding i64::MAX (#5249)
-- Fixed watchdog for initial sync to avoid killing the synchronization process (#5250)
-- Improved synchronization progress logs to show progress in relation to the full chain size (#5250)
-- Fixed flaky test_deriving_gaps_from_storage test (#5024)
-- Increased transaction search timeout from 10s to 30s for system tests (#4446)
+- Fixed timestamp overflow in blocks table for values exceeding i64::MAX ([#5249](https://github.com/dfinity/ic/pull/5249))
+- Fixed watchdog for initial sync to avoid killing the synchronization process ([#5250](https://github.com/dfinity/ic/pull/5250))
+- Improved synchronization progress logs to show progress in relation to the full chain size ([#5250](https://github.com/dfinity/ic/pull/5250))
+- Fixed flaky test_deriving_gaps_from_storage test ([#5024](https://github.com/dfinity/ic/pull/5024))
+- Increased transaction search timeout from 10s to 30s for system tests ([#4446](https://github.com/dfinity/ic/pull/4446))
 
 ## [1.2.1] - 2025-05-10
 ### Added
