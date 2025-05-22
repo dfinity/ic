@@ -40,7 +40,7 @@ pub struct TestConsensusPool {
     pool: ConsensusPoolImpl,
     time_source: Arc<dyn TimeSource>,
     dkg_payload_builder:
-        Box<dyn Fn(&dyn ConsensusPool, Block, &ValidationContext) -> consensus::dkg::DkgPayload>,
+        Box<dyn Fn(&dyn ConsensusPool, Block, &ValidationContext) -> DkgPayload>,
     membership: Membership,
 }
 

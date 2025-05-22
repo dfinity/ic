@@ -1035,7 +1035,7 @@ impl PoolArtifact for ConsensusMessage {
                 // dummy has the SAME payload type as the real payload.
                 Box::new(move || match payload_type {
                     PayloadType::Summary => BlockPayload::Summary(SummaryPayload {
-                        dkg: dkg::DkgSummary::default(),
+                        dkg: DkgSummary::default(),
                         idkg: None,
                     }),
                     PayloadType::Data => BlockPayload::Data(DataPayload {

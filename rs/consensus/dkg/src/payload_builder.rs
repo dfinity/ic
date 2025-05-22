@@ -156,7 +156,7 @@ pub(super) fn create_summary_payload(
     state_manager: &dyn StateManager<State = ReplicatedState>,
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
-) -> Result<dkg::DkgSummary, DkgPayloadCreationError> {
+) -> Result<DkgSummary, DkgPayloadCreationError> {
     let all_dealings = utils::get_dkg_dealings(pool_reader, parent);
     let mut transcripts_for_remote_subnets = BTreeMap::new();
     let mut next_transcripts = BTreeMap::new();
