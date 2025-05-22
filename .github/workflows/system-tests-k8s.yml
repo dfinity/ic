@@ -80,7 +80,7 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: test --config=ci --local_test_jobs=20 --test_tag_filters=k8s,-manual,-colocated,-long_test,-system_test_hourly,-system_test_nightly --k8s
+          BAZEL_COMMAND: test --config=ci --local_test_jobs=12 --test_tag_filters=k8s,-manual,-colocated,-long_test,-system_test_hourly,-system_test_nightly --k8s
           BAZEL_TARGETS: ${{ env.TARGETS }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
