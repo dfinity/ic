@@ -103,14 +103,14 @@ fn test_approvals_are_not_cumulative() {
     let fee = tokens(10_000);
 
     let tr = Transaction {
-        operation: Operation::Approve {
+        operation: Some(Operation::Approve {
             from,
             spender,
             amount: approved_amount,
             expected_allowance: None,
             expires_at: None,
             fee: Some(fee),
-        },
+        }),
         created_at_time: None,
         memo: None,
     };
@@ -132,14 +132,14 @@ fn test_approvals_are_not_cumulative() {
 
     let expiration = now + Duration::from_secs(300);
     let tr = Transaction {
-        operation: Operation::Approve {
+        operation: Some(Operation::Approve {
             from,
             spender,
             amount: new_allowance,
             expected_allowance: None,
             expires_at: Some(expiration.as_nanos_since_unix_epoch()),
             fee: Some(fee),
-        },
+        }),
         created_at_time: None,
         memo: None,
     };
@@ -171,13 +171,13 @@ fn test_approval_transfer_from() {
     let fee = tokens(10_000);
 
     let tr = Transaction {
-        operation: Operation::Transfer {
+        operation: Some(Operation::Transfer {
             from,
             to,
             spender: Some(spender),
             amount: tokens(100_000),
             fee: Some(fee),
-        },
+        }),
         created_at_time: None,
         memo: None,
     };
@@ -189,14 +189,14 @@ fn test_approval_transfer_from() {
     );
 
     let tr = Transaction {
-        operation: Operation::Approve {
+        operation: Some(Operation::Approve {
             from,
             spender,
             amount: tokens(150_000),
             expected_allowance: None,
             expires_at: None,
             fee: Some(fee),
-        },
+        }),
         created_at_time: None,
         memo: None,
     };
@@ -205,13 +205,13 @@ fn test_approval_transfer_from() {
     assert_eq!(ctx.balances().account_balance(&from), tokens(190_000));
 
     let tr = Transaction {
-        operation: Operation::Transfer {
+        operation: Some(Operation::Transfer {
             from,
             to,
             spender: Some(spender),
             amount: tokens(100_000),
             fee: Some(fee),
-        },
+        }),
         created_at_time: None,
         memo: None,
     };
@@ -231,13 +231,13 @@ fn test_approval_transfer_from() {
     );
 
     let tr = Transaction {
-        operation: Operation::Transfer {
+        operation: Some(Operation::Transfer {
             from,
             to,
             spender: Some(spender),
             amount: tokens(100_000),
             fee: Some(fee),
-        },
+        }),
         created_at_time: None,
         memo: None,
     };
@@ -280,7 +280,7 @@ fn test_approval_expiration_override() {
         fee: Some(tokens(10_000)),
     };
     let tr = Transaction {
-        operation: approve(100_000, Some(ts(2000))),
+        operation: Some(approve(100_000, Some(ts(2000)))),
         created_at_time: None,
         memo: None,
     };
@@ -296,7 +296,7 @@ fn test_approval_expiration_override() {
     );
 
     let tr = Transaction {
-        operation: approve(200_000, Some(ts(1500))),
+        operation: Some(approve(200_000, Some(ts(1500)))),
         created_at_time: None,
         memo: None,
     };
@@ -312,7 +312,7 @@ fn test_approval_expiration_override() {
     );
 
     let tr = Transaction {
-        operation: approve(300_000, Some(ts(2500))),
+        operation: Some(approve(300_000, Some(ts(2500)))),
         created_at_time: None,
         memo: None,
     };
@@ -329,7 +329,7 @@ fn test_approval_expiration_override() {
 
     // The expiration is in the past, the allowance is rejected.
     let tr = Transaction {
-        operation: approve(100_000, Some(ts(500))),
+        operation: Some(approve(100_000, Some(ts(500)))),
         created_at_time: None,
         memo: None,
     };
@@ -360,14 +360,14 @@ fn test_approval_no_fee_on_reject() {
     ctx.balances_mut().mint(&from, tokens(20_000)).unwrap();
 
     let tr = Transaction {
-        operation: Operation::Approve {
+        operation: Some(Operation::Approve {
             from,
             spender,
             amount: tokens(1_000),
             expected_allowance: None,
             expires_at: Some(1),
             fee: Some(tokens(10_000)),
-        },
+        }),
         created_at_time: Some(1000),
         memo: None,
     };
@@ -402,13 +402,13 @@ fn test_self_transfer_from() {
     );
 
     let tr = Transaction {
-        operation: Operation::Transfer {
+        operation: Some(Operation::Transfer {
             from,
             to,
             spender: Some(from),
             amount: tokens(20_000),
             fee: Some(tokens(10_000)),
-        },
+        }),
         created_at_time: None,
         memo: None,
     };
@@ -431,14 +431,14 @@ fn test_approval_allowance_covers_fee() {
     ctx.balances_mut().mint(&from, tokens(20_000)).unwrap();
 
     let tr = Transaction {
-        operation: Operation::Approve {
+        operation: Some(Operation::Approve {
             from,
             spender,
             amount: tokens(10_000),
             expected_allowance: None,
             expires_at: None,
             fee: None,
-        },
+        }),
         created_at_time: None,
         memo: None,
     };
@@ -446,13 +446,13 @@ fn test_approval_allowance_covers_fee() {
 
     let fee = tokens(10_000);
     let tr = Transaction {
-        operation: Operation::Transfer {
+        operation: Some(Operation::Transfer {
             from,
             to,
             spender: Some(spender),
             amount: tokens(10_000),
             fee: Some(fee),
-        },
+        }),
         created_at_time: None,
         memo: None,
     };
@@ -464,27 +464,27 @@ fn test_approval_allowance_covers_fee() {
     );
 
     let tr = Transaction {
-        operation: Operation::Approve {
+        operation: Some(Operation::Approve {
             from,
             spender,
             amount: tokens(20_000),
             expected_allowance: None,
             expires_at: None,
             fee: None,
-        },
+        }),
         created_at_time: None,
         memo: None,
     };
     tr.apply(&mut ctx, now, Tokens::ZERO).unwrap();
 
     let tr = Transaction {
-        operation: Operation::Transfer {
+        operation: Some(Operation::Transfer {
             from,
             to,
             spender: Some(spender),
             amount: tokens(10_000),
             fee: Some(fee),
-        },
+        }),
         created_at_time: None,
         memo: None,
     };
@@ -516,11 +516,11 @@ fn test_burn_smoke() {
     assert_eq!(tokens_to_u64(ctx.balances().total_supply()), 200_000);
 
     let tr = Transaction {
-        operation: Operation::Burn {
+        operation: Some(Operation::Burn {
             from,
             spender: None,
             amount: tokens(100_000),
-        },
+        }),
         created_at_time: None,
         memo: None,
     };
@@ -545,11 +545,11 @@ fn test_approval_burn_from() {
     assert_eq!(tokens_to_u64(ctx.balances().total_supply()), 200_000);
 
     let tr = Transaction {
-        operation: Operation::Burn {
+        operation: Some(Operation::Burn {
             from,
             spender: Some(spender),
             amount: tokens(100_000),
-        },
+        }),
         created_at_time: None,
         memo: None,
     };
@@ -563,14 +563,14 @@ fn test_approval_burn_from() {
     assert_eq!(tokens_to_u64(ctx.balances().total_supply()), 200_000);
 
     let tr = Transaction {
-        operation: Operation::Approve {
+        operation: Some(Operation::Approve {
             from,
             spender,
             amount: tokens(150_000),
             expected_allowance: None,
             expires_at: None,
             fee: Some(fee),
-        },
+        }),
         created_at_time: None,
         memo: None,
     };
@@ -580,11 +580,11 @@ fn test_approval_burn_from() {
     assert_eq!(ctx.balances().total_supply(), tokens(190_000));
 
     let tr = Transaction {
-        operation: Operation::Burn {
+        operation: Some(Operation::Burn {
             from,
             spender: Some(spender),
             amount: tokens(100_000),
-        },
+        }),
         created_at_time: None,
         memo: None,
     };
@@ -604,11 +604,11 @@ fn test_approval_burn_from() {
     );
 
     let tr = Transaction {
-        operation: Operation::Burn {
+        operation: Some(Operation::Burn {
             from,
             spender: Some(spender),
             amount: tokens(100_000),
-        },
+        }),
         created_at_time: None,
         memo: None,
     };

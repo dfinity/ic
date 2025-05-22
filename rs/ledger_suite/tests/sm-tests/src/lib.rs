@@ -835,7 +835,7 @@ fn arb_transaction<Tokens: TokensType>() -> impl Strategy<Value = Transaction<To
         any::<Option<[u8; 32]>>(),
     )
         .prop_map(|(operation, ts, memo)| Transaction {
-            operation,
+            operation: Some(operation),
             created_at_time: ts,
             memo: memo.map(|m| Memo::from(m.to_vec())),
         })

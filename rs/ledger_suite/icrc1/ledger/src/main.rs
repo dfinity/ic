@@ -718,11 +718,11 @@ fn execute_transfer_not_async(
 
             (
                 Transaction {
-                    operation: Operation::Burn {
+                    operation: Some(Operation::Burn {
                         from: from_account,
                         spender,
                         amount,
-                    },
+                    }),
                     created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
                     memo,
                 },
@@ -954,14 +954,14 @@ fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<u64, A
         }
 
         let tx = Transaction {
-            operation: Operation::Approve {
+            operation: Some(Operation::Approve {
                 from: from_account,
                 spender: arg.spender,
                 amount,
                 expected_allowance,
                 expires_at: arg.expires_at,
                 fee: arg.fee.map(|_| expected_fee_tokens),
-            },
+            }),
             created_at_time: arg.created_at_time,
             memo: arg.memo,
         };

@@ -535,18 +535,18 @@ where
     }
 }
 
-impl<T> From<ic_icrc1::Transaction<T>> for IcrcTransaction
-where
-    T: TokensType,
-{
-    fn from(tx: ic_icrc1::Transaction<T>) -> Self {
-        Self {
-            operation: tx.operation.into(),
-            created_at_time: tx.created_at_time,
-            memo: tx.memo,
-        }
-    }
-}
+// impl<T> From<ic_icrc1::Transaction<T>> for IcrcTransaction
+// where
+//     T: TokensType,
+// {
+//     fn from(tx: ic_icrc1::Transaction<T>) -> Self {
+//         Self {
+//             operation: tx.operation.into(),
+//             created_at_time: tx.created_at_time,
+//             memo: tx.memo,
+//         }
+//     }
+// }
 
 #[cfg(test)]
 mod tests {
@@ -556,6 +556,7 @@ mod tests {
         encoded_block_to_generic_block, generic_block_to_encoded_block,
         generic_transaction_from_generic_block,
     };
+    use ic_icrc1::Operation;
     use ic_icrc1_test_utils::blocks_strategy;
     use ic_icrc1_tokens_u256::U256;
     use ic_icrc1_tokens_u64::U64;
@@ -798,7 +799,14 @@ mod tests {
             "created_at_time",
         );
         assert_eq!(tx.memo, rosetta_tx.memo, "memo");
-        compare_operations(tx.operation, rosetta_tx.operation);
+        match tx.operation {
+            None => {
+                panic!("Transactions without operations are not supported (yet)");
+            }
+            Some(op) => {
+                compare_operations(op, rosetta_tx.operation);
+            }
+        }
     }
 
     #[track_caller]

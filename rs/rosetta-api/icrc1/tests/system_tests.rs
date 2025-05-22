@@ -1009,20 +1009,21 @@ fn test_construction_submit() {
                         let icrc1_transaction: ic_icrc1::Transaction<U256> =
                             arg_with_caller.to_transaction(setup.minting_account);
                         let fee = match icrc1_transaction.operation {
-                            ic_icrc1::Operation::Transfer { fee, .. } => fee,
-                            ic_icrc1::Operation::Approve { fee, .. } => fee,
-                            ic_icrc1::Operation::Mint { .. } => None,
-                            ic_icrc1::Operation::Burn { .. } => None,
+                            Some(ic_icrc1::Operation::Transfer { fee, .. }) => fee,
+                            Some(ic_icrc1::Operation::Approve { fee, .. }) => fee,
+                            Some(ic_icrc1::Operation::Mint { .. }) => None,
+                            Some(ic_icrc1::Operation::Burn { .. }) => None,
+                            None => None,
                         };
 
                         // Rosetta does not support mint and burn operations
                         // To keep the balances in sync we need to call the ledger agent directly and then go to the next iteration of args with caller
                         if matches!(
                             icrc1_transaction.operation,
-                            ic_icrc1::Operation::Mint { .. }
+                            Some(ic_icrc1::Operation::Mint { .. })
                         ) || matches!(
                             icrc1_transaction.operation,
-                            ic_icrc1::Operation::Burn { .. }
+                            Some(ic_icrc1::Operation::Burn { .. })
                         ) {
                             let caller_agent = Icrc1Agent {
                                 agent: get_custom_agent(arg_with_caller.caller.clone(), setup.port)

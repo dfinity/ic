@@ -34,6 +34,7 @@ pub enum TxApplyError<Tokens> {
     ExpiredApproval { now: TimeStamp },
     AllowanceChanged { current_allowance: Tokens },
     SelfApproval,
+    UnsupportedTransaction,
 }
 
 impl<Tokens> From<BalanceError<Tokens>> for TxApplyError<Tokens> {
@@ -201,6 +202,7 @@ pub enum TransferError<Tokens> {
     TxDuplicate { duplicate_of: BlockIndex },
     AllowanceChanged { current_allowance: Tokens },
     SelfApproval,
+    UnsupportedTransaction,
 }
 
 const APPROVE_PRUNE_LIMIT: usize = 100;
@@ -264,6 +266,7 @@ where
                 TransferError::AllowanceChanged { current_allowance }
             }
             TxApplyError::SelfApproval => TransferError::SelfApproval,
+            TxApplyError::UnsupportedTransaction => TransferError::UnsupportedTransaction,
         })?;
 
     let fee_collector = ledger.fee_collector().cloned();

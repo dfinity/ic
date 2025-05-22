@@ -1100,10 +1100,10 @@ fn test_icrc3_get_archives() {
     let mint_block_size = Block {
         parent_hash: Some(HashOf::new([1; HASH_LENGTH])),
         transaction: Transaction {
-            operation: Operation::Mint {
+            operation: Some(Operation::Mint {
                 to: minting_account,
                 amount: Tokens::from(1_000_000u64),
-            },
+            }),
             created_at_time: None,
             memo: None,
         },

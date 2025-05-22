@@ -164,7 +164,7 @@ pub fn transaction_strategy<Tokens: TokensType>(
     }));
     (operation_strategy, arb_memo(), created_at_time_strategy).prop_map(
         |(operation, memo, created_at_time)| Transaction {
-            operation,
+            operation: Some(operation),
             created_at_time,
             memo,
         },
@@ -198,10 +198,15 @@ pub fn blocks_strategy<Tokens: TokensType>(
         .prop_map(
             |(transaction, arb_fee, timestamp, fee_collector, fee_collector_block_index)| {
                 let effective_fee = match transaction.operation {
-                    Operation::Transfer { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
-                    Operation::Approve { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
-                    Operation::Burn { .. } => None,
-                    Operation::Mint { .. } => None,
+                    Some(Operation::Transfer { ref fee, .. }) => {
+                        fee.clone().is_none().then_some(arb_fee)
+                    }
+                    Some(Operation::Approve { ref fee, .. }) => {
+                        fee.clone().is_none().then_some(arb_fee)
+                    }
+                    Some(Operation::Burn { .. }) => None,
+                    Some(Operation::Mint { .. }) => None,
+                    None => None,
                 };
 
                 Block {
@@ -386,7 +391,7 @@ impl ArgWithCaller {
             }
         };
         Transaction::<T> {
-            operation,
+            operation: Some(operation),
             created_at_time,
             memo,
         }
@@ -425,26 +430,26 @@ impl TransactionsAndBalances {
             return;
         };
         match transaction.operation {
-            Operation::Mint { to, amount, .. } => {
+            Some(Operation::Mint { to, amount, .. }) => {
                 self.credit(to, amount.get_e8s());
             }
-            Operation::Burn { from, amount, .. } => {
+            Some(Operation::Burn { from, amount, .. }) => {
                 assert_eq!(tx.from(), from);
                 self.debit(from, amount.get_e8s());
             }
-            Operation::Transfer {
+            Some(Operation::Transfer {
                 from, to, amount, ..
-            } => {
+            }) => {
                 self.credit(to, amount.get_e8s());
                 assert_eq!(tx.from(), from);
                 self.debit(from, amount.get_e8s() + fee);
             }
-            Operation::Approve {
+            Some(Operation::Approve {
                 from,
                 spender,
                 amount,
                 ..
-            } => {
+            }) => {
                 assert_eq!(tx.from(), from);
                 self.allowances
                     .entry((from, spender))
@@ -454,6 +459,9 @@ impl TransactionsAndBalances {
                     })
                     .or_insert(amount);
                 self.debit(from, fee);
+            }
+            None => {
+                panic!("Unsupported transaction with no operation");
             }
         };
         self.transactions.push(tx);
@@ -487,7 +495,7 @@ impl TransactionsAndBalances {
 
     fn duplicate(
         &mut self,
-        operation: Operation<Tokens>,
+        operation: Option<Operation<Tokens>>,
         created_at_time: Option<u64>,
         memo: Option<Memo>,
     ) -> bool {
@@ -571,10 +579,10 @@ pub fn valid_transactions_strategy(
                 move |(to_signer, amount, created_at_time, memo)| {
                     let to = to_signer.account();
                     let tx = Transaction {
-                        operation: Operation::Mint::<Tokens> {
+                        operation: Some(Operation::Mint::<Tokens> {
                             amount: Tokens::from_e8s(amount),
                             to,
-                        },
+                        }),
                         created_at_time,
                         memo: memo.clone(),
                     };
@@ -623,11 +631,11 @@ pub fn valid_transactions_strategy(
                     "Tx hash already exists",
                     move |(amount, created_at_time, memo)| {
                         let tx = Transaction {
-                            operation: Operation::Burn::<Tokens> {
+                            operation: Some(Operation::Burn::<Tokens> {
                                 amount: Tokens::from_e8s(amount),
                                 from,
                                 spender: None,
-                            },
+                            }),
                             created_at_time,
                             memo: memo.clone(),
                         };
@@ -680,13 +688,13 @@ pub fn valid_transactions_strategy(
                     move |(to_signer, amount, created_at_time, memo, fee)| {
                         let to = to_signer.account();
                         let tx = Transaction {
-                            operation: Operation::Transfer::<Tokens> {
+                            operation: Some(Operation::Transfer::<Tokens> {
                                 amount: Tokens::from_e8s(amount),
                                 from,
                                 fee: fee.map(Tokens::from_e8s),
                                 spender: None,
                                 to,
-                            },
+                            }),
                             created_at_time,
                             memo: memo.clone(),
                         };
@@ -756,7 +764,7 @@ pub fn valid_transactions_strategy(
                         let spender = spender_signer.account();
                         let expected_allowance = allowance_map.get(&(from, spender)).copied();
                         let tx = Transaction {
-                            operation: Operation::Approve::<Tokens> {
+                            operation: Some(Operation::Approve::<Tokens> {
                                 from,
                                 spender,
                                 fee: fee.map(Tokens::from_e8s),
@@ -767,7 +775,7 @@ pub fn valid_transactions_strategy(
                                     None
                                 },
                                 expires_at,
-                            },
+                            }),
                             created_at_time,
                             memo: memo.clone(),
                         };
@@ -1021,7 +1029,7 @@ where
         proptest::option::of(proptest::collection::vec(any::<u8>(), 0..=max_memo_length)),
     )
         .prop_map(|(operation, ts, memo)| Transaction {
-            operation,
+            operation: Some(operation),
             created_at_time: ts,
             memo: memo.map(Memo::from),
         })
