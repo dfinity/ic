@@ -1,5 +1,5 @@
 {
-  "checksum": "ad554b329d1ac146e7416d2fbc356b0fbb1fea54054ec1a94241b850a6e505ec",
+  "checksum": "c1dcaec986d4667b053f4cad9cda33d1814a3a31177109010d3c584f57712594",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -2561,14 +2561,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "anyhow 1.0.93": {
+    "anyhow 1.0.98": {
       "name": "anyhow",
-      "version": "1.0.93",
+      "version": "1.0.98",
       "package_url": "https://github.com/dtolnay/anyhow",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/anyhow/1.0.93/download",
-          "sha256": "4c95c10ba0b00a02636238b814946408b1322d5ac4760326e6fb8ec956d85775"
+          "url": "https://static.crates.io/crates/anyhow/1.0.98/download",
+          "sha256": "e16d2d3311acee920a9eb8d33b8cbc1787ce4a264e85f964c2404b969bdcd487"
         }
       },
       "targets": [
@@ -2612,14 +2612,14 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.93"
+        "version": "1.0.98"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -4099,7 +4099,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -7520,7 +7520,7 @@
               "target": "ripemd"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
@@ -7618,7 +7618,7 @@
               "target": "ripemd"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
@@ -8758,7 +8758,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -8801,7 +8801,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             }
           ],
@@ -9843,7 +9843,7 @@
         "deps": {
           "common": [
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             }
           ],
@@ -10032,7 +10032,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -10202,7 +10202,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -11636,7 +11636,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -11818,7 +11818,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -19418,7 +19418,7 @@
               "target": "serde_json"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
@@ -19787,7 +19787,7 @@
               "target": "aide"
             },
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -20275,6 +20275,10 @@
             {
               "id": "ic-verify-bls-signature 0.6.0",
               "target": "ic_verify_bls_signature"
+            },
+            {
+              "id": "ic-vetkeys 0.1.0",
+              "target": "ic_vetkeys"
             },
             {
               "id": "ic-wasm 0.8.4",
@@ -20770,7 +20774,7 @@
               "target": "serde_yaml"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
@@ -22262,7 +22266,7 @@
               "target": "rand_core"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
@@ -30419,7 +30423,7 @@
               "target": "rand_core"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
@@ -32208,7 +32212,7 @@
               "target": "serde_cbor"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
@@ -32432,7 +32436,7 @@
               "target": "serde_cbor"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
@@ -32536,7 +32540,7 @@
               "target": "ahash"
             },
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -32934,7 +32938,7 @@
               "target": "serde_cbor"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
@@ -33647,7 +33651,7 @@
               "target": "parking_lot"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
@@ -33718,7 +33722,7 @@
               "target": "serde_bytes"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             }
           ],
@@ -33784,7 +33788,7 @@
               "target": "serde_bytes"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             }
           ],
@@ -33839,7 +33843,7 @@
               "target": "serde_bytes"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             }
           ],
@@ -33952,7 +33956,7 @@
               "target": "ahash"
             },
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -34088,7 +34092,7 @@
               "target": "serde_json"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
@@ -34483,7 +34487,7 @@
               "target": "pkcs11"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
@@ -34635,7 +34639,7 @@
               "target": "leb128"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             }
           ],
@@ -34734,7 +34738,7 @@
               "target": "nom"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
@@ -34966,7 +34970,7 @@
               "target": "serde_bytes"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
@@ -35054,7 +35058,7 @@
               "target": "serde_cbor"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
@@ -35142,7 +35146,7 @@
               "target": "serde_cbor"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
@@ -35236,7 +35240,7 @@
               "target": "serde_bytes"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
@@ -35340,7 +35344,7 @@
               "target": "serde_bytes"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
@@ -35446,7 +35450,7 @@
               "target": "rand"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             }
           ],
@@ -35518,7 +35522,7 @@
               "target": "pairing"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             }
           ],
@@ -35526,6 +35530,145 @@
         },
         "edition": "2021",
         "version": "0.6.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
+    },
+    "ic-vetkeys 0.1.0": {
+      "name": "ic-vetkeys",
+      "version": "0.1.0",
+      "package_url": null,
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity/vetkeys",
+          "commitish": {
+            "Rev": "5885675b6ccb5269cfac9740dc3da6f14f75347f"
+          },
+          "strip_prefix": "backend/rs/ic_vetkeys"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_vetkeys",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_vetkeys",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "anyhow 1.0.98",
+              "target": "anyhow"
+            },
+            {
+              "id": "candid 0.10.13",
+              "target": "candid"
+            },
+            {
+              "id": "futures 0.3.31",
+              "target": "futures"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "hkdf 0.12.4",
+              "target": "hkdf"
+            },
+            {
+              "id": "ic-cdk 0.17.2",
+              "target": "ic_cdk"
+            },
+            {
+              "id": "ic-stable-structures 0.6.8",
+              "target": "ic_stable_structures"
+            },
+            {
+              "id": "ic_bls12_381 0.10.1",
+              "target": "ic_bls12_381"
+            },
+            {
+              "id": "lazy_static 1.5.0",
+              "target": "lazy_static"
+            },
+            {
+              "id": "pairing 0.23.0",
+              "target": "pairing"
+            },
+            {
+              "id": "rand 0.8.5",
+              "target": "rand"
+            },
+            {
+              "id": "rand_chacha 0.3.1",
+              "target": "rand_chacha"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.15",
+              "target": "serde_bytes"
+            },
+            {
+              "id": "serde_with 3.12.0",
+              "target": "serde_with"
+            },
+            {
+              "id": "sha2 0.10.9",
+              "target": "sha2"
+            },
+            {
+              "id": "sha3 0.10.8",
+              "target": "sha3"
+            },
+            {
+              "id": "strum 0.26.3",
+              "target": "strum"
+            },
+            {
+              "id": "subtle 2.6.1",
+              "target": "subtle"
+            },
+            {
+              "id": "zeroize 1.8.1",
+              "target": "zeroize"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "ic-cdk-macros 0.17.2",
+              "target": "ic_cdk_macros"
+            },
+            {
+              "id": "strum_macros 0.26.4",
+              "target": "strum_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.1.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -35586,7 +35729,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -35986,7 +36129,7 @@
               "target": "serde"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
@@ -36040,7 +36183,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -36111,7 +36254,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -39648,7 +39791,7 @@
               "target": "elliptic_curve"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
@@ -39744,7 +39887,7 @@
               "target": "once_cell"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
@@ -49148,7 +49291,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -51634,7 +51777,7 @@
               "target": "primeorder"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             }
           ],
@@ -54684,7 +54827,7 @@
               "target": "serde_json"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
@@ -55289,7 +55432,7 @@
               "target": "prost_build"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             }
           ],
@@ -57576,7 +57719,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -57639,7 +57782,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -63610,7 +63753,7 @@
               "target": "rand_core"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
@@ -69059,6 +69202,76 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "serde_with 3.12.0": {
+      "name": "serde_with",
+      "version": "3.12.0",
+      "package_url": "https://github.com/jonasbb/serde_with/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/serde_with/3.12.0/download",
+          "sha256": "d6b6f7f2fcb69f747921f79f3926bd1e203fce4fef62c268dd3abfb6d86029aa"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "serde_with",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "serde_with",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "default",
+            "macros",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "serde_derive 1.0.217",
+              "target": "serde_derive"
+            },
+            {
+              "id": "serde_with_macros 3.12.0",
+              "target": "serde_with_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "3.12.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "serde_with_macros 1.5.2": {
       "name": "serde_with_macros",
       "version": "1.5.2",
@@ -69171,6 +69384,66 @@
         },
         "edition": "2021",
         "version": "2.3.3"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "serde_with_macros 3.12.0": {
+      "name": "serde_with_macros",
+      "version": "3.12.0",
+      "package_url": "https://github.com/jonasbb/serde_with/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/serde_with_macros/3.12.0/download",
+          "sha256": "8d00caa5193a3c8362ac2b73be6b9e768aa5a4b2f721d8f4b339600c3cb51f8e"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "serde_with_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "serde_with_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "darling 0.20.11",
+              "target": "darling"
+            },
+            {
+              "id": "proc-macro2 1.0.95",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.40",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.101",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "3.12.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -69498,14 +69771,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "sha2 0.10.8": {
+    "sha2 0.10.9": {
       "name": "sha2",
-      "version": "0.10.8",
+      "version": "0.10.9",
       "package_url": "https://github.com/RustCrypto/hashes",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/sha2/0.10.8/download",
-          "sha256": "793db75ad2bcafc3ffa7c68b215fee268f537982cd901d132f89c6343f3a3dc8"
+          "url": "https://static.crates.io/crates/sha2/0.10.9/download",
+          "sha256": "a7507d819769d01a365ab707794a4084392c824f54a7a6a7862f8c3d0892b283"
         }
       },
       "targets": [
@@ -69563,7 +69836,7 @@
           ],
           "selects": {}
         },
-        "version": "0.10.8"
+        "version": "0.10.9"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -69620,7 +69893,7 @@
               "target": "hex"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
@@ -74538,7 +74811,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -76324,7 +76597,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -76348,7 +76621,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "sha2 0.10.8",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
@@ -82363,7 +82636,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -83433,7 +83706,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -83878,7 +84151,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -83958,7 +84231,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -84239,7 +84512,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -84368,7 +84641,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -84488,7 +84761,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -84598,7 +84871,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -84808,7 +85081,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -85898,7 +86171,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
@@ -91362,7 +91635,7 @@
     "actix-web-prom 0.9.0",
     "addr 0.15.6",
     "aide 0.14.2",
-    "anyhow 1.0.93",
+    "anyhow 1.0.98",
     "arbitrary 1.4.1",
     "arc-swap 1.7.1",
     "arrayvec 0.7.4",
@@ -91488,6 +91761,7 @@
     "ic-transport-types 0.39.3",
     "ic-utils 0.39.0",
     "ic-verify-bls-signature 0.6.0",
+    "ic-vetkeys 0.1.0",
     "ic-wasm 0.8.4",
     "ic-xrc-types 1.2.0",
     "ic0 0.18.11",
@@ -91617,7 +91891,7 @@
     "serde_regex 1.1.0",
     "serde_with 1.14.0",
     "serde_yaml 0.9.34+deprecated",
-    "sha2 0.10.8",
+    "sha2 0.10.9",
     "sha3 0.10.8",
     "signal-hook 0.3.17",
     "signature 2.2.0",
