@@ -218,7 +218,6 @@ fn check_nodes_health(env: &TestEnv) {
     info!(&env.logger(), "Ecdsa signatures are operational");
 }
 
-// Check that ecdsa signatures work
 pub async fn assert_ecdsa_signatures_work(
     sys_node: IcNodeSnapshot,
     key_name: &str,
