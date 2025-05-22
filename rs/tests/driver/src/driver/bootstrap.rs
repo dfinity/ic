@@ -29,6 +29,7 @@ use bootstrap_config::{build_bootstrap_config_image, BootstrapOptions};
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
+use config::guestos_config;
 use config_types::DeploymentEnvironment;
 use ic_base_types::NodeId;
 use ic_prep_lib::{
@@ -503,9 +504,7 @@ fn create_config_disk_image(
 
     config.hostname = Some(node.node_id.to_string());
 
-    // populate guestos_config_json_path with serialized guestos config object
-    let guestos_config_json_path = tempdir().unwrap().as_ref().join("guestos_config.json");
-    generate_testnet_config(config, guestos_config_json_path.clone())?;
+    let guestos_config = generate_testnet_config(config)?;
 
     let img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
     let local_store_path = test_env
@@ -514,7 +513,7 @@ fn create_config_disk_image(
         .registry_local_store_path();
 
     let mut bootstrap_options = BootstrapOptions {
-        guestos_config: Some(guestos_config_json_path),
+        guestos_config: Some(guestos_config),
         ic_registry_local_store: Some(local_store_path),
         ic_state: Some(node.state_path()),
         ic_crypto: Some(node.crypto_path()),

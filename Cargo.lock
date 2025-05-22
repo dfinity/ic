@@ -1531,6 +1531,8 @@ name = "bootstrap_config"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "config",
+ "config_types",
  "ic-types",
  "regex",
  "serde_json",

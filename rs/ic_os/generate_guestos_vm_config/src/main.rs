@@ -3,7 +3,7 @@ use askama::Template;
 use bootstrap_config::{build_bootstrap_config_image, BootstrapOptions};
 use clap::Parser;
 use config::guestos_config::generate_guestos_config;
-use config::{serialize_and_write_config, DEFAULT_HOSTOS_CONFIG_OBJECT_PATH};
+use config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH;
 use config_types::{GuestOSConfig, HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant};
@@ -111,18 +111,10 @@ fn get_ipv6_gateway(config: &HostOSConfig) -> Result<String> {
 }
 
 fn assemble_config_media(hostos_config: &HostOSConfig, media_path: &Path) -> Result<()> {
-    let guestos_config_file = tempfile::NamedTempFile::new()?;
     let guestos_config =
         generate_guestos_config(hostos_config).context("Failed to generate GuestOS config")?;
-    serialize_and_write_config(guestos_config_file.path(), &guestos_config).with_context(|| {
-        format!(
-            "Failed to write GuestOS config to {}",
-            guestos_config_file.path().display()
-        )
-    })?;
 
-    let bootstrap_options =
-        make_bootstrap_options(hostos_config, guestos_config, guestos_config_file.path())?;
+    let bootstrap_options = make_bootstrap_options(hostos_config, guestos_config)?;
 
     build_bootstrap_config_image(media_path, &bootstrap_options)?;
 
@@ -137,10 +129,17 @@ fn assemble_config_media(hostos_config: &HostOSConfig, media_path: &Path) -> Res
 fn make_bootstrap_options(
     hostos_config: &HostOSConfig,
     guestos_config: GuestOSConfig,
-    guestos_config_path: &Path,
 ) -> Result<BootstrapOptions> {
+    let guestos_address = match &guestos_config.network_settings.ipv6_config {
+        Ipv6Config::Fixed(ip_config) => ip_config.address.clone(),
+        _ => bail!(
+            "Expected GuestOS IPv6 address to be fixed but was {:?}",
+            guestos_config.network_settings.ipv6_config
+        ),
+    };
+
     let mut bootstrap_options = BootstrapOptions {
-        guestos_config: Some(guestos_config_path.to_path_buf()),
+        guestos_config: Some(guestos_config),
         ..Default::default()
     };
 
@@ -160,13 +159,6 @@ fn make_bootstrap_options(
             Some(PathBuf::from("/boot/config/node_operator_private_key.pem"));
     }
 
-    let guestos_address = match guestos_config.network_settings.ipv6_config {
-        Ipv6Config::Fixed(ip_config) => ip_config.address,
-        _ => bail!(
-            "Expected GuestOS IPv6 address to be fixed but was {:?}",
-            guestos_config.network_settings.ipv6_config
-        ),
-    };
     bootstrap_options.ipv6_address = Some(guestos_address);
     bootstrap_options.ipv6_gateway = Some(get_ipv6_gateway(hostos_config)?);
 
@@ -318,8 +310,7 @@ mod tests {
 
         let guestos_config = generate_guestos_config(&config).unwrap();
 
-        let options =
-            make_bootstrap_options(&config, guestos_config, Path::new("/tmp/test")).unwrap();
+        let options = make_bootstrap_options(&config, guestos_config.clone()).unwrap();
 
         assert_eq!(
             options,
@@ -332,7 +323,7 @@ mod tests {
                 node_reward_type: Some("test-reward".to_string()),
                 hostname: Some("guest-001122334455".to_string()),
                 nns_urls: vec!["https://example.com/".to_string()],
-                guestos_config: Some(PathBuf::from("/tmp/test")),
+                guestos_config: Some(guestos_config),
                 nns_public_key: Some(PathBuf::from("/boot/config/nns_public_key.pem")),
                 node_operator_private_key: Some(PathBuf::from(
                     "/boot/config/node_operator_private_key.pem"
