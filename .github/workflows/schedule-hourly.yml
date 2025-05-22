@@ -39,6 +39,7 @@ jobs:
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 120
     runs-on:
+      group: zh1
       labels: dind-large
     steps:
       - name: Checkout
@@ -60,6 +61,7 @@ jobs:
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 120
     runs-on:
+      group: zh1
       labels: dind-large
     steps:
       - name: Checkout
