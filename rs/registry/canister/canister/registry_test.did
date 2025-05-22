@@ -27,6 +27,7 @@ type AddNodeOperatorPayload = record {
   rewardable_nodes : vec record { text; nat32 };
   node_provider_principal_id : opt principal;
   dc_id : text;
+  max_rewardable_nodes : vec record { text; nat32 };
 };
 
 type AddNodePayload = record {
@@ -397,6 +398,7 @@ type UpdateNodeOperatorConfigPayload = record {
   node_allowance : opt nat64;
   rewardable_nodes : vec record { text; nat32 };
   dc_id : opt text;
+  max_rewardable_nodes : vec record { text; nat32 };
 };
 
 type UpdateNodeRewardsTableProposalPayload = record {
