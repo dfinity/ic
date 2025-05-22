@@ -2565,6 +2565,7 @@ dependencies = [
  "anyhow",
  "clap 4.5.27",
  "config_types",
+ "deterministic_ips",
  "ic-types",
  "macaddr",
  "network",
