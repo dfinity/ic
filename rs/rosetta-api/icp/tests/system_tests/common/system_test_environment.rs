@@ -81,7 +81,7 @@ impl RosettaTestingEnvironment {
             // To keep the balances in sync we need to call the ledger agent directly and then go to the next iteration of args with caller
             if !matches!(
                 icrc1_transaction.operation,
-                ic_icrc1::Operation::Transfer { .. }
+                Some(ic_icrc1::Operation::Transfer { .. })
             ) {
                 let caller_agent = Icrc1Agent {
                     agent: get_custom_agent(arg_with_caller.caller.clone(), replica_port).await,

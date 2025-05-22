@@ -234,6 +234,7 @@ pub fn construction_parse(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::storage::types::IcrcOperation;
     use crate::common::utils::utils::icrc1_operation_to_rosetta_core_operations;
     use crate::construction_api::types::CanisterMethodName;
     use crate::construction_api::utils::build_icrc1_transaction_from_canister_method_args;
@@ -387,12 +388,12 @@ mod tests {
                         let icrc1_transaction: ic_icrc1::Transaction<U256> = arg_with_caller
                             .to_transaction(minter_identity().sender().unwrap().into());
                         let fee = match icrc1_transaction.operation {
-                            ic_icrc1::Operation::Transfer { fee, .. } => fee,
-                            ic_icrc1::Operation::Approve { fee, .. } => fee,
+                            Some(ic_icrc1::Operation::Transfer { fee, .. }) => fee,
+                            Some(ic_icrc1::Operation::Approve { fee, .. }) => fee,
                             _ => panic!("Invalid operation"),
                         };
                         let rosetta_core_operations = icrc1_operation_to_rosetta_core_operations(
-                            icrc1_transaction.clone().operation.into(),
+                            icrc1_transaction.clone().operation.map(IcrcOperation::from),
                             currency.clone(),
                             fee.map(|fee| fee.into()),
                         )
@@ -540,12 +541,21 @@ mod tests {
                             .to_transaction(minter_identity().sender().unwrap().into());
 
                         let canister_method_name = match ledger_transaction.operation {
-                            ic_icrc1::Operation::Transfer { .. } => {
+                            Some(ic_icrc1::Operation::Transfer { .. }) => {
                                 CanisterMethodName::Icrc1Transfer
                             }
-                            ic_icrc1::Operation::Approve { .. } => CanisterMethodName::Icrc2Approve,
-                            ic_icrc1::Operation::Mint { .. } => CanisterMethodName::Icrc1Transfer,
-                            ic_icrc1::Operation::Burn { .. } => CanisterMethodName::Icrc1Transfer,
+                            Some(ic_icrc1::Operation::Approve { .. }) => {
+                                CanisterMethodName::Icrc2Approve
+                            }
+                            Some(ic_icrc1::Operation::Mint { .. }) => {
+                                CanisterMethodName::Icrc1Transfer
+                            }
+                            Some(ic_icrc1::Operation::Burn { .. }) => {
+                                CanisterMethodName::Icrc1Transfer
+                            }
+                            None => {
+                                panic!("Transactions without an operation are not supported (yet)")
+                            }
                         };
                         let args = match arg_with_caller.arg {
                             LedgerEndpointArg::TransferArg(arg) => Encode!(&arg),
@@ -566,12 +576,15 @@ mod tests {
                         );
 
                         let fee = match ledger_transaction.operation {
-                            ic_icrc1::Operation::Transfer { fee, .. } => fee,
-                            ic_icrc1::Operation::Approve { fee, .. } => fee,
+                            Some(ic_icrc1::Operation::Transfer { fee, .. }) => fee,
+                            Some(ic_icrc1::Operation::Approve { fee, .. }) => fee,
                             _ => panic!("Invalid operation"),
                         };
                         let rosetta_core_operations = icrc1_operation_to_rosetta_core_operations(
-                            ledger_transaction.clone().operation.into(),
+                            ledger_transaction
+                                .clone()
+                                .operation
+                                .map(IcrcOperation::from),
                             currency.clone(),
                             fee.map(|fee| fee.into()),
                         )

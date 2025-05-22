@@ -137,7 +137,9 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
     while !rosetta_blocks.is_empty() {
         for rosetta_block in rosetta_blocks {
             match rosetta_block.get_transaction().operation {
-                crate::common::storage::types::IcrcOperation::Burn { from, amount, .. } => {
+                Some(crate::common::storage::types::IcrcOperation::Burn {
+                    from, amount, ..
+                }) => {
                     debit(
                         from,
                         amount,
@@ -146,7 +148,7 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
                         &mut account_balances_cache,
                     )?;
                 }
-                crate::common::storage::types::IcrcOperation::Mint { to, amount } => {
+                Some(crate::common::storage::types::IcrcOperation::Mint { to, amount }) => {
                     credit(
                         to,
                         amount,
@@ -155,7 +157,7 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
                         &mut account_balances_cache,
                     )?;
                 }
-                crate::common::storage::types::IcrcOperation::Approve { from, .. } => {
+                Some(crate::common::storage::types::IcrcOperation::Approve { from, .. }) => {
                     let fee = rosetta_block
                         .get_fee_paid()?
                         .unwrap_or(Nat(BigUint::zero()));
@@ -167,9 +169,12 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
                         &mut account_balances_cache,
                     )?;
                 }
-                crate::common::storage::types::IcrcOperation::Transfer {
-                    from, to, amount, ..
-                } => {
+                Some(crate::common::storage::types::IcrcOperation::Transfer {
+                    from,
+                    to,
+                    amount,
+                    ..
+                }) => {
                     let fee = rosetta_block
                         .get_fee_paid()?
                         .unwrap_or(Nat(BigUint::zero()));
@@ -202,6 +207,12 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
                             &mut account_balances_cache,
                         )?;
                     }
+                }
+                None => {
+                    panic!(
+                        "Operation is None for block at index {}",
+                        rosetta_block.index
+                    );
                 }
             }
         }
@@ -254,7 +265,7 @@ pub fn store_blocks(
             fee,
             approval_expires_at,
         ) = match transaction.operation {
-            crate::common::storage::types::IcrcOperation::Mint { to, amount } => (
+            Some(crate::common::storage::types::IcrcOperation::Mint { to, amount }) => (
                 "mint",
                 None,
                 None,
@@ -267,13 +278,13 @@ pub fn store_blocks(
                 None,
                 None,
             ),
-            crate::common::storage::types::IcrcOperation::Transfer {
+            Some(crate::common::storage::types::IcrcOperation::Transfer {
                 from,
                 to,
                 amount,
                 fee,
                 ..
-            } => (
+            }) => (
                 "transfer",
                 Some(from.owner),
                 Some(*from.effective_subaccount()),
@@ -286,7 +297,7 @@ pub fn store_blocks(
                 fee,
                 None,
             ),
-            crate::common::storage::types::IcrcOperation::Burn { from, amount, .. } => (
+            Some(crate::common::storage::types::IcrcOperation::Burn { from, amount, .. }) => (
                 "burn",
                 Some(from.owner),
                 Some(*from.effective_subaccount()),
@@ -299,14 +310,14 @@ pub fn store_blocks(
                 None,
                 None,
             ),
-            crate::common::storage::types::IcrcOperation::Approve {
+            Some(crate::common::storage::types::IcrcOperation::Approve {
                 from,
                 spender,
                 amount,
                 expected_allowance,
                 expires_at,
                 fee,
-            } => (
+            }) => (
                 "approve",
                 Some(from.owner),
                 Some(*from.effective_subaccount()),
@@ -319,6 +330,12 @@ pub fn store_blocks(
                 fee,
                 expires_at,
             ),
+            None => {
+                panic!(
+                    "Operation is None for block at index {}",
+                    rosetta_block.index
+                );
+            }
         };
         insert_tx.prepare_cached(
         "INSERT OR IGNORE INTO blocks (idx, hash, serialized_block, parent_hash, timestamp,tx_hash,operation_type,from_principal,from_subaccount,to_principal,to_subaccount,spender_principal,spender_subaccount,memo,amount,expected_allowance,fee,transaction_created_at_time,approval_expires_at) VALUES (:idx, :hash, :serialized_block, :parent_hash, :timestamp,:tx_hash,:operation_type,:from_principal,:from_subaccount,:to_principal,:to_subaccount,:spender_principal,:spender_subaccount,:memo,:amount,:expected_allowance,:fee,:transaction_created_at_time,:approval_expires_at)")?

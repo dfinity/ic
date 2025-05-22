@@ -561,7 +561,7 @@ mod test {
                         for block in blockchain.clone().into_iter() {
                             // We only push Mint blocks since `update_account_balances` will
                             // complain if we e.g., transfer from an account with no balance.
-                            if let ic_icrc1::Operation::Mint{..} = block.transaction.operation {
+                            if let Some(ic_icrc1::Operation::Mint{..}) = block.transaction.operation {
                                 rosetta_blocks.push(RosettaBlock::from_generic_block(encoded_block_to_generic_block(&block.encode()), added_index as u64).unwrap());
                                 added_index += 1;
                             }
@@ -1024,7 +1024,7 @@ mod test {
                             .filter(|block| {
                                 matches!(
                                     block.block.transaction.operation,
-                                    IcrcOperation::Transfer { .. }
+                                    Some(IcrcOperation::Transfer { .. })
                                 )
                             })
                             .count();
@@ -1040,7 +1040,7 @@ mod test {
                             .filter(|block| {
                                 matches!(
                                     block.block.transaction.operation,
-                                    IcrcOperation::Burn { .. }
+                                    Some(IcrcOperation::Burn { .. })
                                 )
                             })
                             .count();
@@ -1056,7 +1056,7 @@ mod test {
                             .filter(|block| {
                                 matches!(
                                     block.block.transaction.operation,
-                                    IcrcOperation::Mint { .. }
+                                    Some(IcrcOperation::Mint { .. })
                                 )
                             })
                             .count();
@@ -1072,7 +1072,7 @@ mod test {
                             .filter(|block| {
                                 matches!(
                                     block.block.transaction.operation,
-                                    IcrcOperation::Approve { .. }
+                                    Some(IcrcOperation::Approve { .. })
                                 )
                             })
                             .count();
@@ -1089,10 +1089,13 @@ mod test {
                         // We make sure that the service returns the correct number of transactions for each account
                         search_transactions_request.account_identifier = Some(
                             match rosetta_blocks[0].block.transaction.operation {
-                                IcrcOperation::Transfer { from, .. } => from,
-                                IcrcOperation::Mint { to, .. } => to,
-                                IcrcOperation::Burn { from, .. } => from,
-                                IcrcOperation::Approve { from, .. } => from,
+                                Some(IcrcOperation::Transfer { from, .. }) => from,
+                                Some(IcrcOperation::Mint { to, .. }) => to,
+                                Some(IcrcOperation::Burn { from, .. }) => from,
+                                Some(IcrcOperation::Approve { from, .. }) => from,
+                                None => panic!(
+                                    "Transactions without an operation are not supported (yet)"
+                                ),
                             }
                             .into(),
                         );
@@ -1100,9 +1103,9 @@ mod test {
                         let num_of_transactions_with_account = rosetta_blocks
                             .iter()
                             .filter(|block| match block.block.transaction.operation {
-                                IcrcOperation::Transfer {
+                                Some(IcrcOperation::Transfer {
                                     from, to, spender, ..
-                                } => spender
+                                }) => spender
                                     .map_or(vec![from, to], |spender| vec![from, to, spender])
                                     .contains(
                                         &search_transactions_request
@@ -1112,7 +1115,7 @@ mod test {
                                             .try_into()
                                             .unwrap(),
                                     ),
-                                IcrcOperation::Mint { to, .. } => {
+                                Some(IcrcOperation::Mint { to, .. }) => {
                                     to == search_transactions_request
                                         .account_identifier
                                         .clone()
@@ -1120,7 +1123,7 @@ mod test {
                                         .try_into()
                                         .unwrap()
                                 }
-                                IcrcOperation::Burn { from, spender, .. } => spender
+                                Some(IcrcOperation::Burn { from, spender, .. }) => spender
                                     .map_or(vec![from], |spender| vec![from, spender])
                                     .contains(
                                         &search_transactions_request
@@ -1130,15 +1133,19 @@ mod test {
                                             .try_into()
                                             .unwrap(),
                                     ),
-                                IcrcOperation::Approve { from, spender, .. } => [from, spender]
-                                    .contains(
+                                Some(IcrcOperation::Approve { from, spender, .. }) => {
+                                    [from, spender].contains(
                                         &search_transactions_request
                                             .account_identifier
                                             .clone()
                                             .unwrap()
                                             .try_into()
                                             .unwrap(),
-                                    ),
+                                    )
+                                }
+                                None => panic!(
+                                    "Transactions without an operation are not supported (yet)"
+                                ),
                             })
                             .count();
 

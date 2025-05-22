@@ -78,10 +78,11 @@ impl RosettaBlock {
         Ok(self
             .get_effective_fee()
             .or(match self.get_transaction().operation {
-                IcrcOperation::Mint { .. } => None,
-                IcrcOperation::Transfer { fee, .. } => fee,
-                IcrcOperation::Approve { fee, .. } => fee,
-                IcrcOperation::Burn { .. } => None,
+                Some(IcrcOperation::Mint { .. }) => None,
+                Some(IcrcOperation::Transfer { fee, .. }) => fee,
+                Some(IcrcOperation::Approve { fee, .. }) => fee,
+                Some(IcrcOperation::Burn { .. }) => None,
+                None => None,
             }))
     }
 
@@ -225,7 +226,7 @@ impl FromSql for IcrcBlock {
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct IcrcTransaction {
-    pub operation: IcrcOperation,
+    pub operation: Option<IcrcOperation>,
     pub created_at_time: Option<u64>,
     pub memo: Option<Memo>,
 }
@@ -247,7 +248,7 @@ impl TryFrom<Value> for IcrcTransaction {
         let memo = get_opt_field::<ByteBuf>(&map, FIELD_PREFIX, "memo")?.map(Memo);
         let operation = IcrcOperation::try_from(map)?;
         Ok(Self {
-            operation,
+            operation: Some(operation),
             created_at_time,
             memo,
         })
@@ -262,7 +263,10 @@ impl From<IcrcTransaction> for Value {
             memo,
         }: IcrcTransaction,
     ) -> Self {
-        let mut map = BTreeMap::from(operation);
+        let mut map = match operation {
+            Some(op) => BTreeMap::from(op),
+            None => BTreeMap::new(),
+        };
         if let Some(created_at_time) = created_at_time {
             map.insert("ts".to_string(), Value::Nat(Nat::from(created_at_time)));
         }
@@ -556,7 +560,6 @@ mod tests {
         encoded_block_to_generic_block, generic_block_to_encoded_block,
         generic_transaction_from_generic_block,
     };
-    use ic_icrc1::Operation;
     use ic_icrc1_test_utils::blocks_strategy;
     use ic_icrc1_tokens_u256::U256;
     use ic_icrc1_tokens_u64::U64;
@@ -660,7 +663,7 @@ mod tests {
     fn arb_transaction() -> impl Strategy<Value = IcrcTransaction> {
         (arb_op(), option::of(any::<u64>()), option::of(arb_memo())).prop_map(
             |(operation, created_at_time, memo)| IcrcTransaction {
-                operation,
+                operation: Some(operation),
                 created_at_time,
                 memo,
             },
@@ -799,12 +802,12 @@ mod tests {
             "created_at_time",
         );
         assert_eq!(tx.memo, rosetta_tx.memo, "memo");
-        match tx.operation {
-            None => {
-                panic!("Transactions without operations are not supported (yet)");
+        match (tx.operation, rosetta_tx.operation) {
+            (Some(tx_op), Some(rosetta_tx_op)) => {
+                compare_operations(tx_op, rosetta_tx_op);
             }
-            Some(op) => {
-                compare_operations(op, rosetta_tx.operation);
+            _ => {
+                panic!("Transactions without operations are not supported (yet)");
             }
         }
     }
