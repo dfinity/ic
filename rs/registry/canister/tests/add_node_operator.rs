@@ -34,6 +34,7 @@ fn test_the_anonymous_user_cannot_add_a_node_operator() {
             dc_id: "an1".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: None,
+            max_rewardable_nodes: BTreeMap::new(),
         };
 
         // The anonymous end-user tries to add a node operator, bypassing the proposals
@@ -77,6 +78,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_add_a_node_operator
             dc_id: "an1".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: None,
+            max_rewardable_nodes: BTreeMap::new(),
         };
 
         // The attacker canister tries to add a node operator, pretending to be the
@@ -168,6 +170,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             dc_id: "bc1".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: None,
+            max_rewardable_nodes: BTreeMap::new(),
         };
 
         assert!(
@@ -205,6 +208,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             dc_id: "ca1".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: None,
+            max_rewardable_nodes: BTreeMap::new(),
         };
 
         assert!(
