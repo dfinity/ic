@@ -21,7 +21,7 @@ artifact_bundle(
     name = "bundle-disk",
     testonly = True,
     inputs = [icos_images.disk_image],
-    prefix = "guest-os/disk-img",
+    prefix = "guest-os/disk-img-dev",
     visibility = ["//visibility:public"],
 )
 
@@ -29,6 +29,6 @@ artifact_bundle(
     name = "bundle-update",
     testonly = True,
     inputs = [icos_images.update_image],
-    prefix = "guest-os/update-img",
+    prefix = "guest-os/update-img-dev",
     visibility = ["//visibility:public"],
 )
