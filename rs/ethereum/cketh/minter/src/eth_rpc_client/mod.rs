@@ -545,14 +545,6 @@ impl Reduce for EvmMultiRpcResult<Option<EvmTransactionReceipt>> {
     }
 }
 
-impl Reduce for MultiCallResults<Option<TransactionReceipt>> {
-    type Item = Option<TransactionReceipt>;
-
-    fn reduce(self) -> ReducedResult<Self::Item> {
-        self.reduce_with_equality().into()
-    }
-}
-
 impl Reduce for EvmMultiRpcResult<SendRawTransactionStatus> {
     type Item = SendRawTransactionStatus;
 
