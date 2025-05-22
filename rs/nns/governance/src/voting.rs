@@ -4,6 +4,7 @@ use crate::{
     pb::v1::{Ballot, ProposalData, Topic, Topic::NeuronManagement, Vote},
     storage::with_voting_state_machines_mut,
 };
+use ic_cdk::{eprintln, println};
 #[cfg(not(any(test, feature = "canbench-rs")))]
 use ic_nervous_system_long_message::is_message_over_threshold;
 #[cfg(test)]
