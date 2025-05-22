@@ -3,8 +3,6 @@
 
 use crate::numeric::{BlockNumber, LogIndex};
 use ethnum;
-use evm_rpc_client::HttpOutcallError as EvmHttpOutcallError;
-use ic_cdk::api::call::RejectionCode;
 use ic_ethereum_types::Address;
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
@@ -220,38 +218,4 @@ pub struct LogEntry {
     /// "false" if it's a valid log.
     #[serde(default)]
     pub removed: bool,
-}
-
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub enum HttpOutcallError {
-    /// Error from the IC system API.
-    IcError {
-        code: RejectionCode,
-        message: String,
-    },
-    /// Response is not a valid JSON-RPC response,
-    /// which means that the response was not successful (status other than 2xx)
-    /// or that the response body could not be deserialized into a JSON-RPC response.
-    InvalidHttpJsonRpcResponse {
-        status: u16,
-        body: String,
-        parsing_error: Option<String>,
-    },
-}
-
-impl From<EvmHttpOutcallError> for HttpOutcallError {
-    fn from(value: EvmHttpOutcallError) -> Self {
-        match value {
-            EvmHttpOutcallError::IcError { code, message } => Self::IcError { code, message },
-            EvmHttpOutcallError::InvalidHttpJsonRpcResponse {
-                status,
-                body,
-                parsing_error,
-            } => Self::InvalidHttpJsonRpcResponse {
-                status,
-                body,
-                parsing_error,
-            },
-        }
-    }
 }
