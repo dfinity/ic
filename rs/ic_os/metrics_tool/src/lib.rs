@@ -66,8 +66,8 @@ pub struct MetricsWriter {
 }
 
 impl MetricsWriter {
-    pub fn new(path: PathBuf) -> Self {
-        Self { file_path: path }
+    pub fn new(file_path: PathBuf) -> Self {
+        Self { file_path }
     }
 
     pub fn write_metrics(&self, metrics: &[Metric]) -> io::Result<()> {
