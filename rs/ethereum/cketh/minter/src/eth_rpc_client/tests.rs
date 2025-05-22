@@ -8,8 +8,8 @@ mod multi_call_results {
 
     mod reduce_with_equality {
         use crate::eth_rpc_client::tests::{BLOCK_PI, PUBLIC_NODE};
-        use crate::eth_rpc_client::{MultiCallError, MultiCallResults, SingleCallError};
-        use evm_rpc_client::HttpOutcallError;
+        use crate::eth_rpc_client::{MultiCallError, MultiCallResults};
+        use evm_rpc_client::{HttpOutcallError, JsonRpcError};
         use ic_cdk::api::call::RejectionCode;
 
         #[test]
@@ -49,17 +49,19 @@ mod multi_call_results {
             let results: MultiCallResults<String> = MultiCallResults::from_non_empty_iter(vec![
                 (
                     BLOCK_PI,
-                    Err(SingleCallError::JsonRpcError {
+                    Err(JsonRpcError {
                         code: -32700,
                         message: "insufficient funds for gas * price + value".to_string(),
-                    }),
+                    }
+                    .into()),
                 ),
                 (
                     PUBLIC_NODE,
-                    Err(SingleCallError::JsonRpcError {
+                    Err(JsonRpcError {
                         code: -32000,
                         message: "nonce too low".to_string(),
-                    }),
+                    }
+                    .into()),
                 ),
             ]);
 
@@ -119,17 +121,19 @@ mod multi_call_results {
             let results: MultiCallResults<String> = MultiCallResults::from_non_empty_iter(vec![
                 (
                     BLOCK_PI,
-                    Err(SingleCallError::JsonRpcError {
+                    Err(JsonRpcError {
                         code: -32700,
                         message: "insufficient funds for gas * price + value".to_string(),
-                    }),
+                    }
+                    .into()),
                 ),
                 (
                     PUBLIC_NODE,
-                    Err(SingleCallError::JsonRpcError {
+                    Err(JsonRpcError {
                         code: -32700,
                         message: "insufficient funds for gas * price + value".to_string(),
-                    }),
+                    }
+                    .into()),
                 ),
             ]);
 
@@ -178,10 +182,9 @@ mod multi_call_results {
 
     mod reduce_with_stable_majority_by_key {
         use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
-        use crate::eth_rpc_client::{MultiCallError, MultiCallResults, SingleCallError};
+        use crate::eth_rpc_client::{MultiCallError, MultiCallResults};
         use candid::Nat;
-        use evm_rpc_client::FeeHistory;
-        use evm_rpc_client::HttpOutcallError;
+        use evm_rpc_client::{FeeHistory, HttpOutcallError, JsonRpcError};
         use ic_cdk::api::call::RejectionCode;
 
         #[test]
@@ -313,10 +316,11 @@ mod multi_call_results {
                     (BLOCK_PI, Ok(block_pi_fee_history.clone())),
                     (
                         PUBLIC_NODE,
-                        Err(SingleCallError::JsonRpcError {
+                        Err(JsonRpcError {
                             code: -32700,
                             message: "error".to_string(),
-                        }),
+                        }
+                        .into()),
                     ),
                     (LLAMA_NODES, Ok(llama_nodes_fee_history.clone())),
                 ]);
@@ -376,10 +380,11 @@ mod multi_call_results {
                     (BLOCK_PI, Ok(fee_history())),
                     (
                         PUBLIC_NODE,
-                        Err(SingleCallError::JsonRpcError {
+                        Err(JsonRpcError {
                             code: -32700,
                             message: "error".to_string(),
-                        }),
+                        }
+                        .into()),
                     ),
                 ]);
 
@@ -417,8 +422,8 @@ mod multi_call_results {
 
     mod has_http_outcall_error_matching {
         use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
-        use crate::eth_rpc_client::{MultiCallError, MultiCallResults, SingleCallError};
-        use evm_rpc_client::HttpOutcallError;
+        use crate::eth_rpc_client::{MultiCallError, MultiCallResults};
+        use evm_rpc_client::{HttpOutcallError, JsonRpcError};
         use ic_cdk::api::call::RejectionCode;
         use proptest::prelude::any;
         use proptest::proptest;
@@ -458,10 +463,11 @@ mod multi_call_results {
                     (BLOCK_PI, Ok(1)),
                     (
                         LLAMA_NODES,
-                        Err(SingleCallError::JsonRpcError {
+                        Err(JsonRpcError {
                             code: -32700,
                             message: "error".to_string(),
-                        }),
+                        }
+                        .into()),
                     ),
                     (PUBLIC_NODE, Ok(1)),
                 ]));
@@ -579,48 +585,5 @@ mod eth_get_transaction_count {
     fn should_deserialize_transaction_count() {
         let count: TransactionCount = serde_json::from_str("\"0x3d8\"").unwrap();
         assert_eq!(count, TransactionCount::from(0x3d8_u32));
-    }
-}
-
-mod evm_rpc_conversion {
-    use crate::eth_rpc_client::{HttpOutcallError, SingleCallError};
-    use crate::test_fixtures::arb::arb_evm_rpc_error;
-    use evm_rpc_client::{HttpOutcallError as EvmHttpOutcallError, RpcError as EvmRpcError};
-    use proptest::proptest;
-
-    proptest! {
-        #[test]
-        fn should_preserve_http_outcall_errors(evm_error in arb_evm_rpc_error()) {
-            let minter_error = SingleCallError::from(evm_error.clone());
-
-            match (evm_error, minter_error) {
-                (EvmRpcError::HttpOutcallError(e), SingleCallError::HttpOutcallError(m)) => match e {
-                    EvmHttpOutcallError::IcError { code, message } => {
-                        assert_eq!(m, HttpOutcallError::IcError { code, message })
-                    }
-                    EvmHttpOutcallError::InvalidHttpJsonRpcResponse {
-                        status,
-                        body,
-                        parsing_error,
-                    } => {
-                        assert_eq!(
-                            m,
-                            HttpOutcallError::InvalidHttpJsonRpcResponse {
-                                status,
-                                body,
-                                parsing_error
-                            }
-                        )
-                    }
-                },
-                (EvmRpcError::HttpOutcallError(e), _) => {
-                    panic!("EVM-RPC HTTP outcall error not preserved: {:?}", e)
-                }
-                (_, SingleCallError::HttpOutcallError(e)) => {
-                    panic!("Unexpected Minter HTTP outcall error: {:?}", e)
-                }
-                _ => (),
-            };
-        }
     }
 }

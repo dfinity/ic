@@ -9,9 +9,9 @@ use evm_rpc_client::{
     Block, BlockTag, ConsensusStrategy, EthSepoliaService, EvmRpcClient, FeeHistory,
     FeeHistoryArgs, GetLogsArgs, GetTransactionCountArgs as EvmGetTransactionCountArgs, Hex20,
     HttpOutcallError, IcRuntime, LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult,
-    Nat256, OverrideRpcConfig, RpcConfig as EvmRpcConfig, RpcError as EvmRpcError, RpcError,
-    RpcResult as EvmRpcResult, RpcService as EvmRpcService, RpcServices as EvmRpcServices,
-    SendRawTransactionStatus, TransactionReceipt as EvmTransactionReceipt,
+    Nat256, OverrideRpcConfig, RpcConfig as EvmRpcConfig, RpcError, RpcService as EvmRpcService,
+    RpcServices as EvmRpcServices, SendRawTransactionStatus,
+    TransactionReceipt as EvmTransactionReceipt, ValidationError,
 };
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
@@ -172,7 +172,7 @@ impl EthRpcClient {
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct MultiCallResults<T> {
     ok_results: BTreeMap<EvmRpcService, T>,
-    errors: BTreeMap<EvmRpcService, SingleCallError>,
+    errors: BTreeMap<EvmRpcService, RpcError>,
 }
 
 impl<T> From<ReducedResult<T>> for Result<T, MultiCallError<T>> {
@@ -195,7 +195,7 @@ impl<T> MultiCallResults<T> {
         }
     }
 
-    fn map<U, E: Display, F: Fn(T) -> Result<U, E>, O: Fn(E) -> SingleCallError>(
+    fn map<U, E: Display, F: Fn(T) -> Result<U, E>, O: Fn(E) -> RpcError>(
         self,
         f: &F,
         map_err: &O,
@@ -215,7 +215,7 @@ impl<T> MultiCallResults<T> {
         MultiCallResults { ok_results, errors }
     }
 
-    fn insert_once(&mut self, provider: EvmRpcService, result: Result<T, SingleCallError>) {
+    fn insert_once(&mut self, provider: EvmRpcService, result: Result<T, RpcError>) {
         match result {
             Ok(value) => {
                 assert!(!self.errors.contains_key(&provider));
@@ -228,7 +228,7 @@ impl<T> MultiCallResults<T> {
         }
     }
 
-    fn from_non_empty_iter<I: IntoIterator<Item = (EvmRpcService, Result<T, SingleCallError>)>>(
+    fn from_non_empty_iter<I: IntoIterator<Item = (EvmRpcService, Result<T, RpcError>)>>(
         iter: I,
     ) -> Self {
         let mut results = MultiCallResults::new();
@@ -282,45 +282,22 @@ impl<T: PartialEq> MultiCallResults<T> {
         match distinct_errors.len() {
             0 => panic!("BUG: expect errors should be non-empty"),
             1 => match distinct_errors.into_iter().next().unwrap().clone() {
-                SingleCallError::HttpOutcallError(error) => {
+                RpcError::HttpOutcallError(error) => {
                     MultiCallError::ConsistentHttpOutcallError(error)
                 }
-                SingleCallError::JsonRpcError { code, message } => {
-                    MultiCallError::ConsistentJsonRpcError { code, message }
+                RpcError::JsonRpcError(error) => MultiCallError::ConsistentJsonRpcError {
+                    code: error.code,
+                    message: error.message,
+                },
+                RpcError::ProviderError(error) => {
+                    MultiCallError::ConsistentEvmRpcCanisterError(error.to_string())
                 }
-                SingleCallError::EvmRpcError(error) => {
-                    MultiCallError::ConsistentEvmRpcCanisterError(error)
+                RpcError::ValidationError(error) => {
+                    MultiCallError::ConsistentEvmRpcCanisterError(error.to_string())
                 }
             },
             _ => MultiCallError::InconsistentResults(self),
         }
-    }
-}
-
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
-pub enum SingleCallError {
-    HttpOutcallError(HttpOutcallError),
-    JsonRpcError { code: i64, message: String },
-    EvmRpcError(String),
-}
-
-impl From<EvmRpcError> for SingleCallError {
-    fn from(value: EvmRpcError) -> Self {
-        match value {
-            EvmRpcError::ProviderError(e) => SingleCallError::EvmRpcError(e.to_string()),
-            EvmRpcError::HttpOutcallError(e) => SingleCallError::HttpOutcallError(e),
-            EvmRpcError::JsonRpcError(e) => SingleCallError::JsonRpcError {
-                code: e.code,
-                message: e.message,
-            },
-            EvmRpcError::ValidationError(e) => SingleCallError::EvmRpcError(e.to_string()),
-        }
-    }
-}
-
-impl From<HttpOutcallError> for SingleCallError {
-    fn from(value: HttpOutcallError) -> Self {
-        SingleCallError::HttpOutcallError(value)
     }
 }
 
@@ -333,13 +310,6 @@ pub enum MultiCallError<T> {
 }
 
 fn convert_multirpcresult<T>(result: EvmMultiRpcResult<T>) -> Result<T, MultiCallError<T>> {
-    fn into_single_call_result<T>(result: EvmRpcResult<T>) -> Result<T, SingleCallError> {
-        match result {
-            Ok(t) => Ok(t),
-            Err(e) => Err(SingleCallError::from(e)),
-        }
-    }
-
     match result {
         EvmMultiRpcResult::Consistent(Ok(t)) => Ok(t),
         EvmMultiRpcResult::Consistent(Err(RpcError::HttpOutcallError(e))) => {
@@ -360,7 +330,7 @@ fn convert_multirpcresult<T>(result: EvmMultiRpcResult<T>) -> Result<T, MultiCal
         EvmMultiRpcResult::Inconsistent(results) => {
             let mut multi_results = MultiCallResults::new();
             results.into_iter().for_each(|(provider, result)| {
-                multi_results.insert_once(provider, into_single_call_result(result));
+                multi_results.insert_once(provider, result);
             });
             Err(MultiCallError::InconsistentResults(multi_results))
         }
@@ -401,7 +371,7 @@ impl<T> ReducedResult<T> {
             }
             Err(MultiCallError::InconsistentResults(results)) => {
                 reduction(results.map(fallible_op, &|e| {
-                    SingleCallError::EvmRpcError(e.to_string())
+                    RpcError::ValidationError(ValidationError::Custom(e.to_string()))
                 }))
             }
         };
@@ -409,28 +379,21 @@ impl<T> ReducedResult<T> {
     }
 
     fn from_internal(value: EvmMultiRpcResult<T>) -> Self {
-        fn into_single_call_result<T>(result: EvmRpcResult<T>) -> Result<T, SingleCallError> {
-            match result {
-                Ok(t) => Ok(t),
-                Err(e) => Err(SingleCallError::from(e)),
-            }
-        }
-
         let result = match value {
             EvmMultiRpcResult::Consistent(result) => match result {
                 Ok(t) => Ok(t),
                 Err(e) => match e {
-                    EvmRpcError::ProviderError(e) => {
+                    RpcError::ProviderError(e) => {
                         Err(MultiCallError::ConsistentEvmRpcCanisterError(e.to_string()))
                     }
-                    EvmRpcError::HttpOutcallError(e) => {
+                    RpcError::HttpOutcallError(e) => {
                         Err(MultiCallError::ConsistentHttpOutcallError(e))
                     }
-                    EvmRpcError::JsonRpcError(e) => Err(MultiCallError::ConsistentJsonRpcError {
+                    RpcError::JsonRpcError(e) => Err(MultiCallError::ConsistentJsonRpcError {
                         code: e.code,
                         message: e.message,
                     }),
-                    EvmRpcError::ValidationError(e) => {
+                    RpcError::ValidationError(e) => {
                         Err(MultiCallError::ConsistentEvmRpcCanisterError(e.to_string()))
                     }
                 },
@@ -438,7 +401,7 @@ impl<T> ReducedResult<T> {
             EvmMultiRpcResult::Inconsistent(results) => {
                 let mut multi_results = MultiCallResults::new();
                 results.into_iter().for_each(|(provider, result)| {
-                    multi_results.insert_once(provider, into_single_call_result(result));
+                    multi_results.insert_once(provider, result);
                 });
                 Err(MultiCallError::InconsistentResults(multi_results))
             }
@@ -582,10 +545,8 @@ impl<T> MultiCallError<T> {
                     .errors
                     .values()
                     .any(|single_call_error| match single_call_error {
-                        SingleCallError::HttpOutcallError(error) => predicate(error),
-                        SingleCallError::JsonRpcError { .. } | SingleCallError::EvmRpcError(_) => {
-                            false
-                        }
+                        RpcError::HttpOutcallError(error) => predicate(error),
+                        _ => false,
                     })
             }
             MultiCallError::ConsistentEvmRpcCanisterError(_) => false,
