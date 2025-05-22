@@ -2037,18 +2037,20 @@ impl CanisterManager {
         subnet_size: usize,
         round_limits: &mut RoundLimits,
         resource_saturation: &ResourceSaturation,
-    ) -> Result<(SnapshotId, NumInstructions), CanisterManagerError> {
+    ) -> Result<(SnapshotId, NumInstructions), UserError> {
         // validate args:
         let wasm_mode = canister
             .execution_state
+            .as_ref()
             .map(|x| x.wasm_execution_mode)
             .unwrap_or_else(|| WasmExecutionMode::Wasm32);
-        let valid_args = ValidatedSnapshotMetadata::validate(args, wasm_mode).map_err(|e| {
-            UserError::new(
-                ErrorCode::InvalidManagementPayload,
-                format!("Snapshot Metadata contains invalid data: {:?}", e),
-            )
-        })?;
+        let valid_args =
+            ValidatedSnapshotMetadata::validate(args.clone(), wasm_mode).map_err(|e| {
+                UserError::new(
+                    ErrorCode::InvalidManagementPayload,
+                    format!("Snapshot Metadata contains invalid data: {:?}", e),
+                )
+            })?;
 
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
@@ -2072,7 +2074,8 @@ impl CanisterManager {
                     return Err(CanisterManagerError::CanisterSnapshotLimitExceeded {
                         canister_id: canister.canister_id(),
                         limit: self.config.max_number_of_snapshots_per_canister,
-                    });
+                    }
+                    .into());
                 }
                 NumBytes::new(0)
             }
@@ -2085,7 +2088,8 @@ impl CanisterManager {
                 canister_id: canister.canister_id(),
                 value: canister.scheduler_state.heap_delta_debit,
                 limit: self.config.heap_delta_rate_limit,
-            });
+            }
+            .into());
         }
 
         let new_snapshot_size = args.snapshot_size_bytes();

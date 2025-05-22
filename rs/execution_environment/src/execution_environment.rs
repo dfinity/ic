@@ -54,7 +54,6 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_snapshots::ValidatedSnapshotMetadata,
     canister_state::{
         execution_state::WasmExecutionMode,
         system_state::{CyclesUseCase, PausedExecutionId},
@@ -2596,7 +2595,7 @@ impl ExecutionEnvironment {
                 .unwrap()),
                 instructions_used,
             ),
-            Err(e) => (Err(UserError::from(e)), NumInstructions::new(0)),
+            Err(e) => (Err(e), NumInstructions::new(0)),
         }
     }
 

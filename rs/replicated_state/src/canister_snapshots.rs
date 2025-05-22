@@ -417,15 +417,15 @@ impl CanisterSnapshot {
     ) -> Self {
         let stable_memory = PageMemory {
             page_map: PageMap::new(Arc::clone(&fd_factory)),
-            size: NumWasmPages::new(metadata.stable_memory_size as usize / WASM_PAGE_SIZE_IN_BYTES),
+            size: metadata.stable_memory_size,
         };
         let wasm_memory = PageMemory {
             page_map: PageMap::new(Arc::clone(&fd_factory)),
-            size: NumWasmPages::new(metadata.wasm_memory_size as usize / WASM_PAGE_SIZE_IN_BYTES),
+            size: metadata.wasm_memory_size,
         };
         let execution_snapshot = ExecutionStateSnapshot {
             // This is an invalid module now, but will be written to via `upload_canister_snapshot_data`.
-            wasm_binary: CanisterModule::new(vec![0; metadata.wasm_module_size as usize]),
+            wasm_binary: CanisterModule::new(vec![0; metadata.wasm_module_size.get() as usize]),
             exported_globals: metadata.exported_globals.clone(),
             stable_memory,
             wasm_memory,
@@ -565,10 +565,10 @@ pub enum CanisterSnapshotError {
 pub struct ValidatedSnapshotMetadata {
     canister_id: PrincipalId,
     replace_snapshot: Option<SnapshotId>,
-    wasm_module_size: u64,
+    wasm_module_size: NumBytes,
     exported_globals: Vec<Global>,
-    wasm_memory_size: u64,
-    stable_memory_size: u64,
+    wasm_memory_size: NumWasmPages,
+    stable_memory_size: NumWasmPages,
     certified_data: Vec<u8>,
     global_timer: Option<GlobalTimer>,
     on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
@@ -615,14 +615,28 @@ impl ValidatedSnapshotMetadata {
         Ok(Self {
             canister_id: raw.canister_id,
             replace_snapshot,
-            wasm_module_size: raw.wasm_module_size,
+            wasm_module_size: NumBytes::new(raw.wasm_module_size),
             exported_globals: raw.exported_globals,
-            wasm_memory_size: raw.wasm_memory_size,
-            stable_memory_size: raw.stable_memory_size,
+            wasm_memory_size: NumWasmPages::new(
+                raw.wasm_memory_size as usize / WASM_PAGE_SIZE_IN_BYTES,
+            ),
+            stable_memory_size: NumWasmPages::new(
+                raw.stable_memory_size as usize / WASM_PAGE_SIZE_IN_BYTES,
+            ),
             certified_data: raw.certified_data,
             global_timer: raw.global_timer,
             on_low_wasm_memory_hook_status: raw.on_low_wasm_memory_hook_status,
         })
+    }
+
+    /// Returns the size of this snapshot, excluding the size of the wasm chunk store.
+    pub fn snapshot_size_bytes(&self) -> NumBytes {
+        let num_bytes = self.wasm_module_size.get()
+            + (self.wasm_memory_size.get() * WASM_PAGE_SIZE_IN_BYTES) as u64
+            + (self.stable_memory_size.get() * WASM_PAGE_SIZE_IN_BYTES) as u64
+            + self.certified_data.len() as u64
+            + self.exported_globals.len() as u64 * size_of::<Global>() as u64;
+        NumBytes::new(num_bytes)
     }
 
     pub fn canister_id(&self) -> PrincipalId {
@@ -633,7 +647,7 @@ impl ValidatedSnapshotMetadata {
         self.replace_snapshot
     }
 
-    pub fn wasm_module_size(&self) -> u64 {
+    pub fn wasm_module_size(&self) -> NumBytes {
         self.wasm_module_size
     }
 
@@ -641,11 +655,11 @@ impl ValidatedSnapshotMetadata {
         &self.exported_globals
     }
 
-    pub fn wasm_memory_size(&self) -> u64 {
+    pub fn wasm_memory_size(&self) -> NumWasmPages {
         self.wasm_memory_size
     }
 
-    pub fn stable_memory_size(&self) -> u64 {
+    pub fn stable_memory_size(&self) -> NumWasmPages {
         self.stable_memory_size
     }
 
