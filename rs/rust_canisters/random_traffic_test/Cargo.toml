@@ -12,7 +12,6 @@ candid = { workspace = true }
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = "0.18.0"
-ic-cdk-macros = "0.18.0"
 ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-types = { path = "../../types/types" }
 proptest = { workspace = true }

@@ -73,7 +73,7 @@ benches:
     scopes: {}
   list_proposals:
     total:
-      instructions: 91895
+      instructions: 76293
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}

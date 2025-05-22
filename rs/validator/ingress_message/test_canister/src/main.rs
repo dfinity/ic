@@ -1,5 +1,5 @@
 use candid::candid_method;
-use ic_cdk_macros::query;
+use ic_cdk::query;
 use ic_types::messages::{
     Blob, HttpCallContent, HttpCanisterUpdate, HttpRequest, HttpRequestEnvelope,
 };
