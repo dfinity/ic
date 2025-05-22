@@ -14238,7 +14238,6 @@ dependencies = [
  "futures",
  "hex-literal",
  "ic-base-types",
- "ic-canister-client",
  "ic-cketh-minter",
  "ic-ethereum-types",
  "ic-icrc1-index-ng",
