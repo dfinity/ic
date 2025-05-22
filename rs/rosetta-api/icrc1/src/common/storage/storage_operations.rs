@@ -894,7 +894,7 @@ mod tests {
         // Test retrieving blocks by hash
         for (i, original_hash) in original_block_hashes.iter().enumerate() {
             let block_by_hash = get_block_by_hash(&connection, original_hash.clone())?
-                .expect(&format!("Block with hash {:?} not found", original_hash));
+                .unwrap_or_else(|| panic!("Block with hash {:?} not found", original_hash));
 
             assert_eq!(
                 block_by_hash.index, i as u64,
