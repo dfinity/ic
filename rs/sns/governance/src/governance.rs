@@ -2014,15 +2014,7 @@ impl Governance {
         &self,
         request: GetMetricsRequest,
     ) -> Result<GetMetricsResponse, GovernanceError> {
-        let time_window_seconds =
-            request
-                .time_window_seconds
-                .ok_or(GovernanceError::new_with_message(
-                    ErrorType::PreconditionFailed,
-                    "Error: parsing the request failed on unwrapping `time_window_seconds` field"
-                        .to_string(),
-                ))?;
-        let num_recent_proposals = self.recent_proposals(time_window_seconds);
+        let num_recent_proposals = self.recent_proposals(request.time_window_seconds);
         let icrc_ledger_helper = ICRCLedgerHelper::with_ledger(self.ledger.as_ref());
         let last_transaction_timestamp = icrc_ledger_helper
             .get_latest_block_timestamp_seconds()
