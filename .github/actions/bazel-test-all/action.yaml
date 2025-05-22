@@ -83,11 +83,7 @@ runs:
             #
             # To work around this, we build jemalloc separately.
             if [ $(uname -o) != "Darwin" ]; then
-              if [[ $release_build == "true" ]]; then
-                bazel build "${bazel_args[@]}" @@jemalloc//:libjemalloc --config=release
-              else
-                bazel build "${bazel_args[@]}" @@jemalloc//:libjemalloc
-              fi
+              bazel build "${bazel_args[@]}" @@jemalloc//:libjemalloc
             fi
 
             if [[ $diff_only == "true" ]]; then
@@ -124,8 +120,4 @@ runs:
             echo "Building as user: $(whoami)"
             echo "Bazel version: $(bazel version)"
 
-            if [[ $release_build == "true" ]]; then
-              bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}" --config=release
-            else
-              bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}"
-            fi
+            bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}"
