@@ -112,8 +112,17 @@ runs:
             echo "Building as user: $(whoami)"
             echo "Bazel version: $(bazel version)"
 
+            rc=0
+
             if [[ $release_build == "true" ]]; then
-              bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}" --config=release
+              bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}" --config=release || rc="$?"
             else
-              bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}"
+              bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}" || rc="$?"
             fi
+
+            du -sh /tmp/zig-cache
+            df --output=pcent /tmp/zig-cache
+
+            exit "$rc"
+
+
