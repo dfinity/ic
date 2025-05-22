@@ -636,15 +636,11 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
         effective_fee: Tokens,
         fee_collector: Option<FeeCollector<Self::AccountId>>,
     ) -> Self {
-        let effective_fee = transaction
-            .operation
-            .as_ref()
-            .map(|op| match op {
-                Operation::Transfer { fee, .. } => fee.is_none().then_some(effective_fee),
-                Operation::Approve { fee, .. } => fee.is_none().then_some(effective_fee),
-                _ => None,
-            })
-            .flatten();
+        let effective_fee = transaction.operation.as_ref().and_then(|op| match op {
+            Operation::Transfer { fee, .. } => fee.is_none().then_some(effective_fee),
+            Operation::Approve { fee, .. } => fee.is_none().then_some(effective_fee),
+            _ => None,
+        });
         let (fee_collector, fee_collector_block_index) = match fee_collector {
             Some(FeeCollector {
                 fee_collector,
