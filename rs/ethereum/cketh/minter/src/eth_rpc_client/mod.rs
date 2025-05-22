@@ -1,6 +1,4 @@
-use crate::eth_rpc::{
-    Data, FixedSizeData, Hash, HttpOutcallError, LogEntry, Quantity, HEADER_SIZE_LIMIT,
-};
+use crate::eth_rpc::{Data, FixedSizeData, Hash, LogEntry, Quantity, HEADER_SIZE_LIMIT};
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;
 use crate::logs::{PrintProxySink, INFO, TRACE_HTTP};
@@ -10,8 +8,8 @@ use candid::Nat;
 use evm_rpc_client::{
     Block, BlockTag, ConsensusStrategy, EthSepoliaService, EvmRpcClient, FeeHistory,
     FeeHistoryArgs, GetLogsArgs, GetTransactionCountArgs as EvmGetTransactionCountArgs, Hex20,
-    IcRuntime, LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256,
-    OverrideRpcConfig, RpcConfig as EvmRpcConfig, RpcError as EvmRpcError,
+    HttpOutcallError, IcRuntime, LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult,
+    Nat256, OverrideRpcConfig, RpcConfig as EvmRpcConfig, RpcError as EvmRpcError, RpcError,
     RpcResult as EvmRpcResult, RpcService as EvmRpcService, RpcServices as EvmRpcServices,
     SendRawTransactionStatus, TransactionReceipt as EvmTransactionReceipt,
 };
@@ -103,11 +101,7 @@ impl EthRpcClient {
         &self,
         block: BlockTag,
     ) -> Result<Block, MultiCallError<Block>> {
-        self.evm_rpc_client
-            .eth_get_block_by_number(block)
-            .await
-            .reduce()
-            .into()
+        convert_multirpcresult(self.evm_rpc_client.eth_get_block_by_number(block).await)
     }
 
     pub async fn eth_get_transaction_receipt(
@@ -178,6 +172,12 @@ impl EthRpcClient {
 pub struct MultiCallResults<T> {
     ok_results: BTreeMap<EvmRpcService, T>,
     errors: BTreeMap<EvmRpcService, SingleCallError>,
+}
+
+impl<T> From<ReducedResult<T>> for Result<T, MultiCallError<T>> {
+    fn from(value: ReducedResult<T>) -> Self {
+        value.result
+    }
 }
 
 impl<T> Default for MultiCallResults<T> {
@@ -307,7 +307,7 @@ impl From<EvmRpcError> for SingleCallError {
     fn from(value: EvmRpcError) -> Self {
         match value {
             EvmRpcError::ProviderError(e) => SingleCallError::EvmRpcError(e.to_string()),
-            EvmRpcError::HttpOutcallError(e) => SingleCallError::HttpOutcallError(e.into()),
+            EvmRpcError::HttpOutcallError(e) => SingleCallError::HttpOutcallError(e),
             EvmRpcError::JsonRpcError(e) => SingleCallError::JsonRpcError {
                 code: e.code,
                 message: e.message,
@@ -329,6 +329,41 @@ pub enum MultiCallError<T> {
     ConsistentJsonRpcError { code: i64, message: String },
     ConsistentEvmRpcCanisterError(String),
     InconsistentResults(MultiCallResults<T>),
+}
+
+fn convert_multirpcresult<T>(result: EvmMultiRpcResult<T>) -> Result<T, MultiCallError<T>> {
+    fn into_single_call_result<T>(result: EvmRpcResult<T>) -> Result<T, SingleCallError> {
+        match result {
+            Ok(t) => Ok(t),
+            Err(e) => Err(SingleCallError::from(e)),
+        }
+    }
+
+    match result {
+        EvmMultiRpcResult::Consistent(Ok(t)) => Ok(t),
+        EvmMultiRpcResult::Consistent(Err(RpcError::HttpOutcallError(e))) => {
+            Err(MultiCallError::ConsistentHttpOutcallError(e))
+        }
+        EvmMultiRpcResult::Consistent(Err(RpcError::JsonRpcError(e))) => {
+            Err(MultiCallError::ConsistentJsonRpcError {
+                code: e.code,
+                message: e.message,
+            })
+        }
+        EvmMultiRpcResult::Consistent(Err(RpcError::ProviderError(e))) => {
+            Err(MultiCallError::ConsistentEvmRpcCanisterError(e.to_string()))
+        }
+        EvmMultiRpcResult::Consistent(Err(RpcError::ValidationError(e))) => {
+            Err(MultiCallError::ConsistentEvmRpcCanisterError(e.to_string()))
+        }
+        EvmMultiRpcResult::Inconsistent(results) => {
+            let mut multi_results = MultiCallResults::new();
+            results.into_iter().for_each(|(provider, result)| {
+                multi_results.insert_once(provider, into_single_call_result(result));
+            });
+            Err(MultiCallError::InconsistentResults(multi_results))
+        }
+    }
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -388,7 +423,7 @@ impl<T> ReducedResult<T> {
                         Err(MultiCallError::ConsistentEvmRpcCanisterError(e.to_string()))
                     }
                     EvmRpcError::HttpOutcallError(e) => {
-                        Err(MultiCallError::ConsistentHttpOutcallError(e.into()))
+                        Err(MultiCallError::ConsistentHttpOutcallError(e))
                     }
                     EvmRpcError::JsonRpcError(e) => Err(MultiCallError::ConsistentJsonRpcError {
                         code: e.code,
@@ -423,26 +458,9 @@ impl<T> From<Result<T, MultiCallError<T>>> for ReducedResult<T> {
     }
 }
 
-impl<T> From<ReducedResult<T>> for Result<T, MultiCallError<T>> {
-    fn from(value: ReducedResult<T>) -> Self {
-        value.result
-    }
-}
-
 trait Reduce {
     type Item;
     fn reduce(self) -> ReducedResult<Self::Item>;
-}
-
-impl Reduce for EvmMultiRpcResult<Block> {
-    type Item = Block;
-
-    fn reduce(self) -> ReducedResult<Self::Item> {
-        ReducedResult::from_internal(self).map_reduce(
-            &|block: Block| Ok::<Block, String>(block),
-            MultiCallResults::reduce_with_equality,
-        )
-    }
 }
 
 impl Reduce for EvmMultiRpcResult<Vec<EvmLogEntry>> {

@@ -7,9 +7,9 @@ const LLAMA_NODES: EvmRpcService = EvmRpcService::EthMainnet(EthMainnetService::
 mod multi_call_results {
 
     mod reduce_with_equality {
-        use crate::eth_rpc::HttpOutcallError;
         use crate::eth_rpc_client::tests::{BLOCK_PI, PUBLIC_NODE};
         use crate::eth_rpc_client::{MultiCallError, MultiCallResults, SingleCallError};
+        use evm_rpc_client::HttpOutcallError;
         use ic_cdk::api::call::RejectionCode;
 
         #[test]
@@ -178,11 +178,11 @@ mod multi_call_results {
     }
 
     mod reduce_with_stable_majority_by_key {
-        use crate::eth_rpc::HttpOutcallError;
         use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
         use crate::eth_rpc_client::{MultiCallError, MultiCallResults, SingleCallError};
         use candid::Nat;
         use evm_rpc_client::FeeHistory;
+        use evm_rpc_client::HttpOutcallError;
         use ic_cdk::api::call::RejectionCode;
 
         #[test]
@@ -417,9 +417,9 @@ mod multi_call_results {
     }
 
     mod has_http_outcall_error_matching {
-        use crate::eth_rpc::HttpOutcallError;
         use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
         use crate::eth_rpc_client::{MultiCallError, MultiCallResults, SingleCallError};
+        use evm_rpc_client::HttpOutcallError;
         use ic_cdk::api::call::RejectionCode;
         use proptest::prelude::any;
         use proptest::proptest;
