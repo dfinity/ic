@@ -1,9 +1,11 @@
-use ic_icrc_rosetta::common::storage::storage_operations::*;
-use ic_icrc_rosetta::common::storage::types::{IcrcBlock, IcrcOperation, IcrcTransaction, RosettaBlock};
 use candid::{Nat, Principal};
+use ic_icrc_rosetta::common::storage::storage_operations::*;
+use ic_icrc_rosetta::common::storage::types::{
+    IcrcBlock, IcrcOperation, IcrcTransaction, RosettaBlock,
+};
 use icrc_ledger_types::icrc1::account::Account;
 use num_bigint::BigUint;
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use tempfile::tempdir;
 
 // Helper function to create a test block with a specific timestamp and data
@@ -357,8 +359,7 @@ fn test_hash_consistency() -> anyhow::Result<()> {
 
     // Test retrieving blocks by transaction hash
     for (i, original_tx_hash) in original_tx_hashes.iter().enumerate() {
-        let blocks_by_tx =
-            get_blocks_by_transaction_hash(&connection, original_tx_hash.clone())?;
+        let blocks_by_tx = get_blocks_by_transaction_hash(&connection, original_tx_hash.clone())?;
 
         assert_eq!(
             blocks_by_tx.len(),
@@ -389,4 +390,4 @@ fn test_hash_consistency() -> anyhow::Result<()> {
     }
 
     Ok(())
-} 
+}
