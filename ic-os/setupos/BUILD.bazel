@@ -28,7 +28,7 @@ genrule(
         $(location //rs/ic_os/dev_test_tools/setupos-disable-checks) --image-path disk.img
         tar --zstd -Scf $@ disk.img
     """,
-    tags = ["manual"],
+    tags = ["manual", "no-cache"],
     target_compatible_with = ["@platforms//os:linux"],
     tools = ["//rs/ic_os/dev_test_tools/setupos-disable-checks"],
     visibility = [
