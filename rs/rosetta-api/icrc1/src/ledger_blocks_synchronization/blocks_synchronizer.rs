@@ -64,7 +64,7 @@ async fn verify_and_fix_gaps(
     archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
 ) -> anyhow::Result<()> {
     let sync_ranges = derive_synchronization_gaps(storage_client.clone())?;
-    let tip_block_index= get_tip_block_index_and_hash(agent.clone()).await?.1;
+    let tip_block_index = get_tip_block_index_and_hash(agent.clone()).await?.1;
 
     for sync_range in sync_ranges {
         sync_blocks_interval(
@@ -302,7 +302,8 @@ impl ProgressReport {
             let remaining_count = self.remaining_end.saturating_sub(self.start) as f64 + 1.0;
             let expected_remaining_time = remaining_count / current_rate;
             self.last_update = now;
-            let progress = (self.tip_block_index as f64 - remaining_count) / self.tip_block_index as f64;
+            let progress =
+                (self.tip_block_index as f64 - remaining_count) / self.tip_block_index as f64;
             info!(
                 "Progress: {:.2}% (fetching {} of {}), ETA: {:.1}min ({:.1} blocks/s)",
                 progress * 100.0,
