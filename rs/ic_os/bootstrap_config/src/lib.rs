@@ -353,11 +353,9 @@ fn generate_network_conf(config: &BootstrapOptions) -> Result<String> {
         writeln!(network_conf, "ipv6_gateway={ipv6_gateway}")?;
     }
 
-    writeln!(
-        network_conf,
-        "hostname={}",
-        valid_hostname_or_error(config)?
-    )?;
+    let hostname = config.hostname.as_deref().unwrap_or_default();
+    validate_hostname(hostname)?;
+    writeln!(network_conf, "hostname={hostname}",)?;
 
     if let Some(ipv4_address) = &config.ipv4_address {
         writeln!(network_conf, "ipv4_address={ipv4_address}")?;
@@ -374,17 +372,13 @@ fn generate_network_conf(config: &BootstrapOptions) -> Result<String> {
     Ok(network_conf)
 }
 
-fn valid_hostname_or_error(bootstrap_options: &BootstrapOptions) -> Result<&str> {
-    let Some(hostname) = bootstrap_options.hostname.as_ref() else {
-        bail!("Hostname is required");
-    };
-
+fn validate_hostname(hostname: &str) -> Result<()> {
     let pattern = Regex::new(r"^[a-zA-Z][a-zA-Z0-9]*(-[a-zA-Z0-9]+)*$").unwrap();
-    if hostname.is_empty() || !pattern.is_match(hostname) {
+    if hostname.is_empty() || pattern.is_match(hostname) {
+        Ok(())
+    } else {
         bail!("Invalid hostname: '{hostname}'");
     }
-
-    Ok(hostname)
 }
 
 fn copy_dir_recursively(src: &Path, dst: &Path) -> Result<()> {
@@ -411,27 +405,19 @@ mod tests {
 
     #[test]
     fn test_is_valid_hostname() {
-        fn is_valid_hostname(hostname: &str) -> bool {
-            valid_hostname_or_error(&BootstrapOptions {
-                hostname: Some(hostname.to_string()),
-                ..Default::default()
-            })
-            .is_ok()
-        }
-
         // Valid hostnames
-        assert!(is_valid_hostname("hostname"));
-        assert!(is_valid_hostname("hostname123"));
-        assert!(is_valid_hostname("hostname-part2"));
-        assert!(is_valid_hostname("h-1-2-3"));
+        assert!(validate_hostname("").is_ok());
+        assert!(validate_hostname("hostname").is_ok());
+        assert!(validate_hostname("hostname123").is_ok());
+        assert!(validate_hostname("hostname-part2").is_ok());
+        assert!(validate_hostname("h-1-2-3").is_ok());
 
         // Invalid hostnames
-        assert!(!is_valid_hostname(""));
-        assert!(!is_valid_hostname("123hostname"));
-        assert!(!is_valid_hostname("hostname-"));
-        assert!(!is_valid_hostname("-hostname"));
-        assert!(!is_valid_hostname("hostname_invalid"));
-        assert!(!is_valid_hostname("hostname with spaces"));
+        assert!(validate_hostname("123hostname").is_err());
+        assert!(validate_hostname("hostname-").is_err());
+        assert!(validate_hostname("-hostname").is_err());
+        assert!(validate_hostname("hostname_invalid").is_err());
+        assert!(validate_hostname("hostname with spaces").is_err());
     }
 
     #[test]
