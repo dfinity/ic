@@ -13,12 +13,13 @@ on the process that this file is part of, see
 
 ## Changed
 
+* Proposal topics are persisted throughout its lifecycle instead of being recomputed every time.
+
 ## Deprecated
 
 ## Removed
 
-* The `governance_heap_neuron_count` metric is removed as there are no neurons in the heap anymore.
-
 ## Fixed
 
 ## Security
+Enforce a lower bound for `min_participant_icp_e8s` of `1_000_000`.

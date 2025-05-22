@@ -10,8 +10,7 @@ documentation.workspace = true
 bech32 = "0.9.0"
 candid = { workspace = true }
 ic-btc-interface = { workspace = true }
-ic-cdk = "0.17.1"
-ic-cdk-macros = "0.17.1"
+ic-cdk = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }

@@ -2258,7 +2258,7 @@ impl ExecutionEnvironment {
             .upload_chunk(
                 sender,
                 canister,
-                &args.chunk,
+                args.chunk,
                 round_limits,
                 subnet_size,
                 resource_saturation,
@@ -2328,7 +2328,7 @@ impl ExecutionEnvironment {
         let resource_saturation =
             self.subnet_memory_saturation(&round_limits.subnet_available_memory);
         let replace_snapshot = args.replace_snapshot();
-        let (result, instructions_used) = self.canister_manager.take_canister_snapshot(
+        let result = self.canister_manager.take_canister_snapshot(
             subnet_size,
             sender,
             &mut canister,
@@ -2341,8 +2341,8 @@ impl ExecutionEnvironment {
         state.put_canister_state(canister);
 
         match result {
-            Ok(response) => (Ok(response.encode()), instructions_used),
-            Err(err) => (Err(err.into()), instructions_used),
+            Ok((response, instructions_used)) => (Ok(response.encode()), instructions_used),
+            Err(err) => (Err(err.into()), NumInstructions::new(0)),
         }
     }
 
@@ -2953,7 +2953,7 @@ impl ExecutionEnvironment {
             ));
         }
 
-        let dpk = ic_vetkd_utils::DerivedPublicKey::deserialize(&subnet_public_key.public_key)
+        let dpk = ic_vetkd_utils::MasterPublicKey::deserialize(&subnet_public_key.public_key)
             .map_err(|err| {
                 UserError::new(
                     ErrorCode::CanisterRejectedMessage,
@@ -2962,7 +2962,7 @@ impl ExecutionEnvironment {
             })?;
 
         Ok(dpk
-            .derive_sub_key(caller.as_slice())
+            .derive_canister_key(caller.as_slice())
             .derive_sub_key(&context)
             .serialize())
     }
@@ -3320,14 +3320,6 @@ impl ExecutionEnvironment {
                     return (state, Some(NumInstructions::from(0)));
                 }
             };
-
-        // Track whether the deprecated fields in install_code were used.
-        if install_context.compute_allocation.is_some() {
-            self.metrics.compute_allocation_in_install_code_total.inc();
-        }
-        if install_context.memory_allocation.is_some() {
-            self.metrics.memory_allocation_in_install_code_total.inc();
-        }
 
         let call_id = match call_id {
             None => {

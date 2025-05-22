@@ -41,9 +41,7 @@ anchors:
     container:
       <<: *image
       options: >-
-        -e NODE_NAME
-        --privileged --cgroupns host
-        -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 90
   dind-small-setup: &dind-small-setup
     runs-on:
@@ -244,7 +242,7 @@ jobs:
         uses:  ./.github/actions/bazel-test-all/
         with:
           BAZEL_COMMAND: ${{ steps.cfg.outputs.build-command }}
-          BAZEL_TARGETS: //rs/... //publish/binaries/...
+          BAZEL_TARGETS: //rs/... //:upload-artifacts
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ''
       - name: Purge Bazel Output
