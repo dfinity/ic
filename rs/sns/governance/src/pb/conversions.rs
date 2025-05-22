@@ -1,8 +1,7 @@
 use crate::pb::v1 as pb;
-use crate::pb::v1::governance_error::ErrorType;
 use crate::topics;
-use ic_sns_governance_api::pb::v1::get_sns_status_response::{GetMetricsResult, Metrics};
-use ic_sns_governance_api::pb::v1::{self as pb_api, GovernanceError};
+use ic_sns_governance_api::pb::v1 as pb_api;
+// use ic_sns_governance_api::pb::v1::get_metrics_response::{GetMetricsResult, Metrics};
 
 impl From<pb::NeuronPermission> for pb_api::NeuronPermission {
     fn from(item: pb::NeuronPermission) -> Self {
@@ -1823,45 +1822,41 @@ impl From<pb_api::GetMetadataRequest> for pb::GetMetadataRequest {
     }
 }
 
-impl From<pb_api::GetMetricsRequest> for pb::GetMetricsRequest {
-    fn from(value: pb_api::GetMetricsRequest) -> Self {
-        Self {
-            time_window_seconds: value.time_window_seconds,
-        }
+impl TryFrom<pb_api::GetMetricsRequest> for pb::GetMetricsRequest {
+    type Error = String;
+
+    fn try_from(value: pb_api::GetMetricsRequest) -> Result<Self, Self::Error> {
+        let pb_api::GetMetricsRequest {
+            time_window_seconds,
+        } = value;
+
+        let Some(time_window_seconds) = time_window_seconds else {
+            return Err("field time_window_seconds must be specified.".to_string());
+        };
+
+        Ok(Self {
+            time_window_seconds,
+        })
     }
 }
-impl From<pb::GetMetricsResponse> for pb_api::get_sns_status_response::GetMetricsResponse {
+impl From<pb::GetMetricsResponse> for pb_api::get_metrics_response::GetMetricsResponse {
     fn from(value: pb::GetMetricsResponse) -> Self {
-        let missing_last_tx_ts_err = "`last_transaction_timestamp`";
-        let missing_num_recent_proposals = "`num_recent_proposals`";
-
-        let get_metrics_result =
-            match (value.num_recent_proposals, value.last_transaction_timestamp) {
-                (Some(num_recent_proposals), Some(last_transaction_timestamp)) => {
-                    GetMetricsResult::Ok(Metrics {
+        match (value.num_recent_proposals, value.last_transaction_timestamp) {
+            (Some(num_recent_proposals), Some(last_transaction_timestamp)) => Self {
+                get_metrics_result: Some(pb_api::get_metrics_response::GetMetricsResult::Ok(
+                    pb_api::get_metrics_response::Metrics {
                         num_recent_proposals: Some(num_recent_proposals),
                         last_transaction_timestamp: Some(last_transaction_timestamp),
-                    })
+                    },
+                )),
+            },
+            _ => {
+                // The other cases should be unreachable, due to the internal implementation
+                // of `get_metrics()`. We, however, return a None.
+                Self {
+                    get_metrics_result: None,
                 }
-                (Some(_), None) => GetMetricsResult::Err(GovernanceError {
-                    error_type: ErrorType::External.into(),
-                    error_message: format!("missing {}", missing_last_tx_ts_err),
-                }),
-                (None, Some(_)) => GetMetricsResult::Err(GovernanceError {
-                    error_type: ErrorType::External.into(),
-                    error_message: format!("missing {}", missing_num_recent_proposals),
-                }),
-                (None, None) => GetMetricsResult::Err(GovernanceError {
-                    error_type: ErrorType::External.into(),
-                    error_message: format!(
-                        "missing {} and {}",
-                        missing_last_tx_ts_err, missing_num_recent_proposals
-                    ),
-                }),
-            };
-
-        Self {
-            get_metrics_result: Some(get_metrics_result),
+            }
         }
     }
 }

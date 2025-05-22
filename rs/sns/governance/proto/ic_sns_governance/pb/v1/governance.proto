@@ -1596,7 +1596,7 @@ message GetMetadataResponse {
 
 // Request message for 'get_sns_status'
 message GetMetricsRequest {
-  optional uint64 time_window_seconds = 1;
+  uint64 time_window_seconds = 1;
 }
 
 // Response message for 'get_sns_status'
