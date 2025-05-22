@@ -503,7 +503,7 @@ fn test_canister_log_record_index_increment_after_node_restart() {
 fn test_logging_in_trapped_wasm_execution() {
     let (env, canister_id, controller) = setup_with_controller(
         wat_canister()
-            .update("test", wat_fn().stable_grow(1).stable_read(0, 70_000))
+            .update("test", wat_fn().stable_grow(1).stable_read(0, 0, 70_000))
             .build_wasm(),
     );
     // advance time so that time does not grow implicitly when executing a round
