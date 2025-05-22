@@ -159,7 +159,7 @@ mod multi_call_results {
 
     mod reduce_with_min_by_key {
         use crate::eth_rpc_client::tests::{BLOCK_PI, PUBLIC_NODE};
-        use crate::eth_rpc_client::{MinByKey, ReduceWithStrategy};
+        use crate::eth_rpc_client::Reduce;
         use crate::numeric::TransactionCount;
         use evm_rpc_client::{MultiRpcResult, Nat256};
 
@@ -170,8 +170,7 @@ mod multi_call_results {
                 (PUBLIC_NODE, Ok(123457_u32.into())),
             ]);
 
-            let reduced: Result<TransactionCount, _> =
-                ReduceWithStrategy::<MinByKey>::reduce(results).into();
+            let reduced: Result<TransactionCount, _> = results.reduce().into();
 
             assert_eq!(reduced, Ok(TransactionCount::new(123456)));
         }

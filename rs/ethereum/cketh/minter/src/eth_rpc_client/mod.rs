@@ -141,28 +141,29 @@ impl EthRpcClient {
         &self,
         address: Address,
     ) -> Result<TransactionCount, MultiCallError<TransactionCount>> {
-        let results = self
-            .evm_rpc_client
-            .eth_get_transaction_count(EvmGetTransactionCountArgs {
-                address: Hex20::from(address.into_bytes()),
-                block: BlockTag::Finalized,
-            })
-            .await;
-        ReduceWithStrategy::<Equality>::reduce(results).into()
+        convert_multirpcresult(
+            self.evm_rpc_client
+                .eth_get_transaction_count(EvmGetTransactionCountArgs {
+                    address: Hex20::from(address.into_bytes()),
+                    block: BlockTag::Finalized,
+                })
+                .await
+                .map(&|tx_count: Nat256| TransactionCount::from(tx_count)),
+        )
     }
 
     pub async fn eth_get_latest_transaction_count(
         &self,
         address: Address,
     ) -> Result<TransactionCount, MultiCallError<TransactionCount>> {
-        let results = self
-            .evm_rpc_client
+        self.evm_rpc_client
             .eth_get_transaction_count(EvmGetTransactionCountArgs {
                 address: Hex20::from(address.into_bytes()),
                 block: BlockTag::Latest,
             })
-            .await;
-        ReduceWithStrategy::<MinByKey>::reduce(results).into()
+            .await
+            .reduce()
+            .into()
     }
 }
 
@@ -563,28 +564,7 @@ impl Reduce for EvmMultiRpcResult<SendRawTransactionStatus> {
     }
 }
 
-trait ReduceWithStrategy<S> {
-    type Item;
-    fn reduce(self) -> ReducedResult<Self::Item>;
-}
-
-pub enum Equality {}
-pub enum MinByKey {}
-
-impl ReduceWithStrategy<Equality> for EvmMultiRpcResult<Nat256> {
-    type Item = TransactionCount;
-
-    fn reduce(self) -> ReducedResult<Self::Item> {
-        ReducedResult::from_internal(self).map_reduce(
-            &|tx_count: Nat256| {
-                Ok::<TransactionCount, Infallible>(TransactionCount::from(tx_count))
-            },
-            MultiCallResults::reduce_with_equality,
-        )
-    }
-}
-
-impl ReduceWithStrategy<MinByKey> for EvmMultiRpcResult<Nat256> {
+impl Reduce for EvmMultiRpcResult<Nat256> {
     type Item = TransactionCount;
 
     fn reduce(self) -> ReducedResult<Self::Item> {
