@@ -124,4 +124,71 @@ pub struct UpdateNodeOperatorConfigPayload {
     /// not be updated. This field is for the case when we want to update the value to be None.
     #[prost(message, optional, tag = "7")]
     pub set_ipv6_to_none: Option<bool>,
+
+    /// A map from node type to the maximum number of nodes for which the associated Node
+    /// Operator should be rewarded.
+    pub max_rewardable_nodes: BTreeMap<String, i32>,
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::common::test_helpers::invariant_compliant_registry;
+    use crate::mutations::common::test::TEST_NODE_ID;
+    use crate::mutations::do_update_node_operator_config::UpdateNodeOperatorConfigPayload;
+    use ic_base_types::PrincipalId;
+    use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
+    use ic_registry_keys::make_node_operator_record_key;
+    use ic_registry_transport::insert;
+    use maplit::btreemap;
+
+    #[test]
+    fn test_should_update_fields_if_included() {
+        let mut registry = invariant_compliant_registry(0);
+
+        // create a new NO record
+        let node_operator_record = NodeOperatorRecord {
+            node_operator_principal_id: PrincipalId::new_user_test_id(100).to_vec(),
+            node_allowance: 1, // Should be > 0 to add a new node
+            node_provider_principal_id: PrincipalId::new_user_test_id(1000).to_vec(),
+            dc_id: "DC1".to_string(),
+            rewardable_nodes: btreemap! { "type1.1".to_string() => 1 },
+            ipv6: Some("foo".to_string()),
+            max_rewardable_nodes: btreemap! { "type1.2".to_string() => 1 },
+        };
+        let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_node_operator_record_key(node_operator_id),
+            node_operator_record.encode_to_vec(),
+        )]);
+
+        // Make a proposal to upgrade all unassigned nodes to a new version
+        let payload = UpdateNodeOperatorConfigPayload {
+            node_operator_id: Some(PrincipalId::new_user_test_id(100)),
+            node_allowance: Some(2),
+            dc_id: Some("DC2".to_string()),
+            rewardable_nodes: btreemap! { "type1.3".to_string() => 2 },
+            node_provider_id: Some(PrincipalId::new_user_test_id(2000)),
+            ipv6: Some("bar".to_string()),
+            set_ipv6_to_none: None,
+            max_rewardable_nodes: btreemap! { "type1.4".to_string() => 3 },
+        };
+
+        registry.do_update_node_operator_config(payload);
+        let node_operator_record = get_node_operator_record(&registry, node_operator_id);
+        assert_eq!(
+            node_operator_record,
+            NodeOperatorRecord {
+                node_operator_principal_id: PrincipalId::new_user_test_id(100).to_vec(),
+                node_allowance: 2,
+                node_provider_principal_id: PrincipalId::new_user_test_id(2000).to_vec(),
+                dc_id: "DC2".to_string(),
+                rewardable_nodes: btreemap! { "type1.3".to_string() => 2 },
+                ipv6: Some("bar".to_string()),
+                max_rewardable_nodes: btreemap! { "type1.4".to_string() => 3 },
+            }
+        );
+    }
+
+    #[test]
+    fn test_should_not_update_fields_if_omitted() {}
 }
