@@ -7,18 +7,17 @@ use utils::to_cidr;
 /// Generate the GuestOS configuration based on the provided HostOS configuration.
 pub fn generate_guestos_config(hostos_config: &HostOSConfig) -> Result<GuestOSConfig> {
     let hostos_config = hostos_config.clone();
-    let generated_mac = calculate_deterministic_mac(
-        &hostos_config.icos_settings.mgmt_mac,
-        hostos_config.icos_settings.deployment_environment,
-        IpVariant::V6,
-        NodeType::GuestOS, // TODO(NODE-1608): support UpgradeGuestOS
-    );
     // TODO: We won't have to modify networking between the hostos and
     // guestos config after completing the networking revamp (NODE-1327)
     let mut guestos_network_settings = hostos_config.network_settings;
-    // Update the GuestOS networking if `guestos_ipv6_address` is provided
     match &guestos_network_settings.ipv6_config {
         Ipv6Config::Deterministic(deterministic_ipv6_config) => {
+            let generated_mac = calculate_deterministic_mac(
+                &hostos_config.icos_settings.mgmt_mac,
+                hostos_config.icos_settings.deployment_environment,
+                IpVariant::V6,
+                NodeType::GuestOS, // TODO(NODE-1608): support UpgradeGuestOS
+            );
             let guestos_ipv6_address =
                 generated_mac.calculate_slaac(&deterministic_ipv6_config.prefix)?;
             guestos_network_settings.ipv6_config = Ipv6Config::Fixed(FixedIpv6Config {
