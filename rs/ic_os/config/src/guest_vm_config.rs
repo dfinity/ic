@@ -71,23 +71,23 @@ fn run(
     let vm_config_path = &args.output;
 
     // Create parent directory if it doesn't exist
-    if let Some(parent) = output_path.parent() {
+    if let Some(parent) = vm_config_path.parent() {
         fs::create_dir_all(parent).context("Failed to create output directory")?;
     }
 
-    File::create(output_path)
+    File::create(vm_config_path)
         .context("Failed to create output file")?
         .write_all(generate_vm_config(&hostos_config, &args.media)?.as_bytes())
         .context("Failed to write output file")?;
 
     // Restore SELinux security context
-    if let Some(parent) = output_path.parent() {
+    if let Some(parent) = vm_config_path.parent() {
         restorecon(parent)?
     }
 
     println!(
         "Generating GuestOS configuration file: {}",
-        output_path.display(),
+        vm_config_path.display(),
     );
 
     metrics_writer.write_metrics(&[Metric::with_annotation(
@@ -327,6 +327,7 @@ mod tests {
                 node_operator_private_key: Some(PathBuf::from(
                     "/boot/config/node_operator_private_key.pem"
                 )),
+                #[cfg(feature = "dev")]
                 accounts_ssh_authorized_keys: Some(PathBuf::from(
                     "/boot/config/ssh_authorized_keys"
                 )),
@@ -341,44 +342,44 @@ mod tests {
         path
     }
 
-fn test_vm_config(cpu_type: &str, filename: &str) {
-    let mut mint = Mint::new(goldenfiles_path());
-    let mut config = create_test_hostos_config();
-    
-    config.hostos_settings = HostOSSettings {
-        vm_memory: 490,
-        vm_cpu: cpu_type.to_string(),
-        vm_nr_of_vcpus: 56,
-        verbose: false,
-    };
+    fn test_vm_config(cpu_type: &str, filename: &str) {
+        let mut mint = Mint::new(goldenfiles_path());
+        let mut config = create_test_hostos_config();
 
-    let vm_config = generate_vm_config(&config, Path::new("/tmp/config.img")).unwrap();
-    fs::write(mint.new_goldenpath(filename).unwrap(), vm_config).unwrap();
-}
+        config.hostos_settings = HostOSSettings {
+            vm_memory: 490,
+            vm_cpu: cpu_type.to_string(),
+            vm_nr_of_vcpus: 56,
+            verbose: false,
+        };
 
-#[test]
-fn test_generate_vm_config_qemu() {
-    test_vm_config("qemu", "guestos_vm_qemu.xml");
-}
+        let vm_config = generate_vm_config(&config, Path::new("/tmp/config.img")).unwrap();
+        fs::write(mint.new_goldenpath(filename).unwrap(), vm_config).unwrap();
+    }
 
-#[test]
-fn test_generate_vm_config_kvm() {
-    test_vm_config("kvm", "guestos_vm_kvm.xml");
-}
+    #[test]
+    fn test_generate_vm_config_qemu() {
+        test_vm_config("qemu", "guestos_vm_qemu.xml");
+    }
+
+    #[test]
+    fn test_generate_vm_config_kvm() {
+        test_vm_config("kvm", "guestos_vm_kvm.xml");
+    }
 
     #[test]
     fn test_run_success() {
         let temp_dir = tempdir().unwrap();
         let hostos_config_path = temp_dir.path().join("hostos.json");
         let media_path = temp_dir.path().join("config.img");
-        let output_path = temp_dir.path().join("guestos.xml");
+        let vm_config_path = temp_dir.path().join("guestos.xml");
         let metrics_path = temp_dir.path().join("metrics.prom");
 
         serialize_and_write_config(&hostos_config_path, &create_test_hostos_config()).unwrap();
 
         let args = GenerateGuestVmConfigArgs {
             media: media_path.clone(),
-            output: output_path.clone(),
+            output: vm_config_path.clone(),
             config: hostos_config_path.clone(),
         };
 
@@ -397,7 +398,7 @@ fn test_generate_vm_config_kvm() {
         );
 
         assert!(media_path.metadata().unwrap().size() > 0);
-        assert!(output_path.metadata().unwrap().size() > 0);
+        assert!(vm_config_path.metadata().unwrap().size() > 0);
     }
 
     #[test]
@@ -405,17 +406,17 @@ fn test_generate_vm_config_kvm() {
         let temp_dir = tempdir().unwrap();
         let hostos_config_path = temp_dir.path().join("hostos.json");
         let media_path = temp_dir.path().join("config.img");
-        let output_path = temp_dir.path().join("guestos.xml");
+        let vm_config_path = temp_dir.path().join("guestos.xml");
         let metrics_path = temp_dir.path().join("metrics.prom");
 
         serialize_and_write_config(&hostos_config_path, &create_test_hostos_config()).unwrap();
 
         // Create the output file so it already exists
-        fs::write(&output_path, "test").unwrap();
+        fs::write(&vm_config_path, "test").unwrap();
 
         let args = GenerateGuestVmConfigArgs {
             media: media_path,
-            output: output_path,
+            output: vm_config_path,
             config: hostos_config_path,
         };
 
@@ -437,5 +438,11 @@ fn test_generate_vm_config_kvm() {
              # TYPE hostos_generate_guestos_config counter\n\
              hostos_generate_guestos_config 0\n"
         )
+    }
+
+    #[test]
+    fn ensure_tested_with_dev() {
+        // Ensure that the test is run with the dev feature enabled.
+        assert!(cfg!(feature = "dev"));
     }
 }

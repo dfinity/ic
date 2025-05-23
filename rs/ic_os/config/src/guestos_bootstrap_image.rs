@@ -538,6 +538,7 @@ mod tests {
             guestos_config: Some(config_path),
             nns_public_key: Some(nns_key_path),
             node_operator_private_key: Some(node_key_path),
+            #[cfg(feature = "dev")]
             accounts_ssh_authorized_keys: Some(ssh_keys_dir),
             ic_crypto: Some(crypto_dir),
             ic_state: Some(state_dir),
@@ -553,10 +554,15 @@ mod tests {
             nns_urls: vec!["url1".to_string(), "url2".to_string()],
             backup_retention_time_sec: Some(3600),
             backup_purging_interval_sec: Some(300),
+            #[cfg(feature = "dev")]
             malicious_behavior: Some(MaliciousBehaviour::new(true)),
+            #[cfg(feature = "dev")]
             query_stats_epoch_length: Some(60),
+            #[cfg(feature = "dev")]
             bitcoind_addr: Some("127.0.0.1:8332".to_string()),
+            #[cfg(feature = "dev")]
             jaeger_addr: Some("127.0.0.1:14250".to_string()),
+            #[cfg(feature = "dev")]
             socks_proxy: Some("socks5://127.0.0.1:1080".to_string()),
         };
 
@@ -670,5 +676,11 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn ensure_tested_with_dev() {
+        // Ensure that the test is run with the dev feature enabled.
+        assert!(cfg!(feature = "dev"));
     }
 }
