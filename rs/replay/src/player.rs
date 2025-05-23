@@ -46,7 +46,7 @@ use ic_registry_keys::{make_blessed_replica_versions_key, make_subnet_record_key
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
 };
-use ic_registry_nns_data_provider::registry::registry_deltas_to_registry_transport_records;
+use ic_registry_nns_data_provider::registry::registry_deltas_to_registry_records;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{
     dechunkify_delta, dechunkify_get_value_response_content,
@@ -1256,7 +1256,7 @@ async fn get_changes_since(
                     inlined_deltas.push(delta);
                 }
 
-                registry_deltas_to_registry_transport_records(inlined_deltas)
+                registry_deltas_to_registry_records(inlined_deltas)
                     .map_err(|err| format!("{:?}", err))
             }
 

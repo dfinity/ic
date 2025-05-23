@@ -156,13 +156,13 @@ impl RegistryCanister {
     ///
     /// The registry records returned by this function are guaranteed to be
     /// sorted by version.
-    pub async fn get_changes_since_as_transport_records(
+    pub async fn get_changes_since_as_registry_records(
         &self,
         version: u64,
     ) -> Result<(Vec<RegistryRecord>, u64), Error> {
         let (deltas, latest_version) = self.get_changes_since(version).await?;
         Ok((
-            registry_deltas_to_registry_transport_records(deltas)?,
+            registry_deltas_to_registry_records(deltas)?,
             latest_version,
         ))
     }
@@ -318,7 +318,7 @@ impl RegistryCanister {
 }
 
 /// Convert `Vec<RegistryDelta>` to `Vec<RegistryRecord>`.
-pub fn registry_deltas_to_registry_transport_records(
+pub fn registry_deltas_to_registry_records(
     deltas: Vec<RegistryDelta>,
 ) -> Result<Vec<RegistryRecord>, Error> {
     let mut records = Vec::new();

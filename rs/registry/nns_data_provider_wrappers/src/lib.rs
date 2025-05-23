@@ -51,7 +51,7 @@ impl RegistryDataProvider for NnsDataProvider {
         tokio::task::block_in_place(|| {
             rt_handle.block_on(async move {
                 registry_canister
-                    .get_changes_since_as_transport_records(version.get())
+                    .get_changes_since_as_registry_records(version.get())
                     .await
                     .map(|v| v.0)
                     .map_err(|source| RegistryDataProviderError::Transfer {
