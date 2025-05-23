@@ -1,0 +1,29 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = [
+    # Keep sorted.
+    "//rs/nns/governance:__pkg__",
+    "//rs/sns/governance:__pkg__",
+])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:itertools",
+    "@crate_index//:thiserror",
+]
+
+ALIASES = {}
+
+LIB_SRCS = glob(
+    ["src/**"],
+    exclude = ["**/*tests.rs"],
+)
+
+rust_library(
+    name = "set_following",
+    srcs = LIB_SRCS,
+    aliases = ALIASES,
+    crate_name = "ic_nervous_system_governance_set_following",
+    version = "0.0.1",
+    deps = DEPENDENCIES,
+)
