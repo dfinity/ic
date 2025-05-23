@@ -1,7 +1,7 @@
 use anyhow::{bail, Context, Result};
 use askama::Template;
-use bootstrap_config::{build_bootstrap_config_image, BootstrapOptions};
 use clap::Parser;
+use config::guestos_bootstrap_image::BootstrapOptions;
 use config::guestos_config::generate_guestos_config;
 use config::{serialize_and_write_config, DEFAULT_HOSTOS_CONFIG_OBJECT_PATH};
 use config_types::{GuestOSConfig, HostOSConfig, Ipv6Config};
@@ -34,9 +34,9 @@ struct Args {
 pub fn main() -> Result<()> {
     let args = Args::parse();
 
-    let metrics_writer = MetricsWriter::new(
+    let metrics_writer = MetricsWriter::new(PathBuf::from(
         "/run/node_exporter/collector_textfile/hostos_generate_guestos_config.prom",
-    );
+    ));
 
     let hostos_config: HostOSConfig = serde_json::from_reader(
         File::open(&args.config).context("Failed to open HostOS config file")?,
@@ -124,7 +124,7 @@ fn assemble_config_media(hostos_config: &HostOSConfig, media_path: &Path) -> Res
     let bootstrap_options =
         make_bootstrap_options(hostos_config, guestos_config, guestos_config_file.path())?;
 
-    build_bootstrap_config_image(media_path, &bootstrap_options)?;
+    bootstrap_options.build_bootstrap_config_image(media_path)?;
 
     println!(
         "Assembling config media for GuestOS: {}",
@@ -405,7 +405,7 @@ mod tests {
             config: PathBuf::from("/non/existent/path"),
         };
 
-        let metrics_writer = MetricsWriter::new(metrics_path.to_str().unwrap());
+        let metrics_writer = MetricsWriter::new(metrics_path.clone());
         let config = create_test_hostos_config();
 
         let result = run(&args, &metrics_writer, &config, mock_restorecon);
@@ -435,7 +435,7 @@ mod tests {
             config: PathBuf::from("/path/to/config"),
         };
 
-        let metrics_writer = MetricsWriter::new(metrics_path.to_str().unwrap());
+        let metrics_writer = MetricsWriter::new(metrics_path.clone());
         let config = create_test_hostos_config();
 
         let result_err = run(&args, &metrics_writer, &config, mock_restorecon).unwrap_err();

@@ -5,7 +5,6 @@ edition = "2021"
 [dependencies]
 anyhow = { workspace = true }
 askama = { workspace = true }
-bootstrap_config = { path = "../bootstrap_config" }
 clap = { workspace = true }
 config = { path = "../config" }
 config_types = { path = "../config_types" }
@@ -20,4 +19,4 @@ url = { workspace = true }
 goldenfile = { workspace = true }
 
 [features]
-dev = ["bootstrap_config/dev"]
+dev = ["config/dev"]

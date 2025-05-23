@@ -4,7 +4,6 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/ic_os/config:config_lib",
     "//rs/ic_os/config_types",
     "//rs/ic_os/deterministic_ips",
     "//rs/ic_os/metrics_tool",
@@ -26,7 +25,7 @@ rust_binary(
     srcs = glob(["src/**/*.rs"]),
     compile_data = ["templates/guestos_vm_template.xml"],
     crate_name = "generate_guestos_vm_config",
-    deps = DEPENDENCIES + ["//rs/ic_os/bootstrap_config"],
+    deps = DEPENDENCIES + ["//rs/ic_os/config:config_lib"],
 )
 
 # Dev version for testing that should only be enabled in dev builds (unsafe for prod).
@@ -36,7 +35,7 @@ rust_binary(
     compile_data = ["templates/guestos_vm_template.xml"],
     crate_features = ["dev"],
     crate_name = "generate_guestos_vm_config",
-    deps = DEPENDENCIES + ["//rs/ic_os/bootstrap_config:bootstrap_config_dev"],
+    deps = DEPENDENCIES + ["//rs/ic_os/config:config_lib_dev"],
 )
 
 rust_test(
