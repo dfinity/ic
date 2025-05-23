@@ -920,10 +920,10 @@ pub struct Install<'a> {
     pub mode: CanisterInstallMode,
     pub runtime: &'a Runtime,
     pub wasm: Wasm,
-    // The compute and memory allocation fields are still useful here as they
-    // are used to set the allocation of the canister when an `update_settings`
-    // request is used. However, it's weird that they are in a struct called
-    // `Install`. This should probably be cleaned up in the future.
+    // The compute and memory allocation fields are not used in `install_code`
+    // requests but rather in `update_settings`. This is a bit weird as they
+    // are part of a struct called `Install`. This should probably be cleaned
+    // up in the future.
     pub compute_allocation: Option<u64>,
     pub memory_allocation: Option<u64>,
     pub num_cycles: Option<u128>,
