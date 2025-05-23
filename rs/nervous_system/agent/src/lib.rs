@@ -6,6 +6,7 @@ use std::{fmt::Display, future::Future};
 
 pub mod agent_impl;
 pub mod helpers;
+pub mod icrc2;
 pub mod ledger;
 pub mod management_canister;
 pub mod mock;
@@ -14,7 +15,6 @@ mod null_request;
 pub mod pocketic_impl;
 mod registry;
 pub mod sns;
-pub mod icrc2;
 #[cfg(feature = "test")]
 pub mod state_machine_impl;
 
