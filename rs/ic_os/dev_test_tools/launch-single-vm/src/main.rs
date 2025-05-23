@@ -1,8 +1,8 @@
-use bootstrap_config::BootstrapOptions;
 use clap::Parser;
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
+use config::guestos_bootstrap_image::BootstrapOptions;
 use config_types::DeploymentEnvironment;
 use ic_prep_lib::{
     internet_computer::{IcConfig, TopologyConfig},

@@ -10,7 +10,7 @@ use std::process::Command;
 #[cfg(feature = "dev")]
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 
-/// Configuration options for bootstrap image/tar creation
+/// Configuration options for GuestOS bootstrap image/tar creation.
 #[derive(Default, Debug, Clone)]
 pub struct BootstrapOptions {
     /// The serialized GuestOS config object.

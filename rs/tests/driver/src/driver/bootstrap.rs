@@ -25,10 +25,10 @@ use crate::{
     k8s::job::wait_for_job_completion,
 };
 use anyhow::{bail, Context, Result};
-use bootstrap_config::BootstrapOptions;
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
+use config::guestos_bootstrap_image::BootstrapOptions;
 use config_types::DeploymentEnvironment;
 use ic_base_types::NodeId;
 use ic_prep_lib::{
