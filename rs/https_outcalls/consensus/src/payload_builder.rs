@@ -56,7 +56,7 @@ mod proptests;
 mod tests;
 mod utils;
 
-/// Statistics about http messages. The stats contain data about 
+/// Statistics about http messages. The stats contain data about
 /// the number of canister http message types in a canister http payload
 /// but also data about the payload_size
 #[derive(Debug, Default)]
