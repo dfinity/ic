@@ -2,7 +2,6 @@
 //! here, so that Bazel does not recompile the whole production crate each time the tests are run.
 //! The name of this file is indeed too generic; feel free to factor specific tests out into
 //! more appropriate locations, or create new file modules for them, whatever makes more sense.
-
 use super::test_helpers::{
     basic_governance_proto, canister_status_for_test,
     canister_status_from_management_canister_for_test, DoNothingLedger, A_MOTION_PROPOSAL,
