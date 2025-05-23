@@ -1,7 +1,7 @@
 use crate::itest_helpers::{populate_canister_ids, SnsTestsInitPayloadBuilder};
 use candid::{CandidType, Decode, Encode};
 use canister_test::Project;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_ledger_core::Tokens;
 use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_clients::{
@@ -40,14 +40,24 @@ use ic_sns_swap::pb::v1::{
     RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, Ticket,
 };
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
+use ic_test_utilities_execution_environment::get_routing_table_with_specified_ids_allocation_range;
 use ic_types::ingress::WasmResult;
 use icp_ledger::{
     AccountIdentifier, BlockIndex, Memo, TransferArgs, TransferError, DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
+use std::str::FromStr;
 
 pub fn state_machine_builder_for_sns_tests() -> StateMachineBuilder {
-    StateMachineBuilder::new().with_current_time()
+    let subnet_id: SubnetId =
+        PrincipalId::from_str("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
+            .unwrap()
+            .into();
+    let routing_table = get_routing_table_with_specified_ids_allocation_range(subnet_id).unwrap();
+    StateMachineBuilder::new()
+        .with_current_time()
+        .with_routing_table(routing_table)
+        .with_subnet_id(subnet_id)
 }
 
 #[derive(Copy, Clone, Debug)]

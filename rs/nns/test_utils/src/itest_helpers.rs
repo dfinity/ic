@@ -363,7 +363,10 @@ pub async fn set_up_governance_canister(
     runtime: &'_ Runtime,
     init_payload: Governance,
 ) -> Canister<'_> {
-    let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
+    let mut canister = runtime
+        .create_canister_at_id_max_cycles_with_retries(GOVERNANCE_CANISTER_ID.get())
+        .await
+        .unwrap();
     install_governance_canister(&mut canister, init_payload).await;
     canister
 }
@@ -382,7 +385,10 @@ pub async fn set_up_registry_canister(
     runtime: &'_ Runtime,
     init_payload: RegistryCanisterInitPayload,
 ) -> Canister<'_> {
-    let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
+    let mut canister = runtime
+        .create_canister_at_id_max_cycles_with_retries(REGISTRY_CANISTER_ID.get())
+        .await
+        .unwrap();
     install_registry_canister(&mut canister, init_payload).await;
     canister
 }
@@ -402,7 +408,10 @@ pub async fn set_up_genesis_token_canister(
     runtime: &'_ Runtime,
     init_payload: Gtc,
 ) -> Canister<'_> {
-    let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
+    let mut canister = runtime
+        .create_canister_at_id_max_cycles_with_retries(GENESIS_TOKEN_CANISTER_ID.get())
+        .await
+        .unwrap();
     install_genesis_token_canister(&mut canister, init_payload).await;
     canister
 }
@@ -423,7 +432,10 @@ pub async fn set_up_ledger_canister(
     runtime: &Runtime,
     args: LedgerCanisterInitPayload,
 ) -> Canister {
-    let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
+    let mut canister = runtime
+        .create_canister_at_id_max_cycles_with_retries(LEDGER_CANISTER_ID.get())
+        .await
+        .unwrap();
     install_ledger_canister(&mut canister, args).await;
     canister
 }
@@ -442,7 +454,10 @@ pub async fn set_up_root_canister(
     runtime: &'_ Runtime,
     init_payload: RootCanisterInitPayload,
 ) -> Canister<'_> {
-    let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
+    let mut canister = runtime
+        .create_canister_at_id_max_cycles_with_retries(ROOT_CANISTER_ID.get())
+        .await
+        .unwrap();
     install_root_canister(&mut canister, init_payload).await;
     canister
 }
@@ -467,7 +482,10 @@ pub async fn set_up_cycles_minting_canister(
     runtime: &'_ Runtime,
     init_payload: Option<CyclesCanisterInitPayload>,
 ) -> Canister<'_> {
-    let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
+    let mut canister = runtime
+        .create_canister_at_id_max_cycles_with_retries(CYCLES_MINTING_CANISTER_ID.get())
+        .await
+        .unwrap();
     install_cycles_minting_canister(&mut canister, init_payload).await;
     canister
 }
@@ -498,7 +516,10 @@ pub async fn set_up_lifeline_canister(
     runtime: &'_ Runtime,
     init_payload: LifelineCanisterInitPayload,
 ) -> Canister<'_> {
-    let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
+    let mut canister = runtime
+        .create_canister_at_id_max_cycles_with_retries(LIFELINE_CANISTER_ID.get())
+        .await
+        .unwrap();
     install_lifeline_canister(&mut canister, init_payload).await;
     canister
 }
