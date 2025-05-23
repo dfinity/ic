@@ -133,7 +133,6 @@ fn make_bootstrap_options(
         ..Default::default()
     };
 
-    // Set SSH authorized keys (only in dev builds)
     #[cfg(feature = "dev")]
     if hostos_config.icos_settings.use_ssh_authorized_keys {
         bootstrap_options.accounts_ssh_authorized_keys =
