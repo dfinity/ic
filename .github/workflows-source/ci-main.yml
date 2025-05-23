@@ -141,7 +141,6 @@ jobs:
     needs: [ config ]
     <<: *dind-large-setup
     runs-on:
-      group: zh1
       labels: dind-large
     env:
       # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
