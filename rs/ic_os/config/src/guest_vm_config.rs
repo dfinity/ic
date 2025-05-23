@@ -68,7 +68,7 @@ fn run(
         );
     }
 
-    let output_path = &args.output;
+    let vm_config_path = &args.output;
 
     // Create parent directory if it doesn't exist
     if let Some(parent) = output_path.parent() {
