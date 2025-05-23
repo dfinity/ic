@@ -34,6 +34,7 @@ use ic_stable_structures::writer::{BufferedWriter, Writer};
 use icrc_ledger_types::icrc103::get_allowances::{
     Allowances, GetAllowancesArgs, GetAllowancesError,
 };
+use icrc_ledger_types::icrc106::errors::Icrc106Error;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc21::{
     errors::Icrc21Error, lib::build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
@@ -879,6 +880,10 @@ fn supported_standards() -> Vec<StandardRecord> {
             name: "ICRC-103".to_string(),
             url: "https://github.com/dfinity/ICRC/tree/main/ICRCs/ICRC-103".to_string(),
         },
+        StandardRecord {
+            name: "ICRC-106".to_string(),
+            url: "https://github.com/dfinity/ICRC/pull/106".to_string(),
+        },
     ];
     standards
 }
@@ -1079,6 +1084,15 @@ fn icrc3_get_blocks(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
 #[candid_method(query)]
 fn icrc10_supported_standards() -> Vec<StandardRecord> {
     supported_standards()
+}
+
+#[query]
+#[candid_method(query)]
+fn icrc106_get_index_principal() -> Result<Principal, Icrc106Error> {
+    Access::with_ledger(|ledger| match ledger.index_principal() {
+        None => Err(Icrc106Error::IndexPrincipalNotSet),
+        Some(index_principal) => Ok(index_principal),
+    })
 }
 
 #[update]

@@ -36,12 +36,15 @@ fn should_spawn_ledger_with_correct_init_args() {
     };
 
     let orchestrator = LedgerSuiteOrchestrator::default();
-    orchestrator
+    let managed_canisters_assert = orchestrator
         .add_erc20_token(AddErc20Arg {
             contract: usdc_erc20_contract(),
             ledger_init_arg: realistic_usdc_ledger_init_arg,
         })
-        .expect_new_ledger_and_index_canisters()
+        .expect_new_ledger_and_index_canisters();
+    let index_id = managed_canisters_assert.canister_ids.index.unwrap();
+    assert_eq!(index_id, "ryjl3-tyaaa-aaaaa-aaaba-cai".parse().unwrap());
+    managed_canisters_assert
         .assert_ledger_icrc1_fee(2_000_000_000_000_u64)
         .assert_ledger_icrc1_decimals(6_u8)
         .assert_ledger_icrc1_name("USD Coin")
@@ -83,6 +86,10 @@ fn should_spawn_ledger_with_correct_init_args() {
             (
                 "icrc103:max_take_value".to_string(),
                 LedgerMetadataValue::from(500u64),
+            ),
+            (
+                "icrc106:index_principal".to_string(),
+                LedgerMetadataValue::from("ryjl3-tyaaa-aaaaa-aaaba-cai"),
             ),
         ]);
 }
