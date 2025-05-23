@@ -91,6 +91,7 @@ impl From<ErrorCode> for RejectCode {
             UnknownManagementMessage => CanisterReject,
             InvalidManagementPayload => CanisterReject,
             CanisterNotHostedBySubnet => CanisterReject,
+            CanisterSnapshotImmutable => CanisterReject,
             // Canister errors.
             CanisterInvalidController => CanisterError,
             CanisterFunctionNotFound => CanisterError,
@@ -169,6 +170,7 @@ pub enum ErrorCode {
     CanisterRejectedMessage = 406,
     UnknownManagementMessage = 407,
     InvalidManagementPayload = 408,
+    CanisterSnapshotImmutable = 409,
     // 5xx -- `RejectCode::CanisterError`
     CanisterTrapped = 502,
     CanisterCalledTrap = 503,
@@ -324,6 +326,7 @@ impl UserError {
             | ErrorCode::ReservedCyclesLimitIsTooLow
             | ErrorCode::InsufficientCyclesInMessageMemoryGrow
             | ErrorCode::CanisterSnapshotNotFound
+            | ErrorCode::CanisterSnapshotImmutable
             | ErrorCode::CanisterHeapDeltaRateLimited
             | ErrorCode::CanisterWasmMemoryLimitExceeded
             | ErrorCode::DeadlineExpired
@@ -388,7 +391,7 @@ mod tests {
                 101, 102,
                 201, 202, 203, 204, 205, 206, 207, 208, 209, 210,
                 301, 305,
-                402, 403, 404, 405, 406, 407, 408,
+                402, 403, 404, 405, 406, 407, 408, 409,
                 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 512, 513, 514,
                 517, 520, 521, 522, 524, 525, 526, 527, 528, 529, 530, 531, 532,
                 533, 534, 535, 536, 537, 538, 539, 540,
