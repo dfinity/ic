@@ -31,6 +31,7 @@ use registry_canister::mutations::{
     do_add_node_operator::AddNodeOperatorPayload,
     do_remove_node_operators::RemoveNodeOperatorsPayload,
 };
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 /// Test that new Node Operator records can be added and removed to/from the
@@ -195,6 +196,7 @@ async fn add_node_operator(nns_canisters: &NnsCanisters<'_>, node_operator_id: &
         dc_id: "DC".into(),
         rewardable_nodes: rewardable_nodes.clone(),
         ipv6: Some("0:0:0:0:0:0:0:0".into()),
+        max_rewardable_nodes: BTreeMap::new(),
     };
 
     let node_operator_record_key = make_node_operator_record_key(*node_operator_id).into_bytes();
