@@ -19,7 +19,6 @@ def _upload_artifact_impl(ctx):
 
         set -euo pipefail
 
-        export DRY_RUN=1 # TODO: remove this
         VERSION_FILE={version_file}
         export VERSION=$(cat $VERSION_FILE)
         echo "$VERSION"

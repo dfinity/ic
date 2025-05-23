@@ -3,6 +3,7 @@
 set -eEuo pipefail
 
 BUNDLE="${1:?No bundle to upload}"
+DRY_RUN="${DRY_RUN:-}"
 
 echo "VERSION: $VERSION"
 
