@@ -341,46 +341,30 @@ mod tests {
         path
     }
 
-    #[test]
-    fn test_generate_vm_config_qemu() {
-        let mut mint = Mint::new(goldenfiles_path());
-        let mut config = create_test_hostos_config();
+fn test_vm_config(cpu_type: &str, filename: &str) {
+    let mut mint = Mint::new(goldenfiles_path());
+    let mut config = create_test_hostos_config();
+    
+    config.hostos_settings = HostOSSettings {
+        vm_memory: 490,
+        vm_cpu: cpu_type.to_string(),
+        vm_nr_of_vcpus: 56,
+        verbose: false,
+    };
 
-        config.hostos_settings = HostOSSettings {
-            vm_memory: 490,
-            vm_cpu: "qemu".to_string(),
-            vm_nr_of_vcpus: 56,
-            verbose: true,
-        };
+    let vm_config = generate_vm_config(&config, Path::new("/tmp/config.img")).unwrap();
+    fs::write(mint.new_goldenpath(filename).unwrap(), vm_config).unwrap();
+}
 
-        let vm_config = generate_vm_config(&config, Path::new("/tmp/config.img")).unwrap();
+#[test]
+fn test_generate_vm_config_qemu() {
+    test_vm_config("qemu", "guestos_vm_qemu.xml");
+}
 
-        fs::write(
-            mint.new_goldenpath("guestos_vm_qemu.xml").unwrap(),
-            vm_config,
-        )
-        .unwrap();
-    }
-
-    #[test]
-    fn test_generate_vm_config_kvm() {
-        let mut mint = Mint::new(goldenfiles_path());
-        let mut config = create_test_hostos_config();
-        config.hostos_settings = HostOSSettings {
-            vm_memory: 490,
-            vm_cpu: "kvm".to_string(),
-            vm_nr_of_vcpus: 56,
-            verbose: false,
-        };
-
-        let vm_config = generate_vm_config(&config, Path::new("/tmp/config.img")).unwrap();
-
-        fs::write(
-            mint.new_goldenpath("guestos_vm_kvm.xml").unwrap(),
-            vm_config,
-        )
-        .unwrap();
-    }
+#[test]
+fn test_generate_vm_config_kvm() {
+    test_vm_config("kvm", "guestos_vm_kvm.xml");
+}
 
     #[test]
     fn test_run_success() {
