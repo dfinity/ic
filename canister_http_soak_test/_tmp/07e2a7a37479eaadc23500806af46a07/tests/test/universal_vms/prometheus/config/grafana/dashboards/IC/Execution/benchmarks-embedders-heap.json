@@ -1,0 +1,2204 @@
+{
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": {
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "description": "bazel run //rs/embedders:heap_bench",
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "id": 285,
+    "links": [],
+    "panels": [
+      {
+        "fieldConfig": {
+          "defaults": {},
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 3,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "id": 29,
+        "options": {
+          "code": {
+            "language": "plaintext",
+            "showLineNumbers": false,
+            "showMiniMap": false
+          },
+          "content": "To run the benchmarks:\n```sh\n$ bazel run //rs/embedders:heap_bench\n```",
+          "mode": "markdown"
+        },
+        "pluginVersion": "11.3.0",
+        "title": "",
+        "type": "text"
+      },
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 3
+        },
+        "id": 16,
+        "panels": [],
+        "title": "Overview",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "elasticsearch",
+          "uid": "es-logs-ci-performance"
+        },
+        "description": "bazel run //rs/embedders:heap_bench",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "barWidthFactor": 0.6,
+              "drawStyle": "line",
+              "fillOpacity": 0,
+              "gradientMode": "opacity",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "insertNulls": false,
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "always",
+              "spanNulls": true,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "fieldMinMax": false,
+            "mappings": [],
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            },
+            "unit": "ns"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 4
+        },
+        "id": 18,
+        "interval": "1d",
+        "options": {
+          "legend": {
+            "calcs": [
+              "diffperc"
+            ],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "11.3.0",
+        "targets": [
+          {
+            "alias": "All wasm32",
+            "bucketAggs": [
+              {
+                "field": "timestamp",
+                "id": "3",
+                "settings": {
+                  "interval": "auto",
+                  "min_doc_count": "0",
+                  "timeZone": "utc",
+                  "trimEdges": "0"
+                },
+                "type": "date_histogram"
+              }
+            ],
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "es-logs-ci-performance"
+            },
+            "hide": false,
+            "metrics": [
+              {
+                "field": "estimates.mean.point_estimate",
+                "id": "1",
+                "settings": {},
+                "type": "sum"
+              }
+            ],
+            "query": "benchmark.full_id.keyword:/embedders:heap.*wasm32.*/",
+            "refId": "A",
+            "timeField": "timestamp"
+          },
+          {
+            "alias": "All wasm64",
+            "bucketAggs": [
+              {
+                "field": "timestamp",
+                "id": "3",
+                "settings": {
+                  "interval": "auto",
+                  "min_doc_count": "0",
+                  "timeZone": "utc",
+                  "trimEdges": "0"
+                },
+                "type": "date_histogram"
+              }
+            ],
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "es-logs-ci-performance"
+            },
+            "hide": false,
+            "metrics": [
+              {
+                "field": "estimates.mean.point_estimate",
+                "id": "1",
+                "type": "sum"
+              }
+            ],
+            "query": "benchmark.full_id.keyword:/embedders:heap.*wasm64.*/",
+            "refId": "B",
+            "timeField": "timestamp"
+          },
+          {
+            "alias": "wasm32_update_write",
+            "bucketAggs": [
+              {
+                "field": "timestamp",
+                "id": "3",
+                "settings": {
+                  "interval": "auto",
+                  "min_doc_count": "0",
+                  "timeZone": "utc",
+                  "trimEdges": "0"
+                },
+                "type": "date_histogram"
+              }
+            ],
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "es-logs-ci-performance"
+            },
+            "hide": false,
+            "metrics": [
+              {
+                "field": "estimates.mean.point_estimate",
+                "id": "1",
+                "type": "sum"
+              }
+            ],
+            "query": "benchmark.full_id.keyword:/embedders:heap.*wasm32_update_write.*/",
+            "refId": "C",
+            "timeField": "timestamp"
+          },
+          {
+            "alias": "wasm32_update_read",
+            "bucketAggs": [
+              {
+                "field": "timestamp",
+                "id": "3",
+                "settings": {
+                  "interval": "auto",
+                  "min_doc_count": "0",
+                  "timeZone": "utc",
+                  "trimEdges": "0"
+                },
+                "type": "date_histogram"
+              }
+            ],
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "es-logs-ci-performance"
+            },
+            "hide": false,
+            "metrics": [
+              {
+                "field": "estimates.mean.point_estimate",
+                "id": "1",
+                "type": "sum"
+              }
+            ],
+            "query": "benchmark.full_id.keyword:/embedders:heap.*wasm32_update_read.*/",
+            "refId": "D",
+            "timeField": "timestamp"
+          },
+          {
+            "alias": "wasm32_query_write",
+            "bucketAggs": [
+              {
+                "field": "timestamp",
+                "id": "3",
+                "settings": {
+                  "interval": "auto",
+                  "min_doc_count": "0",
+                  "timeZone": "utc",
+                  "trimEdges": "0"
+                },
+                "type": "date_histogram"
+              }
+            ],
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "es-logs-ci-performance"
+            },
+            "hide": false,
+            "metrics": [
+              {
+                "field": "estimates.mean.point_estimate",
+                "id": "1",
+                "type": "sum"
+              }
+            ],
+            "query": "benchmark.full_id.keyword:/embedders:heap.*wasm32_query_write.*/",
+            "refId": "E",
+            "timeField": "timestamp"
+          },
+          {
+            "alias": "wasm32_query_read",
+            "bucketAggs": [
+              {
+                "field": "timestamp",
+                "id": "3",
+                "settings": {
+                  "interval": "auto",
+                  "min_doc_count": "0",
+                  "timeZone": "utc",
+                  "trimEdges": "0"
+                },
+                "type": "date_histogram"
+              }
+            ],
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "es-logs-ci-performance"
+            },
+            "hide": false,
+            "metrics": [
+              {
+                "field": "estimates.mean.point_estimate",
+                "id": "1",
+                "type": "sum"
+              }
+            ],
+            "query": "benchmark.full_id.keyword:/embedders:heap.*wasm32_query_read.*/",
+            "refId": "F",
+            "timeField": "timestamp"
+          }
+        ],
+        "title": "Heap Benchmarks Overview by Type and Operation",
+        "transformations": [
+          {
+            "id": "filterByValue",
+            "options": {
+              "filters": [
+                {
+                  "config": {
+                    "id": "equal",
+                    "options": {
+                      "value": ""
+                    }
+                  },
+                  "fieldName": "All wasm32"
+                },
+                {
+                  "config": {
+                    "id": "equal",
+                    "options": {
+                      "value": ""
+                    }
+                  },
+                  "fieldName": "All wasm64"
+                },
+                {
+                  "config": {
+                    "id": "equal",
+                    "options": {
+                      "value": ""
+                    }
+                  },
+                  "fieldName": "wasm32_update_write"
+                },
+                {
+                  "config": {
+                    "id": "equal",
+                    "options": {
+                      "value": ""
+                    }
+                  },
+                  "fieldName": "wasm32_update_read"
+                },
+                {
+                  "config": {
+                    "id": "equal",
+                    "options": {
+                      "value": ""
+                    }
+                  },
+                  "fieldName": "wasm32_query_write"
+                },
+                {
+                  "config": {
+                    "id": "equal",
+                    "options": {
+                      "value": ""
+                    }
+                  },
+                  "fieldName": "wasm32_query_read"
+                }
+              ],
+              "match": "any",
+              "type": "exclude"
+            }
+          }
+        ],
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "elasticsearch",
+          "uid": "es-logs-ci-performance"
+        },
+        "description": "",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "barWidthFactor": 0.6,
+              "drawStyle": "line",
+              "fillOpacity": 0,
+              "gradientMode": "opacity",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "insertNulls": false,
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "always",
+              "spanNulls": true,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            },
+            "unit": "ns"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 12
+        },
+        "id": 15,
+        "interval": "1d",
+        "options": {
+          "legend": {
+            "calcs": [
+              "diffperc"
+            ],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "11.3.0",
+        "targets": [
+          {
+            "alias": "write_fwd",
+            "bucketAggs": [
+              {
+                "field": "timestamp",
+                "id": "3",
+                "settings": {
+                  "interval": "auto",
+                  "min_doc_count": "0",
+                  "timeZone": "utc",
+                  "trimEdges": "0"
+                },
+                "type": "date_histogram"
+              }
+            ],
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "es-logs-ci-performance"
+            },
+            "hide": false,
+            "metrics": [
+              {
+                "field": "estimates.mean.point_estimate",
+                "id": "1",
+                "type": "sum"
+              }
+            ],
+            "query": "benchmark.full_id.keyword:/embedders:heap.*write_fwd.*/",
+            "refId": "A",
+            "timeField": "timestamp"
+          },
+          {
+            "alias": "write_bwd",
+            "bucketAggs": [
+              {
+                "field": "timestamp",
+                "id": "3",
+                "settings": {
+                  "interval": "auto",
+                  "min_doc_count": "0",
+                  "timeZone": "utc",
+                  "trimEdges": "0"
+                },
+                "type": "date_histogram"
+              }
+            ],
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "es-logs-ci-performance"
+            },
+            "hide": false,
+            "metrics": [
+              {
+                "field": "estimates.mean.point_estimate",
+                "id": "1",
+                "type": "sum"
+              }
+            ],
+            "query": "benchmark.full_id.keyword:/embedders:heap.*write_bwd.*/",
+            "refId": "B",
+            "timeField": "timestamp"
+          },
+          {
+            "alias": "read_fwd",
+            "bucketAggs": [
+              {
+                "field": "timestamp",
+                "id": "3",
+                "settings": {
+                  "interval": "auto",
+                  "min_doc_count": "0",
+                  "timeZone": "utc",
+                  "trimEdges": "0"
+                },
+                "type": "date_histogram"
+              }
+            ],
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "es-logs-ci-performance"
+            },
+            "hide": false,
+            "metrics": [
+              {
+                "field": "estimates.mean.point_estimate",
+                "id": "1",
+                "type": "sum"
+              }
+            ],
+            "query": "benchmark.full_id.keyword:/embedders:heap.*read_fwd.*/",
+            "refId": "C",
+            "timeField": "timestamp"
+          },
+          {
+            "alias": "read_bwd",
+            "bucketAggs": [
+              {
+                "field": "timestamp",
+                "id": "3",
+                "settings": {
+                  "interval": "auto",
+                  "min_doc_count": "0",
+                  "timeZone": "utc",
+                  "trimEdges": "0"
+                },
+                "type": "date_histogram"
+              }
+            ],
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "es-logs-ci-performance"
+            },
+            "hide": false,
+            "metrics": [
+              {
+                "field": "estimates.mean.point_estimate",
+                "id": "1",
+                "type": "sum"
+              }
+            ],
+            "query": "benchmark.full_id.keyword:/embedders:heap.*read_bwd.*/",
+            "refId": "D",
+            "timeField": "timestamp"
+          }
+        ],
+        "title": "Heap Benchmarks Overview by Operation and Direction",
+        "transformations": [
+          {
+            "id": "filterByValue",
+            "options": {
+              "filters": [
+                {
+                  "config": {
+                    "id": "equal",
+                    "options": {
+                      "value": "0"
+                    }
+                  },
+                  "fieldName": "write_fwd"
+                },
+                {
+                  "config": {
+                    "id": "equal",
+                    "options": {
+                      "value": "0"
+                    }
+                  },
+                  "fieldName": "write_bwd"
+                },
+                {
+                  "config": {
+                    "id": "equal",
+                    "options": {
+                      "value": "0"
+                    }
+                  },
+                  "fieldName": "read_fwd"
+                },
+                {
+                  "config": {
+                    "id": "equal",
+                    "options": {
+                      "value": "0"
+                    }
+                  },
+                  "fieldName": "read_bwd"
+                }
+              ],
+              "match": "any",
+              "type": "exclude"
+            }
+          }
+        ],
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "elasticsearch",
+          "uid": "es-logs-ci-performance"
+        },
+        "description": "",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "barWidthFactor": 0.6,
+              "drawStyle": "line",
+              "fillOpacity": 0,
+              "gradientMode": "opacity",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "insertNulls": false,
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "always",
+              "spanNulls": true,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            },
+            "unit": "ns"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 20
+        },
+        "id": 17,
+        "interval": "1d",
+        "options": {
+          "legend": {
+            "calcs": [
+              "diffperc"
+            ],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "11.3.0",
+        "targets": [
+          {
+            "alias": "step_4kb_checkpoint",
+            "bucketAggs": [
+              {
+                "field": "timestamp",
+                "id": "3",
+                "settings": {
+                  "interval": "auto",
+                  "min_doc_count": "0",
+                  "timeZone": "utc",
+                  "trimEdges": "0"
+                },
+                "type": "date_histogram"
+              }
+            ],
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "es-logs-ci-performance"
+            },
+            "hide": false,
+            "metrics": [
+              {
+                "field": "estimates.mean.point_estimate",
+                "id": "1",
+                "type": "sum"
+              }
+            ],
+            "query": "benchmark.full_id.keyword:/embedders:heap.*step_4kb_checkpoint/",
+            "refId": "B",
+            "timeField": "timestamp"
+          },
+          {
+            "alias": "step_16kb_checkpoint",
+            "bucketAggs": [
+              {
+                "field": "timestamp",
+                "id": "3",
+                "settings": {
+                  "interval": "auto",
+                  "min_doc_count": "0",
+                  "timeZone": "utc",
+                  "trimEdges": "0"
+                },
+                "type": "date_histogram"
+              }
+            ],
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "es-logs-ci-performance"
+            },
+            "hide": false,
+            "metrics": [
+              {
+                "field": "estimates.mean.point_estimate",
+                "id": "1",
+                "type": "sum"
+              }
+            ],
+            "query": "benchmark.full_id.keyword:/embedders:heap.*step_16kb_checkpoint/",
+            "refId": "C",
+            "timeField": "timestamp"
+          },
+          {
+            "alias": "step_4kb_page_delta",
+            "bucketAggs": [
+              {
+                "field": "timestamp",
+                "id": "3",
+                "settings": {
+                  "interval": "auto",
+                  "min_doc_count": "0",
+                  "timeZone": "utc",
+                  "trimEdges": "0"
+                },
+                "type": "date_histogram"
+              }
+            ],
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "es-logs-ci-performance"
+            },
+            "hide": false,
+            "metrics": [
+              {
+                "field": "estimates.mean.point_estimate",
+                "id": "1",
+                "type": "sum"
+              }
+            ],
+            "query": "benchmark.full_id.keyword:/embedders:heap.*step_4kb_page_delta/",
+            "refId": "E",
+            "timeField": "timestamp"
+          },
+          {
+            "alias": "step_16kb_page_delta",
+            "bucketAggs": [
+              {
+                "field": "timestamp",
+                "id": "3",
+                "settings": {
+                  "interval": "auto",
+                  "min_doc_count": "0",
+                  "timeZone": "utc",
+                  "trimEdges": "0"
+                },
+                "type": "date_histogram"
+              }
+            ],
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "es-logs-ci-performance"
+            },
+            "hide": false,
+            "metrics": [
+              {
+                "field": "estimates.mean.point_estimate",
+                "id": "1",
+                "type": "sum"
+              }
+            ],
+            "query": "benchmark.full_id.keyword:/embedders:heap.*step_16kb_page_delta/",
+            "refId": "F",
+            "timeField": "timestamp"
+          },
+          {
+            "alias": "step_4kb_new_allocation",
+            "bucketAggs": [
+              {
+                "field": "timestamp",
+                "id": "3",
+                "settings": {
+                  "interval": "auto",
+                  "min_doc_count": "0",
+                  "timeZone": "utc",
+                  "trimEdges": "0"
+                },
+                "type": "date_histogram"
+              }
+            ],
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "es-logs-ci-performance"
+            },
+            "hide": false,
+            "metrics": [
+              {
+                "field": "estimates.mean.point_estimate",
+                "id": "1",
+                "type": "sum"
+              }
+            ],
+            "query": "benchmark.full_id.keyword:/embedders:heap.*step_4kb_new_allocation/",
+            "refId": "H",
+            "timeField": "timestamp"
+          },
+          {
+            "alias": "step_16kb_new_allocation",
+            "bucketAggs": [
+              {
+                "field": "timestamp",
+                "id": "3",
+                "settings": {
+                  "interval": "auto",
+                  "min_doc_count": "0",
+                  "timeZone": "utc",
+                  "trimEdges": "0"
+                },
+                "type": "date_histogram"
+              }
+            ],
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "es-logs-ci-performance"
+            },
+            "hide": false,
+            "metrics": [
+              {
+                "field": "estimates.mean.point_estimate",
+                "id": "1",
+                "type": "sum"
+              }
+            ],
+            "query": "benchmark.full_id.keyword:/embedders:heap.*step_16kb_new_allocation/",
+            "refId": "I",
+            "timeField": "timestamp"
+          }
+        ],
+        "title": "Heap Benchmarks Overview by Step and Source",
+        "transformations": [
+          {
+            "id": "filterByValue",
+            "options": {
+              "filters": [
+                {
+                  "config": {
+                    "id": "equal",
+                    "options": {
+                      "value": ""
+                    }
+                  },
+                  "fieldName": "step_8_checkpoint"
+                },
+                {
+                  "config": {
+                    "id": "equal",
+                    "options": {
+                      "value": ""
+                    }
+                  },
+                  "fieldName": "step_4kb_checkpoint"
+                },
+                {
+                  "config": {
+                    "id": "equal",
+                    "options": {
+                      "value": ""
+                    }
+                  },
+                  "fieldName": "step_16kb_checkpoint"
+                },
+                {
+                  "config": {
+                    "id": "equal",
+                    "options": {
+                      "value": ""
+                    }
+                  },
+                  "fieldName": "step_8_page_delta"
+                },
+                {
+                  "config": {
+                    "id": "equal",
+                    "options": {
+                      "value": ""
+                    }
+                  },
+                  "fieldName": "step_4kb_page_delta"
+                },
+                {
+                  "config": {
+                    "id": "equal",
+                    "options": {
+                      "value": ""
+                    }
+                  },
+                  "fieldName": "step_16kb_page_delta"
+                },
+                {
+                  "config": {
+                    "id": "equal",
+                    "options": {
+                      "value": ""
+                    }
+                  },
+                  "fieldName": "step_8_new_allocation"
+                },
+                {
+                  "config": {
+                    "id": "equal",
+                    "options": {
+                      "value": ""
+                    }
+                  },
+                  "fieldName": "step_4kb_new_allocation"
+                },
+                {
+                  "config": {
+                    "id": "equal",
+                    "options": {
+                      "value": ""
+                    }
+                  },
+                  "fieldName": "step_16kb_new_allocation"
+                }
+              ],
+              "match": "any",
+              "type": "exclude"
+            }
+          }
+        ],
+        "type": "timeseries"
+      },
+      {
+        "collapsed": true,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 28
+        },
+        "id": 19,
+        "panels": [
+          {
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "es-logs-ci-performance"
+            },
+            "description": "",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "barWidthFactor": 0.6,
+                  "drawStyle": "line",
+                  "fillOpacity": 0,
+                  "gradientMode": "opacity",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "always",
+                  "spanNulls": true,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "min": 0,
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green"
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "ns"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 24,
+              "x": 0,
+              "y": 29
+            },
+            "id": 20,
+            "interval": "1d",
+            "options": {
+              "legend": {
+                "calcs": [
+                  "diffperc"
+                ],
+                "displayMode": "list",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "11.3.0",
+            "targets": [
+              {
+                "alias": "",
+                "bucketAggs": [
+                  {
+                    "field": "benchmark.function_id.keyword",
+                    "id": "2",
+                    "settings": {
+                      "min_doc_count": "1",
+                      "order": "desc",
+                      "orderBy": "1",
+                      "size": "100"
+                    },
+                    "type": "terms"
+                  },
+                  {
+                    "field": "timestamp",
+                    "id": "3",
+                    "settings": {
+                      "interval": "auto",
+                      "min_doc_count": "0",
+                      "timeZone": "utc",
+                      "trimEdges": "0"
+                    },
+                    "type": "date_histogram"
+                  }
+                ],
+                "datasource": {
+                  "type": "elasticsearch",
+                  "uid": "es-logs-ci-performance"
+                },
+                "hide": false,
+                "metrics": [
+                  {
+                    "field": "estimates.mean.point_estimate",
+                    "id": "1",
+                    "type": "min"
+                  }
+                ],
+                "query": "benchmark.full_id.keyword:/embedders:heap.*wasm32_update_write.*/",
+                "refId": "A",
+                "timeField": "timestamp"
+              }
+            ],
+            "title": "wasm32: Update Write",
+            "transformations": [
+              {
+                "id": "renameByRegex",
+                "options": {
+                  "regex": "wasm32_update_write_(.*)",
+                  "renamePattern": "$1"
+                }
+              }
+            ],
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "es-logs-ci-performance"
+            },
+            "description": "",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "barWidthFactor": 0.6,
+                  "drawStyle": "line",
+                  "fillOpacity": 0,
+                  "gradientMode": "opacity",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "always",
+                  "spanNulls": true,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "min": 0,
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green"
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "ns"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 24,
+              "x": 0,
+              "y": 69
+            },
+            "id": 21,
+            "interval": "1d",
+            "options": {
+              "legend": {
+                "calcs": [
+                  "diffperc"
+                ],
+                "displayMode": "list",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "11.3.0",
+            "targets": [
+              {
+                "alias": "",
+                "bucketAggs": [
+                  {
+                    "field": "benchmark.function_id.keyword",
+                    "id": "2",
+                    "settings": {
+                      "min_doc_count": "1",
+                      "order": "desc",
+                      "orderBy": "1",
+                      "size": "100"
+                    },
+                    "type": "terms"
+                  },
+                  {
+                    "field": "timestamp",
+                    "id": "3",
+                    "settings": {
+                      "interval": "auto",
+                      "min_doc_count": "0",
+                      "timeZone": "utc",
+                      "trimEdges": "0"
+                    },
+                    "type": "date_histogram"
+                  }
+                ],
+                "datasource": {
+                  "type": "elasticsearch",
+                  "uid": "es-logs-ci-performance"
+                },
+                "metrics": [
+                  {
+                    "field": "estimates.mean.point_estimate",
+                    "id": "1",
+                    "type": "min"
+                  }
+                ],
+                "query": "benchmark.full_id.keyword:/embedders:heap.*wasm32_update_read.*/",
+                "refId": "A",
+                "timeField": "timestamp"
+              }
+            ],
+            "title": "wasm32: Update Read",
+            "transformations": [
+              {
+                "id": "renameByRegex",
+                "options": {
+                  "regex": "wasm32_update_read_(.*)",
+                  "renamePattern": "$1"
+                }
+              }
+            ],
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "es-logs-ci-performance"
+            },
+            "description": "",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "barWidthFactor": 0.6,
+                  "drawStyle": "line",
+                  "fillOpacity": 0,
+                  "gradientMode": "opacity",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "always",
+                  "spanNulls": true,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "min": 0,
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green"
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "ns"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 24,
+              "x": 0,
+              "y": 77
+            },
+            "id": 22,
+            "interval": "1d",
+            "options": {
+              "legend": {
+                "calcs": [
+                  "diffperc"
+                ],
+                "displayMode": "list",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "11.3.0",
+            "targets": [
+              {
+                "alias": "",
+                "bucketAggs": [
+                  {
+                    "field": "benchmark.function_id.keyword",
+                    "id": "2",
+                    "settings": {
+                      "min_doc_count": "1",
+                      "order": "desc",
+                      "orderBy": "1",
+                      "size": "100"
+                    },
+                    "type": "terms"
+                  },
+                  {
+                    "field": "timestamp",
+                    "id": "3",
+                    "settings": {
+                      "interval": "auto",
+                      "min_doc_count": "0",
+                      "timeZone": "utc",
+                      "trimEdges": "0"
+                    },
+                    "type": "date_histogram"
+                  }
+                ],
+                "datasource": {
+                  "type": "elasticsearch",
+                  "uid": "es-logs-ci-performance"
+                },
+                "metrics": [
+                  {
+                    "field": "estimates.mean.point_estimate",
+                    "id": "1",
+                    "type": "min"
+                  }
+                ],
+                "query": "benchmark.full_id.keyword:/embedders:heap.*wasm32_query_write.*/",
+                "refId": "A",
+                "timeField": "timestamp"
+              }
+            ],
+            "title": "wasm32: Query Write",
+            "transformations": [
+              {
+                "id": "renameByRegex",
+                "options": {
+                  "regex": "wasm32_query_write_(.*)",
+                  "renamePattern": "$1"
+                }
+              }
+            ],
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "es-logs-ci-performance"
+            },
+            "description": "",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "barWidthFactor": 0.6,
+                  "drawStyle": "line",
+                  "fillOpacity": 0,
+                  "gradientMode": "opacity",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "always",
+                  "spanNulls": true,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "min": 0,
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green"
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "ns"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 24,
+              "x": 0,
+              "y": 85
+            },
+            "id": 23,
+            "interval": "1d",
+            "options": {
+              "legend": {
+                "calcs": [
+                  "diffperc"
+                ],
+                "displayMode": "list",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "11.3.0",
+            "targets": [
+              {
+                "alias": "",
+                "bucketAggs": [
+                  {
+                    "field": "benchmark.function_id.keyword",
+                    "id": "2",
+                    "settings": {
+                      "min_doc_count": "1",
+                      "order": "desc",
+                      "orderBy": "1",
+                      "size": "100"
+                    },
+                    "type": "terms"
+                  },
+                  {
+                    "field": "timestamp",
+                    "id": "3",
+                    "settings": {
+                      "interval": "auto",
+                      "min_doc_count": "0",
+                      "timeZone": "utc",
+                      "trimEdges": "0"
+                    },
+                    "type": "date_histogram"
+                  }
+                ],
+                "datasource": {
+                  "type": "elasticsearch",
+                  "uid": "es-logs-ci-performance"
+                },
+                "metrics": [
+                  {
+                    "field": "estimates.mean.point_estimate",
+                    "id": "1",
+                    "type": "min"
+                  }
+                ],
+                "query": "benchmark.full_id.keyword:/embedders:heap.*wasm32_query_read.*/",
+                "refId": "A",
+                "timeField": "timestamp"
+              }
+            ],
+            "title": "wasm32: Query Read",
+            "transformations": [
+              {
+                "id": "renameByRegex",
+                "options": {
+                  "regex": "wasm32_query_read_(.*)",
+                  "renamePattern": "$1"
+                }
+              }
+            ],
+            "type": "timeseries"
+          }
+        ],
+        "title": "wasm32",
+        "type": "row"
+      },
+      {
+        "collapsed": true,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 29
+        },
+        "id": 24,
+        "panels": [
+          {
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "es-logs-ci-performance"
+            },
+            "description": "",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "barWidthFactor": 0.6,
+                  "drawStyle": "line",
+                  "fillOpacity": 0,
+                  "gradientMode": "opacity",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "always",
+                  "spanNulls": true,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "min": 0,
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green"
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "ns"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 24,
+              "x": 0,
+              "y": 30
+            },
+            "id": 25,
+            "interval": "1d",
+            "options": {
+              "legend": {
+                "calcs": [
+                  "diffperc"
+                ],
+                "displayMode": "list",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "11.3.0",
+            "targets": [
+              {
+                "alias": "",
+                "bucketAggs": [
+                  {
+                    "field": "benchmark.function_id.keyword",
+                    "id": "2",
+                    "settings": {
+                      "min_doc_count": "1",
+                      "order": "desc",
+                      "orderBy": "1",
+                      "size": "100"
+                    },
+                    "type": "terms"
+                  },
+                  {
+                    "field": "timestamp",
+                    "id": "3",
+                    "settings": {
+                      "interval": "auto",
+                      "min_doc_count": "0",
+                      "timeZone": "utc",
+                      "trimEdges": "0"
+                    },
+                    "type": "date_histogram"
+                  }
+                ],
+                "datasource": {
+                  "type": "elasticsearch",
+                  "uid": "es-logs-ci-performance"
+                },
+                "metrics": [
+                  {
+                    "field": "estimates.mean.point_estimate",
+                    "id": "1",
+                    "type": "min"
+                  }
+                ],
+                "query": "benchmark.full_id.keyword:/embedders:heap.*wasm64_update_write.*/",
+                "refId": "A",
+                "timeField": "timestamp"
+              }
+            ],
+            "title": "wasm64: Update Write",
+            "transformations": [
+              {
+                "id": "renameByRegex",
+                "options": {
+                  "regex": "wasm64_update_write_(.*)",
+                  "renamePattern": "$1"
+                }
+              }
+            ],
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "es-logs-ci-performance"
+            },
+            "description": "",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "barWidthFactor": 0.6,
+                  "drawStyle": "line",
+                  "fillOpacity": 0,
+                  "gradientMode": "opacity",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "always",
+                  "spanNulls": true,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "min": 0,
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green"
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "ns"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 24,
+              "x": 0,
+              "y": 38
+            },
+            "id": 26,
+            "interval": "1d",
+            "options": {
+              "legend": {
+                "calcs": [
+                  "diffperc"
+                ],
+                "displayMode": "list",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "11.3.0",
+            "targets": [
+              {
+                "alias": "",
+                "bucketAggs": [
+                  {
+                    "field": "benchmark.function_id.keyword",
+                    "id": "2",
+                    "settings": {
+                      "min_doc_count": "1",
+                      "order": "desc",
+                      "orderBy": "1",
+                      "size": "100"
+                    },
+                    "type": "terms"
+                  },
+                  {
+                    "field": "timestamp",
+                    "id": "3",
+                    "settings": {
+                      "interval": "auto",
+                      "min_doc_count": "0",
+                      "timeZone": "utc",
+                      "trimEdges": "0"
+                    },
+                    "type": "date_histogram"
+                  }
+                ],
+                "datasource": {
+                  "type": "elasticsearch",
+                  "uid": "es-logs-ci-performance"
+                },
+                "metrics": [
+                  {
+                    "field": "estimates.mean.point_estimate",
+                    "id": "1",
+                    "type": "min"
+                  }
+                ],
+                "query": "benchmark.full_id.keyword:/embedders:heap.*wasm64_update_read.*/",
+                "refId": "A",
+                "timeField": "timestamp"
+              }
+            ],
+            "title": "wasm64: Update Read",
+            "transformations": [
+              {
+                "id": "renameByRegex",
+                "options": {
+                  "regex": "wasm64_update_read_(.*)",
+                  "renamePattern": "$1"
+                }
+              }
+            ],
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "es-logs-ci-performance"
+            },
+            "description": "",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "barWidthFactor": 0.6,
+                  "drawStyle": "line",
+                  "fillOpacity": 0,
+                  "gradientMode": "opacity",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "always",
+                  "spanNulls": true,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "min": 0,
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green"
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "ns"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 24,
+              "x": 0,
+              "y": 46
+            },
+            "id": 27,
+            "interval": "1d",
+            "options": {
+              "legend": {
+                "calcs": [
+                  "diffperc"
+                ],
+                "displayMode": "list",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "11.3.0",
+            "targets": [
+              {
+                "alias": "",
+                "bucketAggs": [
+                  {
+                    "field": "benchmark.function_id.keyword",
+                    "id": "2",
+                    "settings": {
+                      "min_doc_count": "1",
+                      "order": "desc",
+                      "orderBy": "1",
+                      "size": "100"
+                    },
+                    "type": "terms"
+                  },
+                  {
+                    "field": "timestamp",
+                    "id": "3",
+                    "settings": {
+                      "interval": "auto",
+                      "min_doc_count": "0",
+                      "timeZone": "utc",
+                      "trimEdges": "0"
+                    },
+                    "type": "date_histogram"
+                  }
+                ],
+                "datasource": {
+                  "type": "elasticsearch",
+                  "uid": "es-logs-ci-performance"
+                },
+                "metrics": [
+                  {
+                    "field": "estimates.mean.point_estimate",
+                    "id": "1",
+                    "type": "min"
+                  }
+                ],
+                "query": "benchmark.full_id.keyword:/embedders:heap.*wasm64_query_write.*/",
+                "refId": "A",
+                "timeField": "timestamp"
+              }
+            ],
+            "title": "wasm64: Query Write",
+            "transformations": [
+              {
+                "id": "renameByRegex",
+                "options": {
+                  "regex": "wasm64_query_write_(.*)",
+                  "renamePattern": "$1"
+                }
+              }
+            ],
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "elasticsearch",
+              "uid": "es-logs-ci-performance"
+            },
+            "description": "",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "barWidthFactor": 0.6,
+                  "drawStyle": "line",
+                  "fillOpacity": 0,
+                  "gradientMode": "opacity",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "always",
+                  "spanNulls": true,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "min": 0,
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green"
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "ns"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 24,
+              "x": 0,
+              "y": 54
+            },
+            "id": 28,
+            "interval": "1d",
+            "options": {
+              "legend": {
+                "calcs": [
+                  "diffperc"
+                ],
+                "displayMode": "list",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "11.3.0",
+            "targets": [
+              {
+                "alias": "",
+                "bucketAggs": [
+                  {
+                    "field": "benchmark.function_id.keyword",
+                    "id": "2",
+                    "settings": {
+                      "min_doc_count": "1",
+                      "order": "desc",
+                      "orderBy": "1",
+                      "size": "100"
+                    },
+                    "type": "terms"
+                  },
+                  {
+                    "field": "timestamp",
+                    "id": "3",
+                    "settings": {
+                      "interval": "auto",
+                      "min_doc_count": "0",
+                      "timeZone": "utc",
+                      "trimEdges": "0"
+                    },
+                    "type": "date_histogram"
+                  }
+                ],
+                "datasource": {
+                  "type": "elasticsearch",
+                  "uid": "es-logs-ci-performance"
+                },
+                "metrics": [
+                  {
+                    "field": "estimates.mean.point_estimate",
+                    "id": "1",
+                    "type": "min"
+                  }
+                ],
+                "query": "benchmark.full_id.keyword:/embedders:heap.*wasm64_query_read.*/",
+                "refId": "A",
+                "timeField": "timestamp"
+              }
+            ],
+            "title": "wasm64: Query Read",
+            "transformations": [
+              {
+                "id": "renameByRegex",
+                "options": {
+                  "regex": "wasm64_query_read_(.*)",
+                  "renamePattern": "$1"
+                }
+              }
+            ],
+            "type": "timeseries"
+          }
+        ],
+        "title": "wasm64",
+        "type": "row"
+      }
+    ],
+    "preload": false,
+    "schemaVersion": 40,
+    "tags": [],
+    "templating": {
+      "list": []
+    },
+    "time": {
+      "from": "now-30d",
+      "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "UTC",
+    "title": "Benchmarks: Embedders Heap",
+    "uid": "benchmarks-embedders-heap",
+    "version": 9,
+    "weekStart": ""
+  }

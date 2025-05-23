@@ -289,6 +289,14 @@ pub fn generate_responses_to_subnet_calls(
         consensus_responses.append(&mut http_responses);
         stats.canister_http = http_stats;
 
+        info!(
+            log,
+            "CanisterHttpPayloadBuilder: {} responses, {} timeouts, {} divergence responses",
+            stats.canister_http.responses,
+            stats.canister_http.timeouts,
+            stats.canister_http.divergence_responses
+        );
+
         let mut vetkd_responses =
             VetKdPayloadBuilderImpl::into_messages(&block_payload.batch.vetkd);
         consensus_responses.append(&mut vetkd_responses);

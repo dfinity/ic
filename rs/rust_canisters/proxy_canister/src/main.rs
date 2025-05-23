@@ -200,6 +200,16 @@ fn deterministic_transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
 }
 
 #[query]
+fn compute_heavy_transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
+    for i in 0..1000000000 {
+        if i % 1000000 == 0 {
+            println!("compute_heavy_transform: {}", i);
+        }
+    }
+    raw.response
+}
+
+#[query]
 fn transform_with_context(raw: TransformArgs) -> CanisterHttpResponsePayload {
     let (response, context) = (raw.response, raw.context);
     let mut context = context;

@@ -1186,6 +1186,16 @@ impl CyclesAccountManager {
             * (subnet_size as u64)
     }
 
+    pub fn http_request_fee_beta(
+        &self,
+        request_size: NumBytes,
+        response_size_limit: Option<NumBytes>,
+        subnet_size: usize,
+    ) -> Cycles {
+        // TODO(mihailjianu): perform something relevant here. 
+        self.config.http_request_linear_baseline_fee
+    }
+
     /// Returns the default value of the reserved balance limit for the case
     /// when the canister doesn't have it set in the settings.
     pub fn default_reserved_balance_limit(&self) -> Cycles {
