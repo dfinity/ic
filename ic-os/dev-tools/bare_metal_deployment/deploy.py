@@ -251,15 +251,7 @@ def get_url_content(url: str, timeout_secs: int = 1) -> Optional[str]:
         return None
 
 
-def check_hostos_power_metrics(ip_address: IPv6Address, timeout_secs: int) -> bool:
-    metrics_endpoint = f"https://[{ip_address.exploded}]:9100/metrics"
-    log.info(f"Attempting GET on metrics at {metrics_endpoint}...")
-    metrics_output = get_url_content(metrics_endpoint, timeout_secs)
-    if not metrics_output:
-        log.warning(f"Request to {metrics_endpoint} failed.")
-        return False
-
-    log.info("Got metrics result from HostOS")
+def check_hostos_power_metrics(metrics_output: str) -> bool:
     try:
         power_metric_line = next(
             line
@@ -271,6 +263,22 @@ def check_hostos_power_metrics(ip_address: IPv6Address, timeout_secs: int) -> bo
     except StopIteration:
         log.warning("power_average_watts metric in HostOS metrics not found or invalid")
         return False
+
+
+def check_hostos_version_metrics(metrics_output: str) -> bool:
+    for metric in ["hostos_version", "hostos_config_version"]:
+        try:
+            pattern_template = rf"{re.escape(metric)}\{{version=\".*\"\}} 1"
+            version_metric_line = next(
+                line
+                for line in metrics_output.splitlines()
+                if not line.startswith("#") and re.fullmatch(pattern_template, line)
+            )
+            log.info(f"{metric} metric: {version_metric_line}")
+        except StopIteration:
+            log.warning(f"{metric} metric in HostOS metrics not found or invalid")
+            return False
+    return True
 
 
 def check_guestos_ping_connectivity(ip_address: IPv6Address, timeout_secs: int) -> bool:
@@ -570,8 +578,16 @@ def benchmark_nodes(
 
 def check_node_hostos_metrics(bmc_info: BMCInfo):
     log.info("Checking HostOS metrics.")
-    timeout_secs = 5
-    result = check_hostos_power_metrics(bmc_info.hostos_ipv6_address, timeout_secs)
+
+    metrics_endpoint = f"https://[{bmc_info.hostos_ipv6_address.exploded}]:9100/metrics"
+    log.info(f"Attempting GET on metrics at {metrics_endpoint}...")
+    metrics_output = get_url_content(metrics_endpoint, 5)
+    if not metrics_output:
+        log.warning(f"Request to {metrics_endpoint} failed.")
+        return False
+
+    result = check_hostos_power_metrics(metrics_output) and check_hostos_version_metrics(metrics_output)
+
     return OperationResult(bmc_info, success=result)
 
 
