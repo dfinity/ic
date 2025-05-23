@@ -1,5 +1,5 @@
 use candid::{CandidType, Nat, Principal};
-use canister_test::{Project, Wasm};
+use canister_test::Wasm;
 use ic_base_types::CanisterId;
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
 use ic_nervous_system_agent::{
@@ -24,6 +24,7 @@ use ic_nervous_system_integration_tests::{
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::LEDGER_CANISTER_ID;
+use ic_nns_governance::pb::v1::RewardEvent;
 use ic_nns_test_utils::sns_wasm::{
     build_ledger_sns_wasm, build_root_sns_wasm, build_swap_sns_wasm, create_modified_sns_wasm, ensure_sns_wasm_gzipped,
 };
@@ -191,9 +192,23 @@ async fn test_custom_upgrade_path_for_sns() {
         ).await
     };
 
-    
+    // Step 1. Add the SNS token.
+    let response = lp_adaptor_agent
+        .call(
+            kong_backend_canister_id,
+            AddTokenArgs {
+                token: format!("IC.{}", sns_ledger_canister_id),
+            },
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    println!("add_token(SNS) response = {:#?}", response);
 
-    // Step 1: Add the ICP token to the KongSwap canister.
+    // Step 2: Add the ICP token to the KongSwap canister.
+    // Notes on why we first add SNS and then ICP:
+    // - KongSwap starts indexing the tokens from 1.
+    // - The ICP token is assumed to have index 2.
     {
         let response = lp_adaptor_agent.call(
             kong_backend_canister_id,
@@ -207,18 +222,25 @@ async fn test_custom_upgrade_path_for_sns() {
         println!("add_token(ICP) response = {:#?}", response);
     }
 
-    // Add the SNS token.
     let response = lp_adaptor_agent
         .call(
             kong_backend_canister_id,
-            AddTokenArgs {
-                token: format!("IC.{}", sns_ledger_canister_id),
-            },
+            TokensArgs { symbol: None },
         )
         .await
         .unwrap()
         .unwrap();
-    println!("add_token(SNS) response = {:#?}", response);
+    println!("first tokens response = {:#?}", response);
+
+    let response = lp_adaptor_agent
+        .call(
+            kong_backend_canister_id,
+            PoolsArgs { symbol: None },
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    println!("first pools response = {:#?}", response);
 
     // Approve some ICP from the LP Adaptor.
     let starting_icp_amount = Tokens::from_tokens(100).unwrap();
@@ -232,7 +254,7 @@ async fn test_custom_upgrade_path_for_sns() {
     .await;
 
     // Approve some SNS tokens from the LP Adaptor.
-    let response = sns::ledger::icrc1_transfer(&pocket_ic, sns_ledger_canister_id.get(), sns_root_canister_id, TransferArg {
+    sns::ledger::icrc1_transfer(&pocket_ic, sns_ledger_canister_id.get(), sns_root_canister_id, TransferArg {
         from_subaccount: None,
         to: Account {
             owner: lp_adaptor_canister_id.0,
@@ -243,7 +265,6 @@ async fn test_custom_upgrade_path_for_sns() {
         memo: None,
         amount: Nat::from(350 * E8),
     }).await;
-    println!("sns_ledger mint response = {:#?}", response);
 
     // Set up the ICP allowance.
     lp_adaptor_agent
@@ -297,9 +318,11 @@ async fn test_custom_upgrade_path_for_sns() {
                 token_0: "SNS".to_string(),
                 amount_0: Nat::from(200 * E8),
                 tx_id_0: None,
-                token_1: "ksICP".to_string(),
+
+                token_1: "ICP".to_string(),
                 amount_1: Nat::from(50 * E8),
                 tx_id_1: None,
+
                 lp_fee_bps: Some(10),
             },
         )
@@ -308,15 +331,50 @@ async fn test_custom_upgrade_path_for_sns() {
         .unwrap();
     println!("add_pool response = {:#?}", response);
 
-    // Step 2: Double the liquidity
+    let response = lp_adaptor_agent
+        .call(
+            kong_backend_canister_id,
+            TokensArgs { symbol: None },
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    println!("second tokens response = {:#?}", response);
+
+    let response = lp_adaptor_agent
+        .call(
+            kong_backend_canister_id,
+            PoolsArgs { symbol: None },
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    println!("second pools response = {:#?}", response);
+
+    // Step 2: Increase the liquidity allocation.
+    let response = lp_adaptor_agent
+        .call(
+            kong_backend_canister_id,
+            AddLiquidityAmountsArgs {
+                token_0: "SNS".to_string(),
+                amount: Nat::from(140 * E8),
+                token_1: "ICP".to_string(),
+            },
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    println!("add_liquidity_amounts response = {:#?}", response);
+
     let response = lp_adaptor_agent.call(
         kong_backend_canister_id,
         AddLiquidityArgs {
             token_0: "SNS".to_string(),
-            amount_0: Nat::from(200 * E8),
+            amount_0: Nat::from(140 * E8),
             tx_id_0: None,
-            token_1: "ksICP".to_string(),
-            amount_1: Nat::from(50 * E8),
+
+            token_1: "ICP".to_string(),
+            amount_1: response.amount_1,
             tx_id_1: None,
         },
     )
@@ -325,10 +383,130 @@ async fn test_custom_upgrade_path_for_sns() {
     .unwrap();
     println!("add liquidity response = {:#?}", response);
 
+    // Attempt to withdraw all the liquidity.
+
+    let response = lp_adaptor_agent
+        .call(
+            kong_backend_canister_id,
+            UserBalancesArgs {
+                principal_id: lp_adaptor_canister_id.0.to_string(),
+            },
+        )
+        .await
+        .unwrap()
+        .unwrap()
+        [0]
+        .clone();
+
+    println!("user balances response = {:#?}", response);
+
+    let remove_lp_token_amount = match response {
+        UserBalancesReply::LP(response) => {
+            kong_lp_balance_to_demilams(response.balance).unwrap()
+        },
+        _ => panic!("Unexpected response type"),
+    };
+
+    let response = lp_adaptor_agent
+        .call(
+            kong_backend_canister_id,
+            RemoveLiquidityAmountsArgs {
+                token_0: "SNS".to_string(),
+                token_1: "ICP".to_string(),
+                remove_lp_token_amount,
+            },
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    println!("remove_liquidity_amounts response = {:#?}", response);
+
+    let response = lp_adaptor_agent
+        .call(
+            kong_backend_canister_id,
+            RemoveLiquidityArgs {
+                token_0: "SNS".to_string(),
+                token_1: "ICP".to_string(),
+                remove_lp_token_amount: response.remove_lp_token_amount,
+            },
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    println!("remove liquidity response = {:#?}", response);
+
     panic!();
 }
 
-/// ----------------- begin:add_liquidity -----------------
+// ----------------- begin:add_liquidity_amounts -----------------
+impl Request for AddLiquidityAmountsArgs {
+    fn method(&self) -> &'static str {
+        "add_liquidity_amounts"
+    }
+
+    fn update(&self) -> bool {
+        false
+    }
+
+    fn payload(&self) -> Result<Vec<u8>, candid::Error> {
+        let Self {
+            token_0,
+            amount,
+            token_1,
+        } = self.clone();
+
+        candid::encode_args((token_0, amount, token_1))
+    }
+
+    type Response = Result<AddLiquidityAmountsReply, String>;
+}
+
+fn kong_lp_balance_to_demilams(
+    lp_balance: f64,
+) -> Result<Nat, String> {
+    // Check that lp_balance is valid before conversion
+    if !lp_balance.is_finite() || lp_balance < 0.0 {
+        return Err("Invalid LP balance value".to_string());
+    }
+
+    // Calculate with overflow checking
+    let e8_value = E8 as f64;
+    let result_f64 = lp_balance * e8_value;
+
+    // Ensure the result fits in u64 range
+    if result_f64 > u64::MAX as f64 {
+        return Err("LP balance conversion exceeds u64 maximum".to_string());
+    }
+
+    // Convert to Nat (safe because we've checked the bounds)
+    Ok(Nat::from(result_f64.round() as u64))
+}
+
+#[derive(CandidType, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct AddLiquidityAmountsArgs {
+    pub token_0: String,
+    pub amount: Nat,
+    pub token_1: String,
+}
+
+#[derive(CandidType, Debug, Clone, Serialize, Deserialize)]
+pub struct AddLiquidityAmountsReply {
+    pub symbol: String,
+    pub chain_0: String,
+    pub address_0: String,
+    pub symbol_0: String,
+    pub amount_0: Nat,
+    pub fee_0: Nat,
+    pub chain_1: String,
+    pub address_1: String,
+    pub symbol_1: String,
+    pub amount_1: Nat,
+    pub fee_1: Nat,
+    pub add_lp_token_amount: Nat,
+}
+// ----------------- end:add_liquidity_amounts -----------------
+
+// ----------------- begin:add_liquidity -----------------
 impl Request for AddLiquidityArgs {    
     fn method(&self) -> &'static str {
         "add_liquidity"
@@ -351,8 +529,6 @@ pub enum TxId {
     TransactionHash(String),
 }
 
-/// Data structure for the arguments of the `add_liquidity` function.
-/// Used in StableRequest
 #[derive(CandidType, Debug, Clone, Serialize, Deserialize)]
 pub struct AddLiquidityArgs {
     pub token_0: String,
@@ -403,9 +579,9 @@ pub struct ICTransferReply {
     pub canister_id: String,
     pub block_index: Nat,
 }
-/// ----------------- end:add_liquidity -----------------
+// ----------------- end:add_liquidity -----------------
 
-/// ----------------- begin:add_token -----------------
+// ----------------- begin:add_token -----------------
 impl Request for AddTokenArgs {    
     fn method(&self) -> &'static str {
         "add_token"
@@ -422,7 +598,7 @@ impl Request for AddTokenArgs {
     type Response = Result<AddTokenReply, String>;
 }
 
-/// Arguments for adding a token.
+// Arguments for adding a token.
 #[derive(CandidType, Debug, Clone, Serialize, Deserialize)]
 pub struct AddTokenArgs {
     pub token: String,
@@ -447,9 +623,9 @@ pub struct ICReply {
     pub icrc3: bool,
     pub is_removed: bool,
 }
-/// ----------------- end:add_token -----------------
+// ----------------- end:add_token -----------------
 
-/// ----------------- begin:add_pool -----------------
+// ----------------- begin:add_pool -----------------
 impl Request for AddPoolArgs {    
     fn method(&self) -> &'static str {
         "add_pool"
@@ -493,8 +669,6 @@ pub struct AddPoolReply {
     pub ts: u64,
 }
 
-/// Data structure for the arguments of the `add_pool` function.
-/// Used in StableRequest
 #[derive(CandidType, Debug, Clone, Serialize, Deserialize)]
 pub struct AddPoolArgs {
     pub token_0: String,
@@ -506,3 +680,229 @@ pub struct AddPoolArgs {
     pub lp_fee_bps: Option<u8>,
 }
 // ----------------- end:add_pool -----------------
+
+// ----------------- begin:tokens -----------------
+impl Request for TokensArgs {    
+    fn method(&self) -> &'static str {
+        "tokens"
+    }
+    
+    fn update(&self) -> bool {
+        false
+    }
+    
+    fn payload(&self) -> Result<Vec<u8>, candid::Error> {
+        candid::encode_one(self.symbol.clone())
+    }
+    
+    type Response = Result<Vec<TokensReply>, String>;
+}
+
+struct TokensArgs {
+    pub symbol: Option<String>,
+}
+
+#[derive(CandidType, Clone, Debug, Serialize, Deserialize)]
+pub enum TokensReply {
+    LP(LPReply),
+    IC(ICReply),
+}
+
+#[derive(CandidType, Clone, Debug, Serialize, Deserialize)]
+pub struct LPReply {
+    pub token_id: u32,
+    pub chain: String,
+    pub address: String,
+    pub name: String,
+    pub symbol: String,
+    pub pool_id_of: u32,
+    pub decimals: u8,
+    pub fee: Nat,
+    pub total_supply: Nat,
+    pub is_removed: bool,
+}
+// ----------------- end:tokens -----------------
+
+// ----------------- begin:tokens -----------------
+impl Request for PoolsArgs {    
+    fn method(&self) -> &'static str {
+        "pools"
+    }
+    
+    fn update(&self) -> bool {
+        false
+    }
+    
+    fn payload(&self) -> Result<Vec<u8>, candid::Error> {
+        candid::encode_one(self.symbol.clone())
+    }
+    
+    type Response = Result<Vec<PoolReply>, String>;
+}
+
+struct PoolsArgs {
+    pub symbol: Option<String>,
+}
+
+#[derive(CandidType, Debug, Clone, Serialize, Deserialize)]
+pub struct PoolReply {
+    pub pool_id: u32,
+    pub name: String,
+    pub symbol: String,
+    pub chain_0: String,
+    pub symbol_0: String,
+    pub address_0: String,
+    pub balance_0: Nat,
+    pub lp_fee_0: Nat,
+    pub chain_1: String,
+    pub symbol_1: String,
+    pub address_1: String,
+    pub balance_1: Nat,
+    pub lp_fee_1: Nat,
+    pub price: f64,
+    pub lp_fee_bps: u8,
+    pub lp_token_symbol: String,
+    pub is_removed: bool,
+}
+// ----------------- end:tokens -----------------
+
+// ----------------- begin:remove_liquidity_amounts -----------------
+impl Request for RemoveLiquidityAmountsArgs {    
+    fn method(&self) -> &'static str {
+        "remove_liquidity_amounts"
+    }
+    
+    fn update(&self) -> bool {
+        false
+    }
+    
+    fn payload(&self) -> Result<Vec<u8>, candid::Error> {
+        let Self {
+            token_0,
+            token_1,
+            remove_lp_token_amount,
+        } = self;
+
+        candid::encode_args((token_0, token_1, remove_lp_token_amount))
+    }
+    
+    type Response = Result<RemoveLiquidityAmountsReply, String>;
+}
+
+struct RemoveLiquidityAmountsArgs {
+    pub token_0: String,
+    pub token_1: String,
+    pub remove_lp_token_amount: Nat,
+}
+
+#[derive(CandidType, Clone, Debug, Serialize, Deserialize)]
+pub struct RemoveLiquidityAmountsReply {
+    pub symbol: String,
+    pub chain_0: String,
+    pub address_0: String,
+    pub symbol_0: String,
+    pub amount_0: Nat,
+    pub lp_fee_0: Nat,
+    pub chain_1: String,
+    pub address_1: String,
+    pub symbol_1: String,
+    pub amount_1: Nat,
+    pub lp_fee_1: Nat,
+    pub remove_lp_token_amount: Nat,
+}
+// ----------------- end:remove_liquidity_amounts -----------------
+
+// ----------------- begin:liquidity_amounts -----------------
+impl Request for RemoveLiquidityArgs {    
+    fn method(&self) -> &'static str {
+        "remove_liquidity"
+    }
+    
+    fn update(&self) -> bool {
+        true
+    }
+    
+    fn payload(&self) -> Result<Vec<u8>, candid::Error> {
+        candid::encode_one(self)
+    }
+    
+    type Response = Result<RemoveLiquidityReply, String>;
+}
+
+#[derive(CandidType, Debug, Clone, Serialize, Deserialize)]
+pub struct RemoveLiquidityReply {
+    pub tx_id: u64,
+    pub request_id: u64,
+    pub status: String,
+    pub symbol: String,
+    pub chain_0: String,
+    pub address_0: String,
+    pub symbol_0: String,
+    pub amount_0: Nat,
+    pub lp_fee_0: Nat,
+    pub chain_1: String,
+    pub address_1: String,
+    pub symbol_1: String,
+    pub amount_1: Nat,
+    pub lp_fee_1: Nat,
+    pub remove_lp_token_amount: Nat,
+    pub transfer_ids: Vec<TransferIdReply>,
+    pub claim_ids: Vec<u64>,
+    pub ts: u64,
+}
+
+#[derive(CandidType, Debug, Clone, Serialize, Deserialize)]
+pub struct RemoveLiquidityArgs {
+    pub token_0: String,
+    pub token_1: String,
+    pub remove_lp_token_amount: Nat,
+}
+// ----------------- end:liquidity_amounts -----------------
+
+// ----------------- begin:user_balances -----------------
+impl Request for UserBalancesArgs {    
+    fn method(&self) -> &'static str {
+        "user_balances"
+    }
+    
+    fn update(&self) -> bool {
+        false
+    }
+    
+    fn payload(&self) -> Result<Vec<u8>, candid::Error> {
+        candid::encode_one(self.principal_id.clone())
+    }
+    
+    type Response = Result<Vec<UserBalancesReply>, String>;
+}
+
+struct UserBalancesArgs {
+    pub principal_id: String,
+}
+
+#[derive(CandidType, Clone, Debug, Serialize, Deserialize)]
+pub enum UserBalancesReply {
+    LP(UserBalanceLPReply),
+}
+
+#[derive(CandidType, Clone, Debug, Serialize, Deserialize)]
+pub struct UserBalanceLPReply {
+    pub symbol: String,
+    pub name: String,
+    pub lp_token_id: u64,
+    pub balance: f64,
+    pub usd_balance: f64,
+    pub chain_0: String,
+    pub symbol_0: String,
+    pub address_0: String,
+    pub amount_0: f64,
+    pub usd_amount_0: f64,
+    pub chain_1: String,
+    pub symbol_1: String,
+    pub address_1: String,
+    pub amount_1: f64,
+    pub usd_amount_1: f64,
+    pub ts: u64,
+}
+
+// ----------------- end:user_balances -----------------
