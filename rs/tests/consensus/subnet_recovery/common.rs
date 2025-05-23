@@ -262,7 +262,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
     info!(logger, "IC_VERSION_ID: {master_version:?}");
     let topology_snapshot = env.topology_snapshot();
 
-    // choose a node from the nns subnet
+    // Choose a node from the nns subnet
     let nns_node = get_nns_node(&topology_snapshot);
     info!(
         logger,
