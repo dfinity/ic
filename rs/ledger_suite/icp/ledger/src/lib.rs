@@ -424,6 +424,7 @@ impl Ledger {
                 CTE::AllowanceChanged { .. } => todo!(),
                 CTE::SelfApproval => todo!(),
                 CTE::BadBurn { .. } => todo!(),
+                CTE::UnsupportedTransaction => todo!(),
             }
         })
     }

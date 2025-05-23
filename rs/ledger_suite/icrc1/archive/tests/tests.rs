@@ -107,7 +107,7 @@ fn test_icrc3_get_blocks() {
             fee_collector: None,
             fee_collector_block_index: None,
             transaction: Transaction {
-                operation,
+                operation: Some(operation),
                 created_at_time: None,
                 memo: None,
             },
@@ -256,10 +256,10 @@ fn test_icrc3_get_blocks_number_of_blocks_limit() {
             fee_collector: None,
             fee_collector_block_index: None,
             transaction: Transaction {
-                operation: Operation::Mint {
+                operation: Some(Operation::Mint {
                     to: Account::from(Principal::anonymous()),
                     amount: Tokens::from(amount as u64),
-                },
+                }),
                 created_at_time: None,
                 memo: None,
             },
