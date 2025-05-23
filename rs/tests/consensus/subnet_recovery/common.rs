@@ -286,7 +286,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
 
     // TODO(CON-1471): Enable vetKD in large subnet recovery test once
     // large registry deltas are supported.
-    let key_ids = if topology_snapshot.root_subnet().nodes().count() == NNS_NODES {
+    let key_ids = if topology_snapshot.root_subnet().nodes().count() == NNS_NODES_LARGE {
         make_key_ids_for_all_idkg_schemes()
     } else {
         make_key_ids_for_all_schemes()
