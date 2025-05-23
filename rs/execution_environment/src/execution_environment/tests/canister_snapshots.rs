@@ -7,7 +7,7 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterSettingsArgsBuilder,
     CanisterSnapshotDataKind, CanisterSnapshotDataOffset, CanisterSnapshotResponse, ChunkHash,
-    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, GlobalTimer, ListCanisterSnapshotArgs,
+    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, Global, GlobalTimer, ListCanisterSnapshotArgs,
     LoadCanisterSnapshotArgs, Method, OnLowWasmMemoryHookStatus, Payload as Ic00Payload,
     ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotDataResponse,
     ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse, SnapshotSource,
@@ -3001,44 +3001,63 @@ fn canister_snapshot_invalid_md_fails() {
             counter_canister_wasm.clone(),
         )
         .unwrap();
-    let mut md_upload_args = UploadCanisterSnapshotMetadataArgs::new(
+    let md_upload_args_original = UploadCanisterSnapshotMetadataArgs::new(
         canister_id,
         None,
         1024,
-        vec![],
+        vec![Global::I32(42); 1000],
         1 << 16,
         1 << 16,
-        vec![],
+        vec![42; 32],
         None,
         None,
     );
     //original should succeed
-    test.subnet_message("upload_canister_snapshot_metadata", md_upload_args.encode())
-        .unwrap();
+    test.subnet_message(
+        "upload_canister_snapshot_metadata",
+        md_upload_args_original.encode(),
+    )
+    .unwrap();
 
-    md_upload_args.wasm_module_size = 0;
-    let Err(e) = test.subnet_message("upload_canister_snapshot_metadata", md_upload_args.encode())
+    let mut faulty_md = md_upload_args_original.clone();
+    faulty_md.wasm_module_size = 0;
+    let Err(e) = test.subnet_message("upload_canister_snapshot_metadata", faulty_md.encode())
     else {
         panic! {"Expected error"}
     };
     assert_eq!(e.code(), ErrorCode::InvalidManagementPayload);
-    md_upload_args.wasm_module_size = 1024;
 
-    md_upload_args.wasm_memory_size = 123;
-    let Err(e) = test.subnet_message("upload_canister_snapshot_metadata", md_upload_args.encode())
+    let mut faulty_md = md_upload_args_original.clone();
+    faulty_md.wasm_memory_size = 123;
+    let Err(e) = test.subnet_message("upload_canister_snapshot_metadata", faulty_md.encode())
     else {
         panic! {"Expected error"}
     };
     assert_eq!(e.code(), ErrorCode::InvalidManagementPayload);
-    md_upload_args.wasm_memory_size = 1 << 16;
 
-    md_upload_args.stable_memory_size = 123;
-    let Err(e) = test.subnet_message("upload_canister_snapshot_metadata", md_upload_args.encode())
+    let mut faulty_md = md_upload_args_original.clone();
+    faulty_md.stable_memory_size = 123;
+    let Err(e) = test.subnet_message("upload_canister_snapshot_metadata", faulty_md.encode())
     else {
         panic! {"Expected error"}
     };
     assert_eq!(e.code(), ErrorCode::InvalidManagementPayload);
-    md_upload_args.stable_memory_size = 1 << 16;
+
+    let mut faulty_md = md_upload_args_original.clone();
+    faulty_md.certified_data = vec![42; 33];
+    let Err(e) = test.subnet_message("upload_canister_snapshot_metadata", faulty_md.encode())
+    else {
+        panic! {"Expected error"}
+    };
+    assert_eq!(e.code(), ErrorCode::InvalidManagementPayload);
+
+    let mut faulty_md = md_upload_args_original.clone();
+    faulty_md.exported_globals = vec![Global::I32(42); 1001];
+    let Err(e) = test.subnet_message("upload_canister_snapshot_metadata", faulty_md.encode())
+    else {
+        panic! {"Expected error"}
+    };
+    assert_eq!(e.code(), ErrorCode::InvalidManagementPayload);
 }
 
 /// Counter canister that also grows the stable memory by one page on "inc".

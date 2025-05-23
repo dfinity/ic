@@ -7,7 +7,7 @@ use crate::{
     page_map::{Buffer, PageAllocatorFileDescriptor},
     CanisterState, NumWasmPages, PageMap,
 };
-use ic_config::embedders::WASM_MAX_SIZE;
+use ic_config::embedders::{MAX_GLOBALS, WASM_MAX_SIZE};
 use ic_management_canister_types_private::{
     Global, GlobalTimer, OnLowWasmMemoryHookStatus, SnapshotSource,
     UploadCanisterSnapshotMetadataArgs,
@@ -606,6 +606,13 @@ impl ValidatedSnapshotMetadata {
         if raw.stable_memory_size > MAX_STABLE_MEMORY_IN_BYTES {
             return Err(MetadataValidationError::StableMemoryTooLarge);
         }
+        if raw.exported_globals.len() > MAX_GLOBALS {
+            return Err(MetadataValidationError::ExportedGlobalsTooLarge);
+        }
+        // a 32 byte hash
+        if raw.certified_data.len() > 32 {
+            return Err(MetadataValidationError::CertifiedDataTooLarge);
+        }
 
         let replace_snapshot = raw
             .replace_snapshot
@@ -684,6 +691,8 @@ pub enum MetadataValidationError {
     WasmMemoryTooLarge,
     StableMemoryNotPageAligned,
     StableMemoryTooLarge,
+    ExportedGlobalsTooLarge,
+    CertifiedDataTooLarge,
 }
 
 #[cfg(test)]
