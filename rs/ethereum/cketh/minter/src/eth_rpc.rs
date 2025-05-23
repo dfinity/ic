@@ -2,10 +2,7 @@
 //! interface.
 
 use crate::numeric::{BlockNumber, LogIndex};
-use candid::CandidType;
 use ethnum;
-use evm_rpc_client::HttpOutcallError as EvmHttpOutcallError;
-use ic_cdk::api::call::RejectionCode;
 use ic_ethereum_types::Address;
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
@@ -222,61 +219,3 @@ pub struct LogEntry {
     #[serde(default)]
     pub removed: bool,
 }
-
-/// An envelope for all JSON-RPC replies.
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum JsonRpcResult<T> {
-    Result(T),
-    Error { code: i64, message: String },
-}
-
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub enum HttpOutcallError {
-    /// Error from the IC system API.
-    IcError {
-        code: RejectionCode,
-        message: String,
-    },
-    /// Response is not a valid JSON-RPC response,
-    /// which means that the response was not successful (status other than 2xx)
-    /// or that the response body could not be deserialized into a JSON-RPC response.
-    InvalidHttpJsonRpcResponse {
-        status: u16,
-        body: String,
-        parsing_error: Option<String>,
-    },
-}
-
-impl From<EvmHttpOutcallError> for HttpOutcallError {
-    fn from(value: EvmHttpOutcallError) -> Self {
-        match value {
-            EvmHttpOutcallError::IcError { code, message } => Self::IcError { code, message },
-            EvmHttpOutcallError::InvalidHttpJsonRpcResponse {
-                status,
-                body,
-                parsing_error,
-            } => Self::InvalidHttpJsonRpcResponse {
-                status,
-                body,
-                parsing_error,
-            },
-        }
-    }
-}
-
-impl HttpOutcallError {
-    pub fn is_response_too_large(&self) -> bool {
-        match self {
-            Self::IcError { code, message } => is_response_too_large(code, message),
-            _ => false,
-        }
-    }
-}
-
-pub fn is_response_too_large(code: &RejectionCode, message: &str) -> bool {
-    code == &RejectionCode::SysFatal
-        && (message.contains("size limit") || message.contains("length limit"))
-}
-
-pub type HttpOutcallResult<T> = Result<T, HttpOutcallError>;
