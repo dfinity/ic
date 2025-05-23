@@ -251,6 +251,7 @@ mod tests {
     };
     use goldenfile::Mint;
     use std::env;
+    use std::os::unix::prelude::MetadataExt;
     use std::path::Path;
     use tempfile::tempdir;
 
@@ -391,13 +392,16 @@ mod tests {
         let args = Args {
             media: media_path.clone(),
             output: output_path.clone(),
+            // Value does not matter since we pass HostOS config to run.
             config: PathBuf::from("/non/existent/path"),
         };
 
-        let metrics_writer = MetricsWriter::new(metrics_path.clone());
-        let config = create_test_hostos_config();
-
-        let result = run(&args, &metrics_writer, &config, mock_restorecon);
+        let result = run(
+            &args,
+            &MetricsWriter::new(metrics_path.clone()),
+            &create_test_hostos_config(),
+            mock_restorecon,
+        );
         assert!(result.is_ok(), "{result:?}");
 
         assert_eq!(
@@ -405,7 +409,10 @@ mod tests {
             "# HELP hostos_generate_guestos_config HostOS generate GuestOS config\n\
              # TYPE hostos_generate_guestos_config counter\n\
              hostos_generate_guestos_config 1\n"
-        )
+        );
+
+        assert!(media_path.metadata().unwrap().size() > 0);
+        assert!(output_path.metadata().unwrap().size() > 0);
     }
 
     #[test]
@@ -421,13 +428,17 @@ mod tests {
         let args = Args {
             media: media_path,
             output: output_path,
+            // Value does not matter since we pass HostOS config to run.
             config: PathBuf::from("/path/to/config"),
         };
 
-        let metrics_writer = MetricsWriter::new(metrics_path.clone());
-        let config = create_test_hostos_config();
-
-        let result_err = run(&args, &metrics_writer, &config, mock_restorecon).unwrap_err();
+        let result_err = run(
+            &args,
+            &MetricsWriter::new(metrics_path.clone()),
+            &create_test_hostos_config(),
+            mock_restorecon,
+        )
+        .unwrap_err();
 
         assert!(
             result_err.to_string().contains("already exists"),
