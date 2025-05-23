@@ -498,6 +498,9 @@ pub(crate) enum CanisterManagerError {
         offset: u64,
         size: u64,
     },
+    InvalidSpecifiedId {
+        specified_id: CanisterId,
+    },
 }
 
 impl AsErrorHelp for CanisterManagerError {
@@ -678,6 +681,10 @@ impl AsErrorHelp for CanisterManagerError {
                 suggestion:
                     "Use the snapshot metadata API to learn the size of the wasm module / main memory / stable memory."
                         .to_string(),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::InvalidSpecifiedId { specified_id: _ } => ErrorHelp::UserError {
+                suggestion: "Use a `specified_id` that matches a canister ID on the ICP mainnet (and thus does not belong to the canister allocation ranges of the test environment).".to_string(),
                 doc_link: "".to_string(),
             },
         }
@@ -1007,6 +1014,12 @@ impl From<CanisterManagerError> for UserError {
                 Self::new(
                     ErrorCode::InvalidManagementPayload,
                     format!("Invalid subslice into wasm module / main memory / stable memory: offset: {}, size: {}", offset, size)
+                )
+            }
+            InvalidSpecifiedId { specified_id } => {
+                Self::new(
+                    ErrorCode::InvalidManagementPayload,
+                    format!("The `specified_id` {} is invalid because it belongs to the canister allocation ranges of the test environment.{additional_help}", specified_id)
                 )
             }
         }

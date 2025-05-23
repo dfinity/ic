@@ -938,6 +938,13 @@ impl CanisterManager {
             return Err(CanisterManagerError::SenderNotInWhitelist(sender));
         }
 
+        if let Some(specified_id) = specified_id {
+            let specified_id = CanisterId::unchecked_from_principal(specified_id);
+            if !state.metadata.validate_specified_id(specified_id) {
+                return Err(CanisterManagerError::InvalidSpecifiedId { specified_id });
+            }
+        }
+
         let cycles = match cycles_amount {
             Some(cycles_amount) => Cycles::from(cycles_amount),
             None => self.config.default_provisional_cycles_balance,

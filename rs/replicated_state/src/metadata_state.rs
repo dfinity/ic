@@ -929,6 +929,15 @@ impl SystemMetadata {
         self.canister_allocation_ranges.total_count() as u64 - generated_canister_ids
     }
 
+    /// Checks if the given `specified_id` in the argument of `provisional_create_canister_with_cycles` is valid.
+    /// A `specified_id` is valid if it does not belong to the canister allocation ranges.
+    pub fn validate_specified_id(&self, specified_id: CanisterId) -> bool {
+        !self
+            .canister_allocation_ranges
+            .iter()
+            .any(|range| range.contains(&specified_id))
+    }
+
     /// Splits the `MetadataState` as part of subnet splitting phase 1:
     ///  * for the split subnet (B), produces a new `MetadataState`, with the given
     ///    batch time (if `Some`) or the original subnet's batch time (if `None`);
