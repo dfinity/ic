@@ -1,7 +1,6 @@
 use std::{convert::TryFrom, path::PathBuf, time::Duration};
 
-use bitcoin::Network;
-use bitcoin::{blockdata::constants::genesis_block, consensus::Decodable, Block, BlockHash};
+use crate::import::{genesis_block, Block, BlockHash, Decodable, Network};
 use clap::Parser;
 use ic_btc_service::{
     btc_service_client::BtcServiceClient, BtcServiceGetSuccessorsRequest,

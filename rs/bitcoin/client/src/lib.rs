@@ -102,9 +102,12 @@ impl RpcAdapterClient<BitcoinAdapterRequestWrapper> for BitcoinAdapterClientImpl
                     let mut tonic_request = tonic::Request::new(get_successors_request);
                     tonic_request.set_timeout(opts.timeout);
 
-                    client
+                    let result = client
                         .get_successors(tonic_request)
-                        .await
+                        .await;
+
+                    println!("result = {:?}", result);
+                    result
                         .map(|tonic_response| {
                             let inner = tonic_response.into_inner();
                             BitcoinAdapterResponseWrapper::GetSuccessorsResponse(

@@ -1,13 +1,8 @@
 //! The module is responsible for keeping track of the blockchain state.
 //!
+use crate::import::validation::{validate_header, HeaderStore, ValidateHeaderError};
+use crate::import::{genesis_block, Block, BlockHash, BlockHeader, Encodable, Network, Work};
 use crate::{common::BlockHeight, config::Config, metrics::BlockchainStateMetrics};
-use bitcoin::{
-    block::Header as BlockHeader, blockdata::constants::genesis_block, consensus::Encodable, Block,
-    BlockHash, Network,
-};
-
-use bitcoin::Work;
-use ic_btc_validation::{validate_header, HeaderStore, ValidateHeaderError};
 use ic_metrics::MetricsRegistry;
 use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
@@ -379,7 +374,7 @@ impl HeaderStore for BlockchainState {
 
 #[cfg(test)]
 mod test {
-    use bitcoin::{consensus::Decodable, Block, TxMerkleNode};
+    use crate::import::{Block, Decodable, TxMerkleNode};
     use ic_metrics::MetricsRegistry;
 
     use super::*;
@@ -570,7 +565,7 @@ mod test {
         let initial_header = state.genesis();
         let mut chain = generate_headers(initial_header.block_hash(), initial_header.time, 16, &[]);
         let last_header = chain.get_mut(10).unwrap();
-        last_header.prev_blockhash = BlockHash::from_raw_hash(bitcoin::hashes::Hash::all_zeros());
+        last_header.prev_blockhash = BlockHash::from_raw_hash(crate::import::Hash::all_zeros());
 
         let chain_hashes: Vec<BlockHash> = chain.iter().map(|header| header.block_hash()).collect();
         let last_hash = chain_hashes[10];
@@ -607,8 +602,7 @@ mod test {
         assert!(matches!(result, Ok(())));
 
         // Make a block 2's merkle root invalid and try to add the block to the cache.
-        block_2.header.merkle_root =
-            TxMerkleNode::from_raw_hash(bitcoin::hashes::Hash::all_zeros());
+        block_2.header.merkle_root = TxMerkleNode::from_raw_hash(crate::import::Hash::all_zeros());
         // Block 2's hash will now be changed because of the merkle root change.
         let block_2_hash = block_2.block_hash();
         let result = state.add_block(block_2);
