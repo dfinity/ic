@@ -21,13 +21,13 @@ pub trait TopicLike: Debug + Display + Copy + Eq + Ord {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) struct ValidatedSetFollowing<NeuronId: NeuronIdLike, Topic: TopicLike> {
+pub struct ValidatedSetFollowing<NeuronId: NeuronIdLike, Topic: TopicLike> {
     /// Keys cannot contain `Topic::Unspecified`. Values cannot be empty.
     pub topic_following: BTreeMap<Topic, ValidatedFolloweesForTopic<NeuronId, Topic>>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) struct ValidatedFolloweesForTopic<NeuronId: NeuronIdLike, Topic: TopicLike> {
+pub struct ValidatedFolloweesForTopic<NeuronId: NeuronIdLike, Topic: TopicLike> {
     /// If this is empty, it means that the neuron is not following any other neurons on this topic.
     /// An empty set is used also to unset the followees for a given topic.
     pub followees: BTreeSet<ValidatedFollowee<NeuronId, Topic>>,
@@ -36,10 +36,10 @@ pub(crate) struct ValidatedFolloweesForTopic<NeuronId: NeuronIdLike, Topic: Topi
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct ValidatedFollowee<NeuronId: NeuronIdLike, Topic: TopicLike> {
-    topic: Topic,
+pub struct ValidatedFollowee<NeuronId: NeuronIdLike, Topic: TopicLike> {
+    pub topic: Topic,
 
-    neuron_id: NeuronId,
+    pub neuron_id: NeuronId,
 
     /// Alias is optional. If it is set, it must be unique for the same neuron ID.
     ///
@@ -61,5 +61,5 @@ pub(crate) struct ValidatedFollowee<NeuronId: NeuronIdLike, Topic: TopicLike> {
     /// ]
     /// ```
     /// because the neuron ID 42 cannot be associated with two different aliases.
-    alias: Option<String>,
+    pub alias: Option<String>,
 }

@@ -1,5 +1,5 @@
 use super::*;
-use itertools::{Either, Itertools};
+use itertools::Itertools;
 use std::collections::HashSet;
 use thiserror::Error;
 
@@ -31,18 +31,6 @@ pub enum SetFollowingValidationError<NeuronId: NeuronIdLike, Topic: TopicLike> {
 }
 
 #[derive(Error, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub enum FolloweeValidationError {
-    #[error("field neuron_id must be specified")]
-    NeuronIdNotSpecified,
-
-    #[error("alias cannot be the empty string")]
-    AliasCannotBeEmptyString,
-
-    #[error("alias cannot exceed {} bytes, got {} bytes", MAX_NEURON_ALIAS_BYTES, .0)]
-    AliasTooLong(usize),
-}
-
-#[derive(Error, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum FolloweesForTopicValidationError<NeuronId: NeuronIdLike, Topic: TopicLike> {
     #[error("topic must be set to one from SnsGov.list_topics()")]
     UnspecifiedTopic,
@@ -57,12 +45,24 @@ pub enum FolloweesForTopicValidationError<NeuronId: NeuronIdLike, Topic: TopicLi
     DuplicateFolloweeNeuronId(FolloweeGroups<NeuronId, Topic>),
 }
 
+#[derive(Error, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum FolloweeValidationError {
+    #[error("field neuron_id must be specified")]
+    NeuronIdNotSpecified,
+
+    #[error("alias cannot be the empty string")]
+    AliasCannotBeEmptyString,
+
+    #[error("alias cannot exceed {} bytes, got {} bytes", MAX_NEURON_ALIAS_BYTES, .0)]
+    AliasTooLong(usize),
+}
+
 /// Represents followees grouped by neuron ID.
-pub type FolloweeGroups<NeuronId: NeuronIdLike, Topic: TopicLike> =
+pub type FolloweeGroups<NeuronId, Topic> =
     BTreeMap<NeuronId, Vec<ValidatedFollowee<NeuronId, Topic>>>;
 
 /// Represents followee-related data grouped by neuron ID.
-pub type FolloweeAliasGroups<NeuronId: NeuronIdLike, Topic: TopicLike> =
+pub type FolloweeAliasGroups<NeuronId, Topic> =
     BTreeMap<NeuronId, BTreeSet<ValidatedFollowee<NeuronId, Topic>>>;
 
 /// Groups followees grouped by NeuronId, with singleton/unique groups excluded.
