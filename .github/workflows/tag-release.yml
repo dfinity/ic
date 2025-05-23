@@ -59,7 +59,6 @@ jobs:
             "sns-root-canister.wasm"
             "sns-swap-canister.wasm"
             "sns-wasm-canister.wasm"
-            "wasm.wasm"
           )
 
           mkdir canisters && pushd canisters
