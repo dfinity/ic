@@ -109,6 +109,9 @@ else
     CTR_HOME="/ic"
 fi
 
+PER_USER_ZIG_CACHE="/tmp/$(whoami)/zig-cache"
+mkdir -p "$PER_USER_ZIG_CACHE"
+
 PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"
     --mount type=bind,source="${CACHE_DIR:-${HOME}/.cache}",target="${CTR_HOME}/.cache"
@@ -116,7 +119,7 @@ PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
     --mount type=bind,source="/var/lib/containers",target="/var/lib/containers"
     --mount type=bind,source="/tmp",target="/tmp"
-    --mount type=volume,chown=true,destination=/tmp/zig-cache
+    --mount type=bind,source="$PER_USER_ZIG_CACHE",target="/tmp/zig-cache"
     --mount type=tmpfs,destination=/var/sysimage
 )
 
