@@ -161,10 +161,7 @@ impl RegistryCanister {
         version: u64,
     ) -> Result<(Vec<RegistryRecord>, u64), Error> {
         let (deltas, latest_version) = self.get_changes_since(version).await?;
-        Ok((
-            registry_deltas_to_registry_records(deltas)?,
-            latest_version,
-        ))
+        Ok((registry_deltas_to_registry_records(deltas)?, latest_version))
     }
 
     /// Queries the registry for a prefix of all the changes that occurred since
