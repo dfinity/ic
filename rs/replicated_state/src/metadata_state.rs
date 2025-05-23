@@ -2187,6 +2187,10 @@ pub enum UnflushedCheckpointOp {
     TakeSnapshot(CanisterId, SnapshotId),
     /// A snapshot was loaded to a canister.
     LoadSnapshot(CanisterId, SnapshotId),
+    /// A snapshot was created via metadata upload.
+    UploadSnapshotMetadata(SnapshotId),
+    /// Binary data was uploaded to a snapshot
+    UploadSnapshotData(SnapshotId),
 }
 
 /// A collection of unflushed checkpoint operations in the order that they were applied to the state.
@@ -2226,6 +2230,16 @@ impl UnflushedCheckpointOps {
             canister_id,
             snapshot_id,
         ));
+    }
+
+    pub fn create_snapshot_from_metadata(&mut self, snapshot_id: SnapshotId) {
+        self.operations
+            .push(UnflushedCheckpointOp::UploadSnapshotMetadata(snapshot_id));
+    }
+
+    pub fn upload_data(&mut self, snapshot_id: SnapshotId) {
+        self.operations
+            .push(UnflushedCheckpointOp::UploadSnapshotData(snapshot_id));
     }
 }
 

@@ -673,6 +673,8 @@ fn flush_unflushed_checkpoint_ops<T>(
             UnflushedCheckpointOp::LoadSnapshot(canister_id, snapshot_id) => {
                 restore(log, layout, canister_id, snapshot_id)?;
             }
+            UnflushedCheckpointOp::UploadSnapshotData(..)
+            | UnflushedCheckpointOp::UploadSnapshotMetadata(..) => {}
         }
     }
 
