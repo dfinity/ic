@@ -90,7 +90,9 @@ type FolloweeAliasGroups<NeuronId: NeuronIdLike, Topic: TopicLike> =
 /// ordered by topic and *then* neuron ID, which is enforced by the `PartialOrd` implementation.
 ///
 /// This function assumes that all followees correspond to the same topic.
-fn get_duplicate_followee_groups<NeuronId: NeuronIdLike, Topic: TopicLike>(followees: &BTreeSet<ValidatedFollowee<NeuronId, Topic>>) -> FolloweeGroups<NeuronId, Topic> {
+fn get_duplicate_followee_groups<NeuronId: NeuronIdLike, Topic: TopicLike>(
+    followees: &BTreeSet<ValidatedFollowee<NeuronId, Topic>>,
+) -> FolloweeGroups<NeuronId, Topic> {
     followees
         .iter()
         .sorted_by_key(|followee| followee.neuron_id.clone())
@@ -126,7 +128,9 @@ fn get_duplicate_followee_groups<NeuronId: NeuronIdLike, Topic: TopicLike>(follo
 ///
 /// The implementation of this function relies on the fact that `ValidatedFollowee` instances are
 /// ordered by neuron ID and *then* alias, which is enforced by the `PartialOrd` implementation.
-fn get_inconsistent_aliases<NeuronId: NeuronIdLike, Topic: TopicLike>(followees: &BTreeSet<ValidatedFollowee<NeuronId, Topic>>) -> FolloweeAliasGroups<NeuronId, Topic> {
+fn get_inconsistent_aliases<NeuronId: NeuronIdLike, Topic: TopicLike>(
+    followees: &BTreeSet<ValidatedFollowee<NeuronId, Topic>>,
+) -> FolloweeAliasGroups<NeuronId, Topic> {
     followees
         .iter()
         .sorted_by_key(|followee| followee.neuron_id.clone())
@@ -159,7 +163,9 @@ fn get_inconsistent_aliases<NeuronId: NeuronIdLike, Topic: TopicLike>(followees:
 /// Formats an instance of `FolloweeGroups` into a string.
 ///
 /// Need this since `Display for Vec<ValidatedFollowee>` cannot be implemented in this crate.
-fn fmt_followee_groups<NeuronId: NeuronIdLike, Topic: TopicLike>(followee_groups: &FolloweeGroups<NeuronId, Topic>) -> String {
+fn fmt_followee_groups<NeuronId: NeuronIdLike, Topic: TopicLike>(
+    followee_groups: &FolloweeGroups<NeuronId, Topic>,
+) -> String {
     followee_groups
         .iter()
         .map(|(neuron_id, followees)| {
@@ -175,7 +181,9 @@ fn fmt_followee_groups<NeuronId: NeuronIdLike, Topic: TopicLike>(followee_groups
         .join(", ")
 }
 
-fn fmt_alias_groups<NeuronId: NeuronIdLike, Topic: TopicLike>(followees: &FolloweeAliasGroups<NeuronId, Topic>) -> String {
+fn fmt_alias_groups<NeuronId: NeuronIdLike, Topic: TopicLike>(
+    followees: &FolloweeAliasGroups<NeuronId, Topic>,
+) -> String {
     followees
         .iter()
         .map(|(neuron_id, followees_for_this_neuron_id)| {

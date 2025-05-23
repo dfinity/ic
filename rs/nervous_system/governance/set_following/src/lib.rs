@@ -3,8 +3,8 @@ use std::{
     fmt::{Debug, Display},
 };
 
-mod validation;
 mod fmt_impls;
+mod validation;
 
 pub use validation::*;
 
@@ -14,9 +14,9 @@ pub const MAX_NEURON_ALIAS_BYTES: usize = 128;
 /// Maximum number of followees that a neuron can have for a given topic.
 pub const MAX_FOLLOWEES_PER_TOPIC: usize = 15;
 
-pub trait NeuronIdLike : Debug + Display + Clone + Eq + Ord {}
+pub trait NeuronIdLike: Debug + Display + Clone + Eq + Ord {}
 
-pub trait TopicLike : Debug + Display + Copy + Eq + Ord {
+pub trait TopicLike: Debug + Display + Copy + Eq + Ord {
     fn into_i32(self) -> i32;
 }
 
