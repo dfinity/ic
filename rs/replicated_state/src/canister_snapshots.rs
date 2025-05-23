@@ -67,6 +67,7 @@ impl CanisterSnapshots {
     /// the `CanisterSnapshots`' `memory_usage` by the maximum chunk size.
     /// Returns an error if the given snapshot ID could not be found. In this case,
     /// the method has no effect.
+    #[allow(clippy::result_unit_err)]
     pub fn insert_chunk(
         &mut self,
         snapshot_id: SnapshotId,
