@@ -503,6 +503,9 @@ fn eval(ops_bytes: OpsBytes) {
                 let amount_high = (balance >> 64) as u64;
                 api::call_cycles_add128(amount_high, amount_low)
             }
+            Ops::RootKey => {
+                stack.push_blob(api::root_key());
+            }
         }
     }
 }
