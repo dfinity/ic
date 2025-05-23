@@ -22,19 +22,15 @@ use ic_interfaces::p2p::consensus::{
 };
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_types::{
-    artifact::IDkgMessageId,
-    consensus::{
-        idkg::{
-            EcdsaSigShare, IDkgArtifactId, IDkgMessage, IDkgMessageType, IDkgPrefixOf, IDkgStats,
-            IterationPattern, SchnorrSigShare, SigShare, SignedIDkgComplaint, SignedIDkgOpening,
-            VetKdKeyShare,
-        },
-        CatchUpPackage,
+use ic_types::consensus::{
+    idkg::{
+        EcdsaSigShare, IDkgArtifactId, IDkgMessage, IDkgMessageType, IDkgPrefixOf, IDkgStats,
+        SchnorrSigShare, SigShare, SignedIDkgComplaint, SignedIDkgOpening,
     },
-    crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
-    crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing},
+    CatchUpPackage,
 };
+use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
+use ic_types::{artifact::IDkgMessageId, consensus::idkg::VetKdKeyShare};
 use prometheus::IntCounter;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
@@ -96,37 +92,30 @@ impl IDkgObjectPool {
         }))
     }
 
-    /// Iterate over the pool for a given pattern. Start at the first key that matches the pattern
-    /// and stop at the first that does not.
-    fn iter_by<T: TryFrom<IDkgMessage>>(
+    fn iter_by_prefix<T: TryFrom<IDkgMessage>>(
         &self,
-        pattern: IterationPattern,
+        prefix: IDkgPrefixOf<T>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, T)> + '_>
     where
         <T as TryFrom<IDkgMessage>>::Error: Debug,
     {
-        // TODO: currently uses a simple O(n) scheme: iterate to the first match for the pattern
+        // TODO: currently uses a simple O(n) scheme: iterate to the first match for the prefix
         // and take the following matching items. This avoids any complex two level maps/trie style
         // indexing for partial matching. Since the in memory map is fairly fast, this should not
         // be a problem, revisit if needed.
 
-        let is_same_pattern = move |key: &IDkgMessageId| match &pattern {
-            IterationPattern::GroupTag(group_tag) => group_tag == &key.prefix().group_tag(),
-            IterationPattern::Prefix(prefix) => prefix == &key.prefix(),
-        };
-
-        // Find the first entry that matches the pattern.
-        let is_same_pattern_clone = is_same_pattern.clone();
+        // Find the first entry that matches the prefix.
+        let prefix_cl = prefix.as_ref().clone();
         let first = self
             .objects
             .iter()
-            .skip_while(move |(key, _)| !is_same_pattern_clone(key));
+            .skip_while(move |(key, _)| key.prefix() != prefix_cl);
 
-        // Keep collecting while the pattern matches.
-        let is_same_pattern_clone = is_same_pattern.clone();
+        // Keep collecting while the prefix matches.
+        let prefix_cl = prefix.as_ref().clone();
         Box::new(
             first
-                .take_while(move |(key, _)| is_same_pattern_clone(key))
+                .take_while(move |(key, _)| key.prefix() == prefix_cl)
                 .map(|(key, object)| {
                     let inner = T::try_from(object.clone()).unwrap_or_else(|err| {
                         panic!("Failed to convert IDkgMessage to inner type: {:?}", err)
@@ -210,15 +199,7 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
         prefix: IDkgPrefixOf<SignedIDkgDealing>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)> + '_> {
         let object_pool = self.get_pool(IDkgMessageType::Dealing);
-        object_pool.iter_by(IterationPattern::Prefix(prefix.get()))
-    }
-
-    fn signed_dealings_by_transcript_id(
-        &self,
-        transcript_id: &IDkgTranscriptId,
-    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)> + '_> {
-        let object_pool = self.get_pool(IDkgMessageType::Dealing);
-        object_pool.iter_by(IterationPattern::GroupTag(transcript_id.id()))
+        object_pool.iter_by_prefix(prefix)
     }
 
     fn dealing_support(
@@ -233,15 +214,7 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
         prefix: IDkgPrefixOf<IDkgDealingSupport>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_> {
         let object_pool = self.get_pool(IDkgMessageType::DealingSupport);
-        object_pool.iter_by(IterationPattern::Prefix(prefix.get()))
-    }
-
-    fn dealing_support_by_transcript_id(
-        &self,
-        transcript_id: &IDkgTranscriptId,
-    ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_> {
-        let object_pool = self.get_pool(IDkgMessageType::DealingSupport);
-        object_pool.iter_by(IterationPattern::GroupTag(transcript_id.id()))
+        object_pool.iter_by_prefix(prefix)
     }
 
     fn ecdsa_signature_shares(
@@ -256,7 +229,7 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
         prefix: IDkgPrefixOf<EcdsaSigShare>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaSigShare)> + '_> {
         let object_pool = self.get_pool(IDkgMessageType::EcdsaSigShare);
-        object_pool.iter_by(IterationPattern::Prefix(prefix.get()))
+        object_pool.iter_by_prefix(prefix)
     }
 
     fn schnorr_signature_shares(
@@ -271,7 +244,7 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
         prefix: IDkgPrefixOf<SchnorrSigShare>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SchnorrSigShare)> + '_> {
         let object_pool = self.get_pool(IDkgMessageType::SchnorrSigShare);
-        object_pool.iter_by(IterationPattern::Prefix(prefix.get()))
+        object_pool.iter_by_prefix(prefix)
     }
 
     fn vetkd_key_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdKeyShare)> + '_> {
@@ -284,7 +257,7 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
         prefix: IDkgPrefixOf<VetKdKeyShare>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdKeyShare)> + '_> {
         let object_pool = self.get_pool(IDkgMessageType::VetKdKeyShare);
-        object_pool.iter_by(IterationPattern::Prefix(prefix.get()))
+        object_pool.iter_by_prefix(prefix)
     }
 
     fn signature_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SigShare)> + '_> {
@@ -318,7 +291,7 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
         prefix: IDkgPrefixOf<SignedIDkgComplaint>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgComplaint)> + '_> {
         let object_pool = self.get_pool(IDkgMessageType::Complaint);
-        object_pool.iter_by(IterationPattern::Prefix(prefix.get()))
+        object_pool.iter_by_prefix(prefix)
     }
 
     fn openings(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgOpening)> + '_> {
@@ -331,7 +304,7 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
         prefix: IDkgPrefixOf<SignedIDkgOpening>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgOpening)> + '_> {
         let object_pool = self.get_pool(IDkgMessageType::Opening);
-        object_pool.iter_by(IterationPattern::Prefix(prefix.get()))
+        object_pool.iter_by_prefix(prefix)
     }
 }
 
@@ -534,7 +507,7 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_consensus::{fake::*, IDkgStatsNoOp};
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6, NODE_7};
+    use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6};
     use ic_types::artifact::IdentifiableArtifact;
     use ic_types::consensus::idkg::IDkgComplaintContent;
     use ic_types::consensus::idkg::{dealing_support_prefix, IDkgObject};
@@ -624,13 +597,30 @@ mod tests {
         }
     }
 
-    // Used by the two following tests to add dealings to the pool
-    fn add_dealing_supports<'a>(
-        idkg_pool: &'a mut IDkgPoolImpl,
-        test_unvalidated: bool,
-        supports_to_add: &[(IDkgTranscriptId, NodeId, NodeId, u8)],
-    ) -> &'a dyn IDkgPoolSection {
-        for (transcript_id, dealer_id, signer_id, hash) in supports_to_add {
+    // Verifies the prefix based search
+    fn check_search_by_prefix(idkg_pool: &mut IDkgPoolImpl, test_unvalidated: bool) {
+        let transcript_10 = dummy_idkg_transcript_id_for_tests(10);
+        let transcript_100 = dummy_idkg_transcript_id_for_tests(100);
+        let transcript_1000 = dummy_idkg_transcript_id_for_tests(1000);
+        let transcript_50 = dummy_idkg_transcript_id_for_tests(50);
+        let transcript_2000 = dummy_idkg_transcript_id_for_tests(2000);
+
+        // (transcript Id, dealer_id, signer_id, crypto hash pattern)
+        let supports_to_add = [
+            // Prefix 1
+            (transcript_1000, NODE_1, NODE_2, 1),
+            (transcript_1000, NODE_1, NODE_2, 2),
+            (transcript_1000, NODE_1, NODE_2, 3),
+            // Prefix 2
+            (transcript_1000, NODE_2, NODE_3, 4),
+            // Prefix 3
+            (transcript_10, NODE_3, NODE_4, 5),
+            // Prefix 4
+            (transcript_100, NODE_5, NODE_6, 6),
+            (transcript_100, NODE_5, NODE_6, 7),
+        ];
+
+        for (transcript_id, dealer_id, signer_id, hash) in &supports_to_add {
             let support = IDkgDealingSupport {
                 transcript_id: *transcript_id,
                 dealer_id: *dealer_id,
@@ -664,34 +654,6 @@ mod tests {
         } else {
             idkg_pool.validated()
         };
-
-        pool_section
-    }
-
-    // Verifies the prefix based search
-    fn check_search_by_prefix(idkg_pool: &mut IDkgPoolImpl, test_unvalidated: bool) {
-        let transcript_10 = dummy_idkg_transcript_id_for_tests(10);
-        let transcript_100 = dummy_idkg_transcript_id_for_tests(100);
-        let transcript_1000 = dummy_idkg_transcript_id_for_tests(1000);
-        let transcript_50 = dummy_idkg_transcript_id_for_tests(50);
-        let transcript_2000 = dummy_idkg_transcript_id_for_tests(2000);
-
-        // (transcript Id, dealer_id, signer_id, crypto hash pattern)
-        let supports_to_add = [
-            // Prefix 1
-            (transcript_1000, NODE_1, NODE_2, 1),
-            (transcript_1000, NODE_1, NODE_2, 2),
-            (transcript_1000, NODE_1, NODE_2, 3),
-            // Prefix 2
-            (transcript_1000, NODE_2, NODE_3, 4),
-            // Prefix 3
-            (transcript_10, NODE_3, NODE_4, 5),
-            // Prefix 4
-            (transcript_100, NODE_5, NODE_6, 6),
-            (transcript_100, NODE_5, NODE_6, 7),
-        ];
-
-        let pool_section = add_dealing_supports(idkg_pool, test_unvalidated, &supports_to_add);
 
         // Verify iteration produces artifacts in increasing order of
         // transcript Id.
@@ -767,116 +729,6 @@ mod tests {
 
         assert!(pool_section
             .dealing_support_by_prefix(dealing_support_prefix(&transcript_2000, &NODE_1, &NODE_2))
-            .next()
-            .is_none());
-    }
-
-    // Verifies the transcript based search
-    fn check_search_by_transcript_id(idkg_pool: &mut IDkgPoolImpl, test_unvalidated: bool) {
-        let transcript_10 = dummy_idkg_transcript_id_for_tests(10);
-        let transcript_100 = dummy_idkg_transcript_id_for_tests(100);
-        let transcript_1000 = dummy_idkg_transcript_id_for_tests(1000);
-        let transcript_10000 = dummy_idkg_transcript_id_for_tests(10000);
-        let transcript_50 = dummy_idkg_transcript_id_for_tests(50);
-        let transcript_2000 = dummy_idkg_transcript_id_for_tests(2000);
-
-        // (transcript Id, dealer_id, signer_id, crypto hash pattern)
-        let supports_to_add = [
-            // Transcript 1
-            (transcript_1000, NODE_1, NODE_2, 1),
-            (transcript_1000, NODE_1, NODE_3, 3),
-            (transcript_1000, NODE_2, NODE_3, 4),
-            (transcript_1000, NODE_1, NODE_2, 2),
-            (transcript_1000, NODE_4, NODE_5, 5),
-            // Transcript 2
-            (transcript_10, NODE_4, NODE_5, 6),
-            // Transcript 3
-            (transcript_10000, NODE_4, NODE_5, 6),
-            // Transcript 4
-            (transcript_100, NODE_6, NODE_7, 7),
-            (transcript_100, NODE_6, NODE_7, 8),
-        ];
-
-        let pool_section = add_dealing_supports(idkg_pool, test_unvalidated, &supports_to_add);
-
-        // Verify iteration produces artifacts in increasing order of
-        // transcript Id.
-        let ret: Vec<IDkgTranscriptId> = pool_section
-            .dealing_support()
-            .map(|(_, support)| support.transcript_id)
-            .collect();
-        let expected = vec![
-            transcript_10,
-            transcript_100,
-            transcript_100,
-            transcript_1000,
-            transcript_1000,
-            transcript_1000,
-            transcript_1000,
-            transcript_1000,
-            transcript_10000,
-        ];
-        assert_eq!(ret, expected);
-
-        // Verify by transcripts
-        type RetType = (IDkgTranscriptId, NodeId, NodeId, u8);
-        let ret_fn = |support: &IDkgDealingSupport| -> RetType {
-            (
-                support.transcript_id,
-                support.dealer_id,
-                support.sig_share.signer,
-                support.dealing_hash.as_ref().0[0],
-            )
-        };
-
-        let mut ret: Vec<RetType> = pool_section
-            .dealing_support_by_transcript_id(&transcript_1000)
-            .map(|(_, support)| (ret_fn)(&support))
-            .collect();
-        ret.sort();
-        assert_eq!(
-            ret,
-            vec![
-                (transcript_1000, NODE_1, NODE_2, 1),
-                (transcript_1000, NODE_1, NODE_2, 2),
-                (transcript_1000, NODE_1, NODE_3, 3),
-                (transcript_1000, NODE_2, NODE_3, 4),
-                (transcript_1000, NODE_4, NODE_5, 5),
-            ]
-        );
-
-        let ret: Vec<RetType> = pool_section
-            .dealing_support_by_transcript_id(&transcript_10)
-            .map(|(_, support)| (ret_fn)(&support))
-            .collect();
-        assert_eq!(ret, vec![(transcript_10, NODE_4, NODE_5, 6)]);
-
-        let ret: Vec<RetType> = pool_section
-            .dealing_support_by_transcript_id(&transcript_10000)
-            .map(|(_, support)| (ret_fn)(&support))
-            .collect();
-        assert_eq!(ret, vec![(transcript_10000, NODE_4, NODE_5, 6)]);
-
-        let mut ret: Vec<RetType> = pool_section
-            .dealing_support_by_transcript_id(&transcript_100)
-            .map(|(_, support)| (ret_fn)(&support))
-            .collect();
-        ret.sort();
-        assert_eq!(
-            ret,
-            vec![
-                (transcript_100, NODE_6, NODE_7, 7),
-                (transcript_100, NODE_6, NODE_7, 8),
-            ]
-        );
-
-        assert!(pool_section
-            .dealing_support_by_transcript_id(&transcript_50)
-            .next()
-            .is_none());
-
-        assert!(pool_section
-            .dealing_support_by_transcript_id(&transcript_2000)
             .next()
             .is_none());
     }
@@ -1246,26 +1098,6 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let mut idkg_pool = create_idkg_pool(pool_config, logger);
                 check_search_by_prefix(&mut idkg_pool, false);
-            })
-        })
-    }
-
-    #[test]
-    fn test_idkg_transcript_id_search_unvalidated() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let mut idkg_pool = create_idkg_pool(pool_config, logger);
-                check_search_by_transcript_id(&mut idkg_pool, true);
-            })
-        })
-    }
-
-    #[test]
-    fn test_idkg_transcript_id_search_validated() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let mut idkg_pool = create_idkg_pool(pool_config, logger);
-                check_search_by_transcript_id(&mut idkg_pool, false);
             })
         })
     }
