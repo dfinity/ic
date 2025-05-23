@@ -14,7 +14,6 @@ system_test_nns(
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
-        "//packages/ic-vetkd-utils",
         "//rs/config",
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/nns/constants",
@@ -28,6 +27,7 @@ system_test_nns(
         "@crate_index//:anyhow",
         "@crate_index//:futures",
         "@crate_index//:ic-agent",
+        "@crate_index//:ic-vetkeys",
         "@crate_index//:rand",
         "@crate_index//:slog",
     ],

@@ -14,8 +14,6 @@ on the process that this file is part of, see
 ## Deprecated
 
 ## Removed
-- The fields `compute_allocation` and `memory_allocation` in the input type `ChangeCanisterRequest`
-  of the endpoint `change_canister`.
 
 ## Fixed
 

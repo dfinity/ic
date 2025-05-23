@@ -9,28 +9,28 @@ source /opt/ic/bin/metrics.sh
 
 SCRIPT="$(basename $0)[$$]"
 
-# Get keyword arguments
+CONFIG="/var/lib/libvirt/guestos.xml"
+
 for argument in "${@}"; do
     case ${argument} in
         -h | --help)
-            echo 'Usage:
-Start GuestOS virtual machine
+            echo "Usage:
+Run GuestOS virtual machine. The script starts the GuestOS virtual machine and
+keeps running indefinitely. If the VM is killed, the script exits with a failure.
+If the script's process is terminated with SIGTERM, the VM is stopped and the script
+exits with a success.
 
 Arguments:
-  -c=, --config=        specify the GuestOS configuration file (Default: /var/lib/libvirt/guestos.xml)
   -h, --help            show this help message and exit
-'
+"
             exit 1
             ;;
         *)
-            echo "Error: Argument is not supported."
+            echo "Error: Argument '${argument}' is not supported."
             exit 1
             ;;
     esac
 done
-
-# Set arguments if undefined
-CONFIG="${CONFIG:=/var/lib/libvirt/guestos.xml}"
 
 write_tty1_log() {
     local message=$1
@@ -57,8 +57,31 @@ function define_guestos() {
     fi
 }
 
+function is_guestos_running() {
+    # Space around guestos to avoid matching guestos as substring in the VM name
+    # (e.g. guestos-upgrader)
+    virsh list --state-running | grep " guestos " >/dev/null
+}
+
+function stop_guestos() {
+    if is_guestos_running; then
+        virsh destroy --graceful guestos
+        write_log "Stopping GuestOS virtual machine."
+        write_metric "hostos_guestos_service_stop" \
+            "1" \
+            "GuestOS virtual machine stop state" \
+            "gauge"
+    else
+        write_log "GuestOS virtual machine is already stopped."
+        write_metric "hostos_guestos_service_stop" \
+            "0" \
+            "GuestOS virtual machine stop state" \
+            "gauge"
+    fi
+}
+
 function start_guestos() {
-    if [ "$(virsh list --state-running | grep 'guestos')" ]; then
+    if is_guestos_running; then
         write_log "GuestOS virtual machine is already running."
         write_metric "hostos_guestos_service_start" \
             "0" \
@@ -96,10 +119,12 @@ function start_guestos() {
                 write_tty1_log "No /var/log/libvirt/qemu/guestos-serial.log file found."
             fi
 
-            write_tty1_log "Exiting start-guestos.sh so that systemd can restart guestos.service in 5 minutes."
+            write_tty1_log "Exiting guestos.sh so that systemd can restart guestos.service."
             exit 1
         fi
 
+        trap "stop_guestos; exit 0" SIGTERM
+        systemd-notify --ready
         sleep 10
         write_tty1_log ""
         write_tty1_log "#################################################"
@@ -117,10 +142,24 @@ function start_guestos() {
     fi
 }
 
+function wait_for_vm_shutdown() {
+    while true; do
+        virsh event guestos lifecycle
+        # When we terminate normally via systemd stop, the SIGTERM handler will shutdown the VM and this code isn't
+        # reached.
+        if ! is_guestos_running; then
+            write_log "GuestOS VM shut down unexpectedly."
+            systemd-notify --stopping --status="GuestOS VM shut down unexpectedly."
+            exit 1
+        fi
+    done
+}
+
 function main() {
     # Establish run order
     define_guestos
     start_guestos
+    wait_for_vm_shutdown
 }
 
 main

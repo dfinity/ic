@@ -14,7 +14,6 @@ dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 futures = { workspace = true }
 hex-literal = "0.4.1"
 ic-base-types = { path = "../../types/base_types" }
-ic-canister-client = { path = "../../canister_client" }
 ic_consensus_system_test_utils = { path = "../consensus/utils" }
 ic_consensus_threshold_sig_system_test_utils = { path = "../consensus/tecdsa/utils" }
 ic-ethereum-types = { path = "../../../packages/ic-ethereum-types" }

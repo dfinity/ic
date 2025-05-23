@@ -11,6 +11,15 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-05-16: Proposal 136697
+
+http://dashboard.internetcomputer.org/proposal/136697
+
+## Removed
+- The fields `compute_allocation` and `memory_allocation` in the input type `ChangeCanisterRequest`
+  of the endpoint `change_canister`.
+
+
 # 2025-02-07: Proposal 135209
 
 http://dashboard.internetcomputer.org/proposal/135209
