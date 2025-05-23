@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use ic_cdk::println;
 use ic_interfaces_registry::{
     empty_zero_registry_record, RegistryClientResult, RegistryClientVersionedResult,
-    RegistryTransportRecord, ZERO_REGISTRY_VERSION,
+    RegistryRecord, ZERO_REGISTRY_VERSION,
 };
 use ic_nervous_system_canisters::registry::Registry;
 use ic_registry_transport::pb::v1::RegistryDelta;
@@ -121,7 +121,7 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
             map.range(start_range..=end_range)
                 .rev()
                 .find(|(stored_key, _)| stored_key.key == key)
-                .map(|(_, value)| RegistryTransportRecord {
+                .map(|(_, value)| RegistryRecord {
                     key: key.to_string(),
                     version,
                     value: value.0,
