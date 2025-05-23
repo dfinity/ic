@@ -4,7 +4,6 @@ DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-error-types",
     "//rs/artifact_pool",
-    "//rs/canister_client",
     "//rs/canister_sandbox:backend_lib",
     "//rs/config",
     "//rs/consensus",
@@ -41,6 +40,7 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:clap",
     "@crate_index//:hex",
+    "@crate_index//:ic-agent",
     "@crate_index//:mockall",
     "@crate_index//:prost",
     "@crate_index//:rand",
@@ -49,6 +49,7 @@ DEPENDENCIES = [
     "@crate_index//:slog",
     "@crate_index//:slog-async",
     "@crate_index//:tempfile",
+    "@crate_index//:time",
     "@crate_index//:tokio",
     "@crate_index//:tower",
     "@crate_index//:url",

@@ -13,7 +13,6 @@ canister_http = { path = "../../networking/canister_http" }
 canister-test = { path = "../../../rust_canisters/canister_test" }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
-ic-canister-client = { path = "../../../canister_client" }
 ic_consensus_threshold_sig_system_test_utils = { path = "../tecdsa/utils" }
 ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
 ic-nns-constants = { path = "../../../nns/constants" }
