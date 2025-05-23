@@ -146,11 +146,15 @@ impl CallCanisters for Agent {
 impl CallCanistersWithStoppedCanisterError for Agent {
     fn is_canister_stopped_error(&self, err: &Self::Error) -> bool {
         match err {
-            AgentCallError::Agent(AgentError::CertifiedReject(RejectResponse {
-                reject_code: RejectCode::CanisterError,
-                error_code: Some(error_code),
+            AgentCallError::Agent(AgentError::CertifiedReject {
+                reject:
+                    RejectResponse {
+                        reject_code: RejectCode::CanisterError,
+                        error_code: Some(error_code),
+                        ..
+                    },
                 ..
-            })) => {
+            }) => {
                 // CanisterStopped or CanisterStopping
                 ["IC0508".to_string(), "IC0509".to_string()].contains(error_code)
             }
