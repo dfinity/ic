@@ -4,19 +4,7 @@ set -eEuo pipefail
 
 BUNDLE="${1:?No bundle to upload}"
 
-# ~/.aws/credentials is needed by rclone. If home is not set, expect
-# VERSION_FILE to contain the $HOME.
-if [ -z "${HOME:-}" ]; then
-    while read -r k v; do
-        case "$k" in
-            HOME)
-                export HOME="$v"
-                ;;
-        esac
-    done <"$VERSION_FILE"
-fi
-
-VERSION="$(cat $VERSION_TXT)"
+echo "VERSION: $VERSION"
 
 # Multipart upload does not work trough Cloudflare for some reason.
 # Just disabling it with `--s3-upload-cutoff` for now.

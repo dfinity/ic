@@ -121,3 +121,11 @@ runs:
             echo "Bazel version: $(bazel version)"
 
             bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}"
+
+      - name: Upload to S3
+        uses: ./.github/actions/bazel
+        if: inputs.release-build == 'true'
+        with:
+          run: |
+            echo uploading artifacts to CDN
+            bazel run --check_up_to_date //:upload-artifacts
