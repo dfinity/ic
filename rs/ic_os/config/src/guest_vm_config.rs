@@ -14,10 +14,10 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// Generate the GuestOS configuration
+/// Generate the GuestOS VM configuration
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
-struct Args {
+pub struct GenerateGuestVmConfigArgs {
     /// Specify the config media image file
     #[arg(short, long, default_value = "/run/ic-node/config.img")]
     media: PathBuf,
@@ -26,23 +26,23 @@ struct Args {
     #[arg(short, long, default_value = "/var/lib/libvirt/guestos.xml")]
     output: PathBuf,
 
-    /// Path to the HostOS config file
+    /// Path to the input HostOS config file
     #[arg(short, long, default_value = DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)]
     config: PathBuf,
 }
 
-pub fn main() -> Result<()> {
-    let args = Args::parse();
-
+/// Generate the GuestOS VM configuration by assembling the bootstrap config media image
+/// and creating the libvirt XML configuration file.
+pub fn generate_guest_vm_config(args: GenerateGuestVmConfigArgs) -> Result<()> {
     let metrics_writer = MetricsWriter::new(PathBuf::from(
         "/run/node_exporter/collector_textfile/hostos_generate_guestos_config.prom",
     ));
 
-    run(&args, &metrics_writer, restorecon)
+    run(args, &metrics_writer, restorecon)
 }
 
 fn run(
-    args: &Args,
+    args: GenerateGuestVmConfigArgs,
     metrics_writer: &MetricsWriter,
     // We pass a functor to allow mocking in tests.
     restorecon: impl Fn(&Path) -> Result<()>,
@@ -392,14 +392,14 @@ mod tests {
 
         serialize_and_write_config(&hostos_config_path, &create_test_hostos_config()).unwrap();
 
-        let args = Args {
+        let args = GenerateGuestVmConfigArgs {
             media: media_path.clone(),
             output: output_path.clone(),
             config: hostos_config_path.clone(),
         };
 
         let result = run(
-            &args,
+            args,
             &MetricsWriter::new(metrics_path.clone()),
             mock_restorecon,
         );
@@ -429,14 +429,14 @@ mod tests {
         // Create the output file so it already exists
         fs::write(&output_path, "test").unwrap();
 
-        let args = Args {
+        let args = GenerateGuestVmConfigArgs {
             media: media_path,
             output: output_path,
             config: hostos_config_path,
         };
 
         let result_err = run(
-            &args,
+            args,
             &MetricsWriter::new(metrics_path.clone()),
             mock_restorecon,
         )

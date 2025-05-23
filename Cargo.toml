@@ -140,7 +140,6 @@ members = [
     "rs/http_endpoints/xnet",
     "rs/http_utils",
     "rs/ic_os/deterministic_ips",
-    "rs/ic_os/generate_guestos_vm_config",
     "rs/ic_os/build_tools/dflate",
     "rs/ic_os/build_tools/diroid",
     "rs/ic_os/config",
