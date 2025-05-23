@@ -61,7 +61,6 @@ MACRO_DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-secp256k1",
-    "//packages/ic-vetkd-utils",
     "//rs/certification/test-utils",
     "//rs/crypto/for_verification_only",
     "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
@@ -100,6 +99,7 @@ DEV_DEPENDENCIES = [
     "//rs/types/types_test_utils",
     "@crate_index//:assert_matches",
     "@crate_index//:criterion",
+    "@crate_index//:ic-vetkeys",
     "@crate_index//:k256",
     "@crate_index//:maplit",
     "@crate_index//:mockall",

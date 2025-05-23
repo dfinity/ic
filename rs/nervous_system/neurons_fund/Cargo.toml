@@ -7,6 +7,7 @@ edition = "2021"
 name = "ic_neurons_fund"
 
 [dependencies]
+ic-cdk = { workspace = true }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 lazy_static = { workspace = true }
 rust_decimal = "1.36.0"
