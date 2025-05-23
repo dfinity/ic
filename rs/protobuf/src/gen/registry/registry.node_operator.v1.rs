@@ -42,5 +42,5 @@ pub struct NodeOperatorRecord {
     /// Provider should be rewarded for each type of node.
     #[prost(btree_map = "string, uint32", tag = "7")]
     pub max_rewardable_nodes:
-       ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, u32>,
+        ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, u32>,
 }
