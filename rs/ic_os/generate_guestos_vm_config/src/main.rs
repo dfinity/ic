@@ -99,17 +99,6 @@ fn run(
     Ok(())
 }
 
-/// Get the IPv6 gateway from the configuration
-fn get_ipv6_gateway(config: &HostOSConfig) -> Result<String> {
-    match &config.network_settings.ipv6_config {
-        Ipv6Config::Deterministic(config) => Ok(config.gateway.to_string()),
-        Ipv6Config::Fixed(config) => Ok(config.gateway.to_string()),
-        Ipv6Config::RouterAdvertisement => {
-            bail!("RouterAdvertisement IPv6 configuration does not have a gateway")
-        }
-    }
-}
-
 fn assemble_config_media(hostos_config: &HostOSConfig, media_path: &Path) -> Result<()> {
     let guestos_config_file = tempfile::NamedTempFile::new()?;
     let guestos_config =
@@ -160,15 +149,15 @@ fn make_bootstrap_options(
             Some(PathBuf::from("/boot/config/node_operator_private_key.pem"));
     }
 
-    let guestos_address = match guestos_config.network_settings.ipv6_config {
-        Ipv6Config::Fixed(ip_config) => ip_config.address,
+    let guestos_ipv6_config = match guestos_config.network_settings.ipv6_config {
+        Ipv6Config::Fixed(ip_config) => ip_config,
         _ => bail!(
             "Expected GuestOS IPv6 address to be fixed but was {:?}",
             guestos_config.network_settings.ipv6_config
         ),
     };
-    bootstrap_options.ipv6_address = Some(guestos_address);
-    bootstrap_options.ipv6_gateway = Some(get_ipv6_gateway(hostos_config)?);
+    bootstrap_options.ipv6_address = Some(guestos_ipv6_config.address);
+    bootstrap_options.ipv6_gateway = Some(guestos_ipv6_config.gateway.to_string());
 
     if let Some(ipv4_config) = &hostos_config.network_settings.ipv4_config {
         bootstrap_options.ipv4_address = Some(format!(
@@ -206,6 +195,7 @@ fn make_bootstrap_options(
     Ok(bootstrap_options)
 }
 
+/// Generate the GuestOS VM libvirt XML configuration and return it as String.
 fn generate_vm_config(config: &HostOSConfig, media_path: &Path) -> Result<String> {
     // If you get a compile error pointing at #[derive(Template)], there is likely a syntax error in
     // the template.
@@ -257,8 +247,8 @@ fn restorecon(path: &Path) -> Result<()> {
 mod tests {
     use super::*;
     use config_types::{
-        DeploymentEnvironment, DeterministicIpv6Config, FixedIpv6Config, HostOSConfig,
-        HostOSSettings, ICOSSettings, Ipv4Config, Ipv6Config, Logging, NetworkSettings,
+        DeploymentEnvironment, DeterministicIpv6Config, HostOSConfig, HostOSSettings, ICOSSettings,
+        Ipv4Config, Ipv6Config, Logging, NetworkSettings,
     };
     use goldenfile::Mint;
     use std::env;
@@ -282,7 +272,7 @@ mod tests {
                 domain_name: Some("test.domain".to_string()),
             },
             icos_settings: ICOSSettings {
-                node_reward_type: Some("test-reward".to_string()),
+                node_reward_type: Some("type3.1".to_string()),
                 mgmt_mac: "00:11:22:33:44:55".parse().unwrap(),
                 deployment_environment: DeploymentEnvironment::Testnet,
                 logging: Logging {
@@ -329,7 +319,7 @@ mod tests {
                 ipv4_address: Some("192.168.1.2/24".to_string()),
                 ipv4_gateway: Some("192.168.1.1".to_string()),
                 domain: Some("test.domain".to_string()),
-                node_reward_type: Some("test-reward".to_string()),
+                node_reward_type: Some("type3.1".to_string()),
                 hostname: Some("guest-001122334455".to_string()),
                 nns_urls: vec!["https://example.com/".to_string()],
                 guestos_config: Some(PathBuf::from("/tmp/test")),
@@ -451,39 +441,5 @@ mod tests {
              # TYPE hostos_generate_guestos_config counter\n\
              hostos_generate_guestos_config 0\n"
         )
-    }
-
-    #[test]
-    fn test_get_ipv6_gateway_fixed() {
-        let mut config = create_test_hostos_config();
-        config.network_settings.ipv6_config = Ipv6Config::Fixed(FixedIpv6Config {
-            address: "2001:db9::1/64".to_string(),
-            gateway: "2001:db9::ffff".parse().unwrap(),
-        });
-        let gateway = get_ipv6_gateway(&config).unwrap();
-        assert_eq!(gateway, "2001:db9::ffff");
-    }
-
-    #[test]
-    fn test_get_ipv6_gateway_deterministic() {
-        let mut config = create_test_hostos_config();
-        config.network_settings.ipv6_config = Ipv6Config::Deterministic(DeterministicIpv6Config {
-            prefix: "2001:db8::".to_string(),
-            prefix_length: 64,
-            gateway: "2001:db8::1".parse().unwrap(),
-        });
-        let gateway = get_ipv6_gateway(&config).unwrap();
-        assert_eq!(gateway, "2001:db8::1");
-    }
-
-    #[test]
-    fn test_get_ipv6_gateway_router_advertisement_error() {
-        let mut config = create_test_hostos_config();
-        config.network_settings.ipv6_config = Ipv6Config::RouterAdvertisement;
-        let result = get_ipv6_gateway(&config).unwrap_err();
-        assert!(
-            result.to_string().contains("does not have a gateway"),
-            "{result:?}"
-        );
     }
 }

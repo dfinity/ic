@@ -4915,7 +4915,6 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "askama",
- "bootstrap_config",
  "clap 4.5.27",
  "config",
  "config_types",
