@@ -8,11 +8,13 @@ exports_files(
     ],
 )
 
+# TODO: remove
 string_flag(
     name = "s3_endpoint",
     build_setting_default = "",
 )
 
+# TODO: remove
 bool_flag(
     name = "s3_upload",
     build_setting_default = False,
