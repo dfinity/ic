@@ -1,8 +1,8 @@
-use bootstrap_config::{build_bootstrap_config_image, BootstrapOptions};
 use clap::Parser;
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
+use config::guestos_bootstrap_image::BootstrapOptions;
 use config_types::DeploymentEnvironment;
 use ic_prep_lib::{
     internet_computer::{IcConfig, TopologyConfig},
@@ -242,7 +242,9 @@ fn main() {
             accounts_ssh_authorized_keys: Some(keys_dir),
             ..Default::default()
         };
-        build_bootstrap_config_image(&config_path, &bootstrap_options).unwrap();
+        bootstrap_options
+            .build_bootstrap_config_image(&config_path)
+            .unwrap();
 
         // Upload config image
         let image_id = farm

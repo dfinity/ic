@@ -10,7 +10,7 @@ use std::process::Command;
 #[cfg(feature = "dev")]
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 
-/// Configuration options for bootstrap image/tar creation
+/// Configuration options for GuestOS bootstrap image/tar creation.
 #[derive(Default, Debug, Clone, Eq, PartialEq)]
 pub struct BootstrapOptions {
     /// The serialized GuestOS config object.
@@ -110,293 +110,297 @@ pub struct BootstrapOptions {
     pub socks_proxy: Option<String>,
 }
 
-/// Build a bootstrap disk image with the given configuration options.
-pub fn build_bootstrap_config_image(out_file: &Path, options: &BootstrapOptions) -> Result<()> {
-    let tmp_dir = tempfile::tempdir().context("Failed to create temporary directory")?;
+impl BootstrapOptions {
+    /// Create a FAT-formatted disk image containing bootstrap configuration.
+    ///
+    /// Takes all the configuration options specified in BootstrapOptions and packages them into
+    /// a disk image that can be mounted by the GuestOS. The image contains a FAT filesystem with
+    /// a single file named 'ic-bootstrap.tar' that includes all configuration files.
+    pub fn build_bootstrap_config_image(&self, out_file: &Path) -> Result<()> {
+        let tmp_dir = tempfile::tempdir().context("Failed to create temporary directory")?;
 
-    // Create bootstrap tar
-    let tar_path = tmp_dir.path().join("ic-bootstrap.tar");
-    build_bootstrap_tar(&tar_path, options)?;
+        // Create bootstrap tar
+        let tar_path = tmp_dir.path().join("ic-bootstrap.tar");
+        self.build_bootstrap_tar(&tar_path)?;
 
-    let tar_size = fs::metadata(&tar_path)
-        .context("Failed to get tar file metadata")?
-        .len();
+        let tar_size = fs::metadata(&tar_path)
+            .context("Failed to get tar file metadata")?
+            .len();
 
-    // Calculate the disk image size (2 * tar_size + 1MB)
-    let image_size = 2 * tar_size + 1_048_576;
+        // Calculate the disk image size (2 * tar_size + 1MB)
+        let image_size = 2 * tar_size + 1_048_576;
 
-    // Create an empty file of the calculated size
-    let file = File::create(out_file).context("Failed to create output file")?;
-    file.set_len(image_size)
-        .context("Failed to set output file size")?;
+        // Create an empty file of the calculated size
+        let file = File::create(out_file).context("Failed to create output file")?;
+        file.set_len(image_size)
+            .context("Failed to set output file size")?;
 
-    // Format the disk image as FAT
-    // mkfs.vfat is usually in /usr/sbin which is not always in the PATH
-    let path_with_usr_sbin = format!("/usr/sbin:{}", env::var("PATH").unwrap_or_default());
-    if !Command::new("mkfs.vfat")
-        .arg("-n")
-        .arg("CONFIG")
-        .env("PATH", path_with_usr_sbin)
-        .arg(out_file)
-        .status()
-        .context("Failed to execute mkfs.vfat command")?
-        .success()
-    {
-        bail!("Failed to format disk image");
-    }
-
-    // Copy the tar file to the disk image
-    if !Command::new("mcopy")
-        .arg("-i")
-        .arg(out_file)
-        .arg("-o")
-        .arg(&tar_path)
-        .arg("::")
-        .status()
-        .context("Failed to execute mcopy command")?
-        .success()
-    {
-        bail!("Failed to copy tar to disk image");
-    }
-
-    Ok(())
-}
-
-/// Build a bootstrap tar file with the given configuration.
-fn build_bootstrap_tar(out_file: &Path, options: &BootstrapOptions) -> Result<()> {
-    // Create temporary directory for bootstrap files
-    let bootstrap_dir = tempfile::tempdir().context("Failed to create temporary directory")?;
-
-    // Copy files to the temporary directory
-    if let Some(guestos_config) = &options.guestos_config {
-        fs::copy(guestos_config, bootstrap_dir.path().join("config.json"))
-            .context("Failed to copy guestos config")?;
-    }
-
-    if let Some(nns_public_key) = &options.nns_public_key {
-        fs::copy(
-            nns_public_key,
-            bootstrap_dir.path().join("nns_public_key.pem"),
-        )
-        .context("Failed to copy NNS public key")?;
-    }
-
-    if let Some(node_operator_private_key) = &options.node_operator_private_key {
-        fs::copy(
-            node_operator_private_key,
-            bootstrap_dir.path().join("node_operator_private_key.pem"),
-        )
-        .context("Failed to copy node operator private key")?;
-    }
-
-    #[cfg(feature = "dev")]
-    if let Some(accounts_ssh_authorized_keys) = &options.accounts_ssh_authorized_keys {
-        let target_dir = bootstrap_dir.path().join("accounts_ssh_authorized_keys");
-        copy_dir_recursively(accounts_ssh_authorized_keys, &target_dir)
-            .context("Failed to copy SSH authorized keys")?;
-    }
-
-    if let Some(ic_crypto) = &options.ic_crypto {
-        copy_dir_recursively(ic_crypto, &bootstrap_dir.path().join("ic_crypto"))
-            .context("Failed to copy IC crypto directory")?;
-    }
-
-    if let Some(ic_state) = &options.ic_state {
-        if ic_state.exists() {
-            copy_dir_recursively(ic_state, &bootstrap_dir.path().join("ic_state"))
-                .context("Failed to copy IC state directory")?;
+        // Format the disk image as FAT
+        // mkfs.vfat is usually in /usr/sbin which is not always in the PATH
+        let path_with_usr_sbin = format!("/usr/sbin:{}", env::var("PATH").unwrap_or_default());
+        if !Command::new("mkfs.vfat")
+            .arg("-n")
+            .arg("CONFIG")
+            .env("PATH", path_with_usr_sbin)
+            .arg(out_file)
+            .status()
+            .context("Failed to execute mkfs.vfat command")?
+            .success()
+        {
+            bail!("Failed to format disk image");
         }
-    }
 
-    if let Some(ic_registry_local_store) = &options.ic_registry_local_store {
-        copy_dir_recursively(
-            ic_registry_local_store,
-            &bootstrap_dir.path().join("ic_registry_local_store"),
-        )
-        .context("Failed to copy registry local store")?;
-    }
-
-    fs::write(
-        bootstrap_dir.path().join("network.conf"),
-        generate_network_conf(options)?,
-    )
-    .context("Failed to write network.conf")?;
-
-    if let Some(node_reward_type) = &options.node_reward_type {
-        fs::write(
-            bootstrap_dir.path().join("reward.conf"),
-            format!("node_reward_type={node_reward_type}\n"),
-        )
-        .context("Failed to write reward.conf")?;
-    }
-
-    if !options.elasticsearch_hosts.is_empty() {
-        let space_separated_hosts = options.elasticsearch_hosts.join(" ");
-        let mut filebeat_config = File::create(bootstrap_dir.path().join("filebeat.conf"))
-            .context("Failed to create filebeat.conf")?;
-
-        writeln!(
-            filebeat_config,
-            "elasticsearch_hosts={space_separated_hosts}"
-        )?;
-        if !&options.elasticsearch_tags.is_empty() {
-            let space_separated_tags = options.elasticsearch_tags.join(" ");
-            writeln!(filebeat_config, "elasticsearch_tags={space_separated_tags}")?;
+        // Copy the tar file to the disk image
+        if !Command::new("mcopy")
+            .arg("-i")
+            .arg(out_file)
+            .arg("-o")
+            .arg(&tar_path)
+            .arg("::")
+            .status()
+            .context("Failed to execute mcopy command")?
+            .success()
+        {
+            bail!("Failed to copy tar to disk image");
         }
+
+        Ok(())
     }
 
-    if !options.nns_urls.is_empty() {
-        let comma_separated_urls = options.nns_urls.join(",");
+    /// Build a bootstrap tar file with this configuration.
+    fn build_bootstrap_tar(&self, out_file: &Path) -> Result<()> {
+        // Create temporary directory for bootstrap files
+        let bootstrap_dir = tempfile::tempdir().context("Failed to create temporary directory")?;
+
+        // Copy files to the temporary directory
+        if let Some(guestos_config) = &self.guestos_config {
+            fs::copy(guestos_config, bootstrap_dir.path().join("config.json"))
+                .context("Failed to copy guestos config")?;
+        }
+
+        if let Some(nns_public_key) = &self.nns_public_key {
+            fs::copy(
+                nns_public_key,
+                bootstrap_dir.path().join("nns_public_key.pem"),
+            )
+            .context("Failed to copy NNS public key")?;
+        }
+
+        if let Some(node_operator_private_key) = &self.node_operator_private_key {
+            fs::copy(
+                node_operator_private_key,
+                bootstrap_dir.path().join("node_operator_private_key.pem"),
+            )
+            .context("Failed to copy node operator private key")?;
+        }
+
+        #[cfg(feature = "dev")]
+        if let Some(accounts_ssh_authorized_keys) = &self.accounts_ssh_authorized_keys {
+            let target_dir = bootstrap_dir.path().join("accounts_ssh_authorized_keys");
+            Self::copy_dir_recursively(accounts_ssh_authorized_keys, &target_dir)
+                .context("Failed to copy SSH authorized keys")?;
+        }
+
+        if let Some(ic_crypto) = &self.ic_crypto {
+            Self::copy_dir_recursively(ic_crypto, &bootstrap_dir.path().join("ic_crypto"))
+                .context("Failed to copy IC crypto directory")?;
+        }
+
+        if let Some(ic_state) = &self.ic_state {
+            if ic_state.exists() {
+                Self::copy_dir_recursively(ic_state, &bootstrap_dir.path().join("ic_state"))
+                    .context("Failed to copy IC state directory")?;
+            }
+        }
+
+        if let Some(ic_registry_local_store) = &self.ic_registry_local_store {
+            Self::copy_dir_recursively(
+                ic_registry_local_store,
+                &bootstrap_dir.path().join("ic_registry_local_store"),
+            )
+            .context("Failed to copy registry local store")?;
+        }
+
         fs::write(
-            bootstrap_dir.path().join("nns.conf"),
-            format!("nns_url={comma_separated_urls}\n"),
+            bootstrap_dir.path().join("network.conf"),
+            self.generate_network_conf()?,
         )
-        .context("Failed to write nns.conf")?;
-    }
+        .context("Failed to write network.conf")?;
 
-    if let Some(backup_retention_time) = options.backup_retention_time_sec {
-        let mut backup_conf = File::create(bootstrap_dir.path().join("backup.conf"))
-            .context("Failed to create backup.conf")?;
+        if let Some(node_reward_type) = &self.node_reward_type {
+            fs::write(
+                bootstrap_dir.path().join("reward.conf"),
+                format!("node_reward_type={node_reward_type}\n"),
+            )
+            .context("Failed to write reward.conf")?;
+        }
 
-        writeln!(
-            backup_conf,
-            "backup_retention_time_secs={backup_retention_time}"
-        )?;
+        if !self.elasticsearch_hosts.is_empty() {
+            let space_separated_hosts = self.elasticsearch_hosts.join(" ");
+            let mut filebeat_config = File::create(bootstrap_dir.path().join("filebeat.conf"))
+                .context("Failed to create filebeat.conf")?;
 
-        if let Some(backup_purging_interval) = options.backup_purging_interval_sec {
+            writeln!(
+                filebeat_config,
+                "elasticsearch_hosts={space_separated_hosts}"
+            )?;
+            if !&self.elasticsearch_tags.is_empty() {
+                let space_separated_tags = self.elasticsearch_tags.join(" ");
+                writeln!(filebeat_config, "elasticsearch_tags={space_separated_tags}")?;
+            }
+        }
+
+        if !self.nns_urls.is_empty() {
+            let comma_separated_urls = self.nns_urls.join(",");
+            fs::write(
+                bootstrap_dir.path().join("nns.conf"),
+                format!("nns_url={comma_separated_urls}\n"),
+            )
+            .context("Failed to write nns.conf")?;
+        }
+
+        if let Some(backup_retention_time) = self.backup_retention_time_sec {
+            let mut backup_conf = File::create(bootstrap_dir.path().join("backup.conf"))
+                .context("Failed to create backup.conf")?;
+
             writeln!(
                 backup_conf,
-                "backup_puging_interval_secs={backup_purging_interval}"
+                "backup_retention_time_secs={backup_retention_time}"
             )?;
+
+            if let Some(backup_purging_interval) = self.backup_purging_interval_sec {
+                writeln!(
+                    backup_conf,
+                    "backup_puging_interval_secs={backup_purging_interval}"
+                )?;
+            }
+        }
+
+        #[cfg(feature = "dev")]
+        if let Some(malicious_behavior) = &self.malicious_behavior {
+            fs::write(
+                bootstrap_dir.path().join("malicious_behavior.conf"),
+                format!(
+                    "malicious_behavior={}\n",
+                    serde_json::to_string(malicious_behavior)?
+                ),
+            )
+            .context("Failed to write malicious_behavior.conf")?;
+        }
+
+        #[cfg(feature = "dev")]
+        if let Some(query_stats_epoch_length) = self.query_stats_epoch_length {
+            fs::write(
+                bootstrap_dir.path().join("query_stats.conf"),
+                format!("query_stats_epoch_length={query_stats_epoch_length}\n"),
+            )
+            .context("Failed to write query_stats.conf")?;
+        }
+
+        #[cfg(feature = "dev")]
+        if let Some(bitcoind_addr) = &self.bitcoind_addr {
+            fs::write(
+                bootstrap_dir.path().join("bitcoind_addr.conf"),
+                format!("bitcoind_addr={bitcoind_addr}\n"),
+            )
+            .context("Failed to write bitcoind_addr.conf")?;
+        }
+
+        #[cfg(feature = "dev")]
+        if let Some(jaeger_addr) = &self.jaeger_addr {
+            fs::write(
+                bootstrap_dir.path().join("jaeger_addr.conf"),
+                format!("jaeger_addr=http://{jaeger_addr}\n"),
+            )
+            .context("Failed to write jaeger_addr.conf")?;
+        }
+
+        #[cfg(feature = "dev")]
+        if let Some(socks_proxy) = &self.socks_proxy {
+            fs::write(
+                bootstrap_dir.path().join("socks_proxy.conf"),
+                format!("socks_proxy={socks_proxy}\n"),
+            )
+            .context("Failed to write socks_proxy.conf")?;
+        }
+
+        if !Command::new("tar")
+            .arg("cf")
+            .arg(out_file)
+            .arg("--sort=name")
+            .arg("--owner=root:0")
+            .arg("--group=root:0")
+            .arg("--mtime=UTC 1970-01-01 00:00:00")
+            .arg("-C")
+            .arg(bootstrap_dir.path())
+            .arg(".")
+            .status()
+            .context("Failed to execute tar command")?
+            .success()
+        {
+            bail!("Failed to create tar file");
+        }
+
+        Ok(())
+    }
+
+    /// Generate network configuration content.
+    fn generate_network_conf(&self) -> Result<String> {
+        let mut network_conf = String::new();
+
+        if let Some(ipv6_address) = &self.ipv6_address {
+            writeln!(network_conf, "ipv6_address={ipv6_address}")?;
+        }
+
+        if let Some(ipv6_gateway) = &self.ipv6_gateway {
+            writeln!(network_conf, "ipv6_gateway={ipv6_gateway}")?;
+        }
+
+        let hostname = self.hostname.as_deref().unwrap_or_default();
+        Self::validate_hostname(hostname)?;
+        writeln!(network_conf, "hostname={hostname}",)?;
+
+        if let Some(ipv4_address) = &self.ipv4_address {
+            writeln!(network_conf, "ipv4_address={ipv4_address}")?;
+        }
+
+        if let Some(ipv4_gateway) = &self.ipv4_gateway {
+            writeln!(network_conf, "ipv4_gateway={ipv4_gateway}")?;
+        }
+
+        if let Some(domain) = &self.domain {
+            writeln!(network_conf, "domain={domain}")?;
+        }
+
+        Ok(network_conf)
+    }
+
+    fn validate_hostname(hostname: &str) -> Result<()> {
+        let pattern = Regex::new(r"^[a-zA-Z][a-zA-Z0-9]*(-[a-zA-Z0-9]+)*$").unwrap();
+        if hostname.is_empty() || pattern.is_match(hostname) {
+            Ok(())
+        } else {
+            bail!("Invalid hostname: '{hostname}'");
         }
     }
 
-    #[cfg(feature = "dev")]
-    if let Some(malicious_behavior) = &options.malicious_behavior {
-        fs::write(
-            bootstrap_dir.path().join("malicious_behavior.conf"),
-            format!(
-                "malicious_behavior={}\n",
-                serde_json::to_string(malicious_behavior)?
-            ),
-        )
-        .context("Failed to write malicious_behavior.conf")?;
-    }
-
-    #[cfg(feature = "dev")]
-    if let Some(query_stats_epoch_length) = options.query_stats_epoch_length {
-        fs::write(
-            bootstrap_dir.path().join("query_stats.conf"),
-            format!("query_stats_epoch_length={query_stats_epoch_length}\n"),
-        )
-        .context("Failed to write query_stats.conf")?;
-    }
-
-    #[cfg(feature = "dev")]
-    if let Some(bitcoind_addr) = &options.bitcoind_addr {
-        fs::write(
-            bootstrap_dir.path().join("bitcoind_addr.conf"),
-            format!("bitcoind_addr={bitcoind_addr}\n"),
-        )
-        .context("Failed to write bitcoind_addr.conf")?;
-    }
-
-    #[cfg(feature = "dev")]
-    if let Some(jaeger_addr) = &options.jaeger_addr {
-        fs::write(
-            bootstrap_dir.path().join("jaeger_addr.conf"),
-            format!("jaeger_addr=http://{jaeger_addr}\n"),
-        )
-        .context("Failed to write jaeger_addr.conf")?;
-    }
-
-    #[cfg(feature = "dev")]
-    if let Some(socks_proxy) = &options.socks_proxy {
-        fs::write(
-            bootstrap_dir.path().join("socks_proxy.conf"),
-            format!("socks_proxy={socks_proxy}\n"),
-        )
-        .context("Failed to write socks_proxy.conf")?;
-    }
-
-    if !Command::new("tar")
-        .arg("cf")
-        .arg(out_file)
-        .arg("--sort=name")
-        .arg("--owner=root:0")
-        .arg("--group=root:0")
-        .arg("--mtime=UTC 1970-01-01 00:00:00")
-        .arg("-C")
-        .arg(bootstrap_dir.path())
-        .arg(".")
-        .status()
-        .context("Failed to execute tar command")?
-        .success()
-    {
-        bail!("Failed to create tar file");
-    }
-
-    Ok(())
-}
-
-/// Generate network configuration content from config.
-///
-/// The config must be valid.
-fn generate_network_conf(config: &BootstrapOptions) -> Result<String> {
-    let mut network_conf = String::new();
-
-    if let Some(ipv6_address) = &config.ipv6_address {
-        writeln!(network_conf, "ipv6_address={ipv6_address}")?;
-    }
-
-    if let Some(ipv6_gateway) = &config.ipv6_gateway {
-        writeln!(network_conf, "ipv6_gateway={ipv6_gateway}")?;
-    }
-
-    let hostname = config.hostname.as_deref().unwrap_or_default();
-    validate_hostname(hostname)?;
-    writeln!(network_conf, "hostname={hostname}",)?;
-
-    if let Some(ipv4_address) = &config.ipv4_address {
-        writeln!(network_conf, "ipv4_address={ipv4_address}")?;
-    }
-
-    if let Some(ipv4_gateway) = &config.ipv4_gateway {
-        writeln!(network_conf, "ipv4_gateway={ipv4_gateway}")?;
-    }
-
-    if let Some(domain) = &config.domain {
-        writeln!(network_conf, "domain={domain}")?;
-    }
-
-    Ok(network_conf)
-}
-
-fn validate_hostname(hostname: &str) -> Result<()> {
-    let pattern = Regex::new(r"^[a-zA-Z][a-zA-Z0-9]*(-[a-zA-Z0-9]+)*$").unwrap();
-    if hostname.is_empty() || pattern.is_match(hostname) {
+    fn copy_dir_recursively(src: &Path, dst: &Path) -> Result<()> {
+        if !Command::new("cp")
+            .arg("-r")
+            .arg(src)
+            .arg(dst)
+            .status()
+            .context(format!(
+                "Failed to copy {} to {}",
+                src.display(),
+                dst.display()
+            ))?
+            .success()
+        {
+            bail!("Failed to copy {} to {}", src.display(), dst.display());
+        }
         Ok(())
-    } else {
-        bail!("Invalid hostname: '{hostname}'");
     }
-}
-
-fn copy_dir_recursively(src: &Path, dst: &Path) -> Result<()> {
-    if !Command::new("cp")
-        .arg("-r")
-        .arg(src)
-        .arg(dst)
-        .status()
-        .context(format!(
-            "Failed to copy {} to {}",
-            src.display(),
-            dst.display()
-        ))?
-        .success()
-    {
-        bail!("Failed to copy {} to {}", src.display(), dst.display());
-    }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -406,18 +410,18 @@ mod tests {
     #[test]
     fn test_is_valid_hostname() {
         // Valid hostnames
-        assert!(validate_hostname("").is_ok());
-        assert!(validate_hostname("hostname").is_ok());
-        assert!(validate_hostname("hostname123").is_ok());
-        assert!(validate_hostname("hostname-part2").is_ok());
-        assert!(validate_hostname("h-1-2-3").is_ok());
+        assert!(BootstrapOptions::validate_hostname("").is_ok());
+        assert!(BootstrapOptions::validate_hostname("hostname").is_ok());
+        assert!(BootstrapOptions::validate_hostname("hostname123").is_ok());
+        assert!(BootstrapOptions::validate_hostname("hostname-part2").is_ok());
+        assert!(BootstrapOptions::validate_hostname("h-1-2-3").is_ok());
 
         // Invalid hostnames
-        assert!(validate_hostname("123hostname").is_err());
-        assert!(validate_hostname("hostname-").is_err());
-        assert!(validate_hostname("-hostname").is_err());
-        assert!(validate_hostname("hostname_invalid").is_err());
-        assert!(validate_hostname("hostname with spaces").is_err());
+        assert!(BootstrapOptions::validate_hostname("123hostname").is_err());
+        assert!(BootstrapOptions::validate_hostname("hostname-").is_err());
+        assert!(BootstrapOptions::validate_hostname("-hostname").is_err());
+        assert!(BootstrapOptions::validate_hostname("hostname_invalid").is_err());
+        assert!(BootstrapOptions::validate_hostname("hostname with spaces").is_err());
     }
 
     #[test]
@@ -425,7 +429,9 @@ mod tests {
         let tmp_dir = tempfile::tempdir().unwrap();
         let out_file = tmp_dir.path().join("bootstrap.tar");
 
-        assert!(build_bootstrap_config_image(&out_file, &BootstrapOptions::default()).is_ok());
+        assert!(BootstrapOptions::default()
+            .build_bootstrap_config_image(&out_file)
+            .is_ok());
     }
 
     #[test]
@@ -433,14 +439,12 @@ mod tests {
         let tmp_dir = tempfile::tempdir()?;
         let out_file = tmp_dir.path().join("bootstrap.img");
 
-        build_bootstrap_config_image(
-            &out_file,
-            &BootstrapOptions {
-                hostname: Some("testhostname".to_string()),
-                ipv6_address: Some("2001:db8::1/64".to_string()),
-                ..Default::default()
-            },
-        )?;
+        BootstrapOptions {
+            hostname: Some("testhostname".to_string()),
+            ipv6_address: Some("2001:db8::1/64".to_string()),
+            ..Default::default()
+        }
+        .build_bootstrap_config_image(&out_file)?;
 
         assert!(out_file.exists());
         assert!(fs::metadata(&out_file)?.len() > 0);
@@ -459,15 +463,13 @@ mod tests {
         fs::write(&test_config_path, r#"{"test": "value"}"#)?;
 
         // Build the tar file
-        build_bootstrap_tar(
-            &out_file,
-            &BootstrapOptions {
-                hostname: Some("testhostname".to_string()),
-                ipv6_address: Some("2001:db8::1/64".to_string()),
-                guestos_config: Some(test_config_path),
-                ..BootstrapOptions::default()
-            },
-        )?;
+        BootstrapOptions {
+            hostname: Some("testhostname".to_string()),
+            ipv6_address: Some("2001:db8::1/64".to_string()),
+            guestos_config: Some(test_config_path),
+            ..BootstrapOptions::default()
+        }
+        .build_bootstrap_tar(&out_file)?;
 
         // Extract the tar file to verify contents
         let extract_dir = tmp_dir.path().join("extract");
@@ -531,7 +533,7 @@ mod tests {
         fs::write(registry_dir.join("test"), "registry_data")?;
 
         // Create full configuration
-        let config = BootstrapOptions {
+        let bootstrap_options = BootstrapOptions {
             hostname: Some("fulltest".to_string()),
             guestos_config: Some(config_path),
             nns_public_key: Some(nns_key_path),
@@ -559,7 +561,7 @@ mod tests {
         };
 
         // Build and extract tar
-        build_bootstrap_tar(&out_file, &config)?;
+        bootstrap_options.build_bootstrap_tar(&out_file)?;
         let extract_dir = tmp_dir.path().join("extract");
         fs::create_dir(&extract_dir)?;
         Command::new("tar")

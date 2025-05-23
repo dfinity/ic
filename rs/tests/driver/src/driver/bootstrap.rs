@@ -25,10 +25,10 @@ use crate::{
     k8s::job::wait_for_job_completion,
 };
 use anyhow::{bail, Context, Result};
-use bootstrap_config::{build_bootstrap_config_image, BootstrapOptions};
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
+use config::guestos_bootstrap_image::BootstrapOptions;
 use config_types::DeploymentEnvironment;
 use ic_base_types::NodeId;
 use ic_prep_lib::{
@@ -574,7 +574,8 @@ fn create_config_disk_image(
         bootstrap_options.ipv4_gateway = Some(ipv4_config.gateway_ip_addr().to_string());
     }
 
-    build_bootstrap_config_image(&img_path, &bootstrap_options)
+    bootstrap_options
+        .build_bootstrap_config_image(&img_path)
         .context("Could not create bootstrap config image")?;
 
     let mut img_file = File::open(img_path)?;

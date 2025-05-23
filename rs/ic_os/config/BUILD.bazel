@@ -16,6 +16,7 @@ DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:serde_with",
+    "@crate_index//:tempfile",
     "@crate_index//:url",
 ]
 
@@ -43,6 +44,29 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
+rust_library(
+    name = "config_lib_dev",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    crate_features = ["dev"],
+    crate_name = "config",
+    visibility = [
+        "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
+    ],
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "config_lib_test",
+    crate = ":config_lib_dev",
+    crate_features = ["dev"],
+    # You may add other deps that are specific to the test configuration
+    deps = DEV_DEPENDENCIES,
+)
+
 rust_binary(
     name = "config",
     srcs = ["src/main.rs"],
@@ -52,11 +76,4 @@ rust_binary(
     deps = [
         ":config_lib",
     ] + DEPENDENCIES,
-)
-
-rust_test(
-    name = "config_lib_test",
-    crate = ":config_lib",
-    # You may add other deps that are specific to the test configuration
-    deps = DEV_DEPENDENCIES,
 )
