@@ -38,22 +38,22 @@ pub fn main() -> Result<()> {
         "/run/node_exporter/collector_textfile/hostos_generate_guestos_config.prom",
     ));
 
-    let hostos_config: HostOSConfig = serde_json::from_reader(
-        File::open(&args.config).context("Failed to open HostOS config file")?,
-    )
-    .context("Failed to parse config file")?;
-
-    run(&args, &metrics_writer, &hostos_config, restorecon)
+    run(&args, &metrics_writer, restorecon)
 }
 
 fn run(
     args: &Args,
     metrics_writer: &MetricsWriter,
-    hostos_config: &HostOSConfig,
     // We pass a functor to allow mocking in tests.
     restorecon: impl Fn(&Path) -> Result<()>,
 ) -> Result<()> {
-    assemble_config_media(hostos_config, &args.media).context("Failed to assemble config media")?;
+    let hostos_config: HostOSConfig = serde_json::from_reader(
+        File::open(&args.config).context("Failed to open HostOS config file")?,
+    )
+    .context("Failed to parse HostOS config file")?;
+
+    assemble_config_media(&hostos_config, &args.media)
+        .context("Failed to assemble config media")?;
 
     if args.output.exists() {
         metrics_writer.write_metrics(&[Metric::with_annotation(
@@ -77,7 +77,7 @@ fn run(
 
     File::create(output_path)
         .context("Failed to create output file")?
-        .write_all(generate_vm_config(hostos_config, &args.media)?.as_bytes())
+        .write_all(generate_vm_config(&hostos_config, &args.media)?.as_bytes())
         .context("Failed to write output file")?;
 
     // Restore SELinux security context
@@ -229,7 +229,7 @@ fn generate_vm_config(config: &HostOSConfig, media_path: &Path) -> Result<String
         config_media: &media_path.display().to_string(),
     }
     .render()
-    .context("Failed to render GuestOS template")
+    .context("Failed to render GuestOS VM XML template")
 }
 
 fn restorecon(path: &Path) -> Result<()> {
@@ -385,21 +385,22 @@ mod tests {
     #[test]
     fn test_run_success() {
         let temp_dir = tempdir().unwrap();
+        let hostos_config_path = temp_dir.path().join("hostos.json");
         let media_path = temp_dir.path().join("config.img");
         let output_path = temp_dir.path().join("guestos.xml");
         let metrics_path = temp_dir.path().join("metrics.prom");
 
+        serialize_and_write_config(&hostos_config_path, &create_test_hostos_config()).unwrap();
+
         let args = Args {
             media: media_path.clone(),
             output: output_path.clone(),
-            // Value does not matter since we pass HostOS config to run.
-            config: PathBuf::from("/non/existent/path"),
+            config: hostos_config_path.clone(),
         };
 
         let result = run(
             &args,
             &MetricsWriter::new(metrics_path.clone()),
-            &create_test_hostos_config(),
             mock_restorecon,
         );
         assert!(result.is_ok(), "{result:?}");
@@ -418,9 +419,12 @@ mod tests {
     #[test]
     fn test_run_existing_output_file() {
         let temp_dir = tempdir().unwrap();
-        let metrics_path = temp_dir.path().join("metrics.prom");
+        let hostos_config_path = temp_dir.path().join("hostos.json");
         let media_path = temp_dir.path().join("config.img");
         let output_path = temp_dir.path().join("guestos.xml");
+        let metrics_path = temp_dir.path().join("metrics.prom");
+
+        serialize_and_write_config(&hostos_config_path, &create_test_hostos_config()).unwrap();
 
         // Create the output file so it already exists
         fs::write(&output_path, "test").unwrap();
@@ -428,14 +432,12 @@ mod tests {
         let args = Args {
             media: media_path,
             output: output_path,
-            // Value does not matter since we pass HostOS config to run.
-            config: PathBuf::from("/path/to/config"),
+            config: hostos_config_path,
         };
 
         let result_err = run(
             &args,
             &MetricsWriter::new(metrics_path.clone()),
-            &create_test_hostos_config(),
             mock_restorecon,
         )
         .unwrap_err();
