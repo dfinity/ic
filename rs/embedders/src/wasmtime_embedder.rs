@@ -211,7 +211,7 @@ pub struct WasmtimeEmbedder {
     // `SigsegvMemoryTracker` is created it will look up the corresponding memory in the map
     // and remove it. So memories will only be in this map for the time between module
     // instantiation and creation of the corresponding `SigsegvMemoryTracker`.
-    created_memories: Arc<Mutex<HashMap<MemoryStart, MemoryPageSize>>>,
+    created_memories: Arc<Mutex<HashMap<MemoryStart, (MemoryPageSize, usize)>>>,
 }
 
 impl WasmtimeEmbedder {
@@ -601,7 +601,7 @@ impl WasmtimeEmbedder {
             }
             let start = MemoryStart(instance_memory.data_ptr(&store) as usize);
             let mut created_memories = self.created_memories.lock().unwrap();
-            let current_size = match created_memories.remove(&start) {
+            let (current_size, max_size) = match created_memories.remove(&start) {
                 None => {
                     error!(
                         self.log,
@@ -620,6 +620,7 @@ impl WasmtimeEmbedder {
                 MemorySigSegvInfo {
                     instance_memory,
                     current_memory_size_in_pages: current_size,
+                    max_memory_size_in_pages: max_size,
                     page_map: memory_info.memory.page_map.clone(),
                     dirty_page_tracking: memory_info.dirty_page_tracking,
                 },
@@ -646,7 +647,7 @@ impl WasmtimeEmbedder {
         bytemap_name: &str,
         instance: &Instance,
         mut store: &mut Store<StoreData>,
-        created_memories: &mut HashMap<MemoryStart, MemoryPageSize>,
+        created_memories: &mut HashMap<MemoryStart, (MemoryPageSize, usize)>,
         canister_id: CanisterId,
     ) -> HypervisorResult<()> {
         let memory =
@@ -670,7 +671,7 @@ impl WasmtimeEmbedder {
                     ),
                 ))
             }
-            Some((instance_memory, current_memory_size_in_pages)) => {
+            Some((instance_memory, (current_memory_size_in_pages, _))) => {
                 let addr = instance_memory.data_ptr(store) as usize;
                 let size_in_bytes =
                     current_memory_size_in_pages.load(Ordering::SeqCst) * WASM_PAGE_SIZE_IN_BYTES;
@@ -697,6 +698,7 @@ impl WasmtimeEmbedder {
 pub struct MemorySigSegvInfo {
     instance_memory: wasmtime::Memory,
     current_memory_size_in_pages: MemoryPageSize,
+    max_memory_size_in_pages: usize,
     page_map: PageMap,
     dirty_page_tracking: DirtyPageTracking,
 }
@@ -712,6 +714,7 @@ fn sigsegv_memory_tracker<S>(
         MemorySigSegvInfo {
             instance_memory,
             current_memory_size_in_pages,
+            max_memory_size_in_pages,
             page_map,
             dirty_page_tracking,
         },
@@ -746,17 +749,17 @@ fn sigsegv_memory_tracker<S>(
             ))
         };
 
+        println!("Current memory size in pages: {}", size / PAGE_SIZE);
+
         let uffd = UffdBuilder::new()
             .close_on_exec(true)
             .non_blocking(true)
             .user_mode_only(true)
             .create()
             .expect("Failed to create userfaultfd");
-        uffd.register(
-            base,
-            PAGE_SIZE * (*current_memory_size_in_pages).load(Ordering::SeqCst),
-        )
-        .expect("Failed to register region");
+        println!("Created userfaultfd: {:?} for mem_type {}", uffd, mem_type);
+        uffd.register(base, max_memory_size_in_pages * PAGE_SIZE)
+            .expect("Failed to register region");
 
         result.insert(mem_type, Arc::clone(&sigsegv_memory_tracker));
 
@@ -764,49 +767,47 @@ fn sigsegv_memory_tracker<S>(
             loop {
                 let event = uffd.read_event().expect("Failed to read uffd event");
 
-                match event {
-                    Some(Event::Pagefault {
-                        addr: fault_addr,
-                        rw,
-                        ..
-                    }) => {
-                        println!(
-                            "Page fault at address: {:p}",
-                            fault_addr as *mut libc::c_void
-                        );
+                if let Some(Event::Pagefault {
+                    addr: fault_addr,
+                    rw,
+                    ..
+                }) = event
+                {
+                    println!("Page fault at address: {:p}", fault_addr);
 
-                        let memory_tracker = sigsegv_memory_tracker.lock().unwrap();
+                    let memory_tracker = sigsegv_memory_tracker.lock().unwrap();
 
-                        let check_if_expanded =
-                            move |tracker: &MutexGuard<SigsegvMemoryTracker>,
-                                fault_addr: *mut libc::c_void,
-                                current_size_in_pages: &MemoryPageSize| unsafe {
+                    let check_if_expanded =
+                        move |tracker: &MutexGuard<SigsegvMemoryTracker>,
+                              fault_addr: *mut libc::c_void,
+                              current_size_in_pages: &MemoryPageSize| unsafe {
                             let page_count = current_size_in_pages.load(Ordering::SeqCst);
-                            let heap_size = page_count * (WASM_PAGE_SIZE_IN_BYTES as usize);
+                            let heap_size = page_count * WASM_PAGE_SIZE_IN_BYTES;
                             let heap_start = tracker.area().addr() as *mut libc::c_void;
-                            if (heap_start <= fault_addr) && (fault_addr < { heap_start.add(heap_size) }) {
+                            if (heap_start <= fault_addr)
+                                && (fault_addr < { heap_start.add(heap_size) })
+                            {
                                 Some(heap_size)
                             } else {
                                 None
                             }
                         };
 
-                        if !memory_tracker.area().is_within(fault_addr) {
-                            // The heap has expanded. Update tracked memory area.
-                            if let Some(heap_size) = check_if_expanded(
-                                &memory_tracker,
-                                fault_addr,
-                                &current_memory_size_in_pages,
-                            ) {
-                                let delta =
-                                    NumBytes::new(heap_size as u64) - memory_tracker.area().size();
-                                memory_tracker.expand(delta);
-                            }
+                    if !memory_tracker.area().is_within(fault_addr) {
+                        println!("Uffd fault at address: {:p}", fault_addr);
+                        // The heap has expanded. Update tracked memory area.
+                        if let Some(heap_size) = check_if_expanded(
+                            &memory_tracker,
+                            fault_addr,
+                            &current_memory_size_in_pages,
+                        ) {
+                            let delta =
+                                NumBytes::new(heap_size as u64) - memory_tracker.area().size();
+                            memory_tracker.expand(delta);
                         }
-
-                        uffd_handler(&memory_tracker, &uffd, rw, fault_addr);
                     }
-                    _ => {}
+
+                    uffd_handler(&memory_tracker, &uffd, rw, fault_addr);
                 }
             }
         });

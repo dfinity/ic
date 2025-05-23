@@ -43,11 +43,13 @@ impl Deref for MemoryPageSize {
 }
 
 pub struct WasmtimeMemoryCreator {
-    created_memories: Arc<Mutex<HashMap<MemoryStart, MemoryPageSize>>>,
+    created_memories: Arc<Mutex<HashMap<MemoryStart, (MemoryPageSize, usize)>>>,
 }
 
 impl WasmtimeMemoryCreator {
-    pub(crate) fn new(created_memories: Arc<Mutex<HashMap<MemoryStart, MemoryPageSize>>>) -> Self {
+    pub(crate) fn new(
+        created_memories: Arc<Mutex<HashMap<MemoryStart, (MemoryPageSize, usize)>>>,
+    ) -> Self {
         Self { created_memories }
     }
 }
@@ -96,7 +98,10 @@ unsafe impl wasmtime::MemoryCreator for WasmtimeMemoryCreator {
                 let new_memory = WasmtimeMemory::new(mem, min, max);
                 created_memories.insert(
                     MemoryStart(LinearMemory::as_ptr(&new_memory) as usize),
-                    MemoryPageSize(Arc::clone(&new_memory.used)),
+                    (
+                        MemoryPageSize(Arc::clone(&new_memory.used)),
+                        new_memory.max_size_in_pages,
+                    ),
                 );
                 Ok(Box::new(new_memory))
             }
