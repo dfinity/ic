@@ -6814,7 +6814,11 @@ fn can_rename_canister() {
                 );
             }
             state_manager.flush_tip_channel();
-            let tip = CheckpointLayout::<ReadOnly>::new_untracked(state_manager.state_layout().raw_path().join("tip"), height(0)).unwrap();
+            let tip = CheckpointLayout::<ReadOnly>::new_untracked(
+                state_manager.state_layout().raw_path().join("tip"),
+                height(0),
+            )
+            .unwrap();
             assert_eq!(tip.canister_ids().unwrap(), vec![new_canister_id]);
             assert_eq!(tip.snapshot_ids().unwrap(), vec![snapshot_id]);
             let (_height, state) = state_manager.take_tip();
