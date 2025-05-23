@@ -23,7 +23,6 @@ use ic_types::{
     SnapshotId, SubnetId,
 };
 use ic_wasm_types::{doc_ref, AsErrorHelp, CanisterModule, ErrorHelp, WasmHash};
-use num_traits::cast::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
@@ -243,12 +242,6 @@ pub struct InstallCodeContext {
     pub canister_id: CanisterId,
     pub wasm_source: WasmSource,
     pub arg: Vec<u8>,
-    // EXC-370: The following fields will be removed once `compute_allocation`
-    // `memory_allocation` are removed from `InstallCodeArgs`.
-    #[allow(dead_code)]
-    pub compute_allocation: Option<ComputeAllocation>,
-    #[allow(dead_code)]
-    pub memory_allocation: Option<MemoryAllocation>,
 }
 
 impl InstallCodeContext {
@@ -328,8 +321,6 @@ impl InstallCodeContext {
                 wasm_module_hash,
             },
             arg: args.arg,
-            compute_allocation: None,
-            memory_allocation: None,
         })
     }
 }
@@ -340,24 +331,6 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
     fn try_from(input: (CanisterChangeOrigin, InstallCodeArgsV2)) -> Result<Self, Self::Error> {
         let (origin, args) = input;
         let canister_id = CanisterId::unchecked_from_principal(args.canister_id);
-        let compute_allocation = match args.compute_allocation {
-            Some(ca) => Some(ComputeAllocation::try_from(ca.0.to_u64().ok_or_else(
-                || {
-                    InstallCodeContextError::ComputeAllocation(InvalidComputeAllocationError::new(
-                        ca,
-                    ))
-                },
-            )?)?),
-            None => None,
-        };
-        let memory_allocation = match args.memory_allocation {
-            Some(ma) => Some(MemoryAllocation::try_from(NumBytes::from(
-                ma.0.to_u64().ok_or_else(|| {
-                    InstallCodeContextError::MemoryAllocation(InvalidMemoryAllocationError::new(ma))
-                })?,
-            ))?),
-            None => None,
-        };
 
         Ok(InstallCodeContext {
             origin,
@@ -365,8 +338,6 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
             canister_id,
             wasm_source: WasmSource::CanisterModule(CanisterModule::new(args.wasm_module)),
             arg: args.arg,
-            compute_allocation,
-            memory_allocation,
         })
     }
 }
