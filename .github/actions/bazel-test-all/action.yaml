@@ -7,6 +7,9 @@ inputs:
   release-build:
     required: false
     default: true
+  upload-artifacts:
+    required: false
+    default: false
   execlogs-artifact-name:
     required: false
     description: "When provided, the execlogs will be uploaded as an artifact with the specified name."
@@ -124,8 +127,15 @@ runs:
 
       - name: Upload to S3
         uses: ./.github/actions/bazel
-        if: inputs.release-build == 'true'
+        if: inputs.upload-artifacts == 'true'
         with:
           run: |
+            release_build='${{ inputs.release-build }}'
+
+            if [[ $release_build == "true" ]]; then
+              echo "refusing to upload non-release artifacts"
+              exit 1
+            fi
+
             echo uploading artifacts to CDN
             bazel run --check_up_to_date //:upload-artifacts
