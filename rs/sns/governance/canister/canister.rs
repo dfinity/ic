@@ -1,6 +1,5 @@
 // TODO: Jira ticket NNS1-3556
 #![allow(static_mut_refs)]
-
 use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
@@ -26,18 +25,19 @@ use ic_sns_governance::{
         log_prefix, Governance, TimeWarp, ValidGovernanceProto, MATURITY_DISBURSEMENT_DELAY_SECONDS,
     },
     logs::{ERROR, INFO},
-    pb::v1 as sns_gov_pb,
+    pb::v1::{self as sns_gov_pb},
     types::{Environment, HeapGrowthPotential},
     upgrade_journal::serve_journal,
 };
+use ic_sns_governance_api::pb::v1::{get_metrics_response, governance_error::ErrorType};
 use ic_sns_governance_api::pb::v1::{
     get_running_sns_version_response::UpgradeInProgress,
     governance::Version,
     topics::{ListTopicsRequest, ListTopicsResponse},
     ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
     FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
-    GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
-    GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
+    GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMetricsRequest,
+    GetMode, GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
     GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
     GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
     GetUpgradeJournalRequest, GetUpgradeJournalResponse, Governance as GovernanceApi,
@@ -349,6 +349,36 @@ fn get_metadata(request: GetMetadataRequest) -> GetMetadataResponse {
     GetMetadataResponse::from(
         governance().get_metadata(&sns_gov_pb::GetMetadataRequest::from(request)),
     )
+}
+
+/// Returns statistics of the SNS
+#[query]
+async fn get_metrics(request: GetMetricsRequest) -> get_metrics_response::GetMetricsResponse {
+    log!(INFO, "get_metrics");
+
+    let request = sns_gov_pb::GetMetricsRequest::try_from(request);
+
+    if let Err(error_message) = request {
+        return get_metrics_response::GetMetricsResponse {
+            get_metrics_result: Some(get_metrics_response::GetMetricsResult::Err(
+                ic_sns_governance_api::pb::v1::GovernanceError {
+                    error_type: ErrorType::InvalidCommand.into(),
+                    error_message,
+                },
+            )),
+        };
+    }
+
+    // It is safe to unwrap here, because we have handled the Err(..) case above.
+    let result = governance().get_metrics(request.unwrap()).await;
+
+    if let Err(error) = result {
+        return get_metrics_response::GetMetricsResponse {
+            get_metrics_result: Some(get_metrics_response::GetMetricsResult::Err(error.into())),
+        };
+    }
+
+    result.unwrap().into()
 }
 
 /// Returns the initialization parameters used to spawn an SNS

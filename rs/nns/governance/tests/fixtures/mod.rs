@@ -509,6 +509,13 @@ impl IcpLedger for NNSFixture {
     fn canister_id(&self) -> CanisterId {
         LEDGER_CANISTER_ID
     }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<icrc_ledger_types::icrc3::blocks::GetBlocksRequest>,
+    ) -> Result<icrc_ledger_types::icrc3::blocks::GetBlocksResult, NervousSystemError> {
+        unimplemented!()
+    }
 }
 
 impl RandomnessGenerator for NNSFixture {
@@ -960,6 +967,13 @@ impl IcpLedger for NNS {
 
     fn canister_id(&self) -> CanisterId {
         self.fixture.canister_id()
+    }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<icrc_ledger_types::icrc3::blocks::GetBlocksRequest>,
+    ) -> Result<icrc_ledger_types::icrc3::blocks::GetBlocksResult, NervousSystemError> {
+        unimplemented!()
     }
 }
 
