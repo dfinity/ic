@@ -62,7 +62,7 @@ pub type FolloweeGroups<NeuronId: NeuronIdLike, Topic: TopicLike> =
     BTreeMap<NeuronId, Vec<ValidatedFollowee<NeuronId, Topic>>>;
 
 /// Represents followee-related data grouped by neuron ID.
-type FolloweeAliasGroups<NeuronId: NeuronIdLike, Topic: TopicLike> =
+pub type FolloweeAliasGroups<NeuronId: NeuronIdLike, Topic: TopicLike> =
     BTreeMap<NeuronId, BTreeSet<ValidatedFollowee<NeuronId, Topic>>>;
 
 /// Groups followees grouped by NeuronId, with singleton/unique groups excluded.
@@ -90,7 +90,7 @@ type FolloweeAliasGroups<NeuronId: NeuronIdLike, Topic: TopicLike> =
 /// ordered by topic and *then* neuron ID, which is enforced by the `PartialOrd` implementation.
 ///
 /// This function assumes that all followees correspond to the same topic.
-fn get_duplicate_followee_groups<NeuronId: NeuronIdLike, Topic: TopicLike>(
+pub fn get_duplicate_followee_groups<NeuronId: NeuronIdLike, Topic: TopicLike>(
     followees: &BTreeSet<ValidatedFollowee<NeuronId, Topic>>,
 ) -> FolloweeGroups<NeuronId, Topic> {
     followees
@@ -128,7 +128,7 @@ fn get_duplicate_followee_groups<NeuronId: NeuronIdLike, Topic: TopicLike>(
 ///
 /// The implementation of this function relies on the fact that `ValidatedFollowee` instances are
 /// ordered by neuron ID and *then* alias, which is enforced by the `PartialOrd` implementation.
-fn get_inconsistent_aliases<NeuronId: NeuronIdLike, Topic: TopicLike>(
+pub fn get_inconsistent_aliases<NeuronId: NeuronIdLike, Topic: TopicLike>(
     followees: &BTreeSet<ValidatedFollowee<NeuronId, Topic>>,
 ) -> FolloweeAliasGroups<NeuronId, Topic> {
     followees
