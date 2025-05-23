@@ -410,18 +410,6 @@ impl<T> ReducedResult<T> {
     }
 }
 
-impl<T> AsRef<Result<T, MultiCallError<T>>> for ReducedResult<T> {
-    fn as_ref(&self) -> &Result<T, MultiCallError<T>> {
-        &self.result
-    }
-}
-
-impl<T> From<Result<T, MultiCallError<T>>> for ReducedResult<T> {
-    fn from(result: Result<T, MultiCallError<T>>) -> Self {
-        Self { result }
-    }
-}
-
 trait Reduce {
     type Item;
     fn reduce(self) -> ReducedResult<Self::Item>;
