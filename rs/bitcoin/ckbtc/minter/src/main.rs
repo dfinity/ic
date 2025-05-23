@@ -1,8 +1,7 @@
 use candid::Principal;
 use ic_btc_interface::Utxo;
 use ic_canister_log::export as export_logs;
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk_macros::{init, post_upgrade, query, update};
+use ic_cdk::{init, post_upgrade, query, update};
 use ic_ckbtc_minter::dashboard::build_dashboard;
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::lifecycle::{self, init::MinterArg};
@@ -27,6 +26,7 @@ use ic_ckbtc_minter::{
     storage, {Log, LogEntry, Priority},
 };
 use ic_ckbtc_minter::{MinterInfo, IC_CANISTER_RUNTIME};
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use icrc_ledger_types::icrc1::account::Account;
 use std::str::FromStr;
 
@@ -244,6 +244,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         match encode_metrics(&mut writer) {
             Ok(()) => HttpResponseBuilder::ok()
                 .header("Content-Type", "text/plain; version=0.0.4")
+                .header("Cache-Control", "no-store")
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {

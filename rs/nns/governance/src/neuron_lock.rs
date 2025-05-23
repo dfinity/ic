@@ -28,12 +28,12 @@ use crate::{
     },
 };
 
+use ic_cdk::println;
 use ic_nns_common::pb::v1::NeuronId;
 use std::{cell::RefCell, collections::hash_map::Entry, thread::LocalKey};
 
 /// A lock for a neuron that is being updated. This lock can be used in asynchronous methods where a
 /// `'static LocalKey<RefCell<Governance>>` is available instead of a `&'static mut Governance`.
-#[allow(unused)]
 pub(crate) struct NeuronAsyncLock {
     neuron_id: NeuronId,
     governance: &'static LocalKey<RefCell<Governance>>,
@@ -62,7 +62,6 @@ impl Drop for NeuronAsyncLock {
 
 impl NeuronAsyncLock {
     /// Retains the lock even on drop.
-    #[allow(unused)]
     pub(crate) fn retain(&mut self) {
         self.retain = true;
     }
@@ -144,7 +143,6 @@ impl Governance {
     /// let _my_lock = acquire_neuron_async_lock(...);
     /// ```
     /// will retain the lock for the entire scope.
-    #[allow(unused)]
     pub(crate) fn acquire_neuron_async_lock(
         governance: &'static LocalKey<RefCell<Self>>,
         neuron_id: NeuronId,

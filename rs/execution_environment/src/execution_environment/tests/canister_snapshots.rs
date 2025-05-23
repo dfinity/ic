@@ -15,12 +15,12 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_snapshots::SnapshotOperation,
     canister_state::{
         execution_state::{WasmBinary, WasmExecutionMode},
         system_state::{wasm_chunk_store::CHUNK_SIZE, CyclesUseCase},
         WASM_PAGE_SIZE_IN_BYTES,
     },
+    metadata_state::UnflushedCheckpointOp,
     CanisterState, ExecutionState, SchedulerState,
 };
 use ic_sys::PAGE_SIZE;
@@ -460,13 +460,11 @@ fn take_canister_snapshot_fails_when_limit_is_reached() {
         .subnet_message("take_canister_snapshot", args.encode())
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
-    assert_eq!(
-        error.description(),
-        format!(
-            "Canister {} has reached the maximum number of snapshots allowed: {}.",
-            canister_id, max_snapshots_per_canister,
-        )
+    let error_message = format!(
+        "Canister {} has reached the maximum number of snapshots allowed: {}.",
+        canister_id, max_snapshots_per_canister,
     );
+    assert!(error.description().contains(&error_message));
 }
 
 fn grow_stable_memory(
@@ -1685,11 +1683,11 @@ fn load_canister_snapshot_succeeds() {
             snapshot_taken_at_timestamp
         )
     );
-    let unflushed_changes = test.state_mut().canister_snapshots.take_unflushed_changes();
+    let unflushed_changes = test.state_mut().metadata.unflushed_checkpoint_ops.take();
     assert_eq!(unflushed_changes.len(), 2);
     let expected_unflushed_changes = vec![
-        SnapshotOperation::Backup(canister_id, snapshot_id),
-        SnapshotOperation::Restore(canister_id, snapshot_id),
+        UnflushedCheckpointOp::TakeSnapshot(canister_id, snapshot_id),
+        UnflushedCheckpointOp::LoadSnapshot(canister_id, snapshot_id),
     ];
     assert_eq!(expected_unflushed_changes, unflushed_changes);
 }

@@ -7,12 +7,12 @@ use dfn_core::BytesS;
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::{LogEntry, Sink};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::{
     call::{arg_data_raw, reply_raw},
     caller, data_certificate, instruction_counter, print, set_certified_data, time, trap,
 };
-use ic_cdk_macros::{post_upgrade, pre_upgrade, query, update};
+use ic_cdk::{post_upgrade, pre_upgrade, query, update};
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icrc1::endpoints::{convert_transfer_error, StandardRecord};
 use ic_ledger_canister_core::ledger::LedgerContext;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
@@ -406,6 +406,11 @@ pub async fn notify(
 
     let caller_principal_id = PrincipalId::from(caller());
 
+    print(format!(
+        "[ledger] notify method called by [{}]",
+        caller_principal_id
+    ));
+
     if !LEDGER.read().unwrap().can_send(&caller_principal_id) {
         panic!("Notifying from {} is not allowed", caller_principal_id);
     }
@@ -579,10 +584,6 @@ fn block(block_index: BlockIndex) -> Option<Result<EncodedBlock, CanisterId>> {
         Some(Err(result))
     // Or the block may be in the ledger, or the block may not exist
     } else {
-        print(format!(
-            "[ledger] Checking the ledger for block [{}]",
-            block_index
-        ));
         state.blockchain.get(block_index).map(Ok)
     }
 }
@@ -1416,6 +1417,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         match encode_metrics(&mut writer) {
             Ok(()) => HttpResponseBuilder::ok()
                 .header("Content-Type", "text/plain; version=0.0.4")
+                .header("Cache-Control", "no-store")
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {

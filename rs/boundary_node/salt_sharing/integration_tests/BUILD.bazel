@@ -5,9 +5,9 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-http-types",
     "//rs/boundary_node/salt_sharing/api:salt_sharing_api",
     "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
-    "//rs/rust_canisters/http_types",
     "//rs/types/base_types",
     "@crate_index//:assert_matches",
     "@crate_index//:candid",

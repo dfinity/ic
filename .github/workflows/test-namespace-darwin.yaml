@@ -32,9 +32,9 @@ jobs:
       # Build and test, excluding 'upload' jobs that are not required on macOS (used in reproducibility tests)
       - name: Test
         run: |
-          # Until we have a hermetic CC toolchain, tell bazel to use the "real" clang
-          # (instead of Apple's, which sometimes breaks on wasm32)
-          export CC=/opt/homebrew/opt/llvm/bin/clang
+          # Setup zig-cache
+          mkdir -p /tmp/zig-cache
+
           bazel \
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
@@ -42,3 +42,14 @@ jobs:
             --config=ci --config=macos_ci \
             --test_tag_filters="test_macos,test_macos_slow" \
             //packages/pocket-ic/... //rs/... //publish/binaries/...
+
+          mkdir -p build
+          cp \
+            ./bazel-bin/rs/pocket_ic_server/pocket-ic-server \
+            ./build/pocket-ic-server-arm64-darwin
+
+      - name: Upload pocket-ic-server
+        uses: actions/upload-artifact@v4
+        with:
+          name: pocket-ic-server-arm64-darwin
+          path: ./build/pocket-ic-server-arm64-darwin

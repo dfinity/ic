@@ -1,6 +1,6 @@
 //! This module contains async functions for interacting with the management canister.
 use crate::logs::P0;
-use crate::metrics::observe_get_utxos_latency;
+use crate::metrics::{observe_get_utxos_latency, observe_sign_with_ecdsa_latency};
 use crate::{tx, CanisterRuntime, ECDSAPublicKey, GetUtxosRequest, GetUtxosResponse, Network};
 use candid::{CandidType, Principal};
 use ic_btc_checker::{
@@ -10,9 +10,10 @@ use ic_btc_interface::{Address, MillisatoshiPerByte, Utxo};
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::management_canister::bitcoin::UtxoFilter;
-use ic_management_canister_types_private::{
-    DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
+use ic_management_canister_types::{
+    EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgs, EcdsaPublicKeyResult,
 };
+use ic_management_canister_types_private::DerivationPath;
 use serde::de::DeserializeOwned;
 use std::fmt;
 
@@ -156,6 +157,7 @@ pub async fn get_utxos<R: CanisterRuntime>(
     runtime: &R,
 ) -> Result<GetUtxosResponse, CallError> {
     async fn bitcoin_get_utxos<R: CanisterRuntime>(
+        now: &mut u64,
         req: GetUtxosRequest,
         source: CallSource,
         runtime: &R,
@@ -165,18 +167,28 @@ pub async fn get_utxos<R: CanisterRuntime>(
             CallSource::Minter => &crate::metrics::GET_UTXOS_MINTER_CALLS,
         }
         .with(|cell| cell.set(cell.get() + 1));
-        runtime.bitcoin_get_utxos(req).await
+        if let Some(res) = crate::state::read_state(|s| s.get_utxos_cache.get(&req, *now).cloned())
+        {
+            crate::metrics::GET_UTXOS_CACHE_HITS.with(|cell| cell.set(cell.get() + 1));
+            Ok(res)
+        } else {
+            crate::metrics::GET_UTXOS_CACHE_MISSES.with(|cell| cell.set(cell.get() + 1));
+            runtime.bitcoin_get_utxos(req.clone()).await.inspect(|res| {
+                *now = runtime.time();
+                crate::state::mutate_state(|s| s.get_utxos_cache.insert(req, res.clone(), *now))
+            })
+        }
     }
 
-    // Record start time of method execution for metrics
     let start_time = runtime.time();
+    let mut now = start_time;
     let request = GetUtxosRequest {
         address: address.clone(),
         network: network.into(),
         filter: Some(UtxoFilter::MinConfirmations(min_confirmations)),
     };
 
-    let mut response = bitcoin_get_utxos(request.clone(), source, runtime).await?;
+    let mut response = bitcoin_get_utxos(&mut now, request.clone(), source, runtime).await?;
 
     let mut utxos = std::mem::take(&mut response.utxos);
     let mut num_pages: usize = 1;
@@ -187,12 +199,12 @@ pub async fn get_utxos<R: CanisterRuntime>(
             filter: Some(UtxoFilter::Page(page.to_vec())),
             ..request.clone()
         };
-        response = bitcoin_get_utxos(paged_request, source, runtime).await?;
+        response = bitcoin_get_utxos(&mut now, paged_request, source, runtime).await?;
         utxos.append(&mut response.utxos);
         num_pages += 1;
     }
 
-    observe_get_utxos_latency(utxos.len(), num_pages, source, start_time, runtime.time());
+    observe_get_utxos_latency(utxos.len(), num_pages, source, start_time, now);
 
     response.utxos = utxos;
 
@@ -244,9 +256,9 @@ pub async fn ecdsa_public_key(
     call(
         "ecdsa_public_key",
         /*payment=*/ 0,
-        &ECDSAPublicKeyArgs {
+        &EcdsaPublicKeyArgs {
             canister_id: None,
-            derivation_path,
+            derivation_path: derivation_path.into_inner(),
             key_id: EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,
                 name: key_name,
@@ -254,39 +266,28 @@ pub async fn ecdsa_public_key(
         },
     )
     .await
-    .map(|response: ECDSAPublicKeyResponse| ECDSAPublicKey {
+    .map(|response: EcdsaPublicKeyResult| ECDSAPublicKey {
         public_key: response.public_key,
         chain_code: response.chain_code,
     })
 }
 
 /// Signs a message hash using the tECDSA API.
-pub async fn sign_with_ecdsa(
+pub async fn sign_with_ecdsa<R: CanisterRuntime>(
     key_name: String,
     derivation_path: DerivationPath,
     message_hash: [u8; 32],
+    runtime: &R,
 ) -> Result<Vec<u8>, CallError> {
-    use ic_cdk::api::management_canister::ecdsa::{
-        sign_with_ecdsa, EcdsaCurve, EcdsaKeyId, SignWithEcdsaArgument,
-    };
+    let start_time = runtime.time();
 
-    let result = sign_with_ecdsa(SignWithEcdsaArgument {
-        message_hash: message_hash.to_vec(),
-        derivation_path: derivation_path.into_inner(),
-        key_id: EcdsaKeyId {
-            curve: EcdsaCurve::Secp256k1,
-            name: key_name.clone(),
-        },
-    })
-    .await;
+    let result = runtime
+        .sign_with_ecdsa(key_name, derivation_path, message_hash)
+        .await;
 
-    match result {
-        Ok((reply,)) => Ok(reply.signature),
-        Err((code, msg)) => Err(CallError {
-            method: "sign_with_ecdsa".to_string(),
-            reason: Reason::from_reject(code, msg),
-        }),
-    }
+    observe_sign_with_ecdsa_latency(&result, start_time, runtime.time());
+
+    result
 }
 
 /// Check if the given Bitcoin address is blocked.

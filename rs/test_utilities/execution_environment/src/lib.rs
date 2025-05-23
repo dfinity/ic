@@ -1,5 +1,5 @@
 use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
-use ic_config::embedders::{BestEffortResponsesFeature, MeteringType, StableMemoryPageLimit};
+use ic_config::embedders::{MeteringType, StableMemoryPageLimit};
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_config::{
     embedders::{Config as EmbeddersConfig, WASM_MAX_SIZE},
@@ -828,26 +828,6 @@ impl ExecutionTest {
             None,
         );
         let result = self.install_code_v2(args)?;
-        assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
-        Ok(())
-    }
-
-    pub fn install_canister_with_allocation(
-        &mut self,
-        canister_id: CanisterId,
-        wasm_binary: Vec<u8>,
-        compute_allocation: Option<u64>,
-        memory_allocation: Option<u64>,
-    ) -> Result<(), UserError> {
-        let args = InstallCodeArgs::new(
-            CanisterInstallMode::Install,
-            canister_id,
-            wasm_binary,
-            vec![],
-            compute_allocation,
-            memory_allocation,
-        );
-        let result = self.install_code(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
         Ok(())
     }
@@ -2170,14 +2150,6 @@ impl ExecutionTestBuilder {
 
     pub fn with_metering_type(mut self, metering_type: MeteringType) -> Self {
         self.execution_config.embedders_config.metering_type = metering_type;
-        self
-    }
-
-    pub fn with_best_effort_responses(mut self, stage: BestEffortResponsesFeature) -> Self {
-        self.execution_config
-            .embedders_config
-            .feature_flags
-            .best_effort_responses = stage;
         self
     }
 

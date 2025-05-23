@@ -10,6 +10,7 @@ use clap::Parser;
 use http;
 use ic_base_types::NodeId;
 use ic_bn_lib::http::{Client as HttpClient, ConnInfo};
+use ic_bn_lib::prometheus::Registry;
 use ic_certification_test_utils::CertificateBuilder;
 use ic_certification_test_utils::CertificateData::*;
 use ic_crypto_tree_hash::Digest;
@@ -33,25 +34,15 @@ use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey, replica_version::ReplicaVersion, time::Time,
     CanisterId, RegistryVersion, SubnetId,
 };
-use prometheus::Registry;
 use reqwest;
 
 use crate::{
-    cache::Cache,
     cli::Cli,
     core::setup_router,
+    http::middleware::cache::CacheState,
     persist::{Persist, Persister, Routes},
     snapshot::{node_test_id, subnet_test_id, RegistrySnapshot, Snapshot, Snapshotter, Subnet},
 };
-
-#[macro_export]
-macro_rules! principal {
-    ($id:expr) => {{
-        candid::Principal::from_text($id).unwrap()
-    }};
-}
-
-pub use principal;
 
 #[derive(Debug)]
 pub struct TestHttpClient(pub usize);
@@ -282,6 +273,7 @@ pub fn setup_test_router(
         "--obs-log-null",
         "--retry-update-call",
     ];
+
     if !enable_logging {
         args.push("--obs-disable-request-logging");
     }
@@ -291,6 +283,11 @@ pub fn setup_test_router(
     if rate_limit_subnet != "0" {
         args.push("--rate-limit-per-second-per-subnet");
         args.push(rate_limit_subnet.as_str());
+    }
+
+    if enable_cache {
+        args.push("--cache-size");
+        args.push("104857600");
     }
 
     #[cfg(not(feature = "tls"))]
@@ -309,7 +306,7 @@ pub fn setup_test_router(
 
     let (registry_client, _, _) = create_fake_registry_client(subnet_count, nodes_per_subnet, None);
     let (channel_send, _) = tokio::sync::watch::channel(None);
-    let mut snapshotter = Snapshotter::new(
+    let snapshotter = Snapshotter::new(
         registry_snapshot.clone(),
         channel_send,
         Arc::new(registry_client),
@@ -331,9 +328,7 @@ pub fn setup_test_router(
         None,
         &cli,
         &metrics_registry,
-        enable_cache.then_some(Arc::new(
-            Cache::new(10485760, 262144, Duration::from_secs(1), false).unwrap(),
-        )),
+        enable_cache.then(|| Arc::new(CacheState::new(&cli.cache, &Registry::new()).unwrap())),
         salt,
     );
 

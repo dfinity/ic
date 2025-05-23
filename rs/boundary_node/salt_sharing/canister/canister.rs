@@ -1,13 +1,15 @@
+#![allow(unused_imports)]
+
 use crate::helpers::{init_async, is_api_boundary_node_principal};
 use crate::logs::export_logs_as_http_response;
 use crate::metrics::{export_metrics_as_http_response, METRICS};
 use crate::storage::SALT;
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::call::{accept_message, method_name};
 use ic_cdk::{api::time, spawn};
 use ic_cdk::{caller, trap};
-use ic_cdk_macros::{init, inspect_message, post_upgrade, query};
+use ic_cdk::{init, inspect_message, post_upgrade, query};
 use ic_cdk_timers::set_timer;
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use salt_sharing_api::{GetSaltError, GetSaltResponse, InitArg, SaltResponse};
 use std::time::Duration;
 

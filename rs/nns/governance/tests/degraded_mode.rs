@@ -26,7 +26,7 @@ use ic_nns_governance::{
         InstallCode, ManageNeuron, Motion, NetworkEconomics, Neuron, Proposal,
     },
 };
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     manage_neuron_response::Command as CommandResponse, ManageNeuronResponse,
 };
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};

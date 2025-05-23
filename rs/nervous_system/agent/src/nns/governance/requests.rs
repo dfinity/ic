@@ -1,6 +1,6 @@
 use crate::Request;
 use ic_nns_common::pb::v1::ProposalId;
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse, ListNeurons,
     ListNeuronsResponse, ManageNeuronRequest, ManageNeuronResponse, NetworkEconomics, ProposalInfo,
 };

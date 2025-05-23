@@ -4,6 +4,9 @@ set -ue
 ## Helper script to run the specified `BENCH`
 ## and store the best (minimum) results in the `MIN_FILE`.
 ##
+## Please use the top-level `run-all-benchmarks.sh` to run all or just
+## some benchmarks.
+##
 
 DEPENDENCIES="awk bash bazel rg sed tail tee"
 which ${DEPENDENCIES} >/dev/null || (echo "Error checking dependencies: ${DEPENDENCIES}" >&2 && exit 1)
@@ -21,7 +24,11 @@ TMP_FILE="${TMP_FILE:-${MIN_FILE%.*}.tmp}"
 bash -c "set -o pipefail; \
     bazel run '${BENCH}' -- ${FILTER} ${BENCH_ARGS} \
         2>&1 | tee '${LOG_FILE}' | rg '^(test .* )?bench:' --line-buffered \
-        | sed -uEe 's/^test (.+) ... bench: (.+)...... ns\/iter [(].*/> bench: \1 \2 ms\/iter/'" \
+        | awk '{
+                match(\$0, /^test (.+) ... bench: +([0-9]+) ns\/iter.*/, r)
+                printf \"> %s %.2f ms\n\", r[1], r[2] / 1000 / 1000; fflush();
+            }'
+        " \
     || (
         echo "Error running the benchmark:"
         tail -10 "${LOG_FILE}" | sed 's/^/! /'
@@ -47,8 +54,10 @@ else
         min_result_ns="${min_result_ns% ns/iter*}"
 
         if [ -z "${min_result_ns}" ] || [ "${new_result_ns}" -lt "${min_result_ns}" ]; then
-            printf "^ improved: ${name} time: %s -> %s ms\n" \
-                "$((min_result_ns / 1000 / 1000))" "$((new_result_ns / 1000 / 1000))"
+            awk "BEGIN {
+                printf \"^ improved: ${name} (%.2f -> %.2f ms)\n\",
+                    ${min_result_ns} / 1000 / 1000, ${new_result_ns} / 1000 / 1000
+            }"
             min_bench="${new_bench}"
         fi
         echo "${min_bench}" >>"${TMP_FILE}"

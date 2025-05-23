@@ -7,7 +7,7 @@ use core::{
 use dfn_core::api::time_nanos;
 use ic_base_types::CanisterId;
 use ic_canister_log::{export, GlobalBuffer, LogBuffer, LogEntry};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_ledger_core::{
     tokens::{CheckedAdd, CheckedSub},
     Tokens,
@@ -719,6 +719,7 @@ pub fn serve_metrics(
     match encode_metrics(&mut writer) {
         Ok(()) => HttpResponseBuilder::ok()
             .header("Content-Type", "text/plain; version=0.0.4")
+            .header("Cache-Control", "no-store")
             .with_body_and_content_length(writer.into_inner())
             .build(),
         Err(err) => {

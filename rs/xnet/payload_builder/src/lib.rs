@@ -27,7 +27,7 @@ use ic_interfaces::messaging::{
 use ic_interfaces::validation::ValidationError;
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::{StateManager, StateManagerError};
+use ic_interfaces_state_manager::StateManager;
 use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_logger::{error, info, log, warn, ReplicaLogger};
 use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
@@ -39,6 +39,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{replicated_state::ReplicatedStateMessageRouting, ReplicatedState};
 use ic_types::batch::{ValidationContext, XNetPayload};
 use ic_types::registry::RegistryClientError;
+use ic_types::state_manager::StateManagerError;
 use ic_types::xnet::{CertifiedStreamSlice, RejectSignal, StreamIndex};
 use ic_types::{Height, NodeId, NumBytes, RegistryVersion, SubnetId};
 use ic_xnet_hyper::TlsConnector;

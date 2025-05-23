@@ -959,7 +959,7 @@ impl SchedulerImpl {
         // Delete any snapshots associated with the canister
         // that ran out of cycles.
         for canister_id in uninstalled_canisters {
-            state.canister_snapshots.delete_snapshots(canister_id);
+            state.delete_snapshots(canister_id);
         }
 
         // Send rejects to any requests that were forcibly closed while uninstalling.
@@ -1988,7 +1988,7 @@ fn observe_replicated_state_metrics(
                     .take_while(|stop_context| stop_context.call_id().is_none())
                     .count();
             }
-            CanisterStatus::Stopped { .. } => num_stopped_canisters += 1,
+            CanisterStatus::Stopped => num_stopped_canisters += 1,
         }
         match canister.next_task() {
             Some(&ExecutionTask::PausedExecution { .. }) => {

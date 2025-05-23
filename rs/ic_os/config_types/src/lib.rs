@@ -31,7 +31,7 @@ use url::Url;
 pub const CONFIG_VERSION: &str = "1.1.0";
 
 /// List of field names that have been removed and should not be reused.
-pub static RESERVED_FIELD_NAMES: &[&str] = &["DUMMY_RESERVED_VALUE"];
+pub static RESERVED_FIELD_NAMES: &[&str] = &[];
 
 pub type ConfigMap = HashMap<String, String>;
 
@@ -104,7 +104,7 @@ pub struct ICOSDevSettings {}
 pub struct SetupOSSettings;
 
 /// HostOS-specific settings.
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
 pub struct HostOSSettings {
     pub vm_memory: u32,
     pub vm_cpu: String,

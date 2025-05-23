@@ -15,6 +15,8 @@ class Repository:
     projects: typing.List[Project] = field(default_factory=list)
     """version of the compilation engine"""
     engine_version: typing.Optional[str] = None
+    """whether this is a private repository"""
+    is_private: bool = False
 
     def __post_init__(self):
         """Validate field values after initialization"""
@@ -23,5 +25,6 @@ class Repository:
         assert isinstance(self.projects, list) and len(self.projects) > 0
         assert self.engine_version is None or len(self.engine_version) > 0
 
-        for project in self.projects:
-            assert project.path.startswith(self.name)
+        if self.name != "ic":
+            for project in self.projects:
+                assert project.path.startswith(self.name)

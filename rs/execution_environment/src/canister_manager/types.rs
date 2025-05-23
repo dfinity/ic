@@ -243,7 +243,11 @@ pub struct InstallCodeContext {
     pub canister_id: CanisterId,
     pub wasm_source: WasmSource,
     pub arg: Vec<u8>,
+    // EXC-370: The following fields will be removed once `compute_allocation`
+    // `memory_allocation` are removed from `InstallCodeArgs`.
+    #[allow(dead_code)]
     pub compute_allocation: Option<ComputeAllocation>,
+    #[allow(dead_code)]
     pub memory_allocation: Option<MemoryAllocation>,
 }
 
@@ -616,8 +620,8 @@ impl AsErrorHelp for CanisterManagerError {
                 }
             }
             CanisterManagerError::ReservedCyclesLimitIsTooLow { .. } => ErrorHelp::UserError {
-                suggestion: "".to_string(),
-                doc_link: "".to_string(),
+                suggestion: "Set the reserved cycles limit in the canister settings to a value that is at least the current reserved cycles balance.".to_string(),
+                doc_link: "reserved-cycles-limit-is-too-low".to_string(),
             },
             CanisterManagerError::WasmChunkStoreError { .. } => ErrorHelp::UserError {
                 suggestion: "Use the `stored_chunks` API to check which hashes are present \
@@ -648,12 +652,12 @@ impl AsErrorHelp for CanisterManagerError {
                 }
             }
             CanisterManagerError::CanisterSnapshotLimitExceeded { .. } => ErrorHelp::UserError {
-                suggestion: "".to_string(),
-                doc_link: "".to_string(),
+                suggestion: "Consider deleting an unnecessary snapshot of the specified canister before creating a new one.".to_string(),
+                doc_link: "canister-snapshot-limit-exceeded".to_string(),
             },
             CanisterManagerError::CanisterSnapshotNotEnoughCycles { .. } => ErrorHelp::UserError {
-                suggestion: "".to_string(),
-                doc_link: "".to_string(),
+                suggestion: "Try sending more cycles with the request.".to_string(),
+                doc_link: "canister-snapshot-not-enough-cycles".to_string(),
             },
             CanisterManagerError::LongExecutionAlreadyInProgress { .. } => ErrorHelp::UserError {
                 suggestion: "Try waiting for the long execution to complete.".to_string(),
@@ -972,7 +976,7 @@ impl From<CanisterManagerError> for UserError {
             CanisterSnapshotNotEnoughCycles(err) => {
                 Self::new(
                 ErrorCode::CanisterOutOfCycles,
-                    format!("Canister snapshotting failed with `{}`{additional_help}", err),
+                    format!("Canister snapshotting failed with: `{}`{additional_help}", err),
                 )
             }
             LongExecutionAlreadyInProgress { canister_id } => {

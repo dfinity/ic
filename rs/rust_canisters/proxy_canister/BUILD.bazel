@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 rust_library(
     name = "lib",
+    testonly = True,
     srcs = ["src/lib.rs"],
     crate_name = "proxy_canister",
     version = "0.1.0",
@@ -12,20 +13,22 @@ rust_library(
         # Keep sorted.
         "//rs/types/management_canister_types",
         "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
         "@crate_index//:serde",
     ],
 )
 
 rust_canister(
     name = "proxy_canister",
+    testonly = True,
     srcs = ["src/main.rs"],
-    proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
     service_file = ":empty.did",
     deps = [
         # Keep sorted.
         ":lib",
         "//rs/types/management_canister_types",
         "@crate_index//:candid",
+        "@crate_index//:futures",
         "@crate_index//:ic-cdk",
     ],
 )

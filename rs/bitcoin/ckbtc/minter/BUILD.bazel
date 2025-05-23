@@ -26,6 +26,7 @@ LIB_DEPS = [
     "@crate_index//:hex",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-management-canister-types",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:ic0",
@@ -41,7 +42,6 @@ LIB_DEPS = [
 LIB_PROC_MACRO_DEPS = [
     # Keep sorted.
     "@crate_index//:async-trait",
-    "@crate_index//:ic-cdk-macros",
     "@crate_index//:minicbor-derive",
 ]
 
@@ -86,7 +86,6 @@ alias(
         crate_name = "ic_ckbtc_minter_canister",
         proc_macro_deps = [
             # Keep sorted.
-            "@crate_index//:ic-cdk-macros",
         ],
         rustc_env = {
             "CKBTC_MINTER_DID_PATH": "$(execpath :ckbtc_minter.did)",
@@ -96,9 +95,9 @@ alias(
             # Keep sorted.
             ":ckbtc_minter_lib",
             "//packages/ic-dummy-getrandom-for-wasm",
+            "//packages/ic-http-types",
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/rust_canisters/canister_log",
-            "//rs/rust_canisters/http_types",
             "@crate_index//:candid",
             "@crate_index//:ic-btc-interface",
             "@crate_index//:ic-cdk",
@@ -125,6 +124,7 @@ rust_test(
     crate = ":ckbtc_minter_lib",
     deps = [
         # Keep sorted.
+        "@crate_index//:assert_matches",
         "@crate_index//:bitcoin_0_28",
         "@crate_index//:maplit",
         "@crate_index//:mockall",
@@ -205,6 +205,7 @@ rust_ic_test(
     deps = [
         # Keep sorted.
         ":ckbtc_minter_lib",
+        "//packages/ic-http-types",
         "//packages/ic-metrics-assert",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/bitcoin/checker:btc_checker_lib",
@@ -213,7 +214,6 @@ rust_ic_test(
         "//rs/ledger_suite/icrc1",
         "//rs/ledger_suite/icrc1/ledger",
         "//rs/rust_canisters/canister_test",
-        "//rs/rust_canisters/http_types",
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
@@ -293,9 +293,9 @@ rust_canbench(
         # Keep sorted.
         ":ckbtc_minter_lib-canbench",
         "//packages/ic-dummy-getrandom-for-wasm",
+        "//packages/ic-http-types",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/rust_canisters/canister_log",
-        "//rs/rust_canisters/http_types",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-cdk",

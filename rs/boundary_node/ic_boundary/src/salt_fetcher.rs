@@ -1,19 +1,26 @@
-use crate::core::Run;
+use std::{
+    sync::Arc,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+
 use anyhow::Error;
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
 use candid::{Decode, Encode};
-use ic_canister_client::Agent;
-use ic_types::CanisterId;
-use prometheus::{
+use ic_bn_lib::prometheus::{
     register_int_counter_vec_with_registry, register_int_gauge_with_registry, IntCounterVec,
     IntGauge, Registry,
 };
+use ic_bn_lib::tasks::Run;
+use ic_canister_client::Agent;
+use ic_types::CanisterId;
 use salt_sharing_api::{GetSaltError, GetSaltResponse};
-use std::time::{SystemTime, UNIX_EPOCH};
-use std::{sync::Arc, time::Duration};
-use tokio::time::{interval, MissedTickBehavior};
+use tokio::{
+    select,
+    time::{interval, MissedTickBehavior},
+};
+use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
 const SERVICE: &str = "AnonymizationSaltFetcher";
@@ -158,19 +165,24 @@ impl AnonymizationSaltFetcher {
 }
 
 #[async_trait]
-impl Run for Arc<AnonymizationSaltFetcher> {
-    async fn run(&mut self) -> Result<(), Error> {
+impl Run for AnonymizationSaltFetcher {
+    async fn run(&self, token: CancellationToken) -> Result<(), Error> {
         // Create an interval to enable strictly periodic execution
         let mut interval = interval(self.polling_interval);
-        // Skip missed ticks to prevent timing drift and maintain absolute schedule
-        // Example: with 5s interval, if fetch_salt() takes 7s at 0s:
-        //   0s: first execution starts
-        //   7s: first execution completes (5s tick was missed)
-        //   10s: next execution starts (skips to next absolute tick)
         interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
         loop {
-            interval.tick().await;
-            self.fetch_salt().await;
+            select! {
+                biased;
+
+                _ = token.cancelled() => {
+                    return Ok(());
+                }
+
+                _ = interval.tick() => {
+                    self.fetch_salt().await
+                }
+            }
         }
     }
 }

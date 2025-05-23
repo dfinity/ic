@@ -12,7 +12,7 @@ use crate::{
 };
 use rosetta_core::objects::ObjectMap;
 
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     manage_neuron::{self, Command, NeuronIdOrSubaccount},
     ClaimOrRefreshNeuronFromAccount, ManageNeuron,
 };
@@ -646,6 +646,7 @@ mod tests {
         prop_assert, prop_assert_eq, proptest, strategy::Strategy, test_runner::TestCaseError,
     };
     use rand_chacha::rand_core::OsRng;
+    use rosetta_core::metrics::RosettaMetrics;
     use std::{str::FromStr, time::SystemTime};
     use url::Url;
 
@@ -676,7 +677,13 @@ mod tests {
             false,
         ))
         .unwrap();
-        let handler = RosettaRequestHandler::new("Internet Computer".into(), ledger_client.into());
+        // Create a mock canister ID for testing
+        let mock_canister_id_hex = "00000000000000000101";
+        let handler = RosettaRequestHandler::new(
+            "Internet Computer".into(),
+            ledger_client.into(),
+            RosettaMetrics::new("TKN".into(), mock_canister_id_hex.into()),
+        );
 
         // get the nextwork identifier
         let network_identifier = handler.network_id();

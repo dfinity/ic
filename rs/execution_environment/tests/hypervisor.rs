@@ -1,7 +1,6 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_base_types::{NumSeconds, PrincipalId};
-use ic_config::embedders::BestEffortResponsesFeature;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
@@ -46,6 +45,7 @@ use ic_types::{
     MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use more_asserts::assert_gt;
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 use proptest::prelude::*;
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
@@ -1033,16 +1033,13 @@ fn ic0_canister_version_returns_correct_value() {
 
     test.uninstall_code(canister_id).unwrap();
     let memory_allocation = NumBytes::from(1024 * 1024 * 1024);
-    test.install_canister_with_allocation(
-        canister_id,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-        None,
-        Some(memory_allocation.get()),
-    )
-    .unwrap();
+    test.canister_update_allocations_settings(canister_id, None, Some(memory_allocation.get()))
+        .unwrap();
+    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    // Plus 3 for the previous ingress messages.
-    let expected_ctr: u64 = 7 + 3;
+    // Plus 4 for the previous ingress messages.
+    let expected_ctr: u64 = 7 + 4;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1052,8 +1049,8 @@ fn ic0_canister_version_returns_correct_value() {
     test.reinstall_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    // Plus 4 for the previous ingress messages.
-    let expected_ctr: u64 = 8 + 4;
+    // Plus 5 for the previous ingress messages.
+    let expected_ctr: u64 = 8 + 5;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1062,8 +1059,8 @@ fn ic0_canister_version_returns_correct_value() {
     test.update_freezing_threshold(canister_id, NumSeconds::from(1))
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    // Plus 5 for the previous ingress messages.
-    let expected_ctr: u64 = 9 + 5;
+    // Plus 6 for the previous ingress messages.
+    let expected_ctr: u64 = 9 + 6;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1072,8 +1069,8 @@ fn ic0_canister_version_returns_correct_value() {
     test.canister_update_allocations_settings(canister_id, None, None)
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    // Plus 6 for the previous ingress messages.
-    let expected_ctr: u64 = 10 + 6;
+    // Plus 7 for the previous ingress messages.
+    let expected_ctr: u64 = 10 + 7;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1082,8 +1079,8 @@ fn ic0_canister_version_returns_correct_value() {
     test.canister_update_allocations_settings(canister_id, Some(1000), None)
         .unwrap_err();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    // Plus 7 for the previous ingress messages.
-    let expected_ctr: u64 = 10 + 7;
+    // Plus 8 for the previous ingress messages.
+    let expected_ctr: u64 = 10 + 8;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1098,8 +1095,8 @@ fn ic0_canister_version_returns_correct_value() {
     test.start_canister(canister_id)
         .expect("The start canister should not fail.");
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    // Plus 8 for the previous (successful) ingress messages.
-    let expected_ctr: u64 = 13 + 8;
+    // Plus 9 for the previous (successful) ingress messages.
+    let expected_ctr: u64 = 13 + 9;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1108,8 +1105,8 @@ fn ic0_canister_version_returns_correct_value() {
     test.set_controller(canister_id, canister_id.into())
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    // Plus 9 for the previous ingress messages.
-    let expected_ctr: u64 = 14 + 9;
+    // Plus 10 for the previous ingress messages.
+    let expected_ctr: u64 = 14 + 10;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1118,8 +1115,8 @@ fn ic0_canister_version_returns_correct_value() {
     test.uninstall_code(canister_id)
         .expect_err("Uninstall code should fail as the controller has changed.");
     let result = test.ingress(canister_id, "update", ctr).unwrap();
-    // Plus 10 for the previous ingress messages.
-    let expected_ctr: u64 = 14 + 10;
+    // Plus 11 for the previous ingress messages.
+    let expected_ctr: u64 = 14 + 11;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -3005,11 +3002,15 @@ fn subnet_available_memory_is_not_updated_when_allocation_reserved() {
             (memory 1 20)
         )"#;
     let binary = wat::parse_str(wat).unwrap();
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
     let memory_allocation = NumBytes::from(1024 * 1024 * 1024);
-
-    test.install_canister_with_allocation(canister_id, binary, None, Some(memory_allocation.get()))
+    let canister_id = test
+        .create_canister_with_allocation(
+            Cycles::new(1_000_000_000_000),
+            None,
+            Some(memory_allocation.get()),
+        )
         .unwrap();
+    test.install_canister(canister_id, binary).unwrap();
     let initial_memory_used = test.state().memory_taken().execution();
     let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
     // canister history memory usage is not updated in SubnetAvailableMemory => we add it at RHS
@@ -5722,9 +5723,7 @@ fn cycles_correct_if_update_fails() {
 
 #[test]
 fn call_with_best_effort_response_succeeds() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test.universal_canister().unwrap();
 
@@ -5746,9 +5745,7 @@ fn call_with_best_effort_response_succeeds() {
 
 #[test]
 fn call_with_best_effort_response_fails_when_timeout_is_set() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test.universal_canister().unwrap();
 
@@ -5776,7 +5773,6 @@ fn call_with_best_effort_response_test_helper(
     timeout_seconds: u32,
 ) -> CoarseTime {
     let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .with_manual_execution()
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
         .build();
@@ -5840,7 +5836,6 @@ fn ic0_msg_deadline_while_executing_ingress_message() {
     let start_time_seconds = 100;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
         .build();
 
@@ -5862,7 +5857,6 @@ fn ic0_msg_deadline_when_deadline_is_not_set() {
     let start_time_seconds = 100;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
         .build();
 
@@ -5900,7 +5894,6 @@ fn ic0_msg_deadline_when_deadline_is_set() {
     let timeout_seconds = 200;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
         .build();
 
@@ -7081,6 +7074,7 @@ fn stable_memory_grow_reserves_cycles() {
             .system_state
             .reserved_balance();
 
+        assert_gt!(reserved_cycles, Cycles::zero());
         assert_eq!(
             reserved_cycles,
             test.cycles_account_manager().storage_reservation_cycles(
@@ -7161,6 +7155,7 @@ fn wasm_memory_grow_reserves_cycles() {
             .system_state
             .reserved_balance();
 
+        assert_gt!(reserved_cycles, Cycles::zero());
         assert_eq!(
             reserved_cycles,
             test.cycles_account_manager().storage_reservation_cycles(
@@ -7239,6 +7234,7 @@ fn set_reserved_cycles_limit_below_existing_fails() {
         .system_state
         .reserved_balance();
 
+    assert_gt!(reserved_cycles, Cycles::zero());
     assert_eq!(
         reserved_cycles,
         test.cycles_account_manager().storage_reservation_cycles(
@@ -7364,6 +7360,7 @@ fn resource_saturation_scaling_works_in_regular_execution() {
         .system_state
         .reserved_balance();
 
+    assert_gt!(reserved_cycles, Cycles::zero());
     assert_eq!(
         reserved_cycles,
         test.cycles_account_manager().storage_reservation_cycles(

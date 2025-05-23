@@ -36,6 +36,7 @@ rust_library(
     ],
     deps = [
         # Keep sorted.
+        "//packages/ic-http-types",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/artifact_pool",
         "//rs/canister_client",
@@ -47,6 +48,7 @@ rust_library(
         "//rs/crypto/tree_hash",
         "//rs/crypto/utils/threshold_sig_der",
         "//rs/cycles_account_manager",
+        "//rs/ic_os/config:config_lib",
         "//rs/ic_os/config_types",
         "//rs/ic_os/deterministic_ips",
         "//rs/interfaces",
@@ -94,7 +96,6 @@ rust_library(
         "//rs/rust_canisters/canister_test",
         "//rs/rust_canisters/dfn_candid",
         "//rs/rust_canisters/dfn_protobuf",
-        "//rs/rust_canisters/http_types",
         "//rs/rust_canisters/on_wire",
         "//rs/sns/governance",
         "//rs/sns/init",

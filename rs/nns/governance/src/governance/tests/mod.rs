@@ -11,7 +11,7 @@ use ic_nervous_system_common::{assert_is_err, assert_is_ok, E8};
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_common::pb::v1::NeuronId;
 #[cfg(feature = "test")]
-use ic_nns_governance_api::pb::v1::CreateServiceNervousSystem as ApiCreateServiceNervousSystem;
+use ic_nns_governance_api::CreateServiceNervousSystem as ApiCreateServiceNervousSystem;
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 #[cfg(feature = "test")]
 use ic_sns_init::pb::v1::SnsInitPayload;
@@ -22,6 +22,7 @@ use maplit::{btreemap, hashmap};
 use std::{convert::TryFrom, time::Duration};
 
 mod list_neurons;
+mod list_proposals;
 mod neurons_fund;
 mod node_provider_rewards;
 mod stake_maturity;
@@ -146,7 +147,7 @@ mod settle_neurons_fund_participation_mem_tests {
     };
     use ic_base_types::PrincipalId;
     use ic_nns_common::pb::v1::NeuronId;
-    use ic_nns_governance_api::pb::v1::SettleNeuronsFundParticipationResponse;
+    use ic_nns_governance_api::SettleNeuronsFundParticipationResponse;
 
     fn make_dummy_neuron_portion() -> NeuronsFundNeuronPortion {
         NeuronsFundNeuronPortion {
@@ -866,6 +867,7 @@ mod metrics_tests {
                 no: 0,
                 total: 555,
             }),
+            topic: Some(Topic::Governance as i32),
             ..ProposalData::default()
         };
 
@@ -883,6 +885,7 @@ mod metrics_tests {
                 no: 0,
                 total: 1,
             }),
+            topic: Some(Topic::NeuronManagement as i32),
             ..ProposalData::default()
         };
         let governance = Governance::new(
@@ -925,6 +928,7 @@ mod metrics_tests {
                 action: Some(manage_neuron_action.clone()),
                 ..Proposal::default()
             }),
+            topic: Some(Topic::NeuronManagement as i32),
             ..ProposalData::default()
         };
 
@@ -936,6 +940,7 @@ mod metrics_tests {
                 ..Proposal::default()
             }),
             decided_timestamp_seconds: 1,
+            topic: Some(Topic::NeuronManagement as i32),
             ..ProposalData::default()
         };
 
@@ -946,6 +951,7 @@ mod metrics_tests {
                 action: Some(motion_action.clone()),
                 ..Proposal::default()
             }),
+            topic: Some(Topic::Governance as i32),
             ..ProposalData::default()
         };
 

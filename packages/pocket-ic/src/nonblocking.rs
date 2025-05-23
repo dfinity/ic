@@ -7,10 +7,12 @@ use crate::common::rest::{
     RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
     RawTime, RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
 };
+#[cfg(windows)]
+use crate::wsl_path;
 pub use crate::DefaultEffectiveCanisterIdError;
 use crate::{
     copy_dir, start_or_reuse_server, IngressStatusResult, PocketIcBuilder, PocketIcState,
-    RejectResponse,
+    RejectResponse, Time,
 };
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
@@ -40,7 +42,7 @@ use std::fs::{read_dir, File};
 use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 use tracing::{debug, instrument, warn};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
@@ -184,7 +186,12 @@ impl PocketIc {
 
         let instance_config = InstanceConfig {
             subnet_config_set,
+            #[cfg(not(windows))]
             state_dir: state_dir.as_ref().map(|state_dir| state_dir.state_dir()),
+            #[cfg(windows)]
+            state_dir: state_dir
+                .as_ref()
+                .map(|state_dir| wsl_path(&state_dir.state_dir(), "state directory").into()),
             nonmainnet_features,
             log_level: log_level.map(|l| l.to_string()),
             bitcoind_addr,
@@ -360,12 +367,10 @@ impl PocketIc {
     /// Configures the IC to make progress automatically,
     /// i.e., periodically update the time of the IC
     /// to the real time and execute rounds on the subnets.
-    /// Returns the URL at which `/api/v2` requests
+    /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn auto_progress(&self) -> Url {
-        let now = std::time::SystemTime::now();
-        self.set_certified_time(now).await;
         let endpoint = "auto_progress";
         let auto_progress_config = AutoProgressConfig {
             artificial_delay_ms: None,
@@ -395,7 +400,7 @@ impl PocketIc {
         self.post::<(), _>(endpoint, "").await;
     }
 
-    /// Returns the URL at which `/api/v2` requests
+    /// Returns the URL at which `/api` requests
     /// for this instance can be made if the HTTP
     /// gateway has been started.
     pub fn url(&self) -> Option<Url> {
@@ -410,7 +415,7 @@ impl PocketIc {
     /// and configures the PocketIC instance to make progress automatically, i.e.,
     /// periodically update the time of the PocketIC instance to the real time
     /// and process messages on the PocketIC instance.
-    /// Returns the URL at which `/api/v2` and `/api/v3` requests
+    /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn make_live(&mut self, listen_at: Option<u16>) -> Url {
@@ -426,7 +431,7 @@ impl PocketIc {
     /// and configures the PocketIC instance to make progress automatically, i.e.,
     /// periodically update the time of the PocketIC instance to the real time
     /// and process messages on the PocketIC instance.
-    /// Returns the URL at which `/api/v2` and `/api/v3` requests
+    /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn make_live_with_params(
@@ -544,23 +549,20 @@ impl PocketIc {
 
     /// Get the current time of the IC.
     #[instrument(ret, skip(self), fields(instance_id=self.instance_id))]
-    pub async fn get_time(&self) -> SystemTime {
+    pub async fn get_time(&self) -> Time {
         let endpoint = "read/get_time";
         let result: RawTime = self.get(endpoint).await;
-        SystemTime::UNIX_EPOCH + Duration::from_nanos(result.nanos_since_epoch)
+        Time::from_nanos_since_unix_epoch(result.nanos_since_epoch)
     }
 
     /// Set the current time of the IC, on all subnets.
     #[instrument(skip(self), fields(instance_id=self.instance_id, time = ?time))]
-    pub async fn set_time(&self, time: SystemTime) {
+    pub async fn set_time(&self, time: Time) {
         let endpoint = "update/set_time";
         self.post::<(), _>(
             endpoint,
             RawTime {
-                nanos_since_epoch: time
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .expect("Time went backwards")
-                    .as_nanos() as u64,
+                nanos_since_epoch: time.as_nanos_since_unix_epoch(),
             },
         )
         .await;
@@ -568,15 +570,12 @@ impl PocketIc {
 
     /// Set the current certified time of the IC, on all subnets.
     #[instrument(skip(self), fields(instance_id=self.instance_id, time = ?time))]
-    pub async fn set_certified_time(&self, time: SystemTime) {
+    pub async fn set_certified_time(&self, time: Time) {
         let endpoint = "update/set_certified_time";
         self.post::<(), _>(
             endpoint,
             RawTime {
-                nanos_since_epoch: time
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .expect("Time went backwards")
-                    .as_nanos() as u64,
+                nanos_since_epoch: time.as_nanos_since_unix_epoch(),
             },
         )
         .await;
@@ -1416,13 +1415,7 @@ impl PocketIc {
         ];
         let paths = vec![path.clone()];
         let content = ReadState {
-            ingress_expiry: self
-                .get_time()
-                .await
-                .duration_since(std::time::SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos() as u64
-                + 240_000_000_000,
+            ingress_expiry: self.get_time().await.as_nanos_since_unix_epoch() + 240_000_000_000,
             sender: Principal::anonymous(),
             paths,
         };
@@ -1572,7 +1565,8 @@ impl PocketIc {
                             }
                         }
                         if let Some(max_request_time_ms) = self.max_request_time_ms {
-                            if start.elapsed().unwrap() > Duration::from_millis(max_request_time_ms)
+                            if start.elapsed().unwrap_or_default()
+                                > Duration::from_millis(max_request_time_ms)
                             {
                                 panic!("request to PocketIC server timed out.");
                             }
@@ -1581,7 +1575,8 @@ impl PocketIc {
                 }
             }
             if let Some(max_request_time_ms) = self.max_request_time_ms {
-                if start.elapsed().unwrap() > Duration::from_millis(max_request_time_ms) {
+                if start.elapsed().unwrap_or_default() > Duration::from_millis(max_request_time_ms)
+                {
                     panic!("request to PocketIC server timed out.");
                 }
             }

@@ -8,9 +8,7 @@ use crate::{
 };
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance_api::pb::v1::manage_neuron_response::{
-    MergeMaturityResponse, StakeMaturityResponse,
-};
+use ic_nns_governance_api::manage_neuron_response::StakeMaturityResponse;
 use maplit::btreemap;
 use std::sync::Arc;
 
@@ -44,24 +42,16 @@ fn test_stake_maturity() {
     let request = StakeMaturity {
         percentage_to_stake: Some(40),
     };
-    let responses = governance
+
+    let stake_maturity_response = governance
         .stake_maturity_of_neuron(&NeuronId { id: 1 }, &principal_1, &request)
         .expect("Expected call to succeed");
-
-    let (stake_maturity_response, legacy_merge_maturity_response) = responses;
 
     assert_eq!(
         stake_maturity_response,
         StakeMaturityResponse {
             maturity_e8s: 600,
             staked_maturity_e8s: 500
-        }
-    );
-    assert_eq!(
-        legacy_merge_maturity_response,
-        MergeMaturityResponse {
-            merged_maturity_e8s: 400,
-            new_stake_e8s: 523
         }
     );
 }

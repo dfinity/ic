@@ -34,16 +34,7 @@ pub struct AppState {
 impl AppState {
     // The ledger_display_name is the token symbol followed by the first 5 characters of the ledger_id.
     pub fn ledger_display_name(&self) -> String {
-        format!(
-            "{}-{}",
-            self.metadata.symbol.clone(),
-            self.ledger_id
-                .to_string()
-                .as_str()
-                .chars()
-                .take(5)
-                .collect::<String>()
-        )
+        self.storage.get_token_display_name()
     }
 }
 

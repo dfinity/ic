@@ -7,7 +7,7 @@ component_files = {
     Label("early-boot/relabel-machine-id/guestos/relabel-machine-id.sh"): "/opt/ic/bin/relabel-machine-id.sh",
     Label("early-boot/relabel-machine-id/relabel-machine-id.service"): "/etc/systemd/system/relabel-machine-id.service",
     Label("early-boot/setup-hostname/setup-hostname.sh"): "/opt/ic/bin/setup-hostname.sh",
-    Label("early-boot/setup-hostname/setup-hostname.service"): "/etc/systemd/system/setup-hostname.service",
+    Label("early-boot/setup-hostname/guestos/setup-hostname.service"): "/etc/systemd/system/setup-hostname.service",
     Label("early-boot/setup-hostname/hostname-empty"): "/etc/hostname",
     Label("early-boot/save-machine-id/save-machine-id.sh"): "/opt/ic/bin/save-machine-id.sh",
     Label("early-boot/save-machine-id/save-machine-id.service"): "/etc/systemd/system/save-machine-id.service",
@@ -52,6 +52,7 @@ component_files = {
     Label("init/setup-lvs/guestos/setup-lvs.sh"): "/opt/ic/bin/setup-lvs.sh",
 
     # misc
+    Label("misc/config/config.sh"): "/opt/ic/bin/config.sh",
     Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
     Label("misc/metrics.sh"): "/opt/ic/bin/metrics.sh",
     Label("misc/serial-getty@/guestos/override.conf"): "/etc/systemd/system/serial-getty@.service.d/override.conf",
