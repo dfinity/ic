@@ -1,23 +1,23 @@
+use std::collections::BTreeMap;
+
 use candid::{CandidType, Nat, Principal};
 use canister_test::Wasm;
 use ic_base_types::CanisterId;
+use ic_base_types::PrincipalId;
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
 use ic_nervous_system_agent::{
-    helpers::await_with_timeout, nns::{
+    helpers::await_with_timeout,
+    nns::{
         governance::{add_sns_wasm, insert_sns_wasm_upgrade_path_entries},
         sns_wasm::get_next_sns_version,
-    }, pocketic_impl::PocketIcAgent, CallCanisters, Request
+    },
+    pocketic_impl::PocketIcAgent,
+    CallCanisters, Request,
 };
 use ic_nervous_system_common::E8;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
-use ic_nervous_system_integration_tests::pocket_ic_helpers::{install_canister_on_subnet, sns::{
-    self,
-    governance::{
-        redact_human_readable, set_automatically_advance_target_version_flag,
-        EXPECTED_UPGRADE_DURATION_MAX_SECONDS, EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
-    },
-}};
 use ic_nervous_system_integration_tests::pocket_ic_helpers::NnsInstaller;
+use ic_nervous_system_integration_tests::pocket_ic_helpers::{install_canister_on_subnet, sns};
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::{add_wasms_to_sns_wasm, nns},
@@ -26,7 +26,8 @@ use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::pb::v1::RewardEvent;
 use ic_nns_test_utils::sns_wasm::{
-    build_ledger_sns_wasm, build_root_sns_wasm, build_swap_sns_wasm, create_modified_sns_wasm, ensure_sns_wasm_gzipped,
+    build_ledger_sns_wasm, build_root_sns_wasm, build_swap_sns_wasm, create_modified_sns_wasm,
+    ensure_sns_wasm_gzipped,
 };
 use ic_sns_governance::governance::{
     UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS, UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
@@ -39,9 +40,13 @@ use ic_sns_governance_api::{
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_wasm::pb::v1::{SnsCanisterType, SnsUpgrade, SnsVersion, SnsWasm};
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
-use ic_base_types::PrincipalId;
 use icp_ledger::{AccountIdentifier, Tokens, TransferArgs, DEFAULT_TRANSFER_FEE};
-use icrc_ledger_types::{icrc1::{account::Account, transfer::TransferArg}, icrc2::approve::ApproveArgs};
+use icrc_ledger_types::{
+    icrc1::{account::Account, transfer::TransferArg},
+    icrc2::approve::ApproveArgs,
+};
+use itertools::{Either, Itertools};
+use maplit::btreemap;
 use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
 use serde::{Deserialize, Serialize};
 
@@ -62,6 +67,351 @@ const DUMMY_URL_FOR_PROPOSALS: &str = "https://forum.dfinity.org";
 #[tokio::test]
 async fn test() {
     test_custom_upgrade_path_for_sns().await
+}
+
+pub trait LpAdaptor {
+    fn balances(
+        &self,
+    ) -> impl std::future::Future<Output = Result<BTreeMap<String, Nat>, String>> + Send;
+
+    fn withdraw(&mut self) -> impl std::future::Future<Output = Result<(), String>> + Send;
+
+    fn add_liquidity(
+        &mut self,
+        allowances: Vec<Allowance>,
+    ) -> impl std::future::Future<Output = Result<Vec<Allowance>, String>> + Send;
+}
+
+struct KongSwapAdaptor<'a> {
+    agent: &'a PocketIcAgent<'a>,
+    kong_backend_canister_id: CanisterId,
+
+    token_0: String,
+    token_1: String,
+
+    audit_trail: Vec<Nat>,
+}
+
+impl<'a> KongSwapAdaptor<'a> {
+    fn new(
+        agent: &'a PocketIcAgent<'a>,
+        kong_backend_canister_id: CanisterId,
+        token_0: String,
+        token_1: String,
+    ) -> Result<Self, String> {
+        if token_0 == token_1 {
+            return Err("token_0 and token_1 must be different".to_string());
+        }
+
+        if token_1 != "ICP" {
+            return Err("token_1 must be ICP".to_string());
+        }
+
+        Ok(KongSwapAdaptor {
+            agent,
+            kong_backend_canister_id,
+            token_0,
+            token_1,
+            audit_trail: vec![],
+        })
+    }
+
+    async fn maybe_add_token(&self, ledger_canister_id: CanisterId) -> Result<(), String> {
+        let token = format!("IC.{}", ledger_canister_id);
+
+        let response = self
+            .agent
+            .call(
+                self.kong_backend_canister_id,
+                AddTokenArgs {
+                    token: token.clone(),
+                },
+            )
+            .await;
+
+        let Ok(response) = response else {
+            return Err(format!("Failed to add token: {:?}", response));
+        };
+
+        match response {
+            Ok(_) => Ok(()),
+            Err(err) if err == format!("Token {} already exists", token) => Ok(()),
+            Err(err) => Err(err),
+        }
+    }
+
+    async fn lp_balance(&self) -> Result<Nat, String> {
+        let response = self
+            .agent
+            .call(
+                self.kong_backend_canister_id,
+                UserBalancesArgs {
+                    principal_id: self.agent.sender.to_string(),
+                },
+            )
+            .await;
+
+        let Ok(Ok(user_balance_replies)) = response else {
+            return Err(format!("Failed to get balances: {:?}", response));
+        };
+
+        let (balances, errors): (BTreeMap<_, _>, Vec<_>) =
+            user_balance_replies.into_iter().partition_map(
+                |UserBalancesReply::LP(UserBalanceLPReply {
+                     symbol, balance, ..
+                 })| {
+                    match kong_lp_balance_to_demilams(balance) {
+                        Ok(balance) => Either::Left((symbol, balance)),
+                        Err(err) => Either::Right(format!(
+                            "Failed to convert balance for {}: {}",
+                            symbol, err
+                        )),
+                    }
+                },
+            );
+
+        if !errors.is_empty() {
+            return Err(format!(
+                "Failed to convert balances: {:?}",
+                errors.join(", ")
+            ));
+        }
+
+        let lp_token = format!("{}_{}", self.token_0, self.token_1);
+
+        let Some((_, balance)) = balances.into_iter().find(|(token, _)| *token == lp_token) else {
+            return Err(format!("Failed to get LP balance for {}.", lp_token));
+        };
+
+        Ok(balance)
+    }
+}
+
+pub struct Allowance {
+    pub amount_decimals: Nat,
+    pub ledger_canister_id: CanisterId,
+}
+
+impl<'a> LpAdaptor for KongSwapAdaptor<'a> {
+    async fn add_liquidity(
+        &mut self,
+        mut allowances: Vec<Allowance>,
+    ) -> Result<Vec<Allowance>, String> {
+        // Check preconditions.
+        let Some(Allowance {
+            amount_decimals: amount_1,
+            ledger_canister_id: ledger_1,
+        }) = allowances.pop()
+        else {
+            return Err(format!("KongSwapAdaptor requires some allowances."));
+        };
+
+        if ledger_1 != LEDGER_CANISTER_ID {
+            return Err("KongSwapAdaptor only supports ICP as token_1".to_string());
+        }
+
+        let Some(Allowance {
+            amount_decimals: amount_0,
+            ledger_canister_id: ledger_0,
+        }) = allowances.pop()
+        else {
+            return Err(format!(
+                "KongSwapAdaptor requires two allowances (got {})",
+                allowances.len()
+            ));
+        };
+
+        if !allowances.is_empty() {
+            return Err(format!(
+                "KongSwapAdaptor requires exactly two allowances (got {})",
+                allowances.len()
+            ));
+        }
+
+        // Notes on why we first add SNS and then ICP:
+        // - KongSwap starts indexing the tokens from 1.
+        // - The ICP token is assumed to have index 2.
+        self.maybe_add_token(ledger_0).await?;
+        self.maybe_add_token(ledger_1).await?;
+
+        let token_0 = format!("IC.{}", ledger_0);
+        let token_1 = format!("IC.{}", ledger_1);
+
+        let original_amount_1 = amount_1.clone();
+
+        let response = self
+            .agent
+            .call(
+                self.kong_backend_canister_id,
+                AddPoolArgs {
+                    token_0: token_0.clone(),
+                    amount_0: amount_0.clone(),
+                    token_1: token_1.clone(),
+                    amount_1,
+
+                    // Liquidity provider fee in basis points 30=0.3%.
+                    lp_fee_bps: Some(30),
+
+                    // Not needed for the ICRC2 flow.
+                    tx_id_0: None,
+                    tx_id_1: None,
+                },
+            )
+            .await;
+
+        let Ok(response) = response else {
+            return Err(format!("Failed to add pool: {:?}", response));
+        };
+
+        let lp_token = format!("{}_{}", self.token_0, self.token_1);
+
+        let pool_already_exists = format!("Pool {} already exists", lp_token);
+
+        match &response {
+            Ok(_) => {
+                // All used up, since the pool is brand new.
+                return Ok(vec![
+                    Allowance {
+                        amount_decimals: Nat::from(0_u64),
+                        ledger_canister_id: ledger_0,
+                    },
+                    Allowance {
+                        amount_decimals: Nat::from(0_u64),
+                        ledger_canister_id: ledger_1,
+                    },
+                ]);
+            }
+            Err(err) if *err != pool_already_exists => {
+                return Err(format!("Failed to add pool: {:?}", err));
+            }
+            Err(_) => (),
+        }
+
+        // This is a top-up operation for a pre-existing pool.
+        // A top-up requires computing amount_1 as a function of amount_0.
+        let response = self
+            .agent
+            .call(
+                self.kong_backend_canister_id,
+                AddLiquidityAmountsArgs {
+                    token_0: token_0.clone(),
+                    amount: amount_0.clone(),
+                    token_1: token_1.clone(),
+                },
+            )
+            .await;
+
+        let Ok(Ok(AddLiquidityAmountsReply { amount_1, .. })) = response else {
+            return Err(format!(
+                "Failed to estimate how much liquidity can be added: {:?}",
+                response
+            ));
+        };
+
+        let response = self
+            .agent
+            .call(
+                self.kong_backend_canister_id,
+                AddLiquidityArgs {
+                    token_0,
+                    amount_0,
+                    token_1,
+                    amount_1,
+
+                    // Not needed for the ICRC2 flow.
+                    tx_id_0: None,
+                    tx_id_1: None,
+                },
+            )
+            .await;
+
+        let Ok(Ok(AddLiquidityReply {
+            amount_0, amount_1, ..
+        })) = response
+        else {
+            return Err(format!("Failed to top up liquidity: {:?}", response));
+        };
+
+        if original_amount_1 < amount_1 {
+            return Err(format!(
+                "Got top-up amount_1 = {} (must be at least {})",
+                original_amount_1, amount_1
+            ));
+        }
+
+        Ok(vec![
+            Allowance {
+                amount_decimals: amount_0,
+                ledger_canister_id: ledger_0,
+            },
+            Allowance {
+                // TODO: Use safe arithmetic to avoid overflow.
+                amount_decimals: original_amount_1 - amount_1,
+                ledger_canister_id: ledger_1,
+            },
+        ])
+    }
+
+    async fn balances(&self) -> Result<BTreeMap<String, Nat>, String> {
+        let remove_lp_token_amount = self.lp_balance().await?;
+
+        let response = self
+            .agent
+            .call(
+                self.kong_backend_canister_id,
+                RemoveLiquidityAmountsArgs {
+                    token_0: self.token_0.clone(),
+                    token_1: self.token_1.clone(),
+                    remove_lp_token_amount,
+                },
+            )
+            .await;
+
+        let Ok(Ok(RemoveLiquidityAmountsReply {
+            amount_0,
+            amount_1,
+            symbol_0,
+            symbol_1,
+            ..
+        })) = response
+        else {
+            return Err(format!(
+                "Failed to estimate how much liquidity can be removed: {:?}",
+                response
+            ));
+        };
+
+        Ok(btreemap! {
+            symbol_0 => amount_0,
+            symbol_1 => amount_1,
+        })
+    }
+
+    async fn withdraw(&mut self) -> Result<(), String> {
+        let remove_lp_token_amount = self.lp_balance().await?;
+
+        let response = self
+            .agent
+            .call(
+                self.kong_backend_canister_id,
+                RemoveLiquidityArgs {
+                    token_0: self.token_0.clone(),
+                    token_1: self.token_1.clone(),
+                    remove_lp_token_amount,
+                },
+            )
+            .await;
+
+        let Ok(Ok(RemoveLiquidityReply { status, .. })) = response else {
+            return Err(format!("Failed to request to withdraw: {:?}", response));
+        };
+
+        if status != "Success" {
+            return Err(format!("Failed to withdraw, status: {:?}", status));
+        }
+
+        Ok(())
+    }
 }
 
 /// This test demonstrates how an SNS can be recovered if, for some reason, an upgrade along
@@ -169,7 +519,8 @@ async fn test_custom_upgrade_path_for_sns() {
             arg,
             Some(icrc1_wasm),
             controllers,
-        ).await
+        )
+        .await
     };
 
     // Install KongSwap
@@ -179,9 +530,7 @@ async fn test_custom_upgrade_path_for_sns() {
 
         let kong_backend_wasm = Wasm::from_file(wasm_path);
 
-        let controllers = vec![
-            PrincipalId::new_user_test_id(42)
-        ];
+        let controllers = vec![PrincipalId::new_user_test_id(42)];
 
         install_canister_on_subnet(
             &pocket_ic,
@@ -189,82 +538,37 @@ async fn test_custom_upgrade_path_for_sns() {
             vec![],
             Some(kong_backend_wasm),
             controllers,
-        ).await
+        )
+        .await
     };
 
-    // Step 1. Add the SNS token.
-    let response = lp_adaptor_agent
-        .call(
-            kong_backend_canister_id,
-            AddTokenArgs {
-                token: format!("IC.{}", sns_ledger_canister_id),
-            },
-        )
-        .await
-        .unwrap()
-        .unwrap();
-    println!("add_token(SNS) response = {:#?}", response);
-
-    // Step 2: Add the ICP token to the KongSwap canister.
-    // Notes on why we first add SNS and then ICP:
-    // - KongSwap starts indexing the tokens from 1.
-    // - The ICP token is assumed to have index 2.
-    {
-        let response = lp_adaptor_agent.call(
-            kong_backend_canister_id,
-            AddTokenArgs {
-                token: "IC.ryjl3-tyaaa-aaaaa-aaaba-cai".to_string(),
-            },
-        ).await
-        .unwrap()
-        .unwrap();
-
-        println!("add_token(ICP) response = {:#?}", response);
-    }
-
-    let response = lp_adaptor_agent
-        .call(
-            kong_backend_canister_id,
-            TokensArgs { symbol: None },
-        )
-        .await
-        .unwrap()
-        .unwrap();
-    println!("first tokens response = {:#?}", response);
-
-    let response = lp_adaptor_agent
-        .call(
-            kong_backend_canister_id,
-            PoolsArgs { symbol: None },
-        )
-        .await
-        .unwrap()
-        .unwrap();
-    println!("first pools response = {:#?}", response);
-
     // Approve some ICP from the LP Adaptor.
-    let starting_icp_amount = Tokens::from_tokens(100).unwrap();
-
     nns::ledger::mint_icp(
         &pocket_ic,
         AccountIdentifier::new(lp_adaptor_canister_id, None),
-        starting_icp_amount.saturating_add(DEFAULT_TRANSFER_FEE),
+        Tokens::from_tokens(100).unwrap(),
         None,
     )
     .await;
 
     // Approve some SNS tokens from the LP Adaptor.
-    sns::ledger::icrc1_transfer(&pocket_ic, sns_ledger_canister_id.get(), sns_root_canister_id, TransferArg {
-        from_subaccount: None,
-        to: Account {
-            owner: lp_adaptor_canister_id.0,
-            subaccount: None,
+    sns::ledger::icrc1_transfer(
+        &pocket_ic,
+        sns_ledger_canister_id.get(),
+        sns_root_canister_id,
+        TransferArg {
+            from_subaccount: None,
+            to: Account {
+                owner: lp_adaptor_canister_id.0,
+                subaccount: None,
+            },
+            fee: None,
+            created_at_time: None,
+            memo: None,
+            amount: Nat::from(350 * E8),
         },
-        fee: None,
-        created_at_time: None,
-        memo: None,
-        amount: Nat::from(350 * E8),
-    }).await;
+    )
+    .await;
 
     // Set up the ICP allowance.
     lp_adaptor_agent
@@ -276,7 +580,7 @@ async fn test_custom_upgrade_path_for_sns() {
                     owner: kong_backend_canister_id.get().0,
                     subaccount: None,
                 },
-                amount: Nat::from(600 * E8),
+                amount: Nat::from(600 * E8 + DEFAULT_TRANSFER_FEE.get_e8s()),
                 expected_allowance: Some(Nat::from(0u8)),
                 expires_at: Some(u64::MAX),
                 fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),
@@ -298,7 +602,7 @@ async fn test_custom_upgrade_path_for_sns() {
                     owner: kong_backend_canister_id.get().0,
                     subaccount: None,
                 },
-                amount: Nat::from(3500 * E8),
+                amount: Nat::from(3500 * E8 + DEFAULT_TRANSFER_FEE.get_e8s()),
                 expected_allowance: Some(Nat::from(0u8)),
                 expires_at: Some(u64::MAX),
                 fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),
@@ -310,130 +614,71 @@ async fn test_custom_upgrade_path_for_sns() {
         .unwrap()
         .unwrap();
 
-    // Add the ICP:SNS pool with some initial liquidity.
-    let response = lp_adaptor_agent
-        .call(
-            kong_backend_canister_id,
-            AddPoolArgs {
-                token_0: "SNS".to_string(),
-                amount_0: Nat::from(200 * E8),
-                tx_id_0: None,
+    let mut kong_swap_adaptor = KongSwapAdaptor {
+        agent: &lp_adaptor_agent,
+        kong_backend_canister_id,
 
-                token_1: "ICP".to_string(),
-                amount_1: Nat::from(50 * E8),
-                tx_id_1: None,
+        token_0: "SNS".to_string(),
+        token_1: "ICP".to_string(),
 
-                lp_fee_bps: Some(10),
+        audit_trail: vec![],
+    };
+
+    let balances = kong_swap_adaptor.balances().await.unwrap_err();
+    println!("1. user balances = {:#?}", balances);
+
+    kong_swap_adaptor
+        .add_liquidity(vec![
+            Allowance {
+                amount_decimals: Nat::from(200 * E8),
+                ledger_canister_id: sns_ledger_canister_id,
             },
-        )
+            Allowance {
+                amount_decimals: Nat::from(50 * E8),
+                ledger_canister_id: LEDGER_CANISTER_ID,
+            },
+        ])
         .await
-        .unwrap()
         .unwrap();
-    println!("add_pool response = {:#?}", response);
+
+    let balances = kong_swap_adaptor.balances().await.unwrap();
+
+    println!("2. user balances = {:#?}", balances);
 
     let response = lp_adaptor_agent
-        .call(
-            kong_backend_canister_id,
-            TokensArgs { symbol: None },
-        )
+        .call(kong_backend_canister_id, TokensArgs { symbol: None })
         .await
         .unwrap()
         .unwrap();
     println!("second tokens response = {:#?}", response);
 
     let response = lp_adaptor_agent
-        .call(
-            kong_backend_canister_id,
-            PoolsArgs { symbol: None },
-        )
+        .call(kong_backend_canister_id, PoolsArgs { symbol: None })
         .await
         .unwrap()
         .unwrap();
     println!("second pools response = {:#?}", response);
 
     // Step 2: Increase the liquidity allocation.
-    let response = lp_adaptor_agent
-        .call(
-            kong_backend_canister_id,
-            AddLiquidityAmountsArgs {
-                token_0: "SNS".to_string(),
-                amount: Nat::from(140 * E8),
-                token_1: "ICP".to_string(),
+    kong_swap_adaptor
+        .add_liquidity(vec![
+            Allowance {
+                amount_decimals: Nat::from(140 * E8),
+                ledger_canister_id: sns_ledger_canister_id,
             },
-        )
+            Allowance {
+                amount_decimals: Nat::from(35 * E8),
+                ledger_canister_id: LEDGER_CANISTER_ID,
+            },
+        ])
         .await
-        .unwrap()
         .unwrap();
-    println!("add_liquidity_amounts response = {:#?}", response);
 
-    let response = lp_adaptor_agent.call(
-        kong_backend_canister_id,
-        AddLiquidityArgs {
-            token_0: "SNS".to_string(),
-            amount_0: Nat::from(140 * E8),
-            tx_id_0: None,
+    let balances = kong_swap_adaptor.balances().await.unwrap();
 
-            token_1: "ICP".to_string(),
-            amount_1: response.amount_1,
-            tx_id_1: None,
-        },
-    )
-    .await
-    .unwrap()
-    .unwrap();
-    println!("add liquidity response = {:#?}", response);
+    println!("3. user balances = {:#?}", balances);
 
-    // Attempt to withdraw all the liquidity.
-
-    let response = lp_adaptor_agent
-        .call(
-            kong_backend_canister_id,
-            UserBalancesArgs {
-                principal_id: lp_adaptor_canister_id.0.to_string(),
-            },
-        )
-        .await
-        .unwrap()
-        .unwrap()
-        [0]
-        .clone();
-
-    println!("user balances response = {:#?}", response);
-
-    let remove_lp_token_amount = match response {
-        UserBalancesReply::LP(response) => {
-            kong_lp_balance_to_demilams(response.balance).unwrap()
-        },
-        _ => panic!("Unexpected response type"),
-    };
-
-    let response = lp_adaptor_agent
-        .call(
-            kong_backend_canister_id,
-            RemoveLiquidityAmountsArgs {
-                token_0: "SNS".to_string(),
-                token_1: "ICP".to_string(),
-                remove_lp_token_amount,
-            },
-        )
-        .await
-        .unwrap()
-        .unwrap();
-    println!("remove_liquidity_amounts response = {:#?}", response);
-
-    let response = lp_adaptor_agent
-        .call(
-            kong_backend_canister_id,
-            RemoveLiquidityArgs {
-                token_0: "SNS".to_string(),
-                token_1: "ICP".to_string(),
-                remove_lp_token_amount: response.remove_lp_token_amount,
-            },
-        )
-        .await
-        .unwrap()
-        .unwrap();
-    println!("remove liquidity response = {:#?}", response);
+    kong_swap_adaptor.withdraw().await.unwrap();
 
     panic!();
 }
@@ -461,9 +706,7 @@ impl Request for AddLiquidityAmountsArgs {
     type Response = Result<AddLiquidityAmountsReply, String>;
 }
 
-fn kong_lp_balance_to_demilams(
-    lp_balance: f64,
-) -> Result<Nat, String> {
+fn kong_lp_balance_to_demilams(lp_balance: f64) -> Result<Nat, String> {
     // Check that lp_balance is valid before conversion
     if !lp_balance.is_finite() || lp_balance < 0.0 {
         return Err("Invalid LP balance value".to_string());
@@ -507,20 +750,20 @@ pub struct AddLiquidityAmountsReply {
 // ----------------- end:add_liquidity_amounts -----------------
 
 // ----------------- begin:add_liquidity -----------------
-impl Request for AddLiquidityArgs {    
+impl Request for AddLiquidityArgs {
     fn method(&self) -> &'static str {
         "add_liquidity"
     }
-    
+
     fn update(&self) -> bool {
         true
     }
-    
+
     fn payload(&self) -> Result<Vec<u8>, candid::Error> {
         candid::encode_one(self)
     }
-    
-    type Response = Result<AddLiquidityReply, String>;    
+
+    type Response = Result<AddLiquidityReply, String>;
 }
 
 #[derive(CandidType, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -582,19 +825,19 @@ pub struct ICTransferReply {
 // ----------------- end:add_liquidity -----------------
 
 // ----------------- begin:add_token -----------------
-impl Request for AddTokenArgs {    
+impl Request for AddTokenArgs {
     fn method(&self) -> &'static str {
         "add_token"
     }
-    
+
     fn update(&self) -> bool {
         true
     }
-    
+
     fn payload(&self) -> Result<Vec<u8>, candid::Error> {
         candid::encode_one(self)
     }
-    
+
     type Response = Result<AddTokenReply, String>;
 }
 
@@ -626,19 +869,19 @@ pub struct ICReply {
 // ----------------- end:add_token -----------------
 
 // ----------------- begin:add_pool -----------------
-impl Request for AddPoolArgs {    
+impl Request for AddPoolArgs {
     fn method(&self) -> &'static str {
         "add_pool"
     }
-    
+
     fn update(&self) -> bool {
         true
     }
-    
+
     fn payload(&self) -> Result<Vec<u8>, candid::Error> {
         candid::encode_one(self)
     }
-    
+
     type Response = Result<AddPoolReply, String>;
 }
 
@@ -682,19 +925,19 @@ pub struct AddPoolArgs {
 // ----------------- end:add_pool -----------------
 
 // ----------------- begin:tokens -----------------
-impl Request for TokensArgs {    
+impl Request for TokensArgs {
     fn method(&self) -> &'static str {
         "tokens"
     }
-    
+
     fn update(&self) -> bool {
         false
     }
-    
+
     fn payload(&self) -> Result<Vec<u8>, candid::Error> {
         candid::encode_one(self.symbol.clone())
     }
-    
+
     type Response = Result<Vec<TokensReply>, String>;
 }
 
@@ -724,19 +967,19 @@ pub struct LPReply {
 // ----------------- end:tokens -----------------
 
 // ----------------- begin:tokens -----------------
-impl Request for PoolsArgs {    
+impl Request for PoolsArgs {
     fn method(&self) -> &'static str {
         "pools"
     }
-    
+
     fn update(&self) -> bool {
         false
     }
-    
+
     fn payload(&self) -> Result<Vec<u8>, candid::Error> {
         candid::encode_one(self.symbol.clone())
     }
-    
+
     type Response = Result<Vec<PoolReply>, String>;
 }
 
@@ -767,15 +1010,15 @@ pub struct PoolReply {
 // ----------------- end:tokens -----------------
 
 // ----------------- begin:remove_liquidity_amounts -----------------
-impl Request for RemoveLiquidityAmountsArgs {    
+impl Request for RemoveLiquidityAmountsArgs {
     fn method(&self) -> &'static str {
         "remove_liquidity_amounts"
     }
-    
+
     fn update(&self) -> bool {
         false
     }
-    
+
     fn payload(&self) -> Result<Vec<u8>, candid::Error> {
         let Self {
             token_0,
@@ -785,7 +1028,7 @@ impl Request for RemoveLiquidityAmountsArgs {
 
         candid::encode_args((token_0, token_1, remove_lp_token_amount))
     }
-    
+
     type Response = Result<RemoveLiquidityAmountsReply, String>;
 }
 
@@ -813,19 +1056,19 @@ pub struct RemoveLiquidityAmountsReply {
 // ----------------- end:remove_liquidity_amounts -----------------
 
 // ----------------- begin:liquidity_amounts -----------------
-impl Request for RemoveLiquidityArgs {    
+impl Request for RemoveLiquidityArgs {
     fn method(&self) -> &'static str {
         "remove_liquidity"
     }
-    
+
     fn update(&self) -> bool {
         true
     }
-    
+
     fn payload(&self) -> Result<Vec<u8>, candid::Error> {
         candid::encode_one(self)
     }
-    
+
     type Response = Result<RemoveLiquidityReply, String>;
 }
 
@@ -860,19 +1103,19 @@ pub struct RemoveLiquidityArgs {
 // ----------------- end:liquidity_amounts -----------------
 
 // ----------------- begin:user_balances -----------------
-impl Request for UserBalancesArgs {    
+impl Request for UserBalancesArgs {
     fn method(&self) -> &'static str {
         "user_balances"
     }
-    
+
     fn update(&self) -> bool {
         false
     }
-    
+
     fn payload(&self) -> Result<Vec<u8>, candid::Error> {
         candid::encode_one(self.principal_id.clone())
     }
-    
+
     type Response = Result<Vec<UserBalancesReply>, String>;
 }
 
