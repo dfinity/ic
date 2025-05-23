@@ -1,4 +1,6 @@
 use super::*;
+use ic_state_machine_tests::StateMachineBuilder;
+use std::str::FromStr;
 
 pub fn test_icrc106_supported_even_if_index_not_set<T, U>(
     ledger_wasm: Vec<u8>,
@@ -81,6 +83,51 @@ pub fn test_icrc106_set_index_in_upgrade<T, U>(
         .expect("should successfully upgrade ledger canister");
     // Passing `None` should not change the previously set index
     assert_index_set(&env, canister_id, index_principal);
+}
+
+pub fn test_icrc106_set_hardcoded_index_in_upgrade<T, U>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+    encode_upgrade_args: fn(Option<Principal>) -> U,
+) where
+    T: CandidType,
+    U: CandidType,
+{
+    let env = StateMachineBuilder::new()
+        .with_extra_canister_range(std::ops::RangeInclusive::<CanisterId>::new(
+            CanisterId::from_u64(0x2300000),
+            CanisterId::from_u64(0x23FFFFE),
+        ))
+        .build();
+    let ck_eth_ledger_principal_id = PrincipalId::from_str("ss2fx-dyaaa-aaaar-qacoq-cai")
+        .expect("should parse canister ID from string");
+    let canister_id =
+        env.create_canister_with_cycles(Some(ck_eth_ledger_principal_id), Cycles::zero(), None);
+    let ledger_init_args = encode_init_args(init_args(vec![]));
+    env.install_existing_canister(
+        canister_id,
+        ledger_wasm.clone(),
+        Encode!(&ledger_init_args).unwrap(),
+    )
+    .expect("should successfully install ledger canister");
+
+    assert_index_not_set(&env, canister_id, true);
+
+    let args = encode_upgrade_args(None);
+    let encoded_upgrade_args = Encode!(&args).unwrap();
+    env.upgrade_canister(canister_id, ledger_wasm.clone(), encoded_upgrade_args)
+        .expect("should successfully upgrade ledger canister");
+    // The index should now be set
+    let ck_eth_index_principal_id = Principal::from_str("s3zol-vqaaa-aaaar-qacpa-cai")
+        .expect("should parse canister ID from string");
+    assert_index_set(&env, canister_id, ck_eth_index_principal_id);
+
+    let args = encode_upgrade_args(None);
+    let encoded_upgrade_args = Encode!(&args).unwrap();
+    env.upgrade_canister(canister_id, ledger_wasm, encoded_upgrade_args)
+        .expect("should successfully upgrade ledger canister");
+    // Passing `None` should not change the previously set index
+    assert_index_set(&env, canister_id, ck_eth_index_principal_id);
 }
 
 pub fn test_upgrade_downgrade_with_mainnet_ledger<T, U>(
