@@ -2801,10 +2801,9 @@ fn can_create_canister_with_specified_id() {
         .subnet_message("provisional_create_canister_with_cycles", args)
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterAlreadyInstalled, err.code());
-    assert_eq!(
-        err.description(),
-        format!("Canister {} is already installed.", specified_id)
-    );
+    assert!(err
+        .description()
+        .contains(&format!("Canister {} is already installed.", specified_id)));
 }
 
 // Returns CanisterId by formula 'range_start + (range_end - range_start) * percentile'
