@@ -2038,6 +2038,10 @@ impl CanisterManager {
         round_limits: &mut RoundLimits,
         resource_saturation: &ResourceSaturation,
     ) -> Result<(SnapshotId, NumInstructions), UserError> {
+        // Check sender is a controller.
+        validate_controller(canister, &sender)?;
+        let canister_id = canister.canister_id();
+
         // validate args:
         let wasm_mode = canister
             .execution_state
@@ -2051,10 +2055,6 @@ impl CanisterManager {
                     format!("Snapshot Metadata contains invalid data: {:?}", e),
                 )
             })?;
-
-        // Check sender is a controller.
-        validate_controller(canister, &sender)?;
-        let canister_id = canister.canister_id();
 
         let replace_snapshot_size = match args.replace_snapshot() {
             Some(replace_snapshot_id) => {
@@ -2287,9 +2287,16 @@ impl CanisterManager {
 
                 self.memory_usage_updates(canister, round_limits, validated_memory_usage);
 
-                state
+                if let Err(()) = state
                     .canister_snapshots
-                    .insert_chunk(snapshot_id, validated_chunk);
+                    .insert_chunk(snapshot_id, validated_chunk)
+                {
+                    error!(
+                        self.log,
+                        "Snapshot {} not found after validation. This is a bug@write_snapshot_data",
+                        snapshot_id
+                    )
+                }
 
                 canister.system_state.snapshots_memory_usage = canister
                     .system_state

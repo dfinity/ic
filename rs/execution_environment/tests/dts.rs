@@ -1086,7 +1086,6 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
     }
 
     for method in Method::iter() {
-        println!("method: {:?}", method);
         match method {
             // Supported methods accepting just one argument.
             Method::CanisterStatus | Method::DepositCycles | Method::StartCanister => {
