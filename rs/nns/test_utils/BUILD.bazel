@@ -49,6 +49,7 @@ BASE_DEPENDENCIES = [
     "//rs/sns/swap",
     "//rs/state_machine_tests",
     "//rs/test_utilities",
+    "//rs/test_utilities/execution_environment",
     "//rs/test_utilities/types",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
