@@ -200,7 +200,7 @@ fn generate_vm_config(config: &HostOSConfig, media_path: &Path) -> Result<String
     // the template.
     #[derive(Template)]
     #[template(path = "guestos_vm_template.xml")]
-    pub struct GuestOSTemplateProps<'a> {
+    struct GuestOSTemplateProps<'a> {
         pub cpu_domain: &'a str,
         pub vm_memory: u32,
         pub nr_of_vcpus: u32,
