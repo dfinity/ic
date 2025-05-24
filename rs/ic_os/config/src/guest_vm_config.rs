@@ -14,6 +14,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+// See build.rs
+include!(concat!(env!("OUT_DIR"), "/guestos_vm_template.rs"));
+
 /// Generate the GuestOS VM configuration
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -192,18 +195,6 @@ fn make_bootstrap_options(
         .collect();
 
     Ok(bootstrap_options)
-}
-
-// If you get a compile error pointing at #[derive(Template)], there is likely a syntax error in
-// the template.
-#[derive(Template)]
-#[template(path = "guestos_vm_template.xml")]
-pub struct GuestOSTemplateProps<'a> {
-    pub cpu_domain: &'a str,
-    pub vm_memory: u32,
-    pub nr_of_vcpus: u32,
-    pub mac_address: MacAddr6,
-    pub config_media: &'a str,
 }
 
 /// Generate the GuestOS VM libvirt XML configuration and return it as String.
