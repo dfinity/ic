@@ -559,26 +559,39 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
         "scrape_configs": [
             {
                 "job_name": "boundary_nodes",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "file_sd_configs": [{"files": [boundary_nodes_scraping_targets_path]}],
             },
             {
                 "job_name": "boundary_nodes_exporter",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "file_sd_configs": [{"files": [boundary_nodes_exporter_scraping_targets_path]}],
             },
             {
                 "job_name": "ic_boundary",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "file_sd_configs": [{"files": [ic_boundary_scraping_targets_path]}],
             },
-            {"job_name": "replica", "file_sd_configs": [{"files": [replica_scraping_targets_path]}]},
-            {"job_name": "orchestrator", "file_sd_configs": [{"files": [orchestrator_scraping_targets_path]}]},
+            {
+                "job_name": "replica",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
+                "file_sd_configs": [{"files": [replica_scraping_targets_path]}]
+            },
+            {
+                "job_name": "orchestrator",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
+                "file_sd_configs": [{"files": [orchestrator_scraping_targets_path]}]
+            },
             {
                 "job_name": "node_exporter",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "file_sd_configs": [{"files": [node_exporter_scraping_targets_path]}],
                 "scheme": "https",
                 "tls_config": {"insecure_skip_verify": true},
             },
             {
                 "job_name": "ledger-canister",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "honor_timestamps": true,
                 "metrics_path": "/metrics",
                 "scheme": "https",
@@ -588,6 +601,7 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
             },
             {
                 "job_name": "bitcoin-mainnet-canister",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "honor_timestamps": true,
                 "metrics_path": "/metrics",
                 "scheme": "https",
@@ -597,6 +611,7 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
             },
             {
                 "job_name": "bitcoin-testnet-canister",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "honor_timestamps": true,
                 "metrics_path": "/metrics",
                 "scheme": "https",
@@ -606,6 +621,7 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
             },
             {
                 "job_name": "bitcoin-watchdog-mainnet-canister",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "honor_timestamps": true,
                 "metrics_path": "/metrics",
                 "scheme": "https",
@@ -615,6 +631,7 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
             },
             {
                 "job_name": "bitcoin-watchdog-testnet-canister",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "honor_timestamps": true,
                 "metrics_path": "/metrics",
                 "scheme": "https",
