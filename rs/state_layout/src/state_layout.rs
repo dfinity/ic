@@ -1852,6 +1852,21 @@ where
             io_err: err,
         })
     }
+
+    /// Moves the entire canister directory from one canister id to another.
+    pub fn move_canister_directory(
+        &self,
+        src: CanisterId,
+        dst: CanisterId,
+    ) -> Result<(), LayoutError> {
+        let src_path = self.canister(&src)?.raw_path();
+        let dst_path = self.canister(&dst)?.raw_path();
+        std::fs::rename(&src_path, &dst_path).map_err(|err| LayoutError::IoError {
+            path: src_path,
+            message: "Failed to rename canister".to_string(),
+            io_err: err,
+        })
+    }
 }
 
 impl CheckpointLayout<ReadOnly> {
