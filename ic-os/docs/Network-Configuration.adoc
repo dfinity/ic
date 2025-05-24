@@ -7,7 +7,7 @@ Network configuration details for each IC-OS:
 * SetupOS
 ** Basic network connectivity is checked via pinging nns.ic0.app and the default gateway. Virtually no network traffic goes through SetupOS.
 * HostOS
-** The br6 bridge network interface is set up and passed to the GuestOS VM through qemu (refer to guestos.xml.template).
+** The br6 bridge network interface is set up and passed to the GuestOS VM through qemu (refer to guestos_template.xml).
 * GuestOS
 ** An internet connection is received via the br6 bridge interface from qemu.
 
@@ -50,7 +50,7 @@ Examples:
   replica--3cecef6b3799-4wd4u
   boundary-3cecef6b3799-4wd4u
 
-== IPv6 Address 
+== IPv6 Address
 
 The IP address can be derived from the MAC address and vice versa: As every virtual machine ends in the same MAC address, the IPv6 address of each node on the same physical machine can be derived, including the hypervisor itself.
 In other words, the prefix of the EUI-64 formatted IPv6 SLAAC address is swapped to get to the IPv6 address of the next node.

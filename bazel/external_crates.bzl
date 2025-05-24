@@ -526,6 +526,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "custom",
                 ],
             ),
+            "goldenfile": crate.spec(
+                version = "^1.8",
+            ),
             "group": crate.spec(
                 version = "^0.13",
             ),
