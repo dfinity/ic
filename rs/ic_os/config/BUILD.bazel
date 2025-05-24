@@ -100,9 +100,6 @@ rust_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["local"],  # See the comment in :config
     deps = [
-        "@crate_index//:askama",
-    ] + DEPENDENCIES + DEV_DEPENDENCIES,
-    deps = [
         ":config_lib_dev",
     ] + DEPENDENCIES,
 )
