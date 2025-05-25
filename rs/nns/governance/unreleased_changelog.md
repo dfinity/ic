@@ -9,6 +9,8 @@ on the process that this file is part of, see
 
 ## Added
 
+* Enabling `DisburseMaturity` neuron management proposals.
+
 ## Changed
 
 ## Deprecated

@@ -3411,13 +3411,34 @@ async fn test_disallow_large_manage_neuron_proposals() {
             },
         )
         .await;
-
     assert_matches!(
         result,
         Err(GovernanceError { error_type, .. })
         if error_type == ErrorType::PreconditionFailed as i32
     );
 
+    // Sanity check: disburse maturity should be allowed.
+    gov.make_proposal(
+        &NeuronId { id: 2 },
+        // Must match neuron 2's serialized_id.
+        &principal(2),
+        &Proposal {
+            title: Some("A Manage Neuron Proposal".to_string()),
+            action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 1 })),
+                id: None,
+                command: Some(Command::DisburseMaturity(DisburseMaturity {
+                    percentage_to_disburse: 100,
+                    to_account: None,
+                })),
+            }))),
+            ..Default::default()
+        },
+    )
+    .now_or_never()
+    .unwrap()
+    .unwrap();
+    // Disburse maturity with invalid to_account should not be allowed.
     let result = gov
         .make_proposal(
             &NeuronId { id: 2 },
@@ -3448,9 +3469,10 @@ async fn test_disallow_large_manage_neuron_proposals() {
     assert_matches!(
         result,
         Err(GovernanceError { error_type, .. })
-        if error_type == ErrorType::PreconditionFailed as i32
+        if error_type == ErrorType::InvalidCommand as i32
     );
 
+    // Disburse with invalid to_account should not be allowed.
     let result = gov
         .make_proposal(
             &NeuronId { id: 2 },
@@ -3481,6 +3503,28 @@ async fn test_disallow_large_manage_neuron_proposals() {
         if error_type == ErrorType::InvalidCommand as i32
     );
 
+    // Sanity check: follow should be allowed.
+    gov.make_proposal(
+        &NeuronId { id: 2 },
+        // Must match neuron 2's serialized_id.
+        &principal(2),
+        &Proposal {
+            title: Some("A Manage Neuron Proposal".to_string()),
+            action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 1 })),
+                id: None,
+                command: Some(Command::Follow(Follow {
+                    topic: Topic::Governance as i32,
+                    followees: vec![NeuronId { id: 1 }],
+                })),
+            }))),
+            ..Default::default()
+        },
+    )
+    .now_or_never()
+    .unwrap()
+    .unwrap();
+    // Follow with too many followees should not be allowed.
     let result = gov
         .make_proposal(
             &NeuronId { id: 2 },
