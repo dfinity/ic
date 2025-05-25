@@ -17,12 +17,8 @@ build --experimental_remote_cache_compression # If enabled, compress/decompress 
 #build --remote_download_outputs=toplevel # Still download outputs from top level targets.
 
 build --experimental_remote_downloader=bazel-remote.idx.dfinity.network --experimental_remote_downloader_local_fallback
-build:local --experimental_remote_downloader=
 build --remote_local_fallback
-build    --remote_upload_local_results=false
-
-# Run `bazel build ... --config=local` to build targets without cache
-build:local --remote_cache=
+build --remote_upload_local_results=false
 
 # Upload bes by default when running system tests so that e.g. failures can
 # be shared easily without having to rerun a potentially very-long systest
