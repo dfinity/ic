@@ -6,11 +6,6 @@ use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
 use ic_nervous_system_agent::{
-    helpers::await_with_timeout,
-    nns::{
-        governance::{add_sns_wasm, insert_sns_wasm_upgrade_path_entries},
-        sns_wasm::get_next_sns_version,
-    },
     pocketic_impl::PocketIcAgent,
     CallCanisters, Request,
 };
@@ -18,29 +13,10 @@ use ic_nervous_system_common::E8;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nervous_system_integration_tests::pocket_ic_helpers::NnsInstaller;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{install_canister_on_subnet, sns};
-use ic_nervous_system_integration_tests::{
-    create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
-    pocket_ic_helpers::{add_wasms_to_sns_wasm, nns},
-};
+use ic_nervous_system_integration_tests::pocket_ic_helpers::nns;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::LEDGER_CANISTER_ID;
-use ic_nns_governance::pb::v1::RewardEvent;
-use ic_nns_test_utils::sns_wasm::{
-    build_ledger_sns_wasm, build_root_sns_wasm, build_swap_sns_wasm, create_modified_sns_wasm,
-    ensure_sns_wasm_gzipped,
-};
-use ic_sns_governance::governance::{
-    UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS, UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
-};
-use ic_sns_governance_api::pb::v1::upgrade_journal_entry::Event;
-use ic_sns_governance_api::{
-    pb::v1::{governance::Version, upgrade_journal_entry::TargetVersionReset},
-    serialize_journal_entries,
-};
-use ic_sns_swap::pb::v1::Lifecycle;
-use ic_sns_wasm::pb::v1::{SnsCanisterType, SnsUpgrade, SnsVersion, SnsWasm};
-use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
-use icp_ledger::{AccountIdentifier, Tokens, TransferArgs, DEFAULT_TRANSFER_FEE};
+use icp_ledger::{AccountIdentifier, Tokens, DEFAULT_TRANSFER_FEE};
 use icrc_ledger_types::{
     icrc1::{account::Account, transfer::TransferArg},
     icrc2::approve::ApproveArgs,
@@ -49,6 +25,9 @@ use itertools::{Either, Itertools};
 use maplit::btreemap;
 use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
 use serde::{Deserialize, Serialize};
+
+// TODO
+// use thiserror::Error
 
 /// Wraps `pocket_ic` into an agent to use when more authority is required (e.g., making proposals).
 ///
@@ -69,6 +48,11 @@ async fn test() {
     test_custom_upgrade_path_for_sns().await
 }
 
+pub struct Allowance {
+    pub amount_decimals: Nat,
+    pub ledger_canister_id: CanisterId,
+}
+
 pub trait LpAdaptor {
     fn balances(
         &self,
@@ -76,20 +60,69 @@ pub trait LpAdaptor {
 
     fn withdraw(&mut self) -> impl std::future::Future<Output = Result<(), String>> + Send;
 
-    fn add_liquidity(
+    fn deposit(
         &mut self,
         allowances: Vec<Allowance>,
     ) -> impl std::future::Future<Output = Result<Vec<Allowance>, String>> + Send;
+
+    fn audit_trail(&self) -> AuditTrail;
 }
 
-struct KongSwapAdaptor<'a> {
+#[derive(Clone, Debug)]
+pub enum TransactionError {
+    CallFailed(String),
+    BackendError(String),
+}
+
+#[derive(Clone, Debug)]
+pub struct Transaction {
+    ledger_canister_id: CanisterId,
+    /// Ok result contains block indices of the relevant ledger transactions.
+    result: Result<Vec<Nat>, TransactionError>,
+    human_readable: String,
+    timestamp_seconds: u64,
+    treasury_operation_phase: TreasuryOperationPhase,
+}
+
+#[derive(Clone, Debug)]
+pub enum TreasuryOperationPhase {
+    Deposit,
+    Balances,
+    IssueReward,
+    Withdraw,
+}
+
+#[derive(Clone, Debug)]
+pub struct AuditTrail {
+    events: Vec<Transaction>,
+}
+
+impl AuditTrail {
+    pub fn new() -> Self {
+        AuditTrail { events: vec![] }
+    }
+
+    fn record_event(&mut self, event: Transaction) {
+        self.events.push(event);
+    }
+
+    pub fn transactions(&self) -> &[Transaction] {
+        &self.events
+    }
+}
+
+pub struct KongSwapAdaptor<'a> {
     agent: &'a PocketIcAgent<'a>,
     kong_backend_canister_id: CanisterId,
 
     token_0: String,
     token_1: String,
 
-    audit_trail: Vec<Nat>,
+    audit_trail: AuditTrail,
+}
+
+pub trait WithBlockIndices {
+    fn block_indices(&self) -> Vec<Nat>;
 }
 
 impl<'a> KongSwapAdaptor<'a> {
@@ -107,13 +140,53 @@ impl<'a> KongSwapAdaptor<'a> {
             return Err("token_1 must be ICP".to_string());
         }
 
+        let audit_trail = AuditTrail::new();
+
         Ok(KongSwapAdaptor {
             agent,
             kong_backend_canister_id,
             token_0,
             token_1,
-            audit_trail: vec![],
+            audit_trail,
         })
+    }
+
+    async fn emit_transaction<R, Ok>(
+        &mut self,
+        ledger_canister_id: CanisterId,
+        request: R,
+        phase: TreasuryOperationPhase,
+        human_readable: String,
+        now_seconds_fn: impl Fn() -> u64,
+    ) -> Result<Ok, TransactionError>
+    where
+        R: Request,
+        Ok: WithBlockIndices + Clone,
+        Result<Ok, String>: From<R::Response>,
+    {
+        let response = self.agent
+            .call(ledger_canister_id, request)
+            .await;
+
+        let result = match response {
+            Err(err) => Err(TransactionError::CallFailed(err.to_string())),
+            Ok(response) => {
+                Result::<Ok, String>::from(response)
+                    .map_err(|err| TransactionError::BackendError(err.to_string()))
+            }
+        };
+        
+        let transaction = Transaction {
+            ledger_canister_id,
+            result: result.clone().map(|ok| ok.block_index()),
+            human_readable,
+            timestamp_seconds: now_seconds_fn(),
+            treasury_operation_phase: phase,
+        };
+
+        self.audit_trail.record_event(transaction);
+
+        result
     }
 
     async fn maybe_add_token(&self, ledger_canister_id: CanisterId) -> Result<(), String> {
@@ -187,13 +260,8 @@ impl<'a> KongSwapAdaptor<'a> {
     }
 }
 
-pub struct Allowance {
-    pub amount_decimals: Nat,
-    pub ledger_canister_id: CanisterId,
-}
-
 impl<'a> LpAdaptor for KongSwapAdaptor<'a> {
-    async fn add_liquidity(
+    async fn deposit(
         &mut self,
         mut allowances: Vec<Allowance>,
     ) -> Result<Vec<Allowance>, String> {
@@ -412,6 +480,10 @@ impl<'a> LpAdaptor for KongSwapAdaptor<'a> {
 
         Ok(())
     }
+    
+    fn audit_trail(&self) -> AuditTrail {
+        self.audit_trail.clone()
+    }
 }
 
 /// This test demonstrates how an SNS can be recovered if, for some reason, an upgrade along
@@ -614,21 +686,18 @@ async fn test_custom_upgrade_path_for_sns() {
         .unwrap()
         .unwrap();
 
-    let mut kong_swap_adaptor = KongSwapAdaptor {
-        agent: &lp_adaptor_agent,
+    let mut kong_swap_adaptor = KongSwapAdaptor::new(
+         &lp_adaptor_agent,
         kong_backend_canister_id,
-
-        token_0: "SNS".to_string(),
-        token_1: "ICP".to_string(),
-
-        audit_trail: vec![],
-    };
+        "SNS".to_string(),
+        "ICP".to_string(),
+    ).unwrap();
 
     let balances = kong_swap_adaptor.balances().await.unwrap_err();
     println!("1. user balances = {:#?}", balances);
 
     kong_swap_adaptor
-        .add_liquidity(vec![
+        .deposit(vec![
             Allowance {
                 amount_decimals: Nat::from(200 * E8),
                 ledger_canister_id: sns_ledger_canister_id,
@@ -661,7 +730,7 @@ async fn test_custom_upgrade_path_for_sns() {
 
     // Step 2: Increase the liquidity allocation.
     kong_swap_adaptor
-        .add_liquidity(vec![
+        .deposit(vec![
             Allowance {
                 amount_decimals: Nat::from(140 * E8),
                 ledger_canister_id: sns_ledger_canister_id,
@@ -910,6 +979,22 @@ pub struct AddPoolReply {
     pub claim_ids: Vec<u64>,
     pub is_removed: bool,
     pub ts: u64,
+}
+
+impl WithBlockIndices for AddPoolReply {
+    fn block_indices(&self) -> Nat {
+        self.transfer_ids.iter().map(|TransferIdReply {
+            transfer: TransferReply::IC(ICTransferReply {
+                chain,
+                symbol,
+                is_send,
+                amount,
+                canister_id,
+                block_index,
+            }),
+            ..
+        }| ).collect()
+    }
 }
 
 #[derive(CandidType, Debug, Clone, Serialize, Deserialize)]
