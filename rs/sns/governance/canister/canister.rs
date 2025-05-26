@@ -356,29 +356,30 @@ fn get_metadata(request: GetMetadataRequest) -> GetMetadataResponse {
 async fn get_metrics(request: GetMetricsRequest) -> get_metrics_response::GetMetricsResponse {
     log!(INFO, "get_metrics");
 
-    let request = sns_gov_pb::GetMetricsRequest::try_from(request);
-
-    if let Err(error_message) = request {
-        return get_metrics_response::GetMetricsResponse {
+    let request = sns_gov_pb::GetMetricsRequest::try_from(request).map_err(|err| {
+        get_metrics_response::GetMetricsResponse {
             get_metrics_result: Some(get_metrics_response::GetMetricsResult::Err(
                 ic_sns_governance_api::pb::v1::GovernanceError {
-                    error_type: ErrorType::InvalidCommand.into(),
+                    error_type: i32::from(ErrorType::InvalidCommand),
                     error_message,
                 },
             )),
-        };
-    }
+        }
+    })?;
 
-    // It is safe to unwrap here, because we have handled the Err(..) case above.
-    let result = governance().get_metrics(request.unwrap()).await;
+    let result = governance().get_metrics(request).await;
 
-    if let Err(error) = result {
-        return get_metrics_response::GetMetricsResponse {
-            get_metrics_result: Some(get_metrics_response::GetMetricsResult::Err(error.into())),
-        };
-    }
-
-    result.unwrap().into()
+    let get_metrics_result = match result {
+        Ok(metrics) => {
+            let metrics = pb_api::get_metrics_response::Metrics::from(metrics);
+            Some(GetMetricsResult::Ok(metrics))
+        }
+        Err(err) => {
+            let err = pb_api::GovernanceError::from(err);
+            Some(GetMetricsResult::Err(err))
+        }
+    };
+    get_metrics_response::GetMetricsResponse { get_metrics_result }
 }
 
 /// Returns the initialization parameters used to spawn an SNS

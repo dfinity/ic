@@ -38,9 +38,16 @@ impl<'a> ICRCLedgerHelper<'a> {
             start: Nat::from(0_u64),
             length: Nat::from(0_u64),
         }];
-        let last_block_number = call_icrc3_get_blocks(args)
-            .await
-            .map(|blocks| blocks.log_length - Nat::from(1_u32))?;
+
+        let GetBlocksResult { log_length, .. } = call_icrc3_get_blocks(args).await?;
+
+        if log_length == Nat::from(0_u64) {
+            // TODO
+            // DO NOT MERGE
+            // treat the special case of a brand new ledger with zero blocks by setting the API
+            // field to null.
+            return todo!();
+        }
 
         // Make the second call to the last added block to fetch the most
         // recent transaction.
@@ -49,30 +56,54 @@ impl<'a> ICRCLedgerHelper<'a> {
             length: Nat::from(1_u32),
         }];
 
-        let last_block = call_icrc3_get_blocks(args).await?;
+        let GetBlocksResult { blocks, .. } = call_icrc3_get_blocks(args).await?;
+
+        let block = match &blocks[..] {
+            [block] => block.block,
+            blocks => {
+                return Err(format!(
+                    "Error parsing response from {}.icrc3_get_blocks: expected a single block,
+                 got {} blocks.",
+                    self.ledger.canister_id(),
+                    blocks.len(),
+                ))
+            }
+        };
 
         // TODO asserting/logging if blocks.len() != 1
         // We assume in each block we have 1 and only 1 transaction.
         // Block timestamps are in nano seconds
-        let ts_nanos = Self::get_block_timestamp_nanos(&last_block.blocks[0].block)?;
+        let ts_nanos = Self::get_block_timestamp_nanos(&block)?;
         let ts = ts_nanos / Nat::from(ONE_SEC_NANOSEC);
 
-        Ok(ts.0.to_u64_digits()[0])
+        let u64_digit_components = ts.0.to_u64_digits();
+
+        match &u64_digit_components[..] {
+            [val] => Ok(*val),
+            vals => Err(format!(
+                "Error parsing the block timestamp `{:?}`: expected a single u64 value, got {:?}",
+                &ts,
+                vals.len(),
+            )),
+        }
     }
 
     // Shah-TODO it implies that blocks are always a mapping
     // Find how catually the blocks are created.
     fn get_block_timestamp_nanos(block: &ICRC3Value) -> Result<Nat, String> {
-        match block {
-            ICRC3Value::Map(map) => map.get(TIMESTAMP).map_or(
-                Err("Error parsing the block failed: missing timestamp".to_string()),
-                |value| match value {
-                    ICRC3Value::Nat(ts) => Ok(ts.clone()),
-                    _ => Err("Error parsing the block failed: missing timestamp".to_string()),
-                },
-            ),
-            _ => Err("Error parsing the block failed: missing timestamp".to_string()),
-        }
+        let ICRC3Value::Map(map_val) = block else {
+            return Err("Error parsing the block failed: expected a map".to_string());
+        };
+
+        let Some(timestamp) = map_val.get(TIMESTAMP) else {
+            return Err("Error parsing the block failed: missing timestamp".to_string());
+        };
+
+        let ICRC3Value::Nat(timestamp) = timestamp else {
+            return Err("Error parsing the block failed: missing timestamp".to_string());
+        };
+
+        Ok(timestamp)
     }
 }
 

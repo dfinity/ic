@@ -1,4 +1,5 @@
 use crate::icrc_ledger_helper::ICRCLedgerHelper;
+use crate::pb::v1::Metrics;
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
@@ -54,8 +55,8 @@ use crate::{
             DisburseMaturityInProgress, Empty, ExecuteGenericNervousSystemFunction,
             FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse,
             GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
-            GetMetadataResponse, GetMetricsRequest, GetMetricsResponse, GetMode, GetModeResponse,
-            GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
+            GetMetadataResponse, GetMetricsRequest, GetMode, GetModeResponse, GetNeuron,
+            GetNeuronResponse, GetProposal, GetProposalResponse,
             GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
             Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
             ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
@@ -2013,9 +2014,10 @@ impl Governance {
     pub async fn get_metrics(
         &self,
         request: GetMetricsRequest,
-    ) -> Result<GetMetricsResponse, GovernanceError> {
+    ) -> Result<Metrics, GovernanceError> {
         let num_recently_submitted_proposals = self.recent_proposals(request.time_window_seconds);
         let icrc_ledger_helper = ICRCLedgerHelper::with_ledger(self.ledger.as_ref());
+
         let last_ledger_block_timestamp = icrc_ledger_helper
             .get_latest_block_timestamp_seconds()
             .await
@@ -2024,9 +2026,9 @@ impl Governance {
             })?;
 
         // transaction timestamps are in nanoseconds
-        Ok(GetMetricsResponse {
-            num_recently_submitted_proposals: Some(num_recently_submitted_proposals),
-            last_ledger_block_timestamp: Some(last_ledger_block_timestamp),
+        Ok(Metrics {
+            num_recently_submitted_proposals,
+            last_ledger_block_timestamp,
         })
     }
 

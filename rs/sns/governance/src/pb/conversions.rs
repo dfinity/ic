@@ -1,6 +1,9 @@
 use crate::pb::v1 as pb;
 use crate::topics;
 use ic_sns_governance_api::pb::v1 as pb_api;
+use ic_sns_governance_api::pb::v1::get_metrics_response::GetMetricsResult;
+
+use super::v1::GovernanceError;
 // use ic_sns_governance_api::pb::v1::get_metrics_response::{GetMetricsResult, Metrics};
 
 impl From<pb::NeuronPermission> for pb_api::NeuronPermission {
@@ -1822,6 +1825,23 @@ impl From<pb_api::GetMetadataRequest> for pb::GetMetadataRequest {
     }
 }
 
+impl From<pb::Metrics> for pb_api::get_metrics_response::Metrics {
+    fn from(item: pb::Metrics) -> Self {
+        let pb::Metrics {
+            num_recently_submitted_proposals,
+            last_ledger_block_timestamp,
+        } = item;
+
+        let num_recently_submitted_proposals = Some(num_recently_submitted_proposals);
+        let last_ledger_block_timestamp = Some(last_ledger_block_timestamp);
+
+        Self {
+            num_recently_submitted_proposals,
+            last_ledger_block_timestamp,
+        }
+    }
+}
+
 impl TryFrom<pb_api::GetMetricsRequest> for pb::GetMetricsRequest {
     type Error = String;
 
@@ -1837,30 +1857,6 @@ impl TryFrom<pb_api::GetMetricsRequest> for pb::GetMetricsRequest {
         Ok(Self {
             time_window_seconds,
         })
-    }
-}
-impl From<pb::GetMetricsResponse> for pb_api::get_metrics_response::GetMetricsResponse {
-    fn from(value: pb::GetMetricsResponse) -> Self {
-        match (
-            value.num_recently_submitted_proposals,
-            value.last_ledger_block_timestamp,
-        ) {
-            (Some(num_recently_submitted_proposals), Some(last_ledger_block_timestamp)) => Self {
-                get_metrics_result: Some(pb_api::get_metrics_response::GetMetricsResult::Ok(
-                    pb_api::get_metrics_response::Metrics {
-                        num_recently_submitted_proposals: Some(num_recently_submitted_proposals),
-                        last_ledger_block_timestamp: Some(last_ledger_block_timestamp),
-                    },
-                )),
-            },
-            _ => {
-                // The other cases should be unreachable, due to the internal implementation
-                // of `get_metrics()`. We, however, return a None.
-                Self {
-                    get_metrics_result: None,
-                }
-            }
-        }
     }
 }
 
