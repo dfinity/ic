@@ -1631,8 +1631,7 @@ fn http_gateway_route_underscore() {
         let invalid_url = gateway.join(invalid_suffix).unwrap().to_string();
         let error_page = client.get(invalid_url).send().unwrap();
         let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
-        // TODO: fix
-        assert!(page.contains("503 - upstream error"));
+        assert!(page.contains("404 - canister not found"));
     }
 
     // If no canister ID can be found,
@@ -1640,15 +1639,15 @@ fn http_gateway_route_underscore() {
 
     let invalid_url = gateway.join("_/foo").unwrap().to_string();
     let error_page = client.get(invalid_url).send().unwrap();
-    assert_eq!(error_page.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(error_page.status(), StatusCode::SERVICE_UNAVAILABLE);
     let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
-    assert!(page.contains("canister id not found"));
+    assert!(page.contains("503 - upstream error"));
 
     let invalid_url = gateway.join("foo").unwrap().to_string();
     let error_page = client.get(invalid_url).send().unwrap();
-    assert_eq!(error_page.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(error_page.status(), StatusCode::SERVICE_UNAVAILABLE);
     let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
-    assert!(page.contains("canister id not found"));
+    assert!(page.contains("503 - upstream error"));
 }
 
 #[test]
