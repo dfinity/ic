@@ -75,8 +75,6 @@ fn dts_resume_works_in_install_code() {
         canister_id: canister_id.get(),
         wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
     let original_system_state = test.canister_state(canister_id).system_state.clone();
@@ -126,8 +124,6 @@ fn dts_abort_works_in_install_code() {
         canister_id: canister_id.get(),
         wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
     let original_system_state = test.canister_state(canister_id).system_state.clone();
@@ -206,8 +202,6 @@ fn install_code_validate_input_controller() {
         canister_id: canister_id.get(),
         wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
@@ -245,8 +239,6 @@ fn install_code_validates_execution_state() {
         canister_id: canister_id.get(),
         wasm_module: wat::parse_str(r#"(module (memory 0 20))"#).unwrap(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
@@ -292,8 +284,6 @@ fn install_code_fails_when_not_enough_wasm_custom_sections_memory() {
         canister_id: canister_id.get(),
         wasm_module: include_bytes!("../../../tests/test-data/custom_sections.wasm").to_vec(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
@@ -321,8 +311,6 @@ fn install_code_succeeds_with_enough_wasm_custom_sections_memory() {
         canister_id: canister_id.get(),
         wasm_module: include_bytes!("../../../tests/test-data/custom_sections.wasm").to_vec(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
@@ -365,8 +353,6 @@ fn install_code_respects_wasm_custom_sections_available_memory() {
             canister_id: canister_id.get(),
             wasm_module: include_bytes!("../../../tests/test-data/custom_sections.wasm").to_vec(),
             arg: vec![],
-            compute_allocation: None,
-            memory_allocation: None,
             sender_canister_version: None,
         };
 
@@ -392,8 +378,6 @@ fn install_code_respects_wasm_custom_sections_available_memory() {
         canister_id: canister_id.get(),
         wasm_module: include_bytes!("../../../tests/test-data/custom_sections.wasm").to_vec(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
     let result = test.subnet_message(Method::InstallCode, payload.encode());
@@ -415,8 +399,6 @@ fn execute_install_code_message_dts_helper(
         canister_id: canister_id.get(),
         wasm_module: wat::parse_str(wasm).unwrap(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
@@ -530,8 +512,6 @@ fn start_install_code_dts(
         canister_id: canister_id.get(),
         wasm_module: wat::parse_str(wasm).unwrap(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
@@ -655,8 +635,6 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
         canister_id: canister_id.get(),
         wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
     let original_balance = test.canister_state(canister_id).system_state.balance();
@@ -705,8 +683,6 @@ fn install_code_running_out_of_instructions() {
         canister_id: canister_id.get(),
         wasm_module: wat::parse_str(wasm).unwrap(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
@@ -814,8 +790,6 @@ fn dts_install_code_creates_entry_in_subnet_call_context_manager() {
         mode: CanisterInstallMode::Install,
         wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
@@ -893,8 +867,6 @@ fn subnet_call_context_manager_keeps_install_code_requests_when_abort() {
         mode: CanisterInstallMode::Install,
         wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
@@ -1285,8 +1257,6 @@ fn install_code_args(canister_id: CanisterId) -> InstallCodeArgs {
         mode: CanisterInstallMode::Install,
         wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     }
 }
@@ -1881,8 +1851,6 @@ fn install_with_dts_correctly_updates_system_state() {
         canister_id: canister_id.get(),
         wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
@@ -1939,8 +1907,6 @@ fn install_with_dts_correctly_updates_system_state() {
         canister_id: canister_id.get(),
         wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
@@ -2008,8 +1974,6 @@ fn upgrade_with_dts_correctly_updates_system_state() {
         canister_id: canister_id.get(),
         wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
@@ -2066,8 +2030,6 @@ fn upgrade_with_dts_correctly_updates_system_state() {
         canister_id: canister_id.get(),
         wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
@@ -2195,8 +2157,6 @@ fn successful_install_chunked_charges_for_wasm_assembly() {
             canister_id,
             wasm.clone(),
             vec![],
-            None,
-            None,
         )
         .encode();
         let _response = test.subnet_message(method_name, arg).unwrap();
