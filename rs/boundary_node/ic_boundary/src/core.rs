@@ -86,7 +86,7 @@ use crate::{
     salt_fetcher::AnonymizationSaltFetcher,
     snapshot::{
         generate_stub_snapshot, generate_stub_subnet, RegistryReplicatorRunner, RegistrySnapshot,
-        SnapshotPersister, Snapshotter,
+        SnapshotPersister, Snapshotter, DER_PREFIX,
     },
     tls_verify::TlsVerifier,
 };
@@ -298,7 +298,11 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                 .get_threshold_signing_public_key_for_subnet(nns_subnet_id, ver)
                 .context("unable to get root NNS key")?
                 .context("no root NNS key")?;
-            agent.set_root_key(root_key.into_bytes().to_vec());
+
+            let mut root_key_with_prefix = DER_PREFIX.to_vec();
+            root_key_with_prefix.extend_from_slice(&root_key.into_bytes());
+
+            agent.set_root_key(root_key_with_prefix);
         } else if let Some(v) = &cli.registry.registry_nns_pub_key_pem {
             // Set the root key if it was provided
             let root_key = parse_threshold_sig_key(v).context("failed to parse NNS public key")?;
