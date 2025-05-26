@@ -12279,7 +12279,7 @@ dependencies = [
  "candid",
  "clap 4.5.27",
  "hex",
- "ic-agent 0.39.3",
+ "ic-agent 0.40.1",
  "ic-artifact-pool",
  "ic-canister-sandbox-backend-lib",
  "ic-config",
