@@ -54,7 +54,6 @@ use std::{
     process::Command,
     thread::{self, JoinHandle, ScopedJoinHandle},
 };
-use tempfile::tempdir;
 use url::Url;
 use zstd::stream::write::Encoder;
 
