@@ -7,6 +7,9 @@ DRY_RUN="${DRY_RUN:-}"
 
 echo "VERSION: $VERSION"
 
+echo "rclone version"
+"$RCLONE" --version
+
 # Multipart upload does not work trough Cloudflare for some reason.
 # Just disabling it with `--s3-upload-cutoff` for now.
 rclone_common_flags=(

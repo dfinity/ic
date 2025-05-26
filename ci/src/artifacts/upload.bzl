@@ -8,6 +8,7 @@ def _upload_artifact_impl(ctx):
     """
 
     version_file = ctx.file._version_txt
+    rclone = ctx.file._rclone
 
     uploader = ctx.file._artifacts_uploader
     exe = ctx.actions.declare_file("run-upload")
@@ -20,17 +21,17 @@ def _upload_artifact_impl(ctx):
         set -euo pipefail
 
         VERSION_FILE={version_file}
+        export RCLONE={rclone}
         export VERSION=$(cat $VERSION_FILE)
         echo "$VERSION"
         {cmds}
 
-        """.format(cmds = "\n".join(cmds), version_file = version_file.short_path),
+        """.format(cmds = "\n".join(cmds), version_file = version_file.short_path, rclone = rclone.short_path),
         is_executable = True,
     )
 
-    # TODO: check this
-    deps = depset(ctx.files.inputs + [version_file])
-    runfiles = ctx.runfiles(files = [uploader, version_file] + ctx.files.inputs)
+    deps = depset(ctx.files.inputs + [version_file, rclone])
+    runfiles = ctx.runfiles(files = [uploader, version_file, rclone] + ctx.files.inputs)
 
     return [
         DefaultInfo(executable = exe, files = deps, runfiles = runfiles),
