@@ -54,6 +54,9 @@ impl From<SignedIngress> for IngressWithPrinter {
     }
 }
 
+/// Behaves like the anonymous identity for the agent, i.e., does not sign messages.
+/// Though, it still uses a custom PrincipalId as the sender instead of the fixed anonymous
+/// principal.
 struct PrincipalSender(PrincipalId);
 
 impl Identity for PrincipalSender {
