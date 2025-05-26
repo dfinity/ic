@@ -137,4 +137,7 @@ runs:
             fi
 
             echo uploading artifacts to remote storage
+            # with --check_up_to_date Bazel will error out if the artifacts
+            # to be uploaded were not built in the build step above
+            # (this ensures that the exact artifacts built above are uploaded)
             bazel run --check_up_to_date //:upload-artifacts
