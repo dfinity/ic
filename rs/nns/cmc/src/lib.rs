@@ -199,7 +199,9 @@ impl From<CanisterSettingsArgs> for Ic00CanisterSettingsArgs {
             log_visibility: settings.log_visibility.map(LogVisibilityV2::from),
             wasm_memory_limit: settings.wasm_memory_limit,
             wasm_memory_threshold: settings.wasm_memory_threshold,
+            environment_variables: None,
         }
+        
     }
 }
 

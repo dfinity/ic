@@ -31,7 +31,7 @@ use ic_types::{
 use ic_utils::thread::maybe_parallel_map;
 use ic_wasm_types::{CanisterModule, MemoryMappableWasmFile, WasmHash};
 use prometheus::{Histogram, IntCounterVec, IntGauge};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::convert::{identity, From, TryFrom, TryInto};
 use std::ffi::OsStr;
 use std::fs::OpenOptions;
@@ -182,6 +182,7 @@ pub struct CanisterStateBits {
     pub next_snapshot_id: u64,
     pub snapshots_memory_usage: NumBytes,
     pub task_queue: TaskQueue,
+    pub environment_variables: HashMap<String, Vec<u8>>,
 }
 
 /// This struct contains bits of the `CanisterSnapshot` that are not already
@@ -2687,6 +2688,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             next_snapshot_id: item.next_snapshot_id,
             snapshots_memory_usage: item.snapshots_memory_usage.get(),
             tasks: Some((&item.task_queue).into()),
+            environment_variables: item.environment_variables.into_iter().collect(),
         }
     }
 }
@@ -2828,6 +2830,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             next_snapshot_id: value.next_snapshot_id,
             snapshots_memory_usage: NumBytes::from(value.snapshots_memory_usage),
             task_queue,
+            environment_variables: value.environment_variables.into_iter().collect(),
         })
     }
 }

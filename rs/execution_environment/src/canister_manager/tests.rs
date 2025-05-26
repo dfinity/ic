@@ -84,7 +84,7 @@ use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use serde::Deserialize;
-use std::{collections::BTreeSet, convert::TryFrom, mem::size_of, path::Path, sync::Arc};
+use std::{collections::{BTreeSet, HashMap}, convert::TryFrom, mem::size_of, path::Path, sync::Arc};
 
 use super::InstallCodeResult;
 use prometheus::IntCounter;
@@ -4893,7 +4893,7 @@ fn create_canister_fails_with_reserved_cycles_limit_exceeded() {
         )
         .build();
 
-    let result = test.ingress(uc, "update", create_canister);
+    let result = test.ingress(uc, "update", create_canister).unwrap();
 
     let err_msg = match result {
         WasmResult::Reply(_) => unreachable!("Unexpected reply, expected reject"),

@@ -454,4 +454,6 @@ message CanisterStateBits {
   // Contains tasks that need to be executed before processing any input of the
   // canister.
   TaskQueue tasks = 54;
+  // A map of environment variable names to their values
+  map<string, bytes> environment_variables = 55;
 }
