@@ -64,7 +64,16 @@ runs:
             diff_only='${{ inputs.diff-only }}'
             release_build='${{ inputs.release-build }}'
 
-            bazel_args=( )
+            bazel_args=(
+                # default all tests to fail ...
+                #   ... after three attempts for tests marked as flaky
+                #   ... after three attempts for all tests in //rs/tests
+                #   ... after the first attempt for other tests
+                #   see also:
+                #     https://bazel.build/reference/command-line-reference#build-flag--flaky_test_attempts
+                --flaky_test_attempts=default
+                --flaky_test_attempts=//rs/tests/.*@3
+            )
 
             if [[ $release_build == "true" ]]; then
               bazel_args+=( --config=release )
