@@ -11,8 +11,8 @@ async-trait = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
 hex = { workspace = true }
+ic-agent = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
-ic-canister-client = { path = "../canister_client" }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
@@ -54,6 +54,7 @@ serde_json = { workspace = true }
 slog = { workspace = true }
 slog-async = { workspace = true }
 tempfile = { workspace = true }
+time = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 url = { workspace = true }

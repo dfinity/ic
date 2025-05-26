@@ -2313,9 +2313,12 @@ where
     match canister_response {
         Err(agent_error) => {
             let err_resp = match agent_error {
-                AgentError::CertifiedReject(response) | AgentError::UncertifiedReject(response) => {
-                    response
+                AgentError::CertifiedReject {
+                    reject: response, ..
                 }
+                | AgentError::UncertifiedReject {
+                    reject: response, ..
+                } => response,
                 _ => panic!("Unexpected error: {:?}", agent_error),
             };
             // If an agent_error is returned then it means that the http_request failed before
