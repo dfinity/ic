@@ -6295,8 +6295,6 @@ dependencies = [
  "ic-agent 0.39.3",
  "ic-base-types",
  "ic-bn-lib",
- "ic-canister-client",
- "ic-canister-client-sender",
  "ic-certification-test-utils",
  "ic-config",
  "ic-crypto",

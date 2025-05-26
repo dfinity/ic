@@ -17,6 +17,7 @@ use axum::{
 };
 use axum_extra::middleware::option_layer;
 use candid::{DecoderConfig, Principal};
+use ic_agent::{agent::EnvelopeContent, identity::AnonymousIdentity, Agent, Identity, Signature};
 use ic_bn_lib::{
     http::{
         self as bnhttp,
@@ -31,13 +32,13 @@ use ic_bn_lib::{
     tls::verify::NoopServerCertVerifier,
     types::RequestType,
 };
-use ic_canister_client::{Agent, Sender};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::CryptoComponent;
 use ic_crypto_utils_basic_sig::conversions::derive_node_id;
 use ic_interfaces::crypto::{BasicSigner, KeyManager};
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_logger::replica_logger::no_op_logger;
+use ic_protobuf::registry::crypto::v1::{AlgorithmId, PublicKey};
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
 use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_replicator::RegistryReplicator;
@@ -479,10 +480,64 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     Ok(())
 }
 
-async fn create_sender(
+type SignMessageId =
+    Arc<dyn Fn(&MessageId) -> Result<Vec<u8>, Box<dyn std::error::Error>> + Send + Sync>;
+
+/// Custom sender for the node, signing messages with its key.
+struct NodeSender {
+    /// DER encoded public key
+    der_encoded_pub_key: Vec<u8>,
+    /// Function that signs the message id
+    sign: SignMessageId,
+}
+
+impl NodeSender {
+    pub fn new(pub_key: PublicKey, sign: SignMessageId) -> Result<Self, String> {
+        if pub_key.algorithm() != AlgorithmId::Ed25519 {
+            return Err(format!(
+                "Unsupported algorithm: {}",
+                pub_key.algorithm().as_str_name()
+            ));
+        }
+
+        let der_encoded_pub_key = ic_ed25519::PublicKey::convert_raw_to_der(&pub_key.key_value)
+            .map_err(|err| err.to_string())?;
+
+        Ok(Self {
+            der_encoded_pub_key,
+            sign,
+        })
+    }
+}
+
+impl Identity for NodeSender {
+    fn sender(&self) -> Result<Principal, String> {
+        Ok(Principal::self_authenticating(
+            self.der_encoded_pub_key.as_slice(),
+        ))
+    }
+
+    fn public_key(&self) -> Option<Vec<u8>> {
+        Some(self.der_encoded_pub_key.clone())
+    }
+
+    fn sign(&self, content: &EnvelopeContent) -> Result<Signature, String> {
+        let msg = MessageId::from(*content.to_request_id());
+        let signature =
+            Some((self.sign)(&msg).map_err(|err| format!("Cannot create node signature: {err}"))?);
+        let public_key = self.public_key();
+        Ok(Signature {
+            public_key,
+            signature,
+            delegations: None,
+        })
+    }
+}
+
+async fn create_identity(
     crypto_config: CryptoConfig,
     registry_client: Arc<RegistryClientImpl>,
-) -> Result<Sender, Error> {
+) -> Result<Box<dyn Identity>, Error> {
     let crypto_component = tokio::task::spawn_blocking({
         let registry_client = Arc::clone(&registry_client);
 
@@ -514,20 +569,23 @@ async fn create_sender(
     let node_id = derive_node_id(&public_key).expect("failed to derive node id");
 
     // Custom Signer
-    Ok(Sender::Node {
-        pub_key: public_key.key_value,
-        sign: Arc::new(move |msg: &MessageId| {
-            #[allow(clippy::disallowed_methods)]
-            let sig = tokio::task::block_in_place(|| {
-                crypto_component
-                    .sign_basic(msg, node_id, registry_client.get_latest_version())
-                    .map(|value| value.get().0)
-                    .map_err(|err| anyhow!("failed to sign message: {err:?}"))
-            })?;
+    Ok(Box::new(
+        NodeSender::new(
+            public_key,
+            Arc::new(move |msg: &MessageId| {
+                #[allow(clippy::disallowed_methods)]
+                let sig = tokio::task::block_in_place(|| {
+                    crypto_component
+                        .sign_basic(msg, node_id, registry_client.get_latest_version())
+                        .map(|value| value.get().0)
+                        .map_err(|err| anyhow!("failed to sign message: {err:?}"))
+                })?;
 
-            Ok(sig)
-        }),
-    })
+                Ok(sig)
+            }),
+        )
+        .map_err(|err| anyhow!(err))?,
+    ))
 }
 
 async fn create_agent(
@@ -535,13 +593,17 @@ async fn create_agent(
     registry_client: Option<Arc<RegistryClientImpl>>,
     port: u16,
 ) -> Result<Agent, Error> {
-    let sender = if let (Some(v), Some(r)) = (crypto_config, registry_client) {
-        create_sender(v, r).await?
+    let identity = if let (Some(v), Some(r)) = (crypto_config, registry_client) {
+        create_identity(v, r).await?
     } else {
-        Sender::Anonymous
+        Box::new(AnonymousIdentity)
     };
 
-    let agent = Agent::new(format!("http://127.0.0.1:{port}").parse()?, sender);
+    let agent = Agent::builder()
+        .with_url(format!("http://127.0.0.1:{port}"))
+        .with_boxed_identity(identity)
+        .build()?;
+
     Ok(agent)
 }
 
