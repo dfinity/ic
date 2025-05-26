@@ -6,7 +6,7 @@ use ic_ledger_core::tokens::TokensType;
 use icrc_ledger_types::icrc1::transfer::TransferError;
 use icrc_ledger_types::icrc2::approve::ApproveError;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
-use icrc_ledger_types::icrc3::transactions::{Approve, Burn, Mint, Transaction, Transfer};
+use icrc_ledger_types::icrc3::transactions::{Approve, Burn, Mint, Pause, Transaction, Transfer};
 use serde::Deserialize;
 
 pub fn convert_transfer_error<Tokens: TokensType>(
@@ -159,6 +159,7 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
             burn: None,
             transfer: None,
             approve: None,
+            pause: None,
             timestamp: b.timestamp,
         };
         let created_at_time = b.transaction.created_at_time;
@@ -227,6 +228,10 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                     created_at_time,
                     memo,
                 });
+            }
+            Operation::Pause { caller, reason } => {
+                tx.kind = "124pause".to_string();
+                tx.pause = Some(Pause { caller, reason });
             }
         }
 

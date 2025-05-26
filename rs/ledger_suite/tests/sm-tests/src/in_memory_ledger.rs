@@ -537,6 +537,7 @@ where
                     &fee.clone().or(block.effective_fee.clone()),
                     TimeStamp::from_nanos_since_unix_epoch(block.timestamp),
                 ),
+                Operation::Pause { .. } => {}
             }
         }
         self.post_process_ledger_blocks(blocks);

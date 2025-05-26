@@ -18,6 +18,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use serde::{Deserialize, Serialize};
 
+use candid::Principal;
 use std::collections::BTreeMap;
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
@@ -76,6 +77,8 @@ pub enum Operation<Tokens: TokensType> {
         #[serde(skip_serializing_if = "Option::is_none")]
         fee: Option<Tokens>,
     },
+    #[serde(rename = "124pause")]
+    Pause { caller: Principal, reason: String },
 }
 
 // A [Transaction] but flattened meaning that [Operation]
@@ -96,6 +99,7 @@ struct FlattenedTransaction<Tokens: TokensType> {
     pub memo: Option<Memo>,
 
     // [Operation] fields.
+    // FIXME: FI-1730: Consider making this optional.
     pub op: String,
 
     #[serde(default)]
@@ -114,6 +118,7 @@ struct FlattenedTransaction<Tokens: TokensType> {
     spender: Option<Account>,
 
     #[serde(rename = "amt")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     amount: Option<Tokens>,
 
     #[serde(default)]
@@ -127,6 +132,14 @@ struct FlattenedTransaction<Tokens: TokensType> {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     expires_at: Option<u64>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    caller: Option<Principal>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<String>,
 }
 
 impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<Tokens> {
@@ -174,6 +187,14 @@ impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<T
                 expires_at: value.expires_at,
                 fee: value.fee,
             },
+            "124pause" => Operation::Pause {
+                caller: value
+                    .caller
+                    .ok_or("`caller` field required for `124pause` operation")?,
+                reason: value
+                    .reason
+                    .ok_or("`reason` field required for `124pause` operation")?,
+            },
             unknown_op => return Err(format!("Unknown operation name {}", unknown_op)),
         };
         Ok(Transaction {
@@ -196,6 +217,7 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 Mint { .. } => "mint",
                 Transfer { .. } => "xfer",
                 Approve { .. } => "approve",
+                Pause { .. } => "124pause",
             }
             .into(),
             from: match &t.operation {
@@ -216,6 +238,7 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 | Mint { amount, .. }
                 | Transfer { amount, .. }
                 | Approve { amount, .. } => Some(amount.clone()),
+                Pause { .. } => None,
             },
             fee: match &t.operation {
                 Transfer { fee, .. } | Approve { fee, .. } => fee.to_owned(),
@@ -229,6 +252,14 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
             },
             expires_at: match &t.operation {
                 Approve { expires_at, .. } => expires_at.to_owned(),
+                _ => None,
+            },
+            caller: match &t.operation {
+                Pause { caller, .. } => Some(caller.to_owned()),
+                _ => None,
+            },
+            reason: match &t.operation {
+                Pause { reason, .. } => Some(reason.to_owned()),
                 _ => None,
             },
         }
@@ -411,6 +442,9 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                     return Err(e);
                 }
             }
+            Operation::Pause { .. } => {
+                // FIXME: FI-1730: Implement pause operation.
+            }
         }
         Ok(())
     }
@@ -553,6 +587,9 @@ pub struct Block<Tokens: TokensType> {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "fee_col_block")]
     pub fee_collector_block_index: Option<u64>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub btype: Option<String>,
 }
 
 type TaggedBlock<Tokens> = Required<Block<Tokens>, 55799>;
@@ -571,8 +608,13 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
 
     fn decode(encoded_block: EncodedBlock) -> Result<Self, String> {
         let bytes = encoded_block.into_vec();
-        let tagged_block: TaggedBlock<Tokens> = ciborium::de::from_reader(&bytes[..])
+        let mut tagged_block: TaggedBlock<Tokens> = ciborium::de::from_reader(&bytes[..])
             .map_err(|e| format!("failed to decode a block: {}", e))?;
+        let btype = match &tagged_block.0.transaction.operation {
+            Operation::Pause { .. } => Some("124pause".to_string()),
+            _ => None,
+        };
+        tagged_block.0.btype = btype;
         Ok(tagged_block.0)
     }
 
@@ -616,6 +658,10 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
             Some(FeeCollector { block_index, .. }) => (None, block_index),
             None => (None, None),
         };
+        let btype = match &transaction.operation {
+            Operation::Pause { .. } => Some("124pause".to_string()),
+            _ => None,
+        };
         Self {
             parent_hash,
             transaction,
@@ -623,6 +669,7 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
             timestamp: timestamp.as_nanos_since_unix_epoch(),
             fee_collector,
             fee_collector_block_index,
+            btype,
         }
     }
 }

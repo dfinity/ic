@@ -811,6 +811,13 @@ fn arb_mint<Tokens: TokensType>() -> impl Strategy<Value = Operation<Tokens>> {
     (arb_account(), arb_amount()).prop_map(|(to, amount)| Operation::Mint { to, amount })
 }
 
+fn arb_pause<Tokens: TokensType>() -> impl Strategy<Value = Operation<Tokens>> {
+    arb_account().prop_map(|caller| Operation::Pause {
+        caller: caller.owner,
+        reason: "pineapples on pizza".to_string(),
+    })
+}
+
 fn arb_burn<Tokens: TokensType>() -> impl Strategy<Value = Operation<Tokens>> {
     (
         arb_account(),
@@ -825,7 +832,13 @@ fn arb_burn<Tokens: TokensType>() -> impl Strategy<Value = Operation<Tokens>> {
 }
 
 fn arb_operation<Tokens: TokensType>() -> impl Strategy<Value = Operation<Tokens>> {
-    prop_oneof![arb_transfer(), arb_mint(), arb_burn(), arb_approve()]
+    prop_oneof![
+        arb_transfer(),
+        arb_mint(),
+        arb_burn(),
+        arb_approve(),
+        arb_pause()
+    ]
 }
 
 fn arb_transaction<Tokens: TokensType>() -> impl Strategy<Value = Transaction<Tokens>> {
@@ -851,13 +864,20 @@ fn arb_block<Tokens: TokensType>() -> impl Strategy<Value = Block<Tokens>> {
         proptest::option::of(any::<u64>()),
     )
         .prop_map(
-            |(parent_hash, transaction, effective_fee, ts, fee_col, fee_col_block)| Block {
-                parent_hash: parent_hash.map(HashOf::new),
-                transaction,
-                effective_fee,
-                timestamp: ts,
-                fee_collector: fee_col,
-                fee_collector_block_index: fee_col_block,
+            |(parent_hash, transaction, effective_fee, ts, fee_col, fee_col_block)| {
+                let btype = match &transaction.operation {
+                    Operation::Pause { .. } => Some("124pause".to_string()),
+                    _ => None,
+                };
+                Block {
+                    parent_hash: parent_hash.map(HashOf::new),
+                    transaction,
+                    effective_fee,
+                    timestamp: ts,
+                    fee_collector: fee_col,
+                    fee_collector_block_index: fee_col_block,
+                    btype,
+                }
             },
         )
 }
@@ -2029,6 +2049,33 @@ pub fn block_encoding_agreed_with_the_icrc3_schema<Tokens: TokensType>() {
             Ok(())
         })
         .unwrap();
+}
+
+pub fn test_pause_block_encoding_and_decoding<Tokens: TokensType>() {
+    let pause_block = Block {
+        parent_hash: None,
+        transaction: Transaction::<Tokens> {
+            operation: Operation::Pause {
+                caller: MINTER.owner,
+                reason: "pineapple on pizza".to_string(),
+            },
+            created_at_time: None,
+            memo: None,
+        },
+        effective_fee: None,
+        timestamp: 123_456_789u64,
+        fee_collector: Some(MINTER),
+        fee_collector_block_index: None,
+        btype: Some("124pause".to_string()),
+    };
+
+    let encoded_block = pause_block.encode();
+    println!(
+        "encoded_block: {:?}",
+        hex::encode(&encoded_block.as_slice())
+    );
+    let generic_block = encoded_block_to_generic_block(&encoded_block);
+    icrc3::schema::validate(&generic_block).expect("should validate");
 }
 
 // Check that different blocks produce different hashes.

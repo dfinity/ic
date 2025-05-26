@@ -1,4 +1,4 @@
-use candid::{CandidType, Deserialize, Nat};
+use candid::{CandidType, Deserialize, Nat, Principal};
 use serde::Serialize;
 
 use crate::{
@@ -56,6 +56,12 @@ pub struct Approve {
     pub created_at_time: Option<u64>,
 }
 
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct Pause {
+    pub caller: Principal,
+    pub reason: String,
+}
+
 // Representation of a Transaction which supports the Icrc1 Standard functionalities
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Transaction {
@@ -64,6 +70,7 @@ pub struct Transaction {
     pub burn: Option<Burn>,
     pub transfer: Option<Transfer>,
     pub approve: Option<Approve>,
+    pub pause: Option<Pause>,
     pub timestamp: u64,
 }
 
@@ -76,6 +83,7 @@ impl Transaction {
             burn: Some(burn),
             transfer: None,
             approve: None,
+            pause: None,
         }
     }
 
@@ -87,6 +95,7 @@ impl Transaction {
             burn: None,
             transfer: None,
             approve: None,
+            pause: None,
         }
     }
 
@@ -98,6 +107,7 @@ impl Transaction {
             burn: None,
             transfer: Some(transfer),
             approve: None,
+            pause: None,
         }
     }
 
@@ -109,6 +119,19 @@ impl Transaction {
             burn: None,
             transfer: None,
             approve: Some(approve),
+            pause: None,
+        }
+    }
+
+    pub fn pause(caller: Principal, reason: String, timestamp: u64) -> Self {
+        Self {
+            kind: "124pause".into(),
+            timestamp,
+            mint: None,
+            burn: None,
+            transfer: None,
+            approve: None,
+            pause: Some(Pause { caller, reason }),
         }
     }
 }

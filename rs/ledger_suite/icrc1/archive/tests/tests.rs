@@ -100,6 +100,10 @@ fn test_icrc3_get_blocks() {
     let block = |parent: Option<Block>, operation: Operation| -> Block {
         let parent_hash = parent.map(|block| Block::block_hash(&block.encode()));
         let timestamp = setup.nanos_since_epoch();
+        let btype = match &operation {
+            Operation::Pause { .. } => Some("124pause".to_string()),
+            _ => None,
+        };
         Block {
             parent_hash,
             effective_fee: None,
@@ -111,6 +115,7 @@ fn test_icrc3_get_blocks() {
                 created_at_time: None,
                 memo: None,
             },
+            btype,
         }
     };
 
@@ -263,6 +268,7 @@ fn test_icrc3_get_blocks_number_of_blocks_limit() {
                 created_at_time: None,
                 memo: None,
             },
+            btype: None,
         }
         .encode()
     }

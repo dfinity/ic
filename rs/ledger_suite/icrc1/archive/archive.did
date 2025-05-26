@@ -8,6 +8,12 @@ type Transaction = record {
   approve : opt Approve;
   timestamp : nat64;
   transfer : opt Transfer;
+  pause : opt Pause;
+};
+
+type Pause = record {
+  caller: principal;
+  reason: text;
 };
 
 type Approve = record {
@@ -50,13 +56,13 @@ type Transfer = record {
 // type with one more variant. For the ICRC-3
 // type check ICRC3Value instead.
 type Value = variant {
-    Blob : blob; 
-    Text : text; 
+    Blob : blob;
+    Text : text;
     Nat : nat;
     Nat64: nat64;
     Int : int;
-    Array : vec Value; 
-    Map : Map; 
+    Array : vec Value;
+    Map : Map;
 };
 
 type Map = vec record { text; Value };

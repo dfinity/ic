@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 
+use crate::icrc::generic_value_predicate::is_text;
 use crate::icrc::{
     generic_value::Value,
     generic_value_predicate::{
@@ -36,7 +37,7 @@ pub fn validate(block: &Value) -> Result<(), ValuePredicateFailures> {
         is_map(),
         item("amt", Required, is_amount.clone()),
         item("fee", Optional, is_amount.clone()),
-        item("memo", Optional, is_memo),
+        item("memo", Optional, is_memo.clone()),
         item("ts", Optional, is_timestamp.clone()),
     ]);
     let is_icrc1_burn = and(vec![
@@ -64,19 +65,28 @@ pub fn validate(block: &Value) -> Result<(), ValuePredicateFailures> {
         item("to", Required, is_account.clone()),
         item("spender", Optional, is_account.clone()),
     ]);
-    let is_icrc1_or_icrc2_transaction = or(vec![
+    let is_icrc124_pause = and(vec![
+        is_map(),
+        item("caller", Required, is_principal.clone()),
+        item("reason", Required, is_text()),
+        item("memo", Optional, is_memo),
+        item("ts", Optional, is_timestamp.clone()),
+        item("op", Required, is(Value::text("124pause"))),
+    ]);
+    let is_supported_transaction = or(vec![
         is_icrc1_burn,
         is_icrc1_mint,
         is_icrc2_approve,
         is_icrc2_transfer_from,
+        is_icrc124_pause,
     ]);
     let is_parent_hash = and(vec![is_blob(), len(is_equal_to(32))]);
-    let is_icrc1_or_icrc2_block = and(vec![
+    let is_supported_block = and(vec![
         item("phash", Optional, is_parent_hash),
         item("ts", Required, is_timestamp),
         item("fee", Optional, is_amount.clone()),
-        item("tx", Required, is_icrc1_or_icrc2_transaction),
+        item("tx", Required, is_supported_transaction),
     ]);
 
-    is_icrc1_or_icrc2_block(Cow::Borrowed(block))
+    is_supported_block(Cow::Borrowed(block))
 }

@@ -841,6 +841,9 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
 
                 debit(block_index, from, fee);
             }
+            Operation::Pause { .. } => {
+                panic!("Don't know how to handle Pause operation");
+            }
         },
     );
 }
@@ -890,6 +893,7 @@ fn get_accounts(block: &Block<Tokens>) -> Vec<Account> {
         Operation::Mint { to, .. } => vec![to],
         Operation::Transfer { from, to, .. } => vec![from, to],
         Operation::Approve { from, .. } => vec![from],
+        Operation::Pause { .. } => vec![],
     }
 }
 

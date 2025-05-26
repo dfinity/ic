@@ -202,6 +202,11 @@ pub fn blocks_strategy<Tokens: TokensType>(
                     Operation::Approve { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
                     Operation::Burn { .. } => None,
                     Operation::Mint { .. } => None,
+                    Operation::Pause { .. } => None,
+                };
+                let btype = match &transaction.operation {
+                    Operation::Pause { .. } => Some("124pause".to_string()),
+                    _ => None,
                 };
 
                 Block {
@@ -213,6 +218,7 @@ pub fn blocks_strategy<Tokens: TokensType>(
                             timestamp,
                             fee_collector,
                             fee_collector_block_index,
+                            btype: btype.clone(),
                         }
                         .encode(),
                     )),
@@ -221,6 +227,7 @@ pub fn blocks_strategy<Tokens: TokensType>(
                     timestamp,
                     fee_collector,
                     fee_collector_block_index,
+                    btype,
                 }
             },
         )
@@ -455,6 +462,7 @@ impl TransactionsAndBalances {
                     .or_insert(amount);
                 self.debit(from, fee);
             }
+            Operation::Pause { .. } => {}
         };
         self.transactions.push(tx);
     }
@@ -1044,13 +1052,21 @@ where
         proptest::option::of(any::<u64>()),
     )
         .prop_map(
-            |(parent_hash, transaction, effective_fee, ts, fee_col, fee_col_block)| Block {
-                parent_hash: parent_hash.map(HashOf::new),
-                transaction,
-                effective_fee,
-                timestamp: ts,
-                fee_collector: fee_col,
-                fee_collector_block_index: fee_col_block,
+            |(parent_hash, transaction, effective_fee, ts, fee_col, fee_col_block)| {
+                let btype = match &transaction.operation {
+                    Operation::Pause { .. } => Some("124pause".to_string()),
+                    _ => None,
+                };
+
+                Block {
+                    parent_hash: parent_hash.map(HashOf::new),
+                    transaction,
+                    effective_fee,
+                    timestamp: ts,
+                    fee_collector: fee_col,
+                    fee_collector_block_index: fee_col_block,
+                    btype,
+                }
             },
         )
 }

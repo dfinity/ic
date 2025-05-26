@@ -21,6 +21,9 @@ BlockContent = {
 
   ? fee_col: Account,
   ? fee_col_block: uint,
+
+  ;; The block type.
+  ? btype: text,
 }
 
 MintTx = (
@@ -55,17 +58,26 @@ ApproveTx = (
   TxCommon
 )
 
+PauseTx = (
+  op: "124pause",
+  caller: Principal,
+  reason: text,
+  TxCommon
+)
+
 TransactionContent = {
-  MintTx // BurnTx // TransferTx // ApproveTx
+  MintTx // BurnTx // TransferTx // ApproveTx // PauseTx
 }
 
 TxCommon = (
-  amt: Amount,
+  ? amt: Amount,
   ? memo: Memo,
-  ? ts: Timestamp
+  ? ts: Timestamp,
 )
 
 Account = [1*2 bytes]
+
+Principal = bytes
 
 Amount = uint
 Hash = bytes

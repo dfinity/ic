@@ -354,6 +354,11 @@ fn block_encoding_agrees_with_the_icrc3_schema() {
     ic_ledger_suite_state_machine_tests::block_encoding_agreed_with_the_icrc3_schema::<Tokens>();
 }
 
+#[test]
+fn test_pause_block_encoding_and_decoding() {
+    ic_ledger_suite_state_machine_tests::test_pause_block_encoding_and_decoding::<Tokens>();
+}
+
 // Check that different blocks produce different hashes.
 #[test]
 fn transaction_hashes_are_unique() {
@@ -1111,6 +1116,7 @@ fn test_icrc3_get_archives() {
         timestamp: 0,
         fee_collector: None,
         fee_collector_block_index: None,
+        btype: None,
     }
     .encode()
     .size_bytes();

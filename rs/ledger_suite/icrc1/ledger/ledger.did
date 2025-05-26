@@ -8,6 +8,10 @@ type Tokens = nat;
 type TxIndex = nat;
 type Allowance = record { allowance : nat; expires_at : opt Timestamp };
 type AllowanceArgs = record { account : Account; spender : Account };
+type Pause = record {
+  caller: principal;
+  reason: text;
+};
 type Approve = record {
   fee : opt nat;
   from : Account;
@@ -224,6 +228,7 @@ type Transaction = record {
   approve : opt Approve;
   timestamp : Timestamp;
   transfer : opt Transfer;
+  pause : opt Pause;
 };
 
 type Burn = record {
