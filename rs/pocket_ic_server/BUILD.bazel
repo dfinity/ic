@@ -285,15 +285,18 @@ rust_test(
     name = "hyper_issue",
     size = "small",
     srcs = [
-      "tests/hyper.rs",
+        "tests/hyper.rs",
     ],
     aliases = {},
-    tags = ["requires-network"],
+    tags = [
+        "requires-network",
+        "test_macos",
+    ],
     deps = [
-      "@crate_index//:axum",
-      "@crate_index//:http-body-util",
-      "@crate_index//:hyper",
-      "@crate_index//:hyper-util",
-      "@crate_index//:tokio",
+        "@crate_index//:axum",
+        "@crate_index//:http-body-util",
+        "@crate_index//:hyper",
+        "@crate_index//:hyper-util",
+        "@crate_index//:tokio",
     ],
 )
