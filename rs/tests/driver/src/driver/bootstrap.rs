@@ -535,8 +535,9 @@ fn create_config_disk_image(
         bootstrap_options.socks_proxy = Some(socks_proxy);
     }
 
-    config.hostname = Some(node.node_id.to_string());
-    bootstrap_options.hostname = Some(node.node_id.to_string());
+    let hostname = format!("guest-{}", node.node_id);
+    config.hostname = Some(hostname.clone());
+    bootstrap_options.hostname = Some(hostname);
 
     // Generate the GuestOS config and set it in bootstrap_options
     bootstrap_options.guestos_config = Some(generate_testnet_config(config)?);
