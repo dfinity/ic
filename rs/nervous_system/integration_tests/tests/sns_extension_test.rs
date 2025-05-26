@@ -1,47 +1,29 @@
 use std::collections::BTreeMap;
 
-use candid::{CandidType, Nat, Principal};
+use candid::{CandidType, Nat};
 use canister_test::Wasm;
 use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
-use ic_nervous_system_agent::{
-    pocketic_impl::PocketIcAgent,
-    CallCanisters, Request,
-};
+use ic_nervous_system_agent::{pocketic_impl::PocketIcAgent, CallCanisters, Request};
 use ic_nervous_system_common::E8;
-use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
+use ic_nervous_system_integration_tests::pocket_ic_helpers::nns;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::NnsInstaller;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{install_canister_on_subnet, sns};
-use ic_nervous_system_integration_tests::pocket_ic_helpers::nns;
-use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use icp_ledger::{AccountIdentifier, Tokens, DEFAULT_TRANSFER_FEE};
+use icrc_ledger_types::icrc3::transactions;
 use icrc_ledger_types::{
     icrc1::{account::Account, transfer::TransferArg},
     icrc2::approve::ApproveArgs,
 };
 use itertools::{Either, Itertools};
 use maplit::btreemap;
-use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
+use pocket_ic::PocketIcBuilder;
 use serde::{Deserialize, Serialize};
 
 // TODO
 // use thiserror::Error
-
-/// Wraps `pocket_ic` into an agent to use when more authority is required (e.g., making proposals).
-///
-/// Returns the agent and ID of a neuron controlled by this agent.
-fn nns_agent(pocket_ic: &PocketIc) -> (PocketIcAgent, NeuronId) {
-    let nns_neuron_id = NeuronId {
-        id: TEST_NEURON_1_ID,
-    };
-
-    let sender = Principal::from(*TEST_NEURON_1_OWNER_PRINCIPAL);
-    (PocketIcAgent { pocket_ic, sender }, nns_neuron_id)
-}
-
-const DUMMY_URL_FOR_PROPOSALS: &str = "https://forum.dfinity.org";
 
 #[tokio::test]
 async fn test() {
@@ -53,39 +35,68 @@ pub struct Allowance {
     pub ledger_canister_id: CanisterId,
 }
 
-pub trait LpAdaptor {
+#[derive(Clone, Debug, PartialEq)]
+pub enum TransactionError {
+    Precondition(String),
+    /// An error that occurred while calling a canister.
+    Call(String),
+    /// Backend refers to, e.g., the DEX canister that this asset manager talks to.
+    Backend(String),
+}
+
+pub trait TreasuryManager {
     fn balances(
         &self,
-    ) -> impl std::future::Future<Output = Result<BTreeMap<String, Nat>, String>> + Send;
+    ) -> impl std::future::Future<Output = Result<BTreeMap<String, Nat>, TransactionError>> + Send;
 
-    fn withdraw(&mut self) -> impl std::future::Future<Output = Result<(), String>> + Send;
+    fn withdraw(
+        &mut self,
+    ) -> impl std::future::Future<Output = Result<(), TransactionError>> + Send;
 
     fn deposit(
         &mut self,
         allowances: Vec<Allowance>,
-    ) -> impl std::future::Future<Output = Result<Vec<Allowance>, String>> + Send;
+    ) -> impl std::future::Future<Output = Result<(), TransactionError>> + Send;
 
     fn audit_trail(&self) -> AuditTrail;
 }
 
 #[derive(Clone, Debug)]
-pub enum TransactionError {
-    CallFailed(String),
-    BackendError(String),
+pub struct Transfer {
+    ledger_canister_id: String,
+    amount_deimals: Nat,
+    block_index: Nat,
 }
 
+#[derive(Clone, Debug)]
+pub enum TransactionWitness {
+    Ledger(Vec<Transfer>),
+
+    /// Represents a transaction that is not related to the ledger, e.g., DEX operations.
+    /// The argument is a (best-effort) JSON encoding of the response (for human inspection).
+    NonLedger(String),
+}
+
+/// Helper trait to extract transaction witness from a response.
+pub trait WithTransactionWitness {
+    fn witness(&self) -> TransactionWitness;
+}
+
+/// TreasuryManagerPhase
+/// - Transaction
+///     - Transfer
 #[derive(Clone, Debug)]
 pub struct Transaction {
-    ledger_canister_id: CanisterId,
-    /// Ok result contains block indices of the relevant ledger transactions.
-    result: Result<Vec<Nat>, TransactionError>,
+    canister_id: CanisterId,
+
+    result: Result<TransactionWitness, TransactionError>,
     human_readable: String,
     timestamp_seconds: u64,
-    treasury_operation_phase: TreasuryOperationPhase,
+    treasury_operation_phase: TreasuryManagerPhase,
 }
 
-#[derive(Clone, Debug)]
-pub enum TreasuryOperationPhase {
+#[derive(Clone, Copy, Debug)]
+pub enum TreasuryManagerPhase {
     Deposit,
     Balances,
     IssueReward,
@@ -94,20 +105,22 @@ pub enum TreasuryOperationPhase {
 
 #[derive(Clone, Debug)]
 pub struct AuditTrail {
-    events: Vec<Transaction>,
+    transactions: Vec<Transaction>,
 }
 
 impl AuditTrail {
     pub fn new() -> Self {
-        AuditTrail { events: vec![] }
+        AuditTrail {
+            transactions: vec![],
+        }
     }
 
     fn record_event(&mut self, event: Transaction) {
-        self.events.push(event);
+        self.transactions.push(event);
     }
 
     pub fn transactions(&self) -> &[Transaction] {
-        &self.events
+        &self.transactions
     }
 }
 
@@ -118,11 +131,10 @@ pub struct KongSwapAdaptor<'a> {
     token_0: String,
     token_1: String,
 
-    audit_trail: AuditTrail,
-}
+    balance_0_decimals: Nat,
+    balance_1_decimals: Nat,
 
-pub trait WithBlockIndices {
-    fn block_indices(&self) -> Vec<Nat>;
+    audit_trail: AuditTrail,
 }
 
 impl<'a> KongSwapAdaptor<'a> {
@@ -148,39 +160,40 @@ impl<'a> KongSwapAdaptor<'a> {
             token_0,
             token_1,
             audit_trail,
+            balance_0_decimals: Nat::from(0_u64),
+            balance_1_decimals: Nat::from(0_u64),
         })
     }
 
+    /// Performs the request call and records the transaction in the audit trail.
     async fn emit_transaction<R, Ok>(
         &mut self,
-        ledger_canister_id: CanisterId,
+        canister_id: CanisterId,
         request: R,
-        phase: TreasuryOperationPhase,
+        phase: TreasuryManagerPhase,
         human_readable: String,
-        now_seconds_fn: impl Fn() -> u64,
     ) -> Result<Ok, TransactionError>
     where
         R: Request,
-        Ok: WithBlockIndices + Clone,
+        Ok: WithTransactionWitness + Clone,
         Result<Ok, String>: From<R::Response>,
     {
-        let response = self.agent
-            .call(ledger_canister_id, request)
-            .await;
-
-        let result = match response {
-            Err(err) => Err(TransactionError::CallFailed(err.to_string())),
-            Ok(response) => {
+        let result = self
+            .agent
+            .call(canister_id, request)
+            .await
+            .map_err(|err| TransactionError::Call(err.to_string()))
+            .and_then(|response| {
                 Result::<Ok, String>::from(response)
-                    .map_err(|err| TransactionError::BackendError(err.to_string()))
-            }
-        };
-        
+                    .map_err(|err| TransactionError::Backend(err.to_string()))
+            });
+
         let transaction = Transaction {
-            ledger_canister_id,
-            result: result.clone().map(|ok| ok.block_index()),
+            canister_id,
+            result: result.clone().map(|ok| ok.witness()),
             human_readable,
-            timestamp_seconds: now_seconds_fn(),
+            // TODO: use ic_cdk::time::now_seconds
+            timestamp_seconds: 1234567,
             treasury_operation_phase: phase,
         };
 
@@ -189,44 +202,58 @@ impl<'a> KongSwapAdaptor<'a> {
         result
     }
 
-    async fn maybe_add_token(&self, ledger_canister_id: CanisterId) -> Result<(), String> {
+    async fn maybe_add_token(
+        &mut self,
+        ledger_canister_id: CanisterId,
+        phase: TreasuryManagerPhase,
+    ) -> Result<(), TransactionError> {
         let token = format!("IC.{}", ledger_canister_id);
 
+        let human_readable = format!(
+            "Calling KongSwapBackend.add_token to attempt to add {}.",
+            token
+        );
+
+        let request = AddTokenArgs {
+            token: token.clone(),
+        };
+
         let response = self
-            .agent
-            .call(
+            .emit_transaction(
                 self.kong_backend_canister_id,
-                AddTokenArgs {
-                    token: token.clone(),
-                },
+                request,
+                phase,
+                human_readable,
             )
             .await;
 
-        let Ok(response) = response else {
-            return Err(format!("Failed to add token: {:?}", response));
-        };
-
         match response {
             Ok(_) => Ok(()),
-            Err(err) if err == format!("Token {} already exists", token) => Ok(()),
+            Err(TransactionError::Backend(err))
+                if err == format!("Token {} already exists", token) =>
+            {
+                Ok(())
+            }
             Err(err) => Err(err),
         }
     }
 
-    async fn lp_balance(&self) -> Result<Nat, String> {
-        let response = self
-            .agent
-            .call(
-                self.kong_backend_canister_id,
-                UserBalancesArgs {
-                    principal_id: self.agent.sender.to_string(),
-                },
-            )
-            .await;
-
-        let Ok(Ok(user_balance_replies)) = response else {
-            return Err(format!("Failed to get balances: {:?}", response));
+    async fn lp_balance(&mut self, phase: TreasuryManagerPhase) -> Result<Nat, TransactionError> {
+        let request = UserBalancesArgs {
+            principal_id: self.agent.sender.to_string(),
         };
+
+        let human_readable =
+            "Calling KongSwapBackend.user_balances to get LP balances.".to_string();
+
+        let user_balance_replies = self
+            .emit_transaction(
+                self.kong_backend_canister_id,
+                request,
+                phase,
+                human_readable,
+            )
+            .await?;
 
         let (balances, errors): (BTreeMap<_, _>, Vec<_>) =
             user_balance_replies.into_iter().partition_map(
@@ -244,38 +271,79 @@ impl<'a> KongSwapAdaptor<'a> {
             );
 
         if !errors.is_empty() {
-            return Err(format!(
+            return Err(TransactionError::Backend(format!(
                 "Failed to convert balances: {:?}",
                 errors.join(", ")
-            ));
+            )));
         }
 
         let lp_token = format!("{}_{}", self.token_0, self.token_1);
 
         let Some((_, balance)) = balances.into_iter().find(|(token, _)| *token == lp_token) else {
-            return Err(format!("Failed to get LP balance for {}.", lp_token));
+            return Err(TransactionError::Backend(format!(
+                "Failed to get LP balance for {}.",
+                lp_token
+            )));
         };
 
         Ok(balance)
     }
+
+    // TODO: Make this method private once it is periodically called from canister timers.
+    pub async fn refresh_balances(&mut self) -> Result<(), TransactionError> {
+        let phase = TreasuryManagerPhase::Balances;
+
+        let remove_lp_token_amount = self.lp_balance(phase).await?;
+
+        let human_readable = format!(
+            "Calling KongSwapBackend.remove_liquidity_amounts to estimate how much liquidity can be removed for LP token amount {}.",
+            remove_lp_token_amount
+        );
+
+        let request = RemoveLiquidityAmountsArgs {
+            token_0: self.token_0.clone(),
+            token_1: self.token_1.clone(),
+            remove_lp_token_amount,
+        };
+
+        let RemoveLiquidityAmountsReply {
+            amount_0, amount_1, ..
+        } = self
+            .emit_transaction(
+                self.kong_backend_canister_id,
+                request,
+                phase,
+                human_readable,
+            )
+            .await?;
+
+        self.balance_0_decimals = amount_0.clone();
+        self.balance_1_decimals = amount_1.clone();
+
+        Ok(())
+    }
 }
 
-impl<'a> LpAdaptor for KongSwapAdaptor<'a> {
-    async fn deposit(
-        &mut self,
-        mut allowances: Vec<Allowance>,
-    ) -> Result<Vec<Allowance>, String> {
+impl<'a> TreasuryManager for KongSwapAdaptor<'a> {
+    async fn deposit(&mut self, mut allowances: Vec<Allowance>) -> Result<(), TransactionError> {
+        let phase = TreasuryManagerPhase::Deposit;
+
         // Check preconditions.
+
         let Some(Allowance {
             amount_decimals: amount_1,
             ledger_canister_id: ledger_1,
         }) = allowances.pop()
         else {
-            return Err(format!("KongSwapAdaptor requires some allowances."));
+            return Err(TransactionError::Precondition(
+                "KongSwapAdaptor requires some allowances.".to_string(),
+            ));
         };
 
         if ledger_1 != LEDGER_CANISTER_ID {
-            return Err("KongSwapAdaptor only supports ICP as token_1".to_string());
+            return Err(TransactionError::Precondition(
+                "KongSwapAdaptor only supports ICP as token_1.".to_string(),
+            ));
         }
 
         let Some(Allowance {
@@ -283,33 +351,32 @@ impl<'a> LpAdaptor for KongSwapAdaptor<'a> {
             ledger_canister_id: ledger_0,
         }) = allowances.pop()
         else {
-            return Err(format!(
-                "KongSwapAdaptor requires two allowances (got {})",
+            return Err(TransactionError::Precondition(format!(
+                "KongSwapAdaptor requires two allowances (got {}).",
                 allowances.len()
-            ));
+            )));
         };
 
         if !allowances.is_empty() {
-            return Err(format!(
-                "KongSwapAdaptor requires exactly two allowances (got {})",
+            return Err(TransactionError::Precondition(format!(
+                "KongSwapAdaptor requires exactly two allowances (got {}).",
                 allowances.len()
-            ));
+            )));
         }
 
         // Notes on why we first add SNS and then ICP:
         // - KongSwap starts indexing the tokens from 1.
         // - The ICP token is assumed to have index 2.
-        self.maybe_add_token(ledger_0).await?;
-        self.maybe_add_token(ledger_1).await?;
+        self.maybe_add_token(ledger_0, phase).await?;
+        self.maybe_add_token(ledger_1, phase).await?;
 
         let token_0 = format!("IC.{}", ledger_0);
         let token_1 = format!("IC.{}", ledger_1);
 
         let original_amount_1 = amount_1.clone();
 
-        let response = self
-            .agent
-            .call(
+        let result = self
+            .emit_transaction(
                 self.kong_backend_canister_id,
                 AddPoolArgs {
                     token_0: token_0.clone(),
@@ -324,163 +391,137 @@ impl<'a> LpAdaptor for KongSwapAdaptor<'a> {
                     tx_id_0: None,
                     tx_id_1: None,
                 },
+                TreasuryManagerPhase::Deposit,
+                "Calling KongSwapBackend.add_pool to add a new pool.".to_string(),
             )
             .await;
 
-        let Ok(response) = response else {
-            return Err(format!("Failed to add pool: {:?}", response));
+        let pool_already_exists = {
+            let lp_token = format!("{}_{}", self.token_0, self.token_1);
+            format!("Pool {} already exists", lp_token)
         };
 
-        let lp_token = format!("{}_{}", self.token_0, self.token_1);
-
-        let pool_already_exists = format!("Pool {} already exists", lp_token);
-
-        match &response {
+        match result {
+            // All used up, since the pool is brand new.
             Ok(_) => {
-                // All used up, since the pool is brand new.
-                return Ok(vec![
-                    Allowance {
-                        amount_decimals: Nat::from(0_u64),
-                        ledger_canister_id: ledger_0,
-                    },
-                    Allowance {
-                        amount_decimals: Nat::from(0_u64),
-                        ledger_canister_id: ledger_1,
-                    },
-                ]);
+                return Ok(());
             }
-            Err(err) if *err != pool_already_exists => {
-                return Err(format!("Failed to add pool: {:?}", err));
+
+            // An already-existing pool does not preclude a top-up  =>  Keep going.
+            Err(TransactionError::Backend(err)) if *err == pool_already_exists => (),
+
+            Err(err) => {
+                return Err(err);
             }
-            Err(_) => (),
         }
 
         // This is a top-up operation for a pre-existing pool.
         // A top-up requires computing amount_1 as a function of amount_0.
-        let response = self
-            .agent
-            .call(
-                self.kong_backend_canister_id,
-                AddLiquidityAmountsArgs {
-                    token_0: token_0.clone(),
-                    amount: amount_0.clone(),
-                    token_1: token_1.clone(),
-                },
-            )
-            .await;
 
-        let Ok(Ok(AddLiquidityAmountsReply { amount_1, .. })) = response else {
-            return Err(format!(
-                "Failed to estimate how much liquidity can be added: {:?}",
-                response
-            ));
+        let AddLiquidityAmountsReply { amount_1, .. } = {
+            let human_readable = format!(
+                "Calling KongSwapBackend.add_liquidity_amounts to estimate how much liquidity can \
+                 be added for token_1 ={} when adding token_0 = {}, amount_0 = {}.",
+                token_1, token_0, amount_0,
+            );
+
+            let request = AddLiquidityAmountsArgs {
+                token_0: token_0.clone(),
+                amount: amount_0.clone(),
+                token_1: token_1.clone(),
+            };
+
+            self.emit_transaction(
+                self.kong_backend_canister_id,
+                request,
+                phase,
+                human_readable,
+            )
+            .await?
         };
 
-        let response = self
-            .agent
-            .call(
+        let AddLiquidityReply {
+            amount_0: _,
+            amount_1,
+            ..
+        } = {
+            let human_readable = format!(
+                "Calling KongSwapBackend.add_liquidity to top up liquidity for \
+                 token_0 = {}, amount_0 = {}, token_1 = {}, amount_1 = {}.",
+                token_0, amount_0, token_1, amount_1
+            );
+
+            let request = AddLiquidityArgs {
+                token_0,
+                amount_0,
+                token_1,
+                amount_1,
+
+                // Not needed for the ICRC2 flow.
+                tx_id_0: None,
+                tx_id_1: None,
+            };
+
+            self.emit_transaction(
                 self.kong_backend_canister_id,
-                AddLiquidityArgs {
-                    token_0,
-                    amount_0,
-                    token_1,
-                    amount_1,
-
-                    // Not needed for the ICRC2 flow.
-                    tx_id_0: None,
-                    tx_id_1: None,
-                },
+                request,
+                phase,
+                human_readable,
             )
-            .await;
-
-        let Ok(Ok(AddLiquidityReply {
-            amount_0, amount_1, ..
-        })) = response
-        else {
-            return Err(format!("Failed to top up liquidity: {:?}", response));
+            .await?
         };
 
         if original_amount_1 < amount_1 {
-            return Err(format!(
+            return Err(TransactionError::Backend(format!(
                 "Got top-up amount_1 = {} (must be at least {})",
                 original_amount_1, amount_1
-            ));
-        }
-
-        Ok(vec![
-            Allowance {
-                amount_decimals: amount_0,
-                ledger_canister_id: ledger_0,
-            },
-            Allowance {
-                // TODO: Use safe arithmetic to avoid overflow.
-                amount_decimals: original_amount_1 - amount_1,
-                ledger_canister_id: ledger_1,
-            },
-        ])
-    }
-
-    async fn balances(&self) -> Result<BTreeMap<String, Nat>, String> {
-        let remove_lp_token_amount = self.lp_balance().await?;
-
-        let response = self
-            .agent
-            .call(
-                self.kong_backend_canister_id,
-                RemoveLiquidityAmountsArgs {
-                    token_0: self.token_0.clone(),
-                    token_1: self.token_1.clone(),
-                    remove_lp_token_amount,
-                },
-            )
-            .await;
-
-        let Ok(Ok(RemoveLiquidityAmountsReply {
-            amount_0,
-            amount_1,
-            symbol_0,
-            symbol_1,
-            ..
-        })) = response
-        else {
-            return Err(format!(
-                "Failed to estimate how much liquidity can be removed: {:?}",
-                response
-            ));
-        };
-
-        Ok(btreemap! {
-            symbol_0 => amount_0,
-            symbol_1 => amount_1,
-        })
-    }
-
-    async fn withdraw(&mut self) -> Result<(), String> {
-        let remove_lp_token_amount = self.lp_balance().await?;
-
-        let response = self
-            .agent
-            .call(
-                self.kong_backend_canister_id,
-                RemoveLiquidityArgs {
-                    token_0: self.token_0.clone(),
-                    token_1: self.token_1.clone(),
-                    remove_lp_token_amount,
-                },
-            )
-            .await;
-
-        let Ok(Ok(RemoveLiquidityReply { status, .. })) = response else {
-            return Err(format!("Failed to request to withdraw: {:?}", response));
-        };
-
-        if status != "Success" {
-            return Err(format!("Failed to withdraw, status: {:?}", status));
+            )));
         }
 
         Ok(())
     }
-    
+
+    async fn balances(&self) -> Result<BTreeMap<String, Nat>, TransactionError> {
+        Ok(btreemap! {
+            self.token_0.clone() => self.balance_0_decimals.clone(),
+            self.token_1.clone() => self.balance_1_decimals.clone(),
+        })
+    }
+
+    async fn withdraw(&mut self) -> Result<(), TransactionError> {
+        let phase = TreasuryManagerPhase::Withdraw;
+
+        let remove_lp_token_amount = self.lp_balance(phase).await?;
+
+        let human_readable =
+            "Calling KongSwapBackend.remove_liquidity to withdraw all allocated tokens."
+                .to_string();
+
+        let request = RemoveLiquidityArgs {
+            token_0: self.token_0.clone(),
+            token_1: self.token_1.clone(),
+            remove_lp_token_amount,
+        };
+
+        let RemoveLiquidityReply { status, .. } = self
+            .emit_transaction(
+                self.kong_backend_canister_id,
+                request,
+                phase,
+                human_readable,
+            )
+            .await?;
+
+        if status != "Success" {
+            return Err(TransactionError::Backend(format!(
+                "Failed to withdraw liquidity: status = {}",
+                status
+            )));
+        }
+
+        Ok(())
+    }
+
     fn audit_trail(&self) -> AuditTrail {
         self.audit_trail.clone()
     }
@@ -687,14 +728,15 @@ async fn test_custom_upgrade_path_for_sns() {
         .unwrap();
 
     let mut kong_swap_adaptor = KongSwapAdaptor::new(
-         &lp_adaptor_agent,
+        &lp_adaptor_agent,
         kong_backend_canister_id,
         "SNS".to_string(),
         "ICP".to_string(),
-    ).unwrap();
+    )
+    .unwrap();
 
-    let balances = kong_swap_adaptor.balances().await.unwrap_err();
-    println!("1. user balances = {:#?}", balances);
+    let err = kong_swap_adaptor.refresh_balances().await.unwrap_err();
+    assert_eq!(err, TransactionError::Backend("User not found".to_string()));
 
     kong_swap_adaptor
         .deposit(vec![
@@ -749,7 +791,9 @@ async fn test_custom_upgrade_path_for_sns() {
 
     kong_swap_adaptor.withdraw().await.unwrap();
 
-    panic!();
+    let audit_trail = kong_swap_adaptor.audit_trail();
+
+    panic!("{:#?}", audit_trail.transactions());
 }
 
 // ----------------- begin:add_liquidity_amounts -----------------
@@ -816,6 +860,13 @@ pub struct AddLiquidityAmountsReply {
     pub fee_1: Nat,
     pub add_lp_token_amount: Nat,
 }
+
+impl WithTransactionWitness for AddLiquidityAmountsReply {
+    fn witness(&self) -> TransactionWitness {
+        // TODO: Use serde_json::to_string
+        TransactionWitness::NonLedger(format!("{:?}", self))
+    }
+}
 // ----------------- end:add_liquidity_amounts -----------------
 
 // ----------------- begin:add_liquidity -----------------
@@ -871,6 +922,14 @@ pub struct AddLiquidityReply {
     pub ts: u64,
 }
 
+impl WithTransactionWitness for AddLiquidityReply {
+    fn witness(&self) -> TransactionWitness {
+        let transfers = self.transfer_ids.iter().map(Transfer::from).collect();
+
+        TransactionWitness::Ledger(transfers)
+    }
+}
+
 #[derive(CandidType, Debug, Clone, Serialize, Deserialize)]
 pub struct TransferIdReply {
     pub transfer_id: u64,
@@ -919,6 +978,13 @@ pub struct AddTokenArgs {
 #[derive(CandidType, Clone, Debug, Serialize, Deserialize)]
 pub enum AddTokenReply {
     IC(ICReply),
+}
+
+impl WithTransactionWitness for AddTokenReply {
+    fn witness(&self) -> TransactionWitness {
+        // TODO: Use serde_json::to_string
+        TransactionWitness::NonLedger(format!("{:?}", self))
+    }
 }
 
 #[derive(CandidType, Clone, Debug, Serialize, Deserialize)]
@@ -981,19 +1047,36 @@ pub struct AddPoolReply {
     pub ts: u64,
 }
 
-impl WithBlockIndices for AddPoolReply {
-    fn block_indices(&self) -> Nat {
-        self.transfer_ids.iter().map(|TransferIdReply {
-            transfer: TransferReply::IC(ICTransferReply {
-                chain,
-                symbol,
-                is_send,
-                amount,
-                canister_id,
-                block_index,
-            }),
-            ..
-        }| ).collect()
+impl From<&TransferIdReply> for Transfer {
+    fn from(transfer_id_reply: &TransferIdReply) -> Self {
+        let TransferIdReply {
+            transfer_id: _,
+            transfer:
+                TransferReply::IC(ICTransferReply {
+                    amount,
+                    canister_id,
+                    block_index,
+                    ..
+                }),
+        } = transfer_id_reply;
+
+        let ledger_canister_id = canister_id.clone();
+        let amount_deimals = amount.clone();
+        let block_index = block_index.clone();
+
+        Self {
+            ledger_canister_id,
+            amount_deimals,
+            block_index,
+        }
+    }
+}
+
+impl WithTransactionWitness for AddPoolReply {
+    fn witness(&self) -> TransactionWitness {
+        let transfers = self.transfer_ids.iter().map(Transfer::from).collect();
+
+        TransactionWitness::Ledger(transfers)
     }
 }
 
@@ -1138,6 +1221,13 @@ pub struct RemoveLiquidityAmountsReply {
     pub lp_fee_1: Nat,
     pub remove_lp_token_amount: Nat,
 }
+
+impl WithTransactionWitness for RemoveLiquidityAmountsReply {
+    fn witness(&self) -> TransactionWitness {
+        // TODO: Use serde_json::to_string
+        TransactionWitness::NonLedger(format!("{:?}", self))
+    }
+}
 // ----------------- end:remove_liquidity_amounts -----------------
 
 // ----------------- begin:liquidity_amounts -----------------
@@ -1179,6 +1269,14 @@ pub struct RemoveLiquidityReply {
     pub ts: u64,
 }
 
+impl WithTransactionWitness for RemoveLiquidityReply {
+    fn witness(&self) -> TransactionWitness {
+        let transfers = self.transfer_ids.iter().map(Transfer::from).collect();
+
+        TransactionWitness::Ledger(transfers)
+    }
+}
+
 #[derive(CandidType, Debug, Clone, Serialize, Deserialize)]
 pub struct RemoveLiquidityArgs {
     pub token_0: String,
@@ -1211,6 +1309,20 @@ struct UserBalancesArgs {
 #[derive(CandidType, Clone, Debug, Serialize, Deserialize)]
 pub enum UserBalancesReply {
     LP(UserBalanceLPReply),
+}
+
+impl WithTransactionWitness for Vec<UserBalancesReply> {
+    fn witness(&self) -> TransactionWitness {
+        let witnesses = self
+            .iter()
+            .map(|UserBalancesReply::LP(user_balance_lp_reply)| {
+                // TODO: Use serde_json::to_string
+                format!("{:?}", user_balance_lp_reply)
+            })
+            .collect::<Vec<_>>();
+
+        TransactionWitness::NonLedger(witnesses.join(", "))
+    }
 }
 
 #[derive(CandidType, Clone, Debug, Serialize, Deserialize)]
