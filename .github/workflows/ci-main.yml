@@ -111,7 +111,6 @@ jobs:
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 90
     runs-on:
-      group: zh1
       labels: dind-large
     env:
       # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
