@@ -43,8 +43,8 @@ DEPENDENCIES = [
 
 rust_library(
     name = "cup_explorer",
-    compile_data = ["ic_public_key.pem"],
     srcs = glob(["src/**"]),
+    compile_data = ["ic_public_key.pem"],
     crate_name = "ic_cup_explorer",
     version = "0.9.0",
     deps = DEPENDENCIES,
