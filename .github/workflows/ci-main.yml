@@ -111,7 +111,6 @@ jobs:
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 90
     runs-on:
-      group: zh1
       labels: dind-large
     env:
       # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
@@ -151,16 +150,6 @@ jobs:
           # Determine BAZEL_EXTRA_ARGS based on event type or branch name
           BAZEL_EXTRA_ARGS=(
             "--test_tag_filters=$TEST_TAG_FILTERS"
-
-            # default all tests to fail ...
-            #   ... after three attempts for tests marked as flaky
-            #   ... after three attempts for all tests in //rs/tests
-            #   ... after the first attempt for other tests
-            #   see also:
-            #     https://bazel.build/reference/command-line-reference#build-flag--flaky_test_attempts
-            --flaky_test_attempts=default
-            --flaky_test_attempts=//rs/tests/.*@3
-
             --config=lint # enable lint checks
             )
           if [[ "$CI_EVENT_NAME" == 'merge_group' ]]; then
