@@ -35,7 +35,7 @@ use ic_bn_lib::{
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::CryptoComponent;
 use ic_crypto_utils_basic_sig::conversions::derive_node_id;
-use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
+use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key, threshold_sig_public_key_to_der};
 use ic_interfaces::crypto::{BasicSigner, KeyManager};
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_logger::replica_logger::no_op_logger;
@@ -86,7 +86,7 @@ use crate::{
     salt_fetcher::AnonymizationSaltFetcher,
     snapshot::{
         generate_stub_snapshot, generate_stub_subnet, RegistryReplicatorRunner, RegistrySnapshot,
-        SnapshotPersister, Snapshotter, DER_PREFIX,
+        SnapshotPersister, Snapshotter,
     },
     tls_verify::TlsVerifier,
 };
@@ -299,10 +299,10 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                 .context("unable to get root NNS key")?
                 .context("no root NNS key")?;
 
-            let mut root_key_with_prefix = DER_PREFIX.to_vec();
-            root_key_with_prefix.extend_from_slice(&root_key.into_bytes());
+            let der_encoded_root_key = threshold_sig_public_key_to_der(root_key)
+                .context("failed to convert root NNS key to DER")?;
 
-            agent.set_root_key(root_key_with_prefix);
+            agent.set_root_key(der_encoded_root_key);
         } else if let Some(v) = &cli.registry.registry_nns_pub_key_pem {
             // Set the root key if it was provided
             let root_key = parse_threshold_sig_key(v).context("failed to parse NNS public key")?;
