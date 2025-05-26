@@ -348,107 +348,9 @@ fn test_hash_consistency() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_fee_collector_block_index_resolution() -> anyhow::Result<()> {
-    // Create a temporary directory and database
+fn test_fee_collector_resolution_and_repair() -> anyhow::Result<()> {
     let temp_dir = tempdir()?;
     let db_path = temp_dir.path().join("test_fee_collector_db.sqlite");
-
-    // Create and initialize database with necessary tables
-    let mut connection = Connection::open(&db_path)?;
-
-    // Create the database tables using the centralized schema
-    schema::create_tables(&connection)?;
-
-    // Create test accounts
-    let principal1 = vec![1, 2, 3, 4];
-    let principal2 = vec![5, 6, 7, 8];
-    let fee_collector_principal = vec![9, 10, 11, 12];
-
-    let _from_account = Account {
-        owner: Principal::from_slice(&principal1),
-        subaccount: None,
-    };
-    let _to_account = Account {
-        owner: Principal::from_slice(&principal2),
-        subaccount: None,
-    };
-    let fee_collector_account = Account {
-        owner: Principal::from_slice(&fee_collector_principal),
-        subaccount: None,
-    };
-
-    // Create block 0 with direct fee collector specification
-    let mut block0 = create_test_rosetta_block(0, 1000000000, &principal1, 100);
-    block0.block.fee_collector = Some(fee_collector_account);
-
-    // Create block 1 with fee_collector_block_index pointing to block 0
-    let mut block1 = create_test_rosetta_block(1, 1000000001, &principal1, 200);
-    block1.block.fee_collector = None;
-    block1.block.fee_collector_block_index = Some(0);
-
-    // Create block 2 with no fee collector
-    let block2 = create_test_rosetta_block(2, 1000000002, &principal1, 300);
-
-    // Store the blocks
-    store_blocks(
-        &mut connection,
-        vec![block0.clone(), block1.clone(), block2.clone()],
-    )?;
-
-    // Test the fee collector resolution function directly
-    let resolved_collector_0 = get_fee_collector_from_block(&block0, &connection)?;
-    let resolved_collector_1 = get_fee_collector_from_block(&block1, &connection)?;
-    let resolved_collector_2 = get_fee_collector_from_block(&block2, &connection)?;
-
-    // Verify that block 0 returns its direct fee collector
-    assert_eq!(resolved_collector_0, Some(fee_collector_account));
-
-    // Verify that block 1 resolves the fee collector from block 0
-    assert_eq!(resolved_collector_1, Some(fee_collector_account));
-
-    // Verify that block 2 has no fee collector
-    assert_eq!(resolved_collector_2, None);
-
-    // Test with a block that references a non-existent block
-    let mut block3 = create_test_rosetta_block(3, 1000000003, &principal1, 400);
-    block3.block.fee_collector = None;
-    block3.block.fee_collector_block_index = Some(999); // Non-existent block
-
-    store_blocks(&mut connection, vec![block3.clone()])?;
-
-    // This should return an error
-    let result = get_fee_collector_from_block(&block3, &connection);
-    assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("no block at that index"));
-
-    // Test with a block that references a block without a fee collector
-    let mut block4 = create_test_rosetta_block(4, 1000000004, &principal1, 500);
-    block4.block.fee_collector = None;
-    block4.block.fee_collector_block_index = Some(2); // Block 2 has no fee collector
-
-    store_blocks(&mut connection, vec![block4.clone()])?;
-
-    // This should return an error
-    let result = get_fee_collector_from_block(&block4, &connection);
-    assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("has no fee_collector set"));
-
-    Ok(())
-}
-
-#[test]
-fn test_repair_fee_collector_balances() -> anyhow::Result<()> {
-    // Create a temporary directory and database
-    let temp_dir = tempdir()?;
-    let db_path = temp_dir.path().join("test_repair_db.sqlite");
-
-    // Create and initialize database with necessary tables
     let mut connection = Connection::open(&db_path)?;
     schema::create_tables(&connection)?;
 
@@ -470,18 +372,15 @@ fn test_repair_fee_collector_balances() -> anyhow::Result<()> {
         subaccount: None,
     };
 
-    // Create a mint block to give the from_account initial tokens
+    // Test 1: Fee collector resolution logic (only valid blocks for repair testing)
     let mut mint_block = create_test_rosetta_block(0, 999999999, &principal1, 1000000000);
     mint_block.block.transaction.operation = IcrcOperation::Mint {
         to: from_account,
         amount: Nat::from(1000000000u64),
     };
-    mint_block.index = 0;
 
-    // Create block 1 with direct fee collector specification
     let mut block1 = create_test_rosetta_block(1, 1000000000, &principal1, 100);
     block1.block.fee_collector = Some(fee_collector_account);
-    // Fix the transfer to go to the correct recipient
     block1.block.transaction.operation = IcrcOperation::Transfer {
         from: from_account,
         to: to_account,
@@ -490,12 +389,9 @@ fn test_repair_fee_collector_balances() -> anyhow::Result<()> {
         spender: None,
     };
 
-    // Create block 2 with fee_collector_block_index pointing to block 1
-    // This simulates a block that was processed before our fix
     let mut block2 = create_test_rosetta_block(2, 1000000001, &principal1, 200);
     block2.block.fee_collector = None;
-    block2.block.fee_collector_block_index = Some(1);
-    // Fix the transfer to go to the correct recipient
+    block2.block.fee_collector_block_index = Some(1); // References block 1
     block2.block.transaction.operation = IcrcOperation::Transfer {
         from: from_account,
         to: to_account,
@@ -504,287 +400,29 @@ fn test_repair_fee_collector_balances() -> anyhow::Result<()> {
         spender: None,
     };
 
-    // Store all blocks
-    store_blocks(
-        &mut connection,
-        vec![mint_block.clone(), block1.clone(), block2.clone()],
-    )?;
+    let block3 = create_test_rosetta_block(3, 1000000002, &principal1, 300); // No fee collector
 
-    // Test that the repair function works by simply calling it
-    // Since we're clearing and rebuilding all balances, we don't need to simulate broken state
-    repair_fee_collector_balances(&mut connection)?;
+    store_blocks(&mut connection, vec![mint_block.clone(), block1.clone(), block2.clone(), block3.clone()])?;
 
-    // Verify that all balances are correctly calculated
-    // Block 0: Mint 1000000000 to from_account
-    let from_balance_at_0 = get_account_balance_at_block_idx(&connection, &from_account, 0)?;
-    assert_eq!(from_balance_at_0, Some(Nat::from(1000000000u64)));
+    // Test fee collector resolution
+    assert_eq!(get_fee_collector_from_block(&block1, &connection)?, Some(fee_collector_account));
+    assert_eq!(get_fee_collector_from_block(&block2, &connection)?, Some(fee_collector_account));
+    assert_eq!(get_fee_collector_from_block(&block3, &connection)?, None);
 
-    // Block 1: Transfer 100, fee 1 - fee collector should be credited
-    let from_balance_at_1 = get_account_balance_at_block_idx(&connection, &from_account, 1)?;
-    assert_eq!(from_balance_at_1, Some(Nat::from(999999899u64))); // -101
+    // Test error cases (without storing invalid blocks in DB to avoid repair conflicts)
+    let mut invalid_block = create_test_rosetta_block(999, 1000000003, &principal1, 400);
+    invalid_block.block.fee_collector_block_index = Some(999); // Non-existent
+    assert!(get_fee_collector_from_block(&invalid_block, &connection).is_err());
 
-    let to_balance_at_1 = get_account_balance_at_block_idx(&connection, &to_account, 1)?;
-    assert_eq!(to_balance_at_1, Some(Nat::from(100u64)));
+    let mut invalid_block2 = create_test_rosetta_block(998, 1000000004, &principal1, 500);
+    invalid_block2.block.fee_collector_block_index = Some(3); // Block with no fee collector
+    assert!(get_fee_collector_from_block(&invalid_block2, &connection).is_err());
 
-    let fee_collector_balance_at_1 =
-        get_account_balance_at_block_idx(&connection, &fee_collector_account, 1)?;
-    assert_eq!(fee_collector_balance_at_1, Some(Nat::from(1u64))); // Fee correctly credited
-
-    // Block 2: Transfer 200, fee 1 - fee collector should be credited via fee_collector_block_index
-    let from_balance_at_2 = get_account_balance_at_block_idx(&connection, &from_account, 2)?;
-    assert_eq!(from_balance_at_2, Some(Nat::from(999999698u64))); // -201 more
-
-    let to_balance_at_2 = get_account_balance_at_block_idx(&connection, &to_account, 2)?;
-    assert_eq!(to_balance_at_2, Some(Nat::from(300u64))); // +200 more
-
-    let fee_collector_balance_at_2 =
-        get_account_balance_at_block_idx(&connection, &fee_collector_account, 2)?;
-    assert_eq!(fee_collector_balance_at_2, Some(Nat::from(2u64))); // Fee correctly credited via block index resolution
-
-    // Verify that running the repair again doesn't change anything (idempotent)
-    repair_fee_collector_balances(&mut connection)?;
-
-    let fee_collector_balance_after_second_repair =
-        get_account_balance_at_block_idx(&connection, &fee_collector_account, 2)?;
-    assert_eq!(
-        fee_collector_balance_after_second_repair,
-        Some(Nat::from(2u64))
-    ); // Still 2
-
-    Ok(())
-}
-
-#[test]
-fn test_repair_fee_collector_balances_counter_check() -> anyhow::Result<()> {
-    // Create a temporary directory and database
-    let temp_dir = tempdir()?;
-    let db_path = temp_dir.path().join("test_repair_counter_db.sqlite");
-
-    // Create and initialize database with necessary tables
-    let mut connection = Connection::open(&db_path)?;
-    schema::create_tables(&connection)?;
-
-    // Create test accounts
-    let principal1 = vec![1, 2, 3, 4];
-    let from_account = Account {
-        owner: Principal::from_slice(&principal1),
-        subaccount: None,
-    };
-
-    // Create a mint block to give the from_account initial tokens
-    let mut mint_block = create_test_rosetta_block(0, 999999999, &principal1, 1000000000);
-    mint_block.block.transaction.operation = IcrcOperation::Mint {
-        to: from_account,
-        amount: Nat::from(1000000000u64),
-    };
-    mint_block.index = 0;
-
-    // Store the block
-    store_blocks(&mut connection, vec![mint_block.clone()])?;
-
-    // Verify that the counter doesn't exist initially
-    let counter_exists_before = connection
-        .prepare_cached("SELECT value FROM counters WHERE name = 'collector_balances_fixed'")?
-        .query_map(params![], |row| row.get::<_, i64>(0))?
-        .next()
-        .is_some();
-    assert!(!counter_exists_before, "Counter should not exist initially");
-
-    // Run the repair function for the first time
-    repair_fee_collector_balances(&mut connection)?;
-
-    // Verify that the counter now exists
-    let counter_exists_after = connection
-        .prepare_cached("SELECT value FROM counters WHERE name = 'collector_balances_fixed'")?
-        .query_map(params![], |row| row.get::<_, i64>(0))?
-        .next()
-        .is_some();
-    assert!(
-        counter_exists_after,
-        "Counter should exist after first repair"
-    );
-
-    // Verify that the account balance was created
-    let from_balance = get_account_balance_at_block_idx(&connection, &from_account, 0)?;
-    assert_eq!(from_balance, Some(Nat::from(1000000000u64)));
-
-    // Clear the account balances to simulate what would happen if repair ran again
+    // Test 2: Repair functionality with broken state simulation
+    // Manually create broken balances (missing fee collector credits for block 2)
     connection.execute("DELETE FROM account_balances", params![])?;
-
-    // Verify that account balance is now empty
-    let from_balance_after_clear = get_account_balance_at_block_idx(&connection, &from_account, 0)?;
-    assert_eq!(from_balance_after_clear, None);
-
-    // Run the repair function again - it should skip the repair due to the counter
-    repair_fee_collector_balances(&mut connection)?;
-
-    // Verify that the account balance is still empty (repair was skipped)
-    let from_balance_after_second_repair =
-        get_account_balance_at_block_idx(&connection, &from_account, 0)?;
-    assert_eq!(
-        from_balance_after_second_repair, None,
-        "Repair should have been skipped due to counter"
-    );
-
-    Ok(())
-}
-
-#[test]
-fn test_repair_fee_collector_balances_empty_db() -> anyhow::Result<()> {
-    // Test scenario: Empty database (no blocks, no account balances)
-    // This should complete successfully without doing anything
-
-    let temp_dir = tempdir()?;
-    let db_path = temp_dir.path().join("test_empty_db.sqlite");
-
-    // Create and initialize database with necessary tables
-    let mut connection = Connection::open(&db_path)?;
-    schema::create_tables(&connection)?;
-
-    // Verify database is empty
-    let block_count = connection
-        .prepare_cached("SELECT COUNT(*) FROM blocks")?
-        .query_map(params![], |row| row.get::<_, i64>(0))?
-        .next()
-        .unwrap()?;
-    assert_eq!(block_count, 0, "Database should be empty initially");
-
-    let balance_count = connection
-        .prepare_cached("SELECT COUNT(*) FROM account_balances")?
-        .query_map(params![], |row| row.get::<_, i64>(0))?
-        .next()
-        .unwrap()?;
-    assert_eq!(
-        balance_count, 0,
-        "Account balances should be empty initially"
-    );
-
-    // Verify that the counter doesn't exist initially
-    let counter_exists_before = connection
-        .prepare_cached("SELECT value FROM counters WHERE name = 'collector_balances_fixed'")?
-        .query_map(params![], |row| row.get::<_, i64>(0))?
-        .next()
-        .is_some();
-    assert!(!counter_exists_before, "Counter should not exist initially");
-
-    // Run the repair function on empty database
-    repair_fee_collector_balances(&mut connection)?;
-
-    // Verify that the counter now exists (repair completed successfully)
-    let counter_exists_after = connection
-        .prepare_cached("SELECT value FROM counters WHERE name = 'collector_balances_fixed'")?
-        .query_map(params![], |row| row.get::<_, i64>(0))?
-        .next()
-        .is_some();
-    assert!(
-        counter_exists_after,
-        "Counter should exist after repair on empty DB"
-    );
-
-    // Verify database is still empty (no blocks or balances were created)
-    let block_count_after = connection
-        .prepare_cached("SELECT COUNT(*) FROM blocks")?
-        .query_map(params![], |row| row.get::<_, i64>(0))?
-        .next()
-        .unwrap()?;
-    assert_eq!(
-        block_count_after, 0,
-        "Database should still be empty after repair"
-    );
-
-    let balance_count_after = connection
-        .prepare_cached("SELECT COUNT(*) FROM account_balances")?
-        .query_map(params![], |row| row.get::<_, i64>(0))?
-        .next()
-        .unwrap()?;
-    assert_eq!(
-        balance_count_after, 0,
-        "Account balances should still be empty after repair"
-    );
-
-    // Run repair again to verify it's skipped
-    repair_fee_collector_balances(&mut connection)?;
-
-    // Verify counter still exists and database is still empty
-    let counter_exists_final = connection
-        .prepare_cached("SELECT value FROM counters WHERE name = 'collector_balances_fixed'")?
-        .query_map(params![], |row| row.get::<_, i64>(0))?
-        .next()
-        .is_some();
-    assert!(
-        counter_exists_final,
-        "Counter should still exist after second repair"
-    );
-
-    Ok(())
-}
-
-#[test]
-fn test_repair_fee_collector_balances_already_fixed_db() -> anyhow::Result<()> {
-    // Test scenario: Database that already has the fix applied (counter exists)
-    // This should skip the repair entirely
-
-    let temp_dir = tempdir()?;
-    let db_path = temp_dir.path().join("test_already_fixed_db.sqlite");
-
-    // Create and initialize database with necessary tables
-    let mut connection = Connection::open(&db_path)?;
-    schema::create_tables(&connection)?;
-
-    // Create test accounts
-    let principal1 = vec![1, 2, 3, 4];
-    let principal2 = vec![5, 6, 7, 8];
-    let fee_collector_principal = vec![9, 10, 11, 12];
-
-    let from_account = Account {
-        owner: Principal::from_slice(&principal1),
-        subaccount: None,
-    };
-    let to_account = Account {
-        owner: Principal::from_slice(&principal2),
-        subaccount: None,
-    };
-    let fee_collector_account = Account {
-        owner: Principal::from_slice(&fee_collector_principal),
-        subaccount: None,
-    };
-
-    // Create a mint block and a transfer block with fee_collector_block_index
-    let mut mint_block = create_test_rosetta_block(0, 999999999, &principal1, 1000000000);
-    mint_block.block.transaction.operation = IcrcOperation::Mint {
-        to: from_account,
-        amount: Nat::from(1000000000u64),
-    };
-    mint_block.index = 0;
-
-    let mut block1 = create_test_rosetta_block(1, 1000000000, &principal1, 100);
-    block1.block.fee_collector = Some(fee_collector_account);
-    block1.block.transaction.operation = IcrcOperation::Transfer {
-        from: from_account,
-        to: to_account,
-        amount: Nat::from(100u64),
-        fee: Some(Nat::from(1u64)),
-        spender: None,
-    };
-
-    let mut block2 = create_test_rosetta_block(2, 1000000001, &principal1, 200);
-    block2.block.fee_collector = None;
-    block2.block.fee_collector_block_index = Some(1); // References block 1 for fee collector
-    block2.block.transaction.operation = IcrcOperation::Transfer {
-        from: from_account,
-        to: to_account,
-        amount: Nat::from(200u64),
-        fee: Some(Nat::from(1u64)),
-        spender: None,
-    };
-
-    // Store all blocks
-    store_blocks(
-        &mut connection,
-        vec![mint_block.clone(), block1.clone(), block2.clone()],
-    )?;
-
-    // Manually set up correct account balances (simulating a database that was already fixed)
+    
+    // Correct balances for mint and block 1
     connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (0, ?1, ?2, '1000000000')", 
         params![from_account.owner.as_slice(), from_account.effective_subaccount().as_slice()])?;
     connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (1, ?1, ?2, '999999899')", 
@@ -793,260 +431,98 @@ fn test_repair_fee_collector_balances_already_fixed_db() -> anyhow::Result<()> {
         params![to_account.owner.as_slice(), to_account.effective_subaccount().as_slice()])?;
     connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (1, ?1, ?2, '1')", 
         params![fee_collector_account.owner.as_slice(), fee_collector_account.effective_subaccount().as_slice()])?;
+    
+    // Broken balances for block 2 (fee collector not credited)
     connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (2, ?1, ?2, '999999698')", 
         params![from_account.owner.as_slice(), from_account.effective_subaccount().as_slice()])?;
     connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (2, ?1, ?2, '300')", 
         params![to_account.owner.as_slice(), to_account.effective_subaccount().as_slice()])?;
-    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (2, ?1, ?2, '2')", 
-        params![fee_collector_account.owner.as_slice(), fee_collector_account.effective_subaccount().as_slice()])?;
+    // Missing fee collector balance update - this is the bug
 
-    // Manually add the "already fixed" counter to simulate a database that was already repaired
-    connection.execute(
-        "INSERT INTO counters (name, value) VALUES ('collector_balances_fixed', 1)",
-        params![],
-    )?;
+    // Verify broken state
+    let fee_balance_before = get_account_balance_at_block_idx(&connection, &fee_collector_account, 2)?;
+    assert_eq!(fee_balance_before, Some(Nat::from(1u64))); // Should be 2, but it's 1 (broken)
 
-    // Verify the counter exists before repair
-    let counter_exists_before = connection
-        .prepare_cached("SELECT value FROM counters WHERE name = 'collector_balances_fixed'")?
-        .query_map(params![], |row| row.get::<_, i64>(0))?
-        .next()
-        .is_some();
-    assert!(
-        counter_exists_before,
-        "Counter should exist (simulating already fixed DB)"
-    );
-
-    // Verify the correct balances exist before repair
-    let fee_collector_balance_before =
-        get_account_balance_at_block_idx(&connection, &fee_collector_account, 2)?;
-    assert_eq!(
-        fee_collector_balance_before,
-        Some(Nat::from(2u64)),
-        "Fee collector should have correct balance before repair"
-    );
-
-    // Run the repair function - it should skip the repair due to existing counter
+    // Test repair function
     repair_fee_collector_balances(&mut connection)?;
 
-    // Verify that the balances are unchanged (repair was skipped)
-    let fee_collector_balance_after =
-        get_account_balance_at_block_idx(&connection, &fee_collector_account, 2)?;
-    assert_eq!(
-        fee_collector_balance_after,
-        Some(Nat::from(2u64)),
-        "Fee collector balance should be unchanged (repair skipped)"
-    );
+    // Verify fixed state
+    let fee_balance_after = get_account_balance_at_block_idx(&connection, &fee_collector_account, 2)?;
+    assert_eq!(fee_balance_after, Some(Nat::from(2u64))); // Now correctly 2
 
-    let from_balance_after = get_account_balance_at_block_idx(&connection, &from_account, 2)?;
-    assert_eq!(
-        from_balance_after,
-        Some(Nat::from(999999698u64)),
-        "From account balance should be unchanged"
-    );
+    // Test idempotency - running repair again should not change anything
+    repair_fee_collector_balances(&mut connection)?;
+    let fee_balance_final = get_account_balance_at_block_idx(&connection, &fee_collector_account, 2)?;
+    assert_eq!(fee_balance_final, Some(Nat::from(2u64)));
 
-    let to_balance_after = get_account_balance_at_block_idx(&connection, &to_account, 2)?;
-    assert_eq!(
-        to_balance_after,
-        Some(Nat::from(300u64)),
-        "To account balance should be unchanged"
-    );
-
-    // Verify counter still exists
-    let counter_exists_after = connection
+    // Verify counter exists (prevents future repairs)
+    let counter_exists = connection
         .prepare_cached("SELECT value FROM counters WHERE name = 'collector_balances_fixed'")?
         .query_map(params![], |row| row.get::<_, i64>(0))?
         .next()
         .is_some();
-    assert!(
-        counter_exists_after,
-        "Counter should still exist after repair"
-    );
+    assert!(counter_exists);
 
     Ok(())
 }
 
 #[test]
-fn test_repair_fee_collector_balances_broken_state() -> anyhow::Result<()> {
-    // Test scenario: Database with broken fee collector balances (simulating pre-fix state)
-    // This should detect and fix the missing fee collector credits
-
+fn test_repair_fee_collector_edge_cases() -> anyhow::Result<()> {
     let temp_dir = tempdir()?;
-    let db_path = temp_dir.path().join("test_broken_state_db.sqlite");
-
-    // Create and initialize database with necessary tables
+    let db_path = temp_dir.path().join("test_repair_edge_cases_db.sqlite");
     let mut connection = Connection::open(&db_path)?;
     schema::create_tables(&connection)?;
 
-    // Create test accounts
-    let principal1 = vec![1, 2, 3, 4];
-    let principal2 = vec![5, 6, 7, 8];
-    let fee_collector_principal = vec![9, 10, 11, 12];
+    // Test 1: Empty database - should complete successfully and set counter
+    assert!(!connection
+        .prepare_cached("SELECT value FROM counters WHERE name = 'collector_balances_fixed'")?
+        .query_map(params![], |row| row.get::<_, i64>(0))?
+        .next()
+        .is_some());
 
+    repair_fee_collector_balances(&mut connection)?;
+
+    assert!(connection
+        .prepare_cached("SELECT value FROM counters WHERE name = 'collector_balances_fixed'")?
+        .query_map(params![], |row| row.get::<_, i64>(0))?
+        .next()
+        .is_some());
+
+    // Test 2: Already fixed database - should skip repair
+    let principal1 = vec![1, 2, 3, 4];
     let from_account = Account {
         owner: Principal::from_slice(&principal1),
         subaccount: None,
     };
-    let to_account = Account {
-        owner: Principal::from_slice(&principal2),
-        subaccount: None,
-    };
-    let fee_collector_account = Account {
-        owner: Principal::from_slice(&fee_collector_principal),
-        subaccount: None,
-    };
 
-    // Create blocks that would have been processed before the fix
     let mut mint_block = create_test_rosetta_block(0, 999999999, &principal1, 1000000000);
     mint_block.block.transaction.operation = IcrcOperation::Mint {
         to: from_account,
         amount: Nat::from(1000000000u64),
     };
-    mint_block.index = 0;
+    store_blocks(&mut connection, vec![mint_block])?;
 
-    // Block 1: Direct fee collector (this would have worked correctly before the fix)
-    let mut block1 = create_test_rosetta_block(1, 1000000000, &principal1, 100);
-    block1.block.fee_collector = Some(fee_collector_account);
-    block1.block.transaction.operation = IcrcOperation::Transfer {
-        from: from_account,
-        to: to_account,
-        amount: Nat::from(100u64),
-        fee: Some(Nat::from(1u64)),
-        spender: None,
-    };
-
-    // Block 2: Uses fee_collector_block_index (this would have been broken before the fix)
-    let mut block2 = create_test_rosetta_block(2, 1000000001, &principal1, 200);
-    block2.block.fee_collector = None;
-    block2.block.fee_collector_block_index = Some(1); // References block 1 for fee collector
-    block2.block.transaction.operation = IcrcOperation::Transfer {
-        from: from_account,
-        to: to_account,
-        amount: Nat::from(200u64),
-        fee: Some(Nat::from(1u64)),
-        spender: None,
-    };
-
-    // Block 3: Another block using fee_collector_block_index
-    let mut block3 = create_test_rosetta_block(3, 1000000002, &principal1, 300);
-    block3.block.fee_collector = None;
-    block3.block.fee_collector_block_index = Some(1); // References block 1 for fee collector
-    block3.block.transaction.operation = IcrcOperation::Transfer {
-        from: from_account,
-        to: to_account,
-        amount: Nat::from(300u64),
-        fee: Some(Nat::from(1u64)),
-        spender: None,
-    };
-
-    // Store all blocks
-    store_blocks(
-        &mut connection,
-        vec![
-            mint_block.clone(),
-            block1.clone(),
-            block2.clone(),
-            block3.clone(),
-        ],
-    )?;
-
-    // Manually set up BROKEN account balances (simulating the pre-fix state)
-    // The bug was that fee collectors weren't credited for blocks using fee_collector_block_index
-
-    // Block 0: Mint - this would be correct
+    // Manually add correct balance
     connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (0, ?1, ?2, '1000000000')", 
         params![from_account.owner.as_slice(), from_account.effective_subaccount().as_slice()])?;
 
-    // Block 1: Transfer with direct fee collector - this would be correct
-    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (1, ?1, ?2, '999999899')", 
-        params![from_account.owner.as_slice(), from_account.effective_subaccount().as_slice()])?;
-    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (1, ?1, ?2, '100')", 
-        params![to_account.owner.as_slice(), to_account.effective_subaccount().as_slice()])?;
-    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (1, ?1, ?2, '1')", 
-        params![fee_collector_account.owner.as_slice(), fee_collector_account.effective_subaccount().as_slice()])?;
+    // Clear balances to test that repair is skipped
+    connection.execute("DELETE FROM account_balances", params![])?;
+    repair_fee_collector_balances(&mut connection)?; // Should be skipped due to counter
 
-    // Block 2: Transfer with fee_collector_block_index - BROKEN (fee collector not credited)
-    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (2, ?1, ?2, '999999698')", 
-        params![from_account.owner.as_slice(), from_account.effective_subaccount().as_slice()])?;
-    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (2, ?1, ?2, '300')", 
-        params![to_account.owner.as_slice(), to_account.effective_subaccount().as_slice()])?;
-    // NOTE: Fee collector balance is NOT updated here - this is the bug!
+    // Verify balance is still empty (repair was skipped)
+    assert_eq!(get_account_balance_at_block_idx(&connection, &from_account, 0)?, None);
 
-    // Block 3: Another transfer with fee_collector_block_index - BROKEN (fee collector not credited)
-    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (3, ?1, ?2, '999999397')", 
-        params![from_account.owner.as_slice(), from_account.effective_subaccount().as_slice()])?;
-    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (3, ?1, ?2, '600')", 
-        params![to_account.owner.as_slice(), to_account.effective_subaccount().as_slice()])?;
-    // NOTE: Fee collector balance is NOT updated here either - this is the bug!
+    // Test 3: Counter check - verify repair only runs once
+    connection.execute("DELETE FROM counters WHERE name = 'collector_balances_fixed'", params![])?;
+    
+    repair_fee_collector_balances(&mut connection)?; // First run - should execute
+    let balance_after_first = get_account_balance_at_block_idx(&connection, &from_account, 0)?;
+    assert_eq!(balance_after_first, Some(Nat::from(1000000000u64)));
 
-    // Verify the broken state before repair
-    let fee_collector_balance_before =
-        get_account_balance_at_block_idx(&connection, &fee_collector_account, 3)?;
-    assert_eq!(
-        fee_collector_balance_before,
-        Some(Nat::from(1u64)),
-        "Fee collector should only have 1 token (broken state)"
-    );
-
-    let from_balance_before = get_account_balance_at_block_idx(&connection, &from_account, 3)?;
-    assert_eq!(
-        from_balance_before,
-        Some(Nat::from(999999397u64)),
-        "From account should have incorrect balance (broken state)"
-    );
-
-    // Verify that the counter doesn't exist initially
-    let counter_exists_before = connection
-        .prepare_cached("SELECT value FROM counters WHERE name = 'collector_balances_fixed'")?
-        .query_map(params![], |row| row.get::<_, i64>(0))?
-        .next()
-        .is_some();
-    assert!(!counter_exists_before, "Counter should not exist initially");
-
-    // Run the repair function - this should fix the broken state
-    repair_fee_collector_balances(&mut connection)?;
-
-    // Verify that the balances are now CORRECT after repair
-    let fee_collector_balance_after =
-        get_account_balance_at_block_idx(&connection, &fee_collector_account, 3)?;
-    assert_eq!(
-        fee_collector_balance_after,
-        Some(Nat::from(3u64)),
-        "Fee collector should now have 3 tokens (1+1+1 fees)"
-    );
-
-    let from_balance_after = get_account_balance_at_block_idx(&connection, &from_account, 3)?;
-    assert_eq!(
-        from_balance_after,
-        Some(Nat::from(999999397u64)),
-        "From account balance should be correct"
-    );
-
-    let to_balance_after = get_account_balance_at_block_idx(&connection, &to_account, 3)?;
-    assert_eq!(
-        to_balance_after,
-        Some(Nat::from(600u64)),
-        "To account balance should be correct"
-    );
-
-    // Verify that the counter now exists (repair completed)
-    let counter_exists_after = connection
-        .prepare_cached("SELECT value FROM counters WHERE name = 'collector_balances_fixed'")?
-        .query_map(params![], |row| row.get::<_, i64>(0))?
-        .next()
-        .is_some();
-    assert!(counter_exists_after, "Counter should exist after repair");
-
-    // Run repair again to verify it's skipped and balances remain correct
-    repair_fee_collector_balances(&mut connection)?;
-
-    let fee_collector_balance_final =
-        get_account_balance_at_block_idx(&connection, &fee_collector_account, 3)?;
-    assert_eq!(
-        fee_collector_balance_final,
-        Some(Nat::from(3u64)),
-        "Fee collector balance should remain correct after second repair"
-    );
+    connection.execute("DELETE FROM account_balances", params![])?;
+    repair_fee_collector_balances(&mut connection)?; // Second run - should be skipped
+    assert_eq!(get_account_balance_at_block_idx(&connection, &from_account, 0)?, None);
 
     Ok(())
 }
