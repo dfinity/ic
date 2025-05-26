@@ -1604,7 +1604,6 @@ fn test_raw_gateway() {
         url.set_path("/asset.txt");
         let res = client.get(url).send().unwrap();
         let page = String::from_utf8(res.bytes().unwrap().to_vec()).unwrap();
-        println!("page: {}", page);
         assert!(page.contains(expected));
     }
 }
