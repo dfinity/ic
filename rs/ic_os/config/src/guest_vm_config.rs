@@ -122,7 +122,7 @@ fn make_bootstrap_options(
     guestos_config: GuestOSConfig,
 ) -> Result<BootstrapOptions> {
     let guestos_ipv6_config = match &guestos_config.network_settings.ipv6_config {
-        Ipv6Config::Fixed(ip_config) => ip_config,
+        Ipv6Config::Fixed(ip_config) => ip_config.clone(),
         _ => bail!(
             "Expected GuestOS IPv6 address to be fixed but was {:?}",
             guestos_config.network_settings.ipv6_config
