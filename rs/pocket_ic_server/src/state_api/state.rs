@@ -45,7 +45,6 @@ use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    io::Write,
     path::PathBuf,
     sync::atomic::AtomicU64,
     sync::Arc,
@@ -680,9 +679,6 @@ impl ApiState {
             .map(|d| fqdn!(d))
             .collect();
         spawn(async move {
-            let mut root_key = tempfile::NamedTempFile::new().unwrap();
-            root_key.write_all(&agent.read_root_key()).unwrap();
-
             let router = {
                 let mut args = vec!["".to_string()];
                 for d in &domains {
@@ -694,8 +690,7 @@ impl ApiState {
                     args.push("127.0.0.1".to_string());
                 }
                 args.push("--domain-canister-id-from-query-params".to_string());
-                args.push("--ic-root-key".to_string());
-                args.push(root_key.path().as_os_str().to_str().unwrap().to_string());
+                args.push("--ic-unsafe-root-key-fetch".to_string());
                 let cli = Cli::parse_from(args);
 
                 let http_client_opts: ic_gateway::ic_bn_lib::http::client::Options<
@@ -719,6 +714,7 @@ impl ApiState {
                     Arc::new(route_provider),
                     &ic_gateway::ic_bn_lib::prometheus::Registry::new(),
                 )
+                .await
                 .unwrap();
 
                 let backend_client = Arc::new(ReqwestClient::new(reqwest::Client::new()));
