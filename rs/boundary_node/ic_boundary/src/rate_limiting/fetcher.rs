@@ -50,7 +50,7 @@ impl FetchesConfig for CanisterConfigFetcherQuery {
             .0
             .query(&Principal::from(self.1), "get_config")
             .with_arg(Encode!(&None::<Version>).unwrap())
-            .call_without_verification()
+            .call()
             .await
             .map_err(|e| anyhow!("failed to fetch config from the canister: {e:#}"))?;
 
