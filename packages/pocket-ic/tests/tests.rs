@@ -1141,7 +1141,7 @@ fn test_ecdsa_disabled() {
 
 #[test]
 fn test_vetkd() {
-    use ic_vetkd_utils::{DerivedPublicKey, EncryptedVetKey, TransportSecretKey};
+    use ic_vetkeys::{DerivedPublicKey, EncryptedVetKey, TransportSecretKey};
 
     // We create a PocketIC instance consisting of the II and one application subnet.
     let pic = PocketIcBuilder::new()
@@ -2740,4 +2740,41 @@ fn stack_overflow() {
     assert!(err
         .reject_message
         .contains("Canister trapped: stack overflow"));
+}
+
+fn test_specified_id(pic: &PocketIc) {
+    // We define a "specified" canister ID that exists on the IC mainnet,
+    // but belongs to the canister ranges of no subnet on the PocketIC instance.
+    let specified_id = Principal::from_text("rimrc-piaaa-aaaao-aaljq-cai").unwrap();
+
+    let canister_id = pic
+        .create_canister_with_id(None, None, specified_id)
+        .unwrap();
+    assert_eq!(canister_id, specified_id);
+}
+
+#[test]
+fn test_specified_id_on_fresh_instance() {
+    // create a fresh PocketIC instance
+    let pic = PocketIcBuilder::new().with_application_subnet().build();
+
+    test_specified_id(&pic);
+}
+
+#[test]
+fn test_specified_id_on_resumed_state() {
+    // create an empty PocketIC state to be set up later
+    let state = PocketIcState::new();
+    // create a PocketIC instance used to set up the state
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_state(state)
+        .build();
+    // serialize the state
+    let state = pic.drop_and_take_state().unwrap();
+
+    // create a PocketIC instance resuming from the existing state
+    let pic = PocketIcBuilder::new().with_state(state).build();
+
+    test_specified_id(&pic);
 }

@@ -1,19 +1,22 @@
+use crate::guest_vm_config::{generate_guest_vm_config, GenerateGuestVmConfigArgs};
 use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
 use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::deployment_json::get_deployment_settings;
+use config::generate_testnet_config::{
+    generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
+};
+use config::guestos_config::generate_guestos_config;
 use config::serialize_and_write_config;
 use config::update_config::{update_guestos_config, update_hostos_config};
+use config_types::*;
 use macaddr::MacAddr6;
 use network::resolve_mgmt_mac;
 use regex::Regex;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
-use config::generate_testnet_config::{
-    generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
-};
-use config_types::*;
+mod guest_vm_config;
 
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
@@ -42,8 +45,6 @@ pub enum Commands {
         hostos_config_json_path: PathBuf,
         #[arg(long, default_value = config::DEFAULT_HOSTOS_GUESTOS_CONFIG_OBJECT_PATH, value_name = "config-guestos.json")]
         guestos_config_json_path: PathBuf,
-        #[arg(long, value_name = "ipv6_address")]
-        guestos_ipv6_address: String,
     },
     /// Creates a GuestOSConfig object directly from GenerateTestnetConfigClapArgs. Only used for testing purposes.
     GenerateTestnetConfig(GenerateTestnetConfigClapArgs),
@@ -59,6 +60,9 @@ pub enum Commands {
         #[arg(long, default_value = config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
         hostos_config_json_path: PathBuf,
     },
+    /// Generates the GuestOS VM configuration by assembling the bootstrap config media image
+    /// and creating the libvirt XML configuration file.
+    GenerateGuestVmConfig(GenerateGuestVmConfigArgs),
 }
 
 #[derive(Parser)]
@@ -213,7 +217,11 @@ pub fn main() -> Result<()> {
                 node_reward_type,
                 mgmt_mac,
                 deployment_environment: deployment_json_settings.deployment.name.parse()?,
-                logging: Logging::default(),
+                logging: Logging {
+                    elasticsearch_hosts: Some(deployment_json_settings.logging.hosts)
+                        .filter(|v| !v.is_empty()),
+                    elasticsearch_tags: deployment_json_settings.logging.tags,
+                },
                 use_nns_public_key: Path::new("/data/nns_public_key.pem").exists(),
                 nns_urls: deployment_json_settings.nns.url.clone(),
                 use_node_operator_private_key: Path::new("/config/node_operator_private_key.pem")
@@ -288,38 +296,12 @@ pub fn main() -> Result<()> {
         Some(Commands::GenerateGuestosConfig {
             hostos_config_json_path,
             guestos_config_json_path,
-            guestos_ipv6_address,
         }) => {
             let hostos_config_json_path = Path::new(&hostos_config_json_path);
-
             let hostos_config: HostOSConfig =
                 serde_json::from_reader(File::open(hostos_config_json_path)?)?;
 
-            // TODO: We won't have to modify networking between the hostos and
-            // guestos config after completing the networking revamp (NODE-1327)
-            let mut guestos_network_settings = hostos_config.network_settings;
-            // Update the GuestOS networking if `guestos_ipv6_address` is provided
-            match &guestos_network_settings.ipv6_config {
-                Ipv6Config::Deterministic(deterministic_ipv6_config) => {
-                    guestos_network_settings.ipv6_config = Ipv6Config::Fixed(FixedIpv6Config {
-                        address: guestos_ipv6_address,
-                        gateway: deterministic_ipv6_config.gateway,
-                    });
-                }
-                _ => {
-                    anyhow::bail!(
-                        "HostOSConfig Ipv6Config should always be of type Deterministic. Cannot reassign GuestOS networking."
-                    );
-                }
-            }
-
-            let guestos_config = GuestOSConfig {
-                config_version: hostos_config.config_version,
-                network_settings: guestos_network_settings,
-                icos_settings: hostos_config.icos_settings,
-                guestos_settings: hostos_config.guestos_settings,
-            };
-
+            let guestos_config = generate_guestos_config(&hostos_config)?;
             let guestos_config_json_path = Path::new(&guestos_config_json_path);
             serialize_and_write_config(guestos_config_json_path, &guestos_config)?;
 
@@ -385,5 +367,6 @@ pub fn main() -> Result<()> {
             println!("No command provided. Use --help for usage information.");
             Ok(())
         }
+        Some(Commands::GenerateGuestVmConfig(args)) => generate_guest_vm_config(args),
     }
 }

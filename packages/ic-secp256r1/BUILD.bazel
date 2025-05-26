@@ -1,0 +1,58 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:hmac",
+    "@crate_index//:lazy_static",
+    "@crate_index//:num-bigint",
+    "@crate_index//:p256",
+    "@crate_index//:pem",
+    "@crate_index//:rand",
+    "@crate_index//:rand_chacha",
+    "@crate_index//:sha2",
+    "@crate_index//:simple_asn1",
+    "@crate_index//:zeroize",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/sha2",
+    "//rs/crypto/test_utils/reproducible_rng",
+    "@crate_index//:hex",
+    "@crate_index//:hex-literal",
+    "@crate_index//:wycheproof",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "ic-secp256r1",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_secp256r1",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "test",
+    aliases = ALIASES,
+    crate = ":ic-secp256r1",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "integration",
+    srcs = glob(["tests/**/*.rs"]),
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":ic-secp256r1"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)

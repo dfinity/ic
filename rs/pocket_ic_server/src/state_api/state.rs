@@ -4,6 +4,7 @@
 /// interface guarantees consistency and determinism.
 use crate::pocket_ic::{
     AdvanceTimeAndTick, ApiResponse, EffectivePrincipal, PocketIc, ProcessCanisterHttpInternal,
+    SetCertifiedTime,
 };
 use crate::state_api::canister_id::{self, DomainResolver, ResolvesDomain};
 use crate::{InstanceId, OpId, Operation};
@@ -26,10 +27,12 @@ use http::{
     },
     HeaderName, Method, StatusCode,
 };
-use ic_bn_lib::http::body::buffer_body;
-use ic_bn_lib::http::headers::{X_IC_CANISTER_ID, X_REQUESTED_WITH, X_REQUEST_ID};
-use ic_bn_lib::http::proxy::proxy;
-use ic_bn_lib::http::{Client, Error as IcBnError};
+use ic_gateway::ic_bn_lib::http::{
+    body::buffer_body,
+    headers::{X_IC_CANISTER_ID, X_REQUESTED_WITH, X_REQUEST_ID},
+    proxy::proxy,
+    Client, Error as IcBnError,
+};
 use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
 use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, NodeId, PrincipalId, SubnetId};
 use itertools::Itertools;
@@ -1016,43 +1019,60 @@ impl ApiState {
         if instance.progress_thread.is_none() {
             let (tx, mut rx) = mpsc::channel::<()>(1);
             let handle = spawn(async move {
-                debug!("Starting auto progress for instance {}.", instance_id);
                 let mut now = SystemTime::now();
-                loop {
-                    let old = std::mem::replace(&mut now, SystemTime::now());
-                    let op = AdvanceTimeAndTick(now.duration_since(old).unwrap_or_default());
-                    if Self::execute_operation(
-                        instances_clone.clone(),
-                        graph.clone(),
-                        instance_id,
-                        op,
-                        &mut rx,
-                    )
-                    .await
-                    .is_none()
-                    {
-                        break;
+                let time = ic_types::Time::from_nanos_since_unix_epoch(
+                    now.duration_since(SystemTime::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_nanos() as u64,
+                );
+                let op = SetCertifiedTime { time };
+                if Self::execute_operation(
+                    instances_clone.clone(),
+                    graph.clone(),
+                    instance_id,
+                    op,
+                    &mut rx,
+                )
+                .await
+                .is_some()
+                {
+                    debug!("Starting auto progress for instance {}.", instance_id);
+                    loop {
+                        let old = std::mem::replace(&mut now, SystemTime::now());
+                        let op = AdvanceTimeAndTick(now.duration_since(old).unwrap_or_default());
+                        if Self::execute_operation(
+                            instances_clone.clone(),
+                            graph.clone(),
+                            instance_id,
+                            op,
+                            &mut rx,
+                        )
+                        .await
+                        .is_none()
+                        {
+                            break;
+                        }
+                        let op = ProcessCanisterHttpInternal;
+                        if Self::execute_operation(
+                            instances_clone.clone(),
+                            graph.clone(),
+                            instance_id,
+                            op,
+                            &mut rx,
+                        )
+                        .await
+                        .is_none()
+                        {
+                            break;
+                        }
+                        let sleep_duration = std::cmp::max(artificial_delay, MIN_OPERATION_DELAY);
+                        sleep(sleep_duration).await;
+                        if received_stop_signal(&mut rx) {
+                            break;
+                        }
                     }
-                    let op = ProcessCanisterHttpInternal;
-                    if Self::execute_operation(
-                        instances_clone.clone(),
-                        graph.clone(),
-                        instance_id,
-                        op,
-                        &mut rx,
-                    )
-                    .await
-                    .is_none()
-                    {
-                        break;
-                    }
-                    let sleep_duration = std::cmp::max(artificial_delay, MIN_OPERATION_DELAY);
-                    sleep(sleep_duration).await;
-                    if received_stop_signal(&mut rx) {
-                        break;
-                    }
+                    debug!("Stopping auto progress for instance {}.", instance_id);
                 }
-                debug!("Stopping auto progress for instance {}.", instance_id);
             });
             instance.progress_thread = Some(ProgressThread { handle, sender: tx });
             Ok(())

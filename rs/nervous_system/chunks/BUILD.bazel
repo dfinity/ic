@@ -1,12 +1,16 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
-package(default_visibility = ["//rs/nervous_system:default_visibility"])
+package(default_visibility = [
+    "//rs/nervous_system:default_visibility",
+    "//rs/replay:__pkg__",
+])
 
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/sha2",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:lazy_static",
+    "@crate_index//:prost",
 ]
 
 DEV_DEPENDENCIES = [

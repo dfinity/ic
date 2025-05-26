@@ -1,6 +1,7 @@
 use crate::stable_memory::{RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue};
 use crate::CanisterRegistryClient;
 use async_trait::async_trait;
+use ic_cdk::println;
 use ic_interfaces_registry::{
     empty_zero_registry_record, RegistryClientResult, RegistryClientVersionedResult,
     RegistryTransportRecord, ZERO_REGISTRY_VERSION,
@@ -40,10 +41,14 @@ impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
     fn add_deltas(&self, deltas: Vec<RegistryDelta>) -> Result<(), String> {
         for delta in deltas {
             let string_key = std::str::from_utf8(&delta.key[..]).map_err(|e| format!("{e:?}"))?;
+            let mut highest_version_inserted = self.get_latest_version();
 
             S::with_registry_map_mut(|local_registry| {
                 for v in delta.values {
                     let registry_version = RegistryVersion::from(v.version);
+                    highest_version_inserted =
+                        std::cmp::max(highest_version_inserted, registry_version);
+
                     let key =
                         StorableRegistryKey::new(string_key.to_string(), registry_version.get());
                     let value = StorableRegistryValue(if v.deletion_marker {
@@ -55,6 +60,11 @@ impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
                     local_registry.insert(key, value);
                 }
             });
+            // Update the latest version if the inserted version is higher than the current one.
+            if highest_version_inserted > self.get_latest_version() {
+                self.latest_version
+                    .store(highest_version_inserted.get(), AtomicOrdering::SeqCst);
+            }
         }
         Ok(())
     }
@@ -163,14 +173,13 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
 
             match current_local_version.cmp(&remote_latest_version) {
                 Ordering::Less => {
-                    ic_cdk::println!(
+                    println!(
                         "Registry version local {} < remote {}",
-                        current_local_version,
-                        remote_latest_version
+                        current_local_version, remote_latest_version
                     );
                 }
                 Ordering::Equal => {
-                    ic_cdk::println!(
+                    println!(
                         "Local Registry version {} is up to date",
                         current_local_version
                     );
@@ -190,18 +199,9 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
                 .await
                 .map_err(|e| format!("{:?}", e))?;
 
-            // Update the local version to the latest remote version for this iteration.
-            current_local_version = RegistryVersion::new(
-                remote_deltas
-                    .iter()
-                    .flat_map(|delta| delta.values.iter().map(|v| v.version))
-                    .max()
-                    .unwrap_or(current_local_version.get()),
-            );
-
-            self.latest_version
-                .store(current_local_version.get(), AtomicOrdering::SeqCst);
             self.add_deltas(remote_deltas)?;
+            // add_deltas updates latest version based on what was inserted.
+            current_local_version = self.get_latest_version();
         }
         Ok(current_local_version)
     }

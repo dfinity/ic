@@ -2258,7 +2258,7 @@ impl ExecutionEnvironment {
             .upload_chunk(
                 sender,
                 canister,
-                &args.chunk,
+                args.chunk,
                 round_limits,
                 subnet_size,
                 resource_saturation,
@@ -2328,7 +2328,7 @@ impl ExecutionEnvironment {
         let resource_saturation =
             self.subnet_memory_saturation(&round_limits.subnet_available_memory);
         let replace_snapshot = args.replace_snapshot();
-        let (result, instructions_used) = self.canister_manager.take_canister_snapshot(
+        let result = self.canister_manager.take_canister_snapshot(
             subnet_size,
             sender,
             &mut canister,
@@ -2341,8 +2341,8 @@ impl ExecutionEnvironment {
         state.put_canister_state(canister);
 
         match result {
-            Ok(response) => (Ok(response.encode()), instructions_used),
-            Err(err) => (Err(err.into()), instructions_used),
+            Ok((response, instructions_used)) => (Ok(response.encode()), instructions_used),
+            Err(err) => (Err(err.into()), NumInstructions::new(0)),
         }
     }
 
@@ -2953,16 +2953,17 @@ impl ExecutionEnvironment {
             ));
         }
 
-        let dpk = ic_vetkd_utils::DerivedPublicKey::deserialize(&subnet_public_key.public_key)
-            .map_err(|err| {
+        let dpk = ic_vetkeys::MasterPublicKey::deserialize(&subnet_public_key.public_key).map_err(
+            |err| {
                 UserError::new(
                     ErrorCode::CanisterRejectedMessage,
                     format!("Invalid VetKD subnet key: {:?}", err),
                 )
-            })?;
+            },
+        )?;
 
         Ok(dpk
-            .derive_sub_key(caller.as_slice())
+            .derive_canister_key(caller.as_slice())
             .derive_sub_key(&context)
             .serialize())
     }
@@ -2997,7 +2998,7 @@ impl ExecutionEnvironment {
                 ),
             ));
         };
-        if !ic_vetkd_utils::is_valid_transport_public_key_encoding(&args.transport_public_key) {
+        if !ic_vetkeys::is_valid_transport_public_key_encoding(&args.transport_public_key) {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 "The provided transport public key is invalid.",
@@ -3048,7 +3049,7 @@ impl ExecutionEnvironment {
             let alg = schnorr.key_id.algorithm;
             match (alg, &schnorr.taproot_tree_root) {
                 (SchnorrAlgorithm::Bip340Secp256k1, Some(aux)) => {
-                    if aux.len() != 0 && aux.len() != 32 {
+                    if !aux.is_empty() && aux.len() != 32 {
                         return Err(UserError::new(
                             ErrorCode::CanisterRejectedMessage,
                             format!("Invalid aux field for {}", alg),
@@ -3280,10 +3281,10 @@ impl ExecutionEnvironment {
     /// - The given message is an `install_code` message.
     /// - The canister does not have any paused execution in its task queue.
     /// - A call id will be present for an install code message to ensure that
-    ///     potentially long-running messages are exposed to the subnet.
-    ///     During a subnet split, the original subnet knows which
-    ///     aborted install code message must be rejected if the targeted
-    ///     canister has been moved to another subnet.
+    ///   potentially long-running messages are exposed to the subnet.
+    ///   During a subnet split, the original subnet knows which
+    ///   aborted install code message must be rejected if the targeted
+    ///   canister has been moved to another subnet.
     ///
     /// Postcondition:
     /// - If the execution is finished, then it outputs the subnet response.
@@ -3320,14 +3321,6 @@ impl ExecutionEnvironment {
                     return (state, Some(NumInstructions::from(0)));
                 }
             };
-
-        // Track whether the deprecated fields in install_code were used.
-        if install_context.compute_allocation.is_some() {
-            self.metrics.compute_allocation_in_install_code_total.inc();
-        }
-        if install_context.memory_allocation.is_some() {
-            self.metrics.memory_allocation_in_install_code_total.inc();
-        }
 
         let call_id = match call_id {
             None => {

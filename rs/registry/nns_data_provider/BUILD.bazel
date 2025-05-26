@@ -6,7 +6,6 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/canister_client",
     "//rs/certification",
-    "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",
     "//rs/interfaces/registry",
     "//rs/nns/constants",
@@ -25,10 +24,17 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/pocket-ic",
     "//rs/certification/test-utils",
+    "//rs/crypto/sha2",
+    "//rs/nervous_system/agent",
+    "//rs/nervous_system/chunks",
+    "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
+    "//rs/nns/test_utils",
     "@crate_index//:futures-util",
     "@crate_index//:leb128",
     "@crate_index//:pretty_assertions",
+    "@crate_index//:tokio",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -39,6 +45,18 @@ MACRO_DEPENDENCIES = [
 MACRO_DEV_DEPENDENCIES = [
     # Keep sorted.
 ]
+
+DEV_DATA = [
+    # Keep sorted.
+    "//rs/pocket_ic_server:pocket-ic-server",
+    "//rs/registry/canister:registry-canister-test",
+]
+
+DEV_ENV = {
+    # Keep sorted.
+    "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister-test)",
+    "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+}
 
 rust_library(
     name = "nns_data_provider",
@@ -53,5 +71,14 @@ rust_test(
     name = "nns_data_provider_test",
     crate = ":nns_data_provider",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "registry_canister_integration_tests",
+    srcs = ["tests/registry_canister.rs"],
+    data = DEV_DATA,
+    env = DEV_ENV,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":nns_data_provider"],
 )

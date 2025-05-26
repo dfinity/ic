@@ -1,6 +1,8 @@
 pub mod config_ini;
 pub mod deployment_json;
 pub mod generate_testnet_config;
+pub mod guestos_bootstrap_image;
+pub mod guestos_config;
 pub mod update_config;
 
 use anyhow::{Context, Result};
@@ -154,7 +156,7 @@ mod tests {
             "mgmt_mac": "EC:2A:72:31:A2:0C",
             "deployment_environment": "Mainnet",
             "logging": {
-                "elasticsearch_hosts": "elasticsearch.ch1-obsdev1.dfinity.network:443",
+                "elasticsearch_hosts": "elasticsearch.testnet.dfinity.network:443",
                 "elasticsearch_tags": "tag1 tag2"
             },
             "use_nns_public_key": true,

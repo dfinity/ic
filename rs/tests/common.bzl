@@ -7,10 +7,7 @@ load(":qualifying_nns_canisters.bzl", "QUALIFYING_NNS_CANISTERS", "QUALIFYING_SN
 
 GUESTOS_DEV_VERSION = "//ic-os/guestos/envs/dev:version.txt"
 
-GUESTOS_RUNTIME_DEPS = [
-    GUESTOS_DEV_VERSION,
-    "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
-]
+GUESTOS_RUNTIME_DEPS = [GUESTOS_DEV_VERSION]
 
 MAINNET_NNS_SUBNET_REVISION = mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]
 MAINNET_APPLICATION_SUBNET_REVISION = mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]

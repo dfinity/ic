@@ -20,7 +20,7 @@ dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types/" }
 ic-certified-map = "0.3.1"
-ic-cdk = "0.17.1"
+ic-cdk = { workspace = true }
 ic-crypto-node-key-validation = { path = "../../crypto/node_key_validation" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-crypto-utils-basic-sig = { path = "../../crypto/utils/basic_sig" }
@@ -48,6 +48,7 @@ ic-registry-node-provider-rewards = { path = "../node_provider_rewards" }
 ic-stable-structures = { workspace = true }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
+ic-nervous-system-time-helpers = { path = "../../nervous_system/time_helpers" }
 idna = { workspace = true }
 lazy_static = { workspace = true }
 leb128 = "0.2.4"

@@ -451,7 +451,11 @@ fn add_subnet_local_registry_records(
                 .iter()
                 .map(|(key_id, _)| KeyConfig {
                     key_id: key_id.clone(),
-                    pre_signatures_to_create_in_advance: 1,
+                    pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
+                        1
+                    } else {
+                        0
+                    },
                     max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
                 })
                 .collect(),
@@ -3066,7 +3070,7 @@ impl StateMachine {
             sender,
             ic00::IC_00,
             Method::InstallCode,
-            InstallCodeArgs::new(mode, canister_id, wasm, payload, None, None).encode(),
+            InstallCodeArgs::new(mode, canister_id, wasm, payload).encode(),
         )
         .map(|_| ())
     }
@@ -3399,6 +3403,17 @@ impl StateMachine {
             .take()
             .canister_states
             .contains_key(&canister)
+    }
+
+    /// Returns all the canister ids.
+    pub fn get_canister_ids(&self) -> Vec<CanisterId> {
+        self.state_manager
+            .get_latest_state()
+            .take()
+            .canister_states
+            .keys()
+            .cloned()
+            .collect()
     }
 
     /// Returns true if the canister with the specified id exists and is not empty.

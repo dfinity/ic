@@ -34,7 +34,7 @@ use ic_system_test_driver::{
 };
 use ic_types::{Height, PrincipalId, ReplicaVersion};
 use ic_types_test_utils::ids::subnet_test_id;
-use ic_vetkd_utils::{DerivedPublicKey, EncryptedVetKey, TransportSecretKey};
+use ic_vetkeys::{DerivedPublicKey, EncryptedVetKey, TransportSecretKey};
 use k256::ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey};
 use registry_canister::mutations::{
     do_create_subnet::{
@@ -249,7 +249,13 @@ pub fn run_chain_key_signature_test(
         let public_key = get_public_key_with_retries(key_id, canister, logger, 100)
             .await
             .unwrap();
-        assert_eq!(existing_key, public_key);
+        // TODO(CRP-2798): Re-enable vetKD public key equality check as soon as
+        // https://github.com/dfinity/ic/pull/5088 is deployed on the NNS subnet.
+        if let MasterPublicKeyId::VetKd(_vetkd_key_id) = key_id {
+            // skip canister public key equality check because of https://github.com/dfinity/ic/pull/5088
+        } else {
+            assert_eq!(existing_key, public_key);
+        }
         let signature = get_signature_with_logger(
             message_hash.clone(),
             ECDSA_SIGNATURE_FEE,
@@ -795,7 +801,13 @@ pub async fn add_chain_keys_with_timeout_and_rotation_period(
                 .into_iter()
                 .map(|key_id| KeyConfigUpdate {
                     key_id: Some(key_id.clone()),
-                    pre_signatures_to_create_in_advance: Some(5),
+                    pre_signatures_to_create_in_advance: Some(
+                        if key_id.requires_pre_signatures() {
+                            5
+                        } else {
+                            0
+                        },
+                    ),
                     max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                 })
                 .collect(),
@@ -854,9 +866,15 @@ pub async fn create_new_subnet_with_keys(
             .into_iter()
             .map(|(key_id, subnet_id)| KeyConfigRequest {
                 key_config: Some(KeyConfigCreate {
-                    key_id: Some(key_id),
-                    pre_signatures_to_create_in_advance: Some(4),
+                    pre_signatures_to_create_in_advance: Some(
+                        if key_id.requires_pre_signatures() {
+                            4
+                        } else {
+                            0
+                        },
+                    ),
                     max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                    key_id: Some(key_id),
                 }),
                 subnet_id: Some(subnet_id),
             })
