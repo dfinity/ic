@@ -2,6 +2,9 @@ use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 
+// TODO: Remove this workaround when the issue is fixed in askama.
+// https://github.com/askama-rs/askama/issues/461
+//
 // Build reproducibility. askama adds a include_bytes! call when it's generating
 // a template impl so that rustc will recompile the module when the file changes
 // on disk. See https://github.com/djc/askama/blob/180696053833147a61b3348646a953e7d92ae582/askama_shared/src/generator.rs#L141
@@ -25,7 +28,7 @@ pub struct GuestOSTemplateProps<'a> {{
     pub cpu_domain: &'a str,
     pub vm_memory: u32,
     pub nr_of_vcpus: u32,
-    pub mac_address: MacAddr6,
+    pub mac_address: macaddr::MacAddr6,
     pub config_media: &'a str,
 }}
     "#,

@@ -8,7 +8,6 @@ use config_types::{GuestOSConfig, HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant};
 use ic_metrics_tool::{Metric, MetricsWriter};
-use macaddr::MacAddr6;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -199,18 +198,6 @@ fn make_bootstrap_options(
 
 /// Generate the GuestOS VM libvirt XML configuration and return it as String.
 fn generate_vm_config(config: &HostOSConfig, media_path: &Path) -> Result<String> {
-    // If you get a compile error pointing at #[derive(Template)], there is likely a syntax error in
-    // the template.
-    #[derive(Template)]
-    #[template(path = "guestos_vm_template.xml")]
-    struct GuestOSTemplateProps<'a> {
-        pub cpu_domain: &'a str,
-        pub vm_memory: u32,
-        pub nr_of_vcpus: u32,
-        pub mac_address: MacAddr6,
-        pub config_media: &'a str,
-    }
-
     let mac_address = calculate_deterministic_mac(
         &config.icos_settings.mgmt_mac,
         config.icos_settings.deployment_environment,

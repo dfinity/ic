@@ -89,10 +89,6 @@ rust_binary(
     aliases = ALIASES,
     crate_name = "config",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    # When askama expands the template, it includes the full path of the source template.
-    # In order to keep the build deterministic, we build without a sandbox so that the path
-    # is always the same.
-    tags = ["local"],
     deps = [
         ":config_lib",
     ] + DEPENDENCIES,
@@ -104,7 +100,6 @@ rust_binary(
     aliases = ALIASES,
     crate_name = "config",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = ["local"],  # See the comment in :config
     deps = [
         ":config_lib_dev",
     ] + DEPENDENCIES,
