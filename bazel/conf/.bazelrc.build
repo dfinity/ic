@@ -81,6 +81,15 @@ test:testnet --test_output=streamed --test_tag_filters=
 #   https://bazel.build/reference/command-line-reference#flag--flaky_test_attempts
 test --flaky_test_attempts=1
 
+# on CI default all tests to fail ...
+#   ... after three attempts for tests marked as flaky
+#   ... after three attempts for all tests in //rs/tests
+#   ... after the first attempt for other tests
+#   see also:
+#     https://bazel.build/reference/command-line-reference#build-flag--flaky_test_attempts
+test:ci --flaky_test_attempts=default
+test:ci --flaky_test_attempts=//rs/tests/.*@3
+
 # So that developers can build in debug mode.
 build:dev --compilation_mode=fastbuild
 build:macos_ci --build_tag_filters="-system_test,-fuzz_test"
