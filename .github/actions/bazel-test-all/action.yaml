@@ -132,7 +132,7 @@ runs:
           run: |
             release_build='${{ inputs.release-build }}'
 
-            if [[ $release_build == "true" ]]; then
+            if [[ $release_build != "true" ]]; then
               echo "refusing to upload non-release artifacts"
               exit 1
             fi
