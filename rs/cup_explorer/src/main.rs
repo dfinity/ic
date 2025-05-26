@@ -22,7 +22,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::{fs, task};
 
-/// Subcommands for recovery procedures (application subnets, NNS with failover nodes, etc...)
+/// Subcommands for handling CUPs
 #[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
 pub enum SubCommand {
     /// Explore and optionally download the latest CUP of a subnet
@@ -79,6 +79,7 @@ pub struct CupExplorerArgs {
 }
 
 /// Returns the list of nodes assigned to the specified subnet_id.
+/// TODO: Ideally, we should use the local store instead, since these responses aren't certified
 async fn get_nodes(
     registry_canister: &Arc<RegistryCanister>,
     subnet_id: SubnetId,
@@ -205,7 +206,10 @@ async fn explore(registry_url: Url, subnet_id: SubnetId, path: Option<PathBuf>) 
 }
 
 async fn verify(nns_url: Url, cup_path: &Path, local_store_path: &Path, logger: Logger) {
+    // Create a registry local store
     let (_replicator, client) = create_registry(nns_url, local_store_path, logger.clone()).await;
+
+    // Create a crypto component
     let (crypto_config, _tmp) = CryptoConfig::new_in_temp_dir();
     ic_crypto_node_key_generation::generate_node_keys_once(
         &crypto_config,
@@ -226,10 +230,12 @@ async fn verify(nns_url: Url, cup_path: &Path, local_store_path: &Path, logger: 
     .await
     .unwrap();
 
+    // Read and parse the CUP
     let bytes = fs::read(cup_path).await.expect("Failed to read file");
     let proto_cup = pb::CatchUpPackage::decode(bytes.as_slice()).expect("Failed to decode bytes");
     let cup = CatchUpPackage::try_from(&proto_cup).expect("Failed to deserialize CUP content");
 
+    // Verify the CUP
     if !cup.content.check_integrity() {
         panic!(
             "Integrity check of file {cup_path:?} failed. Payload: {:?}",
@@ -237,7 +243,7 @@ async fn verify(nns_url: Url, cup_path: &Path, local_store_path: &Path, logger: 
         );
     }
 
-    let subnet_id = get_subnet_id(client.as_ref(), &cup).unwrap();
+    let subnet_id = get_subnet_id(&cup).unwrap();
 
     crypto
         .verify_combined_threshold_sig_by_public_key(
@@ -277,6 +283,10 @@ async fn verify(nns_url: Url, cup_path: &Path, local_store_path: &Path, logger: 
     );
     println!("DKG registry version: {}", dkg_version);
     println!("Subnet halted on this cup: {}", halted);
+    assert!(
+        halted,
+        "Verification failed: Subnet wasn't instructed to halt on this CUP"
+    );
 }
 
 #[tokio::main]
