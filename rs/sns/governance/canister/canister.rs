@@ -26,18 +26,19 @@ use ic_sns_governance::{
         log_prefix, Governance, TimeWarp, ValidGovernanceProto, MATURITY_DISBURSEMENT_DELAY_SECONDS,
     },
     logs::{ERROR, INFO},
-    pb::v1 as sns_gov_pb,
+    pb::v1::{self as sns_gov_pb},
     types::{Environment, HeapGrowthPotential},
     upgrade_journal::serve_journal,
 };
 use ic_sns_governance_api::pb::v1::{
     get_running_sns_version_response::UpgradeInProgress,
+    get_sns_status_response,
     governance::Version,
     topics::{ListTopicsRequest, ListTopicsResponse},
     ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
     FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
-    GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
-    GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
+    GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMetricsRequest,
+    GetMode, GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
     GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
     GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
     GetUpgradeJournalRequest, GetUpgradeJournalResponse, Governance as GovernanceApi,
@@ -349,6 +350,12 @@ fn get_metadata(request: GetMetadataRequest) -> GetMetadataResponse {
     GetMetadataResponse::from(
         governance().get_metadata(&sns_gov_pb::GetMetadataRequest::from(request)),
     )
+}
+
+/// Returns aggregate SNS metrics.
+#[query(composite = true)]
+async fn get_metrics(_request: GetMetricsRequest) -> get_sns_status_response::GetMetricsResponse {
+    unimplemented!()
 }
 
 /// Returns the initialization parameters used to spawn an SNS

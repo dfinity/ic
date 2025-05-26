@@ -1206,12 +1206,6 @@ pub mod manage_neuron_response {
             }
         }
 
-        pub fn merge_maturity_response(response: MergeMaturityResponse) -> Self {
-            ManageNeuronResponse {
-                command: Some(manage_neuron_response::Command::MergeMaturity(response)),
-            }
-        }
-
         pub fn stake_maturity_response(response: StakeMaturityResponse) -> Self {
             ManageNeuronResponse {
                 command: Some(manage_neuron_response::Command::StakeMaturity(response)),
