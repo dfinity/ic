@@ -23,7 +23,6 @@ def _upload_artifact_impl(ctx):
         VERSION_FILE={version_file}
         export RCLONE={rclone}
         export VERSION=$(cat $VERSION_FILE)
-        echo "$VERSION"
         {cmds}
 
         """.format(cmds = "\n".join(cmds), version_file = version_file.short_path, rclone = rclone.short_path),

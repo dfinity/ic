@@ -6,8 +6,7 @@ BUNDLE="${1:?No bundle to upload}"
 DRY_RUN="${DRY_RUN:-}"
 
 echo "VERSION: $VERSION"
-
-echo "rclone version"
+echo "rclone version:"
 "$RCLONE" --version
 
 # Multipart upload does not work trough Cloudflare for some reason.
