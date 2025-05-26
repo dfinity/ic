@@ -1,10 +1,8 @@
 use anyhow::Result;
 use macaddr::MacAddr6;
 use std::net::{Ipv4Addr, Ipv6Addr};
-use std::path::PathBuf;
 use url::Url;
 
-use crate::serialize_and_write_config;
 use config_types::*;
 
 #[derive(Default)]
@@ -249,22 +247,10 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
 
 /// Generates and writes a serialized GuestOSConfig to guestos_config_json_path.
 /// Any required config fields that aren't specified will receive dummy values.
-pub fn generate_testnet_config(
-    config: GenerateTestnetConfigArgs,
-    guestos_config_json_path: PathBuf,
-) -> Result<()> {
+pub fn generate_testnet_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSConfig> {
     let guestos_config = create_guestos_config(config)?;
-
     println!("GuestOSConfig: {:?}", guestos_config);
-
-    serialize_and_write_config(&guestos_config_json_path, &guestos_config)?;
-
-    println!(
-        "GuestOSConfig has been written to {}",
-        guestos_config_json_path.display()
-    );
-
-    Ok(())
+    Ok(guestos_config)
 }
 
 #[cfg(test)]
