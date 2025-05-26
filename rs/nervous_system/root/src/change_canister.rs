@@ -321,8 +321,6 @@ async fn install_code(request: ChangeCanisterRequest) -> ic_cdk::api::call::Call
             canister_id,
             wasm_module,
             arg,
-            compute_allocation: None,
-            memory_allocation: None,
             sender_canister_version,
         };
         ic_cdk::api::call::call(

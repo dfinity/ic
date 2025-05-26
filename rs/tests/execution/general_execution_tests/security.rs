@@ -51,7 +51,7 @@ pub fn stack_overflow(env: TestEnv) {
                 .await
                 .expect_err("should fail");
             match err {
-                AgentError::CertifiedReject(reject) => {
+                AgentError::CertifiedReject { reject, .. } => {
                     assert!(reject
                         .reject_message
                         .contains("Canister trapped: stack overflow"));

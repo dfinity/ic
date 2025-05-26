@@ -22,7 +22,7 @@ HostOS creates a bootstrap config image containing a tar file with the GuestOS c
 
 Refer to link:../components/hostos-scripts/generate-guestos-config.sh[generate-guestos-config.sh] and link:../components/hostos-scripts/build-bootstrap-config-image.sh[build-bootstrap-config-image.sh] for more details.
 
-When the HostOS launches the GuestOS, the bootstrap config image is attached to the GuestOS as a virtual USB. Refer to link:../components/hostos-scripts/guestos/guestos.xml.template[guestos.xml.template]
+When the HostOS launches the GuestOS, the bootstrap config image is attached to the GuestOS as a virtual USB. Refer to link:../../rs/ic_os/config/templates/guestos_vm_template.xml[guestos_vm_template.xml]
 
 When the GuestOS boots, it checks for available removable media devices (i.e. the bootstrap config image). If such a device is found, the media must contain a VFAT filesystem and a single file called `ic-bootstrap.tar`.
 
@@ -88,8 +88,8 @@ Consider that values may be controlled by an attacker on boot. Bootstrapping a n
 
 === Testing
 
-For testing, to add new configuration bits, you can modify the config tool located at 
-link:../../rs/ic_os/config/README.md[rs/ic_os/config]. Or, you may find it easier to update *build-bootstrap-config-image.sh* and *bootstrap-ic-node.sh* directly, 
+For testing, to add new configuration bits, you can modify the config tool located at
+link:../../rs/ic_os/config/README.md[rs/ic_os/config]. Or, you may find it easier to update *build-bootstrap-config-image.sh* and *bootstrap-ic-node.sh* directly,
 particularly if you wish to add a new configuration file (as opposed to just a new configuration _field_).
 
 * *ic_os config tool* can be run stand-alone to verify that it produces the intended configuration object.
@@ -101,7 +101,7 @@ After all is done, it is advised to prepare a configuration for a single node an
 
 === Injecting external state
 
-*Typical bootstrap process:* On first boot, the system will perform technical initialization (filesystems, etc.) and afterwards, initialize itself to act as a node in the IC. The node is initialized using key generation on the node itself (such that the private key never leaves the node) and through joining the IC (the node gets the rest of its state via joining the IC). "Registration" to the target IC is initiated by the node itself by sending a Node Operator-signed "join" request to its NNS. 
+*Typical bootstrap process:* On first boot, the system will perform technical initialization (filesystems, etc.) and afterwards, initialize itself to act as a node in the IC. The node is initialized using key generation on the node itself (such that the private key never leaves the node) and through joining the IC (the node gets the rest of its state via joining the IC). "Registration" to the target IC is initiated by the node itself by sending a Node Operator-signed "join" request to its NNS.
 
 However, the typical bootstrap process can be modified such that the node is initialized using externally generated private keys and an externally generated initial state. All "registration" to the target IC is assumed to have been performed by other means.
 
