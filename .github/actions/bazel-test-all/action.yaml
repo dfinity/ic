@@ -45,14 +45,6 @@ runs:
           chmod 0700 ~/.ssh
           echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
 
-      - name: Write AWS credentials
-        shell: bash
-        if: inputs.CLOUD_CREDENTIALS_CONTENT != ''
-        run: |
-          AWS_CREDS="${HOME}/.aws/credentials"
-          mkdir -p "$(dirname "${AWS_CREDS}")"
-          echo '${{ inputs.CLOUD_CREDENTIALS_CONTENT }}' >"$AWS_CREDS"
-
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
         env:
@@ -127,7 +119,7 @@ runs:
 
       - name: Upload to S3
         uses: ./.github/actions/bazel
-        if: inputs.upload-artifacts == 'true'
+        if: inputs.upload-artifacts == 'true' && inputs.CLOUD_CREDENTIALS_CONTENT != ''
         with:
           run: |
             release_build='${{ inputs.release-build }}'
@@ -137,5 +129,12 @@ runs:
               exit 1
             fi
 
-            echo uploading artifacts to CDN
+            AWS_CREDS="${HOME}/.aws/credentials"
+            if ! [ -e "$AWS_CREDS" ]; then
+              echo writing remote storage credentials
+              mkdir -p "$(dirname "${AWS_CREDS}")"
+              echo '${{ inputs.CLOUD_CREDENTIALS_CONTENT }}' >"$AWS_CREDS"
+            fi
+
+            echo uploading artifacts to remote storage
             bazel run --check_up_to_date //:upload-artifacts
