@@ -37,11 +37,9 @@ use ic_nns_governance::{
     },
     storage::reset_stable_memory,
 };
-use ic_nns_governance_api::{
-    manage_neuron_response::{self, MergeMaturityResponse},
-    ManageNeuronResponse,
-};
+use ic_nns_governance_api::{manage_neuron_response, ManageNeuronResponse};
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use rand::{prelude::StdRng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::{
@@ -515,9 +513,11 @@ impl IcpLedger for NNSFixture {
 
     async fn icrc3_get_blocks(
         &self,
-        _args: Vec<icrc_ledger_types::icrc3::blocks::GetBlocksRequest>,
-    ) -> Result<icrc_ledger_types::icrc3::blocks::GetBlocksResult, NervousSystemError> {
-        unimplemented!()
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 }
 
@@ -872,36 +872,6 @@ impl NNS {
         behavior.into().propose_and_vote(self, summary)
     }
 
-    pub fn merge_maturity(
-        &mut self,
-        id: &NeuronId,
-        controller: &PrincipalId,
-        percentage_to_merge: u32,
-    ) -> Result<MergeMaturityResponse, GovernanceError> {
-        let result = self
-            .governance
-            .manage_neuron(
-                controller,
-                &ManageNeuron {
-                    id: None,
-                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(*id)),
-                    command: Some(Command::MergeMaturity(MergeMaturity {
-                        percentage_to_merge,
-                    })),
-                },
-            )
-            .now_or_never()
-            .unwrap()
-            .command
-            .unwrap();
-
-        match result {
-            manage_neuron_response::Command::Error(e) => Err(GovernanceError::from(e)),
-            manage_neuron_response::Command::MergeMaturity(response) => Ok(response),
-            _ => panic!("Merge maturity command returned unexpected response"),
-        }
-    }
-
     pub fn merge_neurons(
         &mut self,
         target: &NeuronId,
@@ -1004,9 +974,11 @@ impl IcpLedger for NNS {
 
     async fn icrc3_get_blocks(
         &self,
-        _args: Vec<icrc_ledger_types::icrc3::blocks::GetBlocksRequest>,
-    ) -> Result<icrc_ledger_types::icrc3::blocks::GetBlocksResult, NervousSystemError> {
-        unimplemented!()
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 }
 

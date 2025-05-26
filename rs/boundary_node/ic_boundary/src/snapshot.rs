@@ -3,7 +3,7 @@ use std::{
     fmt,
     net::{IpAddr, SocketAddr},
     str::FromStr,
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
@@ -11,7 +11,8 @@ use anyhow::{Context, Error};
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
-use ic_registry_client::client::RegistryClient;
+use ic_bn_lib::tasks::Run;
+use ic_registry_client::client::{RegistryClient, ThresholdSigPublicKey};
 use ic_registry_client_helpers::{
     api_boundary_node::ApiBoundaryNodeRegistry,
     crypto::CryptoRegistry,
@@ -19,15 +20,16 @@ use ic_registry_client_helpers::{
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
+use ic_registry_replicator::RegistryReplicator;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
-use tokio::sync::watch;
+use tokio::{select, sync::watch};
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 use url::{ParseError, Url};
 use x509_parser::{certificate::X509Certificate, prelude::FromDer};
 
 use crate::{
-    core::Run,
     firewall::{FirewallGenerator, SystemdReloader},
     metrics::{MetricParamsSnapshot, WithMetricsSnapshot},
     routes::RequestType,
@@ -136,7 +138,7 @@ impl SnapshotPersister {
 }
 
 pub trait Snapshot: Send + Sync {
-    fn snapshot(&mut self) -> Result<SnapshotResult, Error>;
+    fn snapshot(&self) -> Result<SnapshotResult, Error>;
 }
 
 #[derive(Clone, Debug)]
@@ -147,17 +149,6 @@ pub struct RegistrySnapshot {
     pub subnets: Vec<Subnet>,
     pub nodes: HashMap<String, Arc<Node>>,
     pub api_bns: Vec<ApiBoundaryNode>,
-}
-
-pub struct Snapshotter {
-    published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
-    channel_notify: watch::Sender<Option<Arc<RegistrySnapshot>>>,
-    registry_client: Arc<dyn RegistryClient>,
-    registry_version_available: Option<RegistryVersion>,
-    registry_version_published: Option<RegistryVersion>,
-    last_version_change: Instant,
-    min_version_age: Duration,
-    persister: Option<SnapshotPersister>,
 }
 
 pub struct SnapshotInfo {
@@ -178,25 +169,23 @@ pub enum SnapshotResult {
     Published(SnapshotInfoPublished),
 }
 
-impl Snapshotter {
-    pub fn new(
-        published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
-        channel_notify: watch::Sender<Option<Arc<RegistrySnapshot>>>,
-        registry_client: Arc<dyn RegistryClient>,
-        min_version_age: Duration,
-    ) -> Self {
-        Self {
-            published_registry_snapshot,
-            channel_notify,
-            registry_client,
-            registry_version_published: None,
-            registry_version_available: None,
-            last_version_change: Instant::now(),
-            min_version_age,
-            persister: None,
-        }
-    }
+#[derive(derive_new::new)]
+pub struct Snapshotter {
+    published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
+    channel_notify: watch::Sender<Option<Arc<RegistrySnapshot>>>,
+    registry_client: Arc<dyn RegistryClient>,
+    #[new(default)]
+    registry_version_available: Mutex<Option<RegistryVersion>>,
+    #[new(default)]
+    registry_version_published: Mutex<Option<RegistryVersion>>,
+    #[new(value = "Mutex::new(Instant::now())")]
+    last_version_change: Mutex<Instant>,
+    min_version_age: Duration,
+    #[new(default)]
+    persister: Option<SnapshotPersister>,
+}
 
+impl Snapshotter {
     pub fn set_persister(&mut self, persister: SnapshotPersister) {
         self.persister = Some(persister);
     }
@@ -389,13 +378,17 @@ impl Snapshotter {
 }
 
 impl Snapshot for Snapshotter {
-    fn snapshot(&mut self) -> Result<SnapshotResult, Error> {
+    fn snapshot(&self) -> Result<SnapshotResult, Error> {
         // Fetch latest available registry version
         let version = self.registry_client.get_latest_version();
 
-        if self.registry_version_available != Some(version) {
-            self.registry_version_available = Some(version);
-            self.last_version_change = Instant::now();
+        let mut registry_version_available = self.registry_version_available.lock().unwrap();
+        let mut last_version_change = self.last_version_change.lock().unwrap();
+        let mut registry_version_published = self.registry_version_published.lock().unwrap();
+
+        if *registry_version_available != Some(version) {
+            *registry_version_available = Some(version);
+            *last_version_change = Instant::now();
         }
 
         // If we have just started and have no snapshot published then we
@@ -404,13 +397,13 @@ impl Snapshot for Snapshotter {
         if self.published_registry_snapshot.load().is_none() {
             // We check that the versions stop progressing for some period of time
             // and only then allow the initial publishing.
-            if self.last_version_change.elapsed() < self.min_version_age {
+            if last_version_change.elapsed() < self.min_version_age {
                 return Ok(SnapshotResult::NotOldEnough(version.get()));
             }
         }
 
         // Check if we already have this version published
-        if self.registry_version_published == Some(version) {
+        if *registry_version_published == Some(version) {
             return Ok(SnapshotResult::NoNewVersion);
         }
 
@@ -441,7 +434,7 @@ impl Snapshot for Snapshotter {
         let snapshot_arc = Arc::new(snapshot.clone());
         self.published_registry_snapshot
             .store(Some(snapshot_arc.clone()));
-        self.registry_version_published = Some(version);
+        *registry_version_published = Some(version);
         self.channel_notify.send_replace(Some(snapshot_arc));
 
         // Persist the firewall rules if configured
@@ -455,7 +448,7 @@ impl Snapshot for Snapshotter {
 
 #[async_trait]
 impl<T: Snapshot> Run for WithMetricsSnapshot<T> {
-    async fn run(&mut self) -> Result<(), Error> {
+    async fn run(&self, _: CancellationToken) -> Result<(), Error> {
         let r = self.0.snapshot()?;
 
         match r {
@@ -482,6 +475,28 @@ impl<T: Snapshot> Run for WithMetricsSnapshot<T> {
             ),
 
             SnapshotResult::NoNewVersion => {}
+        }
+
+        Ok(())
+    }
+}
+
+/// Wrapper for registry replicator to run it as Task
+#[derive(derive_new::new)]
+pub struct RegistryReplicatorRunner(RegistryReplicator, Vec<Url>, Option<ThresholdSigPublicKey>);
+
+#[async_trait]
+impl Run for RegistryReplicatorRunner {
+    async fn run(&self, token: CancellationToken) -> Result<(), Error> {
+        let fut = self
+            .0
+            .start_polling(self.1.clone(), self.2)
+            .await
+            .context("unable to start polling Registry")?;
+
+        select! {
+            _ = token.cancelled() => {}
+            _ = fut => {}
         }
 
         Ok(())
@@ -572,7 +587,7 @@ pub(crate) mod test {
         let reg = Arc::new(reg);
 
         let (channel_send, _) = watch::channel(None);
-        let mut snapshotter =
+        let snapshotter =
             Snapshotter::new(Arc::clone(&snapshot), channel_send, reg, Duration::ZERO);
         snapshotter.snapshot().unwrap();
 

@@ -242,7 +242,7 @@ mod test {
         let (reg, _, _) = create_fake_registry_client(1, 1, Some(node_id));
         let reg = Arc::new(reg);
         let (channel_send, _) = tokio::sync::watch::channel(None);
-        let mut snapshotter =
+        let snapshotter =
             Snapshotter::new(Arc::clone(&snapshot), channel_send, reg, Duration::ZERO);
         let verifier = TlsVerifier::new(Arc::clone(&snapshot));
         snapshotter.snapshot()?;

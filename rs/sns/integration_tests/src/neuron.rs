@@ -20,6 +20,8 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     itest_helpers::{forward_call_via_universal_canister, set_up_universal_canister, NnsCanisters},
 };
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
+
 use ic_sns_governance::{
     governance::Governance,
     neuron::{NeuronState, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER},
@@ -1202,9 +1204,11 @@ async fn zero_total_reward_shares() {
 
         async fn icrc3_get_blocks(
             &self,
-            _args: Vec<icrc_ledger_types::icrc3::blocks::GetBlocksRequest>,
-        ) -> Result<icrc_ledger_types::icrc3::blocks::GetBlocksResult, NervousSystemError> {
-            unimplemented!()
+            _args: Vec<GetBlocksRequest>,
+        ) -> Result<GetBlocksResult, NervousSystemError> {
+            Err(NervousSystemError {
+                error_message: "Not Implemented".to_string(),
+            })
         }
     }
 
@@ -1381,9 +1385,11 @@ async fn couple_of_neurons_who_voted_get_rewards() {
 
         async fn icrc3_get_blocks(
             &self,
-            _args: Vec<icrc_ledger_types::icrc3::blocks::GetBlocksRequest>,
-        ) -> Result<icrc_ledger_types::icrc3::blocks::GetBlocksResult, NervousSystemError> {
-            unimplemented!()
+            _args: Vec<GetBlocksRequest>,
+        ) -> Result<GetBlocksResult, NervousSystemError> {
+            Err(NervousSystemError {
+                error_message: "Not Implemented".to_string(),
+            })
         }
     }
 

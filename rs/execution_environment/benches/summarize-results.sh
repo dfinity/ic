@@ -4,6 +4,9 @@ set -ue
 ## Helper script to summarize the results in the `MIN_FILE`
 ## comparing them to the `BASELINE_DIR` results.
 ##
+## Please use the top-level `run-all-benchmarks.sh` to run all or just
+## some benchmarks.
+##
 
 DEPENDENCIES="awk rg sed"
 which ${DEPENDENCIES} >/dev/null || (echo "Error checking dependencies: ${DEPENDENCIES}" >&2 && exit 1)

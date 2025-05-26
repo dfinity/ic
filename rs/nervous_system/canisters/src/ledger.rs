@@ -5,8 +5,8 @@ use ic_ledger_core::block::BlockIndex;
 use ic_nervous_system_common::NervousSystemError;
 use ic_nervous_system_runtime::Runtime;
 use icp_ledger::{
-    AccountIdentifier, BinaryAccountBalanceArgs, ICRC3GetBlocksArgs, Memo,
-    Subaccount as IcpSubaccount, Tokens, TransferArgs, TransferError,
+    AccountIdentifier, BinaryAccountBalanceArgs, Memo, Subaccount as IcpSubaccount, Tokens,
+    TransferArgs, TransferError,
 };
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
@@ -66,9 +66,11 @@ impl<Rt: Runtime + Send + Sync> ICRC1Ledger for IcpLedgerCanister<Rt> {
 
     async fn icrc3_get_blocks(
         &self,
-        args: Vec<GetBlocksRequest>,
+        _args: Vec<GetBlocksRequest>,
     ) -> Result<GetBlocksResult, NervousSystemError> {
-        <IcpLedgerCanister<Rt> as IcpLedger>::icrc3_get_blocks(self, args).await
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 }
 
@@ -166,24 +168,10 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
 
     async fn icrc3_get_blocks(
         &self,
-        args: Vec<GetBlocksRequest>,
+        _args: Vec<GetBlocksRequest>,
     ) -> Result<GetBlocksResult, NervousSystemError> {
-        let result: Result<GetBlocksResult, (i32, String)> = Rt::call_with_cleanup(
-            self.canister_id,
-            "icrc3_get_blocks",
-            (args
-                .iter()
-                .map(|arg| ICRC3GetBlocksArgs {
-                    start: arg.start.clone(),
-                    length: arg.length.clone(),
-                })
-                .collect::<Vec<_>>(),),
-        )
-        .await
-        .map(|result: (GetBlocksResult,)| result.0);
-
-        result.map_err(|(code, msg)| {
-            NervousSystemError::new_with_message(format!("Error calling method 'icrc3_get_blocks' of the ledger canister. Code: {:?}. Message: {}", code, msg))
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
         })
     }
 }

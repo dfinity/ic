@@ -19,6 +19,7 @@ use ic_sns_swap::{
     },
 };
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
@@ -326,9 +327,11 @@ impl ICRC1Ledger for MockLedger {
 
     async fn icrc3_get_blocks(
         &self,
-        _args: Vec<icrc_ledger_types::icrc3::blocks::GetBlocksRequest>,
-    ) -> Result<icrc_ledger_types::icrc3::blocks::GetBlocksResult, NervousSystemError> {
-        unimplemented!()
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 }
 

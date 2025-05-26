@@ -114,6 +114,8 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for LoggingIcpLedgerCanister<Rt> {
         &self,
         _args: Vec<GetBlocksRequest>,
     ) -> Result<GetBlocksResult, NervousSystemError> {
-        unimplemented!()
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 }
