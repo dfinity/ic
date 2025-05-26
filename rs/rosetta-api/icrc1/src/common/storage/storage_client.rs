@@ -107,6 +107,11 @@ impl StorageClient {
             .unwrap()
             .execute("PRAGMA foreign_keys = 1", [])?;
         storage_client.create_tables()?;
+        
+        // Run the fee collector balances repair if needed
+        tracing::info!("Storage initialization: Checking if fee collector balance repair is needed");
+        storage_client.repair_fee_collector_balances()?;
+        
         Ok(storage_client)
     }
 
@@ -297,6 +302,20 @@ impl StorageClient {
     pub fn get_block_count(&self) -> anyhow::Result<u64> {
         let open_connection = self.storage_connection.lock().unwrap();
         storage_operations::get_block_count(&open_connection)
+    }
+
+    /// Repairs account balances for databases created before the fee collector block index fix.
+    /// This function identifies Transfer operations that used fee_collector_block_index but didn't
+    /// properly credit the fee collector, and adds the missing fee credits.
+    /// 
+    /// This is safe to run multiple times - it will only add missing credits and won't duplicate them.
+    /// 
+    /// # Returns
+    /// 
+    /// Returns `Ok(())` if the repair was successful, or an error if the repair failed.
+    pub fn repair_fee_collector_balances(&self) -> anyhow::Result<()> {
+        let mut open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::repair_fee_collector_balances(&mut open_connection)
     }
 }
 
