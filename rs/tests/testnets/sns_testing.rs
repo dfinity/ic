@@ -53,6 +53,7 @@ use nns_dapp::{
     set_authorized_subnets, set_sns_subnet,
 };
 use slog::info;
+use url::Url;
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
 
@@ -91,6 +92,7 @@ pub fn setup(env: TestEnv) {
         .get_snapshot()
         .unwrap();
     let farm_url = boundary_node.get_playnet().unwrap();
+    let farm_https = Url::parse(&format!("https://{farm_url}")).unwrap();
     env.sync_with_prometheus_by_name("", Some(farm_url));
 
     let topology = env.topology_snapshot();
@@ -107,11 +109,7 @@ pub fn setup(env: TestEnv) {
     info!(logger, "Use {} as effective canister ID when creating canisters for your dapp, e.g., using --provisional-create-canister-effective-canister-id {} with DFX", app_effective_canister_id, app_effective_canister_id);
 
     let sns_aggregator_canister_id = install_sns_aggregator(&env, BOUNDARY_NODE_NAME, sns_node);
-    install_ii_nns_dapp_and_subnet_rental(
-        &env,
-        BOUNDARY_NODE_NAME,
-        Some(sns_aggregator_canister_id),
-    );
+    install_ii_nns_dapp_and_subnet_rental(&env, farm_https, Some(sns_aggregator_canister_id));
     set_authorized_subnets(&env);
     set_sns_subnet(&env, sns_subnet.subnet_id);
     add_all_wasms_to_sns_wasm(&env);

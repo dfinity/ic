@@ -50,6 +50,7 @@ use ic_system_test_driver::driver::{
 use nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
 };
+use url::Url;
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
 
@@ -81,7 +82,14 @@ pub fn setup(env: TestEnv) {
         .use_real_certs_and_dns()
         .start(&env)
         .expect("failed to setup BoundaryNode VM");
-    install_ii_nns_dapp_and_subnet_rental(&env, BOUNDARY_NODE_NAME, None);
+    let boundary_node = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+    let farm_url = boundary_node.get_playnet().unwrap();
+    let url = Url::parse(&format!("https://{}", farm_url)).unwrap();
+    install_ii_nns_dapp_and_subnet_rental(&env, url, None);
     set_authorized_subnets(&env);
     let boundary_node = env
         .get_deployed_boundary_node(BOUNDARY_NODE_NAME)

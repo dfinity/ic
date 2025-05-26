@@ -6,7 +6,7 @@ use ic_system_test_driver::driver::{
     ic::{InternetComputer, Subnet},
     ic_gateway_vm::{IcGatewayVm, IC_GATEWAY_VM_NAME},
     test_env::TestEnv,
-    test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, RetrieveIpv4Addr},
+    test_env_api::{HasTopologySnapshot, IcNodeContainer},
 };
 use ic_system_test_driver::systest;
 use nns_dapp::nns_dapp_customizations;

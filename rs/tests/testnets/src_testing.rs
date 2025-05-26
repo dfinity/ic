@@ -63,6 +63,7 @@ use nns_dapp::{
 };
 use std::env;
 use std::str::FromStr;
+use url::Url;
 use xrc_mock::{ExchangeRate, Response, XrcMockInitPayload};
 
 const DEFAULT_XRC_PRINCIPAL_STR: &str = "uf6dk-hyaaa-aaaaq-qaaaq-cai";
@@ -157,7 +158,8 @@ pub fn setup(env: TestEnv) {
     await_boundary_node_healthy(&env, &bn_name);
 
     // install II, NNS dapp, and Subnet Rental Canister
-    install_ii_nns_dapp_and_subnet_rental(&env, &bn_name, None);
+    let url = Url::parse(&format!("https://{}", boundary_node.get_playnet().unwrap())).unwrap();
+    install_ii_nns_dapp_and_subnet_rental(&env, url, None);
 
     // install the Exchange Rate Canister
     let topology = env.topology_snapshot();

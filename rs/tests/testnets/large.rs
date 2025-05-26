@@ -58,6 +58,7 @@ use nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, install_sns_aggregator, nns_dapp_customizations,
     set_authorized_subnets, set_icp_xdr_exchange_rate, set_sns_subnet,
 };
+use url::Url;
 
 const NUM_FULL_CONSENSUS_APP_SUBNETS: u64 = 1;
 const NUM_SINGLE_NODE_APP_SUBNETS: u64 = 1;
@@ -130,6 +131,13 @@ pub fn setup(env: TestEnv) {
     for i in 0..NUM_BN {
         let bn_name = format!("boundary-node-{}", i);
         await_boundary_node_healthy(&env, &bn_name);
+        let boundary_node = env
+            .get_deployed_boundary_node(&bn_name)
+            .unwrap()
+            .get_snapshot()
+            .unwrap();
+        let farm_url = boundary_node.get_playnet().unwrap();
+        let url = Url::parse(&format!("https://{}", farm_url)).unwrap();
         if i == 0 {
             // pick an SNS subnet among the application subnets
             let topology = env.topology_snapshot();
@@ -149,7 +157,7 @@ pub fn setup(env: TestEnv) {
             add_all_wasms_to_sns_wasm(&env);
 
             // install II, NNS dapp, and Subnet Rental Canister
-            install_ii_nns_dapp_and_subnet_rental(&env, &bn_name, Some(sns_aggregator_canister_id));
+            install_ii_nns_dapp_and_subnet_rental(&env, url, Some(sns_aggregator_canister_id));
         }
     }
 }
