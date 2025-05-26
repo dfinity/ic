@@ -41,6 +41,7 @@ use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_logger::replica_logger::no_op_logger;
 use ic_protobuf::registry::crypto::v1::{AlgorithmId, PublicKey};
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
+use ic_registry_client_helpers::{crypto::CryptoRegistry, subnet::SubnetRegistry};
 use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::messages::MessageId;
@@ -281,13 +282,25 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 
         let agent = create_agent(
             cli.misc.crypto_config.clone(),
-            registry_client,
+            registry_client.clone(),
             cli.listen.listen_http_port_loopback,
         )
         .await?;
 
-        // Set the root key if it was provided
-        if let Some(v) = &cli.registry.registry_nns_pub_key_pem {
+        if let Some(v) = &registry_client {
+            // Fetch the NNS root key from the local registry snapshot
+            let ver = v.get_latest_version();
+            let nns_subnet_id = v
+                .get_root_subnet_id(ver)
+                .context("unable to get root subnet id")?
+                .context("no root subnet")?;
+            let root_key = v
+                .get_threshold_signing_public_key_for_subnet(nns_subnet_id, ver)
+                .context("unable to get root NNS key")?
+                .context("no root NNS key")?;
+            agent.set_root_key(root_key.into_bytes().to_vec());
+        } else if let Some(v) = &cli.registry.registry_nns_pub_key_pem {
+            // Set the root key if it was provided
             let root_key = parse_threshold_sig_key(v).context("failed to parse NNS public key")?;
             agent.set_root_key(root_key.into_bytes().to_vec());
         }
