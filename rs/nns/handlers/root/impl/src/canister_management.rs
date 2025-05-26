@@ -151,8 +151,6 @@ async fn try_to_create_and_install_canister(
         canister_id: id.get_canister_id().get(),
         wasm_module: request.wasm_module,
         arg: request.arg,
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: Some(ic_cdk::api::canister_version()),
     };
     let install_res: Result<(), (RejectionCode, String)> =

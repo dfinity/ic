@@ -11,6 +11,16 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-05-16: Proposal 136695
+
+http://dashboard.internetcomputer.org/proposal/136695
+
+## Changed
+
+* The field `node_reward_type` in AddNodePayload is now required to be populated with a valid node_reward_type when
+  adding a node (in `do_add_node`) if a node_rewards table record is present in the registry.
+
+
 # 2025-05-10: Proposal 136581
 
 http://dashboard.internetcomputer.org/proposal/136581

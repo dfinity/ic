@@ -141,7 +141,6 @@ jobs:
     needs: [ config ]
     <<: *dind-large-setup
     runs-on:
-      group: zh1
       labels: dind-large
     env:
       # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
@@ -242,7 +241,7 @@ jobs:
         uses:  ./.github/actions/bazel-test-all/
         with:
           BAZEL_COMMAND: ${{ steps.cfg.outputs.build-command }}
-          BAZEL_TARGETS: //rs/... //publish/binaries/...
+          BAZEL_TARGETS: //rs/... //:upload-artifacts
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ''
       - name: Purge Bazel Output

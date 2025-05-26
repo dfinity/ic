@@ -129,7 +129,7 @@ func make_fully_qualified_target(target string) (string, error) {
 }
 
 func get_all_testnets() ([]string, error) {
-	command := []string{"bazel", "query", "attr(tags, 'dynamic_testnet', tests(//rs/tests/...))"}
+	command := []string{"bazel", "query", "attr(tags, 'dynamic_testnet', tests(//rs/tests/testnets/...))"}
 	queryCmd := exec.Command(command[0], command[1:]...)
 	outputBuffer := &bytes.Buffer{}
 	stdErrBuffer := &bytes.Buffer{}
