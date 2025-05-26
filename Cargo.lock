@@ -18583,7 +18583,6 @@ dependencies = [
  "ic-error-types 0.1.0",
  "ic-gateway",
  "ic-http-endpoints-public",
- "ic-http-gateway",
  "ic-https-outcalls-adapter",
  "ic-https-outcalls-adapter-client",
  "ic-https-outcalls-service",
@@ -18637,6 +18636,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+ "uuid",
  "wat",
 ]
 

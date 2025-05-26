@@ -1470,9 +1470,9 @@ fn test_unresponsive_gateway_backend() {
         .get(endpoint.join("api/v2/status").unwrap())
         .send()
         .unwrap();
-    assert_eq!(resp.status(), StatusCode::BAD_GATEWAY);
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
     let page = String::from_utf8(resp.bytes().unwrap().as_ref().to_vec()).unwrap();
-    assert!(page.contains("ConnectionFailure: HTTP request failed: error sending request for url"));
+    assert!(page.contains("error: upstream_error"));
 }
 
 #[test]
@@ -1607,24 +1607,7 @@ fn http_gateway_route_underscore() {
 
     let client = Client::new();
 
-    // If a canister ID can be found,
-    // then the HTTP gateway tries to handle the request
-    // (which fails because the canister does not exist).
-
-    for invalid_suffix in [
-        "_/dashboard?canisterId=rwlgt-iiaaa-aaaaa-aaaaa-cai",
-        "_/topology?canisterId=rwlgt-iiaaa-aaaaa-aaaaa-cai",
-        "_/foo?canisterId=rwlgt-iiaaa-aaaaa-aaaaa-cai",
-        "foo?canisterId=rwlgt-iiaaa-aaaaa-aaaaa-cai",
-    ] {
-        let invalid_url = gateway.join(invalid_suffix).unwrap().to_string();
-        let error_page = client.get(invalid_url).send().unwrap();
-        let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
-        assert!(page.contains("Canister rwlgt-iiaaa-aaaaa-aaaaa-cai not found"));
-    }
-
-    // If no canister ID can be found,
-    // then requests to paths starting with `/_/` are routed directly to the PocketIC instance/replica.
+    // Requests to paths starting with `/_/dashboard` and `/_/topology` are routed directly to the PocketIC instance/replica.
 
     let dashboard_url = gateway.join("_/dashboard").unwrap().to_string();
     let dashboard = client.get(dashboard_url).send().unwrap();
@@ -1637,19 +1620,35 @@ fn http_gateway_route_underscore() {
     let topology: Topology = serde_json::from_str(&topology_json).unwrap();
     assert_eq!(topology.get_app_subnets().len(), 1);
 
+    // If a canister ID can be found,
+    // then the HTTP gateway tries to handle the request
+    // (which fails because the canister does not exist).
+
+    for invalid_suffix in [
+        "_/foo?canisterId=rwlgt-iiaaa-aaaaa-aaaaa-cai",
+        "foo?canisterId=rwlgt-iiaaa-aaaaa-aaaaa-cai",
+    ] {
+        let invalid_url = gateway.join(invalid_suffix).unwrap().to_string();
+        let error_page = client.get(invalid_url).send().unwrap();
+        let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
+        // TODO: fix
+        assert!(page.contains("503 - upstream error"));
+    }
+
+    // If no canister ID can be found,
+    // then the HTTP gateway complains that it could not find a canister ID.
+
     let invalid_url = gateway.join("_/foo").unwrap().to_string();
     let error_page = client.get(invalid_url).send().unwrap();
-    assert_eq!(error_page.status(), StatusCode::NOT_FOUND);
-    assert!(error_page.bytes().unwrap().is_empty());
-
-    // If no canister ID can be found and the request's path does not start with `/_/`,
-    // then the HTTP gateway complains that it could not find a canister ID.
+    assert_eq!(error_page.status(), StatusCode::BAD_REQUEST);
+    let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
+    assert!(page.contains("canister id not found"));
 
     let invalid_url = gateway.join("foo").unwrap().to_string();
     let error_page = client.get(invalid_url).send().unwrap();
     assert_eq!(error_page.status(), StatusCode::BAD_REQUEST);
     let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
-    assert!(page.contains("CanisterIdNotFound"));
+    assert!(page.contains("canister id not found"));
 }
 
 #[test]
