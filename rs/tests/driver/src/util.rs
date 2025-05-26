@@ -935,20 +935,28 @@ pub fn assert_reject<T: std::fmt::Debug>(res: Result<T, AgentError>, code: Rejec
     match res {
         Ok(val) => panic!("Expected call to fail but it succeeded with {:?}", val),
         Err(agent_error) => match agent_error {
-            AgentError::UncertifiedReject(RejectResponse {
-                reject_code,
-                reject_message,
+            AgentError::UncertifiedReject {
+                reject:
+                    RejectResponse {
+                        reject_code,
+                        reject_message,
+                        ..
+                    },
                 ..
-            }) => assert_eq!(
+            } => assert_eq!(
                 code, reject_code,
                 "Expect code {:?} did not match {:?}. Reject message: {}",
                 code, reject_code, reject_message
             ),
-            AgentError::CertifiedReject(RejectResponse {
-                reject_code,
-                reject_message,
+            AgentError::CertifiedReject {
+                reject:
+                    RejectResponse {
+                        reject_code,
+                        reject_message,
+                        ..
+                    },
                 ..
-            }) => assert_eq!(
+            } => assert_eq!(
                 code, reject_code,
                 "Expect code {:?} did not match {:?}. Reject message: {}",
                 code, reject_code, reject_message
@@ -969,11 +977,15 @@ pub fn assert_reject_msg<T: std::fmt::Debug>(
     match res {
         Ok(val) => panic!("Expected call to fail but it succeeded with {:?}", val),
         Err(agent_error) => match agent_error {
-            AgentError::CertifiedReject(RejectResponse {
-                reject_code,
-                reject_message,
+            AgentError::CertifiedReject {
+                reject:
+                    RejectResponse {
+                        reject_code,
+                        reject_message,
+                        ..
+                    },
                 ..
-            }) => {
+            } => {
                 assert_eq!(
                     code, reject_code,
                     "Expect code {:?} did not match {:?}. Reject message: {}",
@@ -985,11 +997,15 @@ pub fn assert_reject_msg<T: std::fmt::Debug>(
                     reject_message
                 );
             }
-            AgentError::UncertifiedReject(RejectResponse {
-                reject_code,
-                reject_message,
+            AgentError::UncertifiedReject {
+                reject:
+                    RejectResponse {
+                        reject_code,
+                        reject_message,
+                        ..
+                    },
                 ..
-            }) => {
+            } => {
                 assert_eq!(
                     code, reject_code,
                     "Expect code {:?} did not match {:?}. Reject message: {}",
@@ -1063,7 +1079,7 @@ pub fn assert_http_submit_fails<Output>(
     match result {
         Ok(val) => panic!("Expected call to fail but it succeeded with {:?}.", val),
         Err(agent_error) => match agent_error {
-            AgentError::UncertifiedReject(RejectResponse{reject_code, ..}) => assert_eq!(
+            AgentError::UncertifiedReject { reject: RejectResponse{reject_code, ..}, .. } => assert_eq!(
                 expected_reject_code, reject_code,
                 "Unexpected reject_code: `{:?}`.",
                 reject_code

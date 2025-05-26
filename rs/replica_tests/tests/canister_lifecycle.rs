@@ -748,8 +748,6 @@ fn can_get_canister_information() {
                         canister_b,
                         UNIVERSAL_CANISTER_WASM.to_vec(),
                         vec![],
-                        None,
-                        None,
                     )
                     .encode(),
                 ),
