@@ -35,6 +35,7 @@ use ic_bn_lib::{
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::CryptoComponent;
 use ic_crypto_utils_basic_sig::conversions::derive_node_id;
+use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
 use ic_interfaces::crypto::{BasicSigner, KeyManager};
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_logger::replica_logger::no_op_logger;
@@ -284,6 +285,12 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             cli.listen.listen_http_port_loopback,
         )
         .await?;
+
+        // Set the root key if it was provided
+        if let Some(v) = &cli.registry.registry_nns_pub_key_pem {
+            let root_key = parse_threshold_sig_key(v).context("failed to parse NNS public key")?;
+            agent.set_root_key(root_key.into_bytes().to_vec());
+        }
 
         Some(agent)
     } else {
@@ -683,8 +690,7 @@ fn setup_registry(
                 .expect("NNS public key is required to init Registry local store");
 
             Some(
-                ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key(&nns_pub_key_path)
-                    .expect("failed to parse NNS public key"),
+                parse_threshold_sig_key(&nns_pub_key_path).expect("failed to parse NNS public key"),
             )
         }
     };
