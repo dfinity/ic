@@ -311,6 +311,9 @@ impl CanisterManager {
         if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
             canister.system_state.wasm_memory_limit = Some(wasm_memory_limit);
         }
+        if let Some(environment_variables) = settings.environment_variables() {
+            canister.system_state.environment_variables = environment_variables.clone();
+        }
     }
 
     /// Tries to apply the requested settings on the canister identified by
