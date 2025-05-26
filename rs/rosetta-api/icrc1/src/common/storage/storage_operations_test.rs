@@ -1,10 +1,11 @@
 use candid::{Nat, Principal};
+use ic_icrc_rosetta::common::storage::schema;
 use ic_icrc_rosetta::common::storage::storage_operations::*;
 use ic_icrc_rosetta::common::storage::types::{
     IcrcBlock, IcrcOperation, IcrcTransaction, RosettaBlock,
 };
 use icrc_ledger_types::icrc1::account::Account;
-use rusqlite::{params, Connection};
+use rusqlite::Connection;
 use tempfile::tempdir;
 
 // Helper function to create a test block with a specific timestamp and data
@@ -122,31 +123,8 @@ fn test_store_and_read_blocks() -> anyhow::Result<()> {
     // Create and initialize database with necessary tables
     let mut connection = Connection::open(&db_path)?;
 
-    // Create the blocks table (simplified version for the test)
-    connection.execute(
-        "CREATE TABLE blocks (
-            idx INTEGER PRIMARY KEY,
-            hash BLOB NOT NULL,
-            serialized_block BLOB NOT NULL,
-            parent_hash BLOB,
-            timestamp INTEGER,
-            tx_hash BLOB,
-            operation_type TEXT,
-            from_principal BLOB,
-            from_subaccount BLOB,
-            to_principal BLOB,
-            to_subaccount BLOB,
-            spender_principal BLOB,
-            spender_subaccount BLOB,
-            memo BLOB,
-            amount TEXT,
-            expected_allowance TEXT,
-            fee TEXT,
-            transaction_created_at_time INTEGER,
-            approval_expires_at INTEGER
-        )",
-        params![],
-    )?;
+    // Create the database tables using the centralized schema
+    schema::create_basic_tables(&connection)?;
 
     // Create test data
     let principal1 = vec![1, 2, 3, 4];
@@ -253,30 +231,8 @@ fn test_hash_consistency() -> anyhow::Result<()> {
     // Initialize database with necessary tables
     let mut connection = Connection::open(&db_path)?;
 
-    connection.execute(
-        "CREATE TABLE blocks (
-            idx INTEGER PRIMARY KEY,
-            hash BLOB NOT NULL,
-            serialized_block BLOB NOT NULL,
-            parent_hash BLOB,
-            timestamp INTEGER,
-            tx_hash BLOB,
-            operation_type TEXT,
-            from_principal BLOB,
-            from_subaccount BLOB,
-            to_principal BLOB,
-            to_subaccount BLOB,
-            spender_principal BLOB,
-            spender_subaccount BLOB,
-            memo BLOB,
-            amount TEXT,
-            expected_allowance TEXT,
-            fee TEXT,
-            transaction_created_at_time INTEGER,
-            approval_expires_at INTEGER
-        )",
-        params![],
-    )?;
+    // Create the database tables using the centralized schema
+    schema::create_basic_tables(&connection)?;
 
     // Create test data - blocks with different timestamp values and operations
     let principal1 = vec![1, 2, 3, 4];
@@ -387,6 +343,92 @@ fn test_hash_consistency() -> anyhow::Result<()> {
             i
         );
     }
+
+    Ok(())
+}
+
+#[test]
+fn test_fee_collector_block_index_resolution() -> anyhow::Result<()> {
+    // Create a temporary directory and database
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir.path().join("test_fee_collector_db.sqlite");
+
+    // Create and initialize database with necessary tables
+    let mut connection = Connection::open(&db_path)?;
+
+    // Create the database tables using the centralized schema
+    schema::create_basic_tables(&connection)?;
+
+    // Create test accounts
+    let principal1 = vec![1, 2, 3, 4];
+    let principal2 = vec![5, 6, 7, 8];
+    let fee_collector_principal = vec![9, 10, 11, 12];
+
+    let _from_account = Account {
+        owner: Principal::from_slice(&principal1),
+        subaccount: None,
+    };
+    let _to_account = Account {
+        owner: Principal::from_slice(&principal2),
+        subaccount: None,
+    };
+    let fee_collector_account = Account {
+        owner: Principal::from_slice(&fee_collector_principal),
+        subaccount: None,
+    };
+
+    // Create block 0 with direct fee collector specification
+    let mut block0 = create_test_rosetta_block(0, 1000000000, &principal1, 100);
+    block0.block.fee_collector = Some(fee_collector_account);
+
+    // Create block 1 with fee_collector_block_index pointing to block 0
+    let mut block1 = create_test_rosetta_block(1, 1000000001, &principal1, 200);
+    block1.block.fee_collector = None;
+    block1.block.fee_collector_block_index = Some(0);
+
+    // Create block 2 with no fee collector
+    let block2 = create_test_rosetta_block(2, 1000000002, &principal1, 300);
+
+    // Store the blocks
+    store_blocks(&mut connection, vec![block0.clone(), block1.clone(), block2.clone()])?;
+
+    // Test the fee collector resolution function directly
+    let resolved_collector_0 = get_fee_collector_from_block(&block0, &connection)?;
+    let resolved_collector_1 = get_fee_collector_from_block(&block1, &connection)?;
+    let resolved_collector_2 = get_fee_collector_from_block(&block2, &connection)?;
+
+    // Verify that block 0 returns its direct fee collector
+    assert_eq!(resolved_collector_0, Some(fee_collector_account));
+
+    // Verify that block 1 resolves the fee collector from block 0
+    assert_eq!(resolved_collector_1, Some(fee_collector_account));
+
+    // Verify that block 2 has no fee collector
+    assert_eq!(resolved_collector_2, None);
+
+    // Test with a block that references a non-existent block
+    let mut block3 = create_test_rosetta_block(3, 1000000003, &principal1, 400);
+    block3.block.fee_collector = None;
+    block3.block.fee_collector_block_index = Some(999); // Non-existent block
+
+    store_blocks(&mut connection, vec![block3.clone()])?;
+
+    // This should return an error
+    let result = get_fee_collector_from_block(&block3, &connection);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("no block at that index"));
+
+    // Test with a block that references a block without a fee collector
+    let mut block4 = create_test_rosetta_block(4, 1000000004, &principal1, 500);
+    block4.block.fee_collector = None;
+    block4.block.fee_collector_block_index = Some(2); // Block 2 has no fee collector
+
+    store_blocks(&mut connection, vec![block4.clone()])?;
+
+    // This should return an error
+    let result = get_fee_collector_from_block(&block4, &connection);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("has no fee_collector set"));
 
     Ok(())
 }

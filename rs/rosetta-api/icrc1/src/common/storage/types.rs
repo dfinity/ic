@@ -93,6 +93,10 @@ impl RosettaBlock {
         self.block.fee_collector
     }
 
+    pub fn get_fee_collector_block_index(&self) -> Option<u64> {
+        self.block.fee_collector_block_index
+    }
+
     pub fn get_icrc1_block(&self) -> IcrcBlock {
         self.block.clone()
     }

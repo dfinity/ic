@@ -12,6 +12,40 @@ use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 
+// Helper function to resolve the fee collector account from a block
+pub fn get_fee_collector_from_block(
+    rosetta_block: &RosettaBlock,
+    connection: &Connection,
+) -> anyhow::Result<Option<Account>> {
+    // First check if the fee collector is directly specified in the block
+    if let Some(fee_collector) = rosetta_block.get_fee_collector() {
+        return Ok(Some(fee_collector));
+    }
+
+    // If not, check if there's a fee_collector_block_index that points to another block
+    if let Some(fee_collector_block_index) = rosetta_block.get_fee_collector_block_index() {
+        let referenced_block = get_block_at_idx(connection, fee_collector_block_index)?
+            .with_context(|| {
+                format!(
+                    "Block at index {} has fee_collector_block_index {} but there is no block at that index",
+                    rosetta_block.index, fee_collector_block_index
+                )
+            })?;
+
+        if let Some(fee_collector) = referenced_block.get_fee_collector() {
+            return Ok(Some(fee_collector));
+        } else {
+            bail!(
+                "Block at index {} has fee_collector_block_index {} but that block has no fee_collector set",
+                rosetta_block.index, fee_collector_block_index
+            );
+        }
+    }
+
+    // No fee collector found
+    Ok(None)
+}
+
 pub fn store_metadata(
     connection: &mut Connection,
     metadata: Vec<MetadataEntry>,
@@ -193,7 +227,9 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
                         &mut account_balances_cache,
                     )?;
 
-                    if let Some(collector) = rosetta_block.get_fee_collector() {
+                    if let Some(collector) =
+                        get_fee_collector_from_block(&rosetta_block, connection)?
+                    {
                         credit(
                             collector,
                             fee,
