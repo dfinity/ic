@@ -14,6 +14,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+// See build.rs
+include!(concat!(env!("OUT_DIR"), "/guestos_vm_template.rs"));
+
 /// Generate the GuestOS VM configuration
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]

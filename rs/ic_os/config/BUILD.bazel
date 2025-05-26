@@ -1,9 +1,17 @@
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    data = ["templates/guestos_vm_template.xml"],
+)
+
 DEPENDENCIES = [
     # Keep sorted.
+    ":build_script",
     "//rs/ic_os/config_types",
     "//rs/ic_os/deterministic_ips",
     "//rs/ic_os/metrics_tool",
@@ -79,7 +87,6 @@ rust_binary(
     name = "config",
     srcs = BIN_SOURCES,
     aliases = ALIASES,
-    compile_data = glob(["templates/*"]),
     crate_name = "config",
     proc_macro_deps = MACRO_DEPENDENCIES,
     # When askama expands the template, it includes the full path of the source template.
@@ -95,7 +102,6 @@ rust_binary(
     name = "config_dev",
     srcs = BIN_SOURCES,
     aliases = ALIASES,
-    compile_data = glob(["templates/*"]),
     crate_name = "config",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["local"],  # See the comment in :config
