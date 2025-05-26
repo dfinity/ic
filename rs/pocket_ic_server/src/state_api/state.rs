@@ -460,7 +460,7 @@ struct ErrorCause(String);
 
 impl IntoResponse for ErrorCause {
     fn into_response(self) -> Response {
-        (StatusCode::BAD_GATEWAY, self.0).into_response()
+        (StatusCode::SERVICE_UNAVAILABLE, self.0).into_response()
     }
 }
 
