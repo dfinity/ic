@@ -152,6 +152,10 @@ BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS = [
     "//ic-os/boundary-guestos:scripts/build-bootstrap-config-image.sh",
 ]
 
+IC_GATEWAY_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS + [
+    "//rs/tests:ic_gateway_uvm_config_image",
+]
+
 COUNTER_CANISTER_RUNTIME_DEPS = ["//rs/tests:counter.wat"]
 
 CANISTER_HTTP_RUNTIME_DEPS = [

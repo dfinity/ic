@@ -17326,6 +17326,7 @@ dependencies = [
  "icp-ledger",
  "serde",
  "slog",
+ "url",
 ]
 
 [[package]]
