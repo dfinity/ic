@@ -45,7 +45,7 @@ use lazy_static::lazy_static;
 use maplit::btreeset;
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque, HashMap};
 use std::convert::{TryFrom, TryInto};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -785,6 +785,7 @@ impl SystemState {
             wasm_memory_limit: None,
             next_snapshot_id: 0,
             snapshots_memory_usage: NumBytes::new(0),
+            environment_variables: BTreeMap::new(),
         }
     }
 
@@ -814,6 +815,7 @@ impl SystemState {
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
         snapshots_memory_usage: NumBytes,
+        environment_variables: BTreeMap<String, Vec<u8>>,
         metrics: &dyn CheckpointLoadingMetrics,
     ) -> Self {
         let system_state = Self {
@@ -843,8 +845,7 @@ impl SystemState {
             wasm_memory_limit,
             next_snapshot_id,
             snapshots_memory_usage,
-            //TODO(EXC-2055): Read the environment variables from the checkpoint
-            environment_variables: Default::default(),
+            environment_variables,
         };
         system_state.check_invariants().unwrap_or_else(|msg| {
             metrics.observe_broken_soft_invariant(msg);
