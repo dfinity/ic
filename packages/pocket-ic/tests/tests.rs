@@ -1141,7 +1141,7 @@ fn test_ecdsa_disabled() {
 
 #[test]
 fn test_vetkd() {
-    use ic_vetkd_utils::{DerivedPublicKey, EncryptedVetKey, TransportSecretKey};
+    use ic_vetkeys::{DerivedPublicKey, EncryptedVetKey, TransportSecretKey};
 
     // We create a PocketIC instance consisting of the II and one application subnet.
     let pic = PocketIcBuilder::new()

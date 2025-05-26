@@ -121,5 +121,6 @@ try_from_u8!(
         CostVetkdDeriveKey = 91,
         LiquidCyclesBalance128 = 92,
         CallDataAppendCyclesAddMax = 93,
+        RootKey = 94,
     }
 );

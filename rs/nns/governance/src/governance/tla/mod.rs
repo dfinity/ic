@@ -16,6 +16,7 @@ pub use tla_instrumentation::checker::{check_tla_code_link, PredicateDescription
 
 use std::path::PathBuf;
 
+use ic_cdk::println;
 use icp_ledger::Subaccount;
 mod common;
 mod store;

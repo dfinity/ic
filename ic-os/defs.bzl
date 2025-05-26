@@ -157,6 +157,7 @@ def icos_build(
         partition_root_hash = partition_root + "-hash"
         partition_boot_tzst = "partition-boot" + test_suffix + ".tzst"
         version_txt = "version" + test_suffix + ".txt"
+        boot_args = "boot" + test_suffix + "_args"
         extra_boot_args = "extra_boot" + test_suffix + "_args"
 
         ext4_image(
@@ -187,10 +188,38 @@ def icos_build(
                     image_deps["bootfs"].items() + [
                         (version_txt, "/version.txt:0644"),
                         (extra_boot_args, "/extra_boot_args:0644"),
-                    ]
+                    ] + ([(boot_args, "/boot_args:0644")] if "boot_args_template" in image_deps else [])
                 )
             },
             tags = ["manual", "no-cache"],
+        )
+
+        # The kernel command line (boot args) was previously split into two parts:
+        # 1. Dynamic args calculated at boot time in grub.cfg
+        # 2. Static args stored in EXTRA_BOOT_ARGS on the boot partition
+        #
+        # For stable and predictable measurements with AMD SEV, we now pre-calculate and combine both parts
+        # into a single complete kernel command line that is:
+        # - Generated during image build
+        # - Stored statically on the boot partition
+        # - Measured as part of the SEV launch measurement
+        #
+        # For backwards compatibility in the GuestOS and compatibility with the HostOS and SetupOS, we continue
+        # to support the old way of calculating the dynamic args (see :extra_boot_args) and we derive boot_args
+        # from it.
+        native.genrule(
+            name = "generate-" + boot_args,
+            outs = [boot_args],
+            srcs = [extra_boot_args, ":boot_args_template"],
+            cmd = """
+                source "$(location """ + extra_boot_args + """)"
+                if [ ! -v EXTRA_BOOT_ARGS ]; then
+                    echo "EXTRA_BOOT_ARGS is not set in $(location """ + extra_boot_args + """)"
+                    exit 1
+                fi
+                m4 --define=EXTRA_BOOT_ARGS="$${EXTRA_BOOT_ARGS}" "$(location :boot_args_template)" > $@
+            """,
+            tags = ["manual"],
         )
 
         # Sign only if extra_boot_args_template is provided
@@ -234,6 +263,13 @@ def icos_build(
         # Inherit tags for this test, to avoid triggering builds for local base images
         tags = tags,
     )
+
+    if "boot_args_template" in image_deps:
+        native.alias(
+            name = "boot_args_template",
+            actual = image_deps["boot_args_template"],
+        )
+
     # -------------------- Assemble disk partitions ---------------
 
     # Build a list of custom partitions to allow "injecting" variant-specific partition logic.
@@ -347,7 +383,6 @@ EOF
         srcs = ["//ic-os:dev-tools/launch-remote-vm.sh"],
         data = [
             "//rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm",
-            "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
             ":disk-img.tar.zst",
             "//rs/tests/nested:empty-disk-img.tar.zst",
             ":version.txt",
@@ -356,7 +391,6 @@ EOF
         env = {
             "BIN": "$(location //rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm)",
             "UPLOAD_SYSTEST_DEP": "$(location //bazel:upload_systest_dep)",
-            "SCRIPT": "$(location //ic-os/components:hostos-scripts/build-bootstrap-config-image.sh)",
             "VERSION_FILE": "$(location :version.txt)",
             "DISK_IMG": "$(location :disk-img.tar.zst)",
             "EMPTY_DISK_IMG_PATH": "$(location //rs/tests/nested:empty-disk-img.tar.zst)",
