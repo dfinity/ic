@@ -356,27 +356,29 @@ fn get_metadata(request: GetMetadataRequest) -> GetMetadataResponse {
 async fn get_metrics(request: GetMetricsRequest) -> get_metrics_response::GetMetricsResponse {
     log!(INFO, "get_metrics");
 
-    let request = sns_gov_pb::GetMetricsRequest::try_from(request).map_err(|err| {
-        get_metrics_response::GetMetricsResponse {
+    let request = sns_gov_pb::GetMetricsRequest::try_from(request);
+
+    if let Err(err) = request {
+        return get_metrics_response::GetMetricsResponse {
             get_metrics_result: Some(get_metrics_response::GetMetricsResult::Err(
                 ic_sns_governance_api::pb::v1::GovernanceError {
                     error_type: i32::from(ErrorType::InvalidCommand),
-                    error_message,
+                    error_message: err,
                 },
             )),
-        }
-    })?;
+        };
+    }
 
-    let result = governance().get_metrics(request).await;
+    let result = governance().get_metrics(request.unwrap()).await;
 
     let get_metrics_result = match result {
         Ok(metrics) => {
-            let metrics = pb_api::get_metrics_response::Metrics::from(metrics);
-            Some(GetMetricsResult::Ok(metrics))
+            let metrics = get_metrics_response::Metrics::from(metrics);
+            Some(get_metrics_response::GetMetricsResult::Ok(metrics))
         }
         Err(err) => {
-            let err = pb_api::GovernanceError::from(err);
-            Some(GetMetricsResult::Err(err))
+            let err = ic_sns_governance_api::pb::v1::GovernanceError::from(err);
+            Some(get_metrics_response::GetMetricsResult::Err(err))
         }
     };
     get_metrics_response::GetMetricsResponse { get_metrics_result }

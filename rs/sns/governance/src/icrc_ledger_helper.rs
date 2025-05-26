@@ -41,25 +41,25 @@ impl<'a> ICRCLedgerHelper<'a> {
 
         let GetBlocksResult { log_length, .. } = call_icrc3_get_blocks(args).await?;
 
-        if log_length == Nat::from(0_u64) {
+        if log_length == 0_u64 {
             // TODO
             // DO NOT MERGE
             // treat the special case of a brand new ledger with zero blocks by setting the API
             // field to null.
-            return todo!();
+            todo!();
         }
 
         // Make the second call to the last added block to fetch the most
         // recent transaction.
         let args = vec![GetBlocksRequest {
-            start: last_block_number,
+            start: log_length - Nat::from(1_u64),
             length: Nat::from(1_u32),
         }];
 
         let GetBlocksResult { blocks, .. } = call_icrc3_get_blocks(args).await?;
 
         let block = match &blocks[..] {
-            [block] => block.block,
+            [block] => &block.block,
             blocks => {
                 return Err(format!(
                     "Error parsing response from {}.icrc3_get_blocks: expected a single block,
@@ -73,7 +73,7 @@ impl<'a> ICRCLedgerHelper<'a> {
         // TODO asserting/logging if blocks.len() != 1
         // We assume in each block we have 1 and only 1 transaction.
         // Block timestamps are in nano seconds
-        let ts_nanos = Self::get_block_timestamp_nanos(&block)?;
+        let ts_nanos = Self::get_block_timestamp_nanos(block)?;
         let ts = ts_nanos / Nat::from(ONE_SEC_NANOSEC);
 
         let u64_digit_components = ts.0.to_u64_digits();
@@ -103,7 +103,7 @@ impl<'a> ICRCLedgerHelper<'a> {
             return Err("Error parsing the block failed: missing timestamp".to_string());
         };
 
-        Ok(timestamp)
+        Ok(timestamp.clone())
     }
 }
 

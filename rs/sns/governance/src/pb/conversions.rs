@@ -1,10 +1,6 @@
 use crate::pb::v1 as pb;
 use crate::topics;
 use ic_sns_governance_api::pb::v1 as pb_api;
-use ic_sns_governance_api::pb::v1::get_metrics_response::GetMetricsResult;
-
-use super::v1::GovernanceError;
-// use ic_sns_governance_api::pb::v1::get_metrics_response::{GetMetricsResult, Metrics};
 
 impl From<pb::NeuronPermission> for pb_api::NeuronPermission {
     fn from(item: pb::NeuronPermission) -> Self {
