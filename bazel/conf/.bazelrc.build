@@ -48,7 +48,6 @@ common --flag_alias=timeout_value=//bazel:timeout_value
 common --flag_alias=hermetic_cc=//bazel:hermetic_cc
 
 common:stamped --workspace_status_command='$(pwd)/bazel/workspace_status.sh --stamp'
-common:release --config=stamped # alias
 
 # Exclude system tests by default
 # https://github.com/bazelbuild/bazel/issues/8439

@@ -71,7 +71,8 @@ runs:
             )
 
             if [[ $release_build == "true" ]]; then
-              bazel_args+=( --config=release )
+              # make sure the version is stamped in
+              bazel_args+=( --config=stamped )
             fi
 
             BAZEL_TARGETS='${{ inputs.BAZEL_TARGETS }}'
