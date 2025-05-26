@@ -196,7 +196,7 @@ async fn explore(registry_url: Url, subnet_id: SubnetId, path: Option<PathBuf>) 
 
         if let Some(path) = path {
             let bytes = cup.encode_to_vec();
-            let file_path = path.join(format!("cup.pb"));
+            let file_path = path.join("cup.pb".to_string());
             println!("Writing cup to {:?}", file_path);
             fs::write(file_path, bytes)
                 .await
