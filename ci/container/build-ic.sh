@@ -136,8 +136,10 @@ rm -rf "$DISK_DIR_FULL"
 if "$BUILD_BIN"; then BAZEL_TARGETS+=("//publish/binaries:bundle"); fi
 if "$BUILD_CAN"; then BAZEL_TARGETS+=("//publish/canisters:bundle"); fi
 if "$BUILD_IMG"; then BAZEL_TARGETS+=(
-    "//ic-os/guestos/envs/prod:bundle"
-    "//ic-os/hostos/envs/prod:bundle"
+    "//ic-os/guestos/envs/prod:bundle-disk"
+    "//ic-os/guestos/envs/prod:bundle-update"
+    "//ic-os/hostos/envs/prod:bundle-disk"
+    "//ic-os/hostos/envs/prod:bundle-update"
     "//ic-os/setupos/envs/prod:bundle"
 ); fi
 
