@@ -2034,10 +2034,11 @@ impl Governance {
         self.proto
             .proposals
             .values()
-            .filter(|proposal_data| {
+            .rev()
+            .take_while(|proposal| {
                 self.env
                     .now()
-                    .saturating_sub(proposal_data.proposal_creation_timestamp_seconds)
+                    .saturating_sub(proposal.proposal_creation_timestamp_seconds)
                     <= time_window_seconds
             })
             .count() as u64
