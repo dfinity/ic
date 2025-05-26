@@ -14,9 +14,8 @@ use crate::{
         resource::{AllocatedVm, HOSTOS_MEMORY_KIB_PER_VM, HOSTOS_VCPUS_PER_VM},
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
-            get_dependency_path, get_dependency_path_from_env, get_elasticsearch_hosts,
-            get_ic_os_update_img_sha256, get_ic_os_update_img_url,
-            get_mainnet_ic_os_update_img_url, get_mainnet_nns_revision,
+            get_dependency_path_from_env, get_elasticsearch_hosts, get_ic_os_update_img_sha256,
+            get_ic_os_update_img_url, get_mainnet_ic_os_update_img_url, get_mainnet_nns_revision,
             get_malicious_ic_os_update_img_sha256, get_malicious_ic_os_update_img_url,
             read_dependency_from_env_to_string, HasIcDependencies, HasTopologySnapshot, HasVmName,
             IcNodeContainer, InitialReplicaVersion, NodesInfo,
@@ -25,10 +24,11 @@ use crate::{
     },
     k8s::job::wait_for_job_completion,
 };
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
+use config::guestos_bootstrap_image::BootstrapOptions;
 use config_types::DeploymentEnvironment;
 use ic_base_types::NodeId;
 use ic_prep_lib::{
@@ -508,98 +508,76 @@ fn create_config_disk_image(
     generate_testnet_config(config, guestos_config_json_path.clone())?;
 
     let img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
-    let script_path =
-        get_dependency_path("ic-os/components/hostos-scripts/build-bootstrap-config-image.sh");
-    let mut cmd = Command::new(script_path);
     let local_store_path = test_env
         .prep_dir(ic_name)
         .expect("No no-name IC")
         .registry_local_store_path();
 
-    cmd.arg(img_path.clone())
-        .arg("--guestos_config")
-        .arg(guestos_config_json_path)
-        .arg("--ic_registry_local_store")
-        .arg(local_store_path)
-        .arg("--ic_state")
-        .arg(node.state_path())
-        .arg("--ic_crypto")
-        .arg(node.crypto_path());
+    let mut bootstrap_options = BootstrapOptions {
+        guestos_config: Some(guestos_config_json_path),
+        ic_registry_local_store: Some(local_store_path),
+        ic_state: Some(node.state_path()),
+        ic_crypto: Some(node.crypto_path()),
+        malicious_behavior,
+        query_stats_epoch_length,
+        domain: domain_name,
+        elasticsearch_hosts,
 
-    let ssh_authorized_pub_keys_dir: PathBuf = test_env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
+        // The bitcoind address specifies the local bitcoin node that the bitcoin adapter should
+        // connect to in the system test environment.
+        bitcoind_addr: test_env
+            .read_json_object::<String, _>(BITCOIND_ADDR_PATH)
+            .ok(),
+
+        // The jaeger address specifies the local Jaeger node that the nodes should connect to in
+        // the system test environment.
+        jaeger_addr: test_env
+            .read_json_object::<String, _>(JAEGER_ADDR_PATH)
+            .ok(),
+
+        // The socks proxy configuration indicates that a socks proxy is available to the system
+        // test environment.
+        socks_proxy: test_env
+            .read_json_object::<String, _>(SOCKS_PROXY_PATH)
+            .ok(),
+        ..Default::default()
+    };
+
+    let ssh_authorized_pub_keys_dir = test_env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
     if ssh_authorized_pub_keys_dir.exists() {
-        cmd.arg("--accounts_ssh_authorized_keys")
-            .arg(ssh_authorized_pub_keys_dir);
+        bootstrap_options.accounts_ssh_authorized_keys = Some(ssh_authorized_pub_keys_dir);
     }
 
     // TODO(NODE-1518): remove passing old config (only exists to pass *downgrade* CI tests)
     if InfraProvider::read_attribute(test_env) == InfraProvider::K8s {
-        cmd.arg("--ipv6_address")
-            .arg(format!("{}/64", node.node_config.public_api.ip()))
-            .arg("--ipv6_gateway")
-            .arg("fe80::ecee:eeff:feee:eeee");
+        bootstrap_options.ipv6_address = Some(format!("{}/64", node.node_config.public_api.ip()));
+        bootstrap_options.ipv6_gateway = Some("fe80::ecee:eeff:feee:eeee".to_string());
     }
+
     if let Some(node) = test_env
         .topology_snapshot_by_name(ic_name)
         .root_subnet()
         .nodes()
         .next()
     {
-        cmd.arg("--nns_urls")
-            .arg(format!("http://[{}]:8080", node.get_ip_addr()));
+        bootstrap_options
+            .nns_urls
+            .push(format!("http://[{}]:8080", node.get_ip_addr()));
     }
-    if let Some(malicious_behavior) = malicious_behavior {
-        cmd.arg("--malicious_behavior")
-            .arg(serde_json::to_string(&malicious_behavior)?);
-    }
-    if let Some(query_stats_epoch_length) = query_stats_epoch_length {
-        cmd.arg("--query_stats_epoch_length")
-            .arg(format!("{}", query_stats_epoch_length));
-    }
+
     if let Some(ipv4_config) = ipv4_config {
-        cmd.arg("--ipv4_address").arg(format!(
+        bootstrap_options.ipv4_address = Some(format!(
             "{}/{:?}",
             ipv4_config.ip_addr(),
             ipv4_config.prefix_length()
         ));
-        cmd.arg("--ipv4_gateway").arg(ipv4_config.gateway_ip_addr());
-    }
-    if let Some(domain_name) = domain_name {
-        cmd.arg("--domain").arg(domain_name);
-    }
-    if !elasticsearch_hosts.is_empty() {
-        cmd.arg("--elasticsearch_hosts")
-            .arg(elasticsearch_hosts.join(" "));
+        bootstrap_options.ipv4_gateway = Some(ipv4_config.gateway_ip_addr().to_string());
     }
 
-    // The bitcoind address specifies the local bitcoin node that the bitcoin adapter should connect to in the system test environment.
-    if let Ok(arg) = test_env.read_json_object::<String, _>(BITCOIND_ADDR_PATH) {
-        cmd.arg("--bitcoind_addr").arg(arg);
-    }
-    // The jaeger address specifies the local Jaeger node that the nodes should connect to in the system test environment.
-    if let Ok(arg) = test_env.read_json_object::<String, _>(JAEGER_ADDR_PATH) {
-        cmd.arg("--jaeger_addr").arg(arg);
-    }
-    // The socks proxy configuration indicates that a socks proxy is available to the system test environment.
-    if let Ok(arg) = test_env.read_json_object::<String, _>(SOCKS_PROXY_PATH) {
-        cmd.arg("--socks_proxy").arg(arg);
-    }
+    bootstrap_options
+        .build_bootstrap_config_image(&img_path)
+        .context("Could not create bootstrap config image")?;
 
-    let key = "PATH";
-    let old_path = match std::env::var(key) {
-        Ok(val) => {
-            println!("{}: {:?}", key, val);
-            val
-        }
-        Err(e) => {
-            bail!("Couldn't interpret {}: {}", key, e)
-        }
-    };
-    cmd.env("PATH", format!("{}:{}", "/usr/sbin", old_path));
-
-    if !cmd.status()?.success() {
-        bail!("Could not spawn image creation process");
-    }
     let mut img_file = File::open(img_path)?;
     let compressed_img_path = PathBuf::from(&node.node_path).join(mk_compressed_img_path());
     let compressed_img_file = File::create(compressed_img_path.clone())?;
