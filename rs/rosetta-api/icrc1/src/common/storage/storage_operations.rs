@@ -320,6 +320,17 @@ pub fn store_blocks(
                 expires_at,
             ),
         };
+
+        // SQLite doesn't support unsigned 64-bit integers. We need to convert the timestamps to signed
+        // 64-bit integers before storing them.
+        // TODO: Change the timestamps to a text type. Keeping timestamps as signed integers can cause
+        // issues if someone tries to compare them directly in the DB.
+        let timestamp = rosetta_block.get_timestamp();
+        let timestamp_i64 = convert_timestamp_to_db(timestamp);
+        let transaction_created_at_time_i64 =
+            transaction.created_at_time.map(convert_timestamp_to_db);
+        let approval_expires_at_i64 = approval_expires_at.map(convert_timestamp_to_db);
+
         insert_tx.prepare_cached(
         "INSERT OR IGNORE INTO blocks (idx, hash, serialized_block, parent_hash, timestamp,tx_hash,operation_type,from_principal,from_subaccount,to_principal,to_subaccount,spender_principal,spender_subaccount,memo,amount,expected_allowance,fee,transaction_created_at_time,approval_expires_at) VALUES (:idx, :hash, :serialized_block, :parent_hash, :timestamp,:tx_hash,:operation_type,:from_principal,:from_subaccount,:to_principal,:to_subaccount,:spender_principal,:spender_subaccount,:memo,:amount,:expected_allowance,:fee,:transaction_created_at_time,:approval_expires_at)")?
                     .execute(named_params! {
@@ -327,7 +338,7 @@ pub fn store_blocks(
                         ":hash":rosetta_block.clone().get_block_hash().as_slice().to_vec(),
                         ":serialized_block":rosetta_block.block,
                         ":parent_hash":rosetta_block.get_parent_hash().clone().map(|hash| hash.as_slice().to_vec()),
-                        ":timestamp":rosetta_block.get_timestamp(),
+                        ":timestamp":timestamp_i64,
                         ":tx_hash":rosetta_block.clone().get_transaction_hash().as_slice().to_vec(),
                         ":operation_type":operation_type,
                         ":from_principal":from_principal.map(|x| x.as_slice().to_vec()),
@@ -340,12 +351,25 @@ pub fn store_blocks(
                         ":amount":amount.to_string(),
                         ":expected_allowance":expected_allowance.map(|ea| ea.to_string()),
                         ":fee":fee.map(|fee| fee.to_string()),
-                        ":transaction_created_at_time":transaction.created_at_time,
-                        ":approval_expires_at":approval_expires_at
+                        ":transaction_created_at_time":transaction_created_at_time_i64,
+                        ":approval_expires_at":approval_expires_at_i64
                     })?;
     }
     insert_tx.commit()?;
     Ok(())
+}
+
+// Helper function to convert u64 timestamp to i64 for database storage
+fn convert_timestamp_to_db(timestamp: u64) -> i64 {
+    // Check if timestamp exceeds i64::MAX
+    if timestamp > i64::MAX as u64 {
+        // For values exceeding i64::MAX, we need to preserve the lower bits
+        // but represent them as a negative number in two's complement
+        ((timestamp & 0x7fffffffffffffff) as i64) | i64::MIN
+    } else {
+        // Safe conversion when within i64 range
+        timestamp as i64
+    }
 }
 
 // Returns a RosettaBlock if the block index exists in the database, else returns None.
