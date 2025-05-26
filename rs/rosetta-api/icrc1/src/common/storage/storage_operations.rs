@@ -641,11 +641,11 @@ where
 /// Repairs account balances for databases created before the fee collector block index fix.
 /// This function clears the account_balances table and rebuilds it from scratch using the
 /// corrected fee collector resolution logic by reprocessing all blocks.
-/// 
+///
 /// This function checks if the repair has already been performed by looking for a
 /// "collector_balances_fixed" entry in the counters table. If found, it skips the repair.
 /// If the repair is performed successfully, it adds the counter entry to prevent future runs.
-/// 
+///
 /// This is safe to run multiple times - it will produce the same correct result each time.
 pub fn repair_fee_collector_balances(connection: &mut Connection) -> anyhow::Result<()> {
     // Check if the repair has already been performed
@@ -654,22 +654,22 @@ pub fn repair_fee_collector_balances(connection: &mut Connection) -> anyhow::Res
         .query_map(params![], |row| row.get::<_, i64>(0))?
         .next()
         .is_some();
-    
+
     if already_fixed {
         // Repair has already been performed, skip it
         return Ok(());
     }
-    
+
     // Get block count for logging
     let block_count = connection
         .prepare_cached("SELECT COUNT(*) FROM blocks")?
         .query_map(params![], |row| row.get::<_, i64>(0))?
         .next()
         .unwrap()?;
-    
+
     info!("Starting balance reconciliation...");
     connection.execute("DELETE FROM account_balances", params![])?;
-    
+
     if block_count > 0 {
         info!("Reprocessing all blocks...");
         update_account_balances(connection)?;
@@ -677,14 +677,14 @@ pub fn repair_fee_collector_balances(connection: &mut Connection) -> anyhow::Res
     } else {
         info!("No blocks to process (empty database)");
     }
-    
+
     // Mark the repair as completed by adding a counter entry
     connection.execute(
         "INSERT INTO counters (name, value) VALUES ('collector_balances_fixed', 1)",
-        params![]
+        params![],
     )?;
-    
+
     info!("Balance reconciliation completed successfully");
-    
+
     Ok(())
 }

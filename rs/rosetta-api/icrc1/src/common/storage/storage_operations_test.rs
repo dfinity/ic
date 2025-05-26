@@ -390,7 +390,10 @@ fn test_fee_collector_block_index_resolution() -> anyhow::Result<()> {
     let block2 = create_test_rosetta_block(2, 1000000002, &principal1, 300);
 
     // Store the blocks
-    store_blocks(&mut connection, vec![block0.clone(), block1.clone(), block2.clone()])?;
+    store_blocks(
+        &mut connection,
+        vec![block0.clone(), block1.clone(), block2.clone()],
+    )?;
 
     // Test the fee collector resolution function directly
     let resolved_collector_0 = get_fee_collector_from_block(&block0, &connection)?;
@@ -416,7 +419,10 @@ fn test_fee_collector_block_index_resolution() -> anyhow::Result<()> {
     // This should return an error
     let result = get_fee_collector_from_block(&block3, &connection);
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("no block at that index"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("no block at that index"));
 
     // Test with a block that references a block without a fee collector
     let mut block4 = create_test_rosetta_block(4, 1000000004, &principal1, 500);
@@ -428,7 +434,10 @@ fn test_fee_collector_block_index_resolution() -> anyhow::Result<()> {
     // This should return an error
     let result = get_fee_collector_from_block(&block4, &connection);
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("has no fee_collector set"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("has no fee_collector set"));
 
     Ok(())
 }
@@ -496,7 +505,10 @@ fn test_repair_fee_collector_balances() -> anyhow::Result<()> {
     };
 
     // Store all blocks
-    store_blocks(&mut connection, vec![mint_block.clone(), block1.clone(), block2.clone()])?;
+    store_blocks(
+        &mut connection,
+        vec![mint_block.clone(), block1.clone(), block2.clone()],
+    )?;
 
     // Test that the repair function works by simply calling it
     // Since we're clearing and rebuilding all balances, we don't need to simulate broken state
@@ -514,7 +526,8 @@ fn test_repair_fee_collector_balances() -> anyhow::Result<()> {
     let to_balance_at_1 = get_account_balance_at_block_idx(&connection, &to_account, 1)?;
     assert_eq!(to_balance_at_1, Some(Nat::from(100u64)));
 
-    let fee_collector_balance_at_1 = get_account_balance_at_block_idx(&connection, &fee_collector_account, 1)?;
+    let fee_collector_balance_at_1 =
+        get_account_balance_at_block_idx(&connection, &fee_collector_account, 1)?;
     assert_eq!(fee_collector_balance_at_1, Some(Nat::from(1u64))); // Fee correctly credited
 
     // Block 2: Transfer 200, fee 1 - fee collector should be credited via fee_collector_block_index
@@ -524,14 +537,19 @@ fn test_repair_fee_collector_balances() -> anyhow::Result<()> {
     let to_balance_at_2 = get_account_balance_at_block_idx(&connection, &to_account, 2)?;
     assert_eq!(to_balance_at_2, Some(Nat::from(300u64))); // +200 more
 
-    let fee_collector_balance_at_2 = get_account_balance_at_block_idx(&connection, &fee_collector_account, 2)?;
+    let fee_collector_balance_at_2 =
+        get_account_balance_at_block_idx(&connection, &fee_collector_account, 2)?;
     assert_eq!(fee_collector_balance_at_2, Some(Nat::from(2u64))); // Fee correctly credited via block index resolution
 
     // Verify that running the repair again doesn't change anything (idempotent)
     repair_fee_collector_balances(&mut connection)?;
 
-    let fee_collector_balance_after_second_repair = get_account_balance_at_block_idx(&connection, &fee_collector_account, 2)?;
-    assert_eq!(fee_collector_balance_after_second_repair, Some(Nat::from(2u64))); // Still 2
+    let fee_collector_balance_after_second_repair =
+        get_account_balance_at_block_idx(&connection, &fee_collector_account, 2)?;
+    assert_eq!(
+        fee_collector_balance_after_second_repair,
+        Some(Nat::from(2u64))
+    ); // Still 2
 
     Ok(())
 }
@@ -581,7 +599,10 @@ fn test_repair_fee_collector_balances_counter_check() -> anyhow::Result<()> {
         .query_map(params![], |row| row.get::<_, i64>(0))?
         .next()
         .is_some();
-    assert!(counter_exists_after, "Counter should exist after first repair");
+    assert!(
+        counter_exists_after,
+        "Counter should exist after first repair"
+    );
 
     // Verify that the account balance was created
     let from_balance = get_account_balance_at_block_idx(&connection, &from_account, 0)?;
@@ -589,7 +610,7 @@ fn test_repair_fee_collector_balances_counter_check() -> anyhow::Result<()> {
 
     // Clear the account balances to simulate what would happen if repair ran again
     connection.execute("DELETE FROM account_balances", params![])?;
-    
+
     // Verify that account balance is now empty
     let from_balance_after_clear = get_account_balance_at_block_idx(&connection, &from_account, 0)?;
     assert_eq!(from_balance_after_clear, None);
@@ -598,8 +619,12 @@ fn test_repair_fee_collector_balances_counter_check() -> anyhow::Result<()> {
     repair_fee_collector_balances(&mut connection)?;
 
     // Verify that the account balance is still empty (repair was skipped)
-    let from_balance_after_second_repair = get_account_balance_at_block_idx(&connection, &from_account, 0)?;
-    assert_eq!(from_balance_after_second_repair, None, "Repair should have been skipped due to counter");
+    let from_balance_after_second_repair =
+        get_account_balance_at_block_idx(&connection, &from_account, 0)?;
+    assert_eq!(
+        from_balance_after_second_repair, None,
+        "Repair should have been skipped due to counter"
+    );
 
     Ok(())
 }
@@ -608,7 +633,7 @@ fn test_repair_fee_collector_balances_counter_check() -> anyhow::Result<()> {
 fn test_repair_fee_collector_balances_empty_db() -> anyhow::Result<()> {
     // Test scenario: Empty database (no blocks, no account balances)
     // This should complete successfully without doing anything
-    
+
     let temp_dir = tempdir()?;
     let db_path = temp_dir.path().join("test_empty_db.sqlite");
 
@@ -629,7 +654,10 @@ fn test_repair_fee_collector_balances_empty_db() -> anyhow::Result<()> {
         .query_map(params![], |row| row.get::<_, i64>(0))?
         .next()
         .unwrap()?;
-    assert_eq!(balance_count, 0, "Account balances should be empty initially");
+    assert_eq!(
+        balance_count, 0,
+        "Account balances should be empty initially"
+    );
 
     // Verify that the counter doesn't exist initially
     let counter_exists_before = connection
@@ -648,7 +676,10 @@ fn test_repair_fee_collector_balances_empty_db() -> anyhow::Result<()> {
         .query_map(params![], |row| row.get::<_, i64>(0))?
         .next()
         .is_some();
-    assert!(counter_exists_after, "Counter should exist after repair on empty DB");
+    assert!(
+        counter_exists_after,
+        "Counter should exist after repair on empty DB"
+    );
 
     // Verify database is still empty (no blocks or balances were created)
     let block_count_after = connection
@@ -656,14 +687,20 @@ fn test_repair_fee_collector_balances_empty_db() -> anyhow::Result<()> {
         .query_map(params![], |row| row.get::<_, i64>(0))?
         .next()
         .unwrap()?;
-    assert_eq!(block_count_after, 0, "Database should still be empty after repair");
+    assert_eq!(
+        block_count_after, 0,
+        "Database should still be empty after repair"
+    );
 
     let balance_count_after = connection
         .prepare_cached("SELECT COUNT(*) FROM account_balances")?
         .query_map(params![], |row| row.get::<_, i64>(0))?
         .next()
         .unwrap()?;
-    assert_eq!(balance_count_after, 0, "Account balances should still be empty after repair");
+    assert_eq!(
+        balance_count_after, 0,
+        "Account balances should still be empty after repair"
+    );
 
     // Run repair again to verify it's skipped
     repair_fee_collector_balances(&mut connection)?;
@@ -674,7 +711,10 @@ fn test_repair_fee_collector_balances_empty_db() -> anyhow::Result<()> {
         .query_map(params![], |row| row.get::<_, i64>(0))?
         .next()
         .is_some();
-    assert!(counter_exists_final, "Counter should still exist after second repair");
+    assert!(
+        counter_exists_final,
+        "Counter should still exist after second repair"
+    );
 
     Ok(())
 }
@@ -683,7 +723,7 @@ fn test_repair_fee_collector_balances_empty_db() -> anyhow::Result<()> {
 fn test_repair_fee_collector_balances_already_fixed_db() -> anyhow::Result<()> {
     // Test scenario: Database that already has the fix applied (counter exists)
     // This should skip the repair entirely
-    
+
     let temp_dir = tempdir()?;
     let db_path = temp_dir.path().join("test_already_fixed_db.sqlite");
 
@@ -739,7 +779,10 @@ fn test_repair_fee_collector_balances_already_fixed_db() -> anyhow::Result<()> {
     };
 
     // Store all blocks
-    store_blocks(&mut connection, vec![mint_block.clone(), block1.clone(), block2.clone()])?;
+    store_blocks(
+        &mut connection,
+        vec![mint_block.clone(), block1.clone(), block2.clone()],
+    )?;
 
     // Manually set up correct account balances (simulating a database that was already fixed)
     connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (0, ?1, ?2, '1000000000')", 
@@ -758,7 +801,10 @@ fn test_repair_fee_collector_balances_already_fixed_db() -> anyhow::Result<()> {
         params![fee_collector_account.owner.as_slice(), fee_collector_account.effective_subaccount().as_slice()])?;
 
     // Manually add the "already fixed" counter to simulate a database that was already repaired
-    connection.execute("INSERT INTO counters (name, value) VALUES ('collector_balances_fixed', 1)", params![])?;
+    connection.execute(
+        "INSERT INTO counters (name, value) VALUES ('collector_balances_fixed', 1)",
+        params![],
+    )?;
 
     // Verify the counter exists before repair
     let counter_exists_before = connection
@@ -766,24 +812,45 @@ fn test_repair_fee_collector_balances_already_fixed_db() -> anyhow::Result<()> {
         .query_map(params![], |row| row.get::<_, i64>(0))?
         .next()
         .is_some();
-    assert!(counter_exists_before, "Counter should exist (simulating already fixed DB)");
+    assert!(
+        counter_exists_before,
+        "Counter should exist (simulating already fixed DB)"
+    );
 
     // Verify the correct balances exist before repair
-    let fee_collector_balance_before = get_account_balance_at_block_idx(&connection, &fee_collector_account, 2)?;
-    assert_eq!(fee_collector_balance_before, Some(Nat::from(2u64)), "Fee collector should have correct balance before repair");
+    let fee_collector_balance_before =
+        get_account_balance_at_block_idx(&connection, &fee_collector_account, 2)?;
+    assert_eq!(
+        fee_collector_balance_before,
+        Some(Nat::from(2u64)),
+        "Fee collector should have correct balance before repair"
+    );
 
     // Run the repair function - it should skip the repair due to existing counter
     repair_fee_collector_balances(&mut connection)?;
 
     // Verify that the balances are unchanged (repair was skipped)
-    let fee_collector_balance_after = get_account_balance_at_block_idx(&connection, &fee_collector_account, 2)?;
-    assert_eq!(fee_collector_balance_after, Some(Nat::from(2u64)), "Fee collector balance should be unchanged (repair skipped)");
+    let fee_collector_balance_after =
+        get_account_balance_at_block_idx(&connection, &fee_collector_account, 2)?;
+    assert_eq!(
+        fee_collector_balance_after,
+        Some(Nat::from(2u64)),
+        "Fee collector balance should be unchanged (repair skipped)"
+    );
 
     let from_balance_after = get_account_balance_at_block_idx(&connection, &from_account, 2)?;
-    assert_eq!(from_balance_after, Some(Nat::from(999999698u64)), "From account balance should be unchanged");
+    assert_eq!(
+        from_balance_after,
+        Some(Nat::from(999999698u64)),
+        "From account balance should be unchanged"
+    );
 
     let to_balance_after = get_account_balance_at_block_idx(&connection, &to_account, 2)?;
-    assert_eq!(to_balance_after, Some(Nat::from(300u64)), "To account balance should be unchanged");
+    assert_eq!(
+        to_balance_after,
+        Some(Nat::from(300u64)),
+        "To account balance should be unchanged"
+    );
 
     // Verify counter still exists
     let counter_exists_after = connection
@@ -791,7 +858,10 @@ fn test_repair_fee_collector_balances_already_fixed_db() -> anyhow::Result<()> {
         .query_map(params![], |row| row.get::<_, i64>(0))?
         .next()
         .is_some();
-    assert!(counter_exists_after, "Counter should still exist after repair");
+    assert!(
+        counter_exists_after,
+        "Counter should still exist after repair"
+    );
 
     Ok(())
 }
@@ -800,7 +870,7 @@ fn test_repair_fee_collector_balances_already_fixed_db() -> anyhow::Result<()> {
 fn test_repair_fee_collector_balances_broken_state() -> anyhow::Result<()> {
     // Test scenario: Database with broken fee collector balances (simulating pre-fix state)
     // This should detect and fix the missing fee collector credits
-    
+
     let temp_dir = tempdir()?;
     let db_path = temp_dir.path().join("test_broken_state_db.sqlite");
 
@@ -870,15 +940,23 @@ fn test_repair_fee_collector_balances_broken_state() -> anyhow::Result<()> {
     };
 
     // Store all blocks
-    store_blocks(&mut connection, vec![mint_block.clone(), block1.clone(), block2.clone(), block3.clone()])?;
+    store_blocks(
+        &mut connection,
+        vec![
+            mint_block.clone(),
+            block1.clone(),
+            block2.clone(),
+            block3.clone(),
+        ],
+    )?;
 
     // Manually set up BROKEN account balances (simulating the pre-fix state)
     // The bug was that fee collectors weren't credited for blocks using fee_collector_block_index
-    
+
     // Block 0: Mint - this would be correct
     connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (0, ?1, ?2, '1000000000')", 
         params![from_account.owner.as_slice(), from_account.effective_subaccount().as_slice()])?;
-    
+
     // Block 1: Transfer with direct fee collector - this would be correct
     connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (1, ?1, ?2, '999999899')", 
         params![from_account.owner.as_slice(), from_account.effective_subaccount().as_slice()])?;
@@ -886,14 +964,14 @@ fn test_repair_fee_collector_balances_broken_state() -> anyhow::Result<()> {
         params![to_account.owner.as_slice(), to_account.effective_subaccount().as_slice()])?;
     connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (1, ?1, ?2, '1')", 
         params![fee_collector_account.owner.as_slice(), fee_collector_account.effective_subaccount().as_slice()])?;
-    
+
     // Block 2: Transfer with fee_collector_block_index - BROKEN (fee collector not credited)
     connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (2, ?1, ?2, '999999698')", 
         params![from_account.owner.as_slice(), from_account.effective_subaccount().as_slice()])?;
     connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (2, ?1, ?2, '300')", 
         params![to_account.owner.as_slice(), to_account.effective_subaccount().as_slice()])?;
     // NOTE: Fee collector balance is NOT updated here - this is the bug!
-    
+
     // Block 3: Another transfer with fee_collector_block_index - BROKEN (fee collector not credited)
     connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (3, ?1, ?2, '999999397')", 
         params![from_account.owner.as_slice(), from_account.effective_subaccount().as_slice()])?;
@@ -902,11 +980,20 @@ fn test_repair_fee_collector_balances_broken_state() -> anyhow::Result<()> {
     // NOTE: Fee collector balance is NOT updated here either - this is the bug!
 
     // Verify the broken state before repair
-    let fee_collector_balance_before = get_account_balance_at_block_idx(&connection, &fee_collector_account, 3)?;
-    assert_eq!(fee_collector_balance_before, Some(Nat::from(1u64)), "Fee collector should only have 1 token (broken state)");
+    let fee_collector_balance_before =
+        get_account_balance_at_block_idx(&connection, &fee_collector_account, 3)?;
+    assert_eq!(
+        fee_collector_balance_before,
+        Some(Nat::from(1u64)),
+        "Fee collector should only have 1 token (broken state)"
+    );
 
     let from_balance_before = get_account_balance_at_block_idx(&connection, &from_account, 3)?;
-    assert_eq!(from_balance_before, Some(Nat::from(999999397u64)), "From account should have incorrect balance (broken state)");
+    assert_eq!(
+        from_balance_before,
+        Some(Nat::from(999999397u64)),
+        "From account should have incorrect balance (broken state)"
+    );
 
     // Verify that the counter doesn't exist initially
     let counter_exists_before = connection
@@ -920,14 +1007,27 @@ fn test_repair_fee_collector_balances_broken_state() -> anyhow::Result<()> {
     repair_fee_collector_balances(&mut connection)?;
 
     // Verify that the balances are now CORRECT after repair
-    let fee_collector_balance_after = get_account_balance_at_block_idx(&connection, &fee_collector_account, 3)?;
-    assert_eq!(fee_collector_balance_after, Some(Nat::from(3u64)), "Fee collector should now have 3 tokens (1+1+1 fees)");
+    let fee_collector_balance_after =
+        get_account_balance_at_block_idx(&connection, &fee_collector_account, 3)?;
+    assert_eq!(
+        fee_collector_balance_after,
+        Some(Nat::from(3u64)),
+        "Fee collector should now have 3 tokens (1+1+1 fees)"
+    );
 
     let from_balance_after = get_account_balance_at_block_idx(&connection, &from_account, 3)?;
-    assert_eq!(from_balance_after, Some(Nat::from(999999397u64)), "From account balance should be correct");
+    assert_eq!(
+        from_balance_after,
+        Some(Nat::from(999999397u64)),
+        "From account balance should be correct"
+    );
 
     let to_balance_after = get_account_balance_at_block_idx(&connection, &to_account, 3)?;
-    assert_eq!(to_balance_after, Some(Nat::from(600u64)), "To account balance should be correct");
+    assert_eq!(
+        to_balance_after,
+        Some(Nat::from(600u64)),
+        "To account balance should be correct"
+    );
 
     // Verify that the counter now exists (repair completed)
     let counter_exists_after = connection
@@ -940,10 +1040,13 @@ fn test_repair_fee_collector_balances_broken_state() -> anyhow::Result<()> {
     // Run repair again to verify it's skipped and balances remain correct
     repair_fee_collector_balances(&mut connection)?;
 
-    let fee_collector_balance_final = get_account_balance_at_block_idx(&connection, &fee_collector_account, 3)?;
-    assert_eq!(fee_collector_balance_final, Some(Nat::from(3u64)), "Fee collector balance should remain correct after second repair");
+    let fee_collector_balance_final =
+        get_account_balance_at_block_idx(&connection, &fee_collector_account, 3)?;
+    assert_eq!(
+        fee_collector_balance_final,
+        Some(Nat::from(3u64)),
+        "Fee collector balance should remain correct after second repair"
+    );
 
     Ok(())
 }
-
-

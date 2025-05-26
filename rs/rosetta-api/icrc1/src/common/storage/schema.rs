@@ -119,5 +119,3 @@ pub fn create_indexes(connection: &Connection) -> Result<()> {
 
     Ok(())
 }
-
-
