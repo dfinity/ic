@@ -1,7 +1,7 @@
 //! This module contains a canister used for XNet integration test.
 use candid::{CandidType, Principal};
 use ic_cdk::api::{call::call_raw, id};
-use ic_cdk_macros::query;
+use ic_cdk::query;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::cmp::min;

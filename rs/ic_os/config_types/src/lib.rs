@@ -104,7 +104,7 @@ pub struct ICOSDevSettings {}
 pub struct SetupOSSettings;
 
 /// HostOS-specific settings.
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
 pub struct HostOSSettings {
     pub vm_memory: u32,
     pub vm_cpu: String,

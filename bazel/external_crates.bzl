@@ -192,7 +192,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "aide": crate.spec(
-                version = "^0.14.1",
+                version = "^0.14.2",
                 features = [
                     "axum",
                     "axum-json",
@@ -228,12 +228,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "async-recursion": crate.spec(
                 version = "^1.0.5",
             ),
-            "async-scoped": crate.spec(
-                version = "^0.8.0",
-                features = [
-                    "use-tokio",
-                ],
-            ),
             "async-stream": crate.spec(
                 version = "^0.3.6",
             ),
@@ -241,14 +235,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.1.83",
             ),
             "axum": crate.spec(
-                version = "^0.8.1",
+                version = "^0.8.4",
             ),
             "axum-extra": crate.spec(
-                version = "^0.10.0",
+                version = "^0.10.1",
                 features = ["typed-header"],
             ),
             "axum-server": crate.spec(
-                version = "^0.7.1",
+                version = "^0.7.2",
                 features = [
                     "tls-rustls-no-provider",
                 ],
@@ -456,6 +450,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "dashmap": crate.spec(
                 version = "^5.3.4",
             ),
+            "derive-new": crate.spec(
+                version = "^0.7.0",
+            ),
             "dfx-core": crate.spec(
                 version = "^0.1.3",
             ),
@@ -548,13 +545,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.12",
             ),
             "http": crate.spec(
-                version = "^1.2.0",
+                version = "^1.3.1",
             ),
             "http-body": crate.spec(
                 version = "^1.0.1",
             ),
             "http-body-util": crate.spec(
-                version = "^0.1.2",
+                version = "^0.1.3",
             ),
             "hmac": crate.spec(
                 version = "^0.12",
@@ -565,13 +562,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = ["p384", "alloc"],
             ),
             "humantime": crate.spec(
-                version = "^2.1.0",
+                version = "^2.2.0",
             ),
             "humantime-serde": crate.spec(
                 version = "^1.1.1",
             ),
             "hyper": crate.spec(
-                version = "^1.5.1",
+                version = "^1.6.0",
                 features = ["full"],
             ),
             "hyper-socks2": crate.spec(
@@ -579,12 +576,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "hyper-util": crate.spec(
-                version = "^0.1.10",
+                version = "^0.1.12",
                 features = ["full"],
             ),
             "hyper-rustls": crate.spec(
                 default_features = False,
-                version = "^0.27.3",
+                version = "^0.27.5",
                 features = [
                     "http1",
                     "http2",
@@ -602,7 +599,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-bn-lib": crate.spec(
                 git = "https://github.com/dfinity/ic-bn-lib",
-                rev = "686cff6ccd422716d48767a299ab33044a27d4ad",
+                rev = "ec4a6b4abab2d94e09c4d5fee2d57d7bb1260835",
+                features = [
+                    "acme_alpn",
+                ],
             ),
             "ic-btc-interface": crate.spec(
                 version = "^0.2.2",
@@ -618,21 +618,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "3.0.3",
             ),
             "ic-cdk": crate.spec(
-                version = "^0.18.0",
+                version = "^0.17.2",
             ),
-            "ic-cdk-0-17-1": crate.spec(
+            "ic-cdk-next": crate.spec(
                 package = "ic-cdk",
-                version = "^0.17.1",
+                version = "^0.18.0",
             ),
             "ic-cdk-timers": crate.spec(
                 version = "^0.11.0",
-            ),
-            "ic-cdk-macros": crate.spec(
-                version = "^0.18.0",
-            ),
-            "ic-cdk-macros-0-17-1": crate.spec(
-                package = "ic-cdk-macros",
-                version = "^0.17.1",
             ),
             "ic-certified-map": crate.spec(
                 version = "^0.3.1",
@@ -645,7 +638,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-gateway": crate.spec(
                 git = "https://github.com/dfinity/ic-gateway",
-                rev = "469d2daee8b44aadb46400bcb2832d560baf7272",
+                rev = "ed8539d9edd45b97148c46b8020fa6d7ebd48c07",
+                default_features = False,
             ),
             "ic-http-certification": crate.spec(
                 version = "3.0.3",
@@ -696,6 +690,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "alloc",
                 ],
                 default_features = False,
+            ),
+            "ic-vetkeys": crate.spec(
+                git = "https://github.com/dfinity/vetkeys",
+                rev = "5885675b6ccb5269cfac9740dc3da6f14f75347f",
             ),
             "ic-wasm": crate.spec(
                 version = "^0.8.4",
@@ -1070,7 +1068,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.11.0",
             ),
             "reqwest": crate.spec(
-                version = "^0.12.12",
+                version = "^0.12.15",
                 default_features = False,
                 features = [
                     "blocking",
@@ -1202,7 +1200,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.9.33",
             ),
             "sha2": crate.spec(
-                version = "^0.10.8",
+                version = "^0.10.9",
             ),
             "sha3": crate.spec(
                 version = "^0.10.8",
@@ -1390,11 +1388,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.12.3",
             ),
             "tower": crate.spec(
-                version = "^0.5.1",
+                version = "^0.5.2",
                 features = ["full"],
             ),
             "tower-http": crate.spec(
-                version = "^0.6.2",
+                version = "^0.6.4",
                 features = [
                     "cors",
                     "limit",
@@ -1405,10 +1403,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "tracing",
                 ],
             ),
-            # axum 0.8 support not yet released, use git
             "tower_governor": crate.spec(
-                git = "https://github.com/benwis/tower-governor",
-                rev = "bc9a6eacafcaec1e732886ceae8ae324bbd327df",
+                version = "^0.7.0",
             ),
             "tower-request-id": crate.spec(
                 version = "^0.3.0",
@@ -1455,8 +1451,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "serde",
                 ],
             ),
+            # DO NOT upgrade to >=1.13 unless you are ready to deal with problems.
+            # This breaks `wasm32-unknown-unknown` compatibility.
+            # Read https://github.com/uuid-rs/uuid/releases/tag/1.13.0
             "uuid": crate.spec(
-                version = "^1.11.0",
+                version = "=1.12.1",
                 features = [
                     "v4",
                     "serde",
@@ -1560,4 +1559,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
         splicing_config = splicing_config(
             resolver_version = "2",
         ),
+        supported_platform_triples =
+            [
+                "aarch64-apple-darwin",
+                "aarch64-unknown-linux-gnu",
+                "wasm32-unknown-unknown",
+                "x86_64-apple-darwin",
+                "x86_64-unknown-linux-gnu",
+            ],
     )

@@ -97,7 +97,7 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::{
     self as api,
-    manage_neuron_response::{self, MergeMaturityResponse, StakeMaturityResponse},
+    manage_neuron_response::{self, StakeMaturityResponse},
     proposal_validation,
     subnet_rental::SubnetRentalRequest,
     CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons, ListNeuronsResponse,
@@ -584,12 +584,6 @@ impl NnsFunction {
 }
 
 impl Proposal {
-    /// Whether this proposal is restricted, that is, whether neuron voting
-    /// eligibility depends on the content of this proposal.
-    pub fn is_manage_neuron(&self) -> bool {
-        self.topic() == Topic::NeuronManagement
-    }
-
     /// If this is a [ManageNeuron] proposal, this returns the ID of
     /// the managed neuron.
     pub fn managed_neuron(&self) -> Option<NeuronIdOrSubaccount> {
@@ -602,10 +596,9 @@ impl Proposal {
         }
     }
 
-    /// Compute the topic that a given proposal belongs to. The topic
-    /// of a proposal governs what followers that are taken into
-    /// account when the proposal is voted on.
-    pub(crate) fn topic(&self) -> Topic {
+    /// Computes a topic to a given proposal at the creation time. The topic of a proposal governs
+    /// what followers that are taken into account when the proposal is voted on.
+    pub(crate) fn compute_topic_at_creation(&self) -> Topic {
         if let Some(action) = &self.action {
             match action {
                 Action::ManageNeuron(_) => Topic::NeuronManagement,
@@ -812,18 +805,6 @@ impl Action {
 }
 
 impl ProposalData {
-    pub fn topic(&self) -> Topic {
-        if let Some(proposal) = &self.proposal {
-            proposal.topic()
-        } else {
-            println!(
-                "{}ERROR: ProposalData has no proposal! {:#?}",
-                LOG_PREFIX, self
-            );
-            Topic::Unspecified
-        }
-    }
-
     /// Compute the 'status' of a proposal. See [ProposalStatus] for
     /// more information.
     pub fn status(&self) -> ProposalStatus {
@@ -845,9 +826,7 @@ impl ProposalData {
     /// Whether this proposal is restricted, that is, whether neuron voting
     /// eligibility depends on the content of this proposal.
     pub fn is_manage_neuron(&self) -> bool {
-        self.proposal
-            .as_ref()
-            .is_some_and(Proposal::is_manage_neuron)
+        self.topic() == Topic::NeuronManagement
     }
 
     pub fn reward_status(
@@ -925,7 +904,7 @@ impl ProposalData {
         // no only needs a tie.
         let current_deadline = wait_for_quiet_state.current_deadline_timestamp_seconds;
         let deciding_amount_yes = new_tally.total / 2 + 1;
-        let deciding_amount_no = (new_tally.total + 1) / 2;
+        let deciding_amount_no = new_tally.total.div_ceil(2);
         if new_tally.yes >= deciding_amount_yes
             || new_tally.no >= deciding_amount_no
             || now_seconds > current_deadline
@@ -1671,8 +1650,7 @@ impl Governance {
         cmc: Arc<dyn CMC>,
         mut randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
-        let (heap_neurons, heap_governance_proto, maybe_rng_seed) =
-            split_governance_proto(governance_proto);
+        let (_, heap_governance_proto, maybe_rng_seed) = split_governance_proto(governance_proto);
 
         // Carry over the previous rng seed to avoid race conditions in handling queued ingress
         // messages that may require a functioning RNG.
@@ -1682,7 +1660,7 @@ impl Governance {
 
         Self {
             heap_data: heap_governance_proto,
-            neuron_store: NeuronStore::new_restored(heap_neurons),
+            neuron_store: NeuronStore::new_restored(),
             env,
             ledger,
             cmc,
@@ -1699,11 +1677,9 @@ impl Governance {
     /// After calling this method, the proto and neuron_store (the heap neurons at least)
     /// becomes unusable, so it should only be called in pre_upgrade once.
     pub fn take_heap_proto(&mut self) -> GovernanceProto {
-        let neuron_store = std::mem::take(&mut self.neuron_store);
-        let neurons = neuron_store.take();
         let heap_governance_proto = std::mem::take(&mut self.heap_data);
         let rng_seed = self.randomness.get_rng_seed();
-        reassemble_governance_proto(neurons, heap_governance_proto, rng_seed)
+        reassemble_governance_proto(BTreeMap::new(), heap_governance_proto, rng_seed)
     }
 
     pub fn __get_state_for_test(&self) -> GovernanceProto {
@@ -3023,7 +2999,7 @@ impl Governance {
         id: &NeuronId,
         caller: &PrincipalId,
         stake_maturity: &manage_neuron::StakeMaturity,
-    ) -> Result<(StakeMaturityResponse, MergeMaturityResponse), GovernanceError> {
+    ) -> Result<StakeMaturityResponse, GovernanceError> {
         let (neuron_state, is_neuron_controlled_by_caller, neuron_maturity_e8s_equivalent) =
             self.with_neuron(id, |neuron| {
                 (
@@ -3074,7 +3050,7 @@ impl Governance {
         let _neuron_lock = self.lock_neuron_for_command(id.id, in_flight_command)?;
 
         // Adjust the maturity of the neuron
-        let responses = self
+        let response = self
             .with_neuron_mut(id, |neuron| {
                 neuron.maturity_e8s_equivalent = neuron
                     .maturity_e8s_equivalent
@@ -3087,22 +3063,15 @@ impl Governance {
                         .saturating_add(maturity_to_stake),
                 );
                 let staked_maturity_e8s = neuron.staked_maturity_e8s_equivalent.unwrap_or(0);
-                let new_stake_e8s = neuron.cached_neuron_stake_e8s + staked_maturity_e8s;
 
-                (
-                    StakeMaturityResponse {
-                        maturity_e8s: neuron.maturity_e8s_equivalent,
-                        staked_maturity_e8s,
-                    },
-                    MergeMaturityResponse {
-                        merged_maturity_e8s: maturity_to_stake,
-                        new_stake_e8s,
-                    },
-                )
+                StakeMaturityResponse {
+                    maturity_e8s: neuron.maturity_e8s_equivalent,
+                    staked_maturity_e8s,
+                }
             })
             .expect("Expected the neuron to exist");
 
-        Ok(responses)
+        Ok(response)
     }
 
     /// Disburse part of the stake of a neuron into a new neuron, possibly
@@ -3385,7 +3354,7 @@ impl Governance {
         match self.heap_data.proposals.get_mut(&pid) {
             Some(proposal_data) => {
                 // The proposal has to be adopted before it is executed.
-                assert!(proposal_data.status() == ProposalStatus::Adopted);
+                assert_eq!(proposal_data.status(), ProposalStatus::Adopted);
                 match result {
                     Ok(_) => {
                         println!(
@@ -3882,15 +3851,10 @@ impl Governance {
 
         // Stops borrowing proposal before mutating neurons.
         let action = proposal.proposal.as_ref().and_then(|x| x.action.clone());
-        let is_manage_neuron = proposal
-            .proposal
-            .as_ref()
-            .map(|x| x.is_manage_neuron())
-            .unwrap_or(false);
 
         // The proposal was adopted, return the rejection fee for non-ManageNeuron
         // proposals.
-        if !is_manage_neuron {
+        if !proposal.is_manage_neuron() {
             if let Some(nid) = proposal.proposer {
                 let rejection_cost = proposal.reject_cost_e8s;
                 self.with_neuron_mut(&nid, |neuron| {
@@ -4964,7 +4928,7 @@ impl Governance {
             }
         }
 
-        if proposal.topic() == Topic::Unspecified {
+        if proposal.compute_topic_at_creation() == Topic::Unspecified {
             Err(format!("Topic not specified. proposal: {:#?}", proposal))?;
         }
 
@@ -5281,7 +5245,7 @@ impl Governance {
         caller: &PrincipalId,
         proposal: &Proposal,
     ) -> Result<ProposalId, GovernanceError> {
-        let topic = proposal.topic();
+        let topic = proposal.compute_topic_at_creation();
         let now_seconds = self.env.now();
 
         // Validate proposal
@@ -5459,6 +5423,7 @@ impl Governance {
             ballots,
             wait_for_quiet_state,
             total_potential_voting_power: Some(total_potential_voting_power),
+            topic: Some(topic as i32),
             ..Default::default()
         };
 
@@ -5628,11 +5593,24 @@ impl Governance {
         }
     }
 
+    /// Preconditions:
+    /// 0. `register_vote.proposal` is a proposal ID of a proposal that still accepts votes.
+    /// 1. `neuron_id` identifies an existing neuron that is eligible to vote on that proposal
+    ///    (i.e., it has a corresponding ballot).
+    /// 2. `caller` is authorized to vote on behalf of `neuron_id` (either due to being its
+    ///    controller or a hotkey).
+    /// 3. `register_vote.vote` must not be `Vote::Unspecified`.
+    /// 4. The neuron has not already cast its vote.
+    ///
+    /// Practically, neurons that have already dissolved cannot vote, as long as the minimal
+    /// possible dissolve delay is greated than the maximum possible voting period. Refer to:
+    /// - `VotingPowerEconomics.NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS_BOUNDS`
+    /// - `ProposalData.evaluate_wait_for_quiet`
     async fn register_vote(
         &mut self,
         neuron_id: &NeuronId,
         caller: &PrincipalId,
-        pb: &manage_neuron::RegisterVote,
+        register_vote: &manage_neuron::RegisterVote,
     ) -> Result<(), GovernanceError> {
         let now_seconds = self.env.now();
         let voting_period_seconds = self.voting_period_seconds();
@@ -5647,7 +5625,10 @@ impl Governance {
                 "Caller is not authorized to vote for neuron.",
             ));
         }
-        let proposal_id = pb.proposal.as_ref().ok_or_else(||
+
+        let manage_neuron::RegisterVote { proposal, vote } = register_vote;
+
+        let proposal_id = proposal.as_ref().ok_or_else(||
             // Proposal not specified.
             GovernanceError::new_with_message(ErrorType::PreconditionFailed, "Vote must include a proposal id."))?;
         let proposal = self
@@ -5657,13 +5638,9 @@ impl Governance {
             .ok_or_else(||
             // Proposal not found.
             GovernanceError::new_with_message(ErrorType::NotFound, "Can't find proposal."))?;
-        let topic = proposal
-            .proposal
-            .as_ref()
-            .map(|p| p.topic())
-            .unwrap_or(Topic::Unspecified);
+        let topic = proposal.topic();
 
-        let vote = Vote::try_from(pb.vote).unwrap_or(Vote::Unspecified);
+        let vote = Vote::try_from(*vote).unwrap_or(Vote::Unspecified);
         if vote == Vote::Unspecified {
             // Invalid vote specified, i.e., not yes or no.
             return Err(GovernanceError::new_with_message(
@@ -6255,7 +6232,7 @@ impl Governance {
             Some(Command::MergeMaturity(_)) => Self::merge_maturity_removed_error(),
             Some(Command::StakeMaturity(s)) => self
                 .stake_maturity_of_neuron(&id, caller, s)
-                .map(|(response, _)| ManageNeuronResponse::stake_maturity_response(response)),
+                .map(ManageNeuronResponse::stake_maturity_response),
             Some(Command::Split(s)) => self
                 .split_neuron(&id, caller, s)
                 .await

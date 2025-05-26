@@ -449,8 +449,8 @@ impl CanisterState {
         let execution_usage = self
             .execution_state
             .as_ref()
-            .map_or(NumBytes::new(0), |execution_snapshot| {
-                execution_snapshot.memory_usage()
+            .map_or(NumBytes::new(0), |execution_state| {
+                execution_state.memory_usage_in_snapshot()
             });
 
         execution_usage

@@ -1206,12 +1206,6 @@ pub mod manage_neuron_response {
             }
         }
 
-        pub fn merge_maturity_response(response: MergeMaturityResponse) -> Self {
-            ManageNeuronResponse {
-                command: Some(manage_neuron_response::Command::MergeMaturity(response)),
-            }
-        }
-
         pub fn stake_maturity_response(response: StakeMaturityResponse) -> Self {
             ManageNeuronResponse {
                 command: Some(manage_neuron_response::Command::StakeMaturity(response)),
@@ -1597,6 +1591,8 @@ pub struct ProposalData {
     /// amount of voting power that it exercised (so called "deciding" voting
     /// power) in proportion to this.
     pub total_potential_voting_power: ::core::option::Option<u64>,
+    /// The topic of the proposal.
+    pub topic: ::core::option::Option<i32>,
 }
 /// This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
 #[derive(

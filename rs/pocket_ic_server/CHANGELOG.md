@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+- The endpoint `/instances/<instance_id>/auto_progress` sets the (certified) time of the PocketIC instance
+  to the current system time before starting to execute rounds automatically.
+
+
+
+## 9.0.2 - 2025-05-16
+
+### Fixed
+- Crash when creating a canister with a specified id on a PocketIC instance created from an existing PocketIC state.
+
 ## 9.0.1 - 2025-04-30
 
 ### Fixed

@@ -11,6 +11,35 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-05-16: Proposal 136693
+
+http://dashboard.internetcomputer.org/proposal/136693
+
+## Added
+
+* The `DisburseMaturity` neuron command is enabled. See https://forum.dfinity.org/t/disburse-maturity-in-nns/43228 for more details.
+
+## Changed
+
+* Proposal topics are persisted throughout its lifecycle instead of being recomputed every time.
+
+## Removed
+
+* The `IcpXdrConversionRate` proposal is now obsolete and cannot be submitted.
+
+## Security
+Enforce a lower bound for `min_participant_icp_e8s` of `1_000_000`.
+
+
+# 2025-05-10: Proposal 136580
+
+http://dashboard.internetcomputer.org/proposal/136580
+
+## Removed
+
+* The `governance_heap_neuron_count` metric is removed as there are no neurons in the heap anymore.
+
+
 # 2025-05-02: Proposal 136427
 
 http://dashboard.internetcomputer.org/proposal/136427

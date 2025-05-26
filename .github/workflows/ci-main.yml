@@ -106,12 +106,11 @@ jobs:
     name: Bazel Test All
     needs: [config]
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 90
     runs-on:
-      group: zh1
       labels: dind-large
     env:
       # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
@@ -215,7 +214,7 @@ jobs:
         uses: ./.github/actions/bazel-test-all/
         with:
           BAZEL_COMMAND: ${{ steps.cfg.outputs.build-command }}
-          BAZEL_TARGETS: //rs/... //publish/binaries/...
+          BAZEL_TARGETS: //rs/... //:upload-artifacts
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ''
       - name: Purge Bazel Output
@@ -229,9 +228,9 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -250,9 +249,9 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -271,7 +270,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -302,9 +301,9 @@ jobs:
     needs: [config]
     name: Build IC
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 90
     # keep options from dind-large-setup but run on dind-small-setup
     runs-on:
@@ -383,7 +382,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -418,7 +417,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
     timeout-minutes: 30
     steps:
       - name: Checkout

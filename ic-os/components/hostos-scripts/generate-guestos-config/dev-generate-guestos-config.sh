@@ -73,8 +73,7 @@ function read_config_variables() {
 }
 
 function assemble_config_media() {
-    ipv6_address="$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type GuestOS)"
-    /opt/ic/bin/config generate-guestos-config --guestos-ipv6-address "$ipv6_address"
+    /opt/ic/bin/config generate-guestos-config
 
     cmd=(/opt/ic/bin/build-bootstrap-config-image.sh ${MEDIA})
     cmd+=(--guestos_config "/boot/config/config-guestos.json")
@@ -132,7 +131,7 @@ EOF
     if [ ! -f "${OUTPUT}" ]; then
         mkdir -p "$(dirname "$OUTPUT")"
         sed -e "s@{{ resources_memory }}@${vm_memory}@" \
-            -e "s@{{ nr_of_vcpus }}@${vm_nr_of_vcpus:-64}@" \
+            -e "s@{{ nr_of_vcpus }}@${vm_nr_of_vcpus}@" \
             -e "s@{{ mac_address }}@${MAC_ADDRESS}@" \
             -e "s@{{ cpu_domain }}@${CPU_DOMAIN}@" \
             -e "/{{ cpu_spec }}/{r ${CPU_SPEC}" -e "d" -e "}" \
