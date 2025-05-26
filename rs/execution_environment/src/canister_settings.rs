@@ -10,6 +10,7 @@ use ic_types::{
 };
 use num_traits::{cast::ToPrimitive, SaturatingSub};
 use std::convert::TryFrom;
+use std::collections::HashMap;
 
 use crate::canister_manager::types::CanisterManagerError;
 
@@ -28,6 +29,8 @@ pub(crate) struct CanisterSettings {
     pub(crate) reserved_cycles_limit: Option<Cycles>,
     pub(crate) log_visibility: Option<LogVisibilityV2>,
     pub(crate) wasm_memory_limit: Option<NumBytes>,
+    /// A map of environment variable names to their values
+    pub(crate) environment_variables: Option<HashMap<String, Vec<u8>>>,
 }
 
 impl CanisterSettings {
@@ -40,6 +43,7 @@ impl CanisterSettings {
         reserved_cycles_limit: Option<Cycles>,
         log_visibility: Option<LogVisibilityV2>,
         wasm_memory_limit: Option<NumBytes>,
+        environment_variables: Option<HashMap<String, Vec<u8>>>,
     ) -> Self {
         Self {
             controllers,
@@ -50,6 +54,7 @@ impl CanisterSettings {
             reserved_cycles_limit,
             log_visibility,
             wasm_memory_limit,
+            environment_variables,
         }
     }
 
@@ -83,6 +88,10 @@ impl CanisterSettings {
 
     pub fn wasm_memory_limit(&self) -> Option<NumBytes> {
         self.wasm_memory_limit
+    }
+
+    pub fn environment_variables(&self) -> Option<&HashMap<String, Vec<u8>>> {
+        self.environment_variables.as_ref()
     }
 }
 
@@ -158,6 +167,7 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             reserved_cycles_limit,
             input.log_visibility,
             wasm_memory_limit,
+            input.environment_variables,
         ))
     }
 }
@@ -182,6 +192,7 @@ pub(crate) struct CanisterSettingsBuilder {
     reserved_cycles_limit: Option<Cycles>,
     log_visibility: Option<LogVisibilityV2>,
     wasm_memory_limit: Option<NumBytes>,
+    environment_variables: Option<HashMap<String, Vec<u8>>>,
 }
 
 #[allow(dead_code)]
@@ -196,6 +207,7 @@ impl CanisterSettingsBuilder {
             reserved_cycles_limit: None,
             log_visibility: None,
             wasm_memory_limit: None,
+            environment_variables: None,
         }
     }
 
@@ -209,6 +221,7 @@ impl CanisterSettingsBuilder {
             reserved_cycles_limit: self.reserved_cycles_limit,
             log_visibility: self.log_visibility,
             wasm_memory_limit: self.wasm_memory_limit,
+            environment_variables: self.environment_variables,
         }
     }
 
@@ -264,6 +277,13 @@ impl CanisterSettingsBuilder {
     pub fn with_wasm_memory_limit(self, wasm_memory_limit: NumBytes) -> Self {
         Self {
             wasm_memory_limit: Some(wasm_memory_limit),
+            ..self
+        }
+    }
+
+    pub fn with_environment_variables(self, environment_variables: HashMap<String, Vec<u8>>) -> Self {
+        Self {
+            environment_variables: Some(environment_variables),
             ..self
         }
     }
@@ -351,6 +371,7 @@ pub(crate) struct ValidatedCanisterSettings {
     reservation_cycles: Cycles,
     log_visibility: Option<LogVisibilityV2>,
     wasm_memory_limit: Option<NumBytes>,
+    environment_variables: Option<HashMap<String, Vec<u8>>>,
 }
 
 impl ValidatedCanisterSettings {
@@ -388,6 +409,10 @@ impl ValidatedCanisterSettings {
 
     pub fn wasm_memory_limit(&self) -> Option<NumBytes> {
         self.wasm_memory_limit
+    }
+
+    pub fn environment_variables(&self) -> Option<&HashMap<String, Vec<u8>>> {
+        self.environment_variables.as_ref()
     }
 }
 
@@ -581,5 +606,6 @@ pub(crate) fn validate_canister_settings(
         reservation_cycles,
         log_visibility: settings.log_visibility().cloned(),
         wasm_memory_limit: settings.wasm_memory_limit(),
+        environment_variables: settings.environment_variables().cloned(),
     })
 }

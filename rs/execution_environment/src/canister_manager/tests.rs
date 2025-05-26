@@ -4896,7 +4896,7 @@ fn create_canister_fails_with_reserved_cycles_limit_exceeded() {
         )
         .build();
 
-    let result = test.ingress(uc, "update", create_canister).unwrap();
+    let result = test.ingress(uc, "update", create_canister);
 
     let err_msg = match result {
         WasmResult::Reply(_) => unreachable!("Unexpected reply, expected reject"),
@@ -6647,4 +6647,79 @@ fn memory_usage_updates_increment_subnet_available_memory() {
     // execution memory should get back to its initial value before growing stable memory
     let subnet_available_memory = test.subnet_available_memory();
     assert_eq!(initial_subnet_available_memory, subnet_available_memory);
+}
+
+fn test_update_settings_environment_variables() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+
+    // Create initial environment variables
+    let mut initial_env_vars = HashMap::new();
+    initial_env_vars.insert("KEY1".to_string(), vec![1, 2, 3]);
+    initial_env_vars.insert("KEY2".to_string(), vec![4, 5, 6]);
+
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_environment_variables(initial_env_vars.clone())
+            .build(),
+        sender_canister_version: None,
+    };
+    test.subnet_message(Method::UpdateSettings, args.encode())
+        .unwrap();
+
+    // Verify initial environment variables are set
+    let canister = test.canister_state(canister_id);
+    assert_eq!(
+        canister.system_state.environment_variables,
+        initial_env_vars
+    );
+
+    // Update environment variables
+    let mut updated_env_vars = HashMap::new();
+    updated_env_vars.insert("KEY1".to_string(), vec![7, 8, 9]);
+    updated_env_vars.insert("KEY3".to_string(), vec![10, 11, 12]);
+
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_environment_variables(updated_env_vars.clone())
+            .build(),
+        sender_canister_version: None,
+    };
+    test.subnet_message(Method::UpdateSettings, args.encode())
+        .unwrap();
+
+    // Verify environment variables are updated
+    let canister = test.canister_state(canister_id);
+    assert_eq!(
+        canister.system_state.environment_variables,
+        updated_env_vars
+    );
+}
+
+#[test]
+fn test_create_canister_with_environment_variables() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    // Create initial environment variables
+    let mut env_vars = HashMap::new();
+    env_vars.insert("KEY1".to_string(), vec![1, 2, 3]);
+    env_vars.insert("KEY2".to_string(), vec![4, 5, 6]);
+
+    let canister_id = test
+        .create_canister_with_settings(
+            Cycles::new(1_000_000_000_000_000),
+            CanisterSettingsArgsBuilder::new()
+                .with_environment_variables(env_vars.clone())
+                .build(),
+        )
+        .unwrap();
+
+    // Verify environment variables are set
+    let canister = test.canister_state(canister_id);
+    assert_eq!(
+        canister.system_state.environment_variables,
+        env_vars
+    );
 }
