@@ -39,7 +39,10 @@ artifact_bundle(
 
 artifact_bundle(
     name = "bundle-update",
-    inputs = [icos_images.update_image, icos_images.update_image_test],
+    inputs = [
+        icos_images.update_image,
+        icos_images.update_image_test,
+    ],
     prefix = "guest-os/update-img",
     visibility = ["//visibility:public"],
 )
