@@ -1,5 +1,4 @@
 use candid::CandidType;
-use candid::Nat;
 use dfn_protobuf::ProtoBuf;
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -1095,12 +1094,6 @@ pub struct TipOfChainRes {
 pub struct GetBlocksArgs {
     pub start: BlockIndex,
     pub length: u64,
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
-pub struct ICRC3GetBlocksArgs {
-    pub start: Nat,
-    pub length: Nat,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize, Serialize)]

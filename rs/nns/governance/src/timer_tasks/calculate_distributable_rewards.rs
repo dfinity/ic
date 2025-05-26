@@ -1,6 +1,7 @@
 use crate::governance::{Governance, LOG_PREFIX, REWARD_DISTRIBUTION_PERIOD_SECONDS};
 use crate::pb::v1::GovernanceError;
 use async_trait::async_trait;
+use ic_cdk::println;
 use ic_nervous_system_timer_task::RecurringAsyncTask;
 use std::cell::RefCell;
 use std::thread::LocalKey;
@@ -60,7 +61,7 @@ impl RecurringAsyncTask for CalculateDistributableRewardsTask {
                 });
             }
             Err(err) => {
-                ic_cdk::println!(
+                println!(
                     "{}Error when getting total ICP supply: {}",
                     LOG_PREFIX,
                     GovernanceError::from(err)

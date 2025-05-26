@@ -1841,12 +1841,15 @@ impl TryFrom<pb_api::GetMetricsRequest> for pb::GetMetricsRequest {
 }
 impl From<pb::GetMetricsResponse> for pb_api::get_metrics_response::GetMetricsResponse {
     fn from(value: pb::GetMetricsResponse) -> Self {
-        match (value.num_recent_proposals, value.last_transaction_timestamp) {
-            (Some(num_recent_proposals), Some(last_transaction_timestamp)) => Self {
+        match (
+            value.num_recently_submitted_proposals,
+            value.last_ledger_block_timestamp,
+        ) {
+            (Some(num_recently_submitted_proposals), Some(last_ledger_block_timestamp)) => Self {
                 get_metrics_result: Some(pb_api::get_metrics_response::GetMetricsResult::Ok(
                     pb_api::get_metrics_response::Metrics {
-                        num_recent_proposals: Some(num_recent_proposals),
-                        last_transaction_timestamp: Some(last_transaction_timestamp),
+                        num_recently_submitted_proposals: Some(num_recently_submitted_proposals),
+                        last_ledger_block_timestamp: Some(last_ledger_block_timestamp),
                     },
                 )),
             },

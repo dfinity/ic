@@ -19,11 +19,11 @@ use axum::{
     response::IntoResponse,
 };
 use candid::Principal;
-use ic_bn_lib::http::ConnInfo;
 use ic_bn_lib::prometheus::{
     register_int_counter_vec_with_registry, register_int_gauge_with_registry, IntCounterVec,
     IntGauge, Registry,
 };
+use ic_bn_lib::{http::ConnInfo, tasks::Run};
 use ic_canister_client::Agent;
 use ic_types::CanisterId;
 use ipnet::IpNet;
@@ -32,6 +32,7 @@ use ratelimit::Ratelimiter;
 use strum::{Display, IntoStaticStr};
 #[allow(clippy::disallowed_types)]
 use tokio::sync::{watch, Mutex};
+use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
 use super::{
@@ -43,7 +44,6 @@ use super::{
 };
 
 use crate::{
-    core::Run,
     errors::{ErrorCause, RateLimitCause},
     persist::RouteSubnet,
     routes::{RequestContext, RequestType},
@@ -419,8 +419,8 @@ impl GenericLimiter {
 }
 
 #[async_trait]
-impl Run for Arc<GenericLimiter> {
-    async fn run(&mut self) -> Result<(), Error> {
+impl Run for GenericLimiter {
+    async fn run(&self, token: CancellationToken) -> Result<(), Error> {
         let mut interval = tokio::time::interval(self.opts.poll_interval);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
@@ -429,6 +429,10 @@ impl Run for Arc<GenericLimiter> {
         loop {
             tokio::select! {
                 biased;
+
+                _ = token.cancelled() => {
+                    return Ok(());
+                }
 
                 Ok(()) = channel.changed(), if self.opts.autoscale => {
                     let snapshot = channel.borrow_and_update().clone();
@@ -631,9 +635,9 @@ mod test {
             &Registry::new(),
         ));
 
-        let mut runner = limiter.clone();
+        let limiter_clone = limiter.clone();
         tokio::spawn(async move {
-            let _ = runner.run().await;
+            let _ = limiter_clone.run(CancellationToken::new()).await;
         });
 
         limiter.apply_rules(rules.clone(), 1);

@@ -91,7 +91,9 @@ impl ICRC1Ledger for AlwaysSucceedingLedger {
         &self,
         _args: Vec<GetBlocksRequest>,
     ) -> Result<GetBlocksResult, NervousSystemError> {
-        unimplemented!()
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 }
 

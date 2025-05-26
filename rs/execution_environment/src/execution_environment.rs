@@ -2953,13 +2953,14 @@ impl ExecutionEnvironment {
             ));
         }
 
-        let dpk = ic_vetkd_utils::MasterPublicKey::deserialize(&subnet_public_key.public_key)
-            .map_err(|err| {
+        let dpk = ic_vetkeys::MasterPublicKey::deserialize(&subnet_public_key.public_key).map_err(
+            |err| {
                 UserError::new(
                     ErrorCode::CanisterRejectedMessage,
                     format!("Invalid VetKD subnet key: {:?}", err),
                 )
-            })?;
+            },
+        )?;
 
         Ok(dpk
             .derive_canister_key(caller.as_slice())
@@ -2997,7 +2998,7 @@ impl ExecutionEnvironment {
                 ),
             ));
         };
-        if !ic_vetkd_utils::is_valid_transport_public_key_encoding(&args.transport_public_key) {
+        if !ic_vetkeys::is_valid_transport_public_key_encoding(&args.transport_public_key) {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 "The provided transport public key is invalid.",
@@ -3320,14 +3321,6 @@ impl ExecutionEnvironment {
                     return (state, Some(NumInstructions::from(0)));
                 }
             };
-
-        // Track whether the deprecated fields in install_code were used.
-        if install_context.compute_allocation.is_some() {
-            self.metrics.compute_allocation_in_install_code_total.inc();
-        }
-        if install_context.memory_allocation.is_some() {
-            self.metrics.memory_allocation_in_install_code_total.inc();
-        }
 
         let call_id = match call_id {
             None => {

@@ -116,11 +116,38 @@ impl ICRC1Ledger for LedgerCanister {
         CanisterId::unchecked_from_principal(principal_id)
     }
 
-    // Shah-TODO: if this function should be implemented?
     async fn icrc3_get_blocks(
         &self,
-        _args: Vec<GetBlocksRequest>,
+        args: Vec<GetBlocksRequest>,
     ) -> Result<GetBlocksResult, NervousSystemError> {
-        unimplemented!()
+        use candid::{CandidType, Deserialize};
+        use serde::Serialize;
+
+        #[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
+        pub struct ICRC3GetBlocksArgs {
+            pub start: Nat,
+            pub length: Nat,
+        }
+
+        let result: Result<GetBlocksResult, (i32, String)> = self
+            .client
+            .runtime
+            .call(
+                self.canister_id().into(),
+                "icrc3_get_blocks",
+                (args
+                    .iter()
+                    .map(|arg| ICRC3GetBlocksArgs {
+                        start: arg.start.clone(),
+                        length: arg.length.clone(),
+                    })
+                    .collect::<Vec<_>>(),),
+            )
+            .await
+            .map(|result: (GetBlocksResult,)| result.0);
+
+        result.map_err(|(code, msg)| {
+            NervousSystemError::new_with_message(format!("Error calling method 'icrc3_get_blocks' of the ledger canister. Code: {:?}. Message: {}", code, msg))
+        })
     }
 }

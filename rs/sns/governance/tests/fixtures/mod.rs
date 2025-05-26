@@ -27,7 +27,11 @@ use ic_sns_governance::{
     },
     types::Environment,
 };
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
+use icrc_ledger_types::{
+    icrc1::account::{Account, Subaccount},
+    icrc3::blocks::GetBlocksResult,
+};
 use maplit::btreemap;
 use rand::{rngs::StdRng, SeedableRng};
 use std::{
@@ -143,9 +147,11 @@ impl ICRC1Ledger for LedgerFixture {
 
     async fn icrc3_get_blocks(
         &self,
-        _args: Vec<icrc_ledger_types::icrc3::blocks::GetBlocksRequest>,
-    ) -> Result<icrc_ledger_types::icrc3::blocks::GetBlocksResult, NervousSystemError> {
-        unimplemented!()
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 }
 
