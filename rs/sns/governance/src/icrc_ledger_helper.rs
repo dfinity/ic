@@ -34,7 +34,10 @@ impl<'a> ICRCLedgerHelper<'a> {
         // is included in the response. We hence make a call with default parameters
         // just to find out the last block number added to the blockchain on
         // ledger.
-        let args = vec![GetBlocksRequest::default()];
+        let args = vec![GetBlocksRequest {
+            start: Nat::from(0_u64),
+            length: Nat::from(0_u64),
+        }];
         let last_block_number = call_icrc3_get_blocks(args)
             .await
             .map(|blocks| blocks.log_length - Nat::from(1_u32))?;

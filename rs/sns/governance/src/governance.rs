@@ -2014,9 +2014,9 @@ impl Governance {
         &self,
         request: GetMetricsRequest,
     ) -> Result<GetMetricsResponse, GovernanceError> {
-        let num_recent_proposals = self.recent_proposals(request.time_window_seconds);
+        let num_recently_submitted_proposals = self.recent_proposals(request.time_window_seconds);
         let icrc_ledger_helper = ICRCLedgerHelper::with_ledger(self.ledger.as_ref());
-        let last_transaction_timestamp = icrc_ledger_helper
+        let last_ledger_block_timestamp = icrc_ledger_helper
             .get_latest_block_timestamp_seconds()
             .await
             .map_err(|error_mesage| {
@@ -2025,8 +2025,8 @@ impl Governance {
 
         // transaction timestamps are in nanoseconds
         Ok(GetMetricsResponse {
-            num_recent_proposals: Some(num_recent_proposals),
-            last_transaction_timestamp: Some(last_transaction_timestamp),
+            num_recently_submitted_proposals: Some(num_recently_submitted_proposals),
+            last_ledger_block_timestamp: Some(last_ledger_block_timestamp),
         })
     }
 
