@@ -306,7 +306,9 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         } else if let Some(v) = &cli.registry.registry_nns_pub_key_pem {
             // Set the root key if it was provided
             let root_key = parse_threshold_sig_key(v).context("failed to parse NNS public key")?;
-            agent.set_root_key(root_key.into_bytes().to_vec());
+            let der_encoded_root_key = threshold_sig_public_key_to_der(root_key)
+                .context("failed to convert NNS key to DER")?;
+            agent.set_root_key(der_encoded_root_key);
         }
 
         Some(agent)
