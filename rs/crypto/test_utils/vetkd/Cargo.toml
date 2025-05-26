@@ -9,5 +9,5 @@ ic-crypto-internal-bls12-381-vetkd = { path = "../../internal/crypto_lib/bls12_3
 rand_chacha = { workspace = true }
 
 [dev-dependencies]
-ic-vetkd-utils = { path = "../../../../packages/ic-vetkd-utils" }
+ic-vetkeys = { workspace = true }
 rand = { workspace = true }

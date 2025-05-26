@@ -20,7 +20,6 @@ system_test_nns(
         CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
-        "//rs/canister_client",
         "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
         "//rs/ledger_suite/icrc1/index-ng",
         "//rs/nervous_system/clients",
