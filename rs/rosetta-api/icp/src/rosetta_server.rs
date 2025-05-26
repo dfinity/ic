@@ -462,7 +462,7 @@ fn start_sync_thread(
                 synced_at = std::time::Instant::now();
                 first_sync_successful = true;
             }
-            
+
             // Only call heartbeat after the first successful sync
             if first_sync_successful {
                 heartbeat_fn();
