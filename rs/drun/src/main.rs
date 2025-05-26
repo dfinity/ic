@@ -67,6 +67,11 @@ async fn drun_main() -> Result<(), String> {
         hypervisor_config.max_canister_memory_size_wasm64 =
             hypervisor_config.embedders_config.max_wasm64_memory_size
                 + hypervisor_config.embedders_config.max_stable_memory_size;
+        // Disable trap backtrace in `drun` to have less implementation-specific test outputs.
+        hypervisor_config
+            .embedders_config
+            .feature_flags
+            .canister_backtrace = FlagStatus::Disabled;
 
         let cfg = Config::load_with_default(&source, default_config).unwrap_or_else(|err| {
             eprintln!("Failed to load config:\n  {}", err);

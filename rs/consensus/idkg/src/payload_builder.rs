@@ -768,7 +768,7 @@ mod tests {
     use ic_types::{
         batch::BatchPayload,
         consensus::{
-            dkg::{DkgDataPayload, Summary},
+            dkg::{DkgDataPayload, DkgSummary},
             idkg::{
                 IDkgPayload, PreSigId, ReshareOfUnmaskedParams, TranscriptRef, UnmaskedTranscript,
                 UnmaskedTranscriptWithAttributes,
@@ -814,7 +814,7 @@ mod tests {
             }
         }
         BlockPayload::Summary(SummaryPayload {
-            dkg: Summary::new(
+            dkg: DkgSummary::new(
                 vec![],
                 BTreeMap::new(),
                 BTreeMap::new(),
@@ -1710,7 +1710,7 @@ mod tests {
             assert!(unreported > 0);
 
             let pl = BlockPayload::Summary(SummaryPayload {
-                dkg: Summary::fake(),
+                dkg: DkgSummary::fake(),
                 idkg: Some(summary.clone()),
             });
             let b = Block::new(
