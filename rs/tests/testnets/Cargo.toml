@@ -34,10 +34,6 @@ name = "medium"
 path = "medium.rs"
 
 [[bin]]
-name = "recovered_mainnet_nns"
-path = "recovered_mainnet_nns.rs"
-
-[[bin]]
 name = "single_app_large_node"
 path = "single_app_large_node.rs"
 

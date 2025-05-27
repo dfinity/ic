@@ -55,10 +55,6 @@ prost = { workspace = true }
 url = { workspace = true }
 
 [[bin]]
-name = "nns_upgrade_test"
-path = "nns_upgrade_test.rs"
-
-[[bin]]
 name = "certified_registry_test"
 path = "certified_registry_test.rs"
 
