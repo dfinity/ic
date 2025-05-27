@@ -9,7 +9,6 @@ documentation.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-base64 = { workspace = true }
 clap = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../types/base_types/" }
@@ -20,7 +19,6 @@ ic-crypto-node-key-generation = { path = "../crypto/node_key_generation" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
-ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
