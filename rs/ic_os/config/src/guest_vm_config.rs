@@ -3,7 +3,7 @@ use askama::Template;
 use clap::Parser;
 use config::guestos_bootstrap_image::BootstrapOptions;
 use config::guestos_config::generate_guestos_config;
-use config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH;
+use config::{serialize_and_write_config, DEFAULT_HOSTOS_CONFIG_OBJECT_PATH};
 use config_types::{GuestOSConfig, HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant};
@@ -102,10 +102,18 @@ fn run(
 }
 
 fn assemble_config_media(hostos_config: &HostOSConfig, media_path: &Path) -> Result<()> {
+    let guestos_config_file = tempfile::NamedTempFile::new()?;
     let guestos_config =
         generate_guestos_config(hostos_config).context("Failed to generate GuestOS config")?;
+    serialize_and_write_config(guestos_config_file.path(), &guestos_config).with_context(|| {
+        format!(
+            "Failed to write GuestOS config to {}",
+            guestos_config_file.path().display()
+        )
+    })?;
 
-    let bootstrap_options = make_bootstrap_options(hostos_config, guestos_config)?;
+    let bootstrap_options =
+        make_bootstrap_options(hostos_config, guestos_config, guestos_config_file.path())?;
 
     bootstrap_options.build_bootstrap_config_image(media_path)?;
 
@@ -120,17 +128,10 @@ fn assemble_config_media(hostos_config: &HostOSConfig, media_path: &Path) -> Res
 fn make_bootstrap_options(
     hostos_config: &HostOSConfig,
     guestos_config: GuestOSConfig,
+    guestos_config_path: &Path,
 ) -> Result<BootstrapOptions> {
-    let guestos_ipv6_config = match &guestos_config.network_settings.ipv6_config {
-        Ipv6Config::Fixed(ip_config) => ip_config.clone(),
-        _ => bail!(
-            "Expected GuestOS IPv6 address to be fixed but was {:?}",
-            guestos_config.network_settings.ipv6_config
-        ),
-    };
-
     let mut bootstrap_options = BootstrapOptions {
-        guestos_config: Some(guestos_config),
+        guestos_config: Some(guestos_config_path.to_path_buf()),
         ..Default::default()
     };
 
@@ -149,7 +150,14 @@ fn make_bootstrap_options(
             Some(PathBuf::from("/boot/config/node_operator_private_key.pem"));
     }
 
-    bootstrap_options.ipv6_address = Some(guestos_ipv6_config.address.clone());
+    let guestos_ipv6_config = match guestos_config.network_settings.ipv6_config {
+        Ipv6Config::Fixed(ip_config) => ip_config,
+        _ => bail!(
+            "Expected GuestOS IPv6 address to be fixed but was {:?}",
+            guestos_config.network_settings.ipv6_config
+        ),
+    };
+    bootstrap_options.ipv6_address = Some(guestos_ipv6_config.address);
     bootstrap_options.ipv6_gateway = Some(guestos_ipv6_config.gateway.to_string());
 
     if let Some(ipv4_config) = &hostos_config.network_settings.ipv4_config {
@@ -227,7 +235,6 @@ fn restorecon(path: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use config::serialize_and_write_config;
     use config_types::{
         DeploymentEnvironment, DeterministicIpv6Config, HostOSConfig, HostOSSettings, ICOSSettings,
         Ipv4Config, Ipv6Config, Logging, NetworkSettings,
@@ -291,7 +298,8 @@ mod tests {
 
         let guestos_config = generate_guestos_config(&config).unwrap();
 
-        let options = make_bootstrap_options(&config, guestos_config.clone()).unwrap();
+        let options =
+            make_bootstrap_options(&config, guestos_config, Path::new("/tmp/test")).unwrap();
 
         assert_eq!(
             options,
@@ -304,7 +312,7 @@ mod tests {
                 node_reward_type: Some("type3.1".to_string()),
                 hostname: Some("guest-001122334455".to_string()),
                 nns_urls: vec!["https://example.com/".to_string()],
-                guestos_config: Some(guestos_config),
+                guestos_config: Some(PathBuf::from("/tmp/test")),
                 nns_public_key: Some(PathBuf::from("/boot/config/nns_public_key.pem")),
                 node_operator_private_key: Some(PathBuf::from(
                     "/boot/config/node_operator_private_key.pem"

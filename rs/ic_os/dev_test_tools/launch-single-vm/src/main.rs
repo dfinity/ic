@@ -226,7 +226,9 @@ fn main() {
             generate_ic_boundary_tls_cert: None,
         };
 
-        let guestos_config = generate_testnet_config(config).unwrap();
+        // populate guestos_config_json_path with serialized guestos config object
+        let guestos_config_json_path = tempdir.as_ref().join("guestos_config.json");
+        let _ = generate_testnet_config(config, guestos_config_json_path.clone());
 
         // Build config image
         let filename = "config.tar.gz";
@@ -234,7 +236,7 @@ fn main() {
         let local_store = prep_dir.join("ic_registry_local_store");
 
         let bootstrap_options = BootstrapOptions {
-            guestos_config: Some(guestos_config),
+            guestos_config: Some(guestos_config_json_path),
             ic_crypto: Some(node.crypto_path()),
             ic_registry_local_store: Some(local_store),
             accounts_ssh_authorized_keys: Some(keys_dir),
