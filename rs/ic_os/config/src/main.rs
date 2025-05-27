@@ -1,20 +1,22 @@
+use crate::guest_vm_config::{generate_guest_vm_config, GenerateGuestVmConfigArgs};
 use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
 use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::deployment_json::get_deployment_settings;
+use config::generate_testnet_config::{
+    generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
+};
+use config::guestos_config::generate_guestos_config;
 use config::serialize_and_write_config;
 use config::update_config::{update_guestos_config, update_hostos_config};
+use config_types::*;
 use macaddr::MacAddr6;
 use network::resolve_mgmt_mac;
 use regex::Regex;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
-use config::generate_testnet_config::{
-    generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
-};
-use config::guestos_config::generate_guestos_config;
-use config_types::*;
+mod guest_vm_config;
 
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
@@ -58,6 +60,9 @@ pub enum Commands {
         #[arg(long, default_value = config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
         hostos_config_json_path: PathBuf,
     },
+    /// Generates the GuestOS VM configuration by assembling the bootstrap config media image
+    /// and creating the libvirt XML configuration file.
+    GenerateGuestVmConfig(GenerateGuestVmConfigArgs),
 }
 
 #[derive(Parser)]
@@ -343,7 +348,10 @@ pub fn main() -> Result<()> {
                 generate_ic_boundary_tls_cert: clap_args.generate_ic_boundary_tls_cert,
             };
 
-            generate_testnet_config(args, clap_args.guestos_config_json_path)
+            serialize_and_write_config(
+                &clap_args.guestos_config_json_path,
+                &generate_testnet_config(args)?,
+            )
         }
         // TODO(NODE-1518): delete UpdateGuestosConfig and UpdateHostosConfig after moved to new config format
         // Regenerate config.json on *every boot* in case the config structure changes between
@@ -362,5 +370,6 @@ pub fn main() -> Result<()> {
             println!("No command provided. Use --help for usage information.");
             Ok(())
         }
+        Some(Commands::GenerateGuestVmConfig(args)) => generate_guest_vm_config(args),
     }
 }
