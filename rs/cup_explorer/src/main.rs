@@ -14,11 +14,11 @@ use ic_types::crypto::{CombinedThresholdSig, CombinedThresholdSigOf};
 use ic_types::SubnetId;
 use prost::Message;
 use serde::{Deserialize, Serialize};
-use url::Url;
 use std::convert::TryFrom;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::{fs, task};
+use url::Url;
 
 /// Subcommands for handling CUPs
 #[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
