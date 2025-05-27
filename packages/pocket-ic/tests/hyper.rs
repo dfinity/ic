@@ -6,7 +6,17 @@ use std::io::Read;
 use tokio::net::TcpStream;
 
 async fn handler() -> Html<&'static str> {
+    let agent = ic_agent::Agent::builder()
+        .with_url("http://localhost:3000")
+        .build()
+        .unwrap();
+    let err = agent.fetch_root_key().await.unwrap_err();
+    assert!(matches!(err, ic_agent::AgentError::InvalidCborData(_)));
     Html("<h1>Hello, World!</h1>")
+}
+
+async fn status_handler() -> Html<&'static str> {
+    Html("<h1>status</h1>")
 }
 
 #[tokio::test]
@@ -14,7 +24,9 @@ async fn hyper_issue() {
     // spawn a webserver
     tokio::spawn(async {
         // build our application with a route
-        let app = Router::new().route("/api/v2/status", get(handler)).route("/index.html", get(handler));
+        let app = Router::new()
+            .route("/api/v2/status", get(status_handler))
+            .route("/index.html", get(handler));
 
         // run it
         let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
@@ -50,10 +62,4 @@ async fn hyper_issue() {
 
     println!("hyper body: {}", body);
     assert!(body.contains("Hello, World!"));
-
-    let agent = ic_agent::Agent::builder()
-            .with_url("http://localhost:3000")
-            .build()
-            .unwrap();
-    agent.fetch_root_key().await.unwrap();
 }
