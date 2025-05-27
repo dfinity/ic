@@ -152,11 +152,17 @@ query="$(join_by "+" "${BAZEL_TARGETS[@]}")"
 for artifact in $(bazel cquery "${BAZEL_COMMON_ARGS[@]}" --output=files "$query"); do
     target_dir=
     case "$artifact" in
-        *guestos*)
-            target_dir="$DISK_DIR/guestos"
+        *guestos*disk)
+            target_dir="$DISK_DIR/guestos/disk"
             ;;
-        *hostos*)
-            target_dir="$DISK_DIR/hostos"
+        *guestos*update)
+            target_dir="$DISK_DIR/guestos/update"
+            ;;
+        *hostos*disk)
+            target_dir="$DISK_DIR/hostos/disk"
+            ;;
+        *hostos*update)
+            target_dir="$DISK_DIR/hostos/update"
             ;;
         *setupos*)
             target_dir="$DISK_DIR/setupos"
@@ -196,11 +202,17 @@ fi
 
 if "$BUILD_IMG"; then
     echo_green "##### GUESTOS SHA256SUMS #####"
-    pushd "$DISK_DIR_FULL/guestos" >/dev/null
+    pushd "$DISK_DIR_FULL/guestos/disk" >/dev/null
+    cat SHA256SUMS
+    popd >/dev/null
+    pushd "$DISK_DIR_FULL/guestos/update" >/dev/null
     cat SHA256SUMS
     popd >/dev/null
     echo_green "##### HOSTOS SHA256SUMS #####"
-    pushd "$DISK_DIR_FULL/hostos" >/dev/null
+    pushd "$DISK_DIR_FULL/hostos/disk" >/dev/null
+    cat SHA256SUMS
+    popd >/dev/null
+    pushd "$DISK_DIR_FULL/hostos/update" >/dev/null
     cat SHA256SUMS
     popd >/dev/null
     echo_green "##### SETUPOS SHA256SUMS #####"
