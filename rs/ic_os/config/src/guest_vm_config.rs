@@ -209,7 +209,7 @@ fn generate_vm_config(config: &HostOSConfig, media_path: &Path) -> Result<String
         nr_of_vcpus: config.hostos_settings.vm_nr_of_vcpus,
         mac_address,
         config_media: &media_path.display().to_string(),
-        enable_sev: config.hostos_settings.enable_sev,
+        enable_sev: config.hostos_settings.enable_trusted_execution_environment,
     }
     .render()
     .context("Failed to render GuestOS VM XML template")
@@ -275,6 +275,7 @@ mod tests {
                 vm_cpu: "qemu".to_string(),
                 vm_nr_of_vcpus: 56,
                 verbose: false,
+                enable_trusted_execution_environment: true,
             },
             guestos_settings: Default::default(),
         }
@@ -326,16 +327,11 @@ mod tests {
         path
     }
 
-    fn test_vm_config(cpu_type: &str, filename: &str) {
+    fn test_vm_config(hostos_settings: HostOSSettings, filename: &str) {
         let mut mint = Mint::new(goldenfiles_path());
         let mut config = create_test_hostos_config();
 
-        config.hostos_settings = HostOSSettings {
-            vm_memory: 490,
-            vm_cpu: cpu_type.to_string(),
-            vm_nr_of_vcpus: 56,
-            verbose: false,
-        };
+        config.hostos_settings = hostos_settings;
 
         let vm_config = generate_vm_config(&config, Path::new("/tmp/config.img")).unwrap();
         fs::write(mint.new_goldenpath(filename).unwrap(), vm_config).unwrap();
@@ -343,12 +339,42 @@ mod tests {
 
     #[test]
     fn test_generate_vm_config_qemu() {
-        test_vm_config("qemu", "guestos_vm_qemu.xml");
+        test_vm_config(
+            HostOSSettings {
+                vm_memory: 490,
+                vm_cpu: "qemu".to_string(),
+                vm_nr_of_vcpus: 56,
+                ..HostOSSettings::default()
+            },
+            "guestos_vm_qemu.xml",
+        );
     }
 
     #[test]
     fn test_generate_vm_config_kvm() {
-        test_vm_config("kvm", "guestos_vm_kvm.xml");
+        test_vm_config(
+            HostOSSettings {
+                vm_memory: 490,
+                vm_cpu: "kvm".to_string(),
+                vm_nr_of_vcpus: 56,
+                ..HostOSSettings::default()
+            },
+            "guestos_vm_kvm.xml",
+        );
+    }
+
+    #[test]
+    fn test_generate_vm_config_sev() {
+        test_vm_config(
+            HostOSSettings {
+                vm_memory: 490,
+                vm_cpu: "kvm".to_string(),
+                vm_nr_of_vcpus: 56,
+                enable_trusted_execution_environment: true,
+                ..HostOSSettings::default()
+            },
+            "guestos_vm_sev.xml",
+        );
     }
 
     #[test]

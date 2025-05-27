@@ -350,7 +350,7 @@ pub fn update_hostos_config(
                 .unwrap_or("kvm".to_string()),
             vm_nr_of_vcpus: deployment_json_settings.resources.nr_of_vcpus.unwrap_or(64),
             verbose,
-            enable_sev: false, // TODO: do we need this?
+            enable_trusted_execution_environment,
         };
 
         let guestos_settings = GuestOSSettings::default();

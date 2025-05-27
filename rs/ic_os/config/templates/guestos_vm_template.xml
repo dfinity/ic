@@ -20,7 +20,7 @@
   </cpu>
   {% endif -%}
 
-  {%- if enable_sev %}
+  {%- if enable_sev -%}
   <launchSecurity type='sev-snp' kernelHashes='yes'>
     <cbitpos>51</cbitpos>
     <reducedPhysBits>1</reducedPhysBits>

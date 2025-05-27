@@ -121,7 +121,7 @@ pub struct HostOSSettings {
     /// If the value is enabled, we check during deployment that SEV-SNP is supported
     /// by the hardware. Once deployment is successful, we rely on the hardware supporting
     /// SEV-SNP.
-    pub enable_sev: bool,
+    pub enable_trusted_execution_environment: bool,
 }
 
 const fn default_vm_nr_of_vcpus() -> u32 {

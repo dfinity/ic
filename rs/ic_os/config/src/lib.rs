@@ -81,6 +81,7 @@ mod tests {
             vm_cpu: "kvm".to_string(),
             vm_nr_of_vcpus: 64,
             verbose: false,
+            enable_trusted_execution_environment: true,
         };
         let guestos_settings = GuestOSSettings {
             inject_ic_crypto: false,
