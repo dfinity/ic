@@ -42,11 +42,9 @@ impl<'a> ICRCLedgerHelper<'a> {
         let GetBlocksResult { log_length, .. } = call_icrc3_get_blocks(args).await?;
 
         if log_length == 0_u64 {
-            // TODO
-            // DO NOT MERGE
             // treat the special case of a brand new ledger with zero blocks by setting the API
             // field to null.
-            todo!();
+            return Ok(0);
         }
 
         // Make the second call to the last added block to fetch the most
@@ -70,7 +68,6 @@ impl<'a> ICRCLedgerHelper<'a> {
             }
         };
 
-        // TODO asserting/logging if blocks.len() != 1
         // We assume in each block we have 1 and only 1 transaction.
         // Block timestamps are in nano seconds
         let ts_nanos = Self::get_block_timestamp_nanos(block)?;
@@ -88,8 +85,6 @@ impl<'a> ICRCLedgerHelper<'a> {
         }
     }
 
-    // Shah-TODO it implies that blocks are always a mapping
-    // Find how catually the blocks are created.
     fn get_block_timestamp_nanos(block: &ICRC3Value) -> Result<Nat, String> {
         let ICRC3Value::Map(map_val) = block else {
             return Err("Error parsing the block failed: expected a map".to_string());
@@ -100,7 +95,7 @@ impl<'a> ICRCLedgerHelper<'a> {
         };
 
         let ICRC3Value::Nat(timestamp) = timestamp else {
-            return Err("Error parsing the block failed: missing timestamp".to_string());
+            return Err("Error parsing the block failed: timestamp should be in Nat".to_string());
         };
 
         Ok(timestamp.clone())

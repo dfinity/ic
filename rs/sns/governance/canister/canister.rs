@@ -372,6 +372,9 @@ async fn get_metrics(request: GetMetricsRequest) -> get_metrics_response::GetMet
     let result = governance().get_metrics(request.unwrap()).await;
 
     let get_metrics_result = match result {
+        // if the SNS has been very recently deployed and to transactions made yet
+        // `last_ledger_block_timestamp` field is 0.
+        Ok(metrics) if metrics.last_ledger_block_timestamp == 0 => None,
         Ok(metrics) => {
             let metrics = get_metrics_response::Metrics::from(metrics);
             Some(get_metrics_response::GetMetricsResult::Ok(metrics))

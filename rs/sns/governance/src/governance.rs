@@ -2025,7 +2025,6 @@ impl Governance {
                 GovernanceError::new_with_message(ErrorType::External, error_mesage)
             })?;
 
-        // transaction timestamps are in nanoseconds
         Ok(Metrics {
             num_recently_submitted_proposals,
             last_ledger_block_timestamp,

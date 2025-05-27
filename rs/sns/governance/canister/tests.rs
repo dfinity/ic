@@ -45,6 +45,8 @@ fn test_implemented_interface_matches_declared_interface_exactly() {
 
     let implemented_interface = CandidSource::Text(&implemented_interface_str);
 
+    assert!(0 == 1, "{}", implemented_interface_str);
+
     let result = service_equal(declared_interface, implemented_interface);
     assert!(result.is_ok(), "{:?}\n\n", result.unwrap_err());
 }
