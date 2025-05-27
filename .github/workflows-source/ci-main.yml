@@ -243,6 +243,35 @@ jobs:
           # Clean up the output base for the next run
           sudo rm -rf /var/tmp/bazel-output
 
+  bazel-test-macos-arm64:
+    name: Bazel Build arm64-linux
+    runs-on: namespace-profile-arm64-linux # profile created in namespace console
+    if: github.repository == 'dfinity/ic' # only run on public repo, not private since Namespace runners are not configured there, so these CI jobs get stuck otherwise.
+    steps:
+      - name: Set up Bazel cache
+        run: |
+          # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
+          nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
+      - uses: actions/checkout@v4
+
+      - name: build
+        run: |
+          bazel \
+            --noworkspace_rc \
+            --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
+            build --config=ci //rs/pocket_ic_server:pocket-ic-server
+
+          mkdir -p build
+          cp \
+            ./bazel-bin/rs/pocket_ic_server/pocket-ic-server \
+            ./build/pocket-ic-server-arm64-linux
+
+      - name: Upload pocket-ic-server
+        uses: actions/upload-artifact@v4
+        with:
+          name: pocket-ic-server-arm64-linux
+          path: ./build/pocket-ic-server-arm64-linux
+
   bazel-build-fuzzers:
     name: Bazel Build Fuzzers
     <<: *dind-large-setup
