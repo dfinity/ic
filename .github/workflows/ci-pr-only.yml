@@ -76,7 +76,7 @@ jobs:
         id: app-token
         with:
           app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
-          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
+          private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -112,7 +112,7 @@ jobs:
         id: app-token
         with:
           app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
-          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
+          private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
       - name: Checkout
         uses: actions/checkout@v4
         with:
