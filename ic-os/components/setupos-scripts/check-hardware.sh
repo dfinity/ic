@@ -298,6 +298,20 @@ function verify_deployment_path() {
     fi
 }
 
+function verify_sev_snp() {
+    local config_json="/var/ic/config/config.json"
+    local enabled=$(jq -r '.hostos_settings.enable_trusted_execution_environment' "${config_json}")
+    if [[ "${enabled}" == "true" ]]; then
+        if [[ "${HARDWARE_GENERATION}" != "2" ]]; then
+            log_and_halt_installation_on_error "1" "Trusted execution is enabled but hardware generation is not Gen2."
+        else
+            echo "Trusted execution is enabled and Gen2 hardware detected."
+        fi
+    else
+        echo "Trusted execution is disabled. Skipping verification."
+    fi
+}
+
 ###############################################################################
 # Main
 ###############################################################################
@@ -311,6 +325,7 @@ main() {
         verify_disks
         verify_drive_health
         verify_deployment_path
+        verify_sev_snp
     else
         echo "* Hardware checks skipped by request via kernel command line"
     fi

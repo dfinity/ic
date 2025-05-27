@@ -85,6 +85,11 @@ pub struct ICOSSettings {
     /// The URL (HTTP) of the NNS node(s).
     pub nns_urls: Vec<Url>,
     pub use_node_operator_private_key: bool,
+    /// Whether SEV-SNP is enabled. This is configured when the machine is deployed.
+    /// If the value is enabled, we check during deployment that SEV-SNP is supported
+    /// by the hardware. Once deployment is successful, we rely on the hardware supporting
+    /// SEV-SNP.
+    pub enable_trusted_execution_environment: bool,
     /// This ssh keys directory contains individual files named `admin`, `backup`, `readonly`.
     /// The contents of these files serve as `authorized_keys` for their respective role account.
     /// This means that, for example, `accounts_ssh_authorized_keys/admin`

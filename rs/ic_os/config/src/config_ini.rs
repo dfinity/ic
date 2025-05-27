@@ -4,7 +4,7 @@ use std::path::Path;
 
 use config_types::ConfigMap;
 
-use anyhow::bail;
+use anyhow::{anyhow, bail};
 use anyhow::{Context, Result};
 use regex::Regex;
 
@@ -18,12 +18,27 @@ pub struct ConfigIniSettings {
     pub domain_name: Option<String>,
     pub verbose: bool,
     pub node_reward_type: Option<String>,
+    pub enable_trusted_execution_environment: bool,
 }
 
 // Prefix should have a max length of 19 ("1234:6789:1234:6789")
 // It could have fewer characters though. Parsing as an ip address with trailing '::' should work.
 fn is_valid_ipv6_prefix(ipv6_prefix: &str) -> bool {
     ipv6_prefix.len() <= 19 && format!("{ipv6_prefix}::").parse::<Ipv6Addr>().is_ok()
+}
+
+fn read_boolean(config_map: &ConfigMap, key: &str) -> Result<Option<bool>> {
+    config_map
+        .get(key)
+        .map(|value| {
+            value.parse().map_err(|_| {
+                anyhow!(
+                    "Error reading bool value: {key}. Only true and false are valid values but \
+                    got: '{value}'."
+                )
+            })
+        })
+        .transpose()
 }
 
 pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSettings> {
@@ -85,14 +100,15 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
 
     let domain_name = config_map.get("domain").cloned();
 
-    let verbose = config_map
-        .get("verbose")
-        .is_some_and(|s| s.eq_ignore_ascii_case("true"));
+    let verbose = read_boolean(&config_map, "verbose")?.unwrap_or(false);
 
     let node_reward_type = config_map
         .get("node_reward_type")
         .filter(|s| !s.is_empty())
         .cloned();
+
+    let enable_trusted_execution_environment =
+        read_boolean(&config_map, "enable_trusted_execution_environment")?.unwrap_or(false);
 
     Ok(ConfigIniSettings {
         ipv6_prefix,
@@ -104,6 +120,7 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
         domain_name,
         verbose,
         node_reward_type,
+        enable_trusted_execution_environment,
     })
 }
 
