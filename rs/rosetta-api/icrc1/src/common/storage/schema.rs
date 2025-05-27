@@ -77,18 +77,6 @@ pub fn create_tables(connection: &Connection) -> Result<()> {
         )
     })?;
 
-    initialize_counter_if_missing(connection, &RosettaCounter::CollectorBalancesFixed).map_err(
-        |e| {
-            rusqlite::Error::SqliteFailure(
-                rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_ABORT),
-                Some(format!(
-                    "Failed to initialize CollectorBalancesFixed counter: {}",
-                    e
-                )),
-            )
-        },
-    )?;
-
     // The trigger increments the counter of `SyncedBlocks` by 1 whenever a new block is
     // inserted into the blocks table. For transactions that call `INSERT OR IGNORE` and try to
     // insert a block that already exists, the trigger will not be executed. The trigger is
