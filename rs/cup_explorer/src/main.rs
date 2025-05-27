@@ -216,13 +216,14 @@ fn verify(nns_url: Url, cup_path: &Path) {
         .unwrap();
     assert!(
         halted,
-        "Verification failed: Subnet wasn't instructed to halt on this CUP"
+        "Verification failed: Subnet wasn't instructed to halt on this CUP. Therefore, this CUP is NOT guaranteed to represent the latest state of the subnet!"
     );
     println!(
-        "\nConfirmed that subnet {} was halted on this CUP.",
-        subnet_id
+        "\nConfirmed that subnet {} was halted on this CUP as of {}.",
+        subnet_id, block.context.time
     );
-    println!("It may only be restarted via subnet recovery using the state hash listed above.");
+    println!("This means that the CUP represents the latest state of the subnet, UNTIL the subnet is restarted again.");
+    println!("The subnet may ONLY be restarted via a recovery proposal using the same state hash as listed above.");
 }
 
 #[tokio::main]

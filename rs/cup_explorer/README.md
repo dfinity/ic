@@ -1,0 +1,84 @@
+# CUP Explorer & Verifier
+
+A command-line tool for exploring and verifying Catch-Up Packages (CUPs) of the Internet Computer Protocol (ICP).
+
+## Overview
+
+This tool provides utilities for interacting with Catch-Up Packages (CUPs) on subnets of the Internet Computer. CUPs are special artifacts that are created and signed by a subnet in periodic intervals (i.e. once every 500 blocks). Each CUP (via its state hash) corresponds to a specific state checkpoint of the subnet. 
+
+The tool supports two main functionalities:
+
+- **Exploring** the latest CUP of a subnet,
+- **Verifying** the integrity and signature of a locally stored CUP, and determining whether the subnet was halted on the given CUP.
+
+In particular, this tool may be used to verify if a given CUP represents the latest state of a subnet that was manually halted at a CUP height via proposal (i.e. as part of a key resharing maintenance). If this is the case, then it allows anyone to determine the parameters that should be used in a recovery proposal submitted to restart the subnet again.
+
+## Usage
+
+Run the binary with one of the available subcommands:
+
+### Explore
+
+Fetch and optionally persist the most recent CUPs of all nodes on a given subnet (requires IC network access).
+
+```bash
+bazel run rs/cup_explorer:cup_explorer_bin -- explore --subnet-id <SUBNET_ID> [--download-path <PATH>]
+```
+
+- `--subnet-id`: The target subnet to inspect (required).
+- `--download-path`: If specified, saves the latest CUP to the given path.
+
+### Verify
+
+Verify a CUP file's integrity and threshold signature, and check if the subnet was halted at that height.
+
+```bash
+bazel run rs/cup_explorer:cup_explorer_bin -- verify --cup-path <CUP_FILE>
+```
+
+- `--cup-path`: Path to a local CUP protobuf file (required).
+
+The tool will:
+- Decode and validate the CUP contents.
+- Verify the combined threshold signature against the subnet public key in registry.
+- Confirm the subnet was configured to halt at the CUP’s height.
+
+## Example Output
+
+Executed command:
+```bash
+bazel run rs/cup_explorer:cup_explorer_bin -- verify --cup-path /path/to/cup.pb
+```
+- `/path/to/cup.pb`: A Catch-Up Package file that was published during a subnet maintenance
+
+Output:
+```
+[..]
+Reading CUP file at "/path/to/cup.pb"
+CUP integrity verified!
+
+Checking CUP signature for subnet fuqsr-in2lc-zbcjj-ydmcw-pzq7h-4xm2z-pto4i-dcyee-5z4rz-x63ji-nae...
+Getting registry value of key catch_up_package_contents_fuqsr-in2lc-zbcjj-ydmcw-pzq7h-4xm2z-pto4i-dcyee-5z4rz-x63ji-nae at version 50690...
+CUP signature verification successful!
+
+Latest subnet state according to CUP:
+                TIME: 1748271343192946614, (2025-05-26 14:55:43.192946614 UTC)
+              HEIGHT: 143603500
+                HASH: c214b0175f2348a28a0bb9b63b46d9502cec8071974a370559edbb7ab481b569
+    REGISTRY VERSION: 50690
+
+Verifying that the subnet was halted on this CUP...
+Getting registry value of key subnet_record_fuqsr-in2lc-zbcjj-ydmcw-pzq7h-4xm2z-pto4i-dcyee-5z4rz-x63ji-nae at version 50690...
+
+Confirmed that subnet fuqsr-in2lc-zbcjj-ydmcw-pzq7h-4xm2z-pto4i-dcyee-5z4rz-x63ji-nae was halted on this CUP as of 2025-05-26 14:55:43.192946614 UTC.
+This means that the CUP represents the latest state of the subnet, UNTIL the subnet is restarted again.
+The subnet may ONLY be restarted via a recovery proposal using the same state hash as listed above.
+```
+
+## Configuration
+
+By default, the tool uses `https://ic0.app` as the NNS registry entrypoint. This can be overridden using the `--nns-url` option:
+
+```bash
+bazel run rs/cup_explorer:cup_explorer_bin -- --nns-url https://custom-url.com <subcommand> ...
+```
