@@ -89,17 +89,10 @@ pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(15 *
 
 /// Setup an IC with the given number of unassigned nodes and
 /// an app subnet with the given number of nodes
-pub fn setup(
-    nns_nodes: usize,
-    source_nodes: usize,
-    app_nodes: usize,
-    unassigned_nodes: usize,
-    dkg_interval: u64,
-    env: TestEnv,
-) {
+pub fn setup(env: TestEnv, cfg: SetupConfig) {
     // TODO(CON-1471): Enable vetKD in large subnet recovery test once
     // large registry deltas are supported.
-    let key_ids = if nns_nodes == NNS_NODES_LARGE {
+    let key_ids = if cfg.nns_nodes == NNS_NODES_LARGE {
         make_key_ids_for_all_idkg_schemes()
     } else {
         make_key_ids_for_all_schemes()
@@ -121,25 +114,25 @@ pub fn setup(
     let mut ic = InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
-                .with_dkg_interval_length(Height::from(dkg_interval))
-                .add_nodes(nns_nodes),
+                .with_dkg_interval_length(Height::from(cfg.dkg_interval))
+                .add_nodes(cfg.nns_nodes),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_dkg_interval_length(Height::from(dkg_interval))
-                .add_nodes(source_nodes)
+                .with_dkg_interval_length(Height::from(cfg.dkg_interval))
+                .add_nodes(cfg.source_nodes)
                 .with_chain_key_config(ChainKeyConfig {
                     key_configs,
                     signature_request_timeout_ns: None,
                     idkg_key_rotation_period_ms: None,
                 }),
         )
-        .with_unassigned_nodes(unassigned_nodes);
-    if app_nodes > 0 {
+        .with_unassigned_nodes(cfg.unassigned_nodes);
+    if cfg.app_nodes > 0 {
         ic = ic.add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_dkg_interval_length(Height::from(dkg_interval))
-                .add_nodes(app_nodes),
+                .with_dkg_interval_length(Height::from(cfg.dkg_interval))
+                .add_nodes(cfg.app_nodes),
         );
     }
 
@@ -148,48 +141,80 @@ pub fn setup(
     install_nns_and_check_progress(env.topology_snapshot());
 }
 
+struct SetupConfig {
+    nns_nodes: usize,
+    source_nodes: usize,
+    app_nodes: usize,
+    unassigned_nodes: usize,
+    dkg_interval: u64,
+}
+
 pub fn setup_large_chain_keys(env: TestEnv) {
     setup(
-        NNS_NODES_LARGE,
-        APP_NODES_LARGE,
-        0,
-        APP_NODES_LARGE,
-        DKG_INTERVAL_LARGE,
         env,
+        SetupConfig {
+            nns_nodes: NNS_NODES_LARGE,
+            source_nodes: APP_NODES_LARGE,
+            app_nodes: 0,
+            unassigned_nodes: APP_NODES_LARGE,
+            dkg_interval: DKG_INTERVAL_LARGE,
+        },
     );
 }
 
 pub fn setup_same_nodes_chain_keys(env: TestEnv) {
-    setup(NNS_NODES, APP_NODES, 0, APP_NODES, DKG_INTERVAL, env);
+    setup(
+        env,
+        SetupConfig {
+            nns_nodes: NNS_NODES,
+            source_nodes: APP_NODES,
+            app_nodes: 0,
+            unassigned_nodes: APP_NODES,
+            dkg_interval: DKG_INTERVAL,
+        },
+    );
 }
 
 pub fn setup_failover_nodes_chain_keys(env: TestEnv) {
     setup(
-        NNS_NODES,
-        APP_NODES,
-        0,
-        APP_NODES + UNASSIGNED_NODES,
-        DKG_INTERVAL,
         env,
+        SetupConfig {
+            nns_nodes: NNS_NODES,
+            source_nodes: APP_NODES,
+            app_nodes: 0,
+            unassigned_nodes: APP_NODES + UNASSIGNED_NODES,
+            dkg_interval: DKG_INTERVAL,
+        },
     );
 }
 
 pub fn setup_same_nodes(env: TestEnv) {
-    setup(NNS_NODES, APP_NODES, APP_NODES, 0, DKG_INTERVAL, env);
+    setup(
+        env,
+        SetupConfig {
+            nns_nodes: NNS_NODES,
+            source_nodes: APP_NODES,
+            app_nodes: APP_NODES,
+            unassigned_nodes: 0,
+            dkg_interval: DKG_INTERVAL,
+        },
+    );
 }
 
 pub fn setup_failover_nodes(env: TestEnv) {
     setup(
-        NNS_NODES,
-        APP_NODES,
-        APP_NODES,
-        UNASSIGNED_NODES,
-        DKG_INTERVAL,
         env,
+        SetupConfig {
+            nns_nodes: NNS_NODES,
+            source_nodes: APP_NODES,
+            app_nodes: APP_NODES,
+            unassigned_nodes: UNASSIGNED_NODES,
+            dkg_interval: DKG_INTERVAL,
+        },
     );
 }
 
-struct Config {
+struct TestConfig {
     subnet_size: usize,
     upgrade: bool,
     chain_key: bool,
@@ -200,7 +225,7 @@ struct Config {
 pub fn test_with_chain_keys(env: TestEnv) {
     app_subnet_recovery_test(
         env,
-        Config {
+        TestConfig {
             subnet_size: APP_NODES,
             upgrade: true,
             chain_key: true,
@@ -213,7 +238,7 @@ pub fn test_with_chain_keys(env: TestEnv) {
 pub fn test_without_chain_keys(env: TestEnv) {
     app_subnet_recovery_test(
         env,
-        Config {
+        TestConfig {
             subnet_size: APP_NODES,
             upgrade: true,
             chain_key: false,
@@ -228,7 +253,7 @@ pub fn test_no_upgrade_with_chain_keys(env: TestEnv) {
     let corrupt_cup = env.topology_snapshot().unassigned_nodes().count() > 0;
     app_subnet_recovery_test(
         env,
-        Config {
+        TestConfig {
             subnet_size: APP_NODES,
             upgrade: false,
             chain_key: true,
@@ -241,7 +266,7 @@ pub fn test_no_upgrade_with_chain_keys(env: TestEnv) {
 pub fn test_large_with_chain_keys(env: TestEnv) {
     app_subnet_recovery_test(
         env,
-        Config {
+        TestConfig {
             subnet_size: APP_NODES_LARGE,
             upgrade: false,
             chain_key: true,
@@ -254,7 +279,7 @@ pub fn test_large_with_chain_keys(env: TestEnv) {
 pub fn test_no_upgrade_without_chain_keys(env: TestEnv) {
     app_subnet_recovery_test(
         env,
-        Config {
+        TestConfig {
             subnet_size: APP_NODES,
             upgrade: false,
             chain_key: false,
@@ -267,7 +292,7 @@ pub fn test_no_upgrade_without_chain_keys(env: TestEnv) {
 pub fn test_no_upgrade_without_chain_keys_local(env: TestEnv) {
     app_subnet_recovery_test(
         env,
-        Config {
+        TestConfig {
             subnet_size: APP_NODES,
             upgrade: false,
             chain_key: false,
@@ -277,7 +302,7 @@ pub fn test_no_upgrade_without_chain_keys_local(env: TestEnv) {
     );
 }
 
-fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
+fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let logger = env.logger();
 
     let master_version = env.get_initial_replica_version().unwrap();
@@ -573,7 +598,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
         .for_each(|n| assert_node_is_unassigned(&n, &logger));
 }
 
-fn remote_recovery(cfg: &Config, subnet_recovery: AppSubnetRecovery, logger: &Logger) {
+fn remote_recovery(cfg: &TestConfig, subnet_recovery: AppSubnetRecovery, logger: &Logger) {
     for (step_type, step) in subnet_recovery {
         info!(logger, "Next step: {:?}", step_type);
 
