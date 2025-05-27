@@ -183,7 +183,7 @@ impl OrchestratorDashboard {
                     .as_nanos_since_unix_epoch();
                 let iso_format = match i64::try_from(unix_timestamp) {
                     Ok(ts) => chrono::DateTime::<chrono::Utc>::from_timestamp_nanos(ts).to_string(),
-                    Err(_) => "Timestamp conversion error".to_string(),
+                    Err(_) => String::from("Timestamp conversion error"),
                 };
                 let timestamp_str = format!("{} ({})", unix_timestamp, iso_format);
 
