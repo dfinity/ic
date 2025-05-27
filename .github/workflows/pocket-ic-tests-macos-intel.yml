@@ -65,4 +65,9 @@ jobs:
           echo "PATH=\"$HOME/.cargo/bin:$PATH\"" >> $GITHUB_ENV
       - name: Tests
         run: |
+          export RUST_LOG=debug
+          echo $POCKET_IC_BIN
+          ls -l $POCKET_IC_BIN
+          echo $TEST_WASM
+          ls -l $TEST_WASM
           cargo test --locked -p pocket-ic
