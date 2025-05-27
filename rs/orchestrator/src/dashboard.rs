@@ -175,6 +175,7 @@ impl OrchestratorDashboard {
                 let hash = cup.content.state_hash.get().0;
 
                 let unix_timestamp = cup.content.block.get_value().context.time;
+                // UNIX timestamp in nanoseconds followed by the human-readable representation
                 let timestamp_str = format!(
                     "{} ({})",
                     unix_timestamp.as_nanos_since_unix_epoch(),
