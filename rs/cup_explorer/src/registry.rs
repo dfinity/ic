@@ -10,15 +10,10 @@ use ic_types::{
     registry::RegistryClientError, NodeId, PrincipalId, RegistryVersion, SubnetId, Time,
 };
 use prost::Message;
-use url::Url;
-use std::{
-    env,
-    fs::{self, File},
-    io::Write,
-    sync::Arc,
-    thread,
-};
+use std::{io::Write, sync::Arc, thread};
+use tempfile::NamedTempFile;
 use tokio::{runtime::Runtime, task};
+use url::Url;
 
 /// A wrapper struct allowing us to implement the [RegistryClient] interface for [RegistryCanister].
 pub struct RegistryCanisterClient(pub Arc<RegistryCanister>);
@@ -28,15 +23,13 @@ impl RegistryCanisterClient {
     pub fn new(nns_url: Url) -> RegistryCanisterClient {
         let pem_bytes: &[u8] = include_bytes!("../ic_public_key.pem");
         // Write public keys to a temp file, because `parse_threshold_sig_key` expects a file path
-        let mut temp_path = env::temp_dir();
-        temp_path.push("ic_public_key.pem");
-        let mut file = File::create(&temp_path).unwrap();
-        file.write_all(pem_bytes).unwrap();
+        let mut temp = NamedTempFile::new().unwrap();
+        temp.write_all(pem_bytes).unwrap();
 
-        let content = fs::read_to_string(&temp_path).unwrap();
+        let content = std::fs::read_to_string(temp.path()).unwrap();
         println!("NNS public key being used: \n{}", content);
 
-        let nns_public_key = parse_threshold_sig_key(&temp_path).unwrap();
+        let nns_public_key = parse_threshold_sig_key(temp.path()).unwrap();
 
         RegistryCanisterClient(Arc::new(RegistryCanister::new_with_agent_transformer(
             vec![nns_url],
