@@ -89,7 +89,7 @@ pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(15 *
 
 /// Setup an IC with the given number of unassigned nodes and
 /// an app subnet with the given number of nodes
-pub fn setup(env: TestEnv, cfg: SetupConfig) {
+fn setup(env: TestEnv, cfg: SetupConfig) {
     // TODO(CON-1471): Enable vetKD in large subnet recovery test once
     // large registry deltas are supported.
     let key_ids = if cfg.nns_nodes == NNS_NODES_LARGE {
