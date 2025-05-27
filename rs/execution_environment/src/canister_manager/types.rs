@@ -456,6 +456,7 @@ pub(crate) enum CanisterManagerError {
         limit: usize,
     },
     CanisterSnapshotNotEnoughCycles(CanisterOutOfCyclesError),
+    CanisterSnapshotImmutable,
     LongExecutionAlreadyInProgress {
         canister_id: CanisterId,
     },
@@ -629,6 +630,10 @@ impl AsErrorHelp for CanisterManagerError {
             CanisterManagerError::CanisterSnapshotNotEnoughCycles { .. } => ErrorHelp::UserError {
                 suggestion: "Try sending more cycles with the request.".to_string(),
                 doc_link: "canister-snapshot-not-enough-cycles".to_string(),
+            },
+            CanisterManagerError::CanisterSnapshotImmutable => ErrorHelp::UserError {
+                suggestion: "Only canister snapshots created by metadata upload can be mutated.".to_string(),
+                doc_link: "".to_string(),
             },
             CanisterManagerError::LongExecutionAlreadyInProgress { .. } => ErrorHelp::UserError {
                 suggestion: "Try waiting for the long execution to complete.".to_string(),
@@ -950,6 +955,12 @@ impl From<CanisterManagerError> for UserError {
                     format!("Canister snapshotting failed with: `{}`{additional_help}", err),
                 )
             }
+            CanisterSnapshotImmutable => {
+                Self::new(
+                ErrorCode::CanisterSnapshotImmutable,
+                    "Only canister snapshots created by metadata upload can be mutated.".to_string(),
+                )
+            }
             LongExecutionAlreadyInProgress { canister_id } => {
                 Self::new(
                     ErrorCode::CanisterRejectedMessage,
@@ -992,6 +1003,9 @@ impl From<CanisterSnapshotError> for CanisterManagerError {
             }
             CanisterSnapshotError::InvalidSubslice { offset, size } => {
                 CanisterManagerError::InvalidSubslice { offset, size }
+            }
+            CanisterSnapshotError::InvalidMetadata { reason } => {
+                CanisterManagerError::InvalidSettings { message: reason }
             }
         }
     }
