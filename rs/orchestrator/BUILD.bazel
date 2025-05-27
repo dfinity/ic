@@ -47,6 +47,7 @@ rust_library(
         "//rs/types/types",
         "@crate_index//:backoff",
         "@crate_index//:candid",
+        "@crate_index//:chrono",
         "@crate_index//:clap",
         "@crate_index//:env-file-reader",
         "@crate_index//:exec",
