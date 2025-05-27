@@ -1,0 +1,35 @@
+name: PocketIC macOS Intel
+on:
+  pull_request:
+
+# runs for the same workflow are cancelled on PRs but not on master
+# explanation: on push to master head_ref is not set, so we want it to fall back to run_id so it is not cancelled
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  poc-hyper-issue:
+    name: PoC for hyper issue
+    runs-on:
+      labels: macOS
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+      - name: Set PATH
+        run: |
+          ls -l /usr/local/opt/llvm/bin/clang
+          echo "/usr/local/bin" >> $GITHUB_PATH
+          echo "$HOME/.cargo/bin:" >> $GITHUB_PATH
+          # use llvm-clang instead of apple's
+          echo "CC=/usr/local/opt/llvm/bin/clang" >> "$GITHUB_ENV"
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "PATH=\"$HOME/.cargo/bin:$PATH\"" >> $GITHUB_ENV
+      - name: Tests
+        run: |
+          export RUST_LOG=debug
+          cargo test --locked -p pocket-ic hyper_issue -- --nocapture

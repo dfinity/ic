@@ -18525,6 +18525,7 @@ dependencies = [
 name = "pocket-ic"
 version = "9.0.1"
 dependencies = [
+ "axum 0.8.4",
  "backoff",
  "base64 0.13.1",
  "bitcoin 0.28.2",
@@ -18533,6 +18534,9 @@ dependencies = [
  "ed25519-dalek",
  "flate2",
  "hex",
+ "http-body-util",
+ "hyper 1.6.0",
+ "hyper-util",
  "ic-cdk 0.17.2",
  "ic-certification 3.0.3",
  "ic-error-types 0.1.0",

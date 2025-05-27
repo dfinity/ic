@@ -50,6 +50,10 @@ wslpath = "0.0.2"
 
 [dev-dependencies]
 #TODO: try upgrading this to the latest bitcion crate
+axum = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+http-body-util = { workspace = true }
 bitcoin = { version = "0.28.2" }
 candid_parser = { workspace = true }
 ed25519-dalek = { workspace = true }
