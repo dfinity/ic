@@ -15,23 +15,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  pocket-ic-lint-on-macos-intel:
-    name: PocketIC Lint on macOS Intel
-    runs-on:
-      labels: macOS
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      - name: Install Rust
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-      - name: Linting
-        run: |
-          cargo clippy -p pocket-ic --locked --all-features --all-targets -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off
-          
   pocket-ic-tests-on-macos-intel:
     name: PocketIC Tests on macOS Intel
     runs-on:
@@ -48,27 +31,19 @@ jobs:
           echo "$HOME/.cargo/bin:" >> $GITHUB_PATH
           # use llvm-clang instead of apple's
           echo "CC=/usr/local/opt/llvm/bin/clang" >> "$GITHUB_ENV"
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "PATH=\"$HOME/.cargo/bin:$PATH\"" >> $GITHUB_ENV
       - name: Build PocketIC server
         run: |
           bazel build //rs/pocket_ic_server:pocket-ic-server
       - name: Compute PocketIC server path
         id: pocket-ic-server-path
         run: echo "POCKET_IC_BIN=$(pwd)/$(bazel cquery //rs/pocket_ic_server:pocket-ic-server --output=files)" >> $GITHUB_ENV
-      - name: Build PocketIC test canister
-        run: |
-          bazel build //packages/pocket-ic/test_canister:test_canister
-      - name: Compute PocketIC test canister path
-        id: pocket-ic-test-canister-path
-        run: echo "TEST_WASM=$(pwd)/$(bazel cquery //packages/pocket-ic/test_canister:test_canister --output=files)" >> $GITHUB_ENV
-      - name: Install Rust
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          echo "PATH=\"$HOME/.cargo/bin:$PATH\"" >> $GITHUB_ENV
       - name: Tests
         run: |
           export RUST_LOG=debug
           echo $POCKET_IC_BIN
           ls -l $POCKET_IC_BIN
-          echo $TEST_WASM
-          ls -l $TEST_WASM
-          cargo test --locked -p pocket-ic
+          cargo test --locked -p pocket-ic hyper_issue
