@@ -2256,11 +2256,11 @@ async fn deposit_cycles(
         ensure_balance(cycles)?;
     }
 
-    let res: CallResult<()> = ic_cdk::api::call::call_with_payment(
+    let res: CallResult<()> = ic_cdk::api::call::call_with_payment128(
         IC_00.get().0,
         &Method::DepositCycles.to_string(),
         (CanisterIdRecord::from(canister_id),),
-        u128::from(cycles) as u64,
+        u128::from(cycles),
     )
     .await;
 
@@ -2291,11 +2291,11 @@ async fn do_mint_cycles(
         memo: deposit_memo,
     };
 
-    let result: CallResult<(CyclesLedgerDepositResult,)> = ic_cdk::api::call::call_with_payment(
+    let result: CallResult<(CyclesLedgerDepositResult,)> = ic_cdk::api::call::call_with_payment128(
         cycles_ledger_canister_id.get().0,
         "deposit",
         (arg,),
-        u128::from(cycles) as u64,
+        u128::from(cycles),
     )
     .await;
 
@@ -2398,14 +2398,14 @@ async fn do_create_canister(
         });
 
     for subnet_id in subnets {
-        let result: CallResult<(CanisterIdRecord,)> = ic_cdk::api::call::call_with_payment(
+        let result: CallResult<(CanisterIdRecord,)> = ic_cdk::api::call::call_with_payment128(
             subnet_id.get().0,
             &Method::CreateCanister.to_string(),
             (CreateCanisterArgs {
                 settings: Some(Ic00CanisterSettingsArgs::from(canister_settings.clone())),
                 sender_canister_version: Some(ic_cdk::api::canister_version()),
             },),
-            cycles.get().try_into().unwrap(),
+            u128::from(cycles),
         )
         .await;
 
