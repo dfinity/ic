@@ -2794,6 +2794,6 @@ fn test_invalid_specified_id() {
     let err = pic
         .create_canister_with_id(None, None, specified_id)
         .unwrap_err();
-    let expected_err = format!("The `specified_id` {} is invalid because it belongs to the canister allocation ranges of the test environment.\\nUse a `specified_id` that matches a canister ID on the ICP mainnet (and thus does not belong to the canister allocation ranges of the test environment). See documentation: ", specified_id);
+    let expected_err = format!("The `specified_id` {} is invalid because it belongs to the canister allocation ranges of the test environment.\\nUse a `specified_id` that matches a canister ID on the ICP mainnet (and thus does not belong to the canister allocation ranges of the test environment).", specified_id);
     assert!(err.contains(&expected_err));
 }

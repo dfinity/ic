@@ -2885,7 +2885,7 @@ fn create_canister_with_invalid_specified_id() {
         Some(specified_id.into()),
     ))
     .unwrap();
-    let expected_err = format!("The `specified_id` {} is invalid because it belongs to the canister allocation ranges of the test environment.\nUse a `specified_id` that matches a canister ID on the ICP mainnet (and thus does not belong to the canister allocation ranges of the test environment). See documentation: ", specified_id);
+    let expected_err = format!("The `specified_id` {} is invalid because it belongs to the canister allocation ranges of the test environment.\nUse a `specified_id` that matches a canister ID on the ICP mainnet (and thus does not belong to the canister allocation ranges of the test environment).", specified_id);
 
     // Both in an ingress message to create a canister
     let err = test
