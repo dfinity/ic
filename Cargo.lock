@@ -8756,6 +8756,7 @@ dependencies = [
  "slog",
  "slog-async",
  "slog-term",
+ "tempfile",
  "tokio",
  "url",
 ]
