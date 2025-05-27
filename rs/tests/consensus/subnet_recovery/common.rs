@@ -97,14 +97,6 @@ pub fn setup(
     dkg_interval: u64,
     env: TestEnv,
 ) {
-    let nns = Subnet::new(SubnetType::System)
-        .with_dkg_interval_length(Height::from(dkg_interval))
-        .add_nodes(nns_nodes);
-
-    let mut source_subnet = Subnet::new(SubnetType::Application)
-        .with_dkg_interval_length(Height::from(dkg_interval))
-        .add_nodes(source_nodes);
-
     // TODO(CON-1471): Enable vetKD in large subnet recovery test once
     // large registry deltas are supported.
     let key_ids = if nns_nodes == NNS_NODES_LARGE {
@@ -125,15 +117,23 @@ pub fn setup(
             key_id,
         })
         .collect();
-    source_subnet = source_subnet.with_chain_key_config(ChainKeyConfig {
-        key_configs,
-        signature_request_timeout_ns: None,
-        idkg_key_rotation_period_ms: None,
-    });
 
     let mut ic = InternetComputer::new()
-        .add_subnet(nns)
-        .add_subnet(source_subnet)
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .with_dkg_interval_length(Height::from(dkg_interval))
+                .add_nodes(nns_nodes),
+        )
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_dkg_interval_length(Height::from(dkg_interval))
+                .add_nodes(source_nodes)
+                .with_chain_key_config(ChainKeyConfig {
+                    key_configs,
+                    signature_request_timeout_ns: None,
+                    idkg_key_rotation_period_ms: None,
+                }),
+        )
         .with_unassigned_nodes(unassigned_nodes);
     if app_nodes > 0 {
         ic = ic.add_subnet(
