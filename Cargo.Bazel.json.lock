@@ -1,5 +1,5 @@
 {
-  "checksum": "58b0da31d7c9cd4b0c36ed81181d6fc658810ea335a0bd8b4d648dc83860a604",
+  "checksum": "72bed5a3f2cbd0acb2539c4bcdd25f79d0b44efae028df0a9d15fb4571ae91f7",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -9857,6 +9857,70 @@
         "version": "0.5.0"
       },
       "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "bstr 0.2.17": {
+      "name": "bstr",
+      "version": "0.2.17",
+      "package_url": "https://github.com/BurntSushi/bstr",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/bstr/0.2.17/download",
+          "sha256": "ba3569f383e8f1598449f1a423e72e99569137b47740b1da11ef19af3d5c3223"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bstr",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "bstr",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "lazy_static",
+            "regex-automata",
+            "unicode"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "lazy_static 1.5.0",
+              "target": "lazy_static"
+            },
+            {
+              "id": "memchr 2.7.4",
+              "target": "memchr"
+            },
+            {
+              "id": "regex-automata 0.1.10",
+              "target": "regex_automata"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.2.17"
+      },
+      "license": "MIT OR Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -20120,6 +20184,10 @@
               "target": "getrandom"
             },
             {
+              "id": "goldenfile 1.8.0",
+              "target": "goldenfile"
+            },
+            {
               "id": "group 0.13.0",
               "target": "group"
             },
@@ -27999,6 +28067,65 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "goldenfile 1.8.0": {
+      "name": "goldenfile",
+      "version": "1.8.0",
+      "package_url": "https://github.com/calder/rust-goldenfile",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/goldenfile/1.8.0/download",
+          "sha256": "cf39e208efa110ca273f7255aea02485103ffcb7e5dfa5e4196b05a02411618e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "goldenfile",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "goldenfile",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "scopeguard 1.2.0",
+              "target": "scopeguard"
+            },
+            {
+              "id": "similar-asserts 1.7.0",
+              "target": "similar_asserts"
+            },
+            {
+              "id": "tempfile 3.12.0",
+              "target": "tempfile"
+            },
+            {
+              "id": "yansi 1.0.1",
+              "target": "yansi"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.8.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
     },
     "governor 0.8.1": {
       "name": "governor",
@@ -70031,14 +70158,88 @@
         ],
         "crate_features": {
           "common": [
+            "bstr",
             "default",
             "inline",
-            "text"
+            "text",
+            "unicode",
+            "unicode-segmentation"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bstr 0.2.17",
+              "target": "bstr"
+            },
+            {
+              "id": "unicode-segmentation 1.12.0",
+              "target": "unicode_segmentation"
+            }
           ],
           "selects": {}
         },
         "edition": "2018",
         "version": "2.2.1"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "similar-asserts 1.7.0": {
+      "name": "similar-asserts",
+      "version": "1.7.0",
+      "package_url": "https://github.com/mitsuhiko/similar-asserts",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/similar-asserts/1.7.0/download",
+          "sha256": "b5b441962c817e33508847a22bd82f03a30cff43642dc2fae8b050566121eb9a"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "similar_asserts",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "similar_asserts",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "unicode"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "console 0.15.7",
+              "target": "console"
+            },
+            {
+              "id": "similar 2.2.1",
+              "target": "similar"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "1.7.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -89672,6 +89873,53 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "yansi 1.0.1": {
+      "name": "yansi",
+      "version": "1.0.1",
+      "package_url": "https://github.com/SergioBenitez/yansi",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/yansi/1.0.1/download",
+          "sha256": "cfe53a6657fd280eaa890a3bc59152892ffa3e30101319d168b781ed6529b049"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "yansi",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "yansi",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.0.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "yasna 0.5.2": {
       "name": "yasna",
       "version": "0.5.2",
@@ -91229,6 +91477,7 @@
     "futures-util 0.3.31",
     "get_if_addrs 0.5.3",
     "getrandom 0.2.10",
+    "goldenfile 1.8.0",
     "group 0.13.0",
     "hashlink 0.8.3",
     "hex 0.4.3",
