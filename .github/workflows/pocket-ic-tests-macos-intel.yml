@@ -26,8 +26,8 @@ jobs:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Install Rust
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-          echo "PATH=\"$HOME/.cargo/bin:$PATH\"" >> $GITHUB_ENV
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
       - name: Linting
         run: |
           cargo clippy -p pocket-ic --locked --all-features --all-targets -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off
@@ -61,7 +61,7 @@ jobs:
         run: echo "TEST_WASM=$(bazel cquery //packages/pocket-ic/test_canister:test_canister --output=files)" >> $GITHUB_ENV
       - name: Install Rust
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
           echo "PATH=\"$HOME/.cargo/bin:$PATH\"" >> $GITHUB_ENV
       - name: Tests
         run: |
