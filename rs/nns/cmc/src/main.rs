@@ -2436,7 +2436,7 @@ async fn do_create_canister(
 fn ensure_balance(cycles: Cycles) -> Result<(), String> {
     let now = now_system_time();
 
-    let current_balance = Cycles::from(ic_cdk::api::canister_balance());
+    let current_balance = Cycles::from(ic_cdk::api::canister_balance128());
     let cycles_to_mint = cycles - current_balance;
 
     with_state_mut(|state| {
@@ -2460,13 +2460,10 @@ fn ensure_balance(cycles: Cycles) -> Result<(), String> {
         Ok(())
     })?;
 
-    ic0_mint_cycles(
-        cycles_to_mint
-            .get()
-            .try_into()
-            .map_err(|_| "Cycles u64 overflow".to_owned())?,
-    );
-    assert!(u128::from(ic_cdk::api::canister_balance()) >= cycles.get());
+    let (amount_high, amount_low) = cycles_to_mint.into_parts();
+    // unused because of check above
+    let _minted_cycles = ic0_mint_cycles128(amount_high, amount_low);
+    assert!(u128::from(ic_cdk::api::canister_balance128()) >= cycles.get());
     Ok(())
 }
 
