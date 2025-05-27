@@ -809,7 +809,7 @@ impl XNetPayloadBuilderImpl {
 
     /// Shuffles the provided `Vec` using `self.deterministic_rng_for_testing` when
     /// set, `thread_rng()` otherwise.
-    fn random_shuffle<T>(&self, vec: &mut Vec<T>) {
+    fn random_shuffle<T>(&self, vec: &mut [T]) {
         use rand::seq::SliceRandom;
         match *self.deterministic_rng_for_testing {
             None => vec.shuffle(&mut thread_rng()),
