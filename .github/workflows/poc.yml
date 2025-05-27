@@ -32,4 +32,4 @@ jobs:
       - name: Tests
         run: |
           export RUST_LOG=debug
-          cargo test --locked -p pocket-ic hyper_issue -- --nocapture
+          cargo test --locked -p poc -- --nocapture

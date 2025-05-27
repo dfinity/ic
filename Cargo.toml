@@ -20,6 +20,7 @@ members = [
     "packages/ic-sha3",
     "packages/ic-ledger-hash-of",
     "packages/ic-signature-verification",
+    "packages/poc",
     "packages/pocket-ic",
     "packages/pocket-ic/test_canister",
     "rs/artifact_pool",

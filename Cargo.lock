@@ -18522,6 +18522,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "poc"
+version = "9.0.1"
+dependencies = [
+ "axum 0.8.4",
+ "http-body-util",
+ "hyper 1.6.0",
+ "hyper-util",
+ "ic-agent 0.40.1",
+ "tokio",
+]
+
+[[package]]
 name = "pocket-ic"
 version = "9.0.1"
 dependencies = [
