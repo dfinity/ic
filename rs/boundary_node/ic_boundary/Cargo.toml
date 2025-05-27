@@ -32,11 +32,9 @@ hex = { workspace = true }
 http = { workspace = true }
 http-body = { workspace = true }
 humantime = { workspace = true }
-ic-agent = "0.39.1"
+ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-bn-lib = { workspace = true }
-ic-canister-client = { path = "../../canister_client" }
-ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
 ic-config = { path = "../../config" }
 ic-crypto = { path = "../../crypto" }

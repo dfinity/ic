@@ -211,6 +211,14 @@ impl From<(CanisterId, u64)> for SnapshotId {
     }
 }
 
+// TODO: EXC-2048
+impl TryFrom<Vec<u8>> for SnapshotId {
+    type Error = SnapshotIdError;
+    fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
+        SnapshotId::try_from(&bytes)
+    }
+}
+
 impl TryFrom<&Vec<u8>> for SnapshotId {
     type Error = SnapshotIdError;
     fn try_from(bytes: &Vec<u8>) -> Result<Self, Self::Error> {
