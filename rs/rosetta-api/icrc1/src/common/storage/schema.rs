@@ -1,3 +1,6 @@
+use crate::common::storage::{
+    storage_operations::initialize_counter_if_missing, types::RosettaCounter,
+};
 use rusqlite::{Connection, Result};
 
 /// Creates all the necessary tables for the ICRC1 Rosetta storage system.
@@ -58,6 +61,7 @@ pub fn create_tables(connection: &Connection) -> Result<()> {
     )?;
 
     // Counters table
+    // See RosettaCounter enum in types.rs for documentation of available counter values
     connection.execute(
         r#"
         CREATE TABLE IF NOT EXISTS counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL)
@@ -65,13 +69,24 @@ pub fn create_tables(connection: &Connection) -> Result<()> {
         [],
     )?;
 
-    // Set the initial counter value for `SyncedBlocks` to the number of blocks in the blocks
-    // table. If the counter already exists, the value will not be updated.
-    connection.execute(
-        r#"
-        INSERT OR IGNORE INTO counters (name, value) VALUES ("SyncedBlocks", (SELECT COUNT(*) FROM blocks))
-        "#,
-        [],
+    // Initialize counters using the new counter management system
+    initialize_counter_if_missing(connection, &RosettaCounter::SyncedBlocks).map_err(|e| {
+        rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_ABORT),
+            Some(format!("Failed to initialize SyncedBlocks counter: {}", e)),
+        )
+    })?;
+
+    initialize_counter_if_missing(connection, &RosettaCounter::CollectorBalancesFixed).map_err(
+        |e| {
+            rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_ABORT),
+                Some(format!(
+                    "Failed to initialize CollectorBalancesFixed counter: {}",
+                    e
+                )),
+            )
+        },
     )?;
 
     // The trigger increments the counter of `SyncedBlocks` by 1 whenever a new block is

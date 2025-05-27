@@ -2,7 +2,7 @@ use candid::{Nat, Principal};
 use ic_icrc_rosetta::common::storage::schema;
 use ic_icrc_rosetta::common::storage::storage_operations::*;
 use ic_icrc_rosetta::common::storage::types::{
-    IcrcBlock, IcrcOperation, IcrcTransaction, RosettaBlock,
+    IcrcBlock, IcrcOperation, IcrcTransaction, RosettaBlock, RosettaCounter,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use rusqlite::{params, Connection};
@@ -473,12 +473,10 @@ fn test_fee_collector_resolution_and_repair() -> anyhow::Result<()> {
     assert_eq!(fee_balance_final, Some(Nat::from(2u64)));
 
     // Verify counter exists (prevents future repairs)
-    let counter_exists = connection
-        .prepare_cached("SELECT value FROM counters WHERE name = 'collector_balances_fixed'")?
-        .query_map(params![], |row| row.get::<_, i64>(0))?
-        .next()
-        .is_some();
-    assert!(counter_exists);
+    assert!(is_counter_flag_set(
+        &connection,
+        &RosettaCounter::CollectorBalancesFixed
+    )?);
 
     Ok(())
 }
@@ -491,19 +489,17 @@ fn test_repair_fee_collector_edge_cases() -> anyhow::Result<()> {
     schema::create_tables(&connection)?;
 
     // Test 1: Empty database - should complete successfully and set counter
-    assert!(!connection
-        .prepare_cached("SELECT value FROM counters WHERE name = 'collector_balances_fixed'")?
-        .query_map(params![], |row| row.get::<_, i64>(0))?
-        .next()
-        .is_some());
+    assert!(!is_counter_flag_set(
+        &connection,
+        &RosettaCounter::CollectorBalancesFixed
+    )?);
 
     repair_fee_collector_balances(&mut connection)?;
 
-    assert!(connection
-        .prepare_cached("SELECT value FROM counters WHERE name = 'collector_balances_fixed'")?
-        .query_map(params![], |row| row.get::<_, i64>(0))?
-        .next()
-        .is_some());
+    assert!(is_counter_flag_set(
+        &connection,
+        &RosettaCounter::CollectorBalancesFixed
+    )?);
 
     // Test 2: Already fixed database - should skip repair
     let principal1 = vec![1, 2, 3, 4];
@@ -535,8 +531,8 @@ fn test_repair_fee_collector_edge_cases() -> anyhow::Result<()> {
 
     // Test 3: Counter check - verify repair only runs once
     connection.execute(
-        "DELETE FROM counters WHERE name = 'collector_balances_fixed'",
-        params![],
+        "DELETE FROM counters WHERE name = ?1",
+        params![RosettaCounter::CollectorBalancesFixed.name()],
     )?;
 
     repair_fee_collector_balances(&mut connection)?; // First run - should execute

@@ -1,4 +1,4 @@
-use crate::common::storage::types::RosettaBlock;
+use crate::common::storage::types::{RosettaBlock, RosettaCounter};
 use crate::MetadataEntry;
 use anyhow::{bail, Context};
 use candid::Nat;
@@ -12,6 +12,98 @@ use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 use tracing::info;
+
+/// Gets the current value of a counter from the database.
+/// Returns None if the counter doesn't exist.
+pub fn get_counter_value(
+    connection: &Connection,
+    counter: &RosettaCounter,
+) -> anyhow::Result<Option<i64>> {
+    let mut stmt = connection.prepare_cached("SELECT value FROM counters WHERE name = ?1")?;
+    let mut rows = stmt.query(params![counter.name()])?;
+
+    match rows.next()? {
+        Some(row) => Ok(Some(row.get(0)?)),
+        None => Ok(None),
+    }
+}
+
+/// Sets the value of a counter in the database.
+/// Creates the counter if it doesn't exist, updates it if it does.
+pub fn set_counter_value(
+    connection: &Connection,
+    counter: &RosettaCounter,
+    value: i64,
+) -> anyhow::Result<()> {
+    connection
+        .prepare_cached("INSERT OR REPLACE INTO counters (name, value) VALUES (?1, ?2)")?
+        .execute(params![counter.name(), value])?;
+    Ok(())
+}
+
+/// Increments a counter by the specified amount.
+/// Creates the counter with the increment value if it doesn't exist.
+pub fn increment_counter(
+    connection: &Connection,
+    counter: &RosettaCounter,
+    increment: i64,
+) -> anyhow::Result<()> {
+    connection
+        .prepare_cached(
+            "INSERT INTO counters (name, value) VALUES (?1, ?2) 
+             ON CONFLICT(name) DO UPDATE SET value = value + ?2",
+        )?
+        .execute(params![counter.name(), increment])?;
+    Ok(())
+}
+
+/// Checks if a counter flag is set (value > 0).
+/// Returns false if the counter doesn't exist.
+pub fn is_counter_flag_set(
+    connection: &Connection,
+    counter: &RosettaCounter,
+) -> anyhow::Result<bool> {
+    if !counter.is_flag() {
+        bail!("Counter {} is not a flag counter", counter.name());
+    }
+
+    Ok(get_counter_value(connection, counter)?.unwrap_or(0) > 0)
+}
+
+/// Sets a counter flag to true (value = 1).
+/// Only works with flag counters.
+pub fn set_counter_flag(connection: &Connection, counter: &RosettaCounter) -> anyhow::Result<()> {
+    if !counter.is_flag() {
+        bail!("Counter {} is not a flag counter", counter.name());
+    }
+
+    set_counter_value(connection, counter, 1)
+}
+
+/// Initializes a counter with its default value if it doesn't exist.
+/// For SyncedBlocks, this sets it to the current block count.
+pub fn initialize_counter_if_missing(
+    connection: &Connection,
+    counter: &RosettaCounter,
+) -> anyhow::Result<()> {
+    match counter {
+        RosettaCounter::SyncedBlocks => {
+            // Set to current block count if not exists
+            connection
+                .prepare_cached(
+                    "INSERT OR IGNORE INTO counters (name, value) VALUES (?1, (SELECT COUNT(*) FROM blocks))"
+                )?
+                .execute(params![counter.name()])?;
+        }
+        RosettaCounter::CollectorBalancesFixed => {
+            // Set to default value if not exists
+            connection
+                .prepare_cached("INSERT OR IGNORE INTO counters (name, value) VALUES (?1, ?2)")?
+                .execute(params![counter.name(), counter.default_value()])?;
+        }
+    }
+    Ok(())
+}
 
 // Helper function to resolve the fee collector account from a block
 pub fn get_fee_collector_from_block(
@@ -497,11 +589,8 @@ pub fn get_blockchain_gaps(
 }
 
 pub fn get_block_count(connection: &Connection) -> anyhow::Result<u64> {
-    let command = r#"SELECT value FROM counters WHERE name IS "SyncedBlocks""#;
-    let mut stmt = connection.prepare_cached(command)?;
-    let mut rows = stmt.query(params![])?;
-    let count: u64 = rows.next()?.unwrap().get(0)?;
-    Ok(count)
+    let count = get_counter_value(connection, &RosettaCounter::SyncedBlocks)?.unwrap_or(0);
+    Ok(count as u64)
 }
 
 // Returns icrc1 Transactions if the transaction hash exists in the database, else returns None.
@@ -594,10 +683,11 @@ where
 }
 
 pub fn reset_blocks_counter(connection: &Connection) -> anyhow::Result<()> {
-    connection
-        .prepare_cached("UPDATE counters SET value = (SELECT COUNT(*) FROM blocks) WHERE name IS 'SyncedBlocks'")?
-        .execute(params![])?;
-    Ok(())
+    let block_count: i64 = connection
+        .prepare_cached("SELECT COUNT(*) FROM blocks")?
+        .query_row(params![], |row| row.get(0))?;
+
+    set_counter_value(connection, &RosettaCounter::SyncedBlocks, block_count)
 }
 
 fn read_single_block<P>(
@@ -643,19 +733,13 @@ where
 /// corrected fee collector resolution logic by reprocessing all blocks.
 ///
 /// This function checks if the repair has already been performed by looking for a
-/// "collector_balances_fixed" entry in the counters table. If found, it skips the repair.
+/// "CollectorBalancesFixed" entry in the counters table. If found, it skips the repair.
 /// If the repair is performed successfully, it adds the counter entry to prevent future runs.
 ///
 /// This is safe to run multiple times - it will produce the same correct result each time.
 pub fn repair_fee_collector_balances(connection: &mut Connection) -> anyhow::Result<()> {
     // Check if the repair has already been performed
-    let already_fixed = connection
-        .prepare_cached("SELECT value FROM counters WHERE name = 'collector_balances_fixed'")?
-        .query_map(params![], |row| row.get::<_, i64>(0))?
-        .next()
-        .is_some();
-
-    if already_fixed {
+    if is_counter_flag_set(connection, &RosettaCounter::CollectorBalancesFixed)? {
         // Repair has already been performed, skip it
         return Ok(());
     }
@@ -678,11 +762,8 @@ pub fn repair_fee_collector_balances(connection: &mut Connection) -> anyhow::Res
         info!("No blocks to process (empty database)");
     }
 
-    // Mark the repair as completed by adding a counter entry
-    connection.execute(
-        "INSERT INTO counters (name, value) VALUES ('collector_balances_fixed', 1)",
-        params![],
-    )?;
+    // Mark the repair as completed by setting the flag
+    set_counter_flag(connection, &RosettaCounter::CollectorBalancesFixed)?;
 
     info!("Balance reconciliation completed successfully");
 
