@@ -37,7 +37,7 @@ jobs:
           echo "PATH=\"$HOME/.cargo/bin:$PATH\"" >> $GITHUB_ENV
       - name: Build PocketIC server
         run: |
-          bazel build //rs/pocket_ic_server:pocket-ic-server
+          bazel build //rs/pocket_ic_server:pocket-ic-server --config=ci --config=macos_ci
       - name: Compute PocketIC server path
         id: pocket-ic-server-path
         run: echo "POCKET_IC_BIN=$(pwd)/$(bazel cquery //rs/pocket_ic_server:pocket-ic-server --output=files)" >> $GITHUB_ENV
