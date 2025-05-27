@@ -211,11 +211,6 @@ rust_test(
         "requires-network",
         "test_macos",
     ],
-    # We temporarily disable the test on x86_64-darwin because the hyper HTTP client runs into issues on that platform.
-    target_compatible_with = select({
-        "@platforms//os:osx": ["@platforms//cpu:arm64"],
-        "//conditions:default": [],
-    }),
     deps = TEST_DEPENDENCIES,
 )
 
