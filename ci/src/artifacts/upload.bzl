@@ -2,6 +2,64 @@
 Rules to manipulate with artifacts: download, upload etc.
 """
 
+def _artifact_uploader_impl(ctx):
+    """
+    Uploads an artifact to s3 and returns download link to it
+    """
+
+    version_file = ctx.file._version_txt
+    rclone = ctx.file._rclone
+
+    uploader = ctx.file._artifacts_uploader
+    exe = ctx.actions.declare_file("run-upload")
+    ctx.actions.write(
+        output = exe,
+        content = """
+        #!/usr/bin/env bash
+
+        set -euo pipefail
+
+        VERSION_FILE={version_file}
+        export RCLONE={rclone}
+        export VERSION=$(cat $VERSION_FILE)
+
+        p=$(cd "$BUILD_WORKSPACE_DIRECTORY"; realpath "$1")
+
+        {uploader} "$p"
+
+        echo done
+        """.format(uploader = uploader.path, version_file = version_file.short_path, rclone = rclone.short_path),
+        is_executable = True,
+    )
+
+    deps = depset([version_file, rclone])
+    runfiles = ctx.runfiles(files = [uploader, version_file, rclone])
+
+    return [
+        DefaultInfo(executable = exe, files = deps, runfiles = runfiles),
+    ]
+
+_artifact_uploader = rule(
+    implementation = _artifact_uploader_impl,
+    executable = True,
+    attrs = {
+        "_rclone": attr.label(allow_single_file = True, default = "@rclone//:rclone"),
+        "_artifacts_uploader": attr.label(allow_single_file = True, default = ":upload.sh"),
+        "_version_txt": attr.label(allow_single_file = True, default = "//bazel:version.txt"),
+    },
+)
+
+# To avoid shooting ourselves in the foot, make sure that the upload rule invoker
+# states explicitly whether it expects statically linked openssl.
+def artifact_uploader(**kwargs):
+    """
+    To do.
+    """
+
+    _artifact_uploader(**kwargs)
+
+
+
 def _upload_artifact_impl(ctx):
     """
     Uploads an artifact to s3 and returns download link to it
