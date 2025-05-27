@@ -232,6 +232,8 @@ mod tests {
         DeploymentEnvironment, DeterministicIpv6Config, HostOSConfig, HostOSSettings, ICOSSettings,
         Ipv4Config, Ipv6Config, Logging, NetworkSettings,
     };
+    use goldenfile::Mint;
+    use std::env;
     use std::os::unix::prelude::MetadataExt;
     use std::path::Path;
     use tempfile::tempdir;
@@ -316,39 +318,36 @@ mod tests {
         );
     }
 
-    // Temporarily comment these out until the next PR where we check in the golden files
-    // (we do that to avoid messing up git history).
+    fn goldenfiles_path() -> PathBuf {
+        let mut path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+        path.push("golden");
+        path
+    }
 
-    // fn goldenfiles_path() -> PathBuf {
-    //     let mut path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    //     path.push("golden");
-    //     path
-    // }
-    //
-    // fn test_vm_config(cpu_type: &str, filename: &str) {
-    //     let mut mint = Mint::new(goldenfiles_path());
-    //     let mut config = create_test_hostos_config();
-    //
-    //     config.hostos_settings = HostOSSettings {
-    //         vm_memory: 490,
-    //         vm_cpu: cpu_type.to_string(),
-    //         vm_nr_of_vcpus: 56,
-    //         verbose: false,
-    //     };
-    //
-    //     let vm_config = generate_vm_config(&config, Path::new("/tmp/config.img")).unwrap();
-    //     fs::write(mint.new_goldenpath(filename).unwrap(), vm_config).unwrap();
-    // }
-    //
-    // #[test]
-    // fn test_generate_vm_config_qemu() {
-    //     test_vm_config("qemu", "guestos_vm_qemu.xml");
-    // }
-    //
-    // #[test]
-    // fn test_generate_vm_config_kvm() {
-    //     test_vm_config("kvm", "guestos_vm_kvm.xml");
-    // }
+    fn test_vm_config(cpu_type: &str, filename: &str) {
+        let mut mint = Mint::new(goldenfiles_path());
+        let mut config = create_test_hostos_config();
+
+        config.hostos_settings = HostOSSettings {
+            vm_memory: 490,
+            vm_cpu: cpu_type.to_string(),
+            vm_nr_of_vcpus: 56,
+            verbose: false,
+        };
+
+        let vm_config = generate_vm_config(&config, Path::new("/tmp/config.img")).unwrap();
+        fs::write(mint.new_goldenpath(filename).unwrap(), vm_config).unwrap();
+    }
+
+    #[test]
+    fn test_generate_vm_config_qemu() {
+        test_vm_config("qemu", "guestos_vm_qemu.xml");
+    }
+
+    #[test]
+    fn test_generate_vm_config_kvm() {
+        test_vm_config("kvm", "guestos_vm_kvm.xml");
+    }
 
     #[test]
     fn test_run_success() {

@@ -204,6 +204,7 @@ jobs:
         id: bazel-test-darwin-x86-64
         uses: ./.github/actions/bazel-test-all/
         with:
+          upload-artifacts: ${{ needs.config.outputs.release_build && needs.config.outputs.full_macos_build }}
           BAZEL_COMMAND: ${{ steps.cfg.outputs.build-command }}
           BAZEL_TARGETS: //rs/... //:upload-artifacts
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
