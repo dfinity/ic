@@ -1,6 +1,6 @@
 /* tag::catalog[]
 
-Title:: Subnet Recovery Test (App subnet, same nodes + failover nodes, with and without ECDSA, with and without version upgrade)
+Title:: Subnet Recovery Test (App subnet, same nodes + failover nodes, with and without chain keys, with and without version upgrade)
 
 Goal::
 Ensure that the subnet recovery of an app subnet works on the same nodes and on failover nodes.
@@ -9,7 +9,7 @@ Ensure that the subnet recovery of an app subnet works on the same nodes and on 
 Runbook::
 . Deploy an IC with one "source" app subnet and one "app" app subnet (and some unassigned nodes
   in case of recovery on failover nodes).
-. In case of ECDSA: enable signing on the "source", create the "app" with the key, then disable
+. In case of chain keys: enable signing on the "source", create the "app" with the key, then disable
   signing on "source" and enable it on the "app" instead.
 . Break (halt in case of no upgrade) the subnet.
 . Make sure the subnet stalls.
@@ -17,11 +17,11 @@ Runbook::
 . Download IC state of a node with max finalization height.
 . Execute ic-replay to generate a recovery CUP.
 . Optionally upgrade the subnet to a working replica.
-. Submit a recovery CUP (using failover nodes and/or ECDSA, if configured).
+. Submit a recovery CUP (using failover nodes and/or chain keys, if configured).
 . Upload replayed state to a node.
 . Unhalt the subnet.
 . Ensure the subnet resumes.
-. In case of ECDSA: ensure that signing on the "app" is possible, and the key hasn't changed.
+. In case of chain keys: ensure that signing on the "app" is possible, and the key hasn't changed.
 
 Success::
 . "App" subnet is functional after the recovery.
@@ -148,7 +148,7 @@ pub fn setup(
     install_nns_and_check_progress(env.topology_snapshot());
 }
 
-pub fn setup_large_tecdsa(env: TestEnv) {
+pub fn setup_large_chain_keys(env: TestEnv) {
     setup(
         NNS_NODES_LARGE,
         APP_NODES_LARGE,
@@ -159,11 +159,11 @@ pub fn setup_large_tecdsa(env: TestEnv) {
     );
 }
 
-pub fn setup_same_nodes_tecdsa(env: TestEnv) {
+pub fn setup_same_nodes_chain_keys(env: TestEnv) {
     setup(NNS_NODES, APP_NODES, 0, APP_NODES, DKG_INTERVAL, env);
 }
 
-pub fn setup_failover_nodes_tecdsa(env: TestEnv) {
+pub fn setup_failover_nodes_chain_keys(env: TestEnv) {
     setup(
         NNS_NODES,
         APP_NODES,
@@ -197,7 +197,7 @@ struct Config {
     local_recovery: bool,
 }
 
-pub fn test_with_tecdsa(env: TestEnv) {
+pub fn test_with_chain_keys(env: TestEnv) {
     app_subnet_recovery_test(
         env,
         Config {
@@ -210,7 +210,7 @@ pub fn test_with_tecdsa(env: TestEnv) {
     );
 }
 
-pub fn test_without_tecdsa(env: TestEnv) {
+pub fn test_without_chain_keys(env: TestEnv) {
     app_subnet_recovery_test(
         env,
         Config {
@@ -223,8 +223,8 @@ pub fn test_without_tecdsa(env: TestEnv) {
     );
 }
 
-pub fn test_no_upgrade_with_tecdsa(env: TestEnv) {
-    // Test the corrupt CUP case only when recovering an app subnet with tECDSA without upgrade
+pub fn test_no_upgrade_with_chain_keys(env: TestEnv) {
+    // Test the corrupt CUP case only when recovering an app subnet with chain keys without upgrade
     let corrupt_cup = env.topology_snapshot().unassigned_nodes().count() > 0;
     app_subnet_recovery_test(
         env,
@@ -238,7 +238,7 @@ pub fn test_no_upgrade_with_tecdsa(env: TestEnv) {
     );
 }
 
-pub fn test_large_with_tecdsa(env: TestEnv) {
+pub fn test_large_with_chain_keys(env: TestEnv) {
     app_subnet_recovery_test(
         env,
         Config {
@@ -251,7 +251,7 @@ pub fn test_large_with_tecdsa(env: TestEnv) {
     );
 }
 
-pub fn test_no_upgrade_without_tecdsa(env: TestEnv) {
+pub fn test_no_upgrade_without_chain_keys(env: TestEnv) {
     app_subnet_recovery_test(
         env,
         Config {
@@ -264,7 +264,7 @@ pub fn test_no_upgrade_without_tecdsa(env: TestEnv) {
     );
 }
 
-pub fn test_no_upgrade_without_tecdsa_local(env: TestEnv) {
+pub fn test_no_upgrade_without_chain_keys_local(env: TestEnv) {
     app_subnet_recovery_test(
         env,
         Config {
