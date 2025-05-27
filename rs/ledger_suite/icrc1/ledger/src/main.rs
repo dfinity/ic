@@ -260,6 +260,7 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
 
     initialize_total_volume();
 
+    // TODO(FI-1747): Remove once this has been rolled out to the SNS and chain fusion ledgers.
     ensure_index_principal();
 
     if upgrade_from_version < 3 {
