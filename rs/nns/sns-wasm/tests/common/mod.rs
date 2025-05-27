@@ -1,6 +1,6 @@
 use candid::Encode;
 use canister_test::Project;
-use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::ONE_TRILLION;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_nns_test_utils::{
@@ -12,23 +12,13 @@ use ic_sns_wasm::pb::v1::{
     GetDeployedSnsByProposalIdRequest, GetDeployedSnsByProposalIdResponse,
 };
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
-use ic_test_utilities_execution_environment::get_routing_table_with_specified_ids_allocation_range;
-use std::str::FromStr;
 
 pub const EXPECTED_SNS_CREATION_FEE: u128 = 180 * ONE_TRILLION as u128;
 
 /// Create a `StateMachine` with NNS installed
 pub fn set_up_state_machine_with_nns() -> StateMachine {
-    let subnet_id: SubnetId =
-        PrincipalId::from_str("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
-            .unwrap()
-            .into();
-    let routing_table = get_routing_table_with_specified_ids_allocation_range(subnet_id).unwrap();
-    let machine = StateMachineBuilder::new()
-        .with_current_time()
-        .with_routing_table(routing_table)
-        .with_subnet_id(subnet_id)
-        .build();
+    // We don't want the underlying warnings of the StateMachine
+    let machine = StateMachineBuilder::new().with_current_time().build();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
         .with_initial_invariant_compliant_mutations()

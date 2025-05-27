@@ -77,7 +77,6 @@ use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_test_utilities::universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
 };
-use ic_test_utilities_execution_environment::get_routing_table_with_specified_ids_allocation_range;
 use ic_types::{ingress::WasmResult, Cycles};
 use icp_ledger::{
     AccountIdentifier, BinaryAccountBalanceArgs, BlockIndex, LedgerCanisterInitPayload, Memo,
@@ -91,7 +90,7 @@ use num_traits::ToPrimitive;
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayload;
 use serde::Serialize;
-use std::{str::FromStr, time::Duration};
+use std::{convert::TryInto, time::Duration};
 
 /// A `StateMachine` builder setting the IC time to the current time
 /// and using the canister ranges of both the NNS and II subnets.
@@ -99,15 +98,12 @@ use std::{str::FromStr, time::Duration};
 /// is omitted so that the canister range of the II subnet is not used
 /// for automatic generation of new canister IDs.
 pub fn state_machine_builder_for_nns_tests() -> StateMachineBuilder {
-    let subnet_id: SubnetId =
-        PrincipalId::from_str("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
-            .unwrap()
-            .into();
-    let routing_table = get_routing_table_with_specified_ids_allocation_range(subnet_id).unwrap();
     StateMachineBuilder::new()
         .with_current_time()
-        .with_routing_table(routing_table)
-        .with_subnet_id(subnet_id)
+        .with_extra_canister_range(std::ops::RangeInclusive::<CanisterId>::new(
+            CanisterId::from_u64(0x2100000),
+            CanisterId::from_u64(0x21FFFFE),
+        ))
 }
 
 pub fn registry_mutate_test_high_capacity_records(
@@ -607,21 +603,41 @@ pub fn try_call_with_cycles_via_universal_canister(
     update(machine, sender, "update", universal_canister_payload)
 }
 
+/// Converts a canisterID to a u64 by relying on an implementation detail.
+fn canister_id_to_u64(canister_id: CanisterId) -> u64 {
+    let bytes: [u8; 8] = canister_id.get().to_vec()[0..8]
+        .try_into()
+        .expect("Could not convert vector to [u8; 8]");
+
+    u64::from_be_bytes(bytes)
+}
+
+/// Check that a canister exists  at 0-indexed position (assuming canisters are created sequentially).
+/// If it does not, then create it (and all canisters in between).
+/// This approach is used because create_canister advances the canister ID counter in the underlying
+/// execution environment, which otherwise creates problems with creating other canisters
+/// with non-specified IDs.  If that bug is fixed, the behavior in this test helper can be changed.
 pub fn ensure_canister_id_exists_at_position_with_settings(
     machine: &StateMachine,
     position: u64,
     canister_settings: Option<CanisterSettingsArgs>,
 ) -> CanisterId {
-    let canister_id = CanisterId::from_u64(position);
+    let mut canister_id = CanisterId::from_u64(position);
     if !machine.canister_exists(canister_id) {
-        let actual_canister_id = machine.create_canister_with_cycles(
-            Some(canister_id.into()),
-            Cycles::new(0),
-            canister_settings,
-        );
+        canister_id = machine.create_canister(None);
+        while canister_id_to_u64(canister_id) < position {
+            canister_id = machine.create_canister(canister_settings.clone());
+        }
 
-        assert_eq!(actual_canister_id, canister_id);
+        // In case we tried using this when we are already past the sequence
+        assert_eq!(canister_id_to_u64(canister_id), position);
     }
+
+    if let Some(settings) = canister_settings {
+        machine
+            .update_settings(&canister_id, settings)
+            .expect("Canister settings could not be updated.");
+    };
 
     canister_id
 }

@@ -59,7 +59,6 @@ ic-sns-swap = { path = "../../sns/swap" }
 ic-sns-wasm-protobuf-generator = { path = "./protobuf_generator" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-test-utilities = { path = "../../test_utilities" }
-ic-test-utilities-execution-environment = { path = "../../test_utilities/execution_environment" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 icp-ledger = { path = "../../ledger_suite/icp" }

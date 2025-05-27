@@ -255,7 +255,7 @@ pub fn get_ic_config() -> IcConfig {
     // The last argument is true, as that is the default case. False is used only
     // for ic-prep when we handle a specific deployment scenario: deploying
     // without assigning nodes to a particular subnet.
-    let mut config = IcConfig::new(
+    IcConfig::new(
         prep_dir,
         topology_config,
         ReplicaVersion::default(),
@@ -267,9 +267,7 @@ pub fn get_ic_config() -> IcConfig {
         None,
         None,
         /* ssh_readonly_access_to_unassgined_nodes */ vec![],
-    );
-    config.set_use_specified_ids_allocation_range(true);
-    config
+    )
 }
 
 pub fn canister_test_with_config_async<Fut, F, Out>(

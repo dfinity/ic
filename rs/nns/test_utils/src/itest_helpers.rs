@@ -13,7 +13,7 @@ use canister_test::{
 };
 use cycles_minting_canister::CyclesCanisterInitPayload;
 use dfn_candid::{candid_one, CandidOne};
-use futures::FutureExt;
+use futures::{future::join_all, FutureExt};
 use ic_canister_client_sender::Sender;
 use ic_config::Config;
 use ic_management_canister_types_private::CanisterInstallMode;
@@ -62,7 +62,94 @@ impl NnsCanisters<'_> {
     /// Creates and installs all of the NNS canisters that are scheduled to
     /// exist at genesis, and sets the controller on each canister.
     pub async fn set_up(runtime: &'_ Runtime, init_payloads: NnsInitPayloads) -> NnsCanisters<'_> {
-        Self::set_up_at_ids(runtime, init_payloads).await
+        let since_start_secs = {
+            let s = SystemTime::now();
+            move || (SystemTime::now().duration_since(s).unwrap()).as_secs_f32()
+        };
+
+        // First, create as many canisters as we need. Ordering does not matter, we just
+        // need enough canisters, and them we'll grab them in the order we want.
+        let maybe_canisters: Result<Vec<Canister<'_>>, String> = join_all(
+            (0..NUM_NNS_CANISTERS).map(|_| runtime.create_canister_max_cycles_with_retries()),
+        )
+        .await
+        .into_iter()
+        .collect();
+
+        maybe_canisters.unwrap_or_else(|e| panic!("At least one canister creation failed: {}", e));
+        eprintln!("NNS canisters created after {:.1} s", since_start_secs());
+
+        // TODO (after deploying SNS-WASMs to mainnet) update ALL_NNS_CANISTER_IDS to the resulting
+        // SNS-WASMs canister and delete following line. We avoid that so the canister ID is not added
+        // to a whitelist before it is deployed.  But we need one more canister for our tests.
+        runtime
+            .create_canister_max_cycles_with_retries()
+            .await
+            .expect("Failed creating last canister");
+
+        let mut registry = Canister::new(runtime, REGISTRY_CANISTER_ID);
+        let mut governance = Canister::new(runtime, GOVERNANCE_CANISTER_ID);
+        let mut ledger = Canister::new(runtime, LEDGER_CANISTER_ID);
+        let mut root = Canister::new(runtime, ROOT_CANISTER_ID);
+        let mut cycles_minting = Canister::new(runtime, CYCLES_MINTING_CANISTER_ID);
+        let mut lifeline = Canister::new(runtime, LIFELINE_CANISTER_ID);
+        let mut genesis_token = Canister::new(runtime, GENESIS_TOKEN_CANISTER_ID);
+        let identity = Canister::new(runtime, IDENTITY_CANISTER_ID);
+        let nns_ui = Canister::new(runtime, NNS_UI_CANISTER_ID);
+        let mut sns_wasms = Canister::new(runtime, SNS_WASM_CANISTER_ID);
+
+        // Install all the canisters
+        // Registry and Governance need to first or the process hangs,
+        // Ledger is just added as to avoid Governance spamming the logs.
+        futures::join!(
+            install_registry_canister(&mut registry, init_payloads.registry.clone()),
+            install_governance_canister(&mut governance, init_payloads.governance.clone()),
+            install_ledger_canister(&mut ledger, init_payloads.ledger.clone()),
+        );
+        futures::join!(
+            install_root_canister(&mut root, init_payloads.root.clone()),
+            install_cycles_minting_canister(
+                &mut cycles_minting,
+                init_payloads.cycles_minting.clone()
+            ),
+            install_lifeline_canister(&mut lifeline, init_payloads.lifeline.clone()),
+            install_genesis_token_canister(&mut genesis_token, init_payloads.genesis_token.clone()),
+            install_sns_wasm_canister(&mut sns_wasms, init_payloads.sns_wasms.clone())
+        );
+
+        eprintln!("NNS canisters installed after {:.1} s", since_start_secs());
+
+        // We can set all the controllers at once. Several -- or all -- may go
+        // into the same block, this makes setup faster.
+        futures::try_join!(
+            registry.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            governance.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            ledger.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            // The root is special! it's controlled by the lifeline
+            root.set_controller_with_retries(LIFELINE_CANISTER_ID.get()),
+            cycles_minting.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            lifeline.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            genesis_token.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            identity.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            nns_ui.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            sns_wasms.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+        )
+        .unwrap();
+
+        eprintln!("NNS canisters set up after {:.1} s", since_start_secs());
+
+        NnsCanisters {
+            registry,
+            governance,
+            ledger,
+            root,
+            cycles_minting,
+            lifeline,
+            genesis_token,
+            identity,
+            nns_ui,
+            sns_wasms,
+        }
     }
 
     /// Creates and installs all of the NNS canisters at the right ids that are scheduled to
@@ -363,10 +450,7 @@ pub async fn set_up_governance_canister(
     runtime: &'_ Runtime,
     init_payload: Governance,
 ) -> Canister<'_> {
-    let mut canister = runtime
-        .create_canister_at_id_max_cycles_with_retries(GOVERNANCE_CANISTER_ID.get())
-        .await
-        .unwrap();
+    let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
     install_governance_canister(&mut canister, init_payload).await;
     canister
 }
@@ -385,10 +469,7 @@ pub async fn set_up_registry_canister(
     runtime: &'_ Runtime,
     init_payload: RegistryCanisterInitPayload,
 ) -> Canister<'_> {
-    let mut canister = runtime
-        .create_canister_at_id_max_cycles_with_retries(REGISTRY_CANISTER_ID.get())
-        .await
-        .unwrap();
+    let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
     install_registry_canister(&mut canister, init_payload).await;
     canister
 }
@@ -408,10 +489,7 @@ pub async fn set_up_genesis_token_canister(
     runtime: &'_ Runtime,
     init_payload: Gtc,
 ) -> Canister<'_> {
-    let mut canister = runtime
-        .create_canister_at_id_max_cycles_with_retries(GENESIS_TOKEN_CANISTER_ID.get())
-        .await
-        .unwrap();
+    let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
     install_genesis_token_canister(&mut canister, init_payload).await;
     canister
 }
@@ -432,10 +510,7 @@ pub async fn set_up_ledger_canister(
     runtime: &Runtime,
     args: LedgerCanisterInitPayload,
 ) -> Canister {
-    let mut canister = runtime
-        .create_canister_at_id_max_cycles_with_retries(LEDGER_CANISTER_ID.get())
-        .await
-        .unwrap();
+    let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
     install_ledger_canister(&mut canister, args).await;
     canister
 }
@@ -454,10 +529,7 @@ pub async fn set_up_root_canister(
     runtime: &'_ Runtime,
     init_payload: RootCanisterInitPayload,
 ) -> Canister<'_> {
-    let mut canister = runtime
-        .create_canister_at_id_max_cycles_with_retries(ROOT_CANISTER_ID.get())
-        .await
-        .unwrap();
+    let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
     install_root_canister(&mut canister, init_payload).await;
     canister
 }
@@ -482,10 +554,7 @@ pub async fn set_up_cycles_minting_canister(
     runtime: &'_ Runtime,
     init_payload: Option<CyclesCanisterInitPayload>,
 ) -> Canister<'_> {
-    let mut canister = runtime
-        .create_canister_at_id_max_cycles_with_retries(CYCLES_MINTING_CANISTER_ID.get())
-        .await
-        .unwrap();
+    let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
     install_cycles_minting_canister(&mut canister, init_payload).await;
     canister
 }
@@ -516,10 +585,7 @@ pub async fn set_up_lifeline_canister(
     runtime: &'_ Runtime,
     init_payload: LifelineCanisterInitPayload,
 ) -> Canister<'_> {
-    let mut canister = runtime
-        .create_canister_at_id_max_cycles_with_retries(LIFELINE_CANISTER_ID.get())
-        .await
-        .unwrap();
+    let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
     install_lifeline_canister(&mut canister, init_payload).await;
     canister
 }
