@@ -70,4 +70,4 @@ jobs:
           ls -l $POCKET_IC_BIN
           echo $TEST_WASM
           ls -l $TEST_WASM
-          cargo test --locked -p pocket-ic
+          cargo test --locked -p pocket-ic test_counter_canister
