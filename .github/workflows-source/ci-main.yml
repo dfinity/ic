@@ -243,6 +243,9 @@ jobs:
           # Clean up the output base for the next run
           sudo rm -rf /var/tmp/bazel-output
 
+  # Build the arm64-linux variant of pocket-ic-server and makes
+  # it available as a GHA artifact
+  # NOTE: uses 'namespace.so' runners
   bazel-test-arm64-linux:
     name: Bazel Build arm64-linux
     runs-on: namespace-profile-arm64-linux # profile created in namespace console
