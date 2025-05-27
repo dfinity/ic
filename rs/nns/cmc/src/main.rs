@@ -2463,7 +2463,7 @@ fn ensure_balance(cycles: Cycles) -> Result<(), String> {
     let (amount_high, amount_low) = cycles_to_mint.into_parts();
     // unused because of check above
     let _minted_cycles = ic0_mint_cycles128(amount_high, amount_low);
-    assert!(u128::from(ic_cdk::api::canister_balance128()) >= cycles.get());
+    assert!(ic_cdk::api::canister_balance128() >= cycles.get());
     Ok(())
 }
 
