@@ -18537,6 +18537,7 @@ dependencies = [
  "http-body-util",
  "hyper 1.6.0",
  "hyper-util",
+ "ic-agent 0.40.1",
  "ic-cdk 0.17.2",
  "ic-certification 3.0.3",
  "ic-error-types 0.1.0",
