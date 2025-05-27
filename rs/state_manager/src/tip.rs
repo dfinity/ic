@@ -269,6 +269,18 @@ pub(crate) fn spawn_tip_thread(
                             let _timer = request_timer(&metrics, "flush_unflushed_delta");
                             debug_assert!(tip_state.tip_folder_state.page_maps_height <= height);
                             tip_state.tip_folder_state.page_maps_height = height;
+
+                            // We flush snapshots and canister renamings to disk first.
+                            flush_unflushed_checkpoint_ops(
+                                &log,
+                                &mut tip_handler,
+                                height,
+                                unflushed_checkpoint_ops,
+                            )
+                            .unwrap_or_else(|err| {
+                                fatal!(log, "Failed to flush snapshot changes: {}", err);
+                            });
+
                             let layout = &tip_handler.tip(height).unwrap_or_else(|err| {
                                 fatal!(
                                     log,
@@ -277,12 +289,6 @@ pub(crate) fn spawn_tip_thread(
                                     err
                                 );
                             });
-
-                            // We flush snapshots and canister renamings to disk first.
-                            flush_unflushed_checkpoint_ops(&log, layout, unflushed_checkpoint_ops)
-                                .unwrap_or_else(|err| {
-                                    fatal!(log, "Failed to flush snapshot changes: {}", err);
-                                });
 
                             parallel_map(
                                 &mut thread_pool,
@@ -656,25 +662,29 @@ fn switch_to_checkpoint(
 
 /// Update the tip directory files with the most recent checkpoint operations.
 /// `operations` is an ordered list of all created/restores/deleted snapshots and renamed canisters since the last flush.
-fn flush_unflushed_checkpoint_ops<T>(
+fn flush_unflushed_checkpoint_ops(
     log: &ReplicaLogger,
-    layout: &CheckpointLayout<RwPolicy<T>>,
+    tip_handler: &mut TipHandler,
+    height: Height,
     operations: Vec<UnflushedCheckpointOp>,
 ) -> Result<(), LayoutError> {
     // This loop is not parallelized as there are combinations such as creating then restoring from a snapshot within the same flush.
     for op in operations {
         match op {
             UnflushedCheckpointOp::DeleteSnapshot(snapshot_id) => {
-                layout.snapshot(&snapshot_id)?.delete_dir()?;
+                tip_handler
+                    .tip(height)?
+                    .snapshot(&snapshot_id)?
+                    .delete_dir()?;
             }
             UnflushedCheckpointOp::TakeSnapshot(canister_id, snapshot_id) => {
-                backup(log, layout, canister_id, snapshot_id)?;
+                backup(log, &tip_handler.tip(height)?, canister_id, snapshot_id)?;
             }
             UnflushedCheckpointOp::LoadSnapshot(canister_id, snapshot_id) => {
-                restore(log, layout, canister_id, snapshot_id)?;
+                restore(log, &tip_handler.tip(height)?, canister_id, snapshot_id)?;
             }
             UnflushedCheckpointOp::RenameCanister(src, dst) => {
-                layout.move_canister_directory(src, dst)?;
+                tip_handler.move_canister_directory(height, src, dst)?;
             }
         }
     }

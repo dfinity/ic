@@ -470,6 +470,24 @@ impl TipHandler {
         }
         Ok(())
     }
+
+
+    /// Moves the entire canister directory from one canister id to another.
+    pub fn move_canister_directory(
+        &mut self,
+        height: Height,
+        src: CanisterId,
+        dst: CanisterId,
+    ) -> Result<(), LayoutError> {
+        let tip = self.tip(height)?;
+        let src_path = tip.canister(&src)?.raw_path();
+        let dst_path = tip.canister(&dst)?.raw_path();
+        std::fs::rename(&src_path, &dst_path).map_err(|err| LayoutError::IoError {
+            path: src_path,
+            message: "Failed to rename canister".to_string(),
+            io_err: err,
+        })
+    }
 }
 
 enum CheckpointRemovalRequest {
@@ -1849,21 +1867,6 @@ where
         sync_path(&self.0.root).map_err(|err| LayoutError::IoError {
             path: self.0.root.clone(),
             message: "Failed to sync checkpoint directory for the creation of the unverified checkpoint marker".to_string(),
-            io_err: err,
-        })
-    }
-
-    /// Moves the entire canister directory from one canister id to another.
-    pub fn move_canister_directory(
-        &self,
-        src: CanisterId,
-        dst: CanisterId,
-    ) -> Result<(), LayoutError> {
-        let src_path = self.canister(&src)?.raw_path();
-        let dst_path = self.canister(&dst)?.raw_path();
-        std::fs::rename(&src_path, &dst_path).map_err(|err| LayoutError::IoError {
-            path: src_path,
-            message: "Failed to rename canister".to_string(),
             io_err: err,
         })
     }
