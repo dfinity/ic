@@ -1,0 +1,61 @@
+name: PocketIC macOS Intel
+on:
+  pull_request:
+    paths:
+      - .github/workflows/pocket-ic-tests-macos-intel.yml
+      - packages/pocket-ic/**
+      - rs/pocket_ic_server/**
+  schedule:
+    - cron: "0 1 * * *"
+
+# runs for the same workflow are cancelled on PRs but not on master
+# explanation: on push to master head_ref is not set, so we want it to fall back to run_id so it is not cancelled
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  pocket-ic-lint-on-macos-intel:
+    name: PocketIC Lint on macOS Intel
+    runs-on:
+      labels: macOS
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+      - name: Linting
+        run: |
+          cargo clippy -p pocket-ic --locked --all-features --all-targets -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off
+          
+  pocket-ic-tests-on-macos-intel:
+    name: PocketIC Tests on macOS Intel
+    needs: [bazel-build-pocket-ic]
+    runs-on:
+      labels: macOS
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+      - name: Set PATH
+        run: |
+          echo "/usr/local/bin" >> $GITHUB_PATH
+          echo "$HOME/.cargo/bin:" >> $GITHUB_PATH
+          # use llvm-clang instead of apple's
+          echo "CC=/usr/local/opt/llvm/bin/clang" >> "$GITHUB_ENV"
+      - name: Build PocketIC server
+        run: |
+          bazel build //rs/pocket_ic_server:pocket-ic-server
+      - name: Compute PocketIC server path
+        id: pocket-ic-server-path
+        run: echo "POCKET_IC_BIN=$(bazel cquery //rs/pocket_ic_server:pocket-ic-server --output=files)" >> $GITHUB_ENV
+      - name: Build PocketIC test canister
+        run: |
+          bazel build //packages/pocket-ic/test_canister:test_canister
+      - name: Compute PocketIC test canister path
+        id: pocket-ic-test-canister-path
+        run: echo "TEST_WASM=$(bazel cquery //packages/pocket-ic/test_canister:test_canister --output=files)" >> $GITHUB_ENV
+      - name: Tests
+        run: |
+          cargo test --locked -p pocket-ic
