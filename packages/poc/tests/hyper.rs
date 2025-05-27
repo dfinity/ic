@@ -26,14 +26,18 @@ async fn hyper_issue() {
         // build our application with a route
         let app = Router::new()
             .route("/api/v2/status", get(status_handler))
-            .route("/index.html", get(handler));
+            .route("/index.html", get(handler))
+            .into_make_service();
 
         // run it
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
-            .await
+        let listener = std::net::TcpListener::bind("127.0.0.1:3000")
             .unwrap();
         println!("listening on {}", listener.local_addr().unwrap());
-        axum::serve(listener, app).await.unwrap();
+        axum_server::from_tcp(listener)
+            .serve(app)
+            .await
+            .unwrap();
+        //axum::serve(listener, app).await.unwrap();
     });
 
     // wait until the server starts up

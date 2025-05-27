@@ -18526,6 +18526,7 @@ name = "poc"
 version = "9.0.1"
 dependencies = [
  "axum 0.8.4",
+ "axum-server",
  "http-body-util",
  "hyper 1.6.0",
  "hyper-util",
