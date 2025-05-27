@@ -174,18 +174,12 @@ impl OrchestratorDashboard {
                 let signed = cup.is_signed();
                 let hash = cup.content.state_hash.get().0;
 
-                let unix_timestamp = cup
-                    .content
-                    .block
-                    .get_value()
-                    .context
-                    .time
-                    .as_nanos_since_unix_epoch();
-                let iso_format = match i64::try_from(unix_timestamp) {
-                    Ok(ts) => chrono::DateTime::<chrono::Utc>::from_timestamp_nanos(ts).to_string(),
-                    Err(_) => String::from("Timestamp conversion error"),
-                };
-                let timestamp_str = format!("{} ({})", unix_timestamp, iso_format);
+                let unix_timestamp = cup.content.block.get_value().context.time;
+                let timestamp_str = format!(
+                    "{} ({})",
+                    unix_timestamp.as_nanos_since_unix_epoch(),
+                    unix_timestamp
+                );
 
                 (height, signed.to_string(), hex::encode(hash), timestamp_str)
             }
