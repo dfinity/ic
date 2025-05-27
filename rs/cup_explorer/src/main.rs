@@ -1,24 +1,22 @@
 use clap::Parser;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::CryptoComponent;
-use ic_cup_explorer::{create_registry, get_cup, get_subnet_id, make_logger};
+use ic_cup_explorer::registry::{get_nodes, RegistryCanisterClient};
+use ic_cup_explorer::util::{http_url, make_logger};
+use ic_cup_explorer::{get_cup, get_subnet_id};
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
-use ic_protobuf::registry::{node::v1::NodeRecord, subnet::v1::SubnetRecord};
+use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_registry_keys::{make_node_record_key, make_subnet_record_key};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::consensus::{CatchUpContentProtobufBytes, CatchUpPackage};
 use ic_types::crypto::{CombinedThresholdSig, CombinedThresholdSigOf};
-use ic_types::{NodeId, PrincipalId, SubnetId};
+use ic_types::SubnetId;
 use prost::Message;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
-use slog::{warn, Logger};
 use std::convert::TryFrom;
-use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::sync::Arc;
 use tokio::{fs, task};
 
@@ -35,18 +33,12 @@ pub enum SubCommand {
 #[clap(version = "1.0")]
 pub struct ExploreArgs {
     /// Id of the subnet
-    #[clap(long, value_parser=subnet_id_from_str)]
+    #[clap(long, value_parser=ic_cup_explorer::util::subnet_id_from_str)]
     pub subnet_id: SubnetId,
 
     /// The directory to download the latest CUP to
     #[clap(long)]
     pub download_path: Option<PathBuf>,
-}
-
-pub fn subnet_id_from_str(s: &str) -> Result<SubnetId, String> {
-    PrincipalId::from_str(s)
-        .map_err(|e| format!("Unable to parse subnet_id {:?}", e))
-        .map(SubnetId::from)
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
@@ -55,10 +47,6 @@ pub struct VerifyArgs {
     /// The location of the CUP
     #[clap(long)]
     pub cup_path: PathBuf,
-
-    /// The location of the registry local store
-    #[clap(long)]
-    pub local_store: PathBuf,
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
@@ -76,62 +64,6 @@ pub struct CupExplorerArgs {
 
     #[clap(subcommand)]
     pub subcmd: SubCommand,
-}
-
-/// Returns the list of nodes assigned to the specified subnet_id.
-/// TODO: Ideally, we should use the local store instead, since these responses aren't certified
-async fn get_nodes(
-    registry_canister: &Arc<RegistryCanister>,
-    subnet_id: SubnetId,
-) -> Vec<(NodeId, NodeRecord)> {
-    let (subnet_record, version) = registry_canister
-        .get_value(make_subnet_record_key(subnet_id).as_bytes().to_vec(), None)
-        .await
-        .expect("failed to fetch the list of nodes");
-
-    let subnet = SubnetRecord::decode(&subnet_record[..]).expect("failed to decode subnet record");
-
-    let futures: Vec<_> = subnet
-        .membership
-        .into_iter()
-        .map(|n| {
-            let registry_canister = Arc::clone(registry_canister);
-            task::spawn(async move {
-                let node_id = NodeId::from(PrincipalId::try_from(&n[..]).unwrap());
-                let (node_record_bytes, _) = registry_canister
-                    .get_value(
-                        make_node_record_key(node_id).as_bytes().to_vec(),
-                        Some(version),
-                    )
-                    .await
-                    .unwrap_or_else(|e| panic!("failed to get node record {}: {}", node_id, e));
-                let record = NodeRecord::decode(&node_record_bytes[..]).unwrap_or_else(|e| {
-                    panic!("failed to deserialize node record {}: {}", node_id, e)
-                });
-                (node_id, record)
-            })
-        })
-        .collect();
-
-    let mut results = Vec::new();
-    for f in futures {
-        results.push(f.await.unwrap());
-    }
-    results
-}
-
-fn http_url(n: &NodeRecord) -> Url {
-    let c = n.http.as_ref().unwrap();
-    // Parse IP address (using IpAddr::parse())
-    let ip_addr = c.ip_addr.parse().unwrap();
-    Url::parse(
-        format!(
-            "http://{}",
-            SocketAddr::new(ip_addr, u16::try_from(c.port).unwrap())
-        )
-        .as_str(),
-    )
-    .unwrap()
 }
 
 async fn explore(registry_url: Url, subnet_id: SubnetId, path: Option<PathBuf>) {
@@ -166,16 +98,16 @@ async fn explore(registry_url: Url, subnet_id: SubnetId, path: Option<PathBuf>) 
             Ok(Some(cup)) => {
                 let content = pb::CatchUpContent::decode(&cup.content[..]).unwrap();
                 let block = content.block.unwrap();
-                let h = block.height;
-                let s = hex::encode(&content.state_hash[..]);
-                let t = block.time;
+                let height = block.height;
+                let hash = hex::encode(&content.state_hash[..]);
+                let time = block.time;
 
                 println!(
                     " ✔ [{}]: time = {}, height = {}, state_hash: {}",
-                    node_id, t, h, s
+                    node_id, time, height, hash
                 );
-                if h > latest_height {
-                    latest_height = h;
+                if height > latest_height {
+                    latest_height = height;
                     latest = Some((node_id, cup));
                 }
             }
@@ -205,93 +137,99 @@ async fn explore(registry_url: Url, subnet_id: SubnetId, path: Option<PathBuf>) 
     }
 }
 
-async fn verify(nns_url: Url, cup_path: &Path, local_store_path: &Path, logger: Logger) {
-    // Create a registry local store
-    let (_replicator, client) = create_registry(nns_url, local_store_path, logger.clone()).await;
+fn verify(nns_url: Url, cup_path: &Path) {
+    let client = Arc::new(RegistryCanisterClient::new(nns_url));
+    println!(
+        "Registry client created. Latest registry version: {}",
+        client.get_latest_version()
+    );
 
-    // Create a crypto component
+    println!("\nCreating crypto component...");
     let (crypto_config, _tmp) = CryptoConfig::new_in_temp_dir();
     ic_crypto_node_key_generation::generate_node_keys_once(
         &crypto_config,
         Some(tokio::runtime::Handle::current()),
     )
     .expect("error generating node public keys");
-    let replica_logger = logger.clone().into();
     let client_clone = client.clone();
-    let crypto = tokio::task::spawn_blocking(move || {
-        Arc::new(CryptoComponent::new(
-            &crypto_config,
-            Some(tokio::runtime::Handle::current()),
-            client_clone,
-            replica_logger,
-            None,
-        ))
-    })
-    .await
-    .unwrap();
+    let crypto = Arc::new(CryptoComponent::new(
+        &crypto_config,
+        Some(tokio::runtime::Handle::current()),
+        client_clone,
+        make_logger().into(),
+        None,
+    ));
 
-    // Read and parse the CUP
-    let bytes = fs::read(cup_path).await.expect("Failed to read file");
+    println!("\nReading CUP file at {:?}", cup_path);
+    let bytes = std::fs::read(cup_path).expect("Failed to read file");
     let proto_cup = pb::CatchUpPackage::decode(bytes.as_slice()).expect("Failed to decode bytes");
     let cup = CatchUpPackage::try_from(&proto_cup).expect("Failed to deserialize CUP content");
 
-    // Verify the CUP
     if !cup.content.check_integrity() {
         panic!(
             "Integrity check of file {cup_path:?} failed. Payload: {:?}",
             cup.content.block.as_ref().payload.as_ref()
         );
+    } else {
+        println!("CUP integrity verified!");
     }
 
     let subnet_id = get_subnet_id(&cup).unwrap();
+    println!("\nChecking CUP signature for subnet {}...", subnet_id);
 
+    let block = cup.content.block.get_value();
     crypto
         .verify_combined_threshold_sig_by_public_key(
             &CombinedThresholdSigOf::new(CombinedThresholdSig(proto_cup.signature.clone())),
             &CatchUpContentProtobufBytes::from(&proto_cup),
             subnet_id,
-            cup.content.block.get_value().context.registry_version,
+            block.context.registry_version,
         )
         .map_err(|e| {
-            warn!(
-                logger,
-                "Failed to verify CUP signature at: {:?} with: {:?}", cup_path, e
+            println!(
+                "Failed to verify CUP signature at: {:?} with: {:?}",
+                cup_path, e
             )
         })
         .unwrap();
+    println!("CUP signature verification successful!");
 
-    let block = cup.content.block.get_value();
     let summary = block.payload.as_ref().as_summary();
     let dkg_version = summary.dkg.registry_version;
 
+    println!("\nLatest subnet state according to CUP:");
+    println!(
+        "{:>20}: {}, ({})",
+        "TIME",
+        block.context.time.as_nanos_since_unix_epoch(),
+        block.context.time
+    );
+    println!("{:>20}: {}", "HEIGHT", block.height);
+    println!(
+        "{:>20}: {}",
+        "HASH",
+        hex::encode(&cup.content.state_hash.get_ref().0[..])
+    );
+    println!("{:>20}: {}", "REGISTRY VERSION", dkg_version);
+
+    println!("\nVerifying that the subnet was halted on this CUP...");
     let halted = client
         .get_halt_at_cup_height(subnet_id, dkg_version)
         .unwrap()
         .unwrap();
-
-    println!("Signature verification successful!");
-    println!("Subnet ID: {}", subnet_id);
-    println!("Height: {}", block.height);
-    println!(
-        "Time: {}, ({})",
-        block.context.time.as_nanos_since_unix_epoch(),
-        block.context.time
-    );
-    println!(
-        "Hash: {}",
-        hex::encode(&cup.content.state_hash.get_ref().0[..])
-    );
-    println!("DKG registry version: {}", dkg_version);
-    println!("Subnet halted on this cup: {}", halted);
     assert!(
         halted,
         "Verification failed: Subnet wasn't instructed to halt on this CUP"
     );
+    println!(
+        "\nConfirmed that subnet {} was halted on this CUP.",
+        subnet_id
+    );
+    println!("It may only be restarted via subnet recovery using the state hash listed above.");
 }
 
 #[tokio::main]
 async fn main() {
-    let logger = make_logger();
     let args = CupExplorerArgs::parse();
 
     match &args.subcmd {
@@ -303,14 +241,6 @@ async fn main() {
             )
             .await;
         }
-        SubCommand::Verify(verify_args) => {
-            verify(
-                args.nns_url,
-                &verify_args.cup_path,
-                &verify_args.local_store,
-                logger,
-            )
-            .await
-        }
+        SubCommand::Verify(verify_args) => verify(args.nns_url, &verify_args.cup_path),
     }
 }
