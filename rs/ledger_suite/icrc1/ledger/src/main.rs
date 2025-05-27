@@ -260,7 +260,7 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
 
     initialize_total_volume();
 
-    set_index_principal();
+    ensure_index_principal();
 
     if upgrade_from_version < 3 {
         set_ledger_state(LedgerState::Migrating(LedgerField::Blocks));
@@ -603,11 +603,11 @@ const LEDGER_SUITES: &[LedgerSuite; 16] = &[
     },
 ];
 
-/// Set the principal of the index canister corresponding to this ledger canister.
+/// Ensure the principal of the index canister corresponding to this ledger canister is set.
 /// This will only set the index principal if:
-/// - The index principal is not already set.
+/// - The index principal is not already set, and;
 /// - The ledger principal of the current canister is found in the list of ledgers.
-fn set_index_principal() {
+fn ensure_index_principal() {
     let index_principal = Access::with_ledger(|ledger| ledger.index_principal());
     if index_principal.is_none() {
         let ledger_canister_id = ic_cdk::api::id().to_string();
