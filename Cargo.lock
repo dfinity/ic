@@ -18531,6 +18531,7 @@ dependencies = [
  "hyper 1.6.0",
  "hyper-util",
  "ic-agent 0.40.1",
+ "pocket-ic",
  "tokio",
 ]
 

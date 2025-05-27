@@ -66,4 +66,7 @@ async fn hyper_issue() {
 
     println!("hyper body: {}", body);
     assert!(body.contains("Hello, World!"));
+
+    let mut pic = pocket_ic::nonblocking::PocketIc::new().await;
+    pic.make_live(None).await;
 }

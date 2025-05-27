@@ -27,3 +27,4 @@ hyper-util = { workspace = true }
 http-body-util = { workspace = true }
 tokio = { workspace = true }
 axum-server = { workspace = true }
+pocket-ic = { path = "../pocket-ic" }
