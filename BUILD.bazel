@@ -1,7 +1,7 @@
 load("@bazel_skylib//rules:common_settings.bzl", "string_setting")
 load("@gazelle//:def.bzl", "gazelle")
 load("@rules_python//python:pip.bzl", "compile_pip_requirements")
-load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
+load("//ci/src/artifacts:upload.bzl", "upload_artifacts", "artifact_uploader")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -175,4 +175,8 @@ upload_artifacts(
         ],
     }),
     visibility = ["//visibility:public"],
+)
+
+artifact_uploader(
+    name = "artifact-uploader",
 )
