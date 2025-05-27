@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [1.2.3] - 2025-05-27
+### Fixed
+- Fixed fee collector balance calculation for transfers using fee_collector_block_index ([#5304](https://github.com/dfinity/ic/pull/5304))
+
 ## [1.2.2] - 2025-06-15
 ### Fixed
 - Fixed timestamp overflow in blocks table for values exceeding i64::MAX ([#5249](https://github.com/dfinity/ic/pull/5249))
