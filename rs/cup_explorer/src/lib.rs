@@ -4,7 +4,7 @@ use ic_types::{
     consensus::CatchUpPackage, crypto::threshold_sig::ni_dkg::NiDkgTargetSubnet, SubnetId,
 };
 use prost::Message;
-use reqwest::Url;
+use url::Url;
 
 pub mod registry;
 pub mod util;

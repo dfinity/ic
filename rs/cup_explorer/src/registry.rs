@@ -10,7 +10,7 @@ use ic_types::{
     registry::RegistryClientError, NodeId, PrincipalId, RegistryVersion, SubnetId, Time,
 };
 use prost::Message;
-use reqwest::Url;
+use url::Url;
 use std::{
     env,
     fs::{self, File},
