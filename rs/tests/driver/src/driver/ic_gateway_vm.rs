@@ -1,16 +1,17 @@
 use anyhow::{anyhow, bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use slog::info;
-use std::path::Path;
+use std::{fs, path::Path};
 use url::Url;
 
 use crate::driver::{
-    farm::{DnsRecord, DnsRecordType, PlaynetCertificate, VMCreateResponse},
+    farm::{DnsRecord, DnsRecordType, PlaynetCertificate},
     log_events,
+    resource::AllocatedVm,
     test_env::{TestEnv, TestEnvAttribute},
     test_env_api::{
         get_dependency_path, AcquirePlaynetCertificate, CreatePlaynetDnsRecords,
-        HasTopologySnapshot, HasVmName, SshSession,
+        HasTopologySnapshot, SshSession,
     },
     test_setup::InfraProvider,
     universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
@@ -33,7 +34,7 @@ pub struct IcGatewayVm {
 /// Represents a deployed IC HTTP Gateway VM.
 #[derive(Debug)]
 pub struct DeployedIcGatewayVm {
-    deployed_universal_vm: DeployedUniversalVm,
+    vm: AllocatedVm,
     https_url: Option<Url>,
 }
 
@@ -43,9 +44,9 @@ impl DeployedIcGatewayVm {
     }
 
     /// Retrieves the underlying VM.
-    pub fn get_vm(&self, env: &TestEnv) -> Result<VMCreateResponse> {
+    pub fn get_vm(&self, env: &TestEnv) -> Result<AllocatedVm> {
         let vm_path = Path::new(IC_GATEWAY_VMS_DIR)
-            .join(self.deployed_universal_vm.vm_name())
+            .join(self.vm.name.clone())
             .join(IC_GATEWAY_VM_FILE);
         env.read_json_object(&vm_path)
             .with_context(|| format!("Failed to read VM data from {}", vm_path.display()))
@@ -61,8 +62,8 @@ impl Default for IcGatewayVm {
 impl IcGatewayVm {
     /// Creates a new IC Gateway VM with the specified name.
     pub fn new(name: &str) -> Self {
-        let universal_vm = super::universal_vm::UniversalVm::new(name.to_string())
-            .with_config_img(get_dependency_path(IMAGE_PATH));
+        let universal_vm =
+            UniversalVm::new(name.to_string()).with_config_img(get_dependency_path(IMAGE_PATH));
         Self { universal_vm }
     }
 
@@ -73,14 +74,15 @@ impl IcGatewayVm {
 
         // Start the underlying universal VM
         self.universal_vm.start(env)?;
-        let deployed_universal_vm = env.get_deployed_universal_vm(&self.universal_vm.name)?;
+        let deployed_vm = env.get_deployed_universal_vm(&self.universal_vm.name)?;
+        let allocated_vm = deployed_vm.get_vm()?;
 
         // Get IPv6 address and API node URLs
-        let uvm_ipv6 = deployed_universal_vm.get_vm()?.ipv6.to_string();
+        let vm_ipv6 = allocated_vm.ipv6.to_string();
         let api_nodes_urls = self.get_api_nodes_urls(env)?;
 
         // Handle playnet configuration and DNS records
-        let playnet = self.load_or_create_playnet(env, &uvm_ipv6)?;
+        let playnet = self.load_or_create_playnet(env, &vm_ipv6)?;
         let bn_fqdn = playnet.playnet_cert.playnet.clone();
         self.configure_dns_records(env, &playnet, &bn_fqdn)?;
 
@@ -89,9 +91,8 @@ impl IcGatewayVm {
 
         // Save playnet configuration and start the gateway
         let playnet_url = Url::parse(&format!("https://{}", bn_fqdn))?;
-        env.write_deployed_ic_gateway(&self.universal_vm.name, playnet_url.clone())?;
-        env.write_json_object(PLAYNET_FILE, &playnet)?;
-        self.start_gateway_container(&deployed_universal_vm, &playnet, &api_nodes_urls)?;
+        env.write_deployed_ic_gateway(&self.universal_vm.name, &playnet_url, &allocated_vm)?;
+        self.start_gateway_container(&deployed_vm, &playnet, &api_nodes_urls)?;
 
         info!(
             logger,
@@ -133,6 +134,10 @@ impl IcGatewayVm {
         };
 
         playnet.aaaa_records.push(uvm_ipv6.to_string());
+
+        // Write/overwrite file
+        env.write_json_object(PLAYNET_FILE, &playnet)?;
+
         Ok(playnet)
     }
 
@@ -204,6 +209,7 @@ NETWORK_HTTP_CLIENT_INSECURE_BYPASS_TLS_VERIFICATION=true
 IC_UNSAFE_ROOT_KEY_FETCH=true
 LISTEN_TLS=[::]:443
 CERT_PROVIDER_DIR=/certs
+METRICS_LISTEN=[::]:9325
 EOF
 
 # Load the docker image from the tarball
@@ -289,7 +295,13 @@ pub fn emit_bn_aaaa_records_event(log: &slog::Logger, bn_fqdn: &str, aaaa_record
 /// Trait for interacting with IC Gateway VMs in a test environment.
 pub trait HasIcGatewayVm {
     fn get_deployed_ic_gateway(&self, name: &str) -> Result<DeployedIcGatewayVm>;
-    fn write_deployed_ic_gateway(&self, name: &str, playnet: Url) -> Result<()>;
+    fn get_deployed_ic_gateways(&self) -> Result<Vec<DeployedIcGatewayVm>>;
+    fn write_deployed_ic_gateway(
+        &self,
+        name: &str,
+        playnet: &Url,
+        allocated_vm: &AllocatedVm,
+    ) -> Result<()>;
 }
 
 impl HasIcGatewayVm for TestEnv {
@@ -311,18 +323,47 @@ impl HasIcGatewayVm for TestEnv {
             .with_context(|| format!("Failed to read playnet file: {}", playnet_path.display()))?;
 
         let https_url = playnet.scheme().eq("https").then(|| playnet.clone());
-        let deployed_universal_vm = self
-            .get_deployed_universal_vm(name)
-            .context("Failed to retrieve deployed universal VM")?;
 
-        Ok(DeployedIcGatewayVm {
-            deployed_universal_vm,
-            https_url,
-        })
+        let vm = self
+            .get_deployed_universal_vm(name)
+            .context("Failed to retrieve deployed universal VM")?
+            .get_vm()?;
+
+        Ok(DeployedIcGatewayVm { vm, https_url })
     }
 
-    fn write_deployed_ic_gateway(&self, name: &str, playnet: Url) -> Result<()> {
-        let file_path = Path::new(IC_GATEWAY_VMS_DIR).join(name).join(PLAYNET_FILE);
-        self.write_json_object(&file_path, &playnet)
+    fn get_deployed_ic_gateways(&self) -> Result<Vec<DeployedIcGatewayVm>> {
+        let path = self.get_path(IC_GATEWAY_VMS_DIR);
+
+        // no deployed vms
+        if !path.exists() {
+            return Ok(Vec::new());
+        }
+
+        let entries = fs::read_dir(&path)?;
+
+        let mut gateways = Vec::new();
+
+        for entry_result in entries {
+            let entry = entry_result?;
+            if entry.path().is_dir() {
+                let dir_name = entry.file_name().to_string_lossy().to_string();
+                let vm = self.get_deployed_ic_gateway(&dir_name)?;
+                gateways.push(vm);
+            }
+        }
+
+        Ok(gateways)
+    }
+
+    fn write_deployed_ic_gateway(
+        &self,
+        name: &str,
+        playnet: &Url,
+        allocated_vm: &AllocatedVm,
+    ) -> Result<()> {
+        let path = Path::new(IC_GATEWAY_VMS_DIR).join(name);
+        self.write_json_object(path.join(PLAYNET_FILE), playnet)?;
+        self.write_json_object(path.join(IC_GATEWAY_VM_FILE), allocated_vm)
     }
 }
