@@ -31,7 +31,7 @@ rclone() {
 }
 
 upload() {
-    artifact_localpath="$(realpath --relative-to "$PWD" $1)"
+    artifact_localpath="$1"
     bucket_path="$2"
     bucket_dirname="$(dirname "$bucket_path")"
 
