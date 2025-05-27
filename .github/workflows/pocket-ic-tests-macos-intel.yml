@@ -30,7 +30,6 @@ jobs:
           
   pocket-ic-tests-on-macos-intel:
     name: PocketIC Tests on macOS Intel
-    needs: [bazel-build-pocket-ic]
     runs-on:
       labels: macOS
     steps:
