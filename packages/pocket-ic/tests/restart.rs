@@ -7,6 +7,7 @@ use std::{thread, time::Duration};
 #[test]
 fn create_instance_twice() {
     let mut pic = PocketIcBuilder::new().with_nns_subnet().build();
+    std::thread::sleep(Duration::from_secs(5));
     let url = pic.make_live(None);
     let status_endpoint = url.join("api/v2/status").unwrap();
 
