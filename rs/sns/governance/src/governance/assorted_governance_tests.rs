@@ -2,7 +2,6 @@
 //! here, so that Bazel does not recompile the whole production crate each time the tests are run.
 //! The name of this file is indeed too generic; feel free to factor specific tests out into
 //! more appropriate locations, or create new file modules for them, whatever makes more sense.
-
 use super::test_helpers::{
     basic_governance_proto, canister_status_for_test,
     canister_status_from_management_canister_for_test, DoNothingLedger, A_MOTION_PROPOSAL,
@@ -1520,8 +1519,6 @@ fn setup_env_for_sns_upgrade_to_next_version_test(
                     canister_id: canister_id.get(),
                     wasm_module: vec![9, 8, 7, 6, 5, 4, 3, 2],
                     arg: Encode!().unwrap(),
-                    compute_allocation: None,
-                    memory_allocation: None, // local const in install_code()
                     sender_canister_version: None,
                 })
                 .unwrap(),

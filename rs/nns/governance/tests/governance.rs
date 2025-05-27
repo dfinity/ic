@@ -9555,7 +9555,28 @@ fn test_merge_maturity_returns_expected_error() {
     let neuron = nns.get_neuron(&id);
     let controller = *neuron.controller.as_ref().unwrap();
 
-    let result = nns.merge_maturity(&id, &controller, 10);
+    // This is inlined because the method is removed, so we don't need a general purpose test method
+    let result1 = nns
+        .governance
+        .manage_neuron(
+            &controller,
+            &ManageNeuron {
+                id: None,
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(id)),
+                command: Some(Command::MergeMaturity(MergeMaturity {
+                    percentage_to_merge: 10,
+                })),
+            },
+        )
+        .now_or_never()
+        .unwrap()
+        .command
+        .unwrap();
+    let result = match result1 {
+        manage_neuron_response::Command::Error(e) => Err(GovernanceError::from(e)),
+        manage_neuron_response::Command::MergeMaturity(response) => Ok(response),
+        _ => panic!("Merge maturity command returned unexpected response"),
+    };
     assert!(result.is_err());
 
     let error = result.unwrap_err();

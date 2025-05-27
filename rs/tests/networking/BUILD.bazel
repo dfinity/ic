@@ -229,6 +229,7 @@ system_test_nns(
         "@crate_index//:futures",
         "@crate_index//:ic-agent",
         "@crate_index//:leb128",
+        "@crate_index//:serde_cbor",
         "@crate_index//:slog",
         "@crate_index//:tokio",
     ],

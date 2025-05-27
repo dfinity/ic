@@ -441,8 +441,6 @@ impl SchedulerTest {
             canister_id: target.get(),
             wasm_module,
             arg: encode_message_id_as_payload(message_id),
-            compute_allocation: None,
-            memory_allocation: None,
             sender_canister_version: None,
         };
 
@@ -820,6 +818,8 @@ impl SchedulerTestBuilder {
 
         state.metadata.network_topology.subnets = generate_subnets(
             vec![self.own_subnet_id, self.nns_subnet_id],
+            self.nns_subnet_id,
+            None,
             self.own_subnet_id,
             self.subnet_type,
             registry_settings.subnet_size,

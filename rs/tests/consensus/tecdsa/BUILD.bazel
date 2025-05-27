@@ -12,7 +12,6 @@ system_test_nns(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
-    runtime_deps = ["//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh"],
     deps = [
         # Keep sorted.
         "//rs/nns/constants",

@@ -9,6 +9,8 @@ pub enum CertificationVersion {
     /// Defined `reject_signals`, a struct containing 7 flavors of reject signals.
     /// Deprecated `reject_signals_deltas`.
     V19 = 19,
+    /// Excluded loopback stream from the certified state.
+    V20 = 20,
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -52,7 +54,7 @@ pub const MIN_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = Certificat
 ///
 /// The replica will panic if requested to certify using a version higher than
 /// this.
-pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V19;
+pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V20;
 
 /// Returns a list of all certification versions from `MIN_SUPPORTED_CERTIFICATION_VERSION`
 /// up to `MAX_SUPPORTED_CERTIFICATION_VERSION`.

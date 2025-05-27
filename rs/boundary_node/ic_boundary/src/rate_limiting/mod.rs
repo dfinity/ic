@@ -33,9 +33,9 @@ impl TryFrom<u32> for RateLimit {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
-struct SubnetRateToken;
+struct SubnetKeyExtractor;
 
-impl KeyExtractor for SubnetRateToken {
+impl KeyExtractor for SubnetKeyExtractor {
     type Key = Principal;
 
     fn extract<B>(&self, req: &Request<B>) -> Result<Self::Key, GovernorError> {
@@ -63,9 +63,7 @@ impl KeyExtractor for IpKeyExtractor {
 }
 
 impl RateLimit {
-    // Per IP rate limiting.
-
-    // Allow requests_per_second requests per IP. Refill the rate over 1 second.
+    /// Allow requests_per_second requests per IP
     pub fn add_ip_rate_limiting(&self, router: Router) -> Router {
         let interval = Duration::from_secs(1)
             .checked_div(self.requests_per_second)
@@ -83,9 +81,7 @@ impl RateLimit {
         }))
     }
 
-    // Per subnet rate limiting.
-
-    // Allow requests_per_second requests per subnet. Refill the rate over 1 second.
+    /// Allow requests_per_second requests per subnet
     pub fn add_subnet_rate_limiting(&self, router: Router) -> Router {
         let interval = Duration::from_secs(1)
             .checked_div(self.requests_per_second)
@@ -94,7 +90,7 @@ impl RateLimit {
         let governor_conf = GovernorConfigBuilder::default()
             .per_nanosecond(interval.as_nanos().try_into().unwrap())
             .burst_size(self.requests_per_second)
-            .key_extractor(SubnetRateToken)
+            .key_extractor(SubnetKeyExtractor)
             .finish()
             .unwrap();
 

@@ -28,6 +28,7 @@ use crate::{
     },
 };
 
+use ic_cdk::println;
 use ic_nns_common::pb::v1::NeuronId;
 use std::{cell::RefCell, collections::hash_map::Entry, thread::LocalKey};
 

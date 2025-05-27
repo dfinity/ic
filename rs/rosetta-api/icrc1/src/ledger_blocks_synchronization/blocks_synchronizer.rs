@@ -10,7 +10,7 @@ use num_traits::ToPrimitive;
 use serde_bytes::ByteBuf;
 use std::{cmp, collections::HashMap, ops::RangeInclusive, sync::Arc, time::Duration};
 use tokio::sync::Mutex as AsyncMutex;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 // Interval for reporting progress of the synchronization process for each token.
 const PROGRESS_REPORT_INTERVAL: Duration = Duration::from_secs(5);
@@ -64,6 +64,7 @@ async fn verify_and_fix_gaps(
     archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
 ) -> anyhow::Result<()> {
     let sync_ranges = derive_synchronization_gaps(storage_client.clone())?;
+    let (_tip_block_hash, tip_block_index) = get_tip_block_hash_and_index(agent.clone()).await?;
 
     for sync_range in sync_ranges {
         sync_blocks_interval(
@@ -72,6 +73,7 @@ async fn verify_and_fix_gaps(
             1000,
             archive_canister_ids.clone(),
             sync_range,
+            tip_block_index,
         )
         .await?;
     }
@@ -95,7 +97,7 @@ fn derive_synchronization_gaps(
     if gap.len() > 1 {
         bail!("The database has {} gaps. More than one gap means the database has been tampered with and can no longer be guaranteed to contain valid blocks",gap.len());
     } else if gap.is_empty() {
-        warn!("The database has a gap but the list of gaps is empty. This should not happen. Resetting the blocks counter by counting the actual number of synced blocks.");
+        // The block counter is off
         storage_client.reset_blocks_counter()?;
     }
 
@@ -144,16 +146,31 @@ pub async fn start_synching_blocks(
     heartbeat: Box<dyn Fn() + Send + Sync>,
 ) -> anyhow::Result<()> {
     let mut current_failure_streak = 0u32;
+    let mut is_initial_sync = true;
     loop {
-        heartbeat();
+        // Don't start beating heart before initial sync is done,
+        // otherwise the watchdog thread will keep killing it.
+        if !is_initial_sync {
+            heartbeat();
+        }
         // Verify and fix gaps in the database.
-        verify_and_fix_gaps(
+        let result = verify_and_fix_gaps(
             agent.clone(),
             storage_client.clone(),
             archive_canister_ids.clone(),
         )
-        .await?;
-        if let Err(e) = sync_from_the_tip(
+        .await;
+        match result {
+            Ok(_) => {
+                current_failure_streak = 0;
+            }
+            Err(e) => {
+                error!("Error while verifying and fixing gaps: {}", e);
+                current_failure_streak += 1;
+            }
+        }
+
+        match sync_from_the_tip(
             agent.clone(),
             storage_client.clone(),
             maximum_blocks_per_request,
@@ -161,19 +178,26 @@ pub async fn start_synching_blocks(
         )
         .await
         {
-            error!("Error while syncing blocks: {}", e);
-            current_failure_streak += 1;
-        } else {
-            current_failure_streak = 0;
+            Ok(_) => {
+                current_failure_streak = 0;
+                is_initial_sync = false;
+            }
+            Err(e) => {
+                error!("Error while syncing blocks: {}", e);
+                current_failure_streak += 1;
+            }
         }
 
         // Update the account balances. When queried for its status, the ledger will return the
         // highest block index for which the account balances have been processed.
-        if let Err(e) = storage_client.update_account_balances() {
-            error!("Error while updating account balances: {}", e);
-            current_failure_streak += 1;
-        } else {
-            current_failure_streak = 0;
+        match storage_client.update_account_balances() {
+            Ok(_) => {
+                current_failure_streak = 0;
+            }
+            Err(e) => {
+                error!("Error while updating account balances: {}", e);
+                current_failure_streak += 1;
+            }
         }
 
         match recurrency_mode {
@@ -190,13 +214,9 @@ pub async fn start_synching_blocks(
     Ok(())
 }
 
-/// This function will do a synchronization of the interval (Highest_Stored_Block,Ledger_Tip].
-pub async fn sync_from_the_tip(
+pub async fn get_tip_block_hash_and_index(
     agent: Arc<Icrc1Agent>,
-    storage_client: Arc<StorageClient>,
-    maximum_blocks_per_request: u64,
-    archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<([u8; 32], u64)> {
     let (tip_block_hash, tip_block_index) = match agent
         .get_certified_chain_tip()
         .await
@@ -205,7 +225,7 @@ pub async fn sync_from_the_tip(
         Some(tip) => tip,
         None => {
             info!("The ledger is empty, exiting sync!");
-            return Ok(());
+            return Ok(([0; 32], 0));
         }
     };
 
@@ -213,6 +233,18 @@ pub async fn sync_from_the_tip(
         Some(n) => n,
         None => bail!("could not convert last_block_index {tip_block_index} to u64"),
     };
+
+    Ok((tip_block_hash, tip_block_index))
+}
+
+/// This function will do a synchronization of the interval (Highest_Stored_Block,Ledger_Tip].
+pub async fn sync_from_the_tip(
+    agent: Arc<Icrc1Agent>,
+    storage_client: Arc<StorageClient>,
+    maximum_blocks_per_request: u64,
+    archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
+) -> anyhow::Result<()> {
+    let (tip_block_hash, tip_block_index) = get_tip_block_hash_and_index(agent.clone()).await?;
 
     storage_client
         .get_metrics()
@@ -241,6 +273,7 @@ pub async fn sync_from_the_tip(
             maximum_blocks_per_request,
             archive_canister_ids,
             sync_range,
+            tip_block_index,
         )
         .await?;
     }
@@ -253,16 +286,18 @@ pub struct ProgressReport {
     remaining_end: u64,
     last_update: std::time::Instant,
     start_time: std::time::Instant,
+    tip_block_index: u64,
 }
 
 impl ProgressReport {
-    pub fn new(start: u64, end: u64) -> Self {
+    pub fn new(start: u64, end: u64, tip_block_index: u64) -> Self {
         Self {
             start,
             end,
             remaining_end: end,
             start_time: std::time::Instant::now(),
             last_update: std::time::Instant::now(),
+            tip_block_index,
         }
     }
 
@@ -276,12 +311,13 @@ impl ProgressReport {
             let remaining_count = self.remaining_end.saturating_sub(self.start) as f64 + 1.0;
             let expected_remaining_time = remaining_count / current_rate;
             self.last_update = now;
-            let progress = (self.end as f64 - remaining_count) / self.end as f64;
+            let progress =
+                (self.tip_block_index as f64 - remaining_count) / self.tip_block_index as f64;
             info!(
                 "Progress: {:.2}% (fetching {} of {}), ETA: {:.1}min ({:.1} blocks/s)",
                 progress * 100.0,
                 remaining_count,
-                self.end,
+                self.tip_block_index,
                 expected_remaining_time / 60.0,
                 current_rate
             );
@@ -289,7 +325,11 @@ impl ProgressReport {
     }
 
     pub fn finish(&self) {
-        info!("Fully synched to block height: {}", self.end);
+        if self.end == self.tip_block_index {
+            info!("Fully synched to block height: {}", self.end);
+        } else {
+            info!("Synched block range: {} to {}", self.start, self.end);
+        }
     }
 }
 
@@ -301,11 +341,13 @@ async fn sync_blocks_interval(
     maximum_blocks_per_request: u64,
     archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
     sync_range: SyncRange,
+    tip_block_index: u64,
 ) -> anyhow::Result<()> {
     // Create a progress bar for visualization.
     let mut pr = ProgressReport::new(
         *sync_range.index_range.start(),
         *sync_range.index_range.end(),
+        tip_block_index,
     );
 
     // The leading index/hash is the highest block index/hash that is requested by the icrc ledger.
@@ -330,7 +372,14 @@ async fn sync_blocks_interval(
             next_index_interval.clone(),
             archive_canister_ids.clone(),
         )
-        .await?;
+        .await;
+
+        if let Err(e) = fetched_blocks {
+            error!("Error while calling fetch_blocks_interval: {}", e);
+            return Err(e);
+        }
+
+        let fetched_blocks = fetched_blocks.unwrap();
 
         // Verify that the fetched blocks are valid.
         // Leading block hash of a non empty fetched blocks can never be `None` -> Unwrap is safe.
@@ -359,7 +408,11 @@ async fn sync_blocks_interval(
         let number_of_blocks_fetched = fetched_blocks.len() as u64;
 
         // Store the fetched blocks in the database.
-        storage_client.store_blocks(fetched_blocks.clone())?;
+        let result = storage_client.store_blocks(fetched_blocks.clone());
+        if let Err(e) = result {
+            error!("Error while calling storage_client.store_blocks: {}", e);
+            return Err(e);
+        }
         storage_client
             .get_metrics()
             .add_blocks_fetched(number_of_blocks_fetched);

@@ -1,7 +1,7 @@
 // TODO: refactor/merge this with fstrim_tool and guestos_tool metrics functionality
 use std::fs::File;
 use std::io::{self, Write};
-use std::path::Path;
+use std::path::PathBuf;
 
 // TODO: everything is floating point for now
 pub struct Metric {
@@ -62,19 +62,16 @@ impl Metric {
 }
 
 pub struct MetricsWriter {
-    file_path: String,
+    file_path: PathBuf,
 }
 
 impl MetricsWriter {
-    pub fn new(file_path: &str) -> Self {
-        Self {
-            file_path: file_path.to_string(),
-        }
+    pub fn new(file_path: PathBuf) -> Self {
+        Self { file_path }
     }
 
     pub fn write_metrics(&self, metrics: &[Metric]) -> io::Result<()> {
-        let path = Path::new(&self.file_path);
-        let mut file = File::create(path)?;
+        let mut file = File::create(&self.file_path)?;
         for metric in metrics {
             writeln!(file, "{}", metric.to_prom_string())?;
         }
@@ -104,7 +101,7 @@ mod tests {
             Metric::new("metric1", 1.0),
             Metric::new("metric2", 2.0).add_label("label", "value"),
         ];
-        let writer = MetricsWriter::new("/tmp/test_metrics.prom");
+        let writer = MetricsWriter::new("/tmp/test_metrics.prom".into());
         writer.write_metrics(&metrics).unwrap();
         let content = std::fs::read_to_string("/tmp/test_metrics.prom").unwrap();
         assert!(content.contains(
@@ -155,7 +152,7 @@ mod tests {
     #[test]
     fn test_write_empty_metrics() {
         let metrics: Vec<Metric> = Vec::new();
-        let writer = MetricsWriter::new("/tmp/test_empty_metrics.prom");
+        let writer = MetricsWriter::new("/tmp/test_empty_metrics.prom".into());
         writer.write_metrics(&metrics).unwrap();
         let content = std::fs::read_to_string("/tmp/test_empty_metrics.prom").unwrap();
         assert!(content.is_empty());

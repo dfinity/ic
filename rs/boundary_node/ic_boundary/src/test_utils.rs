@@ -306,7 +306,7 @@ pub fn setup_test_router(
 
     let (registry_client, _, _) = create_fake_registry_client(subnet_count, nodes_per_subnet, None);
     let (channel_send, _) = tokio::sync::watch::channel(None);
-    let mut snapshotter = Snapshotter::new(
+    let snapshotter = Snapshotter::new(
         registry_snapshot.clone(),
         channel_send,
         Arc::new(registry_client),

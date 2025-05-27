@@ -1141,7 +1141,7 @@ fn test_ecdsa_disabled() {
 
 #[test]
 fn test_vetkd() {
-    use ic_vetkd_utils::{DerivedPublicKey, EncryptedVetKey, TransportSecretKey};
+    use ic_vetkeys::{DerivedPublicKey, EncryptedVetKey, TransportSecretKey};
 
     // We create a PocketIC instance consisting of the II and one application subnet.
     let pic = PocketIcBuilder::new()
@@ -1592,7 +1592,7 @@ fn test_raw_gateway() {
     for (host, expected) in [
         (
             format!("{}.{}", canister, gateway_host),
-            "Response verification failed: Certification values not found",
+            "The response from the canister failed verification and cannot be trusted.",
         ),
         (
             format!("{}.raw.{}", canister, gateway_host),

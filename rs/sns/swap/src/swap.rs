@@ -2357,6 +2357,25 @@ impl Swap {
                 return SettleNeuronsFundParticipationResult::new_error(error_message);
             }
         };
+
+        // Check if the Neurons' Fund participation is requested by the SNS.
+        match init.neurons_fund_participation {
+            // If Neurons' Fund participation is specifically requested, keep going.
+            Some(neurons_fund_participation) if neurons_fund_participation => (),
+            Some(_) | None => {
+                log!(
+                    INFO,
+                    "settle_neurons_fund_participation has not been requested. \
+                     Returning successfully.",
+                );
+
+                return SettleNeuronsFundParticipationResult::new_ok(
+                    self.current_neurons_fund_participation_e8s(),
+                    self.cf_participants.len() as u64,
+                );
+            }
+        }
+
         // The following methods are safe to call since we validated Init in the above block
         let nns_proposal_id = init.nns_proposal_id();
         let sns_governance_canister_id = init.sns_governance_or_panic();

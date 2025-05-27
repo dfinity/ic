@@ -60,16 +60,16 @@
     "sha256": "9637743e1215a4db376a62ee807a0986faf20833be2b332df09b3d5dbdd7339e"
   },
   "cycles-minting": {
-    "rev": "2d4bcba47ea10520ff21ce54a8acb9cdb0629317",
-    "sha256": "4e4a6f907a3b4720bfeb4c45c5027d9b1379deb840e4ba0217876df9a4c5b193"
+    "rev": "8ac2131be1a86e1267e7774b0c94085fc107bad3",
+    "sha256": "c2fcf59b5c2edb3b0e334a9ed11d3dba24a032531e2e7707a265a8fe11e09bbd"
   },
   "genesis-token": {
     "rev": "4bed17bfc82cddc5691743db6228992cdc2740f4",
     "sha256": "fd25a4e2e283b498c3be1aaf63cc9b2726264d78a12b12f43ad453ceeb575e7c"
   },
   "governance": {
-    "rev": "5639c29fd72de16d483be7fe6dedc86e9bec3b9e",
-    "sha256": "b23b637e524abae565ac7847f5d38d3a0c4f85c2737f8910c78e48fc7813e40d"
+    "rev": "0dc5478d5aa69bfae7878543cb25d4ace362db0c",
+    "sha256": "b5a749886a455340c46ad3f3baaf3c4154a64329403966d4367f8225338e2681"
   },
   "index": {
     "rev": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
@@ -88,12 +88,12 @@
     "sha256": "f249444b64a3ddb59b2a1a93d778488ea2bfaca9bc029901a2c906d5f18449b8"
   },
   "registry": {
-    "rev": "5639c29fd72de16d483be7fe6dedc86e9bec3b9e",
-    "sha256": "efc7a74c5309eded50e53e9d9eda77ebc47843c84012537f30548bc20c89bcd1"
+    "rev": "8ac2131be1a86e1267e7774b0c94085fc107bad3",
+    "sha256": "5387c3deef80c1ca858127780837a7c8a715655ecb3b97de94881d0eeb9db793"
   },
   "root": {
-    "rev": "9dfa7825fc087deacccbed3985a502e0ec2276ff",
-    "sha256": "a99693bdf767bc3e4c8372a48533796764056f3bdb72a6544b7286c1351e3cb2"
+    "rev": "8ac2131be1a86e1267e7774b0c94085fc107bad3",
+    "sha256": "1df99179fae061830c5bd3ff8315070bb9d26bef3c07cbeda502c2f82688c154"
   },
   "sns-wasm": {
     "rev": "9dfa7825fc087deacccbed3985a502e0ec2276ff",
@@ -120,11 +120,11 @@
     "sha256": "3d808fa63a3d8ebd4510c0400aa078e99a31afaa0515f0b68778f929ce4b2a46"
   },
   "sns_root": {
-    "rev": "2d4bcba47ea10520ff21ce54a8acb9cdb0629317",
-    "sha256": "cbbc1ffdd911c58692409e942fafbddcf3e3445e1df99b26d83ae8ed5383af9a"
+    "rev": "8ac2131be1a86e1267e7774b0c94085fc107bad3",
+    "sha256": "142e3b6303ef41d55fcdfd9eb2a6e6e5641cbe86f8d145dca2689a3f847ee1f5"
   },
   "swap": {
-    "rev": "c5dee3a11b79da7b5c433574f38605d75c9feaf5",
-    "sha256": "ca1fca5a9776d06acfa7e02b49ef2a617c23ec62151e51e68c8840a9f8d1e131"
+    "rev": "b3d031ec7efff83f033adaeb80c04dec0537d0bc",
+    "sha256": "eeaa883855a9e431bc4a2995e658a60e3820837e275b5f7b714998f44c637497"
   }
 }

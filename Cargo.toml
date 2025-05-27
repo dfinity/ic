@@ -16,12 +16,12 @@ members = [
     "packages/ic-http-types",
     "packages/ic-metrics-assert",
     "packages/ic-secp256k1",
+    "packages/ic-secp256r1",
     "packages/ic-sha3",
     "packages/ic-ledger-hash-of",
     "packages/ic-signature-verification",
     "packages/pocket-ic",
     "packages/pocket-ic/test_canister",
-    "packages/ic-vetkd-utils",
     "rs/artifact_pool",
     "rs/http_endpoints/async_utils",
     "rs/backup",
@@ -75,7 +75,6 @@ members = [
     "rs/consensus/utils",
     "rs/criterion_time",
     "rs/crypto",
-    "rs/crypto/ecdsa_secp256r1",
     "rs/crypto/for_verification_only",
     "rs/crypto/iccsa",
     "rs/crypto/internal/crypto_lib/basic_sig/der_utils",
@@ -506,6 +505,7 @@ opt-level = 3
 actix-web = "4.9.0"
 actix-web-prom = "0.9.0"
 actix-rt = "2.10.0"
+aide = { version = "^0.14.2", features = ["axum", "axum-json"] }
 anyhow = "1.0.93"
 arbitrary = { version = "1.3.2", features = ["derive"] }
 arrayvec = "0.7.4"
@@ -515,9 +515,9 @@ assert_matches = "1.5.0"
 async-recursion = "1.0.5"
 async-stream = "0.3.6"
 async-trait = "0.1.83"
-axum = "0.8.1"
-axum-extra = { version = "0.10.0", features = ["typed-header"] }
-axum-server = { version = "0.7.1", features = ["tls-rustls-no-provider"] }
+axum = "0.8.4"
+axum-extra = { version = "0.10.1", features = ["typed-header"] }
+axum-server = { version = "0.7.2", features = ["tls-rustls-no-provider"] }
 backoff = "0.4"
 base64 = { version = "0.13.1" }
 bincode = "1.3.3"
@@ -547,7 +547,8 @@ curve25519-dalek = { version = "4.1.3", features = [
     "group",
     "precomputed-tables",
 ] }
-dfx-core = { version = "0.1.3" }
+derive-new = "0.7.0"
+dfx-core = { version = "0.1.4" }
 ed25519-dalek = { version = "2.1.1", features = [
     "std",
     "zeroize",
@@ -562,13 +563,15 @@ flate2 = "1.0.31"
 futures = "0.3.31"
 futures-util = "0.3.31"
 getrandom = { version = "0.2", features = ["custom"] }
+goldenfile = "1.8.0"
 hex = { version = "0.4.3", features = ["serde"] }
 http = "1.3.1"
 http-body = "1.0.1"
-http-body-util = "0.1.2"
+http-body-util = "0.1.3"
+humantime = "2.2"
 humantime-serde = "1.1.1"
-hyper = { version = "1.5.1", features = ["full"] }
-hyper-rustls = { version = "0.27.3", default-features = false, features = [
+hyper = { version = "1.6.0", features = ["full"] }
+hyper-rustls = { version = "0.27.5", default-features = false, features = [
     "http1",
     "http2",
     "native-tokio",
@@ -576,9 +579,9 @@ hyper-rustls = { version = "0.27.3", default-features = false, features = [
     "tls12",
 ] }
 hyper-socks2 = { version = "0.9.1", default-features = false }
-hyper-util = { version = "0.1.10", features = ["full"] }
-ic-agent = { version = "0.39.2", features = ["pem", "ring"] }
-ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "ec4a6b4abab2d94e09c4d5fee2d57d7bb1260835", features = [
+hyper-util = { version = "0.1.12", features = ["full"] }
+ic-agent = { version = "0.40.1", features = ["pem", "ring"] }
+ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "23b3b0b76795c9b75eed96742c2185da0ce9ee2a", features = [
     "acme_alpn",
 ] }
 ic-btc-interface = "0.2.2"
@@ -588,16 +591,17 @@ ic-cdk = "0.17.2"
 ic-cdk-timers = "0.11.0"
 ic-certificate-verification = "3"
 ic-certification = "3"
-ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "ed8539d9edd45b97148c46b8020fa6d7ebd48c07", default-features = false }
+ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "73495da1d5ab99891a3580522958f0f635902a87", default-features = false }
 ic-http-certification = "3.0.3"
-ic-http-gateway = "0.2.0"
+ic-http-gateway = "0.3.0"
 ic-management-canister-types = "0.3.0"
 ic-response-verification = "3"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
-ic-transport-types = { version = "0.39.2" }
-ic-utils = { version = "0.39", features = ["raw"] }
-ic_bls12_381 = { version = "0.10.0", default-features = false, features = [
+ic-transport-types = { version = "0.40.1" }
+ic-utils = { version = "0.40.1", features = ["raw"] }
+ic-vetkeys = { git = "https://github.com/dfinity/vetkeys", rev = "5885675b6ccb5269cfac9740dc3da6f14f75347f" }
+ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
     "groups",
     "pairings",
     "alloc",
@@ -680,7 +684,7 @@ rand_chacha = "0.3.1"
 rayon = "1.10.0"
 rcgen = { version = "0.13.1", features = ["zeroize"] }
 regex = "1.11.0"
-reqwest = { version = "0.12.12", default-features = false, features = [
+reqwest = { version = "0.12.15", default-features = false, features = [
     "blocking",
     "http2",
     "json",
@@ -707,7 +711,7 @@ serde_cbor = "0.11.2"
 serde_json = { version = "^1.0.107" }
 serde_with = "1.14.0"
 serde_yaml = "0.9.33"
-sha2 = "0.10.8"
+sha2 = "0.10.9"
 sha3 = "0.10.8"
 signature = "2.2.0"
 simple_asn1 = "0.6.2"
@@ -745,8 +749,8 @@ tokio-test = "0.4.4"
 tokio-util = { version = "0.7.13", features = ["full"] }
 tonic = "0.12.3"
 tonic-build = "0.12.3"
-tower = { version = "0.5.1", features = ["full"] }
-tower-http = { version = "0.6.2", features = [
+tower = { version = "0.5.2", features = ["full"] }
+tower-http = { version = "0.6.4", features = [
     "cors",
     "limit",
     "trace",
