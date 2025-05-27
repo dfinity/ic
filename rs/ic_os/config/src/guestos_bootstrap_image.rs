@@ -453,47 +453,6 @@ mod tests {
     }
 
     #[test]
-    fn test_build_bootstrap_tar() -> Result<()> {
-        // Create a temporary directory for the test
-        let tmp_dir = tempfile::tempdir()?;
-        let out_file = tmp_dir.path().join("bootstrap.tar");
-
-        // Create a test file to be included in the tar
-        let test_config_path = tmp_dir.path().join("test_config.json");
-        fs::write(&test_config_path, r#"{"test": "value"}"#)?;
-
-        // Build the tar file
-        BootstrapOptions {
-            hostname: Some("testhostname".to_string()),
-            ipv6_address: Some("2001:db8::1/64".to_string()),
-            ..BootstrapOptions::default()
-        }
-        .build_bootstrap_tar(&out_file)?;
-
-        // Extract the tar file to verify contents
-        let extract_dir = tmp_dir.path().join("extract");
-        fs::create_dir(&extract_dir)?;
-
-        let status = Command::new("tar")
-            .arg("xf")
-            .arg(&out_file)
-            .arg("-C")
-            .arg(&extract_dir)
-            .status()?;
-        assert!(status.success());
-
-        // Verify network.conf contents
-        let network_conf = fs::read_to_string(extract_dir.join("network.conf"))?;
-        assert_eq!(
-            network_conf,
-            "ipv6_address=2001:db8::1/64\n\
-             hostname=testhostname\n"
-        );
-
-        Ok(())
-    }
-
-    #[test]
     fn test_build_bootstrap_tar_with_all_options() -> Result<()> {
         let tmp_dir = tempfile::tempdir()?;
         let out_file = tmp_dir.path().join("bootstrap.tar");

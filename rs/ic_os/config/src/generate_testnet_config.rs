@@ -245,7 +245,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
     Ok(guestos_config)
 }
 
-/// Generates and writes a serialized GuestOSConfig to guestos_config_json_path.
+/// Generate and print GuestOSConfig for tests.
 /// Any required config fields that aren't specified will receive dummy values.
 pub fn generate_testnet_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSConfig> {
     let guestos_config = create_guestos_config(config)?;
