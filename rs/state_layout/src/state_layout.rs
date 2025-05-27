@@ -471,7 +471,6 @@ impl TipHandler {
         Ok(())
     }
 
-
     /// Moves the entire canister directory from one canister id to another.
     pub fn move_canister_directory(
         &mut self,
