@@ -296,10 +296,12 @@ fn mint_all_cycles() {
     let balance_before = api.ic0_canister_cycle_balance().unwrap();
 
     let amount = 50;
-    assert_eq!(api.ic0_mint_cycles(amount), Ok(amount));
+    let mut res = [0u8; 16];
+    api.ic0_mint_cycles128(Cycles::new(50), 0, &mut res);
+    assert_eq!(amount, u128::from_be_bytes(res));
     assert_eq!(
         api.ic0_canister_cycle_balance().unwrap() - balance_before,
-        amount
+        amount as u64
     );
 }
 

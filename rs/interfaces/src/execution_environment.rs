@@ -1096,14 +1096,6 @@ pub trait SystemApi {
     /// Mints the `amount` cycles
     /// Adds cycles to the canister's balance.
     ///
-    /// Adds no more cycles than `amount`.
-    ///
-    /// Returns the amount of cycles added to the canister's balance.
-    fn ic0_mint_cycles(&mut self, amount: u64) -> HypervisorResult<u64>;
-
-    /// Mints the `amount` cycles
-    /// Adds cycles to the canister's balance.
-    ///
     /// Adds no more cycles than `amount`. The balance afterwards cannot
     /// exceed u128::MAX, so the amount added may be less than `amount`.
     ///

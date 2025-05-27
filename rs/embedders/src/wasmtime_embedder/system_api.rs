@@ -3313,38 +3313,6 @@ impl SystemApi for SystemApiImpl {
         trace_syscall!(self, CanisterStatus, result);
         result
     }
-    // TODO(EXC-1806): This can be removed (in favour of ic0_mint_cycles128) once the CMC is upgraded, so it
-    // doesn't make sense to deduplicate the shared code.
-    fn ic0_mint_cycles(&mut self, amount: u64) -> HypervisorResult<u64> {
-        let result = match self.api_type {
-            ApiType::Start { .. }
-            | ApiType::Init { .. }
-            | ApiType::PreUpgrade { .. }
-            | ApiType::Cleanup { .. }
-            | ApiType::ReplicatedQuery { .. }
-            | ApiType::NonReplicatedQuery { .. }
-            | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_mint_cycles")),
-            ApiType::Update { .. }
-            | ApiType::SystemTask { .. }
-            | ApiType::ReplyCallback { .. }
-            | ApiType::RejectCallback { .. } => {
-                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
-                    // Non-replicated mode means we are handling a composite query.
-                    // Access to this syscall not permitted.
-                    Err(self.error_for("ic0_mint_cycles"))
-                } else {
-                    let actually_minted = self
-                        .sandbox_safe_system_state
-                        .mint_cycles(Cycles::from(amount))?;
-                    // the actually minted amount cannot be larger than the argument, which is a u64.
-                    debug_assert_eq!(actually_minted.high64(), 0, "ic0_mint_cycles was called with u64 but minted more cycles than fit into 64 bit");
-                    Ok(actually_minted.low64())
-                }
-            }
-        };
-        trace_syscall!(self, MintCycles, result, amount);
-        result
-    }
 
     fn ic0_mint_cycles128(
         &mut self,
