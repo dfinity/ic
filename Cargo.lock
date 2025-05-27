@@ -8735,7 +8735,6 @@ dependencies = [
 name = "ic-cup-explorer"
 version = "0.9.0"
 dependencies = [
- "base64 0.13.1",
  "clap 4.5.27",
  "hex",
  "ic-base-types",
@@ -8746,7 +8745,6 @@ dependencies = [
  "ic-crypto-utils-threshold-sig-der",
  "ic-interfaces",
  "ic-interfaces-registry",
- "ic-metrics",
  "ic-protobuf",
  "ic-registry-client",
  "ic-registry-client-helpers",
