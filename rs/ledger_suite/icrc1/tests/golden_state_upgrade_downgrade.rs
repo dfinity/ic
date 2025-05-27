@@ -879,6 +879,11 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         "ldv2p-dqaaa-aaaaq-aadga-cai",
         "Swampies",
     );
+    const TACO_LEDGER_SUITE: (&str, &str, &str) = (
+        "kknbx-zyaaa-aaaaq-aae4a-cai",
+        "kepm7-ciaaa-aaaaq-aae5a-cai",
+        "TACO DAO",
+    );
     const TRAX_LEDGER_SUITE: (&str, &str, &str) = (
         "emww2-4yaaa-aaaaq-aacbq-cai",
         "e6qbd-qiaaa-aaaaq-aaccq-cai",
@@ -936,6 +941,7 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         SNEED_LEDGER_SUITE,
         SONIC_LEDGER_SUITE,
         SWAMPIES_LEDGER_SUITE,
+        TACO_LEDGER_SUITE,
         TRAX_LEDGER_SUITE,
         WATERNEURON_LEDGER_SUITE,
         YUKU_LEDGER_SUITE,

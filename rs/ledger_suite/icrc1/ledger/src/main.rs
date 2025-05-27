@@ -310,98 +310,19 @@ struct LedgerSuite {
     pub index: &'static str,
 }
 
-const LEDGER_SUITES: &[LedgerSuite; 55] = &[
+#[cfg(not(feature = "u256-tokens"))]
+const LEDGER_SUITES: &[LedgerSuite; 40] = &[
     // Chain fusion ledger suites
     LedgerSuite {
         name: "ckBTC",
         ledger: "mxzaz-hqaaa-aaaar-qaada-cai",
         index: "n5wcd-faaaa-aaaar-qaaea-cai",
     },
-    LedgerSuite {
-        name: "ckETH",
-        ledger: "ss2fx-dyaaa-aaaar-qacoq-cai",
-        index: "s3zol-vqaaa-aaaar-qacpa-cai",
-    },
-    LedgerSuite {
-        name: "ckEURC",
-        ledger: "pe5t5-diaaa-aaaar-qahwa-cai",
-        index: "pd4vj-oqaaa-aaaar-qahwq-cai",
-    },
-    LedgerSuite {
-        name: "ckUNI",
-        ledger: "ilzky-ayaaa-aaaar-qahha-cai",
-        index: "imymm-naaaa-aaaar-qahhq-cai",
-    },
-    LedgerSuite {
-        name: "ckWBTC",
-        ledger: "bptq2-faaaa-aaaar-qagxq-cai",
-        index: "dso6s-wiaaa-aaaar-qagya-cai",
-    },
-    LedgerSuite {
-        name: "ckLINK",
-        ledger: "g4tto-rqaaa-aaaar-qageq-cai",
-        index: "gvqys-hyaaa-aaaar-qagfa-cai",
-    },
-    LedgerSuite {
-        name: "ckXAUT",
-        ledger: "nza5v-qaaaa-aaaar-qahzq-cai",
-        index: "nmhmy-riaaa-aaaar-qah2a-cai",
-    },
-    LedgerSuite {
-        name: "ckPEPE",
-        ledger: "etik7-oiaaa-aaaar-qagia-cai",
-        index: "eujml-dqaaa-aaaar-qagiq-cai",
-    },
-    LedgerSuite {
-        name: "ckWSTETH",
-        ledger: "j2tuh-yqaaa-aaaar-qahcq-cai",
-        index: "jtq73-oyaaa-aaaar-qahda-cai",
-    },
-    LedgerSuite {
-        name: "ckSHIB",
-        ledger: "fxffn-xiaaa-aaaar-qagoa-cai",
-        index: "fqedz-2qaaa-aaaar-qagoq-cai",
-    },
-    LedgerSuite {
-        name: "ckUSDC",
-        ledger: "xevnm-gaaaa-aaaar-qafnq-cai",
-        index: "xrs4b-hiaaa-aaaar-qafoa-cai",
-    },
-    LedgerSuite {
-        name: "ckUSDT",
-        ledger: "cngnf-vqaaa-aaaar-qag4q-cai",
-        index: "cefgz-dyaaa-aaaar-qag5a-cai",
-    },
-    LedgerSuite {
-        name: "ckOCT",
-        ledger: "ebo5g-cyaaa-aaaar-qagla-cai",
-        index: "egp3s-paaaa-aaaar-qaglq-cai",
-    },
     // Chain fusion test tokens
     LedgerSuite {
         name: "ckTestBTC",
         ledger: "mc6ru-gyaaa-aaaar-qaaaq-cai",
         index: "mm444-5iaaa-aaaar-qaabq-cai",
-    },
-    LedgerSuite {
-        name: "ckSepoliaETH",
-        ledger: "apia6-jaaaa-aaaar-qabma-cai",
-        index: "sh5u2-cqaaa-aaaar-qacna-cai",
-    },
-    LedgerSuite {
-        name: "ckSepoliaUSDC",
-        ledger: "yfumr-cyaaa-aaaar-qaela-cai",
-        index: "ycvkf-paaaa-aaaar-qaelq-cai",
-    },
-    LedgerSuite {
-        name: "ckSepoliaLINK",
-        ledger: "r52mc-qaaaa-aaaar-qafzq-cai",
-        index: "ri55p-riaaa-aaaar-qaf2a-cai",
-    },
-    LedgerSuite {
-        name: "ckSepoliaPEPE",
-        ledger: "hw4ru-taaaa-aaaar-qagdq-cai",
-        index: "g3sv2-4iaaa-aaaar-qagea-cai",
     },
     // SNSs
     LedgerSuite {
@@ -575,6 +496,11 @@ const LEDGER_SUITES: &[LedgerSuite; 55] = &[
         index: "ldv2p-dqaaa-aaaaq-aadga-cai",
     },
     LedgerSuite {
+        name: "TACO-DAO",
+        ledger: "kknbx-zyaaa-aaaaq-aae4a-cai",
+        index: "kepm7-ciaaa-aaaaq-aae5a-cai",
+    },
+    LedgerSuite {
         name: "TRAX",
         ledger: "emww2-4yaaa-aaaaq-aacbq-cai",
         index: "e6qbd-qiaaa-aaaaq-aaccq-cai",
@@ -588,6 +514,92 @@ const LEDGER_SUITES: &[LedgerSuite; 55] = &[
         name: "YUKU-AI",
         ledger: "atbfz-diaaa-aaaaq-aacyq-cai",
         index: "a5dir-yyaaa-aaaaq-aaczq-cai",
+    },
+];
+
+#[cfg(feature = "u256-tokens")]
+const LEDGER_SUITES: &[LedgerSuite; 16] = &[
+    // Chain fusion ledger suites
+    LedgerSuite {
+        name: "ckETH",
+        ledger: "ss2fx-dyaaa-aaaar-qacoq-cai",
+        index: "s3zol-vqaaa-aaaar-qacpa-cai",
+    },
+    LedgerSuite {
+        name: "ckEURC",
+        ledger: "pe5t5-diaaa-aaaar-qahwa-cai",
+        index: "pd4vj-oqaaa-aaaar-qahwq-cai",
+    },
+    LedgerSuite {
+        name: "ckUNI",
+        ledger: "ilzky-ayaaa-aaaar-qahha-cai",
+        index: "imymm-naaaa-aaaar-qahhq-cai",
+    },
+    LedgerSuite {
+        name: "ckWBTC",
+        ledger: "bptq2-faaaa-aaaar-qagxq-cai",
+        index: "dso6s-wiaaa-aaaar-qagya-cai",
+    },
+    LedgerSuite {
+        name: "ckLINK",
+        ledger: "g4tto-rqaaa-aaaar-qageq-cai",
+        index: "gvqys-hyaaa-aaaar-qagfa-cai",
+    },
+    LedgerSuite {
+        name: "ckXAUT",
+        ledger: "nza5v-qaaaa-aaaar-qahzq-cai",
+        index: "nmhmy-riaaa-aaaar-qah2a-cai",
+    },
+    LedgerSuite {
+        name: "ckPEPE",
+        ledger: "etik7-oiaaa-aaaar-qagia-cai",
+        index: "eujml-dqaaa-aaaar-qagiq-cai",
+    },
+    LedgerSuite {
+        name: "ckWSTETH",
+        ledger: "j2tuh-yqaaa-aaaar-qahcq-cai",
+        index: "jtq73-oyaaa-aaaar-qahda-cai",
+    },
+    LedgerSuite {
+        name: "ckSHIB",
+        ledger: "fxffn-xiaaa-aaaar-qagoa-cai",
+        index: "fqedz-2qaaa-aaaar-qagoq-cai",
+    },
+    LedgerSuite {
+        name: "ckUSDC",
+        ledger: "xevnm-gaaaa-aaaar-qafnq-cai",
+        index: "xrs4b-hiaaa-aaaar-qafoa-cai",
+    },
+    LedgerSuite {
+        name: "ckUSDT",
+        ledger: "cngnf-vqaaa-aaaar-qag4q-cai",
+        index: "cefgz-dyaaa-aaaar-qag5a-cai",
+    },
+    LedgerSuite {
+        name: "ckOCT",
+        ledger: "ebo5g-cyaaa-aaaar-qagla-cai",
+        index: "egp3s-paaaa-aaaar-qaglq-cai",
+    },
+    // Chain fusion test tokens
+    LedgerSuite {
+        name: "ckSepoliaETH",
+        ledger: "apia6-jaaaa-aaaar-qabma-cai",
+        index: "sh5u2-cqaaa-aaaar-qacna-cai",
+    },
+    LedgerSuite {
+        name: "ckSepoliaUSDC",
+        ledger: "yfumr-cyaaa-aaaar-qaela-cai",
+        index: "ycvkf-paaaa-aaaar-qaelq-cai",
+    },
+    LedgerSuite {
+        name: "ckSepoliaLINK",
+        ledger: "r52mc-qaaaa-aaaar-qafzq-cai",
+        index: "ri55p-riaaa-aaaar-qaf2a-cai",
+    },
+    LedgerSuite {
+        name: "ckSepoliaPEPE",
+        ledger: "hw4ru-taaaa-aaaar-qagdq-cai",
+        index: "g3sv2-4iaaa-aaaar-qagea-cai",
     },
 ];
 
