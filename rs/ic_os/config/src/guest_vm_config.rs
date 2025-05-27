@@ -1,6 +1,6 @@
 use anyhow::{bail, Context, Result};
 use askama::Template;
-use clap::Parser;
+use clap::{Args, Parser};
 use config::guestos_bootstrap_image::BootstrapOptions;
 use config::guestos_config::generate_guestos_config;
 use config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH;
@@ -17,9 +17,19 @@ use std::process::Command;
 include!(concat!(env!("OUT_DIR"), "/guestos_vm_template.rs"));
 
 /// Generate the GuestOS VM configuration
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Eq, PartialEq)]
 #[command(author, version, about, long_about = None)]
 pub struct GenerateGuestVmConfigArgs {
+    /// Path to the input HostOS config file
+    #[arg(short, long, default_value = DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)]
+    config: PathBuf,
+
+    /// Arguments for direct Linux boot.
+    /// Required when enable_trusted_execution_environment is true
+    /// in the HostOS config.
+    #[command(flatten)]
+    direct_boot: Option<DirectBootArgs>,
+
     /// Specify the config media image file
     #[arg(short, long, default_value = "/run/ic-node/config.img")]
     media: PathBuf,
@@ -27,10 +37,20 @@ pub struct GenerateGuestVmConfigArgs {
     /// Specify the output configuration file
     #[arg(short, long, default_value = "/var/lib/libvirt/guestos.xml")]
     output: PathBuf,
+}
 
-    /// Path to the input HostOS config file
-    #[arg(short, long, default_value = DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)]
-    config: PathBuf,
+#[derive(Debug, Clone, Args, Eq, PartialEq)]
+#[group(requires_all = ["kernel", "initrd", "kernel_cmdline"])]
+pub struct DirectBootArgs {
+    /// Path to the kernel file
+    #[arg(long, required = false)]
+    pub kernel: PathBuf,
+    /// Path to the initrd file
+    #[arg(long, required = false)]
+    pub initrd: PathBuf,
+    /// Kernel command line parameters
+    #[arg(long, required = false)]
+    pub kernel_cmdline: String,
 }
 
 /// Generate the GuestOS VM configuration by assembling the bootstrap config media image
@@ -79,7 +99,7 @@ fn run(
 
     File::create(vm_config_path)
         .context("Failed to create output file")?
-        .write_all(generate_vm_config(&hostos_config, &args.media)?.as_bytes())
+        .write_all(generate_vm_config(&hostos_config, &args.media, &args.direct_boot)?.as_bytes())
         .context("Failed to write output file")?;
 
     // Restore SELinux security context
@@ -189,7 +209,11 @@ fn make_bootstrap_options(
 }
 
 /// Generate the GuestOS VM libvirt XML configuration and return it as String.
-fn generate_vm_config(config: &HostOSConfig, media_path: &Path) -> Result<String> {
+fn generate_vm_config(
+    config: &HostOSConfig,
+    media_path: &Path,
+    direct_boot_args: &Option<DirectBootArgs>,
+) -> Result<String> {
     let mac_address = calculate_deterministic_mac(
         &config.icos_settings.mgmt_mac,
         config.icos_settings.deployment_environment,
@@ -203,12 +227,34 @@ fn generate_vm_config(config: &HostOSConfig, media_path: &Path) -> Result<String
         "kvm"
     };
 
+    let mut direct_boot = None;
+    if config.hostos_settings.enable_trusted_execution_environment {
+        let Some(direct_boot_args) = direct_boot_args else {
+            bail!("Trusted execution environment is enabled but no direct boot arguments were provided");
+        };
+
+        direct_boot = Some(DirectBoot {
+            kernel: direct_boot_args
+                .kernel
+                .to_str()
+                .context("Kernel path is not UTF-8")?
+                .to_string(),
+            initrd: direct_boot_args
+                .initrd
+                .to_str()
+                .context("Initrd path is not UTF-8")?
+                .to_string(),
+            kernel_cmdline: direct_boot_args.kernel_cmdline.clone(),
+        })
+    }
+
     GuestOSTemplateProps {
-        cpu_domain,
+        cpu_domain: cpu_domain.to_string(),
         vm_memory: config.hostos_settings.vm_memory,
         nr_of_vcpus: config.hostos_settings.vm_nr_of_vcpus,
         mac_address,
-        config_media: &media_path.display().to_string(),
+        config_media: media_path.display().to_string(),
+        direct_boot,
         enable_sev: config.hostos_settings.enable_trusted_execution_environment,
     }
     .render()
@@ -275,7 +321,7 @@ mod tests {
                 vm_cpu: "qemu".to_string(),
                 vm_nr_of_vcpus: 56,
                 verbose: false,
-                enable_trusted_execution_environment: true,
+                enable_trusted_execution_environment: false,
             },
             guestos_settings: Default::default(),
         }
@@ -327,13 +373,18 @@ mod tests {
         path
     }
 
-    fn test_vm_config(hostos_settings: HostOSSettings, filename: &str) {
+    fn test_vm_config(
+        hostos_settings: HostOSSettings,
+        direct_boot_args: Option<DirectBootArgs>,
+        filename: &str,
+    ) {
         let mut mint = Mint::new(goldenfiles_path());
         let mut config = create_test_hostos_config();
 
         config.hostos_settings = hostos_settings;
 
-        let vm_config = generate_vm_config(&config, Path::new("/tmp/config.img")).unwrap();
+        let vm_config =
+            generate_vm_config(&config, Path::new("/tmp/config.img"), &direct_boot_args).unwrap();
         fs::write(mint.new_goldenpath(filename).unwrap(), vm_config).unwrap();
     }
 
@@ -346,6 +397,7 @@ mod tests {
                 vm_nr_of_vcpus: 56,
                 ..HostOSSettings::default()
             },
+            None,
             "guestos_vm_qemu.xml",
         );
     }
@@ -359,6 +411,7 @@ mod tests {
                 vm_nr_of_vcpus: 56,
                 ..HostOSSettings::default()
             },
+            None,
             "guestos_vm_kvm.xml",
         );
     }
@@ -373,6 +426,11 @@ mod tests {
                 enable_trusted_execution_environment: true,
                 ..HostOSSettings::default()
             },
+            Some(DirectBootArgs {
+                kernel: PathBuf::from("/tmp/test-kernel"),
+                initrd: PathBuf::from("/tmp/test-initrd"),
+                kernel_cmdline: "security=selinux selinux=1 enforcing=0".to_string(),
+            }),
             "guestos_vm_sev.xml",
         );
     }
@@ -391,6 +449,7 @@ mod tests {
             media: media_path.clone(),
             output: vm_config_path.clone(),
             config: hostos_config_path.clone(),
+            direct_boot: None,
         };
 
         let result = run(
@@ -428,6 +487,7 @@ mod tests {
             media: media_path,
             output: vm_config_path,
             config: hostos_config_path,
+            direct_boot: None,
         };
 
         let result_err = run(
@@ -451,8 +511,68 @@ mod tests {
     }
 
     #[test]
+    fn test_sev_without_direct_boot_args_fails() {
+        let temp_dir = tempdir().unwrap();
+        let hostos_config_path = temp_dir.path().join("hostos.json");
+        let media_path = temp_dir.path().join("config.img");
+        let vm_config_path = temp_dir.path().join("guestos.xml");
+        let metrics_path = temp_dir.path().join("metrics.prom");
+
+        let mut hostos_config = create_test_hostos_config();
+        hostos_config
+            .hostos_settings
+            .enable_trusted_execution_environment = true;
+        serialize_and_write_config(&hostos_config_path, &hostos_config).unwrap();
+
+        let args = GenerateGuestVmConfigArgs {
+            media: media_path,
+            output: vm_config_path,
+            config: hostos_config_path,
+            direct_boot: None,
+        };
+
+        let result_err = run(
+            args,
+            &MetricsWriter::new(metrics_path.clone()),
+            mock_restorecon,
+        )
+        .unwrap_err();
+
+        assert!(
+            result_err
+                .to_string()
+                .contains("enabled but no direct boot arguments"),
+            "{result_err:?}"
+        );
+    }
+
+    #[test]
     fn ensure_tested_with_dev() {
         // Ensure that the test is run with the dev feature enabled.
         assert!(cfg!(feature = "dev"));
+    }
+
+    #[test]
+    fn test_parse_args() {
+        GenerateGuestVmConfigArgs::parse_from(vec!["guest-vm-config"]);
+
+        let args = GenerateGuestVmConfigArgs::parse_from(vec![
+            "guest-vm-config",
+            "--kernel",
+            "/path/to/kernel",
+            "--initrd",
+            "/path/to/initrd",
+            "--kernel-cmdline",
+            "some=args",
+        ]);
+
+        assert_eq!(
+            args.direct_boot.unwrap(),
+            DirectBootArgs {
+                kernel: "/path/to/kernel".into(),
+                initrd: "/path/to/initrd".into(),
+                kernel_cmdline: "some=args".to_string(),
+            }
+        );
     }
 }
