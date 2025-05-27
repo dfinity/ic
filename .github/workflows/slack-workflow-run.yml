@@ -19,6 +19,7 @@ on:
       - Publish Release
       - Container IC Base Images
       - PocketIC Windows
+      - PocketIC macOS Intel
 
 jobs:
   slack-workflow-run:
