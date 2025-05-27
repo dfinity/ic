@@ -129,9 +129,7 @@ async fn explore(registry_url: Url, subnet_id: SubnetId, path: Option<PathBuf>) 
         if let Some(path) = path {
             let bytes = cup.encode_to_vec();
             println!("Writing cup to {:?}", path);
-            fs::write(path, bytes)
-                .await
-                .expect("Failed to write bytes");
+            fs::write(path, bytes).await.expect("Failed to write bytes");
         }
     }
 }
