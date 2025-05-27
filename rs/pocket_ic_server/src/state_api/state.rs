@@ -861,7 +861,7 @@ impl ApiState {
         time::timeout(DEFAULT_SYNC_WAIT_DURATION, agent.fetch_root_key())
             .await
             .map_err(|_| format!("Timed out fetching root key from {}", replica_url))?
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("agent error: {}", e))?;
 
         let replica_url = replica_url.trim_end_matches('/').to_string();
 
