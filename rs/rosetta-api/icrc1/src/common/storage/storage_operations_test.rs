@@ -1,7 +1,8 @@
 use candid::{Nat, Principal};
+use ic_icrc_rosetta::common::storage::schema;
 use ic_icrc_rosetta::common::storage::storage_operations::*;
 use ic_icrc_rosetta::common::storage::types::{
-    IcrcBlock, IcrcOperation, IcrcTransaction, RosettaBlock,
+    IcrcBlock, IcrcOperation, IcrcTransaction, RosettaBlock, RosettaCounter,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use rusqlite::{params, Connection};
@@ -122,31 +123,8 @@ fn test_store_and_read_blocks() -> anyhow::Result<()> {
     // Create and initialize database with necessary tables
     let mut connection = Connection::open(&db_path)?;
 
-    // Create the blocks table (simplified version for the test)
-    connection.execute(
-        "CREATE TABLE blocks (
-            idx INTEGER PRIMARY KEY,
-            hash BLOB NOT NULL,
-            serialized_block BLOB NOT NULL,
-            parent_hash BLOB,
-            timestamp INTEGER,
-            tx_hash BLOB,
-            operation_type TEXT,
-            from_principal BLOB,
-            from_subaccount BLOB,
-            to_principal BLOB,
-            to_subaccount BLOB,
-            spender_principal BLOB,
-            spender_subaccount BLOB,
-            memo BLOB,
-            amount TEXT,
-            expected_allowance TEXT,
-            fee TEXT,
-            transaction_created_at_time INTEGER,
-            approval_expires_at INTEGER
-        )",
-        params![],
-    )?;
+    // Create the database tables using the centralized schema
+    schema::create_tables(&connection)?;
 
     // Create test data
     let principal1 = vec![1, 2, 3, 4];
@@ -253,30 +231,8 @@ fn test_hash_consistency() -> anyhow::Result<()> {
     // Initialize database with necessary tables
     let mut connection = Connection::open(&db_path)?;
 
-    connection.execute(
-        "CREATE TABLE blocks (
-            idx INTEGER PRIMARY KEY,
-            hash BLOB NOT NULL,
-            serialized_block BLOB NOT NULL,
-            parent_hash BLOB,
-            timestamp INTEGER,
-            tx_hash BLOB,
-            operation_type TEXT,
-            from_principal BLOB,
-            from_subaccount BLOB,
-            to_principal BLOB,
-            to_subaccount BLOB,
-            spender_principal BLOB,
-            spender_subaccount BLOB,
-            memo BLOB,
-            amount TEXT,
-            expected_allowance TEXT,
-            fee TEXT,
-            transaction_created_at_time INTEGER,
-            approval_expires_at INTEGER
-        )",
-        params![],
-    )?;
+    // Create the database tables using the centralized schema
+    schema::create_tables(&connection)?;
 
     // Create test data - blocks with different timestamp values and operations
     let principal1 = vec![1, 2, 3, 4];
@@ -387,6 +343,208 @@ fn test_hash_consistency() -> anyhow::Result<()> {
             i
         );
     }
+
+    Ok(())
+}
+
+#[test]
+fn test_fee_collector_resolution_and_repair() -> anyhow::Result<()> {
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir.path().join("test_fee_collector_db.sqlite");
+    let mut connection = Connection::open(&db_path)?;
+    schema::create_tables(&connection)?;
+
+    // Create test accounts
+    let principal1 = vec![1, 2, 3, 4];
+    let principal2 = vec![5, 6, 7, 8];
+    let fee_collector_principal = vec![9, 10, 11, 12];
+
+    let from_account = Account {
+        owner: Principal::from_slice(&principal1),
+        subaccount: None,
+    };
+    let to_account = Account {
+        owner: Principal::from_slice(&principal2),
+        subaccount: None,
+    };
+    let fee_collector_account = Account {
+        owner: Principal::from_slice(&fee_collector_principal),
+        subaccount: None,
+    };
+
+    // Test 1: Fee collector resolution logic (only valid blocks for repair testing)
+    let mut mint_block = create_test_rosetta_block(0, 999999999, &principal1, 1000000000);
+    mint_block.block.transaction.operation = IcrcOperation::Mint {
+        to: from_account,
+        amount: Nat::from(1000000000u64),
+    };
+
+    let mut block1 = create_test_rosetta_block(1, 1000000000, &principal1, 100);
+    block1.block.fee_collector = Some(fee_collector_account);
+    block1.block.transaction.operation = IcrcOperation::Transfer {
+        from: from_account,
+        to: to_account,
+        amount: Nat::from(100u64),
+        fee: Some(Nat::from(1u64)),
+        spender: None,
+    };
+
+    let mut block2 = create_test_rosetta_block(2, 1000000001, &principal1, 200);
+    block2.block.fee_collector = None;
+    block2.block.fee_collector_block_index = Some(1); // References block 1
+    block2.block.transaction.operation = IcrcOperation::Transfer {
+        from: from_account,
+        to: to_account,
+        amount: Nat::from(200u64),
+        fee: Some(Nat::from(1u64)),
+        spender: None,
+    };
+
+    let block3 = create_test_rosetta_block(3, 1000000002, &principal1, 300); // No fee collector
+
+    store_blocks(
+        &mut connection,
+        vec![
+            mint_block.clone(),
+            block1.clone(),
+            block2.clone(),
+            block3.clone(),
+        ],
+    )?;
+
+    // Test fee collector resolution
+    assert_eq!(
+        get_fee_collector_from_block(&block1, &connection)?,
+        Some(fee_collector_account)
+    );
+    assert_eq!(
+        get_fee_collector_from_block(&block2, &connection)?,
+        Some(fee_collector_account)
+    );
+    assert_eq!(get_fee_collector_from_block(&block3, &connection)?, None);
+
+    // Test error cases (without storing invalid blocks in DB to avoid repair conflicts)
+    let mut invalid_block = create_test_rosetta_block(999, 1000000003, &principal1, 400);
+    invalid_block.block.fee_collector_block_index = Some(999); // Non-existent
+    assert!(get_fee_collector_from_block(&invalid_block, &connection).is_err());
+
+    let mut invalid_block2 = create_test_rosetta_block(998, 1000000004, &principal1, 500);
+    invalid_block2.block.fee_collector_block_index = Some(3); // Block with no fee collector
+    assert!(get_fee_collector_from_block(&invalid_block2, &connection).is_err());
+
+    // Test 2: Repair functionality with broken state simulation
+    // Manually create broken balances (missing fee collector credits for block 2)
+    connection.execute("DELETE FROM account_balances", params![])?;
+
+    // Correct balances for mint and block 1
+    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (0, ?1, ?2, '1000000000')", 
+        params![from_account.owner.as_slice(), from_account.effective_subaccount().as_slice()])?;
+    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (1, ?1, ?2, '999999899')", 
+        params![from_account.owner.as_slice(), from_account.effective_subaccount().as_slice()])?;
+    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (1, ?1, ?2, '100')", 
+        params![to_account.owner.as_slice(), to_account.effective_subaccount().as_slice()])?;
+    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (1, ?1, ?2, '1')", 
+        params![fee_collector_account.owner.as_slice(), fee_collector_account.effective_subaccount().as_slice()])?;
+
+    // Broken balances for block 2 (fee collector not credited)
+    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (2, ?1, ?2, '999999698')", 
+        params![from_account.owner.as_slice(), from_account.effective_subaccount().as_slice()])?;
+    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (2, ?1, ?2, '300')", 
+        params![to_account.owner.as_slice(), to_account.effective_subaccount().as_slice()])?;
+    // Missing fee collector balance update - this is the bug
+
+    // Verify broken state
+    let fee_balance_before =
+        get_account_balance_at_block_idx(&connection, &fee_collector_account, 2)?;
+    assert_eq!(fee_balance_before, Some(Nat::from(1u64))); // Should be 2, but it's 1 (broken)
+
+    // Test repair function
+    repair_fee_collector_balances(&mut connection)?;
+
+    // Verify fixed state
+    let fee_balance_after =
+        get_account_balance_at_block_idx(&connection, &fee_collector_account, 2)?;
+    assert_eq!(fee_balance_after, Some(Nat::from(2u64))); // Now correctly 2
+
+    // Test idempotency - running repair again should not change anything
+    repair_fee_collector_balances(&mut connection)?;
+    let fee_balance_final =
+        get_account_balance_at_block_idx(&connection, &fee_collector_account, 2)?;
+    assert_eq!(fee_balance_final, Some(Nat::from(2u64)));
+
+    // Verify counter exists (prevents future repairs)
+    assert!(is_counter_flag_set(
+        &connection,
+        &RosettaCounter::CollectorBalancesFixed
+    )?);
+
+    Ok(())
+}
+
+#[test]
+fn test_repair_fee_collector_edge_cases() -> anyhow::Result<()> {
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir.path().join("test_repair_edge_cases_db.sqlite");
+    let mut connection = Connection::open(&db_path)?;
+    schema::create_tables(&connection)?;
+
+    // Test 1: Empty database - should complete successfully and set counter
+    assert!(!is_counter_flag_set(
+        &connection,
+        &RosettaCounter::CollectorBalancesFixed
+    )?);
+
+    repair_fee_collector_balances(&mut connection)?;
+
+    assert!(is_counter_flag_set(
+        &connection,
+        &RosettaCounter::CollectorBalancesFixed
+    )?);
+
+    // Test 2: Already fixed database - should skip repair
+    let principal1 = vec![1, 2, 3, 4];
+    let from_account = Account {
+        owner: Principal::from_slice(&principal1),
+        subaccount: None,
+    };
+
+    let mut mint_block = create_test_rosetta_block(0, 999999999, &principal1, 1000000000);
+    mint_block.block.transaction.operation = IcrcOperation::Mint {
+        to: from_account,
+        amount: Nat::from(1000000000u64),
+    };
+    store_blocks(&mut connection, vec![mint_block])?;
+
+    // Manually add correct balance
+    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (0, ?1, ?2, '1000000000')", 
+        params![from_account.owner.as_slice(), from_account.effective_subaccount().as_slice()])?;
+
+    // Clear balances to test that repair is skipped
+    connection.execute("DELETE FROM account_balances", params![])?;
+    repair_fee_collector_balances(&mut connection)?; // Should be skipped due to counter
+
+    // Verify balance is still empty (repair was skipped)
+    assert_eq!(
+        get_account_balance_at_block_idx(&connection, &from_account, 0)?,
+        None
+    );
+
+    // Test 3: Counter check - verify repair only runs once
+    connection.execute(
+        "DELETE FROM counters WHERE name = ?1",
+        params![RosettaCounter::CollectorBalancesFixed.name()],
+    )?;
+
+    repair_fee_collector_balances(&mut connection)?; // First run - should execute
+    let balance_after_first = get_account_balance_at_block_idx(&connection, &from_account, 0)?;
+    assert_eq!(balance_after_first, Some(Nat::from(1000000000u64)));
+
+    connection.execute("DELETE FROM account_balances", params![])?;
+    repair_fee_collector_balances(&mut connection)?; // Second run - should be skipped
+    assert_eq!(
+        get_account_balance_at_block_idx(&connection, &from_account, 0)?,
+        None
+    );
 
     Ok(())
 }

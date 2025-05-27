@@ -45,7 +45,7 @@ const PROMETHEUS_VM_NAME: &str = "prometheus";
 /// The latest hash can be retrieved by downloading the SHA256SUMS file from:
 /// https://hydra-int.dfinity.systems/job/dfinity-ci-build/farm/universal-vm.img-prometheus.x86_64-linux/latest
 const DEFAULT_PROMETHEUS_VM_IMG_SHA256: &str =
-    "4c288cebafb59e6c6b1611475cef1f4963aec61b6af798dd47d8c5264af15b8f";
+    "3af874174d48f5c9a59c9bc54dd73cbfc65b17b952fbacd7611ee07d19de369b";
 
 fn get_default_prometheus_vm_img_url() -> String {
     format!("http://download.proxy-global.dfinity.network:8080/farm/prometheus-vm/{DEFAULT_PROMETHEUS_VM_IMG_SHA256}/x86_64-linux/prometheus-vm.img.zst")
@@ -559,26 +559,39 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
         "scrape_configs": [
             {
                 "job_name": "boundary_nodes",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "file_sd_configs": [{"files": [boundary_nodes_scraping_targets_path]}],
             },
             {
                 "job_name": "boundary_nodes_exporter",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "file_sd_configs": [{"files": [boundary_nodes_exporter_scraping_targets_path]}],
             },
             {
                 "job_name": "ic_boundary",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "file_sd_configs": [{"files": [ic_boundary_scraping_targets_path]}],
             },
-            {"job_name": "replica", "file_sd_configs": [{"files": [replica_scraping_targets_path]}]},
-            {"job_name": "orchestrator", "file_sd_configs": [{"files": [orchestrator_scraping_targets_path]}]},
+            {
+                "job_name": "replica",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
+                "file_sd_configs": [{"files": [replica_scraping_targets_path]}]
+            },
+            {
+                "job_name": "orchestrator",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
+                "file_sd_configs": [{"files": [orchestrator_scraping_targets_path]}]
+            },
             {
                 "job_name": "node_exporter",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "file_sd_configs": [{"files": [node_exporter_scraping_targets_path]}],
                 "scheme": "https",
                 "tls_config": {"insecure_skip_verify": true},
             },
             {
                 "job_name": "ledger-canister",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "honor_timestamps": true,
                 "metrics_path": "/metrics",
                 "scheme": "https",
@@ -588,6 +601,7 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
             },
             {
                 "job_name": "bitcoin-mainnet-canister",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "honor_timestamps": true,
                 "metrics_path": "/metrics",
                 "scheme": "https",
@@ -597,6 +611,7 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
             },
             {
                 "job_name": "bitcoin-testnet-canister",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "honor_timestamps": true,
                 "metrics_path": "/metrics",
                 "scheme": "https",
@@ -606,6 +621,7 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
             },
             {
                 "job_name": "bitcoin-watchdog-mainnet-canister",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "honor_timestamps": true,
                 "metrics_path": "/metrics",
                 "scheme": "https",
@@ -615,6 +631,7 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
             },
             {
                 "job_name": "bitcoin-watchdog-testnet-canister",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "honor_timestamps": true,
                 "metrics_path": "/metrics",
                 "scheme": "https",
