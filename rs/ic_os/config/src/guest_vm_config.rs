@@ -209,6 +209,7 @@ fn generate_vm_config(config: &HostOSConfig, media_path: &Path) -> Result<String
         nr_of_vcpus: config.hostos_settings.vm_nr_of_vcpus,
         mac_address,
         config_media: &media_path.display().to_string(),
+        enable_sev: config.hostos_settings.enable_sev,
     }
     .render()
     .context("Failed to render GuestOS VM XML template")
