@@ -45,7 +45,7 @@ impl EccCurveType {
     /// Scalar here refers to the byte size of an integer which has the range
     /// [0,z) where z is the group order.
     pub const fn scalar_bytes(&self) -> usize {
-        (self.scalar_bits() + 7) / 8
+        self.scalar_bits().div_ceil(8)
     }
 
     /// Security level of the curve, in bits
@@ -256,7 +256,7 @@ impl EccScalar {
         let s_bits = curve.scalar_bits();
         let security_level = curve.security_level();
 
-        let field_len = (s_bits + security_level + 7) / 8; // "L" in spec
+        let field_len = (s_bits + security_level).div_ceil(8); // "L" in spec
         let len_in_bytes = count * field_len;
 
         let uniform_bytes = ic_crypto_internal_seed::xmd::<ic_crypto_sha2::Sha256>(

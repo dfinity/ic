@@ -988,11 +988,11 @@ impl SchedulerTestBuilder {
 /// A test message can be constructed using the helper functions defined below:
 /// - `ingress(5)`: a message that uses 5 instructions.
 /// - `ingress(5).dirty_pages(1): a message that uses 5 instructions and
-///    modifies one page.
+///   modifies one page.
 /// - `ingress(5).call(other_side(callee, 3), on_response(8))`: a message
-///    that uses 5 instructions and calls a canister with id `callee`.
-///    The called message uses 3 instructions. The response handler  uses
-///    8 instructions.
+///   that uses 5 instructions and calls a canister with id `callee`.
+///   The called message uses 3 instructions. The response handler  uses
+///   8 instructions.
 #[derive(Clone, Debug)]
 pub(crate) struct TestMessage {
     // The canister id is optional and is inferred from the context if not
