@@ -131,6 +131,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             dc_id: "an1".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: None,
+            max_rewardable_nodes: BTreeMap::new(),
         };
 
         assert!(
