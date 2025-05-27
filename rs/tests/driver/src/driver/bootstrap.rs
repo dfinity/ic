@@ -535,7 +535,7 @@ fn create_config_disk_image(
         bootstrap_options.socks_proxy = Some(socks_proxy);
     }
 
-    let hostname = format!("guest-{}", node.node_id);
+    let hostname = node.node_id.to_string();
     config.hostname = Some(hostname.clone());
     bootstrap_options.hostname = Some(hostname);
 
