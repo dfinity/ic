@@ -18,13 +18,13 @@ use crate::driver::{
 
 // Constants
 pub const IC_GATEWAY_VM_NAME: &str = "ic-gateway";
-const IC_GATEWAY_VM_PATH: &str = "vm.json";
+const IC_GATEWAY_VM_FILE: &str = "vm.json";
 const IMAGE_PATH: &str = "rs/tests/ic_gateway_uvm_config_image.zst";
 const IC_GATEWAY_VMS_DIR: &str = "ic_gateway_vms";
 const PLAYNET_FILE: &str = "playnet.json";
 const BN_AAAA_RECORDS_CREATED_EVENT_NAME: &str = "bn_aaaa_records_created_event";
 
-/// Represents an IC HTTP Gateway VM configuration.
+/// Represents an IC HTTP Gateway VM, it is a wrapper around Farm's Universal VM.
 #[derive(Debug)]
 pub struct IcGatewayVm {
     universal_vm: UniversalVm,
@@ -46,7 +46,7 @@ impl DeployedIcGatewayVm {
     pub fn get_vm(&self, env: &TestEnv) -> Result<VMCreateResponse> {
         let vm_path = Path::new(IC_GATEWAY_VMS_DIR)
             .join(self.deployed_universal_vm.vm_name())
-            .join(IC_GATEWAY_VM_PATH);
+            .join(IC_GATEWAY_VM_FILE);
         env.read_json_object(&vm_path)
             .with_context(|| format!("Failed to read VM data from {}", vm_path.display()))
     }
@@ -189,12 +189,14 @@ impl IcGatewayVm {
     ) -> Result<()> {
         let bash_script = format!(
             r#"
+# Prepare certificates and private key
 mkdir /tmp/certs
 cd /tmp/certs
 printf "%b" "{cert}" > cert.pem
 printf "%b" "{cert_chain}" >> cert.pem
 printf "%b" "{key}" > cert.key
 
+# Prepare config file
 cat <<EOF > ic-gateway.env
 IC_URL={ic_url}
 DOMAIN={domain}
@@ -204,12 +206,47 @@ LISTEN_TLS=[::]:443
 CERT_PROVIDER_DIR=/certs
 EOF
 
+# Load the docker image from the tarball
 docker load -i /config/ic_gatewayd.tar
+
+# Start ic-gateway service in the background
 docker run --name=ic-gateway -d \
   -v /tmp/certs:/certs \
   --network host \
   --env-file ic-gateway.env \
   ic_gatewayd:image
+
+# Wait for the service to become ready.
+# Readiness is defined when some API boundary node used by ic-gateway responds with HTTP 200 to /api/v2/status.
+
+URL="https://{domain}/api/v2/status"
+TOTAL_TIMEOUT=80
+REQUEST_TIMEOUT=2
+RETRY_INTERVAL=5
+
+start_time=$(date +%s)
+echo "Waiting for ic-gateway to become ready..."
+
+while true; do
+  current_time=$(date +%s)
+  elapsed=$((current_time - start_time))
+
+  http_code=$(curl --silent --output /dev/null --write-out "%{{http_code}}" \
+                    --max-time "${{REQUEST_TIMEOUT}}" "$URL")
+
+  if [ "$http_code" -eq 200 ]; then
+    echo "ic-gateway is ready to serve traffic"
+    exit 0
+  fi
+
+  if [ "$elapsed" -ge "${{TOTAL_TIMEOUT}}" ]; then
+    echo "ic-gateway did not become ready within ${{TOTAL_TIMEOUT}}s"
+    exit 1
+  fi
+
+  echo "ic-gateway not ready yet (status: $http_code). Retrying in ${{RETRY_INTERVAL}}s..."
+  sleep "$RETRY_INTERVAL"
+done
 "#,
             key = playnet.playnet_cert.cert.priv_key_pem,
             cert = playnet.playnet_cert.cert.cert_pem,
