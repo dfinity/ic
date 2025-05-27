@@ -43,6 +43,7 @@ jobs:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Set PATH
         run: |
+          ls -l /usr/local/opt/llvm/bin/clang
           echo "/usr/local/bin" >> $GITHUB_PATH
           echo "$HOME/.cargo/bin:" >> $GITHUB_PATH
           # use llvm-clang instead of apple's
