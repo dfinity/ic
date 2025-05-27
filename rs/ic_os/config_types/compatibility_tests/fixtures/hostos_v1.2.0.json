@@ -26,8 +26,8 @@
     "nns_urls": [
       "https://icp-api.io,https//icp0.io,https://ic0.app"
     ],
-    "enable_trusted_execution_environment": true,
     "use_node_operator_private_key": true,
+    "enable_trusted_execution_environment": false,
     "use_ssh_authorized_keys": false,
     "icos_dev_settings": {}
   },
