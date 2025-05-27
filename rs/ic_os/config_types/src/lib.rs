@@ -89,6 +89,7 @@ pub struct ICOSSettings {
     /// If the value is enabled, we check during deployment that SEV-SNP is supported
     /// by the hardware. Once deployment is successful, we rely on the hardware supporting
     /// SEV-SNP.
+    #[serde(default)]
     pub enable_trusted_execution_environment: bool,
     /// This ssh keys directory contains individual files named `admin`, `backup`, `readonly`.
     /// The contents of these files serve as `authorized_keys` for their respective role account.

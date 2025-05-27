@@ -705,7 +705,9 @@ def inject_config_into_image(
 
     enable_trusted_execution_environment_part = ""
     if inject_enable_trusted_execution_environment is not None:
-        enable_trusted_execution_environment_part += f"--enable-trusted-execution-environment {inject_enable_trusted_execution_environment}"
+        enable_trusted_execution_environment_part += (
+            f"--enable-trusted-execution-environment {inject_enable_trusted_execution_environment}"
+        )
 
     verbose_part = ""
     if verbose:
