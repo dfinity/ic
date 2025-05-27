@@ -614,17 +614,21 @@ fn ensure_index_principal() {
         for suite in LEDGER_SUITES {
             if ledger_canister_id == suite.ledger {
                 Access::with_ledger_mut(|ledger| {
-                    let index_principal = Principal::from_text(suite.index).unwrap_or_else(|err| {
-                        ic_cdk::trap(&format!(
-                            "unable to parse index principal for {} from {}: {}",
-                            suite.name, suite.index, err
-                        ))
-                    });
-                    ledger.set_index_principal(index_principal);
-                    log_message(&format!(
-                        "Set index principal of ledger canister {} for {} to {}",
-                        suite.ledger, suite.name, suite.index
-                    ));
+                    match Principal::from_text(suite.index) {
+                        Ok(index_principal) => {
+                            ledger.set_index_principal(index_principal);
+                            log_message(&format!(
+                                "Set index principal of ledger canister {} for {} to {}",
+                                suite.ledger, suite.name, suite.index
+                            ));
+                        }
+                        Err(err) => {
+                            log_message(&format!(
+                                "unable to parse index principal for {} from {}: {}",
+                                suite.name, suite.index, err
+                            ));
+                        }
+                    };
                 });
                 return;
             }
