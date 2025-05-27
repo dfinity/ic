@@ -243,7 +243,7 @@ pub struct FinalizerMetrics {
     pub canister_http_timeouts_delivered: IntCounter,
     pub canister_http_divergences_delivered: IntCounter,
     // the size will be observed in MBs
-    pub canister_http_payload_size: Histogram,
+    pub canister_http_payload_size_delivered: Histogram,
 }
 
 impl FinalizerMetrics {
@@ -335,8 +335,8 @@ impl FinalizerMetrics {
                 "canister_http_divergences_delivered",
                 "Total number of canister http messages delivered as divergences",
             ),
-            canister_http_payload_size: metrics_registry.histogram(
-                "canister_http_payload_size", 
+            canister_http_payload_size_delivered: metrics_registry.histogram(
+                "canister_http_payload_size_delivered", 
                 "The size of the canister http payload bytes",
                 // This will create 16 buckets starting from 0, 100, 200, 500, 1000  
                 // up to 5 * 10^6 ~= 5MB
@@ -363,7 +363,7 @@ impl FinalizerMetrics {
             .inc_by(batch_stats.canister_http.timeouts as u64);
         self.canister_http_divergences_delivered
             .inc_by(batch_stats.canister_http.divergence_responses as u64);
-        self.canister_http_payload_size
+        self.canister_http_payload_size_delivered
             .observe(batch_stats.canister_http.payload_bytes as f64);
 
         if let Some(idkg) = &block_stats.idkg_stats {
