@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::str::FromStr;
 
 use candid::{CandidType, Nat};
 use canister_test::Wasm;
@@ -7,18 +8,20 @@ use ic_base_types::PrincipalId;
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
 use ic_nervous_system_agent::{pocketic_impl::PocketIcAgent, CallCanisters, Request};
 use ic_nervous_system_common::E8;
+use ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister_with_controllers;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::nns;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::NnsInstaller;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{install_canister_on_subnet, sns};
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use icp_ledger::{AccountIdentifier, Tokens, DEFAULT_TRANSFER_FEE};
-use icrc_ledger_types::icrc3::transactions;
+use icrc_ledger_types::icrc::generic_value::Value;
 use icrc_ledger_types::{
     icrc1::{account::Account, transfer::TransferArg},
     icrc2::approve::ApproveArgs,
 };
 use itertools::{Either, Itertools};
 use maplit::btreemap;
+use pocket_ic::nonblocking::PocketIc;
 use pocket_ic::PocketIcBuilder;
 use serde::{Deserialize, Serialize};
 
@@ -51,7 +54,7 @@ pub trait TreasuryManager {
 
     fn withdraw(
         &mut self,
-    ) -> impl std::future::Future<Output = Result<(), TransactionError>> + Send;
+    ) -> impl std::future::Future<Output = Result<BTreeMap<String, Nat>, TransactionError>> + Send;
 
     fn deposit(
         &mut self,
@@ -165,6 +168,13 @@ impl<'a> KongSwapAdaptor<'a> {
         })
     }
 
+    fn get_cached_balances(&self) -> BTreeMap<String, Nat> {
+        btreemap! {
+            self.token_0.clone() => self.balance_0_decimals.clone(),
+            self.token_1.clone() => self.balance_1_decimals.clone(),
+        }
+    }
+
     /// Performs the request call and records the transaction in the audit trail.
     async fn emit_transaction<R, Ok>(
         &mut self,
@@ -255,6 +265,10 @@ impl<'a> KongSwapAdaptor<'a> {
             )
             .await?;
 
+        if user_balance_replies.is_empty() {
+            return Ok(Nat::from(0_u8));
+        }
+
         let (balances, errors): (BTreeMap<_, _>, Vec<_>) =
             user_balance_replies.into_iter().partition_map(
                 |UserBalancesReply::LP(UserBalanceLPReply {
@@ -290,7 +304,7 @@ impl<'a> KongSwapAdaptor<'a> {
     }
 
     // TODO: Make this method private once it is periodically called from canister timers.
-    pub async fn refresh_balances(&mut self) -> Result<(), TransactionError> {
+    pub async fn refresh_balances(&mut self) -> Result<BTreeMap<String, Nat>, TransactionError> {
         let phase = TreasuryManagerPhase::Balances;
 
         let remove_lp_token_amount = self.lp_balance(phase).await?;
@@ -306,9 +320,7 @@ impl<'a> KongSwapAdaptor<'a> {
             remove_lp_token_amount,
         };
 
-        let RemoveLiquidityAmountsReply {
-            amount_0, amount_1, ..
-        } = self
+        let reply = self
             .emit_transaction(
                 self.kong_backend_canister_id,
                 request,
@@ -317,10 +329,16 @@ impl<'a> KongSwapAdaptor<'a> {
             )
             .await?;
 
+        println!("remove_liquidity_amounts reply = {:#?}", reply);
+
+        let RemoveLiquidityAmountsReply {
+            amount_0, amount_1, ..
+        } = reply;
+
         self.balance_0_decimals = amount_0.clone();
         self.balance_1_decimals = amount_1.clone();
 
-        Ok(())
+        Ok(self.get_cached_balances())
     }
 }
 
@@ -440,11 +458,7 @@ impl<'a> TreasuryManager for KongSwapAdaptor<'a> {
             .await?
         };
 
-        let AddLiquidityReply {
-            amount_0: _,
-            amount_1,
-            ..
-        } = {
+        let reply = {
             let human_readable = format!(
                 "Calling KongSwapBackend.add_liquidity to top up liquidity for \
                  token_0 = {}, amount_0 = {}, token_1 = {}, amount_1 = {}.",
@@ -471,6 +485,14 @@ impl<'a> TreasuryManager for KongSwapAdaptor<'a> {
             .await?
         };
 
+        println!("add_liquidity reply = {:#?}", reply);
+
+        let AddLiquidityReply {
+            amount_0: _,
+            amount_1,
+            ..
+        } = reply;
+
         if original_amount_1 < amount_1 {
             return Err(TransactionError::Backend(format!(
                 "Got top-up amount_1 = {} (must be at least {})",
@@ -482,16 +504,18 @@ impl<'a> TreasuryManager for KongSwapAdaptor<'a> {
     }
 
     async fn balances(&self) -> Result<BTreeMap<String, Nat>, TransactionError> {
-        Ok(btreemap! {
-            self.token_0.clone() => self.balance_0_decimals.clone(),
-            self.token_1.clone() => self.balance_1_decimals.clone(),
-        })
+        Ok(self.get_cached_balances())
     }
 
-    async fn withdraw(&mut self) -> Result<(), TransactionError> {
+    async fn withdraw(&mut self) -> Result<BTreeMap<String, Nat>, TransactionError> {
         let phase = TreasuryManagerPhase::Withdraw;
 
         let remove_lp_token_amount = self.lp_balance(phase).await?;
+
+        println!(
+            "refresh_balances >>> remove_lp_token_amount = {}",
+            remove_lp_token_amount
+        );
 
         let human_readable =
             "Calling KongSwapBackend.remove_liquidity to withdraw all allocated tokens."
@@ -503,7 +527,7 @@ impl<'a> TreasuryManager for KongSwapAdaptor<'a> {
             remove_lp_token_amount,
         };
 
-        let RemoveLiquidityReply { status, .. } = self
+        let reply = self
             .emit_transaction(
                 self.kong_backend_canister_id,
                 request,
@@ -512,6 +536,17 @@ impl<'a> TreasuryManager for KongSwapAdaptor<'a> {
             )
             .await?;
 
+        println!("remove_liquidity reply = {:#?}", reply);
+
+        let RemoveLiquidityReply {
+            status,
+            symbol_0,
+            amount_0,
+            symbol_1,
+            amount_1,
+            ..
+        } = reply;
+
         if status != "Success" {
             return Err(TransactionError::Backend(format!(
                 "Failed to withdraw liquidity: status = {}",
@@ -519,7 +554,10 @@ impl<'a> TreasuryManager for KongSwapAdaptor<'a> {
             )));
         }
 
-        Ok(())
+        Ok(btreemap! {
+            symbol_0 => amount_0,
+            symbol_1 => amount_1,
+        })
     }
 
     fn audit_trail(&self) -> AuditTrail {
@@ -543,6 +581,7 @@ impl<'a> TreasuryManager for KongSwapAdaptor<'a> {
 /// 2. Switch the order of upgrades.
 ///
 /// We use this fairly complex custom upgrade path in this test to illustrate both of these cases.
+#[track_caller]
 async fn test_custom_upgrade_path_for_sns() {
     let pocket_ic = PocketIcBuilder::new()
         .with_nns_subnet()
@@ -552,7 +591,7 @@ async fn test_custom_upgrade_path_for_sns() {
         .await;
 
     let topology = pocket_ic.topology().await;
-    let fiduciary_subnet_id = topology.get_fiduciary().unwrap();
+    // let fiduciary_subnet_id = topology.get_fiduciary().unwrap();
     let sns_subnet_id = topology.get_sns().unwrap();
 
     // Step 0: Prepare the world.
@@ -645,24 +684,68 @@ async fn test_custom_upgrade_path_for_sns() {
 
         let controllers = vec![PrincipalId::new_user_test_id(42)];
 
-        install_canister_on_subnet(
+        // Canister ID from the mainnet.
+        // See https://dashboard.internetcomputer.org/canister/2ipq2-uqaaa-aaaar-qailq-cai
+        let canister_id = CanisterId::try_from_principal_id(
+            PrincipalId::from_str("2ipq2-uqaaa-aaaar-qailq-cai").unwrap(),
+        )
+        .unwrap();
+
+        install_canister_with_controllers(
             &pocket_ic,
-            fiduciary_subnet_id,
+            "KongSwap Backend Canister",
+            canister_id,
             vec![],
-            Some(kong_backend_wasm),
+            kong_backend_wasm,
             controllers,
         )
-        .await
+        .await;
+
+        canister_id
+    };
+
+    let lp_adaptor_icp_account = AccountIdentifier::new(lp_adaptor_canister_id, None);
+
+    let lp_adaptor_sns_account = Account {
+        owner: lp_adaptor_canister_id.0,
+        subaccount: None,
+    };
+
+    let assert_dao_balances = async |pocket_ic: &PocketIc, icp: u64, sns: u64| {
+        {
+            let observed_icp_tokens =
+                nns::ledger::account_balance(pocket_ic, &lp_adaptor_icp_account).await;
+            let expected_icp_tokens = Tokens::from_e8s(icp);
+            assert_eq!(
+                observed_icp_tokens, expected_icp_tokens,
+                "Unexpected ICP balance."
+            );
+        }
+        {
+            let observed_sns_tokens = sns::ledger::icrc1_balance_of(
+                pocket_ic,
+                sns_ledger_canister_id.get(),
+                lp_adaptor_sns_account,
+            )
+            .await;
+            let expected_sns_tokens = Nat::from(sns);
+            assert_eq!(
+                observed_sns_tokens, expected_sns_tokens,
+                "Unexpected SNS balance."
+            );
+        }
     };
 
     // Approve some ICP from the LP Adaptor.
     nns::ledger::mint_icp(
         &pocket_ic,
-        AccountIdentifier::new(lp_adaptor_canister_id, None),
+        lp_adaptor_icp_account,
         Tokens::from_tokens(100).unwrap(),
         None,
     )
     .await;
+
+    assert_dao_balances(&pocket_ic, 100 * E8, 0).await;
 
     // Approve some SNS tokens from the LP Adaptor.
     sns::ledger::icrc1_transfer(
@@ -671,17 +754,17 @@ async fn test_custom_upgrade_path_for_sns() {
         sns_root_canister_id,
         TransferArg {
             from_subaccount: None,
-            to: Account {
-                owner: lp_adaptor_canister_id.0,
-                subaccount: None,
-            },
+            to: lp_adaptor_sns_account,
             fee: None,
             created_at_time: None,
             memo: None,
             amount: Nat::from(350 * E8),
         },
     )
-    .await;
+    .await
+    .unwrap();
+
+    assert_dao_balances(&pocket_ic, 100 * E8, 350 * E8).await;
 
     // Set up the ICP allowance.
     lp_adaptor_agent
@@ -693,7 +776,7 @@ async fn test_custom_upgrade_path_for_sns() {
                     owner: kong_backend_canister_id.get().0,
                     subaccount: None,
                 },
-                amount: Nat::from(600 * E8 + DEFAULT_TRANSFER_FEE.get_e8s()),
+                amount: Nat::from(u64::MAX),
                 expected_allowance: Some(Nat::from(0u8)),
                 expires_at: Some(u64::MAX),
                 fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),
@@ -704,6 +787,13 @@ async fn test_custom_upgrade_path_for_sns() {
         .await
         .unwrap()
         .unwrap();
+
+    assert_dao_balances(
+        &pocket_ic,
+        100 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
+        350 * E8,
+    )
+    .await;
 
     // Set up the SNS allowance.
     lp_adaptor_agent
@@ -726,6 +816,13 @@ async fn test_custom_upgrade_path_for_sns() {
         .await
         .unwrap()
         .unwrap();
+
+    assert_dao_balances(
+        &pocket_ic,
+        100 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
+        350 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
+    )
+    .await;
 
     let mut kong_swap_adaptor = KongSwapAdaptor::new(
         &lp_adaptor_agent,
@@ -752,10 +849,22 @@ async fn test_custom_upgrade_path_for_sns() {
         .await
         .unwrap();
 
-    let balances = kong_swap_adaptor.balances().await.unwrap();
+    assert_dao_balances(
+        &pocket_ic,
+        50 * E8 - 2 * DEFAULT_TRANSFER_FEE.get_e8s(),
+        150 * E8 - 2 * DEFAULT_TRANSFER_FEE.get_e8s(),
+    )
+    .await;
 
-    println!("2. user balances = {:#?}", balances);
+    assert_eq!(
+        kong_swap_adaptor.refresh_balances().await,
+        Ok(btreemap! {
+            "SNS".to_string() => Nat::from(200 * E8),
+            "ICP".to_string() => Nat::from(50 * E8),
+        }),
+    );
 
+    // Kong-specific assertion.
     let response = lp_adaptor_agent
         .call(kong_backend_canister_id, TokensArgs { symbol: None })
         .await
@@ -763,6 +872,7 @@ async fn test_custom_upgrade_path_for_sns() {
         .unwrap();
     println!("second tokens response = {:#?}", response);
 
+    // Kong-specific assertion.
     let response = lp_adaptor_agent
         .call(kong_backend_canister_id, PoolsArgs { symbol: None })
         .await
@@ -785,15 +895,59 @@ async fn test_custom_upgrade_path_for_sns() {
         .await
         .unwrap();
 
-    let balances = kong_swap_adaptor.balances().await.unwrap();
+    assert_dao_balances(
+        &pocket_ic,
+        15 * E8 - 3 * DEFAULT_TRANSFER_FEE.get_e8s(),
+        10 * E8 - 3 * DEFAULT_TRANSFER_FEE.get_e8s(),
+    )
+    .await;
 
-    println!("3. user balances = {:#?}", balances);
+    // Debugging: Print the SNS Ledger block details.
+    dbg_print_block(&pocket_ic, sns_ledger_canister_id, 0).await;
+    dbg_print_block(&pocket_ic, sns_ledger_canister_id, 1).await;
+    dbg_print_block(&pocket_ic, sns_ledger_canister_id, 2).await;
+    dbg_print_block(&pocket_ic, sns_ledger_canister_id, 3).await;
 
-    kong_swap_adaptor.withdraw().await.unwrap();
+    assert_eq!(
+        kong_swap_adaptor.refresh_balances().await,
+        Ok(btreemap! {
+            "SNS".to_string() => Nat::from(340 * E8),
+            "ICP".to_string() => Nat::from(85 * E8),
+        }),
+    );
+
+    // Kong-specific assertion.
+    let response = lp_adaptor_agent
+        .call(kong_backend_canister_id, PoolsArgs { symbol: None })
+        .await
+        .unwrap()
+        .unwrap();
+    println!("third pools response = {:#?}", response);
+
+    let withdrawn_amounts = kong_swap_adaptor.withdraw().await.unwrap();
+
+    println!("withdrawn_amounts = {:#?}", withdrawn_amounts);
+
+    assert_eq!(
+        kong_swap_adaptor.refresh_balances().await,
+        Ok(btreemap! {
+            "SNS".to_string() => Nat::from(0_u8),
+            "ICP".to_string() => Nat::from(0_u8),
+        }),
+    );
+
+    assert_dao_balances(
+        &pocket_ic,
+        100 * E8 - 4 * DEFAULT_TRANSFER_FEE.get_e8s(),
+        350 * E8 - 4 * DEFAULT_TRANSFER_FEE.get_e8s(),
+    )
+    .await;
 
     let audit_trail = kong_swap_adaptor.audit_trail();
 
-    panic!("{:#?}", audit_trail.transactions());
+    println!("{:#?}", audit_trail.transactions());
+
+    panic!("  Directed by\nROBERT B. WEIDE.");
 }
 
 // ----------------- begin:add_liquidity_amounts -----------------
@@ -1346,3 +1500,36 @@ pub struct UserBalanceLPReply {
 }
 
 // ----------------- end:user_balances -----------------
+
+async fn dbg_print_block(
+    pocket_ic: &PocketIc,
+    sns_ledger_canister_id: CanisterId,
+    block_index: u64,
+) {
+    let block =
+        sns::ledger::get_all_blocks(pocket_ic, sns_ledger_canister_id.get(), block_index, 1).await;
+
+    let Value::Map(block_details) = block.blocks[0].clone() else {
+        panic!("Expected a block with details, got: {:?}", block.blocks[0]);
+    };
+
+    let Value::Map(tx_details) = block_details.get("tx").clone().unwrap() else {
+        panic!(
+            "Expected a transaction in the block details, got: {:?}",
+            block_details.get("tx")
+        );
+    };
+
+    let from = tx_details.get("from");
+    let to = tx_details.get("to");
+    let spender = tx_details.get("spender");
+    let amt = tx_details.get("amt").unwrap();
+    let op = tx_details.get("op").unwrap();
+
+    println!("SNS Ledger block {} details.", block_index);
+    println!("    amt = {:?}", amt);
+    println!("     op = {:?}", op);
+    println!("   from = {:?}", from);
+    println!("     to = {:?}", to);
+    println!("spender = {:?}", spender);
+}
