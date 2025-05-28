@@ -110,3 +110,25 @@ fn test_decoding_nat() {
     let val = num_nat.0.to_u64_digits()[0];
     assert_eq!(val, 1234);
 }
+
+#[test]
+fn test_decoding_block() {
+    use candid::{Decode, Deserialize, IDLArgs};
+    use hex::decode;
+
+    let hex_str = "4449444c0d6c0381d586b70a7d86dda8bf0a0783f4f4c40f0c6b06cf89df017cfc84eb0103c189ee017dfdd2c9df0204cdf1cbbe0371f9baf3c50b056c02007101016d026d7b6d016c02dbb7017dcdeaf1a70b016d066c02e2e8ada0087de6a99ef8097d6d086a0109010001016c02dd9ad2830409c5b39af8070a6d0b0100fa3201f93201030570686173680320e181bc2b63ddea5e2c8b6ec6f2196f4e56026acbc269f8507912222e2e20a24602747302f5acd8d1d1a0e9a118027478010703616d7402ebc3f993130366656502904e0466726f6d0501031da683ba1acf5ff9163b11aa09b183f4c988ae8e9ea2572dd15c47205b02046d656d6f03080000000000000876026f70040478666572077370656e6465720501030a0000000002300b12010102746f0501030a0000000002300b12010100";
+    let bytes = decode(hex_str).expect("Invalid hex string");
+
+    let args = IDLArgs::from_bytes(&bytes).expect("Ooops");
+    let get_blocks_result: GetBlocksResult = args.args.get(0).unwrap().into();
+}
+
+#[test]
+fn test_abc() {
+    // Prepare the world.
+    let block = ICRC3Value {};
+    let expected = Ok(todo!());
+
+    let observed = get_block_timestamp_nanos(args);
+    assert_eq!(observed, expected);
+}
