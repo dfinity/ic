@@ -1947,13 +1947,21 @@ impl CanisterManager {
         let snapshot = self.get_snapshot(canister.canister_id(), snapshot_id, state)?;
 
         // Charge upfront for the baseline plus the maximum possible size of the returned slice or fail.
-        let num_response_bytes = match &kind {
-            CanisterSnapshotDataKind::WasmModule { size, .. } => *size,
-            CanisterSnapshotDataKind::MainMemory { size, .. } => *size,
-            CanisterSnapshotDataKind::StableMemory { size, .. } => *size,
+        let (num_response_bytes, offset) = match &kind {
+            CanisterSnapshotDataKind::WasmModule { offset, size } => (*size, *offset),
+            CanisterSnapshotDataKind::MainMemory { offset, size } => (*size, *offset),
+            CanisterSnapshotDataKind::StableMemory { offset, size } => (*size, *offset),
             // In this case, we might overcharge. But the stored chunks are also charged fully even if they are smaller.
-            CanisterSnapshotDataKind::WasmChunk { .. } => CHUNK_SIZE,
+            CanisterSnapshotDataKind::WasmChunk { .. } => {
+                (CHUNK_SIZE, 0 /* value meaningless but unreachable */)
+            }
         };
+        if num_response_bytes > MAX_SLICE_SIZE_BYTES {
+            return Err(CanisterManagerError::InvalidSubslice {
+                offset,
+                size: num_response_bytes,
+            });
+        }
         let size = NumInstructions::new(num_response_bytes);
         if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
             &sender,
