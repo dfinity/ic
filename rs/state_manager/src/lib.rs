@@ -2234,7 +2234,7 @@ impl StateManagerImpl {
     // Creates a checkpoint and switches state to it.
     fn create_checkpoint_and_switch(
         &self,
-        mut state: ReplicatedState,
+        state: ReplicatedState,
         height: Height,
     ) -> CreateCheckpointResult {
         self.observe_num_loaded_pagemaps(&state);
@@ -2295,18 +2295,6 @@ impl StateManagerImpl {
                 })
         };
 
-        {
-            let _timer = self
-                .metrics
-                .checkpoint_metrics
-                .make_checkpoint_step_duration
-                .with_label_values(&["defrag_canisters_map"])
-                .start_timer();
-
-            // This step is a functional no-op, but results in a cleaner memory layout that is ultimately faster to iterate over.
-            let canisters = std::mem::take(&mut state.canister_states);
-            state.canister_states = canisters.into_iter().collect();
-        }
         let (state, cp_layout) = checkpoint::make_unvalidated_checkpoint(
             state,
             height,
