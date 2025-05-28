@@ -878,7 +878,7 @@ pub fn canister_version() -> u64 {
 pub fn mint_cycles(amount: u64) -> u64 {
     let mut buf = [0u8; 16];
     unsafe { ic0::mint_cycles128(0, amount, buf.as_mut_ptr() as u32) }
-    u128::from_be_bytes(buf) as u64
+    u128::from_le_bytes(buf) as u64
 }
 
 fn no_op(_: *mut ()) {}
