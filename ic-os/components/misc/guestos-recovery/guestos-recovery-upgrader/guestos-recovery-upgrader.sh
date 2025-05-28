@@ -14,8 +14,6 @@ ROOT_PARTITION_B=8
 VAR_PARTITION_B=9
 
 GUESTOS_DEVICE="/dev/hostlvm/guestos"
-IC_DOWNLOAD_BASE="https://download.dfinity.systems/ic"
-IC_DOWNLOAD_BACKUP="https://download.dfinity.network/ic"
 
 # Reads properties "boot_alternative" and "boot_cycle" from the grubenv
 # file. The properties are stored as global variables.
@@ -101,24 +99,35 @@ prepare_guestos_upgrade() {
 }
 
 download_and_verify_upgrade() {
-    local primary_url="$1"
+    local version="$1"
     local short_hash="$2"
     local tmpdir="$3"
 
-    echo "Downloading upgrade from $primary_url..."
-    if curl -L -o "$tmpdir/upgrade.tar.zst" "$primary_url"; then
-        echo "Download from primary CDN completed successfully"
-    else
-        echo "WARNING: Failed to download from primary CDN, trying backup CDN..."
-        # Construct backup URL by replacing the base domain
-        local backup_url="${primary_url/${IC_DOWNLOAD_BASE}/${IC_DOWNLOAD_BACKUP}}"
-        echo "Downloading upgrade from backup CDN: $backup_url..."
+    # List of base URLs to try in sequence
+    local base_urls=(
+        "https://download.dfinity.systems/ic"
+        "https://download.dfinity.network/ic"
+    )
 
-        if ! curl -L -o "$tmpdir/upgrade.tar.zst" "$backup_url"; then
-            echo "ERROR: Failed to download upgrade file from both primary and backup CDNs"
-            exit 1
+    local download_successful=false
+    for base_url in "${base_urls[@]}"; do
+        local url="${base_url}/${version}/guest-os/update-img/update-img.tar.zst"
+        echo "Attempting to download upgrade from $url..."
+
+        if curl -L -o "$tmpdir/upgrade.tar.zst" "$url"; then
+            echo "Download from $base_url completed successfully"
+            download_successful=true
+            break
+        else
+            echo "WARNING: Failed to download from $base_url"
+            # Remove partial download file if it exists
+            rm -f "$tmpdir/upgrade.tar.zst"
         fi
-        echo "Download from backup CDN completed successfully"
+    done
+
+    if [ "$download_successful" = false ]; then
+        echo "ERROR: Failed to download upgrade file from all available URLs"
+        exit 1
     fi
 
     echo "Verifying upgrade image hash..."
@@ -224,15 +233,14 @@ main() {
         exit 1
     fi
 
-    URL="${IC_DOWNLOAD_BASE}/${VERSION}/guest-os/update-img/update-img.tar.zst"
-    echo "Download url: $URL"
+    echo "Version: $VERSION"
     echo "Short hash: $SHORT_HASH"
 
     TMPDIR=$(mktemp -d)
     trap 'guestos_upgrade_cleanup; rm -rf "$TMPDIR"' EXIT
 
     prepare_guestos_upgrade
-    download_and_verify_upgrade "$URL" "$SHORT_HASH" "$TMPDIR"
+    download_and_verify_upgrade "$VERSION" "$SHORT_HASH" "$TMPDIR"
     extract_upgrade "$TMPDIR"
     install_upgrade "$TMPDIR"
 
