@@ -1,6 +1,7 @@
 use crate::pb::v1 as pb;
 use crate::topics;
 use ic_sns_governance_api::pb::v1 as pb_api;
+// use ic_sns_governance_api::pb::v1::get_metrics_response::{GetMetricsResult, Metrics};
 
 impl From<pb::NeuronPermission> for pb_api::NeuronPermission {
     fn from(item: pb::NeuronPermission) -> Self {
@@ -1818,6 +1819,48 @@ impl From<pb::GetMetadataRequest> for pb_api::GetMetadataRequest {
 impl From<pb_api::GetMetadataRequest> for pb::GetMetadataRequest {
     fn from(_: pb_api::GetMetadataRequest) -> Self {
         Self {}
+    }
+}
+
+impl TryFrom<pb_api::GetMetricsRequest> for pb::GetMetricsRequest {
+    type Error = String;
+
+    fn try_from(value: pb_api::GetMetricsRequest) -> Result<Self, Self::Error> {
+        let pb_api::GetMetricsRequest {
+            time_window_seconds,
+        } = value;
+
+        let Some(time_window_seconds) = time_window_seconds else {
+            return Err("field time_window_seconds must be specified.".to_string());
+        };
+
+        Ok(Self {
+            time_window_seconds,
+        })
+    }
+}
+impl From<pb::GetMetricsResponse> for pb_api::get_metrics_response::GetMetricsResponse {
+    fn from(value: pb::GetMetricsResponse) -> Self {
+        match (
+            value.num_recently_submitted_proposals,
+            value.last_ledger_block_timestamp,
+        ) {
+            (Some(num_recently_submitted_proposals), Some(last_ledger_block_timestamp)) => Self {
+                get_metrics_result: Some(pb_api::get_metrics_response::GetMetricsResult::Ok(
+                    pb_api::get_metrics_response::Metrics {
+                        num_recently_submitted_proposals: Some(num_recently_submitted_proposals),
+                        last_ledger_block_timestamp: Some(last_ledger_block_timestamp),
+                    },
+                )),
+            },
+            _ => {
+                // The other cases should be unreachable, due to the internal implementation
+                // of `get_metrics()`. We, however, return a None.
+                Self {
+                    get_metrics_result: None,
+                }
+            }
+        }
     }
 }
 

@@ -30,6 +30,7 @@ use ic_nns_governance_api::{
     manage_neuron_response::Command as CommandResponse, ManageNeuronResponse,
 };
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use maplit::btreemap;
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -81,6 +82,13 @@ impl IcpLedger for DegradedEnv {
     }
 
     fn canister_id(&self) -> CanisterId {
+        unimplemented!()
+    }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
         unimplemented!()
     }
 }
