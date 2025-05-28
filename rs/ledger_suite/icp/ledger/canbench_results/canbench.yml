@@ -1,8 +1,16 @@
 benches:
   bench_endpoints:
     total:
-      instructions: 200
-      heap_increase: 0
+      instructions: 3122799688
+      heap_increase: 33
       stable_memory_increase: 0
-    scopes: {}
+    scopes:
+      icrc1_transfer:
+        instructions: 3087182955
+        heap_increase: 24
+        stable_memory_increase: 0
+      query_blocks:
+        instructions: 35615612
+        heap_increase: 9
+        stable_memory_increase: 0
 version: 0.1.9
