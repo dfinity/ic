@@ -107,12 +107,6 @@ const MINIMAL_WASM: [u8; 8] = [
 
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
 
-#[test]
-fn assert_relation() {
-    // if this test breaks, sanitization of `CanisterSnapshotDataKind` breaks too.
-    assert!(MAX_SLICE_SIZE_BYTES > CHUNK_SIZE);
-}
-
 // Ensure the slice, with extra room for Candid encoding, fits within 2 MiB.
 #[test]
 fn test_slice() {
