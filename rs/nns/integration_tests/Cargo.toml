@@ -22,6 +22,8 @@ path = "test_canisters/unstoppable_sns_root_canister.rs"
 name = "canister-playground-canister"
 path = "test_canisters/canister_playground_canister.rs"
 
+[features]
+tla = []
 
 # Dependencies required to compile the test canisters.
 [dependencies]

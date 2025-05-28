@@ -22734,6 +22734,7 @@ dependencies = [
  "async-trait",
  "candid",
  "local_key",
+ "serde",
  "sha2 0.10.9",
  "tla_instrumentation_proc_macros",
  "tokio-test",
