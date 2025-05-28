@@ -40,6 +40,9 @@ use icp_ledger::{tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Token
 use icrc_ledger_types::icrc1::account::Account;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+#[cfg(feature = "tla")]
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+
 #[test]
 fn test_merge_neurons_and_simulate_merge_neurons() {
     state_machine_test_on_nns_subnet(|runtime| async move {
@@ -415,6 +418,33 @@ fn test_neuron_disburse_maturity() {
         nns_governance_get_full_neuron(&state_machine, test_user_principal, test_neuron_id.id)
             .expect("Failed to get neuron");
     assert_eq!(neuron.maturity_disbursements_in_progress, Some(vec![]));
+
+    #[cfg(feature = "tla")]
+    check_state_machine_tla_traces(&state_machine, GOVERNANCE_CANISTER_ID);
+}
+
+#[cfg(feature = "tla")]
+fn check_state_machine_tla_traces(
+    sm: &ic_state_machine_tests::StateMachine,
+    gov_canister_id: ic_base_types::CanisterId,
+) {
+    use candid::{Decode, Encode};
+    use canister_test::WasmResult;
+    use ic_nns_governance::governance::tla::{perform_trace_check, UpdateTrace};
+    let wasm_res = sm
+        .query(
+            gov_canister_id,
+            "get_tla_traces",
+            Encode!(&()).expect("Couldn't encode get_tla_traces request"),
+        )
+        .expect("Couldn't call get_tla_traces");
+    let traces = match wasm_res {
+        WasmResult::Reject(r) => panic!("get_tla_traces failed: {}", r),
+        WasmResult::Reply(r) => {
+            Decode!(&r, Vec<UpdateTrace>).expect("Couldn't decode get_tla_traces response")
+        }
+    };
+    perform_trace_check(traces)
 }
 
 /// If a neuron's controller is added as a hot key and then removed, assert that Governance

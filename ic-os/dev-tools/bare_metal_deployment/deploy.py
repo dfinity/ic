@@ -314,15 +314,32 @@ def check_guestos_metrics_version(ip_address: IPv6Address, timeout_secs: int) ->
 
 def check_guestos_hsm_capability(ip_address: IPv6Address, ssh_key_file: Optional[str] = None) -> bool:
     # Check that the HSM is working correctly, over an SSH session with the node.
+    log.info(f"Starting HSM capability check for {ip_address}")
+
     ssh_key_arg = f"-i {ssh_key_file}" if ssh_key_file else ""
     ssh_opts = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+    # Execute the HSM command
+    log.info(f"Executing HSM command on {ip_address}")
+    hsm_command = "/opt/ic/bin/vsock_guest --attach-hsm && sleep 5 && pkcs11-tool --list-slots | grep 'Nitrokey HSM'"
     result = invoke.run(
-        f"ssh {ssh_opts} {ssh_key_arg} admin@{ip_address} '/opt/ic/bin/vsock_guest --attach-hsm && sleep 5 && pkcs11-tool --list-slots | grep \"Nitrokey HSM\"'",
+        f'ssh {ssh_opts} {ssh_key_arg} admin@{ip_address} "{hsm_command}"',
         warn=True,
     )
+
     if not result or not result.ok:
+        log.error(f"HSM command failed on {ip_address}")
+        if result:
+            log.error(f"HSM command stderr: {result.stderr.strip()}")
+            log.error(f"HSM command stdout: {result.stdout.strip()}")
+            # Check if it's an SSH connectivity issue vs HSM-specific issue
+            if result.returncode == 255 or "Connection refused" in result.stderr or "No route to host" in result.stderr:
+                log.error(f"SSH connectivity issue detected for {ip_address}")
+            else:
+                log.error(f"HSM-specific issue detected for {ip_address}")
         return False
 
+    log.info(f"HSM command executed successfully on {ip_address}")
     log.info("HSM check success.")
     return True
 
