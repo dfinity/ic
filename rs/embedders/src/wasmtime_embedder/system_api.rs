@@ -1788,6 +1788,63 @@ impl SystemApiImpl {
             }
         }
     }
+
+    /// Convenience wrapper for ic0_canister_cycle_balance128
+    pub fn canister_cycle_balance128(&mut self) -> HypervisorResult<Cycles> {
+        handle_heap_cycles(self, &Self::ic0_canister_cycle_balance128)
+    }
+
+    /// Convenience wrapper for ic0_canister_liquid_cycle_balance128
+    pub fn canister_liquid_cycle_balance128(&mut self) -> HypervisorResult<Cycles> {
+        handle_heap_cycles(self, &Self::ic0_canister_liquid_cycle_balance128)
+    }
+
+    /// Convenience wrapper for ic0_msg_cycles_available128
+    pub fn msg_cycles_available128(&self) -> HypervisorResult<Cycles> {
+        handle_heap_cycles(self, &Self::ic0_msg_cycles_available128)
+    }
+
+    /// Convenience wrapper for ic0_msg_cycles_refunded128
+    pub fn msg_cycles_refunded128(&self) -> HypervisorResult<Cycles> {
+        handle_heap_cycles(self, &Self::ic0_msg_cycles_refunded128)
+    }
+
+    /// Convenience wrapper for ic0_msg_cycles_accept128
+    pub fn msg_cycles_accept128(&mut self, max_amount: Cycles) -> HypervisorResult<Cycles> {
+        handle_heap_cycles_1(self, max_amount, &Self::ic0_msg_cycles_accept128)
+    }
+
+    /// Convenience wrapper for ic0_mint_cycles128
+    pub fn mint_cycles128(&mut self, amount: Cycles) -> HypervisorResult<Cycles> {
+        handle_heap_cycles_1(self, amount, &Self::ic0_mint_cycles128)
+    }
+
+    /// Convenience wrapper for ic0_cycles_burn128
+    pub fn cycles_burn128(&mut self, amount: Cycles) -> HypervisorResult<Cycles> {
+        handle_heap_cycles_1(self, amount, &Self::ic0_cycles_burn128)
+    }
+}
+
+// Helper to deal with cycles being written to the heap.
+pub fn handle_heap_cycles<T>(
+    slf: T,
+    f: &dyn Fn(T, usize, &mut [u8]) -> HypervisorResult<()>,
+) -> HypervisorResult<Cycles> {
+    let mut res = [0u8; 16];
+    f(slf, 0, &mut res)?;
+    Ok(Cycles::new(u128::from_be_bytes(res)))
+}
+
+// Helper to deal with cycles being written to the heap.
+// For methods with 1 additional argument.
+pub fn handle_heap_cycles_1<T, A>(
+    slf: T,
+    a: A,
+    f: &dyn Fn(T, A, usize, &mut [u8]) -> HypervisorResult<()>,
+) -> HypervisorResult<Cycles> {
+    let mut res = [0u8; 16];
+    f(slf, a, 0, &mut res)?;
+    Ok(Cycles::new(u128::from_be_bytes(res)))
 }
 
 impl SystemApi for SystemApiImpl {
