@@ -240,7 +240,6 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::CostVetkdDeriveKey => vec!["*", "s"],
         SystemApiCallId::DebugPrint => vec!["*", "s"],
         SystemApiCallId::Trap => vec!["*", "s"],
-        SystemApiCallId::MintCycles => vec!["U", "Ry", "Rt", "T"],
         SystemApiCallId::MintCycles128 => vec!["U", "Ry", "Rt", "T"],
         SystemApiCallId::SubnetSelfSize => vec!["*"],
         SystemApiCallId::SubnetSelfCopy => vec!["*"],
