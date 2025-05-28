@@ -228,7 +228,7 @@ fn generate_vm_config(
     };
 
     let mut direct_boot = None;
-    if config.hostos_settings.enable_trusted_execution_environment {
+    if config.icos_settings.enable_trusted_execution_environment {
         let Some(direct_boot_args) = direct_boot_args else {
             bail!("Trusted execution environment is enabled but no direct boot arguments were provided");
         };
@@ -255,7 +255,7 @@ fn generate_vm_config(
         mac_address,
         config_media: media_path.display().to_string(),
         direct_boot,
-        enable_sev: config.hostos_settings.enable_trusted_execution_environment,
+        enable_sev: config.icos_settings.enable_trusted_execution_environment,
     }
     .render()
     .context("Failed to render GuestOS VM XML template")
@@ -321,7 +321,6 @@ mod tests {
                 vm_cpu: "qemu".to_string(),
                 vm_nr_of_vcpus: 56,
                 verbose: false,
-                enable_trusted_execution_environment: false,
             },
             guestos_settings: Default::default(),
         }
@@ -329,6 +328,18 @@ mod tests {
 
     fn mock_restorecon(_path: &Path) -> Result<()> {
         Ok(())
+    }
+
+    fn goldenfiles_path() -> PathBuf {
+        let mut path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+        path.push("golden");
+        path
+    }
+
+    #[test]
+    fn ensure_tested_with_dev() {
+        // Ensure that the test is run with the dev feature enabled.
+        assert!(cfg!(feature = "dev"));
     }
 
     #[test]
@@ -367,19 +378,16 @@ mod tests {
         );
     }
 
-    fn goldenfiles_path() -> PathBuf {
-        let mut path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-        path.push("golden");
-        path
-    }
-
     fn test_vm_config(
         hostos_settings: HostOSSettings,
+        enable_trusted_execution_environment: bool,
         direct_boot_args: Option<DirectBootArgs>,
         filename: &str,
     ) {
         let mut mint = Mint::new(goldenfiles_path());
         let mut config = create_test_hostos_config();
+        config.icos_settings.enable_trusted_execution_environment =
+            enable_trusted_execution_environment;
 
         config.hostos_settings = hostos_settings;
 
@@ -397,6 +405,7 @@ mod tests {
                 vm_nr_of_vcpus: 56,
                 ..HostOSSettings::default()
             },
+            /*enable_trusted_execution_environment=*/ false,
             None,
             "guestos_vm_qemu.xml",
         );
@@ -411,6 +420,7 @@ mod tests {
                 vm_nr_of_vcpus: 56,
                 ..HostOSSettings::default()
             },
+            /*enable_trusted_execution_environment=*/ false,
             None,
             "guestos_vm_kvm.xml",
         );
@@ -423,9 +433,9 @@ mod tests {
                 vm_memory: 490,
                 vm_cpu: "kvm".to_string(),
                 vm_nr_of_vcpus: 56,
-                enable_trusted_execution_environment: true,
                 ..HostOSSettings::default()
             },
+            /*enable_trusted_execution_environment=*/ true,
             Some(DirectBootArgs {
                 kernel: PathBuf::from("/tmp/test-kernel"),
                 initrd: PathBuf::from("/tmp/test-initrd"),
@@ -520,7 +530,7 @@ mod tests {
 
         let mut hostos_config = create_test_hostos_config();
         hostos_config
-            .hostos_settings
+            .icos_settings
             .enable_trusted_execution_environment = true;
         serialize_and_write_config(&hostos_config_path, &hostos_config).unwrap();
 
@@ -547,15 +557,12 @@ mod tests {
     }
 
     #[test]
-    fn ensure_tested_with_dev() {
-        // Ensure that the test is run with the dev feature enabled.
-        assert!(cfg!(feature = "dev"));
+    fn test_parse_no_args() {
+        GenerateGuestVmConfigArgs::parse_from(vec!["guest-vm-config"]);
     }
 
     #[test]
-    fn test_parse_args() {
-        GenerateGuestVmConfigArgs::parse_from(vec!["guest-vm-config"]);
-
+    fn test_parse_direct_boot_args() {
         let args = GenerateGuestVmConfigArgs::parse_from(vec![
             "guest-vm-config",
             "--kernel",
