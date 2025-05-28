@@ -10,6 +10,7 @@ set -o pipefail
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
+source /opt/ic/bin/config.sh
 source /opt/ic/bin/functions.sh
 
 HARDWARE_GENERATION=
@@ -299,8 +300,7 @@ function verify_deployment_path() {
 }
 
 function verify_sev_snp() {
-    local config_json="/var/ic/config/config.json"
-    local enabled=$(jq -r '.hostos_settings.enable_trusted_execution_environment' "${config_json}")
+    local enabled=$(get_config_value '.hostos_settings.enable_trusted_execution_environment')
     if [[ "${enabled}" == "true" ]]; then
         if [[ "${HARDWARE_GENERATION}" != "2" ]]; then
             log_and_halt_installation_on_error "1" "Trusted execution is enabled but hardware generation is not Gen2."

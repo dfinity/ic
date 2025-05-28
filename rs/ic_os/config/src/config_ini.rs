@@ -27,6 +27,10 @@ fn is_valid_ipv6_prefix(ipv6_prefix: &str) -> bool {
     ipv6_prefix.len() <= 19 && format!("{ipv6_prefix}::").parse::<Ipv6Addr>().is_ok()
 }
 
+/// Read a boolean value from the config map.
+///
+/// Returns Err() if the value is not "true" or "false".
+/// Returns Ok(None) if the value cannot be found in the config map.
 fn read_boolean(config_map: &ConfigMap, key: &str) -> Result<Option<bool>> {
     config_map
         .get(key)
