@@ -11,7 +11,12 @@ The tool supports two main functionalities:
 - **Exploring** the latest CUP of a subnet,
 - **Verifying** the integrity and signature of a locally stored CUP, and determining whether the subnet was halted on the given CUP.
 
-In particular, this tool may be used to verify if a given CUP represents the latest state of a subnet that was manually halted at a CUP height via proposal (i.e. as part of a key resharing maintenance). If this is the case, then it allows anyone to determine the parameters that should be used in a recovery proposal submitted to restart the subnet again.
+In particular, this tool can be used to verify whether a given Catch-Up Package represents the most recent state of a subnet that was intentionally halted via a governance proposal (e.g., during a key resharing maintenance). This is done by checking that the CUP references a registry version that explicitly instructs the subnet to halt at the next CUP height. If the verification succeeds, it provides the necessary parameters that should be included in a recovery proposal to safely restart the subnet, without making changes to the subnet state. Specifically, these parameters are:
+1. The `TIME` at which the CUP was created
+2. The block `HEIGHT` of the CUP
+3. The `STATE HASH` of the corresponding state checkpoint
+
+A subsequent recovery proposal to restart the subnet should contain a `TIME` and `HEIGHT` that are *greater* than in the given latest CUP. The proposed `STATE HASH` should be *equal*, meaning that the subnet will be restarted on the same state that it was halted on.
 
 ## Usage
 
@@ -80,5 +85,5 @@ The subnet may ONLY be restarted via a recovery proposal using the same state ha
 By default, the tool uses `https://ic0.app` as the NNS registry entrypoint. This can be overridden using the `--nns-url` option:
 
 ```bash
-bazel run rs/cup_explorer:cup_explorer_bin -- --nns-url https://custom-url.com <subcommand> ...
+bazel run rs/cup_explorer:cup_explorer_bin -- --nns-url http://[<NNS_NODE_IP>]:8080 <subcommand> ...
 ```
