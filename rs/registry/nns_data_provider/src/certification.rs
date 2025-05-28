@@ -175,7 +175,7 @@ pub async fn decode_hash_tree(
 ///   * The latest version available (might be greater than the version of the
 ///     last received delta if there were too many deltas to send in one go).
 ///   * The time when the received data was last certified by the subnet.
-pub(crate) async fn decode_certified_deltas(
+pub async fn decode_certified_deltas(
     since_version: u64,
     canister_id: &CanisterId,
     nns_pk: &ThresholdSigPublicKey,
