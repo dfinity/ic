@@ -96,6 +96,9 @@ class Args:
     # If present - decompress `upload_img` and inject this into config.ini
     inject_image_verbose: Optional[str] = None
 
+    # If present - decompress `upload_img` and inject this into config.ini
+    inject_enable_trusted_execution_environment: Optional[str] = None
+
     # If present - decompress `upload_img` and inject this into ssh_authorized_keys/admin
     inject_image_pub_key: Optional[str] = None
 
@@ -680,6 +683,7 @@ def inject_config_into_image(
     node_reward_type: str,
     ipv6_prefix: str,
     ipv6_gateway: str,
+    inject_enable_trusted_execution_environment: Optional[str],
     ipv4_args: Optional[Ipv4Args],
     verbose: Optional[str],
     pub_key: Optional[str],
@@ -716,6 +720,12 @@ def inject_config_into_image(
         ipv4_part += f"--ipv4-prefix-length {ipv4_args.prefix_length} "
         ipv4_part += f"--domain {ipv4_args.domain} "
 
+    enable_trusted_execution_environment_part = ""
+    if inject_enable_trusted_execution_environment is not None:
+        enable_trusted_execution_environment_part += (
+            f"--enable-trusted-execution-environment {inject_enable_trusted_execution_environment}"
+        )
+
     verbose_part = ""
     if verbose:
         verbose_part = f"--verbose {verbose} "
@@ -725,7 +735,7 @@ def inject_config_into_image(
         admin_key_part = f'--public-keys "{pub_key}"'
 
     invoke.run(
-        f"{setupos_inject_config_path} {image_part} {reward_part} {prefix_part} {gateway_part} {ipv4_part} {verbose_part} {admin_key_part}",
+        f"{setupos_inject_config_path} {image_part} {reward_part} {prefix_part} {gateway_part} {ipv4_part} {enable_trusted_execution_environment_part} {verbose_part} {admin_key_part}",
         echo=True,
     )
 
@@ -806,6 +816,7 @@ def main():
                 args.inject_image_node_reward_type,
                 args.inject_image_ipv6_prefix,
                 args.inject_image_ipv6_gateway,
+                args.inject_enable_trusted_execution_environment,
                 ipv4_args,
                 args.inject_image_verbose,
                 args.inject_image_pub_key,
