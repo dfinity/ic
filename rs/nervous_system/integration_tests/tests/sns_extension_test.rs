@@ -28,6 +28,8 @@ use serde::{Deserialize, Serialize};
 // TODO
 // use thiserror::Error
 
+pub const MAX_SYMBOL_BYTES: usize = 10;
+
 #[tokio::test]
 async fn test() {
     test_custom_upgrade_path_for_sns().await
@@ -40,21 +42,172 @@ pub struct Allowance {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TransactionError {
+    /// Prevents the call from being attempted.
     Precondition(String),
+
     /// An error that occurred while calling a canister.
     Call(String),
+
     /// Backend refers to, e.g., the DEX canister that this asset manager talks to.
     Backend(String),
+
+    /// Prevents the response from being interpreted.
+    Postcondition(String),
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Symbol {
+    /// An Ascii string of up to MAX_SYMBOL_BYTES, e.g., "CHAT" or "ICP".
+    /// Stored as a fixed-size byte array, so the whole `Asset` type can derive `Copy`.
+    /// Can be created from
+    repr: [u8; MAX_SYMBOL_BYTES],
+}
+
+impl std::fmt::Display for Symbol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let symbol_str = bytes_to_string(&self.repr);
+        write!(f, "{}", symbol_str)
+    }
+}
+
+impl std::fmt::Debug for Symbol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let symbol_str = bytes_to_string(&self.repr);
+        write!(f, "{}", symbol_str)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Asset {
+    Token {
+        symbol: Symbol,
+        ledger_canister_id: CanisterId,
+    },
+}
+
+impl std::fmt::Display for Asset {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Asset::Token {
+                symbol,
+                ledger_canister_id,
+            } => {
+                write!(f, "{}.{}", symbol, ledger_canister_id)
+            }
+        }
+    }
+}
+
+impl Asset {
+    pub fn new_token(symbol: &str, ledger_canister_id: CanisterId) -> Result<Self, String> {
+        let symbol = Symbol::try_from(symbol)?;
+        Ok(Asset::Token {
+            symbol,
+            ledger_canister_id,
+        })
+    }
+
+    pub fn symbol(&self) -> String {
+        match self {
+            Asset::Token { symbol, .. } => symbol.to_string(),
+        }
+    }
+}
+
+fn bytes_to_string(bytes: &[u8]) -> String {
+    // Find the first null byte (if any)
+    let null_pos = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+
+    // Convert only ASCII characters
+    bytes[..null_pos].iter().map(|&c| c as char).collect()
+}
+
+fn take_bytes(input: &str) -> [u8; MAX_SYMBOL_BYTES] {
+    let mut result = [0u8; MAX_SYMBOL_BYTES];
+    let bytes = input.as_bytes();
+
+    let copy_len = std::cmp::min(bytes.len(), MAX_SYMBOL_BYTES);
+    result[..copy_len].copy_from_slice(&bytes[..copy_len]);
+
+    result
+}
+
+fn is_valid_symbol_character(b: &u8) -> bool {
+    *b == 0 || b.is_ascii() && b.is_ascii_graphic()
+}
+
+impl TryFrom<[u8; 10]> for Symbol {
+    type Error = String;
+
+    fn try_from(value: [u8; 10]) -> Result<Self, Self::Error> {
+        // Check that the symbol is valid ASCII.
+        if !value.iter().all(is_valid_symbol_character) {
+            return Err(format!("Symbol must be ASCII and graphic; got {:?}", value));
+        }
+
+        Ok(Symbol { repr: value })
+    }
+}
+
+impl TryFrom<&str> for Symbol {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        if value.len() > MAX_SYMBOL_BYTES {
+            return Err(format!(
+                "Symbol must not exceed {} bytes or characters, got {} bytes.",
+                MAX_SYMBOL_BYTES,
+                value.len()
+            ));
+        }
+
+        let bytes = take_bytes(&value);
+
+        let symbol = Self::try_from(bytes)?;
+
+        Ok(symbol)
+    }
+}
+
+/// (symbol, ledger_canister_id)
+impl TryFrom<(String, String)> for Asset {
+    type Error = String;
+
+    fn try_from(value: (String, String)) -> Result<Self, Self::Error> {
+        let (symbol, ledger_canister_id) = value;
+
+        let symbol = Symbol::try_from(symbol.as_str())?;
+
+        let ledger_canister_id = PrincipalId::from_str(&ledger_canister_id).map_err(|_| {
+            format!(
+                "Cannot interpret second component as a principal: {}",
+                ledger_canister_id
+            )
+        })?;
+
+        let ledger_canister_id =
+            CanisterId::try_from_principal_id(ledger_canister_id).map_err(|_| {
+                format!(
+                    "Cannot interpret second component as a canister ID: {}",
+                    ledger_canister_id
+                )
+            })?;
+
+        Ok(Asset::Token {
+            symbol,
+            ledger_canister_id,
+        })
+    }
 }
 
 pub trait TreasuryManager {
     fn balances(
         &self,
-    ) -> impl std::future::Future<Output = Result<BTreeMap<String, Nat>, TransactionError>> + Send;
+    ) -> impl std::future::Future<Output = Result<BTreeMap<Asset, Nat>, TransactionError>> + Send;
 
     fn withdraw(
         &mut self,
-    ) -> impl std::future::Future<Output = Result<BTreeMap<String, Nat>, TransactionError>> + Send;
+    ) -> impl std::future::Future<Output = Result<BTreeMap<Asset, Nat>, TransactionError>> + Send;
 
     fn deposit(
         &mut self,
@@ -131,8 +284,8 @@ pub struct KongSwapAdaptor<'a> {
     agent: &'a PocketIcAgent<'a>,
     kong_backend_canister_id: CanisterId,
 
-    token_0: String,
-    token_1: String,
+    token_0: Asset,
+    token_1: Asset,
 
     balance_0_decimals: Nat,
     balance_1_decimals: Nat,
@@ -144,14 +297,14 @@ impl<'a> KongSwapAdaptor<'a> {
     fn new(
         agent: &'a PocketIcAgent<'a>,
         kong_backend_canister_id: CanisterId,
-        token_0: String,
-        token_1: String,
+        token_0: Asset,
+        token_1: Asset,
     ) -> Result<Self, String> {
         if token_0 == token_1 {
             return Err("token_0 and token_1 must be different".to_string());
         }
 
-        if token_1 != "ICP" {
+        if token_1.symbol() != "ICP" {
             return Err("token_1 must be ICP".to_string());
         }
 
@@ -168,10 +321,10 @@ impl<'a> KongSwapAdaptor<'a> {
         })
     }
 
-    fn get_cached_balances(&self) -> BTreeMap<String, Nat> {
+    fn get_cached_balances(&self) -> BTreeMap<Asset, Nat> {
         btreemap! {
-            self.token_0.clone() => self.balance_0_decimals.clone(),
-            self.token_1.clone() => self.balance_1_decimals.clone(),
+            self.token_0 => self.balance_0_decimals.clone(),
+            self.token_1 => self.balance_1_decimals.clone(),
         }
     }
 
@@ -248,6 +401,10 @@ impl<'a> KongSwapAdaptor<'a> {
         }
     }
 
+    fn lp_token(&self) -> String {
+        format!("{}_{}", self.token_0.symbol(), self.token_1.symbol())
+    }
+
     async fn lp_balance(&mut self, phase: TreasuryManagerPhase) -> Result<Nat, TransactionError> {
         let request = UserBalancesArgs {
             principal_id: self.agent.sender.to_string(),
@@ -291,7 +448,7 @@ impl<'a> KongSwapAdaptor<'a> {
             )));
         }
 
-        let lp_token = format!("{}_{}", self.token_0, self.token_1);
+        let lp_token = self.lp_token();
 
         let Some((_, balance)) = balances.into_iter().find(|(token, _)| *token == lp_token) else {
             return Err(TransactionError::Backend(format!(
@@ -304,7 +461,7 @@ impl<'a> KongSwapAdaptor<'a> {
     }
 
     // TODO: Make this method private once it is periodically called from canister timers.
-    pub async fn refresh_balances(&mut self) -> Result<BTreeMap<String, Nat>, TransactionError> {
+    pub async fn refresh_balances(&mut self) -> Result<BTreeMap<Asset, Nat>, TransactionError> {
         let phase = TreasuryManagerPhase::Balances;
 
         let remove_lp_token_amount = self.lp_balance(phase).await?;
@@ -315,8 +472,8 @@ impl<'a> KongSwapAdaptor<'a> {
         );
 
         let request = RemoveLiquidityAmountsArgs {
-            token_0: self.token_0.clone(),
-            token_1: self.token_1.clone(),
+            token_0: self.token_0.symbol(),
+            token_1: self.token_1.symbol(),
             remove_lp_token_amount,
         };
 
@@ -414,10 +571,7 @@ impl<'a> TreasuryManager for KongSwapAdaptor<'a> {
             )
             .await;
 
-        let pool_already_exists = {
-            let lp_token = format!("{}_{}", self.token_0, self.token_1);
-            format!("Pool {} already exists", lp_token)
-        };
+        let pool_already_exists = { format!("Pool {} already exists", self.lp_token()) };
 
         match result {
             // All used up, since the pool is brand new.
@@ -503,11 +657,11 @@ impl<'a> TreasuryManager for KongSwapAdaptor<'a> {
         Ok(())
     }
 
-    async fn balances(&self) -> Result<BTreeMap<String, Nat>, TransactionError> {
+    async fn balances(&self) -> Result<BTreeMap<Asset, Nat>, TransactionError> {
         Ok(self.get_cached_balances())
     }
 
-    async fn withdraw(&mut self) -> Result<BTreeMap<String, Nat>, TransactionError> {
+    async fn withdraw(&mut self) -> Result<BTreeMap<Asset, Nat>, TransactionError> {
         let phase = TreasuryManagerPhase::Withdraw;
 
         let remove_lp_token_amount = self.lp_balance(phase).await?;
@@ -522,8 +676,8 @@ impl<'a> TreasuryManager for KongSwapAdaptor<'a> {
                 .to_string();
 
         let request = RemoveLiquidityArgs {
-            token_0: self.token_0.clone(),
-            token_1: self.token_1.clone(),
+            token_0: self.token_0.symbol(),
+            token_1: self.token_1.symbol(),
             remove_lp_token_amount,
         };
 
@@ -541,9 +695,11 @@ impl<'a> TreasuryManager for KongSwapAdaptor<'a> {
         let RemoveLiquidityReply {
             status,
             symbol_0,
+            address_0,
             amount_0,
             symbol_1,
             amount_1,
+            address_1,
             ..
         } = reply;
 
@@ -554,9 +710,15 @@ impl<'a> TreasuryManager for KongSwapAdaptor<'a> {
             )));
         }
 
+        let asset_0 =
+            Asset::try_from((symbol_0, address_0)).map_err(TransactionError::Postcondition)?;
+
+        let asset_1 =
+            Asset::try_from((symbol_1, address_1)).map_err(TransactionError::Postcondition)?;
+
         Ok(btreemap! {
-            symbol_0 => amount_0,
-            symbol_1 => amount_1,
+            asset_0 => amount_0,
+            asset_1 => amount_1,
         })
     }
 
@@ -565,22 +727,6 @@ impl<'a> TreasuryManager for KongSwapAdaptor<'a> {
     }
 }
 
-/// This test demonstrates how an SNS can be recovered if, for some reason, an upgrade along
-/// the path of blessed SNS framework canister versions is failing. In that case, it should be
-/// possible to create a *custom path* that is applicable only to that SNS to recover it.
-///
-/// Example:
-///
-/// Normal path: (Deployed) ---> +root (broken) ---> +root (fixed)  ---> +ledger ---> +swap (Last)
-///                        \                                                   /
-/// Custom path:             ------> +ledger ------> +root (fixed) -----------
-///
-/// Note that only Wasms published via `NnsFunction::AddSnsWasm` can be referred to from the custom
-/// upgrade path, which leaves us with only two possible customizations:
-/// 1. Hop over some upgrade.
-/// 2. Switch the order of upgrades.
-///
-/// We use this fairly complex custom upgrade path in this test to illustrate both of these cases.
 #[track_caller]
 async fn test_custom_upgrade_path_for_sns() {
     let pocket_ic = PocketIcBuilder::new()
@@ -824,11 +970,14 @@ async fn test_custom_upgrade_path_for_sns() {
     )
     .await;
 
+    let sns_token = Asset::new_token("SNS", sns_ledger_canister_id).unwrap();
+    let icp_token = Asset::new_token("ICP", LEDGER_CANISTER_ID).unwrap();
+
     let mut kong_swap_adaptor = KongSwapAdaptor::new(
         &lp_adaptor_agent,
         kong_backend_canister_id,
-        "SNS".to_string(),
-        "ICP".to_string(),
+        sns_token,
+        icp_token,
     )
     .unwrap();
 
@@ -859,8 +1008,8 @@ async fn test_custom_upgrade_path_for_sns() {
     assert_eq!(
         kong_swap_adaptor.refresh_balances().await,
         Ok(btreemap! {
-            "SNS".to_string() => Nat::from(200 * E8),
-            "ICP".to_string() => Nat::from(50 * E8),
+            sns_token => Nat::from(200 * E8),
+            icp_token => Nat::from(50 * E8),
         }),
     );
 
@@ -903,16 +1052,12 @@ async fn test_custom_upgrade_path_for_sns() {
     .await;
 
     // Debugging: Print the SNS Ledger block details.
-    dbg_print_block(&pocket_ic, sns_ledger_canister_id, 0).await;
-    dbg_print_block(&pocket_ic, sns_ledger_canister_id, 1).await;
-    dbg_print_block(&pocket_ic, sns_ledger_canister_id, 2).await;
-    dbg_print_block(&pocket_ic, sns_ledger_canister_id, 3).await;
 
     assert_eq!(
         kong_swap_adaptor.refresh_balances().await,
         Ok(btreemap! {
-            "SNS".to_string() => Nat::from(340 * E8),
-            "ICP".to_string() => Nat::from(85 * E8),
+            sns_token => Nat::from(340 * E8),
+            icp_token => Nat::from(85 * E8),
         }),
     );
 
@@ -931,8 +1076,8 @@ async fn test_custom_upgrade_path_for_sns() {
     assert_eq!(
         kong_swap_adaptor.refresh_balances().await,
         Ok(btreemap! {
-            "SNS".to_string() => Nat::from(0_u8),
-            "ICP".to_string() => Nat::from(0_u8),
+            sns_token => Nat::from(0_u8),
+            icp_token => Nat::from(0_u8),
         }),
     );
 
@@ -946,6 +1091,12 @@ async fn test_custom_upgrade_path_for_sns() {
     let audit_trail = kong_swap_adaptor.audit_trail();
 
     println!("{:#?}", audit_trail.transactions());
+
+    dbg_print_block(&pocket_ic, sns_ledger_canister_id, 0).await;
+    dbg_print_block(&pocket_ic, sns_ledger_canister_id, 1).await;
+    dbg_print_block(&pocket_ic, sns_ledger_canister_id, 2).await;
+    dbg_print_block(&pocket_ic, sns_ledger_canister_id, 3).await;
+    dbg_print_block(&pocket_ic, sns_ledger_canister_id, 4).await;
 
     panic!("  Directed by\nROBERT B. WEIDE.");
 }
