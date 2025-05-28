@@ -238,13 +238,10 @@ pub trait WithTransactionWitness {
     fn witness(&self) -> TransactionWitness;
 }
 
-/// TreasuryManagerPhase
-/// - Transaction
-///     - Transfer
 #[derive(Clone, Debug)]
 pub struct Transaction {
     canister_id: CanisterId,
-
+    // TODO: add low-level traces stores as JSON.
     result: Result<TransactionWitness, TransactionError>,
     human_readable: String,
     timestamp_seconds: u64,
