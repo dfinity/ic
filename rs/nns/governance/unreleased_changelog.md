@@ -11,6 +11,8 @@ on the process that this file is part of, see
 
 ## Changed
 
+* `MAX_NEURON_CREATION_SPIKE` is increased from 120 to 300.
+
 ## Deprecated
 
 ## Removed
