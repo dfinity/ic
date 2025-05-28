@@ -181,11 +181,14 @@ jobs:
   bazel-test-coverage:
     name: Bazel Test Coverage
     <<: *dind-large-setup
+    if: false
     steps:
       - <<: *checkout
       - name: Run Bazel Test Coverage
         shell: bash
-        run: ./ci/scripts/bazel-coverage.sh
+        # TODO: enable when bazel coverage is fixed
+        #run: ./ci/scripts/bazel-coverage.sh
+        run: echo "Disabled until fixed"
       - name: Upload bazel-coverage
         uses: actions/upload-artifact@v4
         with:

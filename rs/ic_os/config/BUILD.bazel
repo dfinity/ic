@@ -98,6 +98,7 @@ rust_binary(
     name = "config_dev",
     srcs = BIN_SOURCES,
     aliases = ALIASES,
+    crate_features = ["dev"],
     crate_name = "config",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [
