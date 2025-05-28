@@ -3,6 +3,8 @@
 
 use crate::numeric::{BlockNumber, LogIndex};
 use ethnum;
+use evm_rpc_client::HttpOutcallError;
+use ic_cdk::api::call::RejectionCode;
 use ic_ethereum_types::Address;
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
@@ -218,4 +220,14 @@ pub struct LogEntry {
     /// "false" if it's a valid log.
     #[serde(default)]
     pub removed: bool,
+}
+
+pub fn is_response_too_large(response: &HttpOutcallError) -> bool {
+    match response {
+        HttpOutcallError::IcError { code, message } => {
+            code == &RejectionCode::SysFatal
+                && (message.contains("size limit") || message.contains("length limit"))
+        }
+        _ => false,
+    }
 }

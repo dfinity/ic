@@ -156,14 +156,14 @@ impl EthRpcClient {
         &self,
         address: Address,
     ) -> Result<TransactionCount, MultiCallError<TransactionCount>> {
-        self.evm_rpc_client
+        let results = self
+            .evm_rpc_client
             .eth_get_transaction_count(EvmGetTransactionCountArgs {
                 address: Hex20::from(address.into_bytes()),
                 block: BlockTag::Latest,
             })
-            .await
-            .reduce()
-            .into()
+            .await;
+        ReduceWithStrategy::<MinByKey>::reduce(results).into()
     }
 }
 
@@ -415,6 +415,13 @@ trait Reduce {
     fn reduce(self) -> ReducedResult<Self::Item>;
 }
 
+trait ReduceWithStrategy<S> {
+    type Item;
+    fn reduce(self) -> ReducedResult<Self::Item>;
+}
+
+pub enum MinByKey {}
+
 impl Reduce for EvmMultiRpcResult<Vec<EvmLogEntry>> {
     type Item = Vec<LogEntry>;
 
@@ -507,7 +514,7 @@ impl Reduce for EvmMultiRpcResult<SendRawTransactionStatus> {
     }
 }
 
-impl Reduce for EvmMultiRpcResult<Nat256> {
+impl ReduceWithStrategy<MinByKey> for EvmMultiRpcResult<Nat256> {
     type Item = TransactionCount;
 
     fn reduce(self) -> ReducedResult<Self::Item> {
@@ -534,7 +541,9 @@ impl<T> MultiCallError<T> {
                     .values()
                     .any(|single_call_error| match single_call_error {
                         RpcError::HttpOutcallError(error) => predicate(error),
-                        _ => false,
+                        RpcError::JsonRpcError { .. }
+                        | RpcError::ProviderError(_)
+                        | RpcError::ValidationError(_) => false,
                     })
             }
             MultiCallError::ConsistentEvmRpcCanisterError(_) => false,
