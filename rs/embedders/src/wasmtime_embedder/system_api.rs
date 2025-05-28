@@ -1833,7 +1833,7 @@ pub fn handle_heap_cycles<T>(
 ) -> HypervisorResult<Cycles> {
     let mut res = [0u8; 16];
     f(slf, 0, &mut res)?;
-    Ok(Cycles::new(u128::from_be_bytes(res)))
+    Ok(Cycles::new(u128::from_le_bytes(res)))
 }
 
 // Helper to deal with cycles being written to the heap.
@@ -1846,7 +1846,7 @@ pub fn handle_heap_cycles_1<T, A>(
 ) -> HypervisorResult<Cycles> {
     let mut res = [0u8; 16];
     f(slf, a, 0, &mut res)?;
-    Ok(Cycles::new(u128::from_be_bytes(res)))
+    Ok(Cycles::new(u128::from_le_bytes(res)))
 }
 
 impl SystemApi for SystemApiImpl {
