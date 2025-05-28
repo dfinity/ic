@@ -91,13 +91,11 @@ fn neuron_global() -> TlaValue {
                                     TlaValue::Record(BTreeMap::from([
                                         (
                                             "account_id".to_string(),
-                                            match &d.account_to_disburse_to {
-                                                Some(account) => {
-                                                    account_to_tla(AccountIdentifier::from(
-                                                        Icrc1Account::try_from(account.clone()).expect("An invalid Icrc1 account found in maturity_disbursements_in_progress: {account:?}"),
-                                                    ))
-                                                }
-                                                None => subaccount_to_tla(&neuron.subaccount()),
+                                            {
+                                                let account = d.account_to_disburse_to.as_ref().expect("Account are assumed to be Some in maturity_disbursements_in_progress entries.");
+                                                account_to_tla(AccountIdentifier::from(
+                                                    Icrc1Account::try_from(account.clone()).expect("An invalid Icrc1 account found in maturity_disbursements_in_progress: {account:?}"),
+                                                ))
                                             },
                                         ),
                                         ("amount".to_string(), d.amount_e8s.to_tla_value()),
