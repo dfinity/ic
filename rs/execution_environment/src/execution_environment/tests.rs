@@ -24,7 +24,7 @@ use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
     assert_empty_reply, check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
 };
-use ic_test_utilities_metrics::{fetch_histogram_vec_count, fetch_int_counter, metric_vec};
+use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
 use ic_types::{
     canister_http::{CanisterHttpMethod, Transform},
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -2099,40 +2099,6 @@ fn metrics_are_observed_for_subnet_messages() {
 }
 
 #[test]
-fn metrics_are_observed_for_using_deprecated_fields() {
-    let mut test = ExecutionTestBuilder::new().build();
-
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
-
-    let payload = ic00::InstallCodeArgsV2::new(
-        ic00::CanisterInstallModeV2::Install,
-        canister_id,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-        vec![],
-        Some(1),
-        Some(100 * 1024 * 1024),
-    );
-
-    test.subnet_message(Method::InstallCode, payload.encode())
-        .unwrap();
-
-    assert_eq!(
-        fetch_int_counter(
-            test.metrics_registry(),
-            "execution_compute_allocation_in_install_code_total"
-        ),
-        Some(1),
-    );
-    assert_eq!(
-        fetch_int_counter(
-            test.metrics_registry(),
-            "execution_memory_allocation_in_install_code_total"
-        ),
-        Some(1),
-    );
-}
-
-#[test]
 fn ingress_deducts_execution_cost_from_canister_balance() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister = test.universal_canister().unwrap();
@@ -2824,6 +2790,20 @@ fn can_create_canister_with_specified_id() {
         create_canister_with_specified_id(&mut test, &canister, Some(specified_id.get()));
 
     assert_eq!(specified_id, new_canister.get_canister_id());
+
+    // creating a canister with the same `specified_id` again is an error
+    let args = Encode!(&ProvisionalCreateCanisterWithCyclesArgs::new(
+        None,
+        Some(specified_id.into()),
+    ))
+    .unwrap();
+    let err = test
+        .subnet_message("provisional_create_canister_with_cycles", args)
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterAlreadyInstalled, err.code());
+    assert!(err
+        .description()
+        .contains(&format!("Canister {} is already installed.", specified_id)));
 }
 
 // Returns CanisterId by formula 'range_start + (range_end - range_start) * percentile'

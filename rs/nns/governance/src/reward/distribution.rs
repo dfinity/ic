@@ -4,6 +4,7 @@ use crate::pb::v1::RewardsDistributionInProgress;
 use crate::storage::with_rewards_distribution_state_machine_mut;
 #[cfg(not(feature = "canbench-rs"))]
 use crate::timer_tasks::run_distribute_rewards_periodic_task;
+use ic_cdk::println;
 use ic_nervous_system_long_message::is_message_over_threshold;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_stable_structures::storable::Bound;

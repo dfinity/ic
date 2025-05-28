@@ -41,7 +41,7 @@ ic-secp256r1 = { path = "../../packages/ic-secp256r1" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-types = { path = "../types/types" }
-ic-vetkd-utils = { path = "../../packages/ic-vetkd-utils" }
+ic-vetkeys = { workspace = true }
 parking_lot = { workspace = true }
 rustls = { workspace = true }
 serde = { workspace = true }

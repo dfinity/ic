@@ -16,6 +16,7 @@ pub use tla_instrumentation::checker::{check_tla_code_link, PredicateDescription
 
 use std::path::PathBuf;
 
+use ic_cdk::println;
 use icp_ledger::{AccountIdentifier, Subaccount};
 use icrc_ledger_types::icrc1::account::Account as Icrc1Account;
 

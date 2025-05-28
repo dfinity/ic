@@ -10,6 +10,7 @@ use crate::{
     },
 };
 
+use ic_cdk::println;
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_nervous_system_governance::maturity_modulation::{
     apply_maturity_modulation, MIN_MATURITY_MODULATION_PERMYRIAD,
@@ -524,7 +525,7 @@ pub async fn finalize_maturity_disbursement(
     match try_finalize_maturity_disbursement(governance).await {
         Ok(_) => governance.with_borrow(get_delay_until_next_finalization),
         Err(err) => {
-            ic_cdk::println!("FinalizeMaturityDisbursementTask failed: {}", err);
+            println!("FinalizeMaturityDisbursementTask failed: {}", err);
             RETRY_INTERVAL
         }
     }

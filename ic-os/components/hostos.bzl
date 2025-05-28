@@ -4,12 +4,9 @@ Enumerate every component file dependency for HostOS
 
 component_files = {
     # hostos-scripts
-    Label("hostos-scripts/generate-guestos-config/generate-guestos-config.sh"): "/opt/ic/bin/generate-guestos-config.sh",
     Label("hostos-scripts/generate-guestos-config/generate-guestos-config.service"): "/etc/systemd/system/generate-guestos-config.service",
     Label("hostos-scripts/guestos/guestos.service"): "/etc/systemd/system/guestos.service",
-    Label("hostos-scripts/guestos/start-guestos.sh"): "/opt/ic/bin/start-guestos.sh",
-    Label("hostos-scripts/guestos/stop-guestos.sh"): "/opt/ic/bin/stop-guestos.sh",
-    Label("hostos-scripts/guestos/guestos.xml.template"): "/opt/ic/share/guestos.xml.template",
+    Label("hostos-scripts/guestos/guestos.sh"): "/opt/ic/bin/guestos.sh",
     Label("hostos-scripts/libvirt/setup-libvirt.sh"): "/opt/ic/bin/setup-libvirt.sh",
     Label("hostos-scripts/libvirt/setup-libvirt.service"): "/etc/systemd/system/setup-libvirt.service",
     Label("hostos-scripts/misc/setup-var.sh"): "/opt/ic/bin/setup-var.sh",

@@ -73,6 +73,9 @@ def image_deps(mode, _malicious = False):
 
     deps.update(image_variants[mode])
 
+    if "dev" in mode:
+        deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
+
     return deps
 
 # Inject a step building a data partition that contains either dev or prod
