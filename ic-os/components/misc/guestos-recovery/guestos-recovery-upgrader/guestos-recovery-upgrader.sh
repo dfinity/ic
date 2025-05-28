@@ -15,6 +15,7 @@ VAR_PARTITION_B=9
 
 GUESTOS_DEVICE="/dev/hostlvm/guestos"
 IC_DOWNLOAD_BASE="https://download.dfinity.systems/ic"
+IC_DOWNLOAD_BACKUP="https://download.dfinity.network/ic"
 
 # Reads properties "boot_alternative" and "boot_cycle" from the grubenv
 # file. The properties are stored as global variables.
@@ -100,16 +101,25 @@ prepare_guestos_upgrade() {
 }
 
 download_and_verify_upgrade() {
-    local url="$1"
+    local primary_url="$1"
     local short_hash="$2"
     local tmpdir="$3"
 
-    echo "Downloading upgrade from $url..."
-    if ! curl -L -o "$tmpdir/upgrade.tar.zst" "$url"; then
-        echo "ERROR: Failed to download upgrade file"
-        exit 1
+    echo "Downloading upgrade from $primary_url..."
+    if curl -L -o "$tmpdir/upgrade.tar.zst" "$primary_url"; then
+        echo "Download from primary CDN completed successfully"
+    else
+        echo "WARNING: Failed to download from primary CDN, trying backup CDN..."
+        # Construct backup URL by replacing the base domain
+        local backup_url="${primary_url/${IC_DOWNLOAD_BASE}/${IC_DOWNLOAD_BACKUP}}"
+        echo "Downloading upgrade from backup CDN: $backup_url..."
+
+        if ! curl -L -o "$tmpdir/upgrade.tar.zst" "$backup_url"; then
+            echo "ERROR: Failed to download upgrade file from both primary and backup CDNs"
+            exit 1
+        fi
+        echo "Download from backup CDN completed successfully"
     fi
-    echo "Download completed successfully"
 
     echo "Verifying upgrade image hash..."
     local actual_hash=$(sha256sum "$tmpdir/upgrade.tar.zst" | cut -d' ' -f1)
