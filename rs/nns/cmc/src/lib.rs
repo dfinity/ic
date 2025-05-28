@@ -51,12 +51,13 @@ pub unsafe fn mint_cycles128(_amount_high: u64, _amount_low: u64, _dst: usize) {
 // Not available in ic_cdk
 /// This function can only be called from the CMC canister, and this is the CMC canister.
 /// It is not exposed in ic-cdk because it can't be called from anywhere else.
-pub fn ic0_mint_cycles128(amount_high: u64, amount_low: u64) -> u128 {
+pub fn ic0_mint_cycles128(amount: Cycles) -> Cycles {
+    let (amount_high, amount_low) = amount.into_parts();
     let mut dst = 0u128;
     unsafe {
         mint_cycles128(amount_high, amount_low, &mut dst as *mut u128 as usize);
     }
-    dst
+    Cycles::new(dst)
 }
 
 /// caller that returns principalId instead of Principal
