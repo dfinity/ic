@@ -314,10 +314,10 @@ function build_bootstrap_images() {
         fi
 
         set -x
-          # FIXME: There used to be a call to `build-bootstrap-config-image` here, but it was removed as
-          #  part of the migration to `config::guestos_bootstrap_image`. Therefore this script is broken
-          #  at the moment. If you need this script to work (which you probably shouldn't), add a CLI interface for
-          #  `config::guestos_bootstrap_image` and find for the correct invocation in the git history of this file.
+        # FIXME: There used to be a call to `build-bootstrap-config-image` here, but it was removed as
+        #  part of the migration to `config::guestos_bootstrap_image`. Therefore this script is broken
+        #  at the moment. If you need this script to work (which you probably shouldn't), add a CLI interface for
+        #  `config::guestos_bootstrap_image` and find for the correct invocation in the git history of this file.
         echo "build-bootstrap-config-image is not implemented."
         exit 1
         set +x
