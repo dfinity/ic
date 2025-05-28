@@ -5,6 +5,7 @@ use ic_nervous_system_common::NervousSystemError;
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_registry_canister_api::{Chunk, GetChunkRequest};
+use ic_registry_transport::pb::v1::HighCapacityRegistryDelta;
 use ic_registry_transport::{
     dechunkify_delta, deserialize_get_changes_since_response,
     deserialize_get_latest_version_response, pb::v1::RegistryDelta,
@@ -18,6 +19,10 @@ pub trait Registry: Send + Sync {
         &self,
         version: RegistryVersion,
     ) -> Result<Vec<RegistryDelta>, NervousSystemError>;
+    async fn high_capacity_registry_changes_since(
+        &self,
+        version: RegistryVersion,
+    ) -> Result<Vec<HighCapacityRegistryDelta>, NervousSystemError>;
 }
 
 pub struct RegistryCanister {
@@ -65,6 +70,25 @@ impl Registry for RegistryCanister {
         &self,
         version: RegistryVersion,
     ) -> Result<Vec<RegistryDelta>, NervousSystemError> {
+        let high_capacity_deltas = self.high_capacity_registry_changes_since(version)?;
+
+        // Dechunkify deltas (this may require follow up get_chunk calls to Registry).
+        let mut dechunkified_deltas = vec![];
+        for delta in high_capacity_deltas {
+            let delta = dechunkify_delta(delta, self).await.map_err(|e| {
+                NervousSystemError::new_with_message(format!("Could not decode response {e:?}"))
+            })?;
+
+            dechunkified_deltas.push(delta);
+        }
+
+        Ok(dechunkified_deltas)
+    }
+
+    async fn high_capacity_registry_changes_since(
+        &self,
+        version: RegistryVersion,
+    ) -> Result<Vec<HighCapacityRegistryDelta>, NervousSystemError> {
         let bytes = serialize_get_changes_since_request(version.get()).map_err(|e| {
             NervousSystemError::new_with_message(format!(
                 "Could not encode request for get_changes_since for version {:?}: {}",
@@ -89,17 +113,7 @@ impl Registry for RegistryCanister {
                 ))
             })?;
 
-        // Dechunkify deltas (this may require follow up get_chunk calls to Registry).
-        let mut dechunkified_deltas = vec![];
-        for delta in high_capacity_deltas {
-            let delta = dechunkify_delta(delta, self).await.map_err(|e| {
-                NervousSystemError::new_with_message(format!("Could not decode response {e:?}"))
-            })?;
-
-            dechunkified_deltas.push(delta);
-        }
-
-        Ok(dechunkified_deltas)
+        Ok(high_capacity_deltas)
     }
 }
 
@@ -170,7 +184,10 @@ pub mod fake {
     use ic_base_types::RegistryVersion;
     use ic_nervous_system_common::NervousSystemError;
     use ic_registry_transport::pb::v1::registry_mutation::Type;
-    use ic_registry_transport::pb::v1::{RegistryDelta, RegistryMutation, RegistryValue};
+    use ic_registry_transport::pb::v1::{
+        high_capacity_registry_value, HighCapacityRegistryDelta, HighCapacityRegistryValue,
+        RegistryDelta, RegistryMutation, RegistryValue,
+    };
     use ic_registry_transport::Error;
     use std::collections::BTreeMap;
     use std::sync::atomic::AtomicU64;
@@ -386,6 +403,43 @@ pub mod fake {
                 .collect();
 
             Ok(changes)
+        }
+
+        async fn high_capacity_registry_changes_since(
+            &self,
+            version: RegistryVersion,
+        ) -> Result<Vec<HighCapacityRegistryDelta>, NervousSystemError> {
+            let deltas = self.registry_changes_since(version).await?;
+            let high_capacity_deltas = deltas
+                .into_iter()
+                .map(|delta| {
+                    let values = delta
+                        .values
+                        .into_iter()
+                        .map(|v| {
+                            let content = match v.deletion_marker {
+                                true => Some(
+                                    high_capacity_registry_value::Content::DeletionMarker(true),
+                                ),
+                                false => {
+                                    Some(high_capacity_registry_value::Content::Value(v.value))
+                                }
+                            };
+                            HighCapacityRegistryValue {
+                                version: v.version,
+                                content,
+                                timestamp_nanoseconds: 0,
+                            }
+                        })
+                        .collect();
+
+                    HighCapacityRegistryDelta {
+                        key: delta.key,
+                        values,
+                    }
+                })
+                .collect();
+            Ok(high_capacity_deltas)
         }
     }
 }
