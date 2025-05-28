@@ -2191,6 +2191,8 @@ pub enum UnflushedCheckpointOp {
     UploadSnapshotMetadata(SnapshotId),
     /// Binary data was uploaded to a snapshot
     UploadSnapshotData(SnapshotId),
+    /// A canister was renamed.
+    RenameCanister(CanisterId, CanisterId),
 }
 
 /// A collection of unflushed checkpoint operations in the order that they were applied to the state.
@@ -2240,6 +2242,13 @@ impl UnflushedCheckpointOps {
     pub fn upload_data(&mut self, snapshot_id: SnapshotId) {
         self.operations
             .push(UnflushedCheckpointOp::UploadSnapshotData(snapshot_id));
+    }
+
+    pub fn rename_canister(&mut self, old_canister_id: CanisterId, new_canister_id: CanisterId) {
+        self.operations.push(UnflushedCheckpointOp::RenameCanister(
+            old_canister_id,
+            new_canister_id,
+        ));
     }
 }
 
