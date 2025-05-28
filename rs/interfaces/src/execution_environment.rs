@@ -196,8 +196,6 @@ pub enum SystemApiCallId {
     InReplicatedExecution,
     /// Tracker for `ic0.is_controller()`
     IsController,
-    /// Tracker for `ic0.mint_cycles()`
-    MintCycles,
     /// Tracker for `ic0.mint_cycles128()`
     MintCycles128,
     /// Tracker for `ic0.msg_arg_data_copy()`

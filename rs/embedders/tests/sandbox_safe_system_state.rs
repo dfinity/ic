@@ -364,24 +364,12 @@ fn common_mint_cycles_128(
 
     let api_type = ApiTypeBuilder::build_update_api();
     let mut api = get_system_api(api_type, &system_state, cycles_account_manager);
-    let mut balance_before = [0u8; 16];
-    api.ic0_canister_cycle_balance128(0, &mut balance_before)
-        .unwrap();
-    let balance_before = u128::from_le_bytes(balance_before);
-    assert_eq!(balance_before, initial_cycles.get());
-    let mut heap = [0u8; 16];
-    api.ic0_mint_cycles128(cycles_to_mint, 0, &mut heap)
-        .unwrap();
-    let cycles_minted = u128::from_le_bytes(heap);
-    assert_eq!(cycles_minted, expected_actually_minted.get());
-    let mut balance_after = [0u8; 16];
-    api.ic0_canister_cycle_balance128(0, &mut balance_after)
-        .unwrap();
-    let balance_after = u128::from_le_bytes(balance_after);
-    assert_eq!(
-        balance_after - balance_before,
-        expected_actually_minted.get()
-    );
+    let balance_before = api.canister_cycle_balance128().unwrap();
+    assert_eq!(balance_before, initial_cycles);
+    let cycles_minted = api.mint_cycles128(cycles_to_mint).unwrap();
+    assert_eq!(cycles_minted, expected_actually_minted);
+    let balance_after = api.canister_cycle_balance128().unwrap();
+    assert_eq!(balance_after - balance_before, expected_actually_minted);
 }
 
 #[test]
