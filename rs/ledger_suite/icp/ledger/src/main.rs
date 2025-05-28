@@ -151,6 +151,7 @@ fn init(
             ));
         }
     }
+    #[cfg(not(feature = "canbench-rs"))]
     set_certified_data(
         &LEDGER
             .read()
@@ -268,7 +269,7 @@ async fn send(
     Ok(height)
 }
 
-async fn icrc1_send(
+fn icrc1_send_not_async(
     memo: Option<icrc_ledger_types::icrc1::transfer::Memo>,
     amount: Nat,
     fee: Option<Nat>,
@@ -361,10 +362,32 @@ async fn icrc1_send(
         };
         let (block_index, hash) = apply_transaction(&mut *ledger, tx, now, effective_fee)?;
 
+        #[cfg(not(feature = "canbench-rs"))]
         set_certified_data(&hash.into_bytes());
 
         block_index
     };
+    Ok(block_index)
+}
+
+async fn icrc1_send(
+    memo: Option<icrc_ledger_types::icrc1::transfer::Memo>,
+    amount: Nat,
+    fee: Option<Nat>,
+    from_account: Account,
+    to_account: Account,
+    spender_account: Option<Account>,
+    created_at_time: Option<u64>,
+) -> Result<BlockIndex, CoreTransferError<Tokens>> {
+    let block_index = icrc1_send_not_async(
+        memo,
+        amount,
+        fee,
+        from_account,
+        to_account,
+        spender_account,
+        created_at_time,
+    )?;
 
     let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
     archive_blocks::<Access>(DebugOutSink, max_msg_size as u64).await;
