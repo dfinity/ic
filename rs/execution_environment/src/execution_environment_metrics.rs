@@ -23,8 +23,6 @@ pub const CRITICAL_ERROR_CALL_ID_WITHOUT_INSTALL_CODE_CALL: &str =
 pub(crate) struct ExecutionEnvironmentMetrics {
     subnet_messages: HistogramVec,
     pub executions_aborted: IntCounter,
-    pub(crate) compute_allocation_in_install_code_total: IntCounter,
-    pub(crate) memory_allocation_in_install_code_total: IntCounter,
     pub(crate) call_durations: Histogram,
 
     /// Critical error for responses above the maximum allowed size.
@@ -76,14 +74,6 @@ impl ExecutionEnvironmentMetrics {
             ),
             executions_aborted: metrics_registry
                 .int_counter("executions_aborted", "Total number of aborted executions"),
-            compute_allocation_in_install_code_total: metrics_registry.int_counter(
-                "execution_compute_allocation_in_install_code_total",
-                "Total number of times compute allocation used in install_code requests",
-            ),
-            memory_allocation_in_install_code_total: metrics_registry.int_counter(
-                "execution_memory_allocation_in_install_code_total",
-                "Total number of times memory allocation used in install_code requests",
-            ),
             call_durations: metrics_registry.histogram(
                 "execution_call_duration_seconds",
                 "Call durations, measured as call context age when completed / dropped.",

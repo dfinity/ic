@@ -12,6 +12,11 @@ COMMON_DEPS = [
     "@crate_index//:serde",
 ]
 
+MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:test-strategy",
+]
+
 rust_library(
     name = "tokens_u256",
     srcs = [
@@ -30,6 +35,7 @@ rust_library(
 rust_test(
     name = "test",
     srcs = ["tests/tests.rs"],
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = COMMON_DEPS + [
         ":tokens_u256",
         "@crate_index//:hex",
