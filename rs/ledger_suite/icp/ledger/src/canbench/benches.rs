@@ -1,4 +1,6 @@
-use crate::{balances_len, canister_init, icrc1_send_not_async, query_blocks};
+use crate::{
+    balances_len, canister_init, icrc1_send_not_async, query_blocks, query_encoded_blocks,
+};
 use canbench_rs::{bench, BenchResult};
 use candid::{Nat, Principal};
 use ic_ledger_core::Tokens;
@@ -56,13 +58,18 @@ fn bench_endpoints() -> BenchResult {
             }
             assert_eq!(balances_len(), NUM_OPERATIONS + 1);
         }
+        let args = GetBlocksArgs {
+            start: 1,
+            length: 2000,
+        };
         {
             let _p = canbench_rs::bench_scope("query_blocks");
-            let args = GetBlocksArgs {
-                start: 1,
-                length: 2000,
-            };
-            let res = query_blocks(args);
+            let res = query_blocks(args.clone());
+            assert_eq!(res.blocks.len(), 2000);
+        }
+        {
+            let _p = canbench_rs::bench_scope("query_encoded_blocks");
+            let res = query_encoded_blocks(args);
             assert_eq!(res.blocks.len(), 2000);
         }
     })
