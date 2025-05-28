@@ -103,7 +103,6 @@ download_and_verify_upgrade() {
     local short_hash="$2"
     local tmpdir="$3"
 
-    # List of base URLs to try in sequence
     local base_urls=(
         "https://download.dfinity.systems/ic"
         "https://download.dfinity.network/ic"
