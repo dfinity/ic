@@ -1,7 +1,9 @@
 #[cfg(feature = "canbench-rs")]
 mod canbench;
 
-use candid::{candid_method, Decode, Nat, Principal};
+#[cfg(not(feature = "canbench-rs"))]
+use candid::Decode;
+use candid::{candid_method, Nat, Principal};
 #[cfg(feature = "notify-method")]
 use dfn_candid::CandidOne;
 #[cfg(feature = "notify-method")]
@@ -38,15 +40,16 @@ use ic_stable_structures::writer::{BufferedWriter, Writer};
 use icp_ledger::BlockRes;
 #[cfg(feature = "icp-allowance-getter")]
 use icp_ledger::IcpAllowanceArgs;
+#[cfg(not(feature = "canbench-rs"))]
+use icp_ledger::InitArgs;
 use icp_ledger::{
     from_proto_bytes, max_blocks_per_request, protobuf, to_proto_bytes, tokens_into_proto,
     AccountBalanceArgs, AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, ArchiveInfo,
     ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block,
-    BlockArg, CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, GetBlocksRes, InitArgs,
-    IterBlocksArgs, IterBlocksRes, LedgerCanisterPayload, Memo, Name, Operation, PaymentError,
-    QueryBlocksResponse, QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes,
-    TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs,
-    MEMO_SIZE_BYTES,
+    BlockArg, CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, GetBlocksRes, IterBlocksArgs,
+    IterBlocksRes, LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
+    QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs,
+    Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs, MEMO_SIZE_BYTES,
 };
 use icrc_ledger_types::icrc1::transfer::TransferError as Icrc1TransferError;
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
@@ -360,7 +363,12 @@ fn icrc1_send_not_async(
             icrc1_memo: memo.map(|x| x.0),
             created_at_time,
         };
+
+        #[cfg(not(feature = "canbench-rs"))]
         let (block_index, hash) = apply_transaction(&mut *ledger, tx, now, effective_fee)?;
+
+        #[cfg(feature = "canbench-rs")]
+        let (block_index, _hash) = apply_transaction(&mut *ledger, tx, now, effective_fee)?;
 
         #[cfg(not(feature = "canbench-rs"))]
         set_certified_data(&hash.into_bytes());

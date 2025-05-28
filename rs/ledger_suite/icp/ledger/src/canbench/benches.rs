@@ -6,7 +6,6 @@ use candid::{Nat, Principal};
 use ic_ledger_core::Tokens;
 use icp_ledger::{GetBlocksArgs, LedgerCanisterInitPayload};
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::TransferArg;
 
 const NUM_OPERATIONS: u64 = 10_000;
 
@@ -52,7 +51,7 @@ fn bench_endpoints() -> BenchResult {
                     acc,
                     receiver,
                     None,
-                    Some(start_time + i as u64),
+                    Some(start_time + i),
                 );
                 assert!(result.is_ok());
             }
