@@ -7,11 +7,7 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterSettingsArgsBuilder,
     CanisterSnapshotDataKind, CanisterSnapshotDataOffset, CanisterSnapshotResponse, ChunkHash,
-<<<<<<< HEAD
-    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, GlobalTimer, ListCanisterSnapshotArgs,
-=======
     ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, Global, GlobalTimer, ListCanisterSnapshotArgs,
->>>>>>> origin
     LoadCanisterSnapshotArgs, Method, OnLowWasmMemoryHookStatus, Payload as Ic00Payload,
     ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotDataResponse,
     ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse, SnapshotSource,
@@ -2986,7 +2982,6 @@ fn canister_snapshot_roundtrip_succeeds() {
     assert_eq!(snapshot_stable_memory, snapshot_stable_memory_2);
 }
 
-
 #[test]
 fn canister_snapshot_invalid_metadata_fails() {
     let own_subnet = subnet_test_id(1);
@@ -3058,7 +3053,6 @@ fn canister_snapshot_invalid_metadata_fails() {
         .expect_err("Expected error");
     assert_eq!(e.code(), ErrorCode::InvalidManagementPayload);
 }
-
 
 /// Counter canister that also grows the stable memory by one page on "inc".
 const COUNTER_CANISTER_WAT: &str = r#"
