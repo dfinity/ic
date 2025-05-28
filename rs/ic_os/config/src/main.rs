@@ -348,7 +348,10 @@ pub fn main() -> Result<()> {
                 generate_ic_boundary_tls_cert: clap_args.generate_ic_boundary_tls_cert,
             };
 
-            generate_testnet_config(args, clap_args.guestos_config_json_path)
+            serialize_and_write_config(
+                &clap_args.guestos_config_json_path,
+                &generate_testnet_config(args)?,
+            )
         }
         // TODO(NODE-1518): delete UpdateGuestosConfig and UpdateHostosConfig after moved to new config format
         // Regenerate config.json on *every boot* in case the config structure changes between

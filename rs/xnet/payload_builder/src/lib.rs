@@ -49,6 +49,7 @@ pub use proximity::{GenRangeFn, ProximityMap};
 use rand::{rngs::StdRng, thread_rng, Rng};
 use std::collections::{BTreeMap, VecDeque};
 use std::net::SocketAddr;
+use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use thiserror::Error;
@@ -806,12 +807,13 @@ impl XNetPayloadBuilderImpl {
         }
     }
 
-    /// Given a number of subnets, choose a random subnet among them.
-    fn choose_random_subnet(&self, num_subnets: usize) -> usize {
-        let positions_range = 0..num_subnets;
+    /// Shuffles the provided `Vec` using `self.deterministic_rng_for_testing` when
+    /// set, `thread_rng()` otherwise.
+    fn random_shuffle<T>(&self, vec: &mut [T]) {
+        use rand::seq::SliceRandom;
         match *self.deterministic_rng_for_testing {
-            None => thread_rng().gen_range(positions_range),
-            Some(ref rng) => rng.lock().unwrap().gen_range(positions_range),
+            None => vec.shuffle(&mut thread_rng()),
+            Some(ref rng) => vec.shuffle(rng.lock().unwrap().deref_mut()),
         }
     }
 
@@ -841,10 +843,10 @@ impl XNetPayloadBuilderImpl {
             return Ok((XNetPayload::default(), 0.into()));
         }
 
-        // Random rotation so all slices have equal chances if `byte_limit` is reached.
+        // Random shuffle, so all slices have equal chances to be picked if `byte_limit`
+        // would be exceeded.
         let mut rotated_stream_positions: Vec<_> = stream_positions.clone().into_iter().collect();
-        let first_subnet = self.choose_random_subnet(rotated_stream_positions.len());
-        rotated_stream_positions.rotate_left(first_subnet);
+        self.random_shuffle(&mut rotated_stream_positions);
 
         let mut bytes_left = byte_limit.get() as usize;
         let mut stream_slices = BTreeMap::new();
