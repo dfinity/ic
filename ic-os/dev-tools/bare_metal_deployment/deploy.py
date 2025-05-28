@@ -323,7 +323,7 @@ def check_guestos_hsm_capability(ip_address: IPv6Address, ssh_key_file: Optional
     log.info(f"Executing HSM command on {ip_address}")
     hsm_command = "/opt/ic/bin/vsock_guest --attach-hsm && sleep 5 && pkcs11-tool --list-slots | grep 'Nitrokey HSM'"
     result = invoke.run(
-        f"ssh {ssh_opts} {ssh_key_arg} admin@{ip_address} '{hsm_command}'",
+        f'ssh {ssh_opts} {ssh_key_arg} admin@{ip_address} "{hsm_command}"',
         warn=True,
     )
 
