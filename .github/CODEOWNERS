@@ -100,7 +100,7 @@ go_deps.bzl               @dfinity/idx
 /rs/artifact_pool/                                      @dfinity/consensus
 /rs/backup/                                             @dfinity/consensus
 /rs/bitcoin/                                            @dfinity/ic-interface-owners
-/rs/bitcoin/adapter/                                    @dfinity/consensus
+/rs/bitcoin/adapter/                                    @dfinity/consensus @dfinity/cross-chain-team
 /rs/bitcoin/ckbtc/                                      @dfinity/cross-chain-team
 /rs/bitcoin/mock/                                       @dfinity/cross-chain-team
 /rs/bitcoin/client/                                     @dfinity/consensus
