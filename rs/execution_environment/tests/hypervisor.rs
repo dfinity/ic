@@ -8221,6 +8221,7 @@ fn ic0_mint_cycles_u64() {
             (func (export "canister_update test")
                 (call $mint_cycles128 (i64.const 0) (i64.const 18446744073709551615) (i32.const 0))
             )
+            (memory 1 1)
         )"#;
     let mut canister_id = test.canister_from_wat(wat).unwrap();
     // This loop should finish after four iterations.
