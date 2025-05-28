@@ -11,10 +11,8 @@ use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::{
     audit::process_event, event::EventType, mutate_state, read_state, State, TaskType,
 };
-use evm_rpc_client::HttpOutcallError;
 use evm_rpc_client::{BlockTag, GetLogsArgs, Hex20, Hex32, Nat256};
 use ic_canister_log::log;
-use ic_cdk::api::call::RejectionCode;
 use ic_ethereum_types::Address;
 use num_traits::ToPrimitive;
 use scopeguard::ScopeGuard;
