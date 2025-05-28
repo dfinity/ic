@@ -537,6 +537,14 @@ fn test_get_blocks_returns_multiple_archive_callbacks() {
     );
 }
 
+#[test]
+fn test_icrc124_pause() {
+    ic_ledger_suite_state_machine_tests::pause::test_icrc124_pause::<LedgerArgument, Tokens>(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
 // #[test]
 // fn test_icrc1_test_suite() {
 //     ic_ledger_suite_state_machine_tests::test_icrc1_test_suite(ledger_wasm(), encode_init_args);

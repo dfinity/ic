@@ -64,6 +64,7 @@ use std::{
 pub mod fee_collector;
 pub mod in_memory_ledger;
 pub mod metrics;
+pub mod pause;
 
 pub const FEE: u64 = 10_000;
 pub const DECIMAL_PLACES: u8 = 8;

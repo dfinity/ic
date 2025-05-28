@@ -31,6 +31,8 @@ use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Zero;
 use ic_stable_structures::reader::{BufferedReader, Reader};
 use ic_stable_structures::writer::{BufferedWriter, Writer};
+use icrc_ledger_types::icrc124::errors::Icrc124Error;
+use icrc_ledger_types::icrc124::pause::PauseArgs;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc21::{
     errors::Icrc21Error, lib::build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
@@ -765,6 +767,40 @@ fn execute_transfer_not_async(
         update_total_volume(amount, effective_fee != Tokens::zero());
         Ok(block_idx)
     })
+}
+
+#[update]
+#[candid_method(update)]
+async fn icrc124_pause(args: PauseArgs) -> Result<Nat, Icrc124Error> {
+    panic_if_not_ready();
+    let caller = ic_cdk::api::caller();
+
+    let block_idx = Access::with_ledger_mut(|ledger| {
+        let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+        let created_at_time = args
+            .created_at_time
+            .map(TimeStamp::from_nanos_since_unix_epoch);
+
+        let tx = Transaction::pause(caller, args.reason, created_at_time);
+
+        let (block_idx, _) = apply_transaction(ledger, tx, now, Tokens::zero())
+            .map_err(convert_transfer_error)
+            .map_err(|err| {
+                let err = match Icrc124Error::try_from(err) {
+                    Ok(err) => err,
+                    Err(err) => ic_cdk::trap(&err),
+                };
+                err
+            })?;
+        Ok(block_idx)
+    })?;
+
+    // NB. we need to set the certified data before the first async call to make sure that the
+    // blockchain state agrees with the certificate while archiving is in progress.
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+
+    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+    Ok(Nat::from(block_idx))
 }
 
 #[update]

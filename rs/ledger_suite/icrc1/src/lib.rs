@@ -485,6 +485,14 @@ impl<Tokens: TokensType> Transaction<Tokens> {
             memo,
         }
     }
+
+    pub fn pause(caller: Principal, reason: String, created_at_time: Option<TimeStamp>) -> Self {
+        Self {
+            operation: Operation::Pause { caller, reason },
+            created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
+            memo: None,
+        }
+    }
 }
 
 impl<Tokens: TokensType> TryFrom<icrc_ledger_types::icrc3::transactions::Transaction>
@@ -608,13 +616,8 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
 
     fn decode(encoded_block: EncodedBlock) -> Result<Self, String> {
         let bytes = encoded_block.into_vec();
-        let mut tagged_block: TaggedBlock<Tokens> = ciborium::de::from_reader(&bytes[..])
+        let tagged_block: TaggedBlock<Tokens> = ciborium::de::from_reader(&bytes[..])
             .map_err(|e| format!("failed to decode a block: {}", e))?;
-        let btype = match &tagged_block.0.transaction.operation {
-            Operation::Pause { .. } => Some("124pause".to_string()),
-            _ => None,
-        };
-        tagged_block.0.btype = btype;
         Ok(tagged_block.0)
     }
 

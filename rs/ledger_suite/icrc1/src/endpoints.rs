@@ -4,6 +4,7 @@ use candid::CandidType;
 use ic_ledger_canister_core::ledger::TransferError as CoreTransferError;
 use ic_ledger_core::tokens::TokensType;
 use icrc_ledger_types::icrc1::transfer::TransferError;
+use icrc_ledger_types::icrc124::errors::Icrc124Error;
 use icrc_ledger_types::icrc2::approve::ApproveError;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
 use icrc_ledger_types::icrc3::transactions::{Approve, Burn, Mint, Pause, Transaction, Transfer};
@@ -137,6 +138,45 @@ impl<Tokens: TokensType> TryFrom<EndpointsTransferError<Tokens>> for TransferFro
             CTE::BadBurn { min_burn_amount } => TFE::BadBurn {
                 min_burn_amount: min_burn_amount.into(),
             },
+        })
+    }
+}
+
+impl<Tokens: TokensType> TryFrom<EndpointsTransferError<Tokens>> for Icrc124Error {
+    type Error = String;
+    fn try_from(err: EndpointsTransferError<Tokens>) -> Result<Self, Self::Error> {
+        use ic_ledger_canister_core::ledger::TransferError as CTE;
+
+        Ok(match err.0 {
+            CTE::BadFee { .. } => {
+                return Err("BadFee not implemented for Icrc124Error".to_string());
+            }
+            CTE::InsufficientFunds { .. } => {
+                return Err("Expired not implemented for Icrc124Error".to_string());
+            }
+            CTE::TxTooOld { .. } => Icrc124Error::TooOld,
+            CTE::TxCreatedInFuture { ledger_time } => Icrc124Error::CreatedInFuture {
+                ledger_time: ledger_time.as_nanos_since_unix_epoch(),
+            },
+            CTE::TxThrottled => Icrc124Error::TemporarilyUnavailable,
+            CTE::TxDuplicate { duplicate_of } => Icrc124Error::Duplicate {
+                duplicate_of: Nat::from(duplicate_of),
+            },
+            CTE::InsufficientAllowance { .. } => {
+                return Err("InsufficientAllowance not implemented for Icrc124Error".to_string());
+            }
+            CTE::ExpiredApproval { .. } => {
+                return Err("ExpiredApproval not implemented for Icrc124Error".to_string());
+            }
+            CTE::AllowanceChanged { .. } => {
+                return Err("AllowanceChanged not implemented for Icrc124Error".to_string());
+            }
+            CTE::SelfApproval => {
+                return Err("SelfApproval not implemented for Icrc124Error".to_string());
+            }
+            CTE::BadBurn { .. } => {
+                return Err("BadBurn not implemented for Icrc124Error".to_string());
+            }
         })
     }
 }
