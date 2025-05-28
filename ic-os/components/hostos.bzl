@@ -22,7 +22,6 @@ component_files = {
     Label("hostos-scripts/monitoring/monitor-power.sh"): "/opt/ic/bin/monitor-power.sh",
     Label("hostos-scripts/monitoring/monitor-power.service"): "/etc/systemd/system/monitor-power.service",
     Label("hostos-scripts/monitoring/monitor-power.timer"): "/etc/systemd/system/monitor-power.timer",
-    Label("hostos-scripts/build-bootstrap-config-image.sh"): "/opt/ic/bin/build-bootstrap-config-image.sh",
     Label("hostos-scripts/verbose-logging/verbose-logging.sh"): "/opt/ic/bin/verbose-logging.sh",
     Label("hostos-scripts/verbose-logging/verbose-logging.service"): "/etc/systemd/system/verbose-logging.service",
     Label("hostos-scripts/verbose-logging/logrotate.d/verbose-logging"): "/etc/logrotate.d/verbose-logging",
