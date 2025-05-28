@@ -85,7 +85,7 @@ pub struct ICOSSettings {
     /// The URL (HTTP) of the NNS node(s).
     pub nns_urls: Vec<Url>,
     pub use_node_operator_private_key: bool,
-    /// Whether SEV-SNP is enabled. This is configured when the machine is deployed.
+    /// Whether SEV-SNP should be enabled. This is configured when the machine is deployed.
     /// If the value is enabled, we check during deployment that SEV-SNP is supported
     /// by the hardware. Once deployment is successful, we rely on the hardware supporting
     /// SEV-SNP.
