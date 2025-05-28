@@ -8,6 +8,7 @@ use general_execution_tests::api_tests::test_controller;
 use general_execution_tests::api_tests::test_cycles_burn;
 use general_execution_tests::api_tests::test_in_replicated_execution;
 use general_execution_tests::api_tests::test_raw_rand_api;
+use general_execution_tests::api_tests::{root_key_on_nns_subnet, root_key_on_non_nns_subnet};
 use general_execution_tests::big_stable_memory::*;
 use general_execution_tests::canister_heartbeat::*;
 use general_execution_tests::canister_lifecycle::*;
@@ -102,7 +103,9 @@ fn main() -> Result<()> {
                 .add_test(systest!(
                     install_large_wasm_with_other_store_fails_cross_subnet
                 ))
-                .add_test(systest!(stack_overflow)),
+                .add_test(systest!(stack_overflow))
+                .add_test(systest!(root_key_on_nns_subnet))
+                .add_test(systest!(root_key_on_non_nns_subnet)),
         )
         .execute_from_args()?;
 

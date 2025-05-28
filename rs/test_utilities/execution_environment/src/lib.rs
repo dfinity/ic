@@ -93,6 +93,8 @@ const INITIAL_CANISTER_CYCLES: Cycles = Cycles::new(1_000_000_000_000);
 /// A helper to create subnets.
 pub fn generate_subnets(
     subnet_ids: Vec<SubnetId>,
+    nns_subnet_id: SubnetId,
+    root_key: Option<Vec<u8>>,
     own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
     own_subnet_size: usize,
@@ -108,10 +110,15 @@ pub fn generate_subnets(
                 nodes.insert(node_test_id(i as u64));
             }
         }
+        let public_key = if subnet_id == nns_subnet_id {
+            root_key.clone().unwrap_or(vec![1, 2, 3, 4])
+        } else {
+            vec![1, 2, 3, 4]
+        };
         result.insert(
             subnet_id,
             SubnetTopology {
-                public_key: vec![1, 2, 3, 4],
+                public_key,
                 nodes,
                 subnet_type,
                 subnet_features: SubnetFeatures::default(),
@@ -132,7 +139,7 @@ pub fn generate_network_topology(
 ) -> NetworkTopology {
     NetworkTopology {
         nns_subnet_id,
-        subnets: generate_subnets(subnets, own_subnet_id, own_subnet_type, subnet_size),
+        subnets: generate_subnets(subnets, nns_subnet_id, None, own_subnet_id, own_subnet_type, subnet_size),
         routing_table: match routing_table {
             Some(routing_table) => Arc::new(routing_table),
             None => {
@@ -798,8 +805,6 @@ impl ExecutionTest {
             canister_id,
             wasm_binary,
             vec![],
-            None,
-            None,
         );
         let result = self.install_code(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
@@ -817,30 +822,8 @@ impl ExecutionTest {
             canister_id,
             wasm_binary,
             vec![],
-            None,
-            None,
         );
         let result = self.install_code_v2(args)?;
-        assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
-        Ok(())
-    }
-
-    pub fn install_canister_with_allocation(
-        &mut self,
-        canister_id: CanisterId,
-        wasm_binary: Vec<u8>,
-        compute_allocation: Option<u64>,
-        memory_allocation: Option<u64>,
-    ) -> Result<(), UserError> {
-        let args = InstallCodeArgs::new(
-            CanisterInstallMode::Install,
-            canister_id,
-            wasm_binary,
-            vec![],
-            compute_allocation,
-            memory_allocation,
-        );
-        let result = self.install_code(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
         Ok(())
     }
@@ -856,8 +839,6 @@ impl ExecutionTest {
             canister_id,
             wasm_binary,
             vec![],
-            None,
-            None,
         );
         let result = self.install_code(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
@@ -874,8 +855,6 @@ impl ExecutionTest {
             canister_id,
             wasm_binary,
             vec![],
-            None,
-            None,
         );
         let result = self.install_code_v2(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
@@ -893,8 +872,6 @@ impl ExecutionTest {
             canister_id,
             wasm_binary,
             vec![],
-            None,
-            None,
         );
         let result = self.install_code(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
@@ -914,8 +891,6 @@ impl ExecutionTest {
             canister_id,
             wasm_binary,
             vec![],
-            None,
-            None,
         );
         let result = self.install_code_v2(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
@@ -933,8 +908,6 @@ impl ExecutionTest {
             canister_id,
             wasm_binary,
             vec![],
-            None,
-            None,
         );
         self.dts_install_code(args)
     }
@@ -943,16 +916,12 @@ impl ExecutionTest {
         &mut self,
         canister_id: CanisterId,
         wasm_binary: Vec<u8>,
-        compute_allocation: Option<u64>,
-        memory_allocation: Option<u64>,
     ) -> Result<(), UserError> {
         let args = InstallCodeArgs::new(
             CanisterInstallMode::Upgrade,
             canister_id,
             wasm_binary,
             vec![],
-            compute_allocation,
-            memory_allocation,
         );
         let result = self.install_code(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
@@ -1730,6 +1699,7 @@ impl ExecutionTest {
 pub struct ExecutionTestBuilder {
     execution_config: Config,
     nns_subnet_id: SubnetId,
+    root_key: Option<Vec<u8>>,
     own_subnet_id: SubnetId,
     caller_subnet_id: Option<SubnetId>,
     subnet_type: SubnetType,
@@ -1773,6 +1743,7 @@ impl Default for ExecutionTestBuilder {
                 ..Config::default()
             },
             nns_subnet_id: subnet_test_id(2),
+            root_key: None,
             own_subnet_id: subnet_test_id(1),
             caller_subnet_id: None,
             subnet_type,
@@ -1828,6 +1799,12 @@ impl ExecutionTestBuilder {
         }
     }
 
+    pub fn with_root_key(self, root_key: Vec<u8>) -> Self {
+        Self {
+            root_key: Some(root_key),
+            ..self
+        }
+    }
     pub fn with_own_subnet_id(self, own_subnet_id: SubnetId) -> Self {
         Self {
             own_subnet_id,
@@ -2234,6 +2211,8 @@ impl ExecutionTestBuilder {
         subnets.extend(self.caller_subnet_id.iter().copied());
         state.metadata.network_topology.subnets = generate_subnets(
             subnets,
+            self.nns_subnet_id,
+            self.root_key,
             self.own_subnet_id,
             self.subnet_type,
             self.registry_settings.subnet_size,
