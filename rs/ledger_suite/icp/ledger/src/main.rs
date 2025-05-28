@@ -1,3 +1,6 @@
+#[cfg(feature = "canbench-rs")]
+mod canbench;
+
 use candid::{candid_method, Decode, Nat, Principal};
 #[cfg(feature = "notify-method")]
 use dfn_candid::CandidOne;
@@ -731,6 +734,7 @@ fn canister_init(arg: LedgerCanisterPayload) {
     }
 }
 
+#[cfg(not(feature = "canbench-rs"))]
 #[export_name = "canister_init"]
 fn main() {
     ic_cdk::setup();
@@ -763,6 +767,9 @@ fn main() {
         }
     }
 }
+
+#[cfg(feature = "canbench-rs")]
+fn main() {}
 
 // We use 8MiB buffer
 const BUFFER_SIZE: usize = 8388608;
