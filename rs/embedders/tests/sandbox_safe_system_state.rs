@@ -293,15 +293,13 @@ fn mint_all_cycles() {
 
     let api_type = ApiTypeBuilder::build_update_api();
     let mut api = get_system_api(api_type, &get_cmc_system_state(), cycles_account_manager);
-    let balance_before = api.ic0_canister_cycle_balance().unwrap();
+    let balance_before = api.canister_cycle_balance128().unwrap();
 
-    let amount = 50;
-    let mut res = [0u8; 16];
-    api.ic0_mint_cycles128(Cycles::new(50), 0, &mut res);
-    assert_eq!(amount, u128::from_be_bytes(res));
+    let amount = Cycles::new(50);
+    assert_eq!(amount, api.mint_cycles128(amount).unwrap());
     assert_eq!(
-        api.ic0_canister_cycle_balance().unwrap() - balance_before,
-        amount as u64
+        api.canister_cycle_balance128().unwrap() - balance_before,
+        amount
     );
 }
 
@@ -321,13 +319,13 @@ fn mint_cycles_large_value() {
 
     let api_type = ApiTypeBuilder::build_update_api();
     let mut api = get_system_api(api_type, &system_state, cycles_account_manager);
-    let balance_before = api.ic0_canister_cycle_balance().unwrap();
+    let balance_before = api.canister_cycle_balance128().unwrap();
 
-    let amount = 50;
+    let amount = Cycles::new(50);
     // Canisters on the System subnet can hold any amount of cycles
-    assert_eq!(api.ic0_mint_cycles(amount), Ok(amount));
+    assert_eq!(api.mint_cycles128(amount).unwrap(), amount);
     assert_eq!(
-        api.ic0_canister_cycle_balance().unwrap() - balance_before,
+        api.canister_cycle_balance128().unwrap() - balance_before,
         amount
     );
 }
@@ -342,12 +340,12 @@ fn mint_cycles_fails_caller_not_on_nns() {
         cycles_account_manager,
     );
 
-    let balance_before = api.ic0_canister_cycle_balance().unwrap();
+    let balance_before = api.canister_cycle_balance128().unwrap();
 
-    assert!(api.ic0_mint_cycles(50).is_err());
+    assert!(api.mint_cycles128(Cycles::new(50)).is_err());
     assert_eq!(
-        api.ic0_canister_cycle_balance().unwrap() - balance_before,
-        0
+        api.canister_cycle_balance128().unwrap() - balance_before,
+        Cycles::new(0)
     );
 }
 
