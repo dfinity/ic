@@ -746,14 +746,10 @@ fn sync_prometheus_config_dir_with_ic_gateways(
         });
     }
 
-    for (name, p8s_static_configs) in
-        &[(IC_GATEWAY_PROMETHEUS_TARGET, ic_gateways_p8s_static_configs)]
-    {
-        ::serde_json::to_writer(
-            &File::create(prometheus_config_dir.join(name))?,
-            &p8s_static_configs,
-        )?;
-    }
+    ::serde_json::to_writer(
+        &File::create(prometheus_config_dir.join(IC_GATEWAY_PROMETHEUS_TARGET))?,
+        &ic_gateways_p8s_static_configs,
+    )?;
 
     Ok(())
 }
