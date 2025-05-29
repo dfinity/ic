@@ -9,6 +9,8 @@ on the process that this file is part of, see
 
 ## Added
 
+* Support disbursing maturity to an account identifier, in addition to icrc1 account.
+
 ## Changed
 
 ## Deprecated
