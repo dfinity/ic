@@ -697,7 +697,11 @@ type TreasuryManagerFunction = variant {
 
 type ExecuteCapabilityBasedFunction = record {
   dapp_canister_id : opt principal;
-  function : opt TreasuryManagerFunction;
+  function : opt CapabilityBasedFunction;
+};
+
+type CapabilityBasedFunction = variant {
+  TreasuryManagerFunction : TreasuryManagerFunction;
 };
 
 type Capability = variant {
@@ -706,7 +710,7 @@ type Capability = variant {
   // Granting this capability will register the following capability-based functions:
   // - deposit()
   // - withdraw()
-  TreasuryManager : record {};
+  TreasuryManagerCapability : record {};
 };
 
 type Capabilities = record {
