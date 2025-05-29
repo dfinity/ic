@@ -3430,6 +3430,7 @@ async fn test_disallow_large_manage_neuron_proposals() {
                 command: Some(Command::DisburseMaturity(DisburseMaturity {
                     percentage_to_disburse: 100,
                     to_account: None,
+                    to_account_identifier: None,
                 })),
             }))),
             ..Default::default()
@@ -3459,6 +3460,7 @@ async fn test_disallow_large_manage_neuron_proposals() {
                                 subaccount: vec![1u8; 1_000_000],
                             }),
                         }),
+                        to_account_identifier: None,
                     })),
                 }))),
                 ..Default::default()

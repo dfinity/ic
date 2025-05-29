@@ -1113,8 +1113,13 @@ message ManageNeuron {
     // The percentage to disburse, from 1 to 100
     uint32 percentage_to_disburse = 1;
 
-    // The (optional) principal to which to transfer the stake.
+    // The (optional) principal to which to transfer the stake. It should not be set if
+    // `to_account_identifier` is set.
     Account to_account = 2;
+
+    // The (optional) account identifier to which to transfer the stake. It should not be set if
+    // `to_account` is set.
+    ic_ledger.pb.v1.AccountIdentifier to_account_identifier = 3;
   }
 
   oneof command {
@@ -2732,10 +2737,16 @@ message MaturityDisbursement {
   uint64 amount_e8s = 1;
   // The timestamp at which the maturity was disbursed.
   uint64 timestamp_of_disbursement_seconds = 2;
-  // The account to disburse the maturity to.
-  Account account_to_disburse_to = 3;
+
   // The timestamp at which the maturity disbursement should be finalized.
   uint64 finalize_disbursement_timestamp_seconds = 4;
+
+  oneof destination {
+    // The icrc1 account to disburse the maturity to.
+    Account account_to_disburse_to = 3;
+    // The account identifier to disburse the maturity to.
+    ic_ledger.pb.v1.AccountIdentifier account_identifier_to_disburse_to = 5;
+  }
 }
 
 // A map of neuron voting powers at a certain point in time. It can be used to initialize ballots of
@@ -2768,4 +2779,7 @@ message FinalizeDisburseMaturity {
 
   // The original amount of maturity to be disbursed (before maturity modulation).
   uint64 original_maturity_e8s_equivalent = 4;
+
+  // The account identifer to which to transfer the ICPs.
+  ic_ledger.pb.v1.AccountIdentifier to_account_identifier = 5;
 }

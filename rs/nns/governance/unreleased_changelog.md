@@ -11,6 +11,7 @@ on the process that this file is part of, see
 
 * Expose a new metric `voting_power_snapshots_latest_snapshot_is_spike`.
 * Enabling `DisburseMaturity` neuron management proposals.
+* Support disbursing maturity to an account identifier, in addition to icrc1 account.
 
 ## Changed
 

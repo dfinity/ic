@@ -29,7 +29,7 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
     state_test_helpers::{
-        icrc1_balance, list_neurons, list_neurons_by_principal, nns_add_hot_key,
+        ledger_account_balance, list_neurons, list_neurons_by_principal, nns_add_hot_key,
         nns_claim_or_refresh_neuron, nns_disburse_maturity, nns_disburse_neuron,
         nns_governance_get_full_neuron, nns_governance_get_neuron_info,
         nns_governance_make_proposal, nns_increase_dissolve_delay, nns_join_community_fund,
@@ -39,8 +39,10 @@ use ic_nns_test_utils::{
     },
 };
 use ic_state_machine_tests::StateMachine;
-use icp_ledger::{tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Tokens};
-use icrc_ledger_types::icrc1::account::Account;
+use icp_ledger::{
+    protobuf::AccountIdentifier as AccountIdentifierProto, tokens_from_proto, AccountBalanceArgs,
+    AccountIdentifier, BinaryAccountBalanceArgs, Subaccount, Tokens,
+};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[cfg(feature = "tla")]
@@ -346,105 +348,317 @@ fn create_neuron_with_maturity(
 
 fn get_balance_e8s_of_disburse_destination(
     state_machine: &StateMachine,
-    principal_id: PrincipalId,
+    account_identifier: AccountIdentifier,
 ) -> u64 {
-    icrc1_balance(
+    ledger_account_balance(
         state_machine,
         LEDGER_CANISTER_ID,
-        Account {
-            owner: principal_id.0,
-            subaccount: None,
+        &BinaryAccountBalanceArgs {
+            account: account_identifier.to_address(),
         },
     )
     .get_e8s()
 }
 
+/// In this test, we create 3 maturity disbursements with 2 neurons with 3 days between each
+/// disbursement, and assert that the disbursements can be created, as well as finalized at the
+/// right time.
 #[test]
 fn test_neuron_disburse_maturity() {
-    // Step 1.1: Prepare the world by setting up NNS canisters with 2000 ICP in a ledger account.
+    // Step 1.1: Prepare the world by setting up NNS canisters with 2000 ICP in 2 ledger accounts.
     let state_machine = state_machine_builder_for_nns_tests().build();
-    let test_user_principal = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let neuron_1_controller = PrincipalId::new_self_authenticating(b"neuron_1_controller");
+    let neuron_2_controller = PrincipalId::new_self_authenticating(b"neuron_2_controller");
     let nns_init_payloads = NnsInitPayloadsBuilder::new()
-        .with_ledger_account(
-            AccountIdentifier::new(test_user_principal, None),
-            Tokens::from_tokens(2000).unwrap(),
-        )
+        .with_ledger_accounts(vec![
+            (
+                AccountIdentifier::new(neuron_1_controller, None),
+                Tokens::from_tokens(2000).unwrap(),
+            ),
+            (
+                AccountIdentifier::new(neuron_2_controller, None),
+                Tokens::from_tokens(2000).unwrap(),
+            ),
+        ])
         .build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
 
-    // Step 1.2: Create a neuron with some maturity.
-    let neuron_id = create_neuron_with_maturity(
+    // Step 1.2: Create 2 neurons with some maturity.
+    let neuron_id_1 = create_neuron_with_maturity(
         &state_machine,
-        test_user_principal,
+        neuron_1_controller,
+        Tokens::from_tokens(1000).unwrap(),
+    );
+    let neuron_id_2 = create_neuron_with_maturity(
+        &state_machine,
+        neuron_2_controller,
         Tokens::from_tokens(1000).unwrap(),
     );
 
-    // Step 1.3: check that the neuron has no maturity disbursement in progress, and record its
+    // Step 1.3: check that both neurons have no maturity disbursement in progress, and record their
     // original maturity.
-    let neuron = nns_governance_get_full_neuron(&state_machine, test_user_principal, neuron_id.id)
-        .expect("Failed to get neuron");
-    let original_neuron_maturity_e8s_equivalent = neuron.maturity_e8s_equivalent;
-    assert_eq!(neuron.maturity_disbursements_in_progress, Some(vec![]));
+    let neuron_1 =
+        nns_governance_get_full_neuron(&state_machine, neuron_1_controller, neuron_id_1.id)
+            .expect("Failed to get neuron");
+    let original_neuron_1_maturity_e8s_equivalent = neuron_1.maturity_e8s_equivalent;
+    assert_eq!(neuron_1.maturity_disbursements_in_progress, Some(vec![]));
+    let neuron_2 =
+        nns_governance_get_full_neuron(&state_machine, neuron_2_controller, neuron_id_2.id)
+            .expect("Failed to get neuron");
+    let original_neuron_2_maturity_e8s_equivalent = neuron_2.maturity_e8s_equivalent;
+    assert_eq!(neuron_2.maturity_disbursements_in_progress, Some(vec![]));
 
-    // Step 2: Call the code under test - disburse maturity.
-    let disburse_destination = PrincipalId::new_self_authenticating(&[1u8]);
+    // Step 2.1: Disburse 30% of maturity for neuron 1
+    let disburse_destination_1_principal =
+        PrincipalId::new_self_authenticating(b"disburse_destination_1");
+    let disburse_destination_1 = AccountIdentifier::from(disburse_destination_1_principal);
     let disburse_response = nns_disburse_maturity(
         &state_machine,
-        test_user_principal,
-        neuron_id,
-        100,
-        Some(GovernanceAccount {
-            owner: Some(disburse_destination),
-            subaccount: None,
-        }),
+        neuron_1_controller,
+        neuron_id_1,
+        DisburseMaturity {
+            percentage_to_disburse: 30,
+            to_account: Some(GovernanceAccount {
+                owner: Some(disburse_destination_1_principal),
+                subaccount: None,
+            }),
+            to_account_identifier: None,
+        },
     )
     .panic_if_error("Failed to disburse maturity");
 
+    // Step 2.2: Check the disbursement response.
     let Some(CommandResponse::DisburseMaturity(disburse_maturity_response)) =
         disburse_response.command
     else {
         panic!("Failed to disburse maturity: {:#?}", disburse_response)
     };
     assert!(disburse_maturity_response.amount_disbursed_e8s.unwrap() > 0);
-    let neuron = nns_governance_get_full_neuron(&state_machine, test_user_principal, neuron_id.id)
-        .expect("Failed to get neuron");
-    let maturity_disbursement = neuron
+
+    // Step 2.3: Check that the disbursement is recorded in the neuron 1 and maturity is reduced.
+    let neuron =
+        nns_governance_get_full_neuron(&state_machine, neuron_1_controller, neuron_id_1.id)
+            .expect("Failed to get neuron");
+    let maturity_disbursement_1 = neuron
         .maturity_disbursements_in_progress
         .unwrap()
         .first()
         .cloned()
         .unwrap();
     assert_eq!(
-        maturity_disbursement.amount_e8s.unwrap(),
+        maturity_disbursement_1.amount_e8s.unwrap(),
         disburse_maturity_response.amount_disbursed_e8s.unwrap()
     );
     assert_eq!(
         neuron.maturity_e8s_equivalent,
-        original_neuron_maturity_e8s_equivalent
+        original_neuron_1_maturity_e8s_equivalent
             - disburse_maturity_response.amount_disbursed_e8s.unwrap()
     );
 
-    // Step 3: Wait for 7 days and check that the disbursement was successful.
-    for _ in 0..7 {
-        // The destination account should be empty before the disbursement is finalized.
-        assert_eq!(
-            get_balance_e8s_of_disburse_destination(&state_machine, disburse_destination),
-            0
-        );
+    // Step 3: Wait for 3 days.
+    state_machine.advance_time(Duration::from_secs(ONE_DAY_SECONDS * 3));
 
-        state_machine.advance_time(Duration::from_secs(ONE_DAY_SECONDS));
+    // Step 4.1: Disburse 100% of maturity for neuron 2 through account identifier.
+    let disburse_destination_2_principal =
+        PrincipalId::new_self_authenticating(b"disburse_destination_2");
+    let disburse_destination_2 = AccountIdentifier::from(disburse_destination_2_principal);
+    let disburse_response = nns_disburse_maturity(
+        &state_machine,
+        neuron_2_controller,
+        neuron_id_2,
+        DisburseMaturity {
+            percentage_to_disburse: 100,
+            to_account: None,
+            to_account_identifier: Some(AccountIdentifierProto::from(disburse_destination_2)),
+        },
+    )
+    .panic_if_error("Failed to disburse maturity");
 
-        // Because of how timer works, the time needs to be "flowing" in order for the tasks to be executed.
-        for _ in 0..20 {
-            state_machine.advance_time(Duration::from_secs(1));
-            state_machine.tick();
-        }
+    // Step 4.2: Check the disbursement response.
+    let Some(CommandResponse::DisburseMaturity(disburse_maturity_response)) =
+        disburse_response.command
+    else {
+        panic!("Failed to disburse maturity: {:#?}", disburse_response)
+    };
+    assert!(disburse_maturity_response.amount_disbursed_e8s.unwrap() > 0);
+
+    // Step 4.3: Check that the disbursement is recorded in the neuron 2 and maturity is reduced to 0.
+    let neuron_2 =
+        nns_governance_get_full_neuron(&state_machine, neuron_2_controller, neuron_id_2.id)
+            .expect("Failed to get neuron");
+    let maturity_disbursement_2 = neuron_2
+        .maturity_disbursements_in_progress
+        .unwrap()
+        .first()
+        .cloned()
+        .unwrap();
+    assert_eq!(
+        maturity_disbursement_2.amount_e8s.unwrap(),
+        disburse_maturity_response.amount_disbursed_e8s.unwrap()
+    );
+    assert_eq!(
+        maturity_disbursement_2.amount_e8s.unwrap(),
+        original_neuron_2_maturity_e8s_equivalent
+    );
+    assert_eq!(neuron_2.maturity_e8s_equivalent, 0);
+
+    // Step 5: Wait for 3 days.
+    state_machine.advance_time(Duration::from_secs(ONE_DAY_SECONDS * 3));
+
+    // Step 6.1: Disburse maturity the remaining maturity for neuron 1 to its controller.
+    let disburse_destination_3_principal =
+        PrincipalId::new_self_authenticating(b"disburse_destination_3");
+    let disburse_destination_3_subaccount = [1u8; 32];
+    let disburse_destination_3 = AccountIdentifier::new(
+        disburse_destination_3_principal,
+        Some(Subaccount(disburse_destination_3_subaccount)),
+    );
+    let disburse_response = nns_disburse_maturity(
+        &state_machine,
+        neuron_1_controller,
+        neuron_id_1,
+        // Both to_account and to_account_identifier are None, so the disbursement will be
+        // made to the neuron's controller.
+        DisburseMaturity {
+            percentage_to_disburse: 100,
+            to_account: Some(GovernanceAccount {
+                owner: Some(disburse_destination_3_principal),
+                subaccount: Some(disburse_destination_3_subaccount.to_vec()),
+            }),
+            to_account_identifier: None,
+        },
+    )
+    .panic_if_error("Failed to disburse maturity");
+
+    // Step 6.2: Check the disbursement response.
+    let Some(CommandResponse::DisburseMaturity(disburse_maturity_response)) =
+        disburse_response.command
+    else {
+        panic!("Failed to disburse maturity: {:#?}", disburse_response)
+    };
+    assert!(disburse_maturity_response.amount_disbursed_e8s.unwrap() > 0);
+
+    // Step 6.3: Check that the disbursement is recorded in the neuron 1 and maturity is reduced to 0. Note that the 1st disbursement
+    // is not finalized yet, so there are 2 maturity disbursements in progress, where the new one is at the end of the list.
+    let neuron_1 =
+        nns_governance_get_full_neuron(&state_machine, neuron_1_controller, neuron_id_1.id)
+            .expect("Failed to get neuron");
+    let maturity_disbursement_3 = neuron_1
+        .maturity_disbursements_in_progress
+        .unwrap()
+        .last()
+        .cloned()
+        .unwrap();
+    assert_eq!(
+        maturity_disbursement_3.amount_e8s.unwrap(),
+        disburse_maturity_response.amount_disbursed_e8s.unwrap()
+    );
+    assert_eq!(neuron_1.maturity_e8s_equivalent, 0);
+
+    // Step 7: Check that all 3 disbursement destinations are empty, as it's still 6 days after the first disbursement.
+    assert_eq!(
+        get_balance_e8s_of_disburse_destination(&state_machine, disburse_destination_1),
+        0
+    );
+    assert_eq!(
+        get_balance_e8s_of_disburse_destination(&state_machine, disburse_destination_2),
+        0
+    );
+    assert_eq!(
+        get_balance_e8s_of_disburse_destination(&state_machine, disburse_destination_3),
+        0
+    );
+
+    // Step 8.1: Advance time by 1 day and tick the state machine to finalize the disbursement.
+    state_machine.advance_time(Duration::from_secs(ONE_DAY_SECONDS));
+    for _ in 0..20 {
+        state_machine.advance_time(Duration::from_secs(1));
+        state_machine.tick();
     }
-    let balance = get_balance_e8s_of_disburse_destination(&state_machine, disburse_destination);
-    assert!(balance > 0, "{}", balance);
-    let neuron = nns_governance_get_full_neuron(&state_machine, test_user_principal, neuron_id.id)
-        .expect("Failed to get neuron");
-    assert_eq!(neuron.maturity_disbursements_in_progress, Some(vec![]));
+
+    // Step 8.2: Check that the destination account of the first disbursement has enough balance.
+    let disburse_destination_1_balance =
+        get_balance_e8s_of_disburse_destination(&state_machine, disburse_destination_1);
+    assert!(
+        disburse_destination_1_balance as f64
+            > maturity_disbursement_1.amount_e8s.unwrap() as f64 * 0.95,
+        "Disbursement 1 balance is too low: {}",
+        disburse_destination_1_balance
+    );
+
+    // Step 8.3: Check that the neuron 1 still has one disbursement in progress, which is the second one.
+    let neuron_1 =
+        nns_governance_get_full_neuron(&state_machine, neuron_1_controller, neuron_id_1.id)
+            .expect("Failed to get neuron");
+    assert_eq!(
+        neuron_1.maturity_disbursements_in_progress.unwrap().len(),
+        1
+    );
+
+    // Step 8.4: Check that the destination account of the second disbursement is still empty.
+    assert_eq!(
+        get_balance_e8s_of_disburse_destination(&state_machine, disburse_destination_2),
+        0
+    );
+
+    // Step 9.1: Advance 3 days and tick the state machine to finalize the second disbursement.
+    state_machine.advance_time(Duration::from_secs(ONE_DAY_SECONDS * 3));
+    for _ in 0..20 {
+        state_machine.advance_time(Duration::from_secs(1));
+        state_machine.tick();
+    }
+
+    // Step 9.2: Check that the destination account of the second disbursement has enough balance.
+    let disburse_destination_2_balance =
+        get_balance_e8s_of_disburse_destination(&state_machine, disburse_destination_2);
+    assert!(
+        disburse_destination_2_balance as f64
+            > maturity_disbursement_2.amount_e8s.unwrap() as f64 * 0.95,
+        "Disbursement 2 balance is too low: {}",
+        disburse_destination_2_balance
+    );
+
+    // Step 9.3: Check that the neuron 2 has no maturity disbursement in progress.
+    let neuron_2 =
+        nns_governance_get_full_neuron(&state_machine, neuron_2_controller, neuron_id_2.id)
+            .expect("Failed to get neuron");
+    assert_eq!(
+        neuron_2.maturity_disbursements_in_progress.unwrap().len(),
+        0
+    );
+
+    // Step 9.4: Check that the destination account of the third disbursement is still empty.
+    assert_eq!(
+        get_balance_e8s_of_disburse_destination(&state_machine, disburse_destination_3),
+        0
+    );
+
+    // Step 10.1: Advance 3 days and tick the state machine to finalize the third disbursement.
+    state_machine.advance_time(Duration::from_secs(ONE_DAY_SECONDS * 3));
+    for _ in 0..20 {
+        state_machine.advance_time(Duration::from_secs(1));
+        state_machine.tick();
+    }
+
+    // Step 10.2: Check that the destination account of the third disbursement has enough balance.
+    let disburse_destination_3_balance =
+        get_balance_e8s_of_disburse_destination(&state_machine, disburse_destination_3);
+    assert!(
+        disburse_destination_3_balance as f64
+            > maturity_disbursement_3.amount_e8s.unwrap() as f64 * 0.95,
+        "Disbursement 3 balance is too low: {}",
+        disburse_destination_3_balance
+    );
+
+    // Step 10.3: Check that the neuron 1 has no maturity disbursement in progress.
+    let neuron_1 =
+        nns_governance_get_full_neuron(&state_machine, neuron_1_controller, neuron_id_1.id)
+            .expect("Failed to get neuron");
+
+    assert_eq!(
+        neuron_1.maturity_disbursements_in_progress.unwrap().len(),
+        0
+    );
 
     #[cfg(feature = "tla")]
     check_state_machine_tla_traces(&state_machine, GOVERNANCE_CANISTER_ID);
@@ -480,12 +694,12 @@ fn test_neuron_disburse_maturity_through_neuron_management_proposal() {
     let state_machine = state_machine_builder_for_nns_tests().build();
     let managed_neuron_controller = PrincipalId::new_self_authenticating(b"managed_neuron");
     let neuron_manager_controller = PrincipalId::new_self_authenticating(b"neuron_manager");
-    let disburse_destination = PrincipalId::new_self_authenticating(b"disburse_destination");
+    let disburse_destination = AccountIdentifier::from(managed_neuron_controller);
     let nns_init_payloads = NnsInitPayloadsBuilder::new()
         .with_ledger_accounts(vec![
             (
                 AccountIdentifier::new(managed_neuron_controller, None),
-                Tokens::from_tokens(2000).unwrap(),
+                Tokens::new(1000, 10000).unwrap(),
             ),
             (
                 AccountIdentifier::new(neuron_manager_controller, None),
@@ -545,10 +759,8 @@ fn test_neuron_disburse_maturity_through_neuron_management_proposal() {
                     command: Some(ManageNeuronCommandRequest::DisburseMaturity(
                         DisburseMaturity {
                             percentage_to_disburse: 100,
-                            to_account: Some(GovernanceAccount {
-                                owner: Some(disburse_destination),
-                                subaccount: None,
-                            }),
+                            to_account: None,
+                            to_account_identifier: None,
                         },
                     )),
                 },
