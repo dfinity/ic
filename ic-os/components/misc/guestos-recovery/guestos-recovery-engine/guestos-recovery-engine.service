@@ -1,0 +1,24 @@
+[Unit]
+Description=Recovery Engine Service
+# HELP: do we want the service to run after upgrade-shared-data-store or before?
+After=upgrade-shared-data-store.service
+# TODO: scritinize the order of the services
+Wants=network-online.target
+After=network-online.target
+Before=ic-replica.service
+RequiresMountsFor=/boot/config /var/lib/ic/data /var/lib/ic/crypto
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/guestos-recovery-engine.sh
+Restart=on-failure
+RestartSec=10
+
+# All guestos services that networking depends on log their outputs to the 
+# console to be piped to the host terminal if the verbose flag is enabled.
+StandardOutput=journal+console
+StandardError=journal+console
