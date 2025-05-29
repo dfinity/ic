@@ -8,20 +8,23 @@ use icp_ledger::{GetBlocksArgs, LedgerCanisterInitPayload};
 use icrc_ledger_types::icrc1::account::Account;
 
 const NUM_OPERATIONS: u64 = 10_000;
+const MAX_GET_BLOCKS: u64 = 2_000;
 
 #[bench(raw)]
 fn bench_endpoints() -> BenchResult {
+    // Create the ledger canister
     let minter = Account {
         owner: Principal::from_slice(&[1u8; 1]),
         subaccount: None,
     };
-    let start_time = ic_cdk::api::time();
     let args = LedgerCanisterInitPayload::builder()
         .minting_account(minter.into())
         .transfer_fee(Tokens::from_e8s(10_000))
         .build()
         .unwrap();
     canister_init(args.0);
+
+    // Transfer funds from the minter to a regular account
     let acc = Account {
         owner: Principal::from_slice(&[2u8; 1]),
         subaccount: None,
@@ -35,6 +38,8 @@ fn bench_endpoints() -> BenchResult {
         None,
         None,
     );
+
+    let start_time = ic_cdk::api::time();
     canbench_rs::bench_fn(|| {
         {
             let _p = canbench_rs::bench_scope("icrc1_transfer");
@@ -59,17 +64,17 @@ fn bench_endpoints() -> BenchResult {
         }
         let args = GetBlocksArgs {
             start: 1,
-            length: 2000,
+            length: MAX_GET_BLOCKS,
         };
         {
             let _p = canbench_rs::bench_scope("query_blocks");
             let res = query_blocks(args.clone());
-            assert_eq!(res.blocks.len(), 2000);
+            assert_eq!(res.blocks.len(), MAX_GET_BLOCKS as usize);
         }
         {
             let _p = canbench_rs::bench_scope("query_encoded_blocks");
             let res = query_encoded_blocks(args);
-            assert_eq!(res.blocks.len(), 2000);
+            assert_eq!(res.blocks.len(), MAX_GET_BLOCKS as usize);
         }
     })
 }
