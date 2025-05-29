@@ -60,7 +60,7 @@ pub struct AddNodeOperatorPayload {
     pub ipv6: Option<String>,
 
     // The maximum number of rewardable nodes for this node operator.
-    pub max_rewardable_nodes: BTreeMap<String, u32>,
+    pub max_rewardable_nodes: Option<BTreeMap<String, u32>>,
 }
 
 impl From<AddNodeOperatorPayload> for NodeOperatorRecord {
@@ -72,7 +72,7 @@ impl From<AddNodeOperatorPayload> for NodeOperatorRecord {
             dc_id: val.dc_id.to_lowercase(),
             rewardable_nodes: val.rewardable_nodes,
             ipv6: val.ipv6,
-            max_rewardable_nodes: BTreeMap::new(),
+            max_rewardable_nodes: val.max_rewardable_nodes.unwrap_or_default(),
         }
     }
 }
@@ -101,7 +101,7 @@ mod tests {
             dc_id: "DC1".to_string(),
             rewardable_nodes: btreemap! { "type1.1".to_string() => 1 },
             ipv6: Some("bar".to_string()),
-            max_rewardable_nodes: btreemap! { "type1.2".to_string() => 1 },
+            max_rewardable_nodes: Some(btreemap! { "type1.2".to_string() => 1 }),
         };
 
         registry.do_add_node_operator(payload);

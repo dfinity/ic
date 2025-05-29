@@ -145,7 +145,7 @@ mod tests {
             dc_id: dc_id_1.clone(),
             rewardable_nodes: btreemap! {},
             ipv6: None,
-            max_rewardable_nodes: btreemap! {},
+            max_rewardable_nodes: None,
         };
         let node_operator_1 = NodeOperatorRecord::from(node_operator_payload.clone());
         registry.do_add_node_operator(node_operator_payload);
@@ -156,7 +156,7 @@ mod tests {
             dc_id: dc_id_1.clone(),
             rewardable_nodes: btreemap! {},
             ipv6: None,
-            max_rewardable_nodes: btreemap! {},
+            max_rewardable_nodes: None,
         };
         let node_operator_2 = NodeOperatorRecord::from(node_operator_payload.clone());
         registry.do_add_node_operator(node_operator_payload);
@@ -175,7 +175,7 @@ mod tests {
             dc_id: dc_id_2.clone(),
             rewardable_nodes: btreemap! {},
             ipv6: None,
-            max_rewardable_nodes: btreemap! {},
+            max_rewardable_nodes: None,
         };
         let node_operator_3 = NodeOperatorRecord::from(node_operator_payload.clone());
         registry.do_add_node_operator(node_operator_payload);
@@ -195,7 +195,7 @@ mod tests {
             dc_id: dc_id_3.clone(),
             rewardable_nodes: btreemap! {},
             ipv6: None,
-            max_rewardable_nodes: btreemap! {},
+            max_rewardable_nodes: None,
         };
         let node_operator_4 = NodeOperatorRecord::from(node_operator_payload.clone());
         registry.do_add_node_operator(node_operator_payload);
@@ -255,7 +255,7 @@ mod tests {
             dc_id: dc_id_1.clone(),
             rewardable_nodes: btreemap! {},
             ipv6: None,
-            max_rewardable_nodes: btreemap! {},
+            max_rewardable_nodes: None,
         };
         // Add node operator.
         registry.do_add_node_operator(node_operator_payload);

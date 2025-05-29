@@ -69,7 +69,7 @@ fn test_non_governance_users_cannot_update_node_operator_config() {
             node_provider_id: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
             ipv6: None,
             set_ipv6_to_none: None,
-            max_rewardable_nodes: btreemap! {},
+            max_rewardable_nodes: None,
         };
 
         // The anonymous end-user tries to update a node operator, bypassing
@@ -149,7 +149,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             node_provider_id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
             ipv6: Some("0:0:0:0:0:0:0:0".into()),
             set_ipv6_to_none: None,
-            max_rewardable_nodes: btreemap! {},
+            max_rewardable_nodes: None,
         };
 
         // ...causing a panic
@@ -171,7 +171,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             node_provider_id: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
             ipv6: Some("0:0:0:0:0:0:0:0".into()),
             set_ipv6_to_none: None,
-            max_rewardable_nodes: btreemap! {},
+            max_rewardable_nodes: None,
         };
 
         assert!(
@@ -195,7 +195,7 @@ fn test_accepted_proposal_mutates_the_registry() {
                 rewardable_nodes,
                 node_provider_principal_id: (*TEST_NEURON_2_OWNER_PRINCIPAL).to_vec(),
                 ipv6: Some("0:0:0:0:0:0:0:0".into()),
-                max_rewardable_nodes: btreemap! {},
+                max_rewardable_nodes: BTreeMap::new(),
             },
         );
 
@@ -242,7 +242,7 @@ fn test_set_ipv6_none() {
             node_provider_id: None,
             ipv6: None,
             set_ipv6_to_none: None,
-            max_rewardable_nodes: btreemap! {},
+            max_rewardable_nodes: None,
         };
 
         assert!(
@@ -272,7 +272,7 @@ fn test_set_ipv6_none() {
             node_provider_id: None,
             ipv6: None,
             set_ipv6_to_none: Some(true),
-            max_rewardable_nodes: btreemap! {},
+            max_rewardable_nodes: None,
         };
         assert!(
             forward_call_via_universal_canister(

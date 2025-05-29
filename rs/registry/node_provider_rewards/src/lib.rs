@@ -223,7 +223,7 @@ mod tests {
                         "type3".to_string() => 3,
                     },
                     ipv6: None,
-                    max_rewardable_nodes: btreemap! {},
+                    max_rewardable_nodes: BTreeMap::new(),
                 },
             ),
             (
@@ -237,7 +237,7 @@ mod tests {
                         "type1".to_string() => 2,
                     },
                     ipv6: None,
-                    max_rewardable_nodes: btreemap! {},
+                    max_rewardable_nodes: BTreeMap::new(),
                 },
             ),
         ];

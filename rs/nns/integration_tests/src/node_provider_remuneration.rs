@@ -935,7 +935,7 @@ fn add_node_operator(
         dc_id: dc_id.into(),
         rewardable_nodes,
         ipv6: Some(ipv6.into()),
-        max_rewardable_nodes: BTreeMap::new(),
+        max_rewardable_nodes: None,
     };
 
     submit_nns_proposal(
