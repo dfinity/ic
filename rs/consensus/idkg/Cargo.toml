@@ -26,6 +26,7 @@ ic-types = { path = "../../types/types" }
 phantom_newtype = { path = "../../phantom_newtype" }
 prometheus = { workspace = true }
 rand = { workspace = true }
+rayon = { workspace = true }
 slog = { workspace = true }
 
 [dev-dependencies]
@@ -44,7 +45,6 @@ ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 ic-test-utilities-state = { path = "../../test_utilities/state" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
-rayon = { workspace = true }
 strum = { workspace = true }
 
 [features]
