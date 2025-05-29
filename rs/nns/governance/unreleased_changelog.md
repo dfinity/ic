@@ -9,11 +9,11 @@ on the process that this file is part of, see
 
 ## Added
 
-* The `DisburseMaturity` neuron command is enabled. See https://forum.dfinity.org/t/disburse-maturity-in-nns/43228 for more details.
+* Expose a new metric `voting_power_snapshots_latest_snapshot_is_spike`.
 
 ## Changed
 
-* Proposal topics are persisted throughout its lifecycle instead of being recomputed every time.
+* `MAX_NEURON_CREATION_SPIKE` is increased from 120 to 300.
 
 ## Deprecated
 
@@ -22,4 +22,3 @@ on the process that this file is part of, see
 ## Fixed
 
 ## Security
-Enforce a lower bound for `min_participant_icp_e8s` of `1_000_000`.

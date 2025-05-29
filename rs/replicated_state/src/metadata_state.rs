@@ -2187,6 +2187,8 @@ pub enum UnflushedCheckpointOp {
     TakeSnapshot(CanisterId, SnapshotId),
     /// A snapshot was loaded to a canister.
     LoadSnapshot(CanisterId, SnapshotId),
+    /// A canister was renamed.
+    RenameCanister(CanisterId, CanisterId),
 }
 
 /// A collection of unflushed checkpoint operations in the order that they were applied to the state.
@@ -2225,6 +2227,13 @@ impl UnflushedCheckpointOps {
         self.operations.push(UnflushedCheckpointOp::LoadSnapshot(
             canister_id,
             snapshot_id,
+        ));
+    }
+
+    pub fn rename_canister(&mut self, old_canister_id: CanisterId, new_canister_id: CanisterId) {
+        self.operations.push(UnflushedCheckpointOp::RenameCanister(
+            old_canister_id,
+            new_canister_id,
         ));
     }
 }

@@ -14,9 +14,8 @@ use crate::{
         resource::{AllocatedVm, HOSTOS_MEMORY_KIB_PER_VM, HOSTOS_VCPUS_PER_VM},
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
-            get_dependency_path, get_dependency_path_from_env, get_elasticsearch_hosts,
-            get_ic_os_update_img_sha256, get_ic_os_update_img_url,
-            get_mainnet_ic_os_update_img_url, get_mainnet_nns_revision,
+            get_dependency_path_from_env, get_elasticsearch_hosts, get_ic_os_update_img_sha256,
+            get_ic_os_update_img_url, get_mainnet_ic_os_update_img_url, get_mainnet_nns_revision,
             get_malicious_ic_os_update_img_sha256, get_malicious_ic_os_update_img_url,
             read_dependency_from_env_to_string, HasIcDependencies, HasTopologySnapshot, HasVmName,
             IcNodeContainer, InitialReplicaVersion, NodesInfo,
@@ -25,10 +24,11 @@ use crate::{
     },
     k8s::job::wait_for_job_completion,
 };
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
+use config::guestos_bootstrap_image::BootstrapOptions;
 use config_types::DeploymentEnvironment;
 use ic_base_types::NodeId;
 use ic_prep_lib::{
@@ -54,7 +54,6 @@ use std::{
     process::Command,
     thread::{self, JoinHandle, ScopedJoinHandle},
 };
-use tempfile::tempdir;
 use url::Url;
 use zstd::stream::write::Encoder;
 
@@ -401,6 +400,7 @@ fn create_config_disk_image(
         elasticsearch_tags: Some(format!("system_test {}", group_name)),
         use_nns_public_key: Some(true),
         nns_urls: None,
+        enable_trusted_execution_environment: None,
         use_node_operator_private_key: Some(true),
         use_ssh_authorized_keys: Some(true),
         inject_ic_crypto: Some(false),
@@ -417,12 +417,31 @@ fn create_config_disk_image(
         generate_ic_boundary_tls_cert: None,
     };
 
+    // TODO(NODE-1518): remove passing old config (only exists to pass *downgrade* CI tests)
+    let mut bootstrap_options = BootstrapOptions {
+        ic_registry_local_store: Some(
+            test_env
+                .prep_dir(ic_name)
+                .expect("No no-name IC")
+                .registry_local_store_path(),
+        ),
+        ic_state: Some(node.state_path()),
+        ic_crypto: Some(node.crypto_path()),
+        ..Default::default()
+    };
+
     // We've seen k8s nodes fail to pick up RA correctly, so we specify their
     // addresses directly. Ideally, all nodes should do this, to match mainnet.
     if InfraProvider::read_attribute(test_env) == InfraProvider::K8s {
+        let ip = format!("{}/64", node.node_config.public_api.ip());
+        let gateway = "fe80::ecee:eeff:feee:eeee".to_string();
+
         config.ipv6_config_type = Some(Ipv6ConfigType::Fixed);
-        config.fixed_address = Some(format!("{}/64", node.node_config.public_api.ip()));
-        config.fixed_gateway = Some("fe80::ecee:eeff:feee:eeee".to_string());
+        config.fixed_address = Some(ip.clone());
+        config.fixed_gateway = Some(gateway.clone());
+
+        bootstrap_options.ipv6_address = Some(ip);
+        bootstrap_options.ipv6_gateway = Some(gateway);
     }
 
     // If we have a root subnet, specify the correct NNS url.
@@ -432,15 +451,18 @@ fn create_config_disk_image(
         .nodes()
         .next()
     {
-        config.nns_urls = Some(vec![format!("http://[{}]:8080", node.get_ip_addr())]);
+        let nns_url = format!("http://[{}]:8080", node.get_ip_addr());
+        config.nns_urls = Some(vec![nns_url.clone()]);
+        bootstrap_options.nns_urls.push(nns_url);
     }
 
-    if let Some(ref malicious_behavior) = malicious_behavior {
+    if let Some(malicious_behavior) = malicious_behavior {
         info!(
             test_env.logger(),
             "Node with id={} has malicious behavior={:?}", node.node_id, malicious_behavior
         );
         config.malicious_behavior = Some(serde_json::to_string(&malicious_behavior)?);
+        bootstrap_options.malicious_behavior = Some(malicious_behavior);
     }
 
     if let Some(query_stats_epoch_length) = query_stats_epoch_length {
@@ -451,6 +473,7 @@ fn create_config_disk_image(
             query_stats_epoch_length
         );
         config.query_stats_epoch_length = Some(query_stats_epoch_length);
+        bootstrap_options.query_stats_epoch_length = Some(query_stats_epoch_length);
     }
 
     if let Some(ref ipv4_config) = ipv4_config {
@@ -461,6 +484,13 @@ fn create_config_disk_image(
         config.ipv4_address = Some(ipv4_config.ip_addr().to_string());
         config.ipv4_gateway = Some(ipv4_config.gateway_ip_addr().to_string());
         config.ipv4_prefix_length = Some(ipv4_config.prefix_length().try_into().unwrap());
+
+        bootstrap_options.ipv4_address = Some(format!(
+            "{}/{:?}",
+            ipv4_config.ip_addr(),
+            ipv4_config.prefix_length()
+        ));
+        bootstrap_options.ipv4_gateway = Some(ipv4_config.gateway_ip_addr().to_string());
     }
 
     // if the node has a domain name, generate a certificate to be used
@@ -475,6 +505,7 @@ fn create_config_disk_image(
             "Node with id={} has domain_name {}", node.node_id, domain_name,
         );
         config.domain_name = Some(domain_name.to_string());
+        bootstrap_options.domain = Some(domain_name.to_string());
     }
 
     let elasticsearch_hosts: Vec<String> = get_elasticsearch_hosts()?;
@@ -484,122 +515,45 @@ fn create_config_disk_image(
     );
     if !elasticsearch_hosts.is_empty() {
         config.elasticsearch_hosts = Some(elasticsearch_hosts.join(" "));
+        bootstrap_options.elasticsearch_hosts = elasticsearch_hosts.clone();
     }
 
     // The bitcoin_addr specifies the local bitcoin node that the bitcoin adapter should connect to in the system test environment.
-    if let Ok(bitcoin_addr) = test_env.read_json_object::<String, _>(BITCOIND_ADDR_PATH) {
-        config.bitcoind_addr = Some(bitcoin_addr);
+    if let Ok(bitcoind_addr) = test_env.read_json_object::<String, _>(BITCOIND_ADDR_PATH) {
+        config.bitcoind_addr = Some(bitcoind_addr.clone());
+        bootstrap_options.bitcoind_addr = Some(bitcoind_addr);
     }
 
     // The jaeger_addr specifies the local Jaeger node that the nodes should connect to in the system test environment.
     if let Ok(jaeger_addr) = test_env.read_json_object::<String, _>(JAEGER_ADDR_PATH) {
-        config.jaeger_addr = Some(jaeger_addr);
+        config.jaeger_addr = Some(jaeger_addr.clone());
+        bootstrap_options.jaeger_addr = Some(jaeger_addr);
     }
 
     // The socks_proxy configuration indicates that a socks proxy is available to the system test environment.
     if let Ok(socks_proxy) = test_env.read_json_object::<String, _>(SOCKS_PROXY_PATH) {
-        config.socks_proxy = Some(socks_proxy);
+        config.socks_proxy = Some(socks_proxy.clone());
+        bootstrap_options.socks_proxy = Some(socks_proxy);
     }
 
-    config.hostname = Some(node.node_id.to_string());
+    let hostname = node.node_id.to_string();
+    config.hostname = Some(hostname.clone());
+    bootstrap_options.hostname = Some(hostname);
 
-    // populate guestos_config_json_path with serialized guestos config object
-    let guestos_config_json_path = tempdir().unwrap().as_ref().join("guestos_config.json");
-    generate_testnet_config(config, guestos_config_json_path.clone())?;
+    // Generate the GuestOS config and set it in bootstrap_options
+    bootstrap_options.guestos_config = Some(generate_testnet_config(config)?);
+
+    let ssh_authorized_pub_keys_dir = test_env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
+    if ssh_authorized_pub_keys_dir.exists() {
+        bootstrap_options.accounts_ssh_authorized_keys = Some(ssh_authorized_pub_keys_dir);
+    }
 
     let img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
-    let script_path =
-        get_dependency_path("ic-os/components/hostos-scripts/build-bootstrap-config-image.sh");
-    let mut cmd = Command::new(script_path);
-    let local_store_path = test_env
-        .prep_dir(ic_name)
-        .expect("No no-name IC")
-        .registry_local_store_path();
 
-    cmd.arg(img_path.clone())
-        .arg("--guestos_config")
-        .arg(guestos_config_json_path)
-        .arg("--ic_registry_local_store")
-        .arg(local_store_path)
-        .arg("--ic_state")
-        .arg(node.state_path())
-        .arg("--ic_crypto")
-        .arg(node.crypto_path());
+    bootstrap_options
+        .build_bootstrap_config_image(&img_path)
+        .context("Could not create bootstrap config image")?;
 
-    let ssh_authorized_pub_keys_dir: PathBuf = test_env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
-    if ssh_authorized_pub_keys_dir.exists() {
-        cmd.arg("--accounts_ssh_authorized_keys")
-            .arg(ssh_authorized_pub_keys_dir);
-    }
-
-    // TODO(NODE-1518): remove passing old config (only exists to pass *downgrade* CI tests)
-    if InfraProvider::read_attribute(test_env) == InfraProvider::K8s {
-        cmd.arg("--ipv6_address")
-            .arg(format!("{}/64", node.node_config.public_api.ip()))
-            .arg("--ipv6_gateway")
-            .arg("fe80::ecee:eeff:feee:eeee");
-    }
-    if let Some(node) = test_env
-        .topology_snapshot_by_name(ic_name)
-        .root_subnet()
-        .nodes()
-        .next()
-    {
-        cmd.arg("--nns_urls")
-            .arg(format!("http://[{}]:8080", node.get_ip_addr()));
-    }
-    if let Some(malicious_behavior) = malicious_behavior {
-        cmd.arg("--malicious_behavior")
-            .arg(serde_json::to_string(&malicious_behavior)?);
-    }
-    if let Some(query_stats_epoch_length) = query_stats_epoch_length {
-        cmd.arg("--query_stats_epoch_length")
-            .arg(format!("{}", query_stats_epoch_length));
-    }
-    if let Some(ipv4_config) = ipv4_config {
-        cmd.arg("--ipv4_address").arg(format!(
-            "{}/{:?}",
-            ipv4_config.ip_addr(),
-            ipv4_config.prefix_length()
-        ));
-        cmd.arg("--ipv4_gateway").arg(ipv4_config.gateway_ip_addr());
-    }
-    if let Some(domain_name) = domain_name {
-        cmd.arg("--domain").arg(domain_name);
-    }
-    if !elasticsearch_hosts.is_empty() {
-        cmd.arg("--elasticsearch_hosts")
-            .arg(elasticsearch_hosts.join(" "));
-    }
-
-    // The bitcoind address specifies the local bitcoin node that the bitcoin adapter should connect to in the system test environment.
-    if let Ok(arg) = test_env.read_json_object::<String, _>(BITCOIND_ADDR_PATH) {
-        cmd.arg("--bitcoind_addr").arg(arg);
-    }
-    // The jaeger address specifies the local Jaeger node that the nodes should connect to in the system test environment.
-    if let Ok(arg) = test_env.read_json_object::<String, _>(JAEGER_ADDR_PATH) {
-        cmd.arg("--jaeger_addr").arg(arg);
-    }
-    // The socks proxy configuration indicates that a socks proxy is available to the system test environment.
-    if let Ok(arg) = test_env.read_json_object::<String, _>(SOCKS_PROXY_PATH) {
-        cmd.arg("--socks_proxy").arg(arg);
-    }
-
-    let key = "PATH";
-    let old_path = match std::env::var(key) {
-        Ok(val) => {
-            println!("{}: {:?}", key, val);
-            val
-        }
-        Err(e) => {
-            bail!("Couldn't interpret {}: {}", key, e)
-        }
-    };
-    cmd.env("PATH", format!("{}:{}", "/usr/sbin", old_path));
-
-    if !cmd.status()?.success() {
-        bail!("Could not spawn image creation process");
-    }
     let mut img_file = File::open(img_path)?;
     let compressed_img_path = PathBuf::from(&node.node_path).join(mk_compressed_img_path());
     let compressed_img_file = File::create(compressed_img_path.clone())?;

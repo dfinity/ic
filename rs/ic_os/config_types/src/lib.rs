@@ -28,7 +28,7 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.1.0";
+pub const CONFIG_VERSION: &str = "1.2.0";
 
 /// List of field names that have been removed and should not be reused.
 pub static RESERVED_FIELD_NAMES: &[&str] = &[];
@@ -85,6 +85,12 @@ pub struct ICOSSettings {
     /// The URL (HTTP) of the NNS node(s).
     pub nns_urls: Vec<Url>,
     pub use_node_operator_private_key: bool,
+    /// Whether SEV-SNP should be enabled. This is configured when the machine is deployed.
+    /// If the value is enabled, we check during deployment that SEV-SNP is supported
+    /// by the hardware. Once deployment is successful, we rely on the hardware supporting
+    /// SEV-SNP.
+    #[serde(default)]
+    pub enable_trusted_execution_environment: bool,
     /// This ssh keys directory contains individual files named `admin`, `backup`, `readonly`.
     /// The contents of these files serve as `authorized_keys` for their respective role account.
     /// This means that, for example, `accounts_ssh_authorized_keys/admin`
@@ -104,7 +110,7 @@ pub struct ICOSDevSettings {}
 pub struct SetupOSSettings;
 
 /// HostOS-specific settings.
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
 pub struct HostOSSettings {
     pub vm_memory: u32,
     pub vm_cpu: String,
@@ -284,6 +290,7 @@ mod tests {
                 use_nns_public_key: false,
                 nns_urls: vec![],
                 use_node_operator_private_key: false,
+                enable_trusted_execution_environment: false,
                 use_ssh_authorized_keys: false,
                 icos_dev_settings: ICOSDevSettings::default(),
             },

@@ -97,7 +97,7 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::{
     self as api,
-    manage_neuron_response::{self, MergeMaturityResponse, StakeMaturityResponse},
+    manage_neuron_response::{self, StakeMaturityResponse},
     proposal_validation,
     subnet_rental::SubnetRentalRequest,
     CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons, ListNeuronsResponse,
@@ -155,10 +155,10 @@ use crate::reward::distribution::RewardsDistribution;
 use crate::storage::with_voting_state_machines_mut;
 #[cfg(feature = "tla")]
 pub use tla::{
-    tla_update_method, InstrumentationState, ToTla, CLAIM_NEURON_DESC, DISBURSE_NEURON_DESC,
-    DISBURSE_TO_NEURON_DESC, MERGE_NEURONS_DESC, REFRESH_NEURON_DESC, SPAWN_NEURONS_DESC,
-    SPAWN_NEURON_DESC, SPLIT_NEURON_DESC, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY,
-    TLA_TRACES_MUTEX,
+    tla_update_method, InstrumentationState, ToTla, CLAIM_NEURON_DESC, DISBURSE_MATURITY_DESC,
+    DISBURSE_NEURON_DESC, DISBURSE_TO_NEURON_DESC, MERGE_NEURONS_DESC, REFRESH_NEURON_DESC,
+    SPAWN_NEURONS_DESC, SPAWN_NEURON_DESC, SPLIT_NEURON_DESC, TLA_INSTRUMENTATION_STATE,
+    TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
 };
 
 // 70 KB (for executing NNS functions that are not canister upgrades)
@@ -214,7 +214,11 @@ pub const MAX_SUSTAINED_NEURONS_PER_HOUR: u64 = 15;
 
 pub const MINIMUM_SECONDS_BETWEEN_ALLOWANCE_INCREASE: u64 = 3600 / MAX_SUSTAINED_NEURONS_PER_HOUR;
 
-pub const MAX_NEURON_CREATION_SPIKE: u64 = MAX_SUSTAINED_NEURONS_PER_HOUR * 8;
+/// The maximum number of neurons that can be created in a spike. Note that such rate of neuron
+/// creation is not sustainable as the allowance will be exhausted after creating this many neurons
+/// in a short period of time, and the allowance will only be increased according to
+/// `MINIMUM_SECONDS_BETWEEN_ALLOWANCE_INCREASE`.
+pub const MAX_NEURON_CREATION_SPIKE: u64 = MAX_SUSTAINED_NEURONS_PER_HOUR * 20;
 
 /// The maximum number results returned by the method `list_proposals`.
 pub const MAX_LIST_PROPOSAL_RESULTS: u32 = 100;
@@ -2221,7 +2225,7 @@ impl Governance {
     /// - The neuron exists.
     /// - The caller is the controller of the the neuron.
     /// - The neuron's state is `Dissolved` at the current timestamp.
-    #[cfg_attr(feature = "tla", tla_update_method(DISBURSE_NEURON_DESC.clone()))]
+    #[cfg_attr(feature = "tla", tla_update_method(DISBURSE_NEURON_DESC.clone(), tla_snapshotter!()))]
     pub async fn disburse_neuron(
         &mut self,
         id: &NeuronId,
@@ -2411,7 +2415,7 @@ impl Governance {
     ///   stake.
     /// - The amount to split minus the transfer fee is more than the minimum
     ///   stake.
-    #[cfg_attr(feature = "tla", tla_update_method(SPLIT_NEURON_DESC.clone()))]
+    #[cfg_attr(feature = "tla", tla_update_method(SPLIT_NEURON_DESC.clone(), tla_snapshotter!()))]
     pub async fn split_neuron(
         &mut self,
         id: &NeuronId,
@@ -2667,7 +2671,7 @@ impl Governance {
     ///   it will be merged into the stake of the target neuron; if it is less
     ///   than the transaction fee, the maturity of the source neuron will
     ///   still be merged into the maturity of the target neuron.
-    #[cfg_attr(feature = "tla", tla_update_method(MERGE_NEURONS_DESC.clone()))]
+    #[cfg_attr(feature = "tla", tla_update_method(MERGE_NEURONS_DESC.clone(), tla_snapshotter!()))]
     pub async fn merge_neurons(
         &mut self,
         id: &NeuronId,
@@ -2851,7 +2855,7 @@ impl Governance {
     /// - The parent neuron is not spawning itself.
     /// - The maturity to move to the new neuron must be such that, with every maturity modulation, at least
     ///   NetworkEconomics::neuron_minimum_spawn_stake_e8s are created when the maturity is spawn.
-    #[cfg_attr(feature = "tla", tla_update_method(SPAWN_NEURON_DESC.clone()))]
+    #[cfg_attr(feature = "tla", tla_update_method(SPAWN_NEURON_DESC.clone(), tla_snapshotter!()))]
     pub fn spawn_neuron(
         &mut self,
         id: &NeuronId,
@@ -2999,7 +3003,7 @@ impl Governance {
         id: &NeuronId,
         caller: &PrincipalId,
         stake_maturity: &manage_neuron::StakeMaturity,
-    ) -> Result<(StakeMaturityResponse, MergeMaturityResponse), GovernanceError> {
+    ) -> Result<StakeMaturityResponse, GovernanceError> {
         let (neuron_state, is_neuron_controlled_by_caller, neuron_maturity_e8s_equivalent) =
             self.with_neuron(id, |neuron| {
                 (
@@ -3050,7 +3054,7 @@ impl Governance {
         let _neuron_lock = self.lock_neuron_for_command(id.id, in_flight_command)?;
 
         // Adjust the maturity of the neuron
-        let responses = self
+        let response = self
             .with_neuron_mut(id, |neuron| {
                 neuron.maturity_e8s_equivalent = neuron
                     .maturity_e8s_equivalent
@@ -3063,22 +3067,15 @@ impl Governance {
                         .saturating_add(maturity_to_stake),
                 );
                 let staked_maturity_e8s = neuron.staked_maturity_e8s_equivalent.unwrap_or(0);
-                let new_stake_e8s = neuron.cached_neuron_stake_e8s + staked_maturity_e8s;
 
-                (
-                    StakeMaturityResponse {
-                        maturity_e8s: neuron.maturity_e8s_equivalent,
-                        staked_maturity_e8s,
-                    },
-                    MergeMaturityResponse {
-                        merged_maturity_e8s: maturity_to_stake,
-                        new_stake_e8s,
-                    },
-                )
+                StakeMaturityResponse {
+                    maturity_e8s: neuron.maturity_e8s_equivalent,
+                    staked_maturity_e8s,
+                }
             })
             .expect("Expected the neuron to exist");
 
-        Ok(responses)
+        Ok(response)
     }
 
     /// Disburse part of the stake of a neuron into a new neuron, possibly
@@ -3103,7 +3100,7 @@ impl Governance {
     ///   stake.
     /// - The amount to split minus the transfer fee is more than the minimum
     ///   stake.
-    #[cfg_attr(feature = "tla", tla_update_method(DISBURSE_TO_NEURON_DESC.clone()))]
+    #[cfg_attr(feature = "tla", tla_update_method(DISBURSE_TO_NEURON_DESC.clone(), tla_snapshotter!()))]
     pub async fn disburse_to_neuron(
         &mut self,
         id: &NeuronId,
@@ -3316,6 +3313,7 @@ impl Governance {
         Ok(child_nid)
     }
 
+    #[cfg_attr(feature = "tla", tla_update_method(DISBURSE_MATURITY_DESC.clone(), tla_snapshotter!()))]
     fn disburse_maturity(
         &mut self,
         id: &NeuronId,
@@ -5923,7 +5921,7 @@ impl Governance {
     }
 
     /// Refreshes the stake of a given neuron by checking it's account.
-    #[cfg_attr(feature = "tla", tla_update_method(REFRESH_NEURON_DESC.clone()))]
+    #[cfg_attr(feature = "tla", tla_update_method(REFRESH_NEURON_DESC.clone(), tla_snapshotter!()))]
     async fn refresh_neuron(
         &mut self,
         nid: NeuronId,
@@ -6009,7 +6007,7 @@ impl Governance {
     /// the neuron and lock it before we make the call, we know that any
     /// concurrent call to mutate the same neuron will need to wait for this
     /// one to finish before proceeding.
-    #[cfg_attr(feature = "tla", tla_update_method(CLAIM_NEURON_DESC.clone()))]
+    #[cfg_attr(feature = "tla", tla_update_method(CLAIM_NEURON_DESC.clone(), tla_snapshotter!()))]
     async fn claim_neuron(
         &mut self,
         subaccount: Subaccount,
@@ -6239,7 +6237,7 @@ impl Governance {
             Some(Command::MergeMaturity(_)) => Self::merge_maturity_removed_error(),
             Some(Command::StakeMaturity(s)) => self
                 .stake_maturity_of_neuron(&id, caller, s)
-                .map(|(response, _)| ManageNeuronResponse::stake_maturity_response(response)),
+                .map(ManageNeuronResponse::stake_maturity_response),
             Some(Command::Split(s)) => self
                 .split_neuron(&id, caller, s)
                 .await
@@ -6510,7 +6508,7 @@ impl Governance {
     /// This means that programming in this method needs to be extra-defensive on the handling of results so that
     /// we're sure not to trap after we've acquired the global lock and made an async call, as otherwise the global
     /// lock will be permanently held and no spawning will occur until a upgrade to fix it is made.
-    #[cfg_attr(feature = "tla", tla_update_method(SPAWN_NEURONS_DESC.clone()))]
+    #[cfg_attr(feature = "tla", tla_update_method(SPAWN_NEURONS_DESC.clone(), tla_snapshotter!()))]
     pub async fn maybe_spawn_neurons(&mut self) {
         if !self.can_spawn_neurons() {
             return;
