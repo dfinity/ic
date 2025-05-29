@@ -31,7 +31,6 @@ use registry_canister::mutations::{
     do_add_node_operator::AddNodeOperatorPayload,
     do_remove_node_operators::RemoveNodeOperatorsPayload,
 };
-use std::collections::BTreeMap;
 use std::time::Duration;
 
 /// Test that new Node Operator records can be added and removed to/from the
