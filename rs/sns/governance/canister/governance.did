@@ -16,6 +16,7 @@ type Action = variant {
   TransferSnsTreasuryFunds : TransferSnsTreasuryFunds;
   UpgradeSnsControlledCanister : UpgradeSnsControlledCanister;
   DeregisterDappCanisters : DeregisterDappCanisters;
+  TreasuryManagerWithdraw : TreasuryManagerWithdraw;
   MintSnsTokens : MintSnsTokens;
   Unspecified : record {};
   ManageSnsMetadata : ManageSnsMetadata;
@@ -665,14 +666,12 @@ type RegisterDappCanisters = record {
 };
 
 type ExistingCanister = record {
-  canister_id : principal;
+  canister_id : opt principal;
   wasm_module_hash : opt blob;
-  store_canister_id : opt principal;
 };
 
 type NewCanister = record {
   chunked_canister_wasm : opt ChunkedCanisterWasm;
-  canister_install_arg : opt blob;
 };
 
 type Installation = variant {
@@ -701,6 +700,10 @@ type RegisterTreasuryManager = record {
 
   // The SNS should set these treasury allowances while registering the treasury manager.
   allowances : opt Allowances;
+};
+
+type TreasuryManagerWithdraw = record {
+  treasuty_manager_canister_id : opt principal;
 };
 
 type RegisterVote = record {
