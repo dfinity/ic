@@ -10,44 +10,37 @@ trap 'popd > /dev/null 2>&1 || true' EXIT
 mkdir -p /tmp/subnet_recovery
 pushd /tmp/subnet_recovery > /dev/null
 
+download_artifacts_from_url() {
+    local base_url="$1"
+    local registry_url="${base_url}ic_registry_local_store.tar.zst"
+    local cup_url="${base_url}cup.proto"
+    
+    echo "Attempting to download recovery artifacts from $base_url"
+
+
+    # Download both files - if either fails, the function fails
+    if curl -L --fail -o "ic_registry_local_store.tar.zst" "$registry_url" && \
+       curl -L --fail -o "cup.proto" "$cup_url"; then
+        echo "Successfully downloaded recovery artifacts from $base_url"
+        return 0
+    else
+        echo "WARNING: Failed to download recovery artifacts from $base_url"
+        rm -f "ic_registry_local_store.tar.zst" "cup.proto"
+        return 1
+    fi
+}
+
 echo "Downloading recovery artifacts..."
-local base_urls=(
+base_urls=(
     "https://download.dfinity.systems/"
     "https://download.dfinity.network/"
 )
+
+download_successful=false
 for base_url in "${base_urls[@]}"; do
-    local registry_url="${base_url}ic_registry_local_store.tar.zst"
-    local cup_url="${base_url}cup.proto"
-    echo "Attempting to download recovery artifacts from $base_url"
-
-    registry_success=false
-    cup_success=false
-
-    if curl -L -o "ic_registry_local_store.tar.zst" "$registry_url"; then
-        echo "Successfully downloaded ic_registry_local_store.tar.zst from $base_url"
-        registry_success=true
-    else
-        echo "WARNING: Failed to download ic_registry_local_store.tar.zst from $base_url"
-        rm -f "ic_registry_local_store.tar.zst"
-    fi
-
-    if curl -L -o "cup.proto" "$cup_url"; then
-        echo "Successfully downloaded cup.proto from $base_url"
-        cup_success=true
-    else
-        echo "WARNING: Failed to download cup.proto from $base_url"
-        rm -f "cup.proto"
-    fi
-
-    if [ "$registry_success" = true ] && [ "$cup_success" = true ]; then
-        echo "Download from $base_url completed successfully"
+    if download_artifacts_from_url "$base_url"; then
         download_successful=true
         break
-    else
-        echo "WARNING: Failed to download all artifacts from $base_url"
-        # Clean up partial downloads
-        rm -f "ic_registry_local_store.tar.zst"
-        rm -f "cup.proto"
     fi
 done
 
