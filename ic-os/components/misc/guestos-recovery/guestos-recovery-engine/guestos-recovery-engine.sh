@@ -4,7 +4,7 @@ set -e
 
 # Completes the recovery process by downloading and applying the recovery artifacts
 
-echo "Starting GuestOS recovery process..."
+echo "Starting GuestOS recovery engine..."
 echo "Downloading recovery artifacts..."
 # ...
 # download ic_registry_local_store.tar.zst and cup.proto
@@ -35,4 +35,4 @@ sudo systemctl restart setup-permissions || true
 # sudo systemctl start ic-replica;
 # sudo systemctl status ic-replica;
 
-echo "GuestOS recovery process completed"
+echo "GuestOS recovery engine completed"
