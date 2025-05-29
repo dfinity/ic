@@ -12,7 +12,7 @@ type Action = variant {
   UpgradeSnsToNextVersion : record {};
   AdvanceSnsTargetVersion : AdvanceSnsTargetVersion;
   RegisterDappCanisters : RegisterDappCanisters;
-  ManageRegisterDappCapabilities : ManageRegisterDappCapabilities;
+  ManageDappCanisterCapabilities : ManageDappCanisterCapabilities;
   TransferSnsTreasuryFunds : TransferSnsTreasuryFunds;
   UpgradeSnsControlledCanister : UpgradeSnsControlledCanister;
   DeregisterDappCanisters : DeregisterDappCanisters;
@@ -704,20 +704,25 @@ type CapabilityBasedFunction = variant {
   TreasuryManagerFunction : TreasuryManagerFunction;
 };
 
+type TreasuryManager = record {
+  initial_deposit : opt Deposit;
+};
+
 type Capability = variant {
-  // This capability enabled a dapp canister to manage some treasury tokens on behalf of the DAO.
+  // This capability enabled a dapp canister to manage some treasury tokens on behalf of the SNS.
+  // The initial allowances can be set 
   //
   // Granting this capability will register the following capability-based functions:
   // - deposit()
   // - withdraw()
-  TreasuryManagerCapability : record {};
+  TreasuryManager : TreasuryManager;
 };
 
 type Capabilities = record {
   capabilities : vec Capability;
 }
 
-type ManageRegisterDappCapabilities = record {
+type ManageDappCanisterCapabilities = record {
   // Which dapp canister is being managed?
   dapp_canister_id : opt principal;
 
