@@ -163,7 +163,7 @@ mod tests {
             dc_id: "DC1".to_string(),
             rewardable_nodes: btreemap! { "type1.1".to_string() => 1 },
             ipv6: Some("foo".to_string()),
-            max_rewardable_nodes: Some(btreemap! { "type1.2".to_string() => 1 }),
+            max_rewardable_nodes: btreemap! { "type1.2".to_string() => 1 },
         };
         registry.maybe_apply_mutation_internal(vec![insert(
             make_node_operator_record_key(node_operator_id),
@@ -195,7 +195,7 @@ mod tests {
                 dc_id: "DC2".to_string(),
                 rewardable_nodes: btreemap! { "type1.3".to_string() => 2 },
                 ipv6: Some("2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string()),
-                max_rewardable_nodes: Some(btreemap! { "type1.4".to_string() => 3 }),
+                max_rewardable_nodes: btreemap! { "type1.4".to_string() => 3 },
             }
         );
     }
@@ -214,7 +214,7 @@ mod tests {
             dc_id: "DC1".to_string(),
             rewardable_nodes: btreemap! { "type1.1".to_string() => 1 },
             ipv6: Some("foo".to_string()),
-            max_rewardable_nodes: Some(btreemap! { "type1.2".to_string() => 1 }),
+            max_rewardable_nodes: btreemap! { "type1.2".to_string() => 1 },
         };
         registry.maybe_apply_mutation_internal(vec![insert(
             make_node_operator_record_key(node_operator_id),
