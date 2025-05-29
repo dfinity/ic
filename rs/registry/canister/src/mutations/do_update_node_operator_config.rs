@@ -77,8 +77,12 @@ impl Registry {
             }
         }
 
-        if !payload.max_rewardable_nodes.is_empty() {
-            node_operator_record.max_rewardable_nodes = payload.max_rewardable_nodes;
+        if let Some(max_rewardable_nodes) = payload.max_rewardable_nodes {
+            // It might make sense to allow setting this to None, but for now we keep the same
+            // behavior as the old field of only making changes if values are set.
+            if !max_rewardable_nodes.is_empty() {
+                node_operator_record.max_rewardable_nodes = max_rewardable_nodes;
+            }
         }
 
         let mutations = vec![RegistryMutation {

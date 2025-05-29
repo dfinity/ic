@@ -1981,8 +1981,7 @@ impl ProposalPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperatorCmd {
         let max_rewardable_nodes = self
             .max_rewardable_nodes
             .as_ref()
-            .map(|s| parse_rewardable_nodes(s))
-            .unwrap_or_default();
+            .map(|s| parse_rewardable_nodes(s));
 
         AddNodeOperatorPayload {
             node_operator_principal_id: Some(self.node_operator_principal_id),
@@ -2071,8 +2070,7 @@ impl ProposalPayload<UpdateNodeOperatorConfigPayload> for ProposeToUpdateNodeOpe
         let max_rewardable_nodes = self
             .max_rewardable_nodes
             .as_ref()
-            .map(|s| parse_rewardable_nodes(s))
-            .unwrap_or_default();
+            .map(|s| parse_rewardable_nodes(s));
 
         UpdateNodeOperatorConfigPayload {
             node_operator_id: Some(self.node_operator_id),
