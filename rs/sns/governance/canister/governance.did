@@ -12,7 +12,7 @@ type Action = variant {
   UpgradeSnsToNextVersion : record {};
   AdvanceSnsTargetVersion : AdvanceSnsTargetVersion;
   RegisterDappCanisters : RegisterDappCanisters;
-  ManageSnsExtensionCapabilities : ManageSnsExtensionCapabilities;
+  ManageRegisterDappCapabilities : ManageRegisterDappCapabilities;
   TransferSnsTreasuryFunds : TransferSnsTreasuryFunds;
   UpgradeSnsControlledCanister : UpgradeSnsControlledCanister;
   DeregisterDappCanisters : DeregisterDappCanisters;
@@ -20,6 +20,7 @@ type Action = variant {
   Unspecified : record {};
   ManageSnsMetadata : ManageSnsMetadata;
   ExecuteGenericNervousSystemFunction : ExecuteGenericNervousSystemFunction;
+  ExecuteCapabilityBasedFunction : ExecuteCapabilityBasedFunction;
   ManageLedgerParameters : ManageLedgerParameters;
   Motion : Motion;
 };
@@ -204,6 +205,11 @@ type DissolveState = variant {
 
 type ExecuteGenericNervousSystemFunction = record {
   function_id : nat64;
+  payload : blob;
+};
+
+type ExecuteCustomProposal = record {
+  proposal_id : opt ProposalId;
   payload : blob;
 };
 
@@ -678,30 +684,48 @@ type Allowances = record {
   icrc2_allowances : opt vec Icrc2Allowance;
 };
 
-type TreasuryManagerArgs = record {
+type Deposit = record {
   allowances : opt Allowances;
 };
 
+type Withdraw = record {};
+
+type TreasuryManagerFunction = variant {
+  Deposit : Deposit;
+  Withdraw : Withdraw;
+};
+
+type ExecuteCapabilityBasedFunction = record {
+  dapp_canister_id : opt principal;
+  function : opt TreasuryManagerFunction;
+};
+
 type Capability = variant {
-  TreasuryManager : TreasuryManagerArgs;
+  // This capability enabled a dapp canister to manage some treasury tokens on behalf of the DAO.
+  //
+  // Granting this capability will register the following capability-based functions:
+  // - deposit()
+  // - withdraw()
+  TreasuryManager : record {};
 };
 
 type Capabilities = record {
   capabilities : vec Capability;
 }
 
-type Extension = record {
-  canister_id : opt principal;
+type ManageRegisterDappCapabilities = record {
+  // Which dapp canister is being managed?
+  dapp_canister_id : opt principal;
 
-  // Each capability has a list of supported SNS extension versions.
+  // This field is used to specify the intended version of the dapp canister module for which
+  // the capabilities are being registered. Some capabilities may be granted only for specific
+  // canister versions modules, e.g., to ensure compatibility and safety. For these capabilities,
+  // the SNS will check the module hash of the dapp canister against this value. If it matches,
+  // the SNS will render the proposal text to indicate the most important aspects required for
+  // the voters to make a decision, e.g., the declared purpose, and where to find the source code.
   module_hash : opt blob;
-};
 
-type ManageSnsExtensionCapabilities = record {
-  // Which SNS extension (dapp canister) is being managed?
-  extension : opt Extension;
-
-  // Which SNS extension (dapp canister) should this extension have?
+  // Which capabilities should this dapp canister have?
   capabilities : opt Capabilities;
 };
 
