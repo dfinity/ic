@@ -127,7 +127,11 @@ pub struct UpdateNodeOperatorConfigPayload {
     pub set_ipv6_to_none: Option<bool>,
 
     /// A map from node type to the maximum number of nodes for which the associated Node
-    /// Operator should be rewarded.
+    /// Operator should be rewarded.  To set all values to 0, you need to send a map with at least
+    /// one entry and a value of 0, like `Some(btreemap! { "type1.1".to_string() => 0 })`.  If an
+    /// empty map is sent, the existing values will not be updated, to be consistent with the behavior
+    /// of `rewardable_nodes`.  That behavior may change in the future, so prefer sending None
+    /// instead of an empty BtreeMap.
     pub max_rewardable_nodes: Option<BTreeMap<String, u32>>,
 }
 
