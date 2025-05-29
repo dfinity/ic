@@ -653,7 +653,7 @@ fn validate_combined_signature(
         }
         ThresholdSigInputsRef::VetKd(_) => {
             // We don't expect to find agreements for vet KD contexts in the IDKG payload
-            return Err(InvalidIDkgPayloadReason::VetKdUnexpected(id).into());
+            Err(InvalidIDkgPayloadReason::VetKdUnexpected(id).into())
         }
     }
 }
