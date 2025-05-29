@@ -690,11 +690,18 @@ type Capabilities = record {
   capabilities : vec Capability;
 }
 
+type Extension = record {
+  canister_id : opt principal;
+
+  // Each capability has a list of supported SNS extension versions.
+  module_hash : opt blob;
+};
+
 type ManageSnsExtensionCapabilities = record {
-  // Which of the dapp canisters is being promoted to have some capabilities?
+  // Which SNS extension (dapp canister) is being managed?
   extension : opt Extension;
 
-  // The SNS should set these treasury allowances while registering the treasury manager.
+  // Which SNS extension (dapp canister) should this extension have?
   capabilities : opt Capabilities;
 };
 
