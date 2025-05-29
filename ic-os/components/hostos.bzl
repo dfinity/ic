@@ -53,6 +53,8 @@ component_files = {
     Label("misc/hostos/sudoers"): "/etc/sudoers",
     Label("misc/hostos/ic-node.conf"): "/etc/tmpfiles.d/ic-node.conf",
     Label("misc/hostos/20-ipmi.rules"): "/etc/udev/rules.d/20-ipmi.rules",
+    Label("misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-upgrader.sh"): "/opt/ic/bin/guestos-recovery-upgrader.sh",
+    Label("misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-upgrader.service"): "/etc/systemd/system/guestos-recovery-upgrader.service",
 
     # monitoring
     Label("monitoring/systemd-user/user@.service"): "/etc/systemd/system/user@.service",
