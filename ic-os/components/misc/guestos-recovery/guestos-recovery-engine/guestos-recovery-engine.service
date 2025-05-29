@@ -6,7 +6,6 @@ After=upgrade-shared-data-store.service
 Wants=network-online.target
 After=network-online.target
 Before=ic-replica.service
-RequiresMountsFor=/boot/config /var/lib/ic/data /var/lib/ic/crypto
 
 [Install]
 WantedBy=multi-user.target
