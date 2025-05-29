@@ -245,8 +245,7 @@ main() {
 
     echo "Recovery Upgrader completed successfully"
 
-    echo "Rebooting GuestOS into new version..."
-    systemctl restart guestos
+    echo "Launching GuestOS on the new version..."
 }
 
 main
