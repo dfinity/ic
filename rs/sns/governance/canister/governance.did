@@ -12,6 +12,7 @@ type Action = variant {
   UpgradeSnsToNextVersion : record {};
   AdvanceSnsTargetVersion : AdvanceSnsTargetVersion;
   RegisterDappCanisters : RegisterDappCanisters;
+  RegisterTreasuryManager : RegisterTreasuryManager;
   TransferSnsTreasuryFunds : TransferSnsTreasuryFunds;
   UpgradeSnsControlledCanister : UpgradeSnsControlledCanister;
   DeregisterDappCanisters : DeregisterDappCanisters;
@@ -661,6 +662,45 @@ type QueryStats = record {
 
 type RegisterDappCanisters = record {
   canister_ids : vec principal;
+};
+
+type ExistingCanister = record {
+  canister_id : principal;
+  wasm_module_hash : opt blob;
+  store_canister_id : opt principal;
+};
+
+type NewCanister = record {
+  chunked_canister_wasm : opt ChunkedCanisterWasm;
+  canister_install_arg : opt blob;
+};
+
+type Installation = variant {
+  existing_canister : ExistingCanister;
+  new_canister : NewCanister;
+};
+
+type Icrc2Token = variant {
+  NativeSnsToken : record {};
+  Icp : record {};
+};
+
+type Icrc2Allowance = record {
+    token : opt Icrc2Token;
+    amount_e8s : opt nat64;
+};
+
+type Allowances = record {
+  icrc2_allowances : opt vec Icrc2Allowance;
+};
+
+type RegisterTreasuryManager = record {
+  // Determines the type of installation for the extension canister; e.g., whether it is
+  // a new canister to be installed by the SNS or an existing one.
+  installation : opt Installation;
+
+  // The SNS should set these treasury allowances while registering the treasury manager.
+  allowances : opt Allowances;
 };
 
 type RegisterVote = record {
