@@ -79,7 +79,6 @@ def image_deps(mode, _malicious = False):
     deps.update(image_variants[mode])
 
     if "dev" in mode:
-        # Remove the original config tool and add the dev version
         deps["rootfs"].pop("//rs/ic_os/release:config", None)
         deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
 
