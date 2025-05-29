@@ -12,6 +12,7 @@ type Action = variant {
   UpgradeSnsToNextVersion : record {};
   AdvanceSnsTargetVersion : AdvanceSnsTargetVersion;
   RegisterDappCanisters : RegisterDappCanisters;
+  ManageSnsExtensionCapabilities : ManageSnsExtensionCapabilities;
   TransferSnsTreasuryFunds : TransferSnsTreasuryFunds;
   UpgradeSnsControlledCanister : UpgradeSnsControlledCanister;
   DeregisterDappCanisters : DeregisterDappCanisters;
@@ -661,6 +662,40 @@ type QueryStats = record {
 
 type RegisterDappCanisters = record {
   canister_ids : vec principal;
+};
+
+type Icrc2Token = variant {
+  NativeSnsToken : record {};
+  Icp : record {};
+};
+
+type Icrc2Allowance = record {
+    token : opt Icrc2Token;
+    amount_e8s : opt nat64;
+};
+
+type Allowances = record {
+  icrc2_allowances : opt vec Icrc2Allowance;
+};
+
+type TreasuryManagerArgs = record {
+  allowances : opt Allowances;
+};
+
+type Capability = variant {
+  TreasuryManager : TreasuryManagerArgs;
+};
+
+type Capabilities = record {
+  capabilities : vec Capability;
+}
+
+type ManageSnsExtensionCapabilities = record {
+  // Which of the dapp canisters is being promoted to have some capabilities?
+  extension : opt Extension;
+
+  // The SNS should set these treasury allowances while registering the treasury manager.
+  capabilities : opt Capabilities;
 };
 
 type RegisterVote = record {
