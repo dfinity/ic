@@ -14,11 +14,10 @@ download_artifacts_from_url() {
     local base_url="$1"
     local registry_url="${base_url}ic_registry_local_store.tar.zst"
     local cup_url="${base_url}cup.proto"
-    
+
     echo "Attempting to download recovery artifacts from $base_url"
 
-
-    # Download both files - if either fails, the function fails
+    # Download both artifacts - if either fails, the function fails
     if curl -L --fail -o "ic_registry_local_store.tar.zst" "$registry_url" && \
        curl -L --fail -o "cup.proto" "$cup_url"; then
         echo "Successfully downloaded recovery artifacts from $base_url"
