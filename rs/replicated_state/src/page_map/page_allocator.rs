@@ -118,7 +118,7 @@ impl PageAllocator {
     /// The generic parameters simplify the usage with `PageDelta::iter()`.
     pub fn serialize_page_delta<'a, I>(&'a self, page_delta: I) -> PageDeltaSerialization
     where
-        I: IntoIterator<Item = (PageIndex, &'a Page)>,
+        I: IntoIterator<Item = (&'a PageIndex, &'a Page)>,
     {
         self.0.serialize_page_delta(page_delta)
     }

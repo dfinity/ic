@@ -163,7 +163,7 @@ use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::Neuron;
+use ic_nns_governance_api::Neuron;
 use ic_nns_init::read_initial_mutations_from_local_store_dir;
 use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
@@ -203,7 +203,7 @@ use std::{
     fs,
     future::Future,
     io::{Read, Write},
-    net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream},
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
@@ -871,6 +871,14 @@ impl IcNodeSnapshot {
             })
     }
 
+    pub fn is_api_boundary_node(&self) -> bool {
+        let registry_version = self.registry_version;
+        self.local_registry
+            .get_api_boundary_node_ids(registry_version)
+            .unwrap()
+            .contains(&self.node_id)
+    }
+
     pub fn effective_canister_id(&self) -> PrincipalId {
         match self.subnet_id() {
             Some(subnet_id) => {
@@ -881,10 +889,22 @@ impl IcNodeSnapshot {
                     .expect("Optional routing table is None in local registry.");
                 match canister_ranges.first() {
                     Some(range) => range.start.get(),
-                    None => PrincipalId::default(),
+                    None => {
+                        warn!(
+                            self.env.logger(),
+                            "No canister ranges found for subnet_id={}", subnet_id
+                        );
+                        PrincipalId::default()
+                    }
                 }
             }
-            None => PrincipalId::default(),
+            None => {
+                warn!(
+                    self.env.logger(),
+                    "Node {} is not assigned to any subnet", self.node_id
+                );
+                PrincipalId::default()
+            }
         }
     }
 
@@ -917,6 +937,39 @@ impl IcNodeSnapshot {
         name: &str,
         arg: Option<Vec<u8>>,
     ) -> Principal {
+        self.create_and_install_canister_with_arg_and_cycles(name, arg, None)
+    }
+
+    pub fn install_canister_with_arg(
+        &self,
+        canister_id: Principal,
+        name: &str,
+        arg: Option<Vec<u8>>,
+    ) {
+        let canister_bytes = load_wasm(name);
+        self.with_default_agent(move |agent| async move {
+            // Create a canister.
+            let mgr = ManagementCanister::create(&agent);
+
+            let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
+            if let Some(arg) = arg {
+                install_code = install_code.with_raw_arg(arg)
+            }
+            install_code
+                .call_and_wait()
+                .await
+                .map_err(|err| format!("Couldn't install canister: {}", err))?;
+            Ok::<_, String>(canister_id)
+        })
+        .expect("Could not install canister");
+    }
+
+    pub fn create_and_install_canister_with_arg_and_cycles(
+        &self,
+        name: &str,
+        arg: Option<Vec<u8>>,
+        cycles_amount: Option<u128>,
+    ) -> Principal {
         let canister_bytes = load_wasm(name);
         let effective_canister_id = self.effective_canister_id();
 
@@ -925,7 +978,7 @@ impl IcNodeSnapshot {
             let mgr = ManagementCanister::create(&agent);
             let canister_id = mgr
                 .create_canister()
-                .as_provisional_create_with_amount(None)
+                .as_provisional_create_with_amount(cycles_amount)
                 .with_effective_canister_id(effective_canister_id)
                 .call_and_wait()
                 .await
@@ -1107,14 +1160,12 @@ impl<T: HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_mainnet_ic_os_img_sha256(&self) -> Result<String> {
-        let mainnet_version: String =
-            read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+        let mainnet_version = get_mainnet_nns_revision();
         fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img"), "disk-img.tar.zst", self.test_env().logger())
     }
 
     fn get_mainnet_ic_os_update_img_sha256(&self) -> Result<String> {
-        let mainnet_version: String =
-            read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+        let mainnet_version = get_mainnet_nns_revision();
         fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img"), "update-img.tar.zst", self.test_env().logger())
     }
 }
@@ -1127,101 +1178,99 @@ pub fn get_elasticsearch_hosts() -> Result<Vec<String>> {
 }
 
 pub fn get_ic_os_img_url() -> Result<Url> {
-    let url = read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_ic_os_img_sha256() -> Result<String> {
-    let sha256 = read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "ic_os_img_sha256")?;
-    Ok(sha256)
+    Ok(std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_HASH")?)
 }
 
 pub fn get_malicious_ic_os_img_url() -> Result<Url> {
-    let url =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_malicious_ic_os_img_sha256() -> Result<String> {
-    let sha256 =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "ic_os_img_sha256")?;
-    Ok(sha256)
+    Ok(std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG_HASH")?)
 }
 
 pub fn get_ic_os_update_img_url() -> Result<Url> {
-    let url = read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_ic_os_update_img_sha256() -> Result<String> {
-    let sha256 = read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
-    Ok(sha256)
+    Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_HASH")?)
 }
 
 pub fn get_ic_os_update_img_test_url() -> Result<Url> {
-    let url = read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_TEST_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_ic_os_update_img_test_sha256() -> Result<String> {
-    let sha256 =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
-    Ok(sha256)
+    Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_TEST_HASH")?)
 }
 
 pub fn get_malicious_ic_os_update_img_url() -> Result<Url> {
-    let url =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_malicious_ic_os_update_img_sha256() -> Result<String> {
-    let sha256 =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
-    Ok(sha256)
+    Ok(std::env::var(
+        "ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG_HASH",
+    )?)
 }
 
 pub fn get_boundary_node_img_url() -> Result<Url> {
-    let dep_rel_path = "ic-os/boundary-guestos/envs/dev/disk-img.tar.zst.cas-url";
-    let url = read_dependency_to_string(dep_rel_path)?;
+    let url = std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_boundary_node_img_sha256() -> Result<String> {
-    let dep_rel_path = "ic-os/boundary-guestos/envs/dev/disk-img.tar.zst.sha256";
-    let sha256 = read_dependency_to_string(dep_rel_path)?;
-    bail_if_sha256_invalid(&sha256, "boundary_node_img_sha256")?;
-    Ok(sha256)
+    Ok(std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_HASH")?)
+}
+
+pub fn get_mainnet_nns_revision() -> String {
+    std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
+        .expect("could not read mainnet nns version from environment")
+}
+
+pub fn get_mainnet_application_subnet_revision() -> String {
+    std::env::var("MAINNET_APPLICATION_SUBNET_REVISION_ENV")
+        .expect("could not read mainnet application subnet version from environment")
 }
 
 pub fn get_mainnet_ic_os_img_url() -> Result<Url> {
-    let mainnet_version: String = read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+    let mainnet_version = get_mainnet_nns_revision();
     let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img/disk-img.tar.zst");
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_mainnet_ic_os_update_img_url() -> Result<Url> {
-    let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+    let mainnet_version = get_mainnet_nns_revision();
     let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img/update-img.tar.zst");
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_hostos_update_img_test_url() -> Result<Url> {
-    let url =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_hostos_update_img_test_sha256() -> Result<String> {
-    let sha256 =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "hostos_update_img_sha256")?;
-    Ok(sha256)
+    Ok(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_HASH")?)
+}
+
+pub fn get_empty_disk_img_url() -> Result<Url> {
+    let url = std::env::var("ENV_DEPS__EMPTY_DISK_IMG_URL")?;
+    Ok(Url::parse(&url)?)
+}
+
+pub fn get_empty_disk_img_sha256() -> Result<String> {
+    Ok(std::env::var("ENV_DEPS__EMPTY_DISK_IMG_HASH")?)
 }
 
 pub const FETCH_SHA256SUMS_RETRY_TIMEOUT: Duration = Duration::from_secs(120);
@@ -1376,6 +1425,17 @@ pub fn get_dependency_path<P: AsRef<Path>>(p: P) -> PathBuf {
     Path::new(&runfiles).join(p)
 }
 
+/// Return the (actual) path of the (runfiles-relative) artifact in environment variable `v`.
+pub fn get_dependency_path_from_env(v: &str) -> PathBuf {
+    let runfiles =
+        std::env::var("RUNFILES").expect("Expected environment variable RUNFILES to be defined!");
+
+    let path_from_env =
+        std::env::var(v).unwrap_or_else(|_| panic!("Environment variable {} not set", v));
+
+    Path::new(&runfiles).join(path_from_env)
+}
+
 pub fn read_dependency_to_string<P: AsRef<Path>>(p: P) -> Result<String> {
     let dep_path = get_dependency_path(p);
     if dep_path.exists() {
@@ -1444,9 +1504,11 @@ pub trait SshSession {
         channel.send_eof()?;
         let mut out = String::new();
         channel.read_to_string(&mut out)?;
+        let mut err = String::new();
+        channel.stderr().read_to_string(&mut err)?;
         let exit_status = channel.exit_status()?;
         if exit_status != 0 {
-            bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out}");
+            bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out} Err: {err}");
         }
         Ok(out)
     }
@@ -1502,9 +1564,14 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     }
 
     fn status(&self) -> Result<HttpStatusResponse> {
+        block_on(self.status_async())
+    }
+
+    async fn status_async(&self) -> Result<HttpStatusResponse> {
         let url = self.get_public_url();
         let addr = self.get_public_addr();
-        let client = reqwest::blocking::Client::builder()
+
+        let client = reqwest::Client::builder()
             .danger_accept_invalid_certs(self.uses_snake_oil_certs())
             .timeout(READY_RESPONSE_TIMEOUT);
         let client = match (self.uses_dns(), url.domain()) {
@@ -1515,11 +1582,13 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
             .build()
             .expect("cannot build a reqwest client")
             .get(url.join("api/v2/status").expect("failed to join URLs"))
-            .send()?;
+            .send()
+            .await?;
 
         let status = response.status();
         let body = response
             .bytes()
+            .await
             .expect("failed to convert a response to bytes")
             .to_vec();
         if status.is_client_error() || status.is_server_error() {
@@ -1538,7 +1607,11 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
 
     /// The status-endpoint reports `healthy`.
     fn status_is_healthy(&self) -> Result<bool> {
-        match self.status() {
+        block_on(self.status_is_healthy_async())
+    }
+
+    async fn status_is_healthy_async(&self) -> Result<bool> {
+        match self.status_async().await {
             Ok(s) if s.replica_health_status.is_some() => {
                 let healthy = Some(ReplicaHealthStatus::Healthy) == s.replica_health_status;
                 if !healthy {
@@ -1565,16 +1638,54 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
 
     /// Waits until the is_healthy() returns true
     fn await_status_is_healthy(&self) -> Result<()> {
-        retry_with_msg!(
+        block_on(self.await_status_is_healthy_async())
+    }
+
+    async fn await_status_is_healthy_async(&self) -> Result<()> {
+        retry_with_msg_async!(
             &format!("await_status_is_healthy of {}", self.get_public_url()),
-            self.test_env().logger(),
+            &self.test_env().logger(),
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
-            || {
-                self.status_is_healthy()
-                    .and_then(|s| if !s { bail!("Not ready!") } else { Ok(()) })
+            || async {
+                self.status_is_healthy_async().await.and_then(|s| {
+                    if !s {
+                        bail!("Not ready!")
+                    } else {
+                        Ok(())
+                    }
+                })
             }
         )
+        .await
+    }
+
+    /// Checks if the Orchestrator dashboard endpoint is accessible
+    fn is_orchestrator_dashboard_accessible(ip: Ipv6Addr, timeout_secs: u64) -> bool {
+        let dashboard_endpoint = format!("http://[{}]:7070", ip);
+
+        let client = reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(timeout_secs))
+            .build()
+            .expect("Failed to build HTTP client");
+
+        let resp = match client.get(&dashboard_endpoint).send() {
+            Ok(resp) => resp,
+            Err(e) => {
+                eprintln!("Failed to send request: {}", e);
+                return false;
+            }
+        };
+
+        if !resp.status().is_success() {
+            eprintln!(
+                "Orchestrator dashboard returned non-success status: {}",
+                resp.status()
+            );
+            return false;
+        }
+
+        resp.text().is_ok()
     }
 
     /// Waits until the is_healthy() returns an error three times in a row
@@ -1597,6 +1708,34 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
                 Ok(_) => {
                     count = 0;
                     Err(anyhow!("Status is still available"))
+                }
+            }
+        )
+    }
+
+    /// Waits until the Orchestrator dashboard endpoint is accessible
+    fn await_orchestrator_dashboard_accessible(&self) -> anyhow::Result<()> {
+        let mut count = 0;
+        retry_with_msg!(
+            &format!(
+                "await_orchestrator_dashboard_accessible for {}",
+                self.get_public_addr().ip()
+            ),
+            self.test_env().logger(),
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || {
+                let ip = match self.get_public_addr().ip() {
+                    IpAddr::V6(ip) => ip,
+                    IpAddr::V4(_) => panic!("Expected IPv6 address"),
+                };
+                if Self::is_orchestrator_dashboard_accessible(ip, 5) {
+                    Ok(())
+                } else {
+                    count += 1;
+                    Err(anyhow::anyhow!(
+                        "Orchestrator dashboard not available, attempt {count}"
+                    ))
                 }
             }
         )
@@ -1632,7 +1771,16 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
 impl HasPublicApiUrl for IcNodeSnapshot {
     fn get_public_url(&self) -> Url {
         let node_record = self.raw_node_record();
-        IcNodeSnapshot::http_endpoint_to_url(&node_record.http.expect("Node doesn't have URL"))
+
+        // API boundary nodes listen on port 443, while replicas listen on port 8080
+        if self.is_api_boundary_node() {
+            match self.get_ip_addr() {
+                IpAddr::V4(ipv4) => Url::parse(&format!("https://{}", ipv4)).unwrap(),
+                IpAddr::V6(ipv6) => Url::parse(&format!("https://[{}]", ipv6)).unwrap(),
+            }
+        } else {
+            IcNodeSnapshot::http_endpoint_to_url(&node_record.http.expect("Node doesn't have URL"))
+        }
     }
 
     fn get_public_addr(&self) -> SocketAddr {
@@ -1640,8 +1788,13 @@ impl HasPublicApiUrl for IcNodeSnapshot {
         let connection_endpoint = node_record.http.expect("Node doesn't have URL");
         SocketAddr::new(
             IpAddr::from_str(&connection_endpoint.ip_addr).expect("Missing IP address in the node"),
-            connection_endpoint.port as u16,
+            0,
         )
+    }
+
+    fn uses_snake_oil_certs(&self) -> bool {
+        let node_record = self.raw_node_record();
+        node_record.domain.is_some()
     }
 
     async fn try_build_default_agent_async(&self) -> Result<Agent, AgentError> {
@@ -2034,7 +2187,7 @@ where
     let start = Instant::now();
     debug!(
         log,
-        "Func=\"{msg}\" is being retried for the maximum of {timeout:?} with a linear backoff of {backoff:?}"
+        "Func=\"{msg}\" is being retried for the maximum of {timeout:?} with a constant backoff of {backoff:?}"
     );
     loop {
         match f().await {

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.1.9
+
+### Added
+
+- `icrc103` types.
+
+## 0.1.8
+
+### Added
+
+- Add default encoding and decoding of a Principal in a Subaccount.
+
+## 0.1.7
+
+### Added
+
+- Rustdoc.
+
 ## 0.1.6
 
 ### Added

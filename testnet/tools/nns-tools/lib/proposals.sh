@@ -47,6 +47,10 @@ __Target canister__: [$CANISTER_ID](https://dashboard.internetcomputer.org/canis
 
 [new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
 
+## Summary
+
+TODO add a summary of changes
+
 ## New Commits
 
 \`\`\`
@@ -124,6 +128,33 @@ generate_nns_upgrade_proposal_text() {
     ESCAPED_IC_REPO=$(printf '%s\n' "$IC_REPO" | sed -e 's/[]\/$*.^[]/\\&/g')
     RELATIVE_CODE_LOCATION="$(echo "$CANISTER_CODE_LOCATION" | sed "s/$ESCAPED_IC_REPO/./g")"
 
+    # If the canister has an unrelease_changelog.md file, use that to populate
+    # the "Features & Fixes" section of the upgrade proposal.
+    FEATURES_AND_FIXES="TODO Hand-craft this section."
+    PRIMARY_CANISTER_CODE_LOCATION=$(echo "${CANISTER_CODE_LOCATION}" | cut -d' ' -f1)
+    UNRELEASED_CHANGELOG_PATH="${PRIMARY_CANISTER_CODE_LOCATION}/unreleased_changelog.md"
+    if [[ -e "${UNRELEASED_CHANGELOG_PATH}" ]]; then
+        FEATURES_AND_FIXES=$(
+            sed -n '/# Next Upgrade Proposal/,$p' \
+                "${UNRELEASED_CHANGELOG_PATH}" \
+                | tail -n +3 \
+                | filter_out_empty_markdown_sections \
+                | increment_markdown_heading_levels
+        )
+        if [[ -z "${FEATURES_AND_FIXES}" ]]; then
+            print_yellow "The unreleased_changelog.md has nothing interesting in it." >&2
+            print_yellow 'Therefore, Some hand crafting of "Features & Fixes" will be required.' >&2
+            FEATURES_AND_FIXES='TODO Hand-craft this section. unreleased_changelog.md was empty. It might be
+that this is just a "maintenance" release; i.e. we are not trying to ship
+any behavior changes. Instead, we just want the build in production to not
+get too old. One reason to run recent builds is so that the next release
+does not have a huge amount of changes in it.'
+        fi
+    else
+        print_yellow "No unreleased_changelog.md found at ${UNRELEASED_CHANGELOG_PATH} for ${CANISTER_NAME} " >&2
+        print_yellow 'The "Features & Fixes" section will need to be written by hand.' >&2
+    fi
+
     ARGS_HASH=""
     if [ ! -z "$CANDID_ARGS" ]; then
         FILE=$(encode_candid_args_in_file "$CANDID_ARGS")
@@ -139,6 +170,16 @@ __Proposer__: ${PROPOSER}
 __Source code__: [$NEXT_COMMIT][new-commit]
 
 [new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
+
+
+## Features & Fixes
+
+TODO: Review this section. In particular, make sure that it matches the "New
+Commits" section, and does not contain anything extraneous from previous
+proposals. If it seems alright, simply delete this TODO.
+
+$FEATURES_AND_FIXES
+
 
 ## New Commits
 
@@ -244,6 +285,33 @@ generate_sns_bless_wasm_proposal_text() {
     ESCAPED_IC_REPO=$(printf '%s\n' "$IC_REPO" | sed -e 's/[]\/$*.^[]/\\&/g')
     RELATIVE_CODE_LOCATION="$(echo "$CANISTER_CODE_LOCATION" | sed "s/$ESCAPED_IC_REPO/./g")"
 
+    # If the canister has an unrelease_changelog.md file, use that to populate
+    # the "Features & Fixes" section of the proposal.
+    FEATURES_AND_FIXES="TODO Hand-craft this section."
+    PRIMARY_CANISTER_CODE_LOCATION=$(echo "${CANISTER_CODE_LOCATION}" | cut -d' ' -f1)
+    UNRELEASED_CHANGELOG_PATH="${PRIMARY_CANISTER_CODE_LOCATION}/unreleased_changelog.md"
+    if [[ -e "${UNRELEASED_CHANGELOG_PATH}" ]]; then
+        FEATURES_AND_FIXES=$(
+            sed -n '/# Next Upgrade Proposal/,$p' \
+                "${UNRELEASED_CHANGELOG_PATH}" \
+                | tail -n +3 \
+                | filter_out_empty_markdown_sections \
+                | increment_markdown_heading_levels
+        )
+        if [[ -z "${FEATURES_AND_FIXES}" ]]; then
+            print_yellow "The unreleased_changelog.md has nothing interesting in it." >&2
+            print_yellow 'Therefore, Some hand crafting of "Features & Fixes" will be required.' >&2
+            FEATURES_AND_FIXES='TODO Hand-craft this section. unreleased_changelog.md was empty. It might be
+that this is just a "maintenance" release; i.e. we are not trying to ship
+any behavior changes. Instead, we just want the build in production to not
+get too old. One reason to run recent builds is so that the next release
+does not have a huge amount of changes in it.'
+        fi
+    else
+        print_yellow 'No unreleased_changelog.md file for ${CANISTER_NAME}.' >&2
+        print_yellow 'The "Features & Fixes" section will need to be written by hand.' >&2
+    fi
+
     OUTPUT=$(
         cat <<++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # Publish SNS $CAPITALIZED_CANISTER_TYPE WASM Built at Commit $SHORT_NEXT_COMMIT
@@ -253,6 +321,14 @@ __Proposer__: $PROPOSER
 __Source code__: [$NEXT_COMMIT][new-commit]
 
 [new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
+
+## Features & Fixes
+
+TODO: Review this section. In particular, make sure that it matches the "New
+Commits" section, and does not contain anything extraneous from previous
+proposals. If it seems alright, simply delete this TODO.
+
+$FEATURES_AND_FIXES
 
 
 ## New Commits
@@ -556,12 +632,12 @@ proposal_field_value() {
 
 nns_upgrade_proposal_canister_raw_name() {
     local FILE=$1
-    cat "$FILE" | grep "## Proposal to Upgrade the" | cut -d' ' -f6
+    cat "$FILE" | grep "# Upgrade the" | cut -d' ' -f4
 }
 
 sns_wasm_publish_proposal_canister_raw_name() {
     local FILE=$1
-    cat "$FILE" | grep "## Proposal to Publish the SNS" | cut -d' ' -f7
+    cat "$FILE" | grep "# Publish SNS" | cut -d' ' -f4
 }
 #### Proposal text validators
 

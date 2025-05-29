@@ -46,7 +46,7 @@ rust_test(
     name = "unit_tests",
     crate = ":make_proposal",
     data = [
-        "//rs/bitcoin/ckbtc/kyt:kyt.did",
+        "//rs/bitcoin/checker:btc_checker_canister.did",
         "//rs/bitcoin/ckbtc/minter:ckbtc_minter.did",
         "//rs/ethereum/cketh/minter:cketh_minter.did",
         "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator.did",

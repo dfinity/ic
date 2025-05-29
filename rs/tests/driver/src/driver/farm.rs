@@ -15,6 +15,7 @@ use ic_crypto_sha2::Sha256;
 use reqwest::blocking::{multipart, Client, RequestBuilder};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use slog::info;
 use slog::{error, warn, Logger};
 use std::fmt;
 use std::io::Write;
@@ -161,6 +162,11 @@ impl Farm {
         path: P,
         filename: &str,
     ) -> FarmResult<FileId> {
+        let size = std::fs::metadata(&path).map_err(FarmError::IoError)?.len();
+        info!(
+            self.logger,
+            "Uploading file: {} of size {} bytes ...", filename, size
+        );
         let rb = self
             .post(&format!("group/{}/file", group_name))
             .timeout(TIMEOUT_SETTINGS_LONG.max_http_timeout);
@@ -448,34 +454,31 @@ pub struct GroupSpec {
 
 impl GroupSpec {
     pub fn add_meta(mut self, group_base_name: &str) -> Self {
-        let mut metadata = GroupMetadata {
-            user: None,
-            job_schedule: None,
-            test_name: Some(group_base_name.to_string()),
-        };
-
-        // Acquire bazel's volatile status containing key value pairs like USER and CI_JOB_NAME:
-        let volatile_status_file_path = std::env::var("VOLATILE_STATUS_FILE_PATH")
-            .expect("Expected the environment variable VOLATILE_STATUS_FILE_PATH to be defined!");
-        let volatile_status = read_dependency_to_string(&volatile_status_file_path)
+        // Acquire bazel's stable status containing key value pairs like user and job name:
+        let farm_metadata_path = std::env::var("FARM_METADATA_PATH")
+            .expect("Expected the environment variable FARM_METADATA_PATH to be defined!");
+        let farm_metadata = read_dependency_to_string(&farm_metadata_path)
             .unwrap_or_else(|e| {
-                panic!("Couldn't read content of the volatile status file {volatile_status_file_path}: {e:?}")
+                panic!("Couldn't read content of the status file {farm_metadata_path}: {e:?}")
             })
             .trim_end()
             .to_string();
-        let runtime_args_map = parse_volatile_status_file(volatile_status);
+        let runtime_args_map = parse_farm_metadata_file(farm_metadata);
 
-        if let Some(user) = runtime_args_map.get("USER") {
-            metadata.user = Some(String::from(user));
-        } else {
-            metadata.user = Some(String::from("CI"));
-        }
-
-        if let Some(ci_job_name) = runtime_args_map.get("CI_JOB_NAME") {
-            metadata.job_schedule = Some(String::from(ci_job_name));
-        } else {
-            metadata.job_schedule = Some(String::from("manual"));
-        }
+        // Read values from the runtime args and use sensible defaults if unset
+        let user = runtime_args_map
+            .get("STABLE_FARM_USER") // Always set by bazel
+            .cloned()
+            .unwrap_or("CI".to_string());
+        let job_schedule = runtime_args_map
+            .get("STABLE_FARM_JOB_NAME") // Injected by workspace status
+            .cloned()
+            .unwrap_or("manual".to_string());
+        let metadata = GroupMetadata {
+            user,
+            job_schedule,
+            test_name: group_base_name.to_string(),
+        };
         self.metadata = Some(metadata);
         self
     }
@@ -484,14 +487,14 @@ impl GroupSpec {
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct GroupMetadata {
     #[serde(rename = "user")]
-    pub user: Option<String>,
+    pub user: String,
     #[serde(rename = "jobSchedule")]
-    pub job_schedule: Option<String>,
+    pub job_schedule: String,
     #[serde(rename = "testName")]
-    pub test_name: Option<String>,
+    pub test_name: String,
 }
 
-fn parse_volatile_status_file(input: String) -> HashMap<String, String> {
+fn parse_farm_metadata_file(input: String) -> HashMap<String, String> {
     let mut map = HashMap::new();
     let lines = input.split('\n');
     for line in lines {
@@ -631,7 +634,6 @@ impl CreateVmRequest {
 #[serde(rename_all = "camelCase")]
 pub enum VmType {
     Production,
-    Nested,
     Test,
     Sev,
 }
@@ -644,7 +646,6 @@ pub enum ImageLocation {
     ImageViaUrl { url: Url, sha256: String },
     IcOsImageViaId { id: FileId },
     IcOsImageViaUrl { url: Url, sha256: String },
-    PersistentVolumeClaim { name: String },
 }
 
 #[derive(Debug, Error)]

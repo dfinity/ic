@@ -1,0 +1,37 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "async_utils",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_http_endpoints_async_utils",
+    version = "0.9.0",
+    deps = [
+        # Keep sorted.
+        "@crate_index//:anyhow",
+        "@crate_index//:async-stream",
+        "@crate_index//:byte-unit",
+        "@crate_index//:bytes",
+        "@crate_index//:futures",
+        "@crate_index//:futures-util",
+        "@crate_index//:hyper",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+        "@crate_index//:tonic",
+    ],
+)
+
+rust_test(
+    name = "async_utils_test",
+    crate = ":async_utils",
+    deps = [
+        # Keep sorted.
+        "@crate_index//:rand",
+    ],
+)
+
+rust_doc_test(
+    name = "async_utils_doc_test",
+    crate = ":async_utils",
+)

@@ -40,7 +40,7 @@ fn add_remove_neuron() {
     })
     .build();
 
-    neuron.known_neuron_data = Some(KnownNeuronData {
+    neuron.set_known_neuron_data(KnownNeuronData {
         name: "known neuron data".to_string(),
         description: None,
     });
@@ -466,7 +466,7 @@ fn update_neuron_add_known_neuron() {
 
     // Step 3: make a new neuron with known neuron data and update the neuron.
     let mut new_neuron = old_neuron.clone();
-    new_neuron.known_neuron_data = Some(KnownNeuronData {
+    new_neuron.set_known_neuron_data(KnownNeuronData {
         name: "known neuron data".to_string(),
         description: None,
     });
@@ -499,7 +499,7 @@ fn update_neuron_remove_known_neuron() {
 
     // Step 3: make a new neuron without known neuron data and update the neuron.
     let mut new_neuron = old_neuron.clone();
-    new_neuron.known_neuron_data = None;
+    new_neuron.clear_known_neuron_data();
     assert_eq!(indexes.update_neuron(&old_neuron, &new_neuron), Ok(()));
 
     // Step 4: known neuron can no longer be looked up after update.
@@ -528,7 +528,7 @@ fn update_neuron_update_known_neuron_name() {
 
     // Step 3: make a new neuron with different known neuron name and update the neuron.
     let mut new_neuron = old_neuron.clone();
-    new_neuron.known_neuron_data = Some(KnownNeuronData {
+    new_neuron.set_known_neuron_data(KnownNeuronData {
         name: "different known neuron data".to_string(),
         description: None,
     });

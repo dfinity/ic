@@ -107,8 +107,6 @@ type InitArgs = record {
     metadata : vec record { text; MetadataValue };
     initial_balances : vec record { Account; nat };
     feature_flags : opt FeatureFlags;
-    maximum_number_of_accounts : opt nat64;
-    accounts_overflow_trim_quantity : opt nat64;
     archive_options : record {
         num_blocks_to_archive : nat64;
         max_transactions_per_response : opt nat64;
@@ -144,7 +142,6 @@ type UpgradeArgs = record {
     change_fee_collector : opt ChangeFeeCollector;
     max_memo_length : opt nat16;
     feature_flags : opt FeatureFlags;
-    accounts_overflow_trim_quantity: opt nat64;
     change_archive_options : opt ChangeArchiveOptions;
 };
 
@@ -481,6 +478,34 @@ type icrc21_consent_message_response = variant {
     Err: icrc21_error;
 };
 
+type GetAllowancesArgs = record {
+    from_account: opt Account;
+    prev_spender: opt Account;
+    take: opt nat;
+};
+
+type Allowance103 = record {
+    from_account: Account;
+    to_spender: Account;
+    allowance: nat;
+    expires_at: opt nat64;
+};
+
+type GetAllowancesError = variant {
+    AccessDenied: record {
+        reason: text;
+    };
+    GenericError: record {
+       error_code: nat;
+       message: text;
+   };
+};
+
+type icrc103_get_allowances_response = variant {
+    Ok: vec Allowance103;
+    Err: GetAllowancesError;
+};
+
 service : (ledger_arg : LedgerArg) -> {
     archives : () -> (vec ArchiveInfo) query;
     get_transactions : (GetTransactionsRequest) -> (GetTransactionsResponse) query;
@@ -509,4 +534,8 @@ service : (ledger_arg : LedgerArg) -> {
 
     icrc21_canister_call_consent_message: (icrc21_consent_message_request) -> (icrc21_consent_message_response);
     icrc10_supported_standards : () -> (vec record { name : text; url : text }) query;
+
+    icrc103_get_allowances : (GetAllowancesArgs) -> (icrc103_get_allowances_response) query;
+
+    is_ledger_ready: () -> (bool) query;
 }

@@ -1,7 +1,9 @@
 //! Utilities to initialize and mutate the registry, for tests.
 
 use assert_matches::assert_matches;
+use async_trait::async_trait;
 use canister_test::Canister;
+use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId, RegistryVersion, SubnetId};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::generate_node_keys_once;
@@ -17,6 +19,7 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
+    dc::v1::DataCenterRecord,
     node::v1::{ConnectionEndpoint, NodeRecord},
     node_operator::v1::NodeOperatorRecord,
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
@@ -26,24 +29,25 @@ use ic_protobuf::registry::{
         SubnetRecord,
     },
 };
-use ic_registry_canister_api::AddNodePayload;
+use ic_registry_canister_api::{AddNodePayload, Chunk, GetChunkRequest};
 use ic_registry_keys::{
     make_blessed_replica_versions_key, make_catch_up_package_contents_key, make_crypto_node_key,
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
-    make_node_operator_record_key, make_node_record_key, make_replica_version_key,
-    make_routing_table_record_key, make_subnet_list_record_key, make_subnet_record_key,
+    make_data_center_record_key, make_node_operator_record_key, make_node_record_key,
+    make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
+    make_subnet_record_key,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{
-    deserialize_get_value_response, insert,
+    dechunkify_get_value_response_content, deserialize_get_value_response, insert,
     pb::v1::{
-        registry_mutation::Type, RegistryAtomicMutateRequest, RegistryAtomicMutateResponse,
-        RegistryMutation,
+        registry_mutation::Type, HighCapacityRegistryGetValueResponse, RegistryAtomicMutateRequest,
+        RegistryAtomicMutateResponse, RegistryMutation,
     },
-    serialize_get_value_request, Error,
+    serialize_get_value_request, Error, GetChunk,
 };
-use ic_test_utilities_types::ids::{subnet_test_id, user_test_id};
+use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
     crypto::{
         threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript},
@@ -91,27 +95,87 @@ pub fn invariant_compliant_mutation_as_atomic_req(mutation_id: u8) -> RegistryAt
         preconditions: vec![],
     }
 }
+
+// This could be pub, but for now, that's not needed.
+struct GetChunkImpl<'a> {
+    registry: &'a Canister<'a>,
+}
+
+#[async_trait]
+impl GetChunk for GetChunkImpl<'_> {
+    async fn get_chunk_without_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String> {
+        // Construct request.
+        let request = GetChunkRequest {
+            content_sha256: Some(content_sha256.to_vec()),
+        };
+
+        // Send request.
+        let chunk = self
+            .registry
+            .query_("get_chunk", candid_one, request)
+            .await
+            .map_err(|err| {
+                format!(
+                    "Registry canister received our get_chunk request (key={:?}), \
+                     but found it lacking in some way: {}",
+                    content_sha256, err,
+                )
+            })?;
+
+        // Unpack result (and handle errors).
+        let Chunk {
+            content: Some(content),
+        } = chunk
+        else {
+            return Err(format!(
+                "Registry replied to our get_chunk request (key={:?}), \
+                 but the reply did not have a populated `content` field.",
+                content_sha256,
+            ));
+        };
+
+        // Success!
+        Ok(content)
+    }
+}
+
 /// Returns a Result with either an Option(T) or a ic_registry_transport::Error
 pub async fn get_value_result<T: Message + Default>(
     registry: &Canister<'_>,
     key: &[u8],
 ) -> Result<Option<T>, Error> {
-    match deserialize_get_value_response(
-        registry
-            .query_(
-                "get_value",
-                bytes,
-                serialize_get_value_request(key.to_vec(), None).unwrap(),
-            )
-            .await
-            .unwrap(),
-    ) {
-        Ok((encoded_value, _version)) => Ok(Some(T::decode(encoded_value.as_slice()).unwrap())),
-        Err(error) => match error {
-            Error::KeyNotPresent(_) => Ok(None),
-            _ => Err(error),
-        },
-    }
+    let result: Vec<u8> = registry
+        .query_(
+            "get_value",
+            bytes,
+            serialize_get_value_request(key.to_vec(), None).unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let result: HighCapacityRegistryGetValueResponse = match deserialize_get_value_response(result)
+    {
+        Ok(ok) => ok,
+        Err(error) => {
+            return match error {
+                Error::KeyNotPresent(_) => Ok(None),
+                _ => Err(error),
+            };
+        }
+    };
+
+    let Some(content) = result.content else {
+        return Err(Error::MalformedMessage(format!(
+            "Registry replied to get_value call, but no content field \
+             was populated. key={:?}",
+            key,
+        )));
+    };
+
+    let result: Vec<u8> =
+        dechunkify_get_value_response_content(content, &GetChunkImpl { registry }).await?;
+
+    Ok(Some(T::decode(result.as_slice()).unwrap()))
 }
 
 /// Gets the latest value for the given key and decode it, assuming it
@@ -249,7 +313,7 @@ pub fn invariant_compliant_mutation_with_subnet_id(
     subnet_pid: SubnetId,
     chain_key_config: Option<ChainKeyConfig>,
 ) -> Vec<RegistryMutation> {
-    let node_operator_pid = user_test_id(TEST_ID);
+    let node_operator_pid = PrincipalId::new_user_test_id(1990);
 
     let (valid_pks, node_id) = new_node_keys_and_node_id();
 
@@ -270,7 +334,7 @@ pub fn invariant_compliant_mutation_with_subnet_id(
             port: 4321,
         };
         NodeRecord {
-            node_operator_id: node_operator_pid.get().to_vec(),
+            node_operator_id: node_operator_pid.to_vec(),
             xnet: Some(xnet_connection_endpoint),
             http: Some(http_connection_endpoint),
             ..Default::default()
@@ -395,11 +459,22 @@ pub fn new_node_crypto_keys_mutations(
     new_current_node_crypto_keys_mutations(node_id, current_npks)
 }
 
+/// Make a `DataCenterRecord` with the provided `dc_id`.
+pub fn make_data_center_record(dc_id: &str) -> DataCenterRecord {
+    DataCenterRecord {
+        id: dc_id.to_string(),
+        region: "Europe,ES,Barcelona".to_string(),
+        owner: "Jorge Gomez".to_string(),
+        ..Default::default()
+    }
+}
+
 /// Make a `NodeOperatorRecord` from the provided `PrincipalId`.
-fn make_node_operator_record(principal_id: PrincipalId) -> NodeOperatorRecord {
+fn make_node_operator_record(principal_id: PrincipalId, dc_id: &str) -> NodeOperatorRecord {
     NodeOperatorRecord {
         node_allowance: 1,
         node_operator_principal_id: principal_id.into(),
+        dc_id: dc_id.to_string(),
         ..Default::default()
     }
 }
@@ -511,11 +586,15 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
         *TEST_USER6_PRINCIPAL,
         *TEST_USER7_PRINCIPAL,
     ] {
-        node_operator.push(make_node_operator_record(*principal_id));
+        node_operator.push(make_node_operator_record(*principal_id, "dc1"));
     }
 
     let mut add_node_mutations = vec![];
     let mut node_id = vec![];
+    add_node_mutations.push(insert(
+        make_data_center_record_key("dc1").as_bytes(),
+        make_data_center_record("dc1").encode_to_vec(),
+    ));
     for nor in &node_operator {
         let (id, mut mutations) = get_new_node_id_and_mutations(nor, nns_subnet_id);
         node_id.push(id);

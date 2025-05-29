@@ -1,0 +1,22 @@
+[package]
+name = "ic-http-endpoints-async-utils"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+async-stream = { workspace = true }
+byte-unit = "4.0.14"
+bytes = { workspace = true }
+futures = { workspace = true }
+futures-util = { workspace = true }
+hyper = { workspace = true }
+slog = { workspace = true }
+tokio = { workspace = true }
+tonic = { workspace = true }
+
+[dev-dependencies]
+rand = { workspace = true }

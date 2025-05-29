@@ -1,0 +1,79 @@
+name: Governance Unreleased Changelog Reminder
+
+on:
+  pull_request:
+    types:
+      - review_requested
+
+permissions:
+  pull-requests: write
+
+jobs:
+  mainJob:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v6
+        id: mainStep
+        # If the PR requires governance-team to approve, GitHub will force governance-team to
+        # be in requested_teams. Therefore, the following condition is always
+        # met when governance-team must approve. (Further filtering takes place in the
+        # script itself.)
+        if: contains(github.event.pull_request.requested_teams.*.name, 'governance-team')
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          retries: 3
+          script: |
+            const pullRequestNumber = context.payload.number;
+
+            // Skip reminder if we already reminded (to avoid spam).
+            const reviews = await github.rest.pulls.listReviews({
+              owner: "dfinity",
+              repo: "ic",
+              pull_number: pullRequestNumber,
+            });
+            const alreadyRemindedAboutUnreleasedChangelog = reviews
+              .data
+              .some(review => review
+                .body
+                .startsWith("If this pull request changes the behavior")
+              );
+            console.log("alreadyRemindedAboutUnreleasedChangelog = " + alreadyRemindedAboutUnreleasedChangelog);
+            if (alreadyRemindedAboutUnreleasedChangelog) {
+              return;
+            }
+
+            // Post a review to remind the author to update unreleased_changelog.md.
+            // TODO: Figure out how to post in such a way that there is a "Resolve" button nearby.
+            console.log("Adding reminder to update unreleased_changelog.md...");
+            const reminderText = `
+              If this pull request changes the behavior of any canister owned by
+              the Governance team in an externally visible way, remember to
+              update the corresponding unreleased_changelog.md file(s).
+
+              To acknowldge this reminder (and unblock the PR), dismiss this
+              code review by going to the bottom of the pull request page, look
+              for where it says this bot is requesting changes, click the three
+              dots on the right, select "Dismiss review", and supply one of the
+              following reasons:
+
+              1. Done.
+
+              2. No canister behavior changes.
+
+              To be more precise, "externally visible behavior change" usually
+              means that responses differ in some way. However, "externally
+              visible behavior change" is not limited to that. For example, it
+              could also means that the canister makes different requests to
+              other canisters.
+            `
+            .replace(/^ +/gm, '')
+            .trim();
+            await github.rest.pulls.createReview({
+              owner: "dfinity",
+              repo: "ic",
+              pull_number: pullRequestNumber,
+              body: reminderText,
+              // This is what forces the author to explicitly acknowledge.
+              event: "REQUEST_CHANGES",
+            });
+            console.log("Reminder was added successfully.");

@@ -12,8 +12,11 @@ pub async fn upload_image<P: AsRef<Path>>(path: P, url: &str) -> Result<()> {
         url
     );
     let file = tokio::fs::File::open(path.as_ref()).await?;
+    let metadata = file.metadata().await?;
+    let content_length = metadata.len();
     let res = client
         .put(url)
+        .header(reqwest::header::CONTENT_LENGTH, content_length)
         .body({
             let stream = FramedRead::new(file, BytesCodec::new());
             Body::wrap_stream(stream)

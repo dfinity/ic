@@ -213,10 +213,15 @@ class MockSlackStore(SlackVulnerabilityStore):
             t = event.type
             if t == SlackVulnerabilityEventType.VULN_ADDED:
                 scan_result_by_channel[event.channel_id].new_vulnerabilities += 1
+                scan_result_by_channel[event.channel_id].unrated_vulnerabilities += 1
+                scan_result_by_channel[event.channel_id].total_vulnerabilities += 1
             elif t == SlackVulnerabilityEventType.VULN_REMOVED:
                 scan_result_by_channel[event.channel_id].fixed_vulnerabilities += 1
             elif t == SlackVulnerabilityEventType.VULN_CHANGED:
                 scan_result_by_channel[event.channel_id].changed_vulnerabilities += 1
+                scan_result_by_channel[event.channel_id].total_vulnerabilities += 1
+            elif t == SlackVulnerabilityEventType.VULN_UNCHANGED:
+                scan_result_by_channel[event.channel_id].total_vulnerabilities += 1
             elif t == SlackVulnerabilityEventType.DEP_ADDED:
                 if event.finding_id not in scan_result_by_channel[event.channel_id].added_dependencies:
                     scan_result_by_channel[event.channel_id].added_dependencies[event.finding_id] = set()

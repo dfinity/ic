@@ -19,7 +19,6 @@ use crate::{
     ingress::*,
     player::{Player, ReplayResult},
 };
-use ic_canister_client::{Agent, Sender};
 use ic_config::{Config, ConfigSource};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_protobuf::{registry::subnet::v1::InitialNiDkgTranscriptRecord, types::v1 as pb};
@@ -121,7 +120,7 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
                 cmd.start_height,
             )
             .with_replay_target_height(target_height);
-            *res_clone.borrow_mut() = player.restore(cmd.start_height + 1);
+            *res_clone.borrow_mut() = player.restore_from_backup(cmd.start_height + 1);
             return;
         }
 
@@ -144,12 +143,7 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
             }
 
             let extra = move |player: &Player, time| -> Vec<IngressWithPrinter> {
-                // Use a dummy URL here because we don't send any outgoing ingress.
-                // The agent is only used to construct ingress messages.
-                let agent = &Agent::new(
-                    url::Url::parse("http://localhost").unwrap(),
-                    Sender::PrincipalId(canister_caller_id.into()),
-                );
+                let agent = &agent_with_principal_as_sender(&canister_caller_id.get()).unwrap();
                 match subcmd {
                     Some(SubCommand::AddAndBlessReplicaVersion(cmd)) => {
                         cmd_add_and_bless_replica_version(agent, player, cmd, time)
@@ -240,10 +234,12 @@ fn cmd_get_recovery_cup(
     let low_threshold_transcript = summary
         .dkg
         .current_transcript(&NiDkgTag::LowThreshold)
+        .expect("No current low threshold transcript available")
         .clone();
     let high_threshold_transcript = summary
         .dkg
         .current_transcript(&NiDkgTag::HighThreshold)
+        .expect("No current high threshold transcript available")
         .clone();
     let initial_ni_dkg_transcript_low_threshold =
         Some(InitialNiDkgTranscriptRecord::from(low_threshold_transcript));
@@ -266,7 +262,7 @@ fn cmd_get_recovery_cup(
         chain_key_initializations: vec![],
     };
 
-    let cup = ic_consensus::dkg::make_registry_cup_from_cup_contents(
+    let cup = ic_consensus::make_registry_cup_from_cup_contents(
         &*player.registry,
         player.subnet_id,
         cup_contents,

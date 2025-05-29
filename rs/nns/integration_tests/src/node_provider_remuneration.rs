@@ -9,7 +9,7 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::{pb::v1::NeuronId as ProtoNeuronId, types::UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     add_or_remove_node_provider::Change,
     manage_neuron_response::Command as CommandResponse,
     reward_node_provider::{RewardMode, RewardToAccount},
@@ -17,6 +17,7 @@ use ic_nns_governance_api::pb::v1::{
     ListNodeProviderRewardsRequest, MakeProposalRequest, NetworkEconomics, NnsFunction,
     NodeProvider, ProposalActionRequest, RewardNodeProvider, RewardNodeProviders,
 };
+use ic_nns_test_utils::state_test_helpers::setup_nns_canisters_with_features;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{
@@ -24,7 +25,7 @@ use ic_nns_test_utils::{
         nns_get_most_recent_monthly_node_provider_rewards, nns_get_network_economics_parameters,
         nns_governance_get_proposal_info, nns_governance_make_proposal,
         nns_list_node_provider_rewards, nns_wait_for_proposal_execution, query,
-        setup_nns_canisters, state_machine_builder_for_nns_tests, update_with_sender,
+        state_machine_builder_for_nns_tests, update_with_sender,
     },
 };
 use ic_protobuf::registry::{
@@ -69,13 +70,23 @@ impl NodeInfo {
 
 #[test]
 fn test_list_node_provider_rewards() {
+    do_test_list_node_provider_rewards(&[]);
+}
+
+// TODO(NNS1-3763) after Node Reward Canister is by-default enabled, remove this test.
+#[test]
+fn test_list_node_provider_rewards_with_node_reward_canister() {
+    do_test_list_node_provider_rewards(&["test"]);
+}
+
+fn do_test_list_node_provider_rewards(features: &[&str]) {
     let state_machine = state_machine_builder_for_nns_tests().build();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
         .with_initial_invariant_compliant_mutations()
         .with_test_neurons()
         .build();
-    setup_nns_canisters(&state_machine, nns_init_payload);
+    setup_nns_canisters_with_features(&state_machine, nns_init_payload, features);
 
     add_data_centers(&state_machine);
     add_node_rewards_table(&state_machine);
@@ -279,15 +290,28 @@ fn test_list_node_provider_rewards() {
             .collect::<Vec<_>>()
     );
 }
+
 #[test]
 fn test_automated_node_provider_remuneration() {
+    do_test_automated_node_provider_remuneration(&[]);
+}
+
+// TODO(NNS1-3763) after Node Reward Canister is by-default enabled, remove this test.
+#[test]
+fn test_automated_node_provider_remuneration_with_node_reward_canister() {
+    do_test_automated_node_provider_remuneration(&["test"]);
+}
+
+// This test cannot depend on any specific "test" features to function, as
+// only one calling version uses the test feature flag.
+fn do_test_automated_node_provider_remuneration(features: &[&str]) {
     let state_machine = state_machine_builder_for_nns_tests().build();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
         .with_initial_invariant_compliant_mutations()
         .with_test_neurons()
         .build();
-    setup_nns_canisters(&state_machine, nns_init_payload);
+    setup_nns_canisters_with_features(&state_machine, nns_init_payload, features);
 
     add_data_centers(&state_machine);
     add_node_rewards_table(&state_machine);

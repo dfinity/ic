@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use clap::Parser;
 use ic_admin_derive::derive_common_proposal_fields;
 use ic_canister_client::{Agent, Sender};
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_common::types::NeuronId;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::{NodeId, PrincipalId, SubnetId};
@@ -203,9 +203,6 @@ impl ProposeToUpdateRecoveryCupCmd {
             replacement_nodes,
             registry_store_uri,
             chain_key_config,
-
-            // Deprecated fields
-            ecdsa_config: None,
         }
     }
 }
@@ -223,7 +220,9 @@ impl ProposalPayload<do_recover_subnet::RecoverSubnetPayload> for ProposeToUpdat
 mod tests {
     use std::str::FromStr;
 
-    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId};
+    use ic_management_canister_types_private::{
+        EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
+    };
     use ic_types::PrincipalId;
 
     use super::*;
@@ -242,7 +241,6 @@ mod tests {
                 .unwrap_or_else(|err| panic!("Invalid state hash: {}", err)),
             replacement_nodes: None,
             registry_store_uri: None,
-            ecdsa_config: None,
             chain_key_config: None,
         }
     }
@@ -296,6 +294,12 @@ mod tests {
                 "pre_signatures_to_create_in_advance": "98",
                 "max_queue_size": "154",
                 "subnet_id": "gxevo-lhkam-aaaaa-aaaap-yai"
+            },
+            {
+                "key_id": "vetkd:Bls12_381_G2:some_key_name_3",
+                "pre_signatures_to_create_in_advance": "0",
+                "max_queue_size": "154",
+                "subnet_id": "gxevo-lhkam-aaaaa-aaaap-yai"
             }]"#
         .to_string();
         let initial_chain_key_configs_to_request = Some(initial_chain_key_configs_to_request);
@@ -334,6 +338,19 @@ mod tests {
                                     name: "some_key_name_2".to_string(),
                                 })),
                                 pre_signatures_to_create_in_advance: Some(98),
+                                max_queue_size: Some(154),
+                            }),
+                            subnet_id: Some(
+                                PrincipalId::from_str("gxevo-lhkam-aaaaa-aaaap-yai").unwrap()
+                            ),
+                        },
+                        do_recover_subnet::KeyConfigRequest {
+                            key_config: Some(do_recover_subnet::KeyConfig {
+                                key_id: Some(MasterPublicKeyId::VetKd(VetKdKeyId {
+                                    curve: VetKdCurve::Bls12_381_G2,
+                                    name: "some_key_name_3".to_string(),
+                                })),
+                                pre_signatures_to_create_in_advance: Some(0),
                                 max_queue_size: Some(154),
                             }),
                             subnet_id: Some(

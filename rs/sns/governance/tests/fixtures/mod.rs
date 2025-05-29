@@ -3,16 +3,16 @@ use async_trait::async_trait;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
+use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
-use ic_nervous_system_common::{cmc::CMC, NervousSystemError, E8};
+use ic_nervous_system_common::{NervousSystemError, E8};
 use ic_sns_governance::{
     governance::{Governance, ValidGovernanceProto},
     pb::v1::{
         get_neuron_response, get_proposal_response,
-        governance::{MaturityModulation, Mode, SnsMetadata},
-        manage_neuron,
+        governance::{MaturityModulation, Mode, SnsMetadata, Version},
         manage_neuron::{
-            AddNeuronPermissions, MergeMaturity, RegisterVote, RemoveNeuronPermissions,
+            self, AddNeuronPermissions, MergeMaturity, RegisterVote, RemoveNeuronPermissions,
         },
         manage_neuron_response::{
             self, AddNeuronPermissionsResponse, FollowResponse, MergeMaturityResponse,
@@ -216,7 +216,7 @@ impl CmcFixture {
 
 #[async_trait]
 impl CMC for CmcFixture {
-    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
+    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
         Ok(*self.maturity_modulation.try_lock().unwrap())
     }
 }
@@ -430,6 +430,13 @@ impl GovernanceCanisterFixture {
             .lock()
             .unwrap()
             .now += delta_seconds;
+        self
+    }
+
+    /// Ensures that SNS upgrade features are not going to produce any external calls that are
+    /// orthogonal to this test scenario, as they would require setting up mock responses.
+    pub fn temporarily_disable_sns_upgrades(&mut self) -> &mut Self {
+        assert!(self.governance.acquire_upgrade_periodic_task_lock());
         self
     }
 
@@ -854,6 +861,7 @@ impl Default for GovernanceCanisterFixtureBuilder {
                     current_basis_points: Some(0),
                     updated_at_timestamp_seconds: Some(1),
                 }),
+                deployed_version: Some(Version::default()),
                 ..Default::default()
             },
             sns_ledger_transforms: Vec::default(),

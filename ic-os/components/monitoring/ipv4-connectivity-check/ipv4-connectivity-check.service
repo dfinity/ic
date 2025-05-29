@@ -7,3 +7,7 @@ WantedBy=multi-user.target
 [Service]
 Type=oneshot
 ExecStart=/opt/ic/bin/ipv4-connectivity-check.sh
+
+# Disable systemd start and stop logs
+LogLevelMax=1
+SyslogLevel=2

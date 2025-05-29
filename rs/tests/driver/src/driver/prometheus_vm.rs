@@ -3,6 +3,7 @@ use std::{
     fs::{self, File},
     net::Ipv6Addr,
     path::{Path, PathBuf},
+    str::FromStr,
     time::Duration,
 };
 
@@ -11,7 +12,7 @@ use maplit::hashmap;
 use reqwest::Url;
 use serde::Serialize;
 use serde_json::json;
-use slog::{debug, info};
+use slog::{debug, info, warn, Logger};
 
 use crate::driver::{
     constants::SSH_USERNAME,
@@ -21,8 +22,8 @@ use crate::driver::{
     resource::{DiskImage, ImageType},
     test_env::TestEnv,
     test_env_api::{
-        get_dependency_path, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-        RetrieveIpv4Addr, SshSession, TopologySnapshot,
+        HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, RetrieveIpv4Addr, SshSession,
+        TopologySnapshot,
     },
     test_setup::{GroupSetup, InfraProvider},
     universal_vm::{UniversalVm, UniversalVms},
@@ -42,9 +43,9 @@ const PROMETHEUS_VM_NAME: &str = "prometheus";
 
 /// The SHA-256 hash of the Prometheus VM disk image.
 /// The latest hash can be retrieved by downloading the SHA256SUMS file from:
-/// https://hydra.dfinity.systems/job/dfinity-ci-build/farm/universal-vm.img-prometheus.x86_64-linux/latest
+/// https://hydra-int.dfinity.systems/job/dfinity-ci-build/farm/universal-vm.img-prometheus.x86_64-linux/latest
 const DEFAULT_PROMETHEUS_VM_IMG_SHA256: &str =
-    "1462da1e3584fa36f6d956e9f741b530bcc4ba20cddc2ce95d40fabda5881101";
+    "3af874174d48f5c9a59c9bc54dd73cbfc65b17b952fbacd7611ee07d19de369b";
 
 fn get_default_prometheus_vm_img_url() -> String {
     format!("http://download.proxy-global.dfinity.network:8080/farm/prometheus-vm/{DEFAULT_PROMETHEUS_VM_IMG_SHA256}/x86_64-linux/prometheus-vm.img.zst")
@@ -75,9 +76,16 @@ const REPLICA_PROMETHEUS_TARGET: &str = "replica.json";
 const ORCHESTRATOR_PROMETHEUS_TARGET: &str = "orchestrator.json";
 const NODE_EXPORTER_PROMETHEUS_TARGET: &str = "node_exporter.json";
 const LEDGER_CANISTER_PROMETHEUS_TARGET: &str = "ledger_canister.json";
+const BITCOIN_MAINNET_CANISTER_PROMETHEUS_TARGET: &str = "bitcoin_mainnet_canister.json";
+const BITCOIN_TESTNET_CANISTER_PROMETHEUS_TARGET: &str = "bitcoin_testnet_canister.json";
+const BITCOIN_WATCHDOG_MAINNET_CANISTER_PROMETHEUS_TARGET: &str =
+    "bitcoin_watchdog_mainnet_canister.json";
+const BITCOIN_WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET: &str =
+    "bitcoin_watchdog_testnet_canister.json";
 const BN_PROMETHEUS_TARGET: &str = "boundary_nodes.json";
 const BN_EXPORTER_PROMETHEUS_TARGET: &str = "boundary_nodes_exporter.json";
 const IC_BOUNDARY_PROMETHEUS_TARGET: &str = "ic_boundary.json";
+const GRAFANA_DASHBOARDS: &str = "grafana_dashboards";
 
 pub struct PrometheusVm {
     universal_vm: UniversalVm,
@@ -137,6 +145,100 @@ impl PrometheusVm {
         self
     }
 
+    /// Expects the layout of directory to be like:
+    /// ```
+    /// root
+    /// ├── folder1
+    /// │   ├── kustomization.yaml
+    /// │   ├── dashboard1.json
+    /// │   └── dashboard2.json
+    /// ├── folder2
+    /// │   ├── dashboard3.json
+    /// │   ├── dashboard4.json
+    /// │   ├── kustomization.yaml
+    /// ...
+    /// ```
+    ///
+    /// This process automatically discovers all `*.json` files, which are interpreted as Grafana dashboards. It then copies these files to a destination, where they will be sent to the Prometheus VM for use with the testnets. The expected name of the dashboards directory is determined by reading the `commonAnnotations.k8s-sidecar-target-directory` path from the `kustomize.yaml` file. This value specifies the location where the dashboards should be placed so that the links don't get broken.
+    fn transform_dashboards_root_dir(logger: Logger, destination: &Path) -> Result<()> {
+        let dashboards_root = PathBuf::from_str(&std::env::var("IC_DASHBOARDS_DIR")?)?;
+
+        for directory in dashboards_root.read_dir().map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to read contents of `{}`: {:?}",
+                dashboards_root.display(),
+                e
+            )
+        })? {
+            let entry = directory?;
+            if !entry.path().is_dir() {
+                continue;
+            }
+
+            let maybe_kustomization = entry
+                .path()
+                .read_dir()?
+                .filter_map(|f| f.ok())
+                .find(|f| f.file_name().eq("kustomization.yaml"));
+
+            let dashboard_dir = match maybe_kustomization {
+                Some(file) => {
+                    let parsed: serde_yaml::Value =
+                        serde_yaml::from_str(&std::fs::read_to_string(file.path()).unwrap())?;
+
+                    parsed
+                        .get("commonAnnotations")
+                        .ok_or(anyhow::anyhow!(
+                            "Unexpected yaml schema for kustomization.yaml"
+                        ))?
+                        .get("k8s-sidecar-target-directory")
+                        .ok_or(anyhow::anyhow!(
+                            "Unexpected yaml schema for kustomization.yaml"
+                        ))?
+                        .as_str()
+                        .ok_or(anyhow::anyhow!("Expected string for the name of directory"))?
+                        .to_string()
+                }
+                None => entry.file_name().to_string_lossy().to_string(),
+            };
+            let dashboard_dir = destination.join(dashboard_dir);
+
+            std::fs::create_dir_all(&dashboard_dir)?;
+            info!(
+                logger,
+                "Created dir for dashboards: {}",
+                dashboard_dir.display()
+            );
+
+            for maybe_file in entry.path().read_dir()? {
+                let file = maybe_file?;
+
+                if !file.path().is_file() && file.path().extension().is_none() {
+                    continue;
+                }
+
+                // Safe because of previous check
+                let path = file.path();
+                let extension = path.extension().unwrap();
+
+                // Dashboards are json files
+                if extension != "json" {
+                    continue;
+                }
+
+                let file_name = file.file_name();
+                let file_name = file_name.as_os_str().to_str().unwrap();
+
+                let destination_path = dashboard_dir.join(file_name);
+
+                std::fs::copy(file.path(), destination_path)?;
+                info!(logger, "Copying `{}` dashboard...", file_name);
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn start(&self, env: &TestEnv) -> Result<()> {
         // Create a config directory containing the prometheus.yml configuration file.
         let vm_name = &self.universal_vm.name;
@@ -151,12 +253,14 @@ for name in replica orchestrator node_exporter; do
   echo '[]' > "{PROMETHEUS_SCRAPING_TARGETS_DIR}/$name.json"
 done
 
+mkdir -p /config/grafana/dashboards
+
 if uname -a | grep -q Ubuntu; then
   # k8s
   chmod g+s /etc/prometheus
   cp -f /config/prometheus/prometheus.yml /etc/prometheus/prometheus.yml
-  cp -R /config/grafana/dashboards/IC /var/lib/grafana/dashboards/
-  chown -R grafana:grafana /var/lib/grafana/dashboards/IC/
+  cp -R /config/grafana/dashboards /var/lib/grafana/
+  chown -R grafana:grafana /var/lib/grafana/dashboards
   chown -R {SSH_USERNAME}:prometheus /etc/prometheus
   systemctl reload prometheus
 else
@@ -167,10 +271,21 @@ fi
                 ),
             )
             .unwrap();
-        let grafana_dashboards_src = get_dependency_path("rs/tests/dashboards");
+
         let grafana_dashboards_dst = config_dir.join("grafana").join("dashboards");
-        debug!(log, "Copying Grafana dashboards from {grafana_dashboards_src:?} to {grafana_dashboards_dst:?} ...");
-        TestEnv::shell_copy_with_deref(grafana_dashboards_src, grafana_dashboards_dst).unwrap();
+        std::fs::create_dir_all(&grafana_dashboards_dst).unwrap();
+        let grafana_dashboards_src = env.get_path(GRAFANA_DASHBOARDS);
+        if let Err(e) = Self::transform_dashboards_root_dir(log.clone(), &grafana_dashboards_src) {
+            warn!(
+                log,
+                "Failed to sync k8s dashboards to grafana. Error: {}",
+                e.to_string()
+            )
+        } else {
+            debug!(log, "Copying Grafana dashboards from {grafana_dashboards_src:?} to {grafana_dashboards_dst:?} ...");
+            TestEnv::shell_copy_with_deref(grafana_dashboards_src, grafana_dashboards_dst).unwrap();
+        }
+
         write_prometheus_config_dir(config_dir.clone(), self.scrape_interval).unwrap();
 
         self.universal_vm
@@ -257,9 +372,9 @@ pub trait HasPrometheus {
     fn sync_with_prometheus(&self);
 
     /// Retrieves a topology snapshot by name, converts it into p8s scraping target
-    /// JSON files and scps them to the prometheus VM. If `farm_url` is specified, add a
+    /// JSON files and scps them to the prometheus VM. If `playnet_url` is specified, add a
     /// scraping target for NNS canisters (currently only the ICP ledger) to the prometheus VM.
-    fn sync_with_prometheus_by_name(&self, name: &str, farm_url: Option<String>);
+    fn sync_with_prometheus_by_name(&self, name: &str, playnet_url: Option<String>);
 
     /// Downloads prometheus' data directory to the test artifacts
     /// such that we can run a local p8s on that later.
@@ -268,20 +383,25 @@ pub trait HasPrometheus {
     /// This allows this function to be used in a finalizer where no prometheus
     /// server has been setup.
     fn download_prometheus_data_dir_if_exists(&self);
+
+    /// Get the playnet URL of the boundary node with the given name.
+    fn get_playnet_url(&self, boundary_node_name: &str) -> Option<String>;
 }
 
 impl HasPrometheus for TestEnv {
+    fn get_playnet_url(&self, boundary_node_name: &str) -> Option<String> {
+        self.get_deployed_boundary_node(boundary_node_name)
+            .ok()
+            .and_then(|bn| bn.get_snapshot().ok()?.get_playnet())
+    }
+
     fn sync_with_prometheus(&self) {
         self.sync_with_prometheus_by_name("", None)
     }
 
-    fn sync_with_prometheus_by_name(
-        &self,
-        name: &str,
-        mut farm_url_for_ledger_canister: Option<String>,
-    ) {
+    fn sync_with_prometheus_by_name(&self, name: &str, mut playnet_url: Option<String>) {
         if InfraProvider::read_attribute(self) == InfraProvider::K8s {
-            farm_url_for_ledger_canister = None;
+            playnet_url = None;
         }
 
         let vm_name = PROMETHEUS_VM_NAME.to_string();
@@ -292,7 +412,7 @@ impl HasPrometheus for TestEnv {
             prometheus_config_dir.clone(),
             group_name.clone(),
             self.topology_snapshot_by_name(name),
-            &farm_url_for_ledger_canister,
+            &playnet_url,
         )
         .expect("Failed to synchronize prometheus config with the latest IC topology!");
         sync_prometheus_config_dir_with_boundary_nodes(
@@ -315,8 +435,12 @@ impl HasPrometheus for TestEnv {
             BN_EXPORTER_PROMETHEUS_TARGET,
             IC_BOUNDARY_PROMETHEUS_TARGET,
         ];
-        if farm_url_for_ledger_canister.is_some() {
+        if playnet_url.is_some() {
             target_json_files.push(LEDGER_CANISTER_PROMETHEUS_TARGET);
+            target_json_files.push(BITCOIN_MAINNET_CANISTER_PROMETHEUS_TARGET);
+            target_json_files.push(BITCOIN_TESTNET_CANISTER_PROMETHEUS_TARGET);
+            target_json_files.push(BITCOIN_WATCHDOG_MAINNET_CANISTER_PROMETHEUS_TARGET);
+            target_json_files.push(BITCOIN_WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET);
         }
         for file in &target_json_files {
             let from = prometheus_config_dir.join(file);
@@ -419,38 +543,101 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(NODE_EXPORTER_PROMETHEUS_TARGET);
     let ledger_canister_scraping_target_path =
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(LEDGER_CANISTER_PROMETHEUS_TARGET);
+    let bitcoin_mainnet_canister_scraping_target_path =
+        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(BITCOIN_MAINNET_CANISTER_PROMETHEUS_TARGET);
+    let bitcoin_testnet_canister_scraping_target_path =
+        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(BITCOIN_TESTNET_CANISTER_PROMETHEUS_TARGET);
+    let bitcoin_watchdog_mainnet_canister_scraping_target_path =
+        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR)
+            .join(BITCOIN_WATCHDOG_MAINNET_CANISTER_PROMETHEUS_TARGET);
+    let bitcoin_watchdog_testnet_canister_scraping_target_path =
+        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR)
+            .join(BITCOIN_WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET);
     let scrape_interval_str: String = format!("{}s", scrape_interval.as_secs());
     let prometheus_config = json!({
         "global": {"scrape_interval": scrape_interval_str},
         "scrape_configs": [
             {
                 "job_name": "boundary_nodes",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "file_sd_configs": [{"files": [boundary_nodes_scraping_targets_path]}],
             },
             {
                 "job_name": "boundary_nodes_exporter",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "file_sd_configs": [{"files": [boundary_nodes_exporter_scraping_targets_path]}],
             },
             {
                 "job_name": "ic_boundary",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "file_sd_configs": [{"files": [ic_boundary_scraping_targets_path]}],
             },
-            {"job_name": "replica", "file_sd_configs": [{"files": [replica_scraping_targets_path]}]},
-            {"job_name": "orchestrator", "file_sd_configs": [{"files": [orchestrator_scraping_targets_path]}]},
+            {
+                "job_name": "replica",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
+                "file_sd_configs": [{"files": [replica_scraping_targets_path]}]
+            },
+            {
+                "job_name": "orchestrator",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
+                "file_sd_configs": [{"files": [orchestrator_scraping_targets_path]}]
+            },
             {
                 "job_name": "node_exporter",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "file_sd_configs": [{"files": [node_exporter_scraping_targets_path]}],
                 "scheme": "https",
                 "tls_config": {"insecure_skip_verify": true},
             },
             {
                 "job_name": "ledger-canister",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "honor_timestamps": true,
                 "metrics_path": "/metrics",
                 "scheme": "https",
                 "follow_redirects": true,
                 "enable_http2": true,
                 "file_sd_configs": [{"files": [ledger_canister_scraping_target_path]}],
+            },
+            {
+                "job_name": "bitcoin-mainnet-canister",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
+                "honor_timestamps": true,
+                "metrics_path": "/metrics",
+                "scheme": "https",
+                "follow_redirects": true,
+                "enable_http2": true,
+                "file_sd_configs": [{"files": [bitcoin_mainnet_canister_scraping_target_path]}],
+            },
+            {
+                "job_name": "bitcoin-testnet-canister",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
+                "honor_timestamps": true,
+                "metrics_path": "/metrics",
+                "scheme": "https",
+                "follow_redirects": true,
+                "enable_http2": true,
+                "file_sd_configs": [{"files": [bitcoin_testnet_canister_scraping_target_path]}],
+            },
+            {
+                "job_name": "bitcoin-watchdog-mainnet-canister",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
+                "honor_timestamps": true,
+                "metrics_path": "/metrics",
+                "scheme": "https",
+                "follow_redirects": true,
+                "enable_http2": true,
+                "file_sd_configs": [{"files": [bitcoin_watchdog_mainnet_canister_scraping_target_path]}],
+            },
+            {
+                "job_name": "bitcoin-watchdog-testnet-canister",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
+                "honor_timestamps": true,
+                "metrics_path": "/metrics",
+                "scheme": "https",
+                "follow_redirects": true,
+                "enable_http2": true,
+                "file_sd_configs": [{"files": [bitcoin_watchdog_testnet_canister_scraping_target_path]}],
             },
         ],
     });
@@ -513,7 +700,7 @@ fn sync_prometheus_config_dir(
     prometheus_config_dir: PathBuf,
     group_name: String,
     topology_snapshot: TopologySnapshot,
-    farm_url_for_ledger_canister: &Option<String>,
+    playnet_url: &Option<String>,
 ) -> Result<()> {
     let mut replica_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
     let mut ic_boundary_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
@@ -584,15 +771,42 @@ fn sync_prometheus_config_dir(
         });
     }
 
-    if let Some(farm_url) = farm_url_for_ledger_canister {
-        let ledger_canister_p8s_static_config = vec![PrometheusStaticConfig {
-            targets: vec![format!("ryjl3-tyaaa-aaaaa-aaaba-cai.raw.{}", farm_url)],
-            labels: hashmap! {"ic".to_string() => group_name.clone(), "token".to_string() => "icp".to_string()},
-        }];
+    if let Some(playnet_url) = playnet_url {
+        // ICP ledger canister
         serde_json::to_writer(
             &File::create(prometheus_config_dir.join(LEDGER_CANISTER_PROMETHEUS_TARGET))?,
-            &ledger_canister_p8s_static_config,
+            &vec![PrometheusStaticConfig {
+                targets: vec![format!("ryjl3-tyaaa-aaaaa-aaaba-cai.raw.{}", playnet_url)],
+                labels: hashmap! {"ic".to_string() => group_name.clone(), "token".to_string() => "icp".to_string()},
+            }],
         )?;
+        // Bitcoin canisters
+        for (prometheus_target, canister_id) in [
+            (
+                BITCOIN_MAINNET_CANISTER_PROMETHEUS_TARGET,
+                "ghsi2-tqaaa-aaaan-aaaca-cai",
+            ),
+            (
+                BITCOIN_TESTNET_CANISTER_PROMETHEUS_TARGET,
+                "g4xu7-jiaaa-aaaan-aaaaq-cai",
+            ),
+            (
+                BITCOIN_WATCHDOG_MAINNET_CANISTER_PROMETHEUS_TARGET,
+                "gatoo-6iaaa-aaaan-aaacq-cai",
+            ),
+            (
+                BITCOIN_WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET,
+                "gjqfs-iaaaa-aaaan-aaada-cai",
+            ),
+        ] {
+            serde_json::to_writer(
+                &File::create(prometheus_config_dir.join(prometheus_target))?,
+                &vec![PrometheusStaticConfig {
+                    targets: vec![format!("{canister_id}.raw.{playnet_url}")],
+                    labels: hashmap! {"ic".to_string() => group_name.clone()},
+                }],
+            )?;
+        }
     }
     for (name, p8s_static_configs) in &[
         (REPLICA_PROMETHEUS_TARGET, replica_p8s_static_configs),

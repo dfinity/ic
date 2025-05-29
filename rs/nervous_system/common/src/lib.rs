@@ -7,7 +7,7 @@ use core::{
 use dfn_core::api::time_nanos;
 use ic_base_types::CanisterId;
 use ic_canister_log::{export, GlobalBuffer, LogBuffer, LogEntry};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_ledger_core::{
     tokens::{CheckedAdd, CheckedSub},
     Tokens,
@@ -26,7 +26,6 @@ use std::{
 };
 
 pub mod binary_search;
-pub mod cmc;
 pub mod dfn_core_stable_mem_utils;
 pub mod ledger;
 pub mod ledger_validation;
@@ -168,6 +167,12 @@ impl NervousSystemError {
         NervousSystemError {
             error_message: message.to_string(),
         }
+    }
+}
+
+impl From<NervousSystemError> for String {
+    fn from(value: NervousSystemError) -> Self {
+        value.error_message
     }
 }
 
@@ -714,26 +719,12 @@ pub fn serve_metrics(
     match encode_metrics(&mut writer) {
         Ok(()) => HttpResponseBuilder::ok()
             .header("Content-Type", "text/plain; version=0.0.4")
+            .header("Cache-Control", "no-store")
             .with_body_and_content_length(writer.into_inner())
             .build(),
         Err(err) => {
             HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err)).build()
         }
-    }
-}
-
-pub fn serve_journal<Journal>(journal: &Journal) -> HttpResponse
-where
-    Journal: serde::Serialize,
-{
-    match serde_json::to_string(journal) {
-        Err(err) => {
-            HttpResponseBuilder::server_error(format!("Failed to encode journal: {}", err)).build()
-        }
-        Ok(body) => HttpResponseBuilder::ok()
-            .header("Content-Type", "application/json")
-            .with_body_and_content_length(body)
-            .build(),
     }
 }
 
@@ -776,6 +767,16 @@ fn checked_div_mod(dividend: usize, divisor: usize) -> Option<(usize, usize)> {
     let quotient = dividend.checked_div(divisor)?;
     let remainder = dividend.checked_rem(divisor)?;
     Some((quotient, remainder))
+}
+
+/// Converts a sha256 hash into a hex string representation
+pub fn hash_to_hex_string(hash: &[u8]) -> String {
+    use std::fmt::Write;
+    let mut result_hash = String::new();
+    for b in hash {
+        let _ = write!(result_hash, "{:02x}", b);
+    }
+    result_hash
 }
 
 #[cfg(test)]

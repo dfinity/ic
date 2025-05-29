@@ -3,7 +3,7 @@ use crate::{
     ledger_client::{neuron_response::NeuronResponse, OperationOutput},
     models,
 };
-use ic_nns_governance_api::pb::v1::{GovernanceError, Neuron, NeuronState};
+use ic_nns_governance_api::{GovernanceError, Neuron, NeuronState};
 use std::{
     collections::HashMap,
     time::{SystemTime, UNIX_EPOCH},
@@ -15,7 +15,7 @@ pub fn handle_neuron_info(
     // Check the response from governance call.
     let response: Result<Neuron, GovernanceError> = candid::decode_one(bytes.as_ref())
         .map_err(|err| format!("Could not decode NEURON_INFO response: {}", err))?;
-    return match response {
+    match response {
         Err(e) => Ok(Err(ApiError::InvalidRequest(
             false,
             format!("Could not retrieve neuron information: {}", e.error_message).into(),
@@ -32,9 +32,9 @@ pub fn handle_neuron_info(
                 hotkeys: neuron.hot_keys,
                 staked_maturity_e8s: neuron.staked_maturity_e8s_equivalent,
             });
-            return Ok(Ok(Some(output)));
+            Ok(Ok(Some(output)))
         }
-    };
+    }
 }
 
 fn neuron_state(neuron: &Neuron) -> models::NeuronState {

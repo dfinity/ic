@@ -22,7 +22,7 @@ use ic_types::{
 #[cfg(test)]
 use mockall::automock;
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
-use std::collections::BTreeMap;
+use std::collections::{btree_map, BTreeMap};
 use std::sync::{Arc, Mutex};
 
 #[cfg(test)]
@@ -51,18 +51,6 @@ struct StreamBuilderMetrics {
     /// failures to induct responses.
     pub critical_error_induct_response_failed: IntCounter,
 }
-
-/// Desired byte size of an outgoing stream.
-///
-/// At most `MAX_STREAM_MESSAGES` are enqueued into a stream; but only until its
-/// `count_bytes()` is greater than or equal to `TARGET_STREAM_SIZE_BYTES`.
-const TARGET_STREAM_SIZE_BYTES: usize = 10 * 1024 * 1024;
-
-/// Maximum number of messages in a stream.
-///
-/// At most `MAX_STREAM_MESSAGES` are enqueued into a stream; but only until its
-/// `count_bytes()` is greater than or equal to `TARGET_STREAM_SIZE_BYTES`.
-const MAX_STREAM_MESSAGES: usize = 10_000;
 
 const METRIC_STREAM_MESSAGES: &str = "mr_stream_messages";
 const METRIC_STREAM_BYTES: &str = "mr_stream_bytes";
@@ -172,8 +160,14 @@ pub(crate) trait StreamBuilder: Send {
     fn build_streams(&self, state: ReplicatedState) -> ReplicatedState;
 }
 
+/// Routes messages from canister output queues into streams, up to the specified limits.
+///
+/// At most `max_stream_messages` are enqueued into a stream; but only until its
+/// `count_bytes()` is greater than or equal to `target_stream_size_bytes`.
 pub(crate) struct StreamBuilderImpl {
     subnet_id: SubnetId,
+    max_stream_messages: usize,
+    target_stream_size_bytes: usize,
     metrics: StreamBuilderMetrics,
     time_in_stream_metrics: Arc<Mutex<LatencyMetrics>>,
     log: ReplicaLogger,
@@ -182,6 +176,8 @@ pub(crate) struct StreamBuilderImpl {
 impl StreamBuilderImpl {
     pub(crate) fn new(
         subnet_id: SubnetId,
+        max_stream_messages: usize,
+        target_stream_size_bytes: usize,
         metrics_registry: &MetricsRegistry,
         message_routing_metrics: &MessageRoutingMetrics,
         time_in_stream_metrics: Arc<Mutex<LatencyMetrics>>,
@@ -189,6 +185,8 @@ impl StreamBuilderImpl {
     ) -> Self {
         Self {
             subnet_id,
+            max_stream_messages,
+            target_stream_size_bytes,
             metrics: StreamBuilderMetrics::new(metrics_registry, message_routing_metrics),
             time_in_stream_metrics,
             log,
@@ -224,6 +222,7 @@ impl StreamBuilderImpl {
                 // Arbitrary large amount, pushing a response always returns memory.
                 &mut (i64::MAX / 2),
             )
+            .map(|_| ())
             .unwrap_or_else(|(err, response)| {
                 // Local request, we should never get a `CanisterNotFound`, `CanisterStopped` or
                 // `NonMatchingResponse` error.
@@ -262,15 +261,8 @@ impl StreamBuilderImpl {
             .observe(msg.payload_size_bytes().get() as f64);
     }
 
-    /// Implementation of `StreamBuilder::build_streams()` that takes a
-    /// `target_stream_size_bytes` argument to limit how many messages will be
-    /// routed into each stream.
-    fn build_streams_impl(
-        &self,
-        mut state: ReplicatedState,
-        max_stream_messages: usize,
-        target_stream_size_bytes: usize,
-    ) -> ReplicatedState {
+    /// Implementation of `StreamBuilder::build_streams()`.
+    fn build_streams_impl(&self, mut state: ReplicatedState) -> ReplicatedState {
         /// Pops the previously peeked message.
         ///
         /// Panics:
@@ -286,23 +278,20 @@ impl StreamBuilderImpl {
             message
         }
 
-        /// Tests whether a stream is over the message count limit, byte limit or (if
-        /// directed at a system subnet) over `2 * SYSTEM_SUBNET_STREAM_MSG_LIMIT`.
-        fn is_at_limit(
-            stream: Option<&Stream>,
-            max_stream_messages: usize,
-            target_stream_size_bytes: usize,
-            is_local_message: bool,
-            destination_subnet_type: SubnetType,
-        ) -> bool {
+        // Tests whether a stream is over the message count limit, byte limit or (if
+        // directed at a system subnet) over `2 * SYSTEM_SUBNET_STREAM_MSG_LIMIT`.
+        let is_at_limit = |stream: &btree_map::Entry<SubnetId, Stream>,
+                           is_local_message: bool,
+                           destination_subnet_type: SubnetType|
+         -> bool {
             let stream = match stream {
-                Some(stream) => stream,
-                None => return false,
+                btree_map::Entry::Occupied(occupied_entry) => occupied_entry.get(),
+                btree_map::Entry::Vacant(_) => return false,
             };
             let stream_messages_len = stream.messages().len();
 
-            if stream_messages_len >= max_stream_messages
-                || stream.count_bytes() >= target_stream_size_bytes
+            if stream_messages_len >= self.max_stream_messages
+                || stream.count_bytes() >= self.target_stream_size_bytes
             {
                 // At limit if message count or byte size limits (enforced across all outgoing
                 // streams) are hit.
@@ -315,7 +304,7 @@ impl StreamBuilderImpl {
             !is_local_message
                 && destination_subnet_type == SubnetType::System
                 && stream_messages_len >= 2 * SYSTEM_SUBNET_STREAM_MSG_LIMIT
-        }
+        };
 
         let mut streams = state.take_streams();
         let routing_table = state.routing_table();
@@ -358,10 +347,9 @@ impl StreamBuilderImpl {
             match routing_table.route(msg.receiver().get()) {
                 // Destination subnet found.
                 Some(dst_subnet_id) => {
+                    let dst_stream_entry = streams.entry(dst_subnet_id);
                     if is_at_limit(
-                        streams.get(&dst_subnet_id),
-                        max_stream_messages,
-                        target_stream_size_bytes,
+                        &dst_stream_entry,
                         self.subnet_id == dst_subnet_id,
                         *subnet_types
                             .get(&dst_subnet_id)
@@ -432,14 +420,14 @@ impl StreamBuilderImpl {
                                 }
                             }
 
-                            streams.push(dst_subnet_id, msg);
+                            dst_stream_entry.or_default().push(msg);
                         }
 
                         _ => {
                             // Route the message into the stream.
                             self.observe_message_status(&msg, LABEL_VALUE_STATUS_SUCCESS);
                             self.observe_payload_size(&msg);
-                            streams.push(dst_subnet_id, msg);
+                            dst_stream_entry.or_default().push(msg);
                         }
                     };
                 }
@@ -547,6 +535,6 @@ impl StreamBuilderImpl {
 
 impl StreamBuilder for StreamBuilderImpl {
     fn build_streams(&self, state: ReplicatedState) -> ReplicatedState {
-        self.build_streams_impl(state, MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES)
+        self.build_streams_impl(state)
     }
 }

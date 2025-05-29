@@ -5,6 +5,7 @@ use clap::Parser;
 use futures::{stream, StreamExt};
 use ic_agent::Agent;
 use ic_nervous_system_agent::nns::sns_wasm;
+use ic_sns_governance_api::pb::v1::topics::ListTopicsResponse;
 use ic_sns_root::types::SnsCanisterType;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -21,29 +22,49 @@ pub struct HealthArgs {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+struct Cycles {
+    cycles: u128,
+    freezing_threshold: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 struct SnsHealthInfo {
     name: String,
     memory_consumption: Vec<(u64, SnsCanisterType)>,
-    cycles: Vec<(u64, SnsCanisterType)>,
+    cycles: Vec<(Cycles, SnsCanisterType)>,
     num_remaining_upgrade_steps: usize,
+    automatic_target_version_advancement: Option<bool>,
+    /// Information about this SNS's proposal topics. Emitted only if --json is selected.
+    proposal_topics: Option<ListTopicsResponse>,
 }
 
 impl TableRow for SnsHealthInfo {
     fn column_names() -> Vec<&'static str> {
-        vec!["Name", "Memory", "Cycles", "Upgrades Remaining"]
+        vec![
+            "Name",
+            "Memory",
+            "Cycles",
+            "Upgrades Remaining",
+            "Auto Upgrades",
+        ]
     }
 
     fn column_values(&self) -> Vec<String> {
+        const MEMORY_THRESHOLD_GIB: f64 = 2.5;
+        const CYCLES_THRESHOLD_TC: f64 = 10.0;
+        const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
+        const TC: f64 = 1000.0 * 1000.0 * 1000.0 * 1000.0;
+
         let high_memory_consumption = self
             .memory_consumption
             .iter()
             .filter(|(memory_consumption, _)| {
-                (*memory_consumption as f64) > 2.5 * 1024.0 * 1024.0 * 1024.0
+                (*memory_consumption as f64) > MEMORY_THRESHOLD_GIB * GIB
             })
             .map(|(memory_consumption, canister_type)| {
                 format!(
                     "{canister_type}: ({:.2} GiB)",
-                    *memory_consumption as f64 / 1024.0 / 1024.0 / 1024.0
+                    *memory_consumption as f64 / GIB
                 )
             })
             .join(", ");
@@ -57,11 +78,16 @@ impl TableRow for SnsHealthInfo {
         let low_cycles = self
             .cycles
             .iter()
-            .filter(|(cycles, _)| (*cycles as f64) < 10.0 * 1000.0 * 1000.0 * 1000.0 * 1000.0)
+            .filter(|(cycles, _)| (cycles.cycles as f64) < CYCLES_THRESHOLD_TC * TC)
             .map(|(cycles, canister_type)| {
                 format!(
-                    "{canister_type}: ({:.2} TC)",
-                    *cycles as f64 / 1000.0 / 1000.0 / 1000.0 / 1000.0
+                    "{canister_type}: ({:.2} TC{frozen})",
+                    cycles.cycles as f64 / TC,
+                    frozen = if cycles.cycles < cycles.freezing_threshold as u128 {
+                        " 🥶".to_string()
+                    } else {
+                        "".to_string()
+                    }
                 )
             })
             .join(", ");
@@ -71,11 +97,19 @@ impl TableRow for SnsHealthInfo {
             "👍".to_string()
         };
 
+        let automatic_target_version_advancement_sign =
+            match self.automatic_target_version_advancement {
+                Some(true) => "🐇",
+                Some(false) => "💪",
+                None => "🦕",
+            };
+
         vec![
             self.name.clone(),
             high_memory_consumption,
             low_cycles,
             format!("{}", self.num_remaining_upgrade_steps),
+            automatic_target_version_advancement_sign.to_string(),
         ]
     }
 }
@@ -128,7 +162,16 @@ pub async fn exec(args: HealthArgs, agent: &Agent) -> Result<()> {
                 .map(|(canister_status, ctype)| {
                     (
                         (u64::try_from(canister_status.memory_size.0).unwrap(), ctype),
-                        (u64::try_from(canister_status.cycles.0).unwrap(), ctype),
+                        (
+                            Cycles {
+                                freezing_threshold: u64::try_from(
+                                    canister_status.settings.freezing_threshold.0,
+                                )
+                                .unwrap(),
+                                cycles: u128::try_from(canister_status.cycles.0).unwrap(),
+                            },
+                            ctype,
+                        ),
                     )
                 })
                 .unzip();
@@ -140,11 +183,26 @@ pub async fn exec(args: HealthArgs, agent: &Agent) -> Result<()> {
                 .len()
                 .saturating_sub(1);
 
+            let automatic_target_version_advancement = sns
+                .governance
+                .get_nervous_system_parameters(agent)
+                .await?
+                .automatically_advance_target_version;
+
+            let proposal_topics = if args.json {
+                let topics = sns.governance.list_topics(agent).await?;
+                Some(topics)
+            } else {
+                None
+            };
+
             Result::<SnsHealthInfo, anyhow::Error>::Ok(SnsHealthInfo {
                 name,
                 memory_consumption,
                 cycles,
                 num_remaining_upgrade_steps,
+                automatic_target_version_advancement,
+                proposal_topics,
             })
         })
         .buffer_unordered(10)

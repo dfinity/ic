@@ -1,19 +1,19 @@
 //! This module contains async functions for interacting with the management canister.
-
 use crate::logs::P0;
-use crate::tx;
-use crate::ECDSAPublicKey;
+use crate::metrics::{observe_get_utxos_latency, observe_sign_with_ecdsa_latency};
+use crate::{tx, CanisterRuntime, ECDSAPublicKey, GetUtxosRequest, GetUtxosResponse, Network};
 use candid::{CandidType, Principal};
-use ic_btc_interface::{
-    Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
-    MillisatoshiPerByte, Network, Utxo, UtxosFilterInRequest,
+use ic_btc_checker::{
+    CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs, CheckTransactionResponse,
 };
+use ic_btc_interface::{Address, MillisatoshiPerByte, Utxo};
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
-use ic_ckbtc_kyt::{DepositRequest, Error as KytError, FetchAlertsResponse, WithdrawalAttempt};
+use ic_cdk::api::management_canister::bitcoin::UtxoFilter;
 use ic_management_canister_types::{
-    DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
+    EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgs, EcdsaPublicKeyResult,
 };
+use ic_management_canister_types_private::DerivationPath;
 use serde::de::DeserializeOwned;
 use std::fmt;
 
@@ -34,6 +34,13 @@ impl CallError {
     /// Returns the failure reason.
     pub fn reason(&self) -> &Reason {
         &self.reason
+    }
+
+    pub fn from_cdk_error(method: &str, (code, msg): (RejectionCode, String)) -> CallError {
+        CallError {
+            method: String::from(method),
+            reason: Reason::from_reject(code, msg),
+        }
     }
 }
 
@@ -86,7 +93,7 @@ impl Reason {
     }
 }
 
-async fn call<I, O>(method: &str, payment: u64, input: &I) -> Result<O, CallError>
+pub(crate) async fn call<I, O>(method: &str, payment: u64, input: &I) -> Result<O, CallError>
 where
     I: CandidType,
     O: CandidType + DeserializeOwned,
@@ -124,7 +131,7 @@ where
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CallSource {
     /// The client initiated the call.
     Client,
@@ -132,86 +139,96 @@ pub enum CallSource {
     Minter,
 }
 
+impl fmt::Display for CallSource {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Client => write!(f, "client"),
+            Self::Minter => write!(f, "minter"),
+        }
+    }
+}
+
 /// Fetches the full list of UTXOs for the specified address.
-pub async fn get_utxos(
+pub async fn get_utxos<R: CanisterRuntime>(
     network: Network,
     address: &Address,
     min_confirmations: u32,
     source: CallSource,
+    runtime: &R,
 ) -> Result<GetUtxosResponse, CallError> {
-    // NB. The minimum number of cycles that need to be sent with the call is 10B (4B) for
-    // Bitcoin mainnet (Bitcoin testnet):
-    // https://internetcomputer.org/docs/current/developer-docs/integrations/bitcoin/bitcoin-how-it-works#api-fees--pricing
-    let get_utxos_cost_cycles = match network {
-        Network::Mainnet => 10_000_000_000,
-        Network::Testnet | Network::Regtest => 4_000_000_000,
-    };
-
-    // Calls "bitcoin_get_utxos" method with the specified argument on the
-    // management canister.
-    async fn bitcoin_get_utxos(
-        req: &GetUtxosRequest,
-        cycles: u64,
+    async fn bitcoin_get_utxos<R: CanisterRuntime>(
+        now: &mut u64,
+        req: GetUtxosRequest,
         source: CallSource,
+        runtime: &R,
     ) -> Result<GetUtxosResponse, CallError> {
         match source {
             CallSource::Client => &crate::metrics::GET_UTXOS_CLIENT_CALLS,
             CallSource::Minter => &crate::metrics::GET_UTXOS_MINTER_CALLS,
         }
         .with(|cell| cell.set(cell.get() + 1));
-        call("bitcoin_get_utxos", cycles, req).await
+        if let Some(res) = crate::state::read_state(|s| s.get_utxos_cache.get(&req, *now).cloned())
+        {
+            crate::metrics::GET_UTXOS_CACHE_HITS.with(|cell| cell.set(cell.get() + 1));
+            Ok(res)
+        } else {
+            crate::metrics::GET_UTXOS_CACHE_MISSES.with(|cell| cell.set(cell.get() + 1));
+            runtime.bitcoin_get_utxos(req.clone()).await.inspect(|res| {
+                *now = runtime.time();
+                crate::state::mutate_state(|s| s.get_utxos_cache.insert(req, res.clone(), *now))
+            })
+        }
     }
 
-    let mut response = bitcoin_get_utxos(
-        &GetUtxosRequest {
-            address: address.to_string(),
-            network: network.into(),
-            filter: Some(UtxosFilterInRequest::MinConfirmations(min_confirmations)),
-        },
-        get_utxos_cost_cycles,
-        source,
-    )
-    .await?;
+    let start_time = runtime.time();
+    let mut now = start_time;
+    let request = GetUtxosRequest {
+        address: address.clone(),
+        network: network.into(),
+        filter: Some(UtxoFilter::MinConfirmations(min_confirmations)),
+    };
+
+    let mut response = bitcoin_get_utxos(&mut now, request.clone(), source, runtime).await?;
 
     let mut utxos = std::mem::take(&mut response.utxos);
+    let mut num_pages: usize = 1;
 
     // Continue fetching until there are no more pages.
     while let Some(page) = response.next_page {
-        response = bitcoin_get_utxos(
-            &GetUtxosRequest {
-                address: address.to_string(),
-                network: network.into(),
-                filter: Some(UtxosFilterInRequest::Page(page)),
-            },
-            get_utxos_cost_cycles,
-            source,
-        )
-        .await?;
-
+        let paged_request = GetUtxosRequest {
+            filter: Some(UtxoFilter::Page(page.to_vec())),
+            ..request.clone()
+        };
+        response = bitcoin_get_utxos(&mut now, paged_request, source, runtime).await?;
         utxos.append(&mut response.utxos);
+        num_pages += 1;
     }
+
+    observe_get_utxos_latency(utxos.len(), num_pages, source, start_time, now);
 
     response.utxos = utxos;
 
     Ok(response)
 }
 
-/// Returns the current fee percentiles on the bitcoin network.
-pub async fn get_current_fees(network: Network) -> Result<Vec<MillisatoshiPerByte>, CallError> {
-    let cost_cycles = match network {
-        Network::Mainnet => 100_000_000,
-        Network::Testnet => 40_000_000,
-        Network::Regtest => 0,
-    };
+/// Fetches a subset of UTXOs for the specified address.
+pub async fn bitcoin_get_utxos(request: GetUtxosRequest) -> Result<GetUtxosResponse, CallError> {
+    ic_cdk::api::management_canister::bitcoin::bitcoin_get_utxos(request)
+        .await
+        .map(|(response,)| response.into())
+        .map_err(|err| CallError::from_cdk_error("bitcoin_get_utxos", err))
+}
 
-    call(
-        "bitcoin_get_current_fee_percentiles",
-        cost_cycles,
-        &GetCurrentFeePercentilesRequest {
+/// Returns the current fee percentiles on the Bitcoin network.
+pub async fn get_current_fees(network: Network) -> Result<Vec<MillisatoshiPerByte>, CallError> {
+    ic_cdk::api::management_canister::bitcoin::bitcoin_get_current_fee_percentiles(
+        ic_cdk::api::management_canister::bitcoin::GetCurrentFeePercentilesRequest {
             network: network.into(),
         },
     )
     .await
+    .map(|(result,)| result)
+    .map_err(|err| CallError::from_cdk_error("bitcoin_get_current_fee_percentiles", err))
 }
 
 /// Sends the transaction to the network the management canister interacts with.
@@ -219,27 +236,14 @@ pub async fn send_transaction(
     transaction: &tx::SignedTransaction,
     network: Network,
 ) -> Result<(), CallError> {
-    use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork;
-
-    let cdk_network = match network {
-        Network::Mainnet => BitcoinNetwork::Mainnet,
-        Network::Testnet => BitcoinNetwork::Testnet,
-        Network::Regtest => BitcoinNetwork::Regtest,
-    };
-
-    let tx_bytes = transaction.serialize();
-
     ic_cdk::api::management_canister::bitcoin::bitcoin_send_transaction(
         ic_cdk::api::management_canister::bitcoin::SendTransactionRequest {
-            transaction: tx_bytes,
-            network: cdk_network,
+            transaction: transaction.serialize(),
+            network: network.into(),
         },
     )
     .await
-    .map_err(|(code, msg)| CallError {
-        method: "bitcoin_send_transaction".to_string(),
-        reason: Reason::from_reject(code, msg),
-    })
+    .map_err(|err| CallError::from_cdk_error("bitcoin_send_transaction", err))
 }
 
 /// Fetches the ECDSA public key of the canister.
@@ -252,9 +256,9 @@ pub async fn ecdsa_public_key(
     call(
         "ecdsa_public_key",
         /*payment=*/ 0,
-        &ECDSAPublicKeyArgs {
+        &EcdsaPublicKeyArgs {
             canister_id: None,
-            derivation_path,
+            derivation_path: derivation_path.into_inner(),
             key_id: EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,
                 name: key_name,
@@ -262,87 +266,65 @@ pub async fn ecdsa_public_key(
         },
     )
     .await
-    .map(|response: ECDSAPublicKeyResponse| ECDSAPublicKey {
+    .map(|response: EcdsaPublicKeyResult| ECDSAPublicKey {
         public_key: response.public_key,
         chain_code: response.chain_code,
     })
 }
 
 /// Signs a message hash using the tECDSA API.
-pub async fn sign_with_ecdsa(
+pub async fn sign_with_ecdsa<R: CanisterRuntime>(
     key_name: String,
     derivation_path: DerivationPath,
     message_hash: [u8; 32],
+    runtime: &R,
 ) -> Result<Vec<u8>, CallError> {
-    use ic_cdk::api::management_canister::ecdsa::{
-        sign_with_ecdsa, EcdsaCurve, EcdsaKeyId, SignWithEcdsaArgument,
-    };
+    let start_time = runtime.time();
 
-    let result = sign_with_ecdsa(SignWithEcdsaArgument {
-        message_hash: message_hash.to_vec(),
-        derivation_path: derivation_path.into_inner(),
-        key_id: EcdsaKeyId {
-            curve: EcdsaCurve::Secp256k1,
-            name: key_name.clone(),
-        },
-    })
-    .await;
+    let result = runtime
+        .sign_with_ecdsa(key_name, derivation_path, message_hash)
+        .await;
 
-    match result {
-        Ok((reply,)) => Ok(reply.signature),
-        Err((code, msg)) => Err(CallError {
-            method: "sign_with_ecdsa".to_string(),
-            reason: Reason::from_reject(code, msg),
-        }),
-    }
+    observe_sign_with_ecdsa_latency(&result, start_time, runtime.time());
+
+    result
 }
 
-/// Requests alerts for the given UTXO.
-pub async fn fetch_utxo_alerts(
-    kyt_principal: Principal,
-    caller: Principal,
-    utxo: &Utxo,
-) -> Result<Result<FetchAlertsResponse, KytError>, CallError> {
-    let (res,): (Result<FetchAlertsResponse, KytError>,) = ic_cdk::api::call::call(
-        kyt_principal,
-        "fetch_utxo_alerts",
-        (DepositRequest {
-            caller,
-            txid: utxo.outpoint.txid.into(),
-            vout: utxo.outpoint.vout,
-        },),
+/// Check if the given Bitcoin address is blocked.
+pub async fn check_withdrawal_destination_address(
+    btc_checker_principal: Principal,
+    address: String,
+) -> Result<CheckAddressResponse, CallError> {
+    let (res,): (CheckAddressResponse,) = ic_cdk::api::call::call(
+        btc_checker_principal,
+        "check_address",
+        (CheckAddressArgs { address },),
     )
     .await
     .map_err(|(code, message)| CallError {
-        method: "fetch_utxo_alerts".to_string(),
+        method: "check_address".to_string(),
         reason: Reason::from_reject(code, message),
     })?;
     Ok(res)
 }
 
-/// Requests alerts for the given Bitcoin address.
-pub async fn fetch_withdrawal_alerts(
-    kyt_principal: Principal,
-    caller: Principal,
-    address: String,
-    amount: u64,
-) -> Result<Result<FetchAlertsResponse, KytError>, CallError> {
-    let now = ic_cdk::api::time();
-    let id = format!("{caller}:{address}:{amount}:{now}");
-    let (res,): (Result<FetchAlertsResponse, KytError>,) = ic_cdk::api::call::call(
-        kyt_principal,
-        "fetch_withdrawal_alerts",
-        (WithdrawalAttempt {
-            caller,
-            id,
-            amount,
-            address,
-            timestamp_nanos: now,
+/// Check if the given UTXO passes Bitcoin check.
+pub async fn check_transaction(
+    btc_checker_principal: Principal,
+    utxo: &Utxo,
+    cycle_payment: u128,
+) -> Result<CheckTransactionResponse, CallError> {
+    let (res,): (CheckTransactionResponse,) = ic_cdk::api::call::call_with_payment128(
+        btc_checker_principal,
+        "check_transaction",
+        (CheckTransactionArgs {
+            txid: utxo.outpoint.txid.as_ref().to_vec(),
         },),
+        cycle_payment,
     )
     .await
     .map_err(|(code, message)| CallError {
-        method: "fetch_withdrawal_alerts".to_string(),
+        method: "check_transaction".to_string(),
         reason: Reason::from_reject(code, message),
     })?;
     Ok(res)

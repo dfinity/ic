@@ -1,7 +1,10 @@
 [package]
 name = "ic-https-outcalls-adapter"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -15,12 +18,14 @@ hyper-util = { workspace = true }
 hyper-rustls = { workspace = true }
 hyper-socks2 = { workspace = true }
 ic-adapter-metrics-server = { path = "../../monitoring/adapter_metrics/server" }
-ic-async-utils = { path = "../../async_utils" }
+ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
 ic-config = { path = "../../config" }
 ic-https-outcalls-service = { path = "../service" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
+parking_lot = { workspace = true }
 prometheus = { workspace = true }
+rand = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
@@ -33,10 +38,10 @@ tower = { workspace = true }
 async-stream = { workspace = true }
 bytes = { workspace = true }
 once_cell = "1.13.1"
-rand = { workspace = true }
 rustls = { workspace = true }
 rustls-pemfile = "2.1.2"
 rstest = { workspace = true }
+socks5-impl = { version = "0.6", features = ["tokio"] }
 tempfile = { workspace = true }
 tokio-rustls = { workspace = true }
 uuid = { workspace = true }

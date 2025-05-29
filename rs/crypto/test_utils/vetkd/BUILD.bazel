@@ -1,0 +1,29 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "vetkd",
+    testonly = True,
+    srcs = glob(["src/**"]),
+    crate_name = "ic_crypto_test_utils_vetkd",
+    version = "0.1.0",
+    deps = [
+        "//rs/crypto/internal/crypto_lib/bls12_381/type",
+        "//rs/crypto/internal/crypto_lib/bls12_381/vetkd",
+        "@crate_index//:rand_chacha",
+    ],
+)
+
+rust_test_suite(
+    name = "vetkd_tests",
+    srcs = glob(["tests/**/*.rs"]),
+    deps = [
+        ":vetkd",
+        "//rs/crypto/internal/crypto_lib/bls12_381/type",
+        "//rs/crypto/internal/crypto_lib/bls12_381/vetkd",
+        "@crate_index//:ic-vetkeys",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+    ],
+)

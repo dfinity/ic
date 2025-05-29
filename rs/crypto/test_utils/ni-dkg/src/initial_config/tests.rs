@@ -144,7 +144,7 @@ fn should_correctly_retrieve_initial_low_threshold_ni_dkg_transcript_from_regist
     let mut transcript = transcript();
     let dkg_tag = NiDkgTag::LowThreshold;
     transcript.dkg_id.dkg_tag = dkg_tag.clone();
-    let registry = registry_with_ni_dkg_transcript(
+    let registry = registry_with_initial_ni_dkg_transcript(
         InitialNiDkgTranscriptRecord::from(transcript.clone()),
         dkg_tag,
         SUBNET_1,
@@ -167,7 +167,7 @@ fn should_correctly_retrieve_initial_high_threshold_ni_dkg_transcript_from_regis
     let mut transcript = transcript();
     let dkg_tag = NiDkgTag::HighThreshold;
     transcript.dkg_id.dkg_tag = dkg_tag.clone();
-    let registry = registry_with_ni_dkg_transcript(
+    let registry = registry_with_initial_ni_dkg_transcript(
         InitialNiDkgTranscriptRecord::from(transcript.clone()),
         dkg_tag,
         SUBNET_1,
@@ -275,7 +275,7 @@ fn transcript() -> NiDkgTranscript {
     transcript_without_empty_or_default_data()
 }
 
-fn registry_with_ni_dkg_transcript(
+fn registry_with_initial_ni_dkg_transcript(
     transcript_record: InitialNiDkgTranscriptRecord,
     dkg_tag: NiDkgTag,
     subnet_id: SubnetId,
@@ -293,6 +293,9 @@ fn registry_with_ni_dkg_transcript(
             cup_contents.initial_ni_dkg_transcript_high_threshold = Some(transcript_record);
             cup_contents.initial_ni_dkg_transcript_low_threshold =
                 Some(InitialNiDkgTranscriptRecord::from(transcript()));
+        }
+        NiDkgTag::HighThresholdForKey(_master_public_key_id) => {
+            unimplemented!("not an initial NI-DKG transcript tag")
         }
     }
     let registry_data = ProtoRegistryDataProvider::new();

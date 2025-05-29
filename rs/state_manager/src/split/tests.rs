@@ -1,14 +1,14 @@
 use super::*;
 use crate::{
-    checkpoint::make_checkpoint,
+    checkpoint::make_unvalidated_checkpoint,
     flush_canister_snapshots_and_page_maps,
     state_sync::types::{FileInfo, Manifest},
-    tip::spawn_tip_thread,
+    tip::{flush_tip_channel, spawn_tip_thread},
     CheckpointMetrics, ManifestMetrics, StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use assert_matches::assert_matches;
 use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, NumSeconds, SnapshotId};
-use ic_config::{flag_status::FlagStatus, state_manager::lsmt_config_default};
+use ic_config::state_manager::lsmt_config_default;
 use ic_error_types::{ErrorCode, UserError};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -82,91 +82,46 @@ const SUBNET_B_RANGES: &[CanisterIdRange] = &[
 /// Full list of files expected to be listed in the manifest of subnet A.
 /// Note that any queue files are missing as they would be empty.
 fn subnet_a_files() -> &'static [&'static str] {
-    // With lsmt enabled, we do do not write empty files for the wasm chunk store.
-    match lsmt_config_default().lsmt_status {
-        FlagStatus::Enabled => &[
-            "canister_states/00000000000000010101/canister.pbuf",
-            "canister_states/00000000000000010101/software.wasm",
-            "canister_states/00000000000000020101/canister.pbuf",
-            "canister_states/00000000000000020101/software.wasm",
-            "canister_states/00000000000000030101/canister.pbuf",
-            "canister_states/00000000000000030101/software.wasm",
-            INGRESS_HISTORY_FILE,
-            "snapshots/00000000000000010101/000000000000000000000000000000010101/snapshot.pbuf",
-            "snapshots/00000000000000010101/000000000000000000000000000000010101/software.wasm",
-            SUBNET_QUEUES_FILE,
-            SYSTEM_METADATA_FILE,
-        ],
-        FlagStatus::Disabled => &[
-            "canister_states/00000000000000010101/canister.pbuf",
-            "canister_states/00000000000000010101/software.wasm",
-            "canister_states/00000000000000010101/wasm_chunk_store.bin",
-            "canister_states/00000000000000020101/canister.pbuf",
-            "canister_states/00000000000000020101/software.wasm",
-            "canister_states/00000000000000020101/wasm_chunk_store.bin",
-            "canister_states/00000000000000030101/canister.pbuf",
-            "canister_states/00000000000000030101/software.wasm",
-            "canister_states/00000000000000030101/wasm_chunk_store.bin",
-            INGRESS_HISTORY_FILE,
-            "snapshots/00000000000000010101/000000000000000000000000000000010101/snapshot.pbuf",
-            "snapshots/00000000000000010101/000000000000000000000000000000010101/software.wasm",
-            SUBNET_QUEUES_FILE,
-            SYSTEM_METADATA_FILE,
-        ],
-    }
+    &[
+        "canister_states/00000000000000010101/canister.pbuf",
+        "canister_states/00000000000000010101/software.wasm",
+        "canister_states/00000000000000020101/canister.pbuf",
+        "canister_states/00000000000000020101/software.wasm",
+        "canister_states/00000000000000030101/canister.pbuf",
+        "canister_states/00000000000000030101/software.wasm",
+        INGRESS_HISTORY_FILE,
+        "snapshots/00000000000000010101/000000000000000000000000000000010101/snapshot.pbuf",
+        "snapshots/00000000000000010101/000000000000000000000000000000010101/software.wasm",
+        SUBNET_QUEUES_FILE,
+        SYSTEM_METADATA_FILE,
+    ]
 }
 
 /// Full list of files expected to be listed in the manifest of subnet A'.
 fn subnet_a_prime_files() -> &'static [&'static str] {
-    match lsmt_config_default().lsmt_status {
-        FlagStatus::Enabled => &[
-            "canister_states/00000000000000010101/canister.pbuf",
-            "canister_states/00000000000000010101/software.wasm",
-            "canister_states/00000000000000030101/canister.pbuf",
-            "canister_states/00000000000000030101/software.wasm",
-            INGRESS_HISTORY_FILE,
-            "snapshots/00000000000000010101/000000000000000000000000000000010101/snapshot.pbuf",
-            "snapshots/00000000000000010101/000000000000000000000000000000010101/software.wasm",
-            SPLIT_MARKER_FILE,
-            SUBNET_QUEUES_FILE,
-            SYSTEM_METADATA_FILE,
-        ],
-        FlagStatus::Disabled => &[
-            "canister_states/00000000000000010101/canister.pbuf",
-            "canister_states/00000000000000010101/software.wasm",
-            "canister_states/00000000000000010101/wasm_chunk_store.bin",
-            "canister_states/00000000000000030101/canister.pbuf",
-            "canister_states/00000000000000030101/software.wasm",
-            "canister_states/00000000000000030101/wasm_chunk_store.bin",
-            INGRESS_HISTORY_FILE,
-            "snapshots/00000000000000010101/000000000000000000000000000000010101/snapshot.pbuf",
-            "snapshots/00000000000000010101/000000000000000000000000000000010101/software.wasm",
-            SPLIT_MARKER_FILE,
-            SUBNET_QUEUES_FILE,
-            SYSTEM_METADATA_FILE,
-        ],
-    }
+    &[
+        "canister_states/00000000000000010101/canister.pbuf",
+        "canister_states/00000000000000010101/software.wasm",
+        "canister_states/00000000000000030101/canister.pbuf",
+        "canister_states/00000000000000030101/software.wasm",
+        INGRESS_HISTORY_FILE,
+        "snapshots/00000000000000010101/000000000000000000000000000000010101/snapshot.pbuf",
+        "snapshots/00000000000000010101/000000000000000000000000000000010101/software.wasm",
+        SPLIT_MARKER_FILE,
+        SUBNET_QUEUES_FILE,
+        SYSTEM_METADATA_FILE,
+    ]
 }
 
 /// Full list of files expected to be listed in the manifest of subnet B.
 fn subnet_b_files() -> &'static [&'static str] {
-    match lsmt_config_default().lsmt_status {
-        FlagStatus::Enabled => &[
-            "canister_states/00000000000000020101/canister.pbuf",
-            "canister_states/00000000000000020101/software.wasm",
-            INGRESS_HISTORY_FILE,
-            SPLIT_MARKER_FILE,
-            SYSTEM_METADATA_FILE,
-        ],
-        FlagStatus::Disabled => &[
-            "canister_states/00000000000000020101/canister.pbuf",
-            "canister_states/00000000000000020101/software.wasm",
-            "canister_states/00000000000000020101/wasm_chunk_store.bin",
-            INGRESS_HISTORY_FILE,
-            SPLIT_MARKER_FILE,
-            SYSTEM_METADATA_FILE,
-        ],
-    }
+    &[
+        "canister_states/00000000000000020101/canister.pbuf",
+        "canister_states/00000000000000020101/software.wasm",
+        INGRESS_HISTORY_FILE,
+        SPLIT_MARKER_FILE,
+        SYSTEM_METADATA_FILE,
+    ]
 }
 
 const HEIGHT: Height = Height::new(42);
@@ -191,21 +146,20 @@ fn read_write_roundtrip() {
 
         // Read the latest checkpoint into a state.
         let fd_factory = Arc::new(TestPageAllocatorFileDescriptorImpl::new());
-        let (cp, mut state) =
-            read_checkpoint(&layout, &mut thread_pool, fd_factory.clone(), &metrics)
-                .expect("failed to read checkpoint");
+        let (cp, state) = read_checkpoint(&layout, &mut thread_pool, fd_factory.clone(), &metrics)
+            .expect("failed to read checkpoint");
 
         // Sanity check: ensure that `split_from` is not set by default.
         assert_eq!(None, state.metadata.split_from);
 
         // Write back the state as a new checkpoint.
         write_checkpoint(
-            &mut state,
+            state,
             layout.clone(),
             &cp,
             &mut thread_pool,
-            fd_factory,
             &Config::new(root),
+            fd_factory.clone(),
             &metrics,
             log.clone(),
         )
@@ -431,9 +385,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
     let snapshot =
         CanisterSnapshot::from_canister(state.canister_state(&CANISTER_1).unwrap(), state.time())
             .unwrap();
-    state
-        .canister_snapshots
-        .push(snapshot_id, Arc::new(snapshot));
+    state.take_snapshot(snapshot_id, Arc::new(snapshot));
 
     // Make subnet_queues non-empty
     state
@@ -446,25 +398,33 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         )
         .unwrap();
 
-    flush_canister_snapshots_and_page_maps(
-        &mut state,
-        HEIGHT,
-        &tip_channel,
-        &state_manager_metrics.checkpoint_metrics,
-    );
+    flush_canister_snapshots_and_page_maps(&mut state, HEIGHT, &tip_channel);
 
     let mut thread_pool = thread_pool();
-    let (cp_layout, _state, _has_downgrade) = make_checkpoint(
-        &state,
+    let (state, cp_layout) = make_unvalidated_checkpoint(
+        state,
         HEIGHT,
         &tip_channel,
         &state_manager_metrics.checkpoint_metrics,
-        &mut thread_pool,
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-        lsmt_config_default().lsmt_status,
     )
-    .unwrap_or_else(|err| panic!("Expected make_checkpoint to succeed, got {:?}", err));
-    validate_checkpoint_and_remove_unverified_marker(&cp_layout, Some(&mut thread_pool)).unwrap();
+    .unwrap_or_else(|err| {
+        panic!(
+            "Expected make_unvalidated_checkpoint to succeed, got {:?}",
+            err
+        )
+    });
+    flush_tip_channel(&tip_channel);
+    let fd_factory = Arc::new(TestPageAllocatorFileDescriptorImpl::new());
+    validate_and_finalize_checkpoint_and_remove_unverified_marker(
+        &cp_layout,
+        None,
+        SubnetType::Application,
+        fd_factory.clone(),
+        &state_manager_metrics.checkpoint_metrics,
+        Some(&mut thread_pool),
+    )
+    .unwrap();
 
     // Sanity checks.
     assert_eq!(layout.checkpoint_heights().unwrap(), vec![HEIGHT]);

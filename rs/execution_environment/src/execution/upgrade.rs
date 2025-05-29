@@ -4,7 +4,7 @@
 //! and https://internetcomputer.org/docs/current/references/ic-interface-spec/#system-api-upgrades
 
 use crate::as_round_instructions;
-use crate::canister_manager::{
+use crate::canister_manager::types::{
     CanisterManagerError, DtsInstallCodeResult, InstallCodeContext, PausedInstallCodeExecution,
 };
 use crate::execution::common::{ingress_status_with_processing_state, update_round_limits};
@@ -14,18 +14,20 @@ use crate::execution::install_code::{
 };
 use crate::execution_environment::{RoundContext, RoundLimits};
 use ic_base_types::PrincipalId;
-use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
+use ic_embedders::{
+    wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult},
+    wasmtime_embedder::system_api::ApiType,
+};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, WasmExecutionOutput,
 };
 use ic_logger::{info, warn, ReplicaLogger};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterInstallModeV2, CanisterUpgradeOptions, WasmMemoryPersistence,
 };
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::InstallCodeCallId, CanisterState, ExecutionState,
 };
-use ic_system_api::ApiType;
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{
     funds::Cycles,
@@ -105,7 +107,7 @@ pub(crate) fn execute_upgrade(
     let mut helper = InstallCodeHelper::new(&clean_canister, &original);
 
     // Stage 0: validate input.
-    if let Err(err) = helper.validate_input(&original, &round, round_limits) {
+    if let Err(err) = helper.validate_input(&original) {
         return finish_err(
             clean_canister,
             helper.instructions_left(),
@@ -209,7 +211,7 @@ pub(crate) fn execute_upgrade(
 
 #[allow(clippy::too_many_arguments)]
 fn upgrade_stage_1_process_pre_upgrade_result(
-    canister_state_changes: Option<CanisterStateChanges>,
+    canister_state_changes: CanisterStateChanges,
     output: WasmExecutionOutput,
     context: InstallCodeContext,
     clean_canister: CanisterState,
@@ -321,7 +323,6 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
         instructions_from_compilation,
         result,
         memory_handling,
-        &original,
     ) {
         let instructions_left = helper.instructions_left();
         return finish_err(
@@ -413,7 +414,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
 
 #[allow(clippy::too_many_arguments)]
 fn upgrade_stage_3b_process_start_result(
-    canister_state_changes: Option<CanisterStateChanges>,
+    canister_state_changes: CanisterStateChanges,
     output: WasmExecutionOutput,
     context_sender: PrincipalId,
     context_arg: Vec<u8>,
@@ -531,7 +532,7 @@ fn upgrade_stage_4a_call_post_upgrade(
 
 #[allow(clippy::too_many_arguments)]
 fn upgrade_stage_4b_process_post_upgrade_result(
-    canister_state_changes: Option<CanisterStateChanges>,
+    canister_state_changes: CanisterStateChanges,
     output: WasmExecutionOutput,
     clean_canister: CanisterState,
     mut helper: InstallCodeHelper,
@@ -590,7 +591,6 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
             self.paused_helper,
             &self.original,
             &round,
-            round_limits,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {
@@ -695,7 +695,6 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
             self.paused_helper,
             &self.original,
             &round,
-            round_limits,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {
@@ -799,7 +798,6 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
             self.paused_helper,
             &self.original,
             &round,
-            round_limits,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {
@@ -884,7 +882,7 @@ fn determine_main_memory_handling(
     let old_state_uses_orthogonal_persistence = || {
         old_state
             .as_ref()
-            .map_or(false, expects_enhanced_orthogonal_persistence)
+            .is_some_and(expects_enhanced_orthogonal_persistence)
     };
     let new_state_uses_classical_persistence = || {
         new_state_candidate.is_ok()

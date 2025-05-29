@@ -1,0 +1,42 @@
+[package]
+name = "ic-consensus-dkg"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+
+ic-metrics = { path = "../../monitoring/metrics" }
+ic-consensus-utils = { path = "../utils" }
+ic-interfaces = { path = "../../interfaces" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
+ic-protobuf = { path = "../../protobuf" }
+ic-registry-client-helpers = { path = "../../registry/helpers" }
+ic-replicated-state = { path = "../../replicated_state" }
+ic-types = { path = "../../types/types" }
+prometheus = { workspace = true }
+slog = { workspace = true }
+rayon = { workspace = true }
+
+[dev-dependencies]
+
+ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }
+ic-test-artifact-pool = { path = "../../test_utilities/artifact_pool" }
+prost = { workspace = true }
+ic-artifact-pool = { path = "../../artifact_pool" }
+ic-consensus-mocks = { path = "../mocks" }
+ic-crypto-test-utils-ni-dkg = { path = "../../crypto/test_utils/ni-dkg" }
+ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
+ic-registry-keys = { path = "../../registry/keys" }
+ic-registry-subnet-features = { path = "../../registry/subnet_features" }
+ic-test-utilities = { path = "../../test_utilities" }
+ic-test-utilities-consensus = { path = "../../test_utilities/consensus" }
+ic-test-utilities-logger = { path = "../../test_utilities/logger" }
+ic-test-utilities-registry = { path = "../../test_utilities/registry" }
+ic-test-utilities-state = { path = "../../test_utilities/state" }
+ic-test-utilities-types = { path = "../../test_utilities/types" }

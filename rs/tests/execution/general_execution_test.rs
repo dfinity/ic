@@ -2,15 +2,13 @@ mod general_execution_tests;
 
 use anyhow::Result;
 use general_execution_tests::api_tests::node_metrics_history_another_subnet_succeeds;
-use general_execution_tests::api_tests::node_metrics_history_ingress_query_fails;
-use general_execution_tests::api_tests::node_metrics_history_ingress_update_fails;
 use general_execution_tests::api_tests::node_metrics_history_non_existing_subnet_fails;
 use general_execution_tests::api_tests::node_metrics_history_query_fails;
-use general_execution_tests::api_tests::node_metrics_history_update_succeeds;
 use general_execution_tests::api_tests::test_controller;
 use general_execution_tests::api_tests::test_cycles_burn;
 use general_execution_tests::api_tests::test_in_replicated_execution;
 use general_execution_tests::api_tests::test_raw_rand_api;
+use general_execution_tests::api_tests::{root_key_on_nns_subnet, root_key_on_non_nns_subnet};
 use general_execution_tests::big_stable_memory::*;
 use general_execution_tests::canister_heartbeat::*;
 use general_execution_tests::canister_lifecycle::*;
@@ -19,6 +17,7 @@ use general_execution_tests::ingress_rate_limiting::*;
 use general_execution_tests::malicious_input::malicious_input_test;
 use general_execution_tests::nns_shielding::*;
 use general_execution_tests::queries::query_reply_sizes;
+use general_execution_tests::security::stack_overflow;
 use general_execution_tests::wasm_chunk_store::*;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
@@ -39,12 +38,9 @@ fn main() -> Result<()> {
                 .add_test(systest!(test_controller))
                 .add_test(systest!(test_in_replicated_execution))
                 .add_test(systest!(test_cycles_burn))
-                .add_test(systest!(node_metrics_history_update_succeeds))
                 .add_test(systest!(node_metrics_history_query_fails))
                 .add_test(systest!(node_metrics_history_another_subnet_succeeds))
                 .add_test(systest!(node_metrics_history_non_existing_subnet_fails))
-                .add_test(systest!(node_metrics_history_ingress_update_fails))
-                .add_test(systest!(node_metrics_history_ingress_query_fails))
                 .add_test(systest!(can_access_big_heap_and_big_stable_memory))
                 .add_test(systest!(can_access_big_stable_memory))
                 .add_test(systest!(can_handle_overflows_when_indexing_stable_memory))
@@ -90,10 +86,8 @@ fn main() -> Result<()> {
                 .add_test(systest!(canister_only_accepts_ingress_with_payload))
                 .add_test(systest!(canister_rejects_ingress_only_from_one_caller))
                 .add_test(systest!(query_reply_sizes))
-                .add_test(systest!(
-                    mint_cycles_supported_only_on_cycles_minting_canister
-                ))
                 .add_test(systest!(mint_cycles_not_supported_on_application_subnet))
+                .add_test(systest!(mint_cycles128_not_supported_on_application_subnet))
                 .add_test(systest!(no_cycle_balance_limit_on_nns_subnet))
                 .add_test(systest!(app_canister_attempt_initiating_dkg_fails))
                 .add_test(systest!(canister_heartbeat_is_called_at_regular_intervals))
@@ -108,7 +102,10 @@ fn main() -> Result<()> {
                 .add_test(systest!(install_large_wasm_with_other_store))
                 .add_test(systest!(
                     install_large_wasm_with_other_store_fails_cross_subnet
-                )),
+                ))
+                .add_test(systest!(stack_overflow))
+                .add_test(systest!(root_key_on_nns_subnet))
+                .add_test(systest!(root_key_on_non_nns_subnet)),
         )
         .execute_from_args()?;
 

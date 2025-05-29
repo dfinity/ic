@@ -26,11 +26,10 @@ use x509_cert::spki; // re-export of spki crate
 use ic_interfaces_registry::{
     RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
 };
-use ic_protobuf::registry::firewall::v1::{
-    FirewallAction, FirewallRule, FirewallRuleDirection, FirewallRuleSet,
-};
+
 use ic_protobuf::registry::{
     api_boundary_node::v1::ApiBoundaryNodeRecord,
+    dc::v1::DataCenterRecord,
     node_operator::v1::NodeOperatorRecord,
     provisional_whitelist::v1::ProvisionalWhitelist as PbProvisionalWhitelist,
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
@@ -38,11 +37,15 @@ use ic_protobuf::registry::{
     subnet::v1::SubnetListRecord,
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
+use ic_protobuf::registry::{
+    dc::v1::Gps,
+    firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection, FirewallRuleSet},
+};
 use ic_protobuf::types::v1::{PrincipalId as PrincipalIdProto, SubnetId as SubnetIdProto};
 use ic_registry_client::client::RegistryDataProviderError;
 use ic_registry_keys::{
     make_api_boundary_node_record_key, make_blessed_replica_versions_key,
-    make_firewall_rules_record_key, make_node_operator_record_key,
+    make_data_center_record_key, make_firewall_rules_record_key, make_node_operator_record_key,
     make_provisional_whitelist_record_key, make_replica_version_key, make_routing_table_record_key,
     make_subnet_list_record_key, make_unassigned_nodes_config_record_key, FirewallRulesScope,
     ROOT_SUBNET_ID_KEY,
@@ -107,29 +110,47 @@ impl TopologyConfig {
     fn get_routing_table_with_specified_ids_allocation_range(
         &self,
     ) -> Result<RoutingTable, WellFormedError> {
-        let specified_ids_range_start: u64 = 0;
-        let specified_ids_range_end: u64 = u64::MAX / 2;
-
-        let specified_ids_range = CanisterIdRange {
-            start: CanisterId::from(specified_ids_range_start),
-            end: CanisterId::from(specified_ids_range_end),
-        };
-
-        let subnets_allocation_range_start =
-            ((specified_ids_range_end / CANISTER_IDS_PER_SUBNET) + 2) * CANISTER_IDS_PER_SUBNET;
-        let subnets_allocation_range_end =
-            subnets_allocation_range_start + CANISTER_IDS_PER_SUBNET - 1;
-
-        let subnets_allocation_range = CanisterIdRange {
-            start: CanisterId::from(subnets_allocation_range_start),
-            end: CanisterId::from(subnets_allocation_range_end),
-        };
-
         let mut routing_table = RoutingTable::default();
-        let subnet_index = self.subnets.keys().next().unwrap();
-        let subnet_id = self.subnet_ids[subnet_index];
-        routing_table.insert(specified_ids_range, subnet_id)?;
-        routing_table.insert(subnets_allocation_range, subnet_id)?;
+
+        // Calculates specified and subnet allocation ranges based on given start and end.
+        let calculate_ranges = |specified_ids_range_start: u64, specified_ids_range_end: u64| {
+            let specified_ids_range = CanisterIdRange {
+                start: CanisterId::from(specified_ids_range_start),
+                end: CanisterId::from(specified_ids_range_end),
+            };
+
+            let subnets_allocation_range_start =
+                ((specified_ids_range_end / CANISTER_IDS_PER_SUBNET) + 2) * CANISTER_IDS_PER_SUBNET;
+            let subnets_allocation_range_end =
+                subnets_allocation_range_start + CANISTER_IDS_PER_SUBNET - 1;
+
+            let subnets_allocation_range = CanisterIdRange {
+                start: CanisterId::from(subnets_allocation_range_start),
+                end: CanisterId::from(subnets_allocation_range_end),
+            };
+
+            (specified_ids_range, subnets_allocation_range)
+        };
+
+        // Set initial range values.
+        let mut start = 0;
+        let mut end = u64::MAX / 2;
+
+        for (i, &subnet_index) in self.subnets.keys().enumerate() {
+            let subnet_id = self.subnet_ids[&subnet_index];
+            let (specified_ids_range, subnets_allocation_range) = calculate_ranges(start, end);
+
+            // Insert both ranges for the first subnet, only specified range for others.
+            routing_table.insert(specified_ids_range, subnet_id)?;
+            if i == 0 {
+                routing_table.insert(subnets_allocation_range, subnet_id)?;
+            }
+
+            // Adjust start and end for the next subnet.
+            start = end + 1;
+            end = end.saturating_add(CANISTER_IDS_PER_SUBNET);
+        }
+
         Ok(routing_table)
     }
 
@@ -247,6 +268,9 @@ pub struct IcConfig {
     generate_subnet_records: bool,
     /// The index of the NNS subnet, if any.
     nns_subnet_index: Option<u64>,
+
+    // Initial set of data center records to populate the registry with.
+    initial_dc_records: Vec<DataCenterRecord>,
 
     /// Vector of node operator records
     initial_registry_node_operator_entries: Vec<NodeOperatorEntry>,
@@ -376,6 +400,7 @@ impl IcConfig {
             initial_release_package_url: release_package_url,
             initial_release_package_sha256_hex: release_package_sha256_hex,
             initial_registry_node_operator_entries: Vec::new(),
+            initial_dc_records: Vec::new(),
             provisional_whitelist,
             initial_mutations: Vec::new(),
             initial_node_operator,
@@ -621,6 +646,16 @@ impl IcConfig {
             PbProvisionalWhitelist::from(provisional_whitelist),
         );
 
+        for dc_record in self.initial_dc_records {
+            write_registry_entry(
+                &data_provider,
+                self.target_dir.as_path(),
+                make_data_center_record_key(dc_record.id.as_str()).as_ref(),
+                version,
+                dc_record,
+            );
+        }
+
         for node_operator_entry in self.initial_registry_node_operator_entries {
             let id = node_operator_entry.principal_id;
             let node_operator_record: NodeOperatorRecord = node_operator_entry.into();
@@ -717,13 +752,27 @@ impl IcConfig {
     /// >   provider_keys/
     /// >     np.der
     ///
-    /// > "dc_A": { "node_allowance" : 3,
+    /// > "dc_A": {
+    /// >   "node_allowance" : 3,
     /// >   "node_provider": "provider_keys/np.der",
     /// > }
     ///
     /// *Note* that in case of the provider key, the filename *must* include the
     /// extension. If the path is not absolute, the directory containing the
     /// meta.json is used as a basis.
+    ///
+    /// Extra data center information can be added to the meta.json file, such as
+    /// region, owner, and gps coordinates. The gps coordinates should be in the
+    /// format of a 2-element array, where the first element is the latitude
+    /// and the second element is the longitude. For example:
+    ///
+    /// > "dc_A": {
+    /// >   "node_allowance" : 3,
+    /// >   "node_provider": "provider_keys/np.der",
+    /// >   "region": "us-west-1",
+    /// >   "owner": "example_owner",
+    /// >   "gps": [37.7749, -122.4194]
+    /// > }
     pub fn load_registry_node_operator_records_from_dir(
         mut self,
         der_dir: &Path,
@@ -755,6 +804,8 @@ impl IcConfig {
         //and push them into the node_operator_entries vector. We don't use a map
         // because there are too many '?' in there.
         let mut node_operator_entries = Vec::new();
+        let mut data_center_entries = Vec::new();
+
         for fname in der_files {
             let name = fname
                 .file_name()
@@ -832,12 +883,49 @@ impl IcConfig {
                 None
             };
 
+            let dcr = DataCenterRecord {
+                id: name.to_string(),
+                region: match obj["region"].as_str() {
+                    Some(region) => region.to_string(),
+                    None => String::from(""),
+                },
+                owner: match obj["owner"].as_str() {
+                    Some(owner) => owner.to_string(),
+                    None => String::from(""),
+                },
+                gps: match obj["gps"].as_array() {
+                    Some(gps) => {
+                        if gps.len() != 2 {
+                            return Err(InitializeError::NotString {
+                                key: "gps".to_string(),
+                                value: obj["gps"].to_string(),
+                            });
+                        }
+                        let lat = gps[0].as_f64().ok_or_else(|| InitializeError::NotString {
+                            key: "gps".to_string(),
+                            value: obj["gps"].to_string(),
+                        })?;
+                        let lon = gps[1].as_f64().ok_or_else(|| InitializeError::NotString {
+                            key: "gps".to_string(),
+                            value: obj["gps"].to_string(),
+                        })?;
+                        Some(Gps {
+                            latitude: lat as f32,
+                            longitude: lon as f32,
+                        })
+                    }
+                    None => None,
+                },
+            };
+
+            data_center_entries.push(dcr);
+
             node_operator_entries.push(NodeOperatorEntry {
                 _name: String::from(name),
                 principal_id: PrincipalId::new_self_authenticating(&operator_buf),
                 node_provider_principal_id,
                 node_allowance,
-                dc_id: "".into(),
+                dc_id: name.into(),
                 rewardable_nodes: BTreeMap::new(),
                 ipv6: None,
             });
@@ -845,6 +933,8 @@ impl IcConfig {
 
         self.initial_registry_node_operator_entries
             .extend(node_operator_entries);
+
+        self.initial_dc_records.extend(data_center_entries);
         Ok(self)
     }
 }

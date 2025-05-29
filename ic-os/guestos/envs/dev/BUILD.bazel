@@ -1,17 +1,34 @@
 load("//ic-os:defs.bzl", "icos_build")
 load("//ic-os/guestos:defs.bzl", "image_deps")
+load("//publish:defs.bzl", "artifact_bundle")
 
 # The macro contains several targets.
 # Check
 #       //ic-os/guestos/BUILD.bazel for examples
 #    or //ic-os/defs.bzl for the full list of targets.
-icos_build(
+icos_images = icos_build(
     name = "dev",
-    ic_version = "//bazel:rc_only_version.txt",
     image_deps_func = image_deps,
-    upload_prefix = "guest-os",
     visibility = [
         "//rs:ic-os-pkg",
         "//rs:system-tests-pkg",
+        "//testnet/tools:icos_deploy-pkg",
     ],
+)
+
+# The icos_deploy testnet script needs this
+artifact_bundle(
+    name = "bundle-disk",
+    testonly = True,
+    inputs = [icos_images.disk_image],
+    prefix = "guest-os/disk-img-dev",
+    visibility = ["//visibility:public"],
+)
+
+artifact_bundle(
+    name = "bundle-update",
+    testonly = True,
+    inputs = [icos_images.update_image],
+    prefix = "guest-os/update-img-dev",
+    visibility = ["//visibility:public"],
 )

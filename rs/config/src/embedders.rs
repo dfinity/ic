@@ -1,9 +1,11 @@
 use std::time::Duration;
 
 use ic_base_types::NumBytes;
-use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
-use ic_types::{NumInstructions, NumOsPages, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES};
+use ic_types::{
+    NumInstructions, NumOsPages, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES,
+    MAX_WASM_MEMORY_IN_BYTES,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::flag_status::FlagStatus;
@@ -12,7 +14,7 @@ use crate::flag_status::FlagStatus;
 // each message's execution time (about 40x), so set a limit 3 orders of
 // magnitude lower which should still allow for reasonable canisters to be
 // written (current max number of globals on the Alpha network is 7).
-pub(crate) const MAX_GLOBALS: usize = 1000;
+pub const MAX_GLOBALS: usize = 1000;
 // The maximum number of functions allowed in a Wasm module.
 pub(crate) const MAX_FUNCTIONS: usize = 50000;
 // The maximum number of custom sections allowed in a Wasm module.
@@ -43,8 +45,10 @@ const DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS: usize = 10;
 const DEFAULT_PAGE_ALLOCATOR_THREADS: usize = 8;
 
 /// Sandbox process eviction ensures that the number of sandbox processes is
-/// always below this threshold.
-pub(crate) const DEFAULT_MAX_SANDBOX_COUNT: usize = 5_000;
+/// always below this threshold. Idle sandboxes should be using at most ~5MiB
+/// resident memory with the on-disk compilation cache, so 10,000 sandboxes
+/// shouldn't be more than 50 GiB.
+pub(crate) const DEFAULT_MAX_SANDBOX_COUNT: usize = 10_000;
 
 /// A sandbox process may be evicted after it has been idle for this
 /// duration and sandbox process eviction is activated.
@@ -104,12 +108,8 @@ pub struct FeatureFlags {
     pub rate_limiting_of_debug_prints: FlagStatus,
     /// Track dirty pages with a write barrier instead of the signal handler.
     pub write_barrier: FlagStatus,
-    pub wasm_native_stable_memory: FlagStatus,
     /// Indicates whether the support for 64 bit main memory is enabled
     pub wasm64: FlagStatus,
-    // TODO(IC-1674): remove this flag once the feature is enabled by default.
-    /// Indicates whether the best-effort responses feature is enabled.
-    pub best_effort_responses: FlagStatus,
     /// Collect a backtrace from the canister when it panics.
     pub canister_backtrace: FlagStatus,
 }
@@ -119,9 +119,7 @@ impl FeatureFlags {
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             write_barrier: FlagStatus::Disabled,
-            wasm_native_stable_memory: FlagStatus::Enabled,
-            wasm64: FlagStatus::Disabled,
-            best_effort_responses: FlagStatus::Disabled,
+            wasm64: FlagStatus::Enabled,
             canister_backtrace: FlagStatus::Enabled,
         }
     }
@@ -208,12 +206,12 @@ pub struct Config {
     pub max_sandbox_idle_time: Duration,
 
     /// Sandbox processes may be evicted if their total RSS exceeds
-    /// the specified amount in bytes.
+    /// the specified amount in bytes. By default, we assume that
+    /// each sandbox process has 50 MiB RSS (see `DEFAULT_SANDBOX_PROCESS_RSS`).
+    /// The actual RSS is updated in the background thread, while the
+    /// synchronous RSS-based eviction is only triggered when there is
+    /// a memory pressure (see `DEFAULT_MIN_MEM_AVAILABLE_TO_EVICT_SANDBOXES`)
     pub max_sandboxes_rss: NumBytes,
-
-    /// The type of the local subnet. The default value here should be replaced
-    /// with the correct value at runtime when the hypervisor is created.
-    pub subnet_type: SubnetType,
 
     /// Dirty page overhead. The number of instructions to charge for each dirty
     /// page created by a write to stable memory. The default value should be
@@ -240,6 +238,9 @@ pub struct Config {
 
     /// The maximum size of the wasm heap memory.
     pub max_wasm_memory_size: NumBytes,
+
+    /// The maximum size of the wasm heap memory for Wasm64 canisters.
+    pub max_wasm64_memory_size: NumBytes,
 
     /// The maximum size of the stable memory.
     pub max_stable_memory_size: NumBytes,
@@ -273,13 +274,13 @@ impl Config {
             max_sandbox_count: DEFAULT_MAX_SANDBOX_COUNT,
             max_sandbox_idle_time: DEFAULT_MAX_SANDBOX_IDLE_TIME,
             max_sandboxes_rss: DEFAULT_MAX_SANDBOXES_RSS,
-            subnet_type: SubnetType::Application,
             dirty_page_overhead: NumInstructions::new(0),
             trace_execution: FlagStatus::Disabled,
             max_dirty_pages_without_optimization: DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION,
             dirty_page_copy_overhead: DIRTY_PAGE_COPY_OVERHEAD,
             wasm_max_size: WASM_MAX_SIZE,
             max_wasm_memory_size: NumBytes::new(MAX_WASM_MEMORY_IN_BYTES),
+            max_wasm64_memory_size: NumBytes::new(MAX_WASM64_MEMORY_IN_BYTES),
             max_stable_memory_size: NumBytes::new(MAX_STABLE_MEMORY_IN_BYTES),
             wasm64_dirty_page_overhead_multiplier: WASM64_DIRTY_PAGE_OVERHEAD_MULTIPLIER,
         }

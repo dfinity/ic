@@ -1,22 +1,18 @@
 use crate::{
     canister_api::CanisterApi,
-    pb::{
-        hash_to_hex_string,
-        v1::{
-            add_wasm_response, AddWasmRequest, AddWasmResponse, DappCanistersTransferResult,
-            DeployNewSnsRequest, DeployNewSnsResponse, DeployedSns,
-            GetDeployedSnsByProposalIdRequest, GetDeployedSnsByProposalIdResponse,
-            GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetProposalIdThatAddedWasmRequest,
-            GetProposalIdThatAddedWasmResponse, GetSnsSubnetIdsResponse,
-            GetWasmMetadataRequest as GetWasmMetadataRequestPb,
-            GetWasmMetadataResponse as GetWasmMetadataResponsePb, GetWasmRequest, GetWasmResponse,
-            InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse,
-            ListDeployedSnsesRequest, ListDeployedSnsesResponse, ListUpgradeStep,
-            ListUpgradeStepsRequest, ListUpgradeStepsResponse,
-            MetadataSection as MetadataSectionPb, SnsCanisterIds, SnsCanisterType, SnsUpgrade,
-            SnsVersion, SnsWasm, SnsWasmError, SnsWasmStableIndex, StableCanisterState,
-            UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
-        },
+    pb::v1::{
+        add_wasm_response, AddWasmRequest, AddWasmResponse, DappCanistersTransferResult,
+        DeployNewSnsRequest, DeployNewSnsResponse, DeployedSns, GetDeployedSnsByProposalIdRequest,
+        GetDeployedSnsByProposalIdResponse, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
+        GetProposalIdThatAddedWasmRequest, GetProposalIdThatAddedWasmResponse,
+        GetSnsSubnetIdsResponse, GetWasmMetadataRequest as GetWasmMetadataRequestPb,
+        GetWasmMetadataResponse as GetWasmMetadataResponsePb, GetWasmRequest, GetWasmResponse,
+        InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse,
+        ListDeployedSnsesRequest, ListDeployedSnsesResponse, ListUpgradeStep,
+        ListUpgradeStepsRequest, ListUpgradeStepsResponse, MetadataSection as MetadataSectionPb,
+        SnsCanisterIds, SnsCanisterType, SnsUpgrade, SnsVersion, SnsWasm, SnsWasmError,
+        SnsWasmStableIndex, StableCanisterState, UpdateSnsSubnetListRequest,
+        UpdateSnsSubnetListResponse,
     },
     stable_memory::SnsWasmStableMemory,
     wasm_metadata::MetadataSection,
@@ -25,7 +21,7 @@ use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::api::stable::StableMemory;
 use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
-use ic_nervous_system_common::{ONE_TRILLION, SNS_CREATION_FEE};
+use ic_nervous_system_common::{hash_to_hex_string, ONE_TRILLION, SNS_CREATION_FEE};
 use ic_nervous_system_proto::pb::v1::Canister;
 use ic_nns_constants::{
     DEFAULT_SNS_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT,
@@ -50,8 +46,7 @@ use std::{
     thread::LocalKey,
 };
 
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
+use ic_cdk::println;
 
 const LOG_PREFIX: &str = "[SNS-WASM] ";
 
@@ -182,10 +177,7 @@ fn join_errors_or_ok(results: Vec<Result<(), String>>) -> Result<(), String> {
     if results.iter().any(|r| r.is_err()) {
         Err(results
             .into_iter()
-            .flat_map(|result| match result {
-                Ok(_) => None,
-                Err(e) => Some(e),
-            })
+            .flat_map(|result| result.err())
             .collect::<Vec<_>>()
             .join("\n"))
     } else {
@@ -472,6 +464,23 @@ where
             }
         };
 
+        // Get the new latest version.
+        // This function is fallible (as it checks for cycles in the upgrade path), but it has no side-effects.
+        // So we want to try it first, and only if it succeeds, proceed to write the WASM to stable memory.
+        let new_latest_version = self
+            .upgrade_path
+            .get_new_latest_version(sns_canister_type, &hash);
+        let new_latest_version = match new_latest_version {
+            Ok(new_latest_version) => new_latest_version,
+            Err(err) => {
+                return AddWasmResponse {
+                    result: Some(add_wasm_response::Result::Error(SnsWasmError {
+                        message: err,
+                    })),
+                };
+            }
+        };
+
         let result = match self.stable_memory.write_wasm(wasm) {
             Ok((offset, size)) => {
                 self.wasm_indexes.insert(
@@ -484,18 +493,19 @@ where
                     },
                 );
 
-                self.upgrade_path.add_wasm(sns_canister_type, &hash);
+                self.upgrade_path.add_wasm(new_latest_version);
 
-                Some(add_wasm_response::Result::Hash(hash.to_vec()))
+                add_wasm_response::Result::Hash(hash.to_vec())
             }
             Err(e) => {
                 println!("{}add_wasm unable to persist WASM: {}", LOG_PREFIX, e);
 
-                Some(add_wasm_response::Result::Error(SnsWasmError {
+                add_wasm_response::Result::Error(SnsWasmError {
                     message: format!("Unable to persist WASM: {}", e),
-                }))
+                })
             }
         };
+        let result = Some(result);
 
         AddWasmResponse { result }
     }
@@ -865,7 +875,7 @@ where
             })?;
 
         // Set up the expected control graph of the SNS while retaining control of the dapps.
-        Self::add_controllers(canister_api, &sns_canisters)
+        Self::add_sns_w_and_root_controllers(canister_api, &sns_canisters)
             .await
             .map_err(|message| {
                 DeployError::Reversible(ReversibleDeployError {
@@ -906,7 +916,7 @@ where
             // Accept all remaining cycles and fund the canisters
             Self::fund_canisters(canister_api, &sns_canisters).await,
             // Remove self as the controller
-            Self::remove_self_as_controller(canister_api, &sns_canisters).await,
+            Self::remove_sns_w_as_controller(canister_api, &sns_canisters).await,
         ])
         // At this point, all the dapp canisters are still controlled by NNS Root and can
         // be restored.
@@ -995,75 +1005,81 @@ where
         join_errors_or_ok(results)
     }
 
-    /// Sets the controllers of the SNS canisters so that Root controls Governance + Ledger, and
-    /// Governance controls Root.
+    /// Sets the controllers of the SNS framework canisters to SNS Root and SNS-W, with
+    /// the exception of SNS Root itself, for which this function sets SNS Governance and SNS-W
+    /// as controllers.
     ///
-    /// WARNING: This function should be kept in sync with `remove_self_as_controller`.
-    async fn add_controllers(
+    /// WARNING: This function should be kept in sync with `remove_sns_w_as_controller`.
+    async fn add_sns_w_and_root_controllers(
         canister_api: &impl CanisterApi,
         canisters: &SnsCanisterIds,
     ) -> Result<(), String> {
-        let this_canister_id = canister_api.local_canister_id().get();
+        let sns_w_canister_id = canister_api.local_canister_id().get();
 
         let set_controllers_results = vec![
             // Set Root as controller of Governance.
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.governance.unwrap()),
-                    vec![this_canister_id, canisters.root.unwrap()],
+                    vec![sns_w_canister_id, canisters.root.unwrap()],
                 )
                 .await
-                .map_err(|e| {
+                .map_err(|err| {
                     format!(
-                        "Unable to set Root as Governance canister controller: {}",
-                        e
+                        "Unable to set SNS-W and Root as Governance canister controller: {}",
+                        err
                     )
                 }),
-            // Set root as controller of Ledger.
+            // Set Root as controller of Ledger.
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.ledger.unwrap()),
-                    vec![this_canister_id, canisters.root.unwrap()],
+                    vec![sns_w_canister_id, canisters.root.unwrap()],
                 )
                 .await
-                .map_err(|e| format!("Unable to set Root as Ledger canister controller: {}", e)),
-            // Set root as controller of Index.
+                .map_err(|err| {
+                    format!(
+                        "Unable to set SNS-W and Root as Ledger canister controller: {}",
+                        err
+                    )
+                }),
+            // Set Root as controller of Index.
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.index.unwrap()),
-                    vec![this_canister_id, canisters.root.unwrap()],
+                    vec![sns_w_canister_id, canisters.root.unwrap()],
                 )
                 .await
-                .map_err(|e| format!("Unable to set Root as Index canister controller: {}", e)),
+                .map_err(|err| {
+                    format!(
+                        "Unable to set SNS-W and Root as Index canister controller: {}",
+                        err
+                    )
+                }),
             // Set Governance as controller of Root.
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.root.unwrap()),
-                    vec![this_canister_id, canisters.governance.unwrap()],
+                    vec![sns_w_canister_id, canisters.governance.unwrap()],
                 )
                 .await
-                .map_err(|e| {
+                .map_err(|err| {
                     format!(
-                        "Unable to set Governance as Root canister controller: {}",
-                        e
+                        "Unable to set SNS-W and Governance as Root canister controller: {}",
+                        err
                     )
                 }),
-            // Set SNS Root and NNS Root as controllers of Swap.
+            // Set Root as the controller of Swap.
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.swap.unwrap()),
-                    vec![
-                        this_canister_id,
-                        canisters.root.unwrap(),
-                        ROOT_CANISTER_ID.get(),
-                    ],
+                    vec![sns_w_canister_id, canisters.root.unwrap()],
                 )
                 .await
-                .map_err(|e| {
+                .map_err(|err| {
                     format!(
-                        "Unable to set SNS Root and NNS Root and Swap canister (itself) \
-                         as Swap canister controller: {}",
-                        e
+                        "Unable to set SNS-W and Root as Swap canister controller: {}",
+                        err
                     )
                 }),
         ];
@@ -1071,57 +1087,54 @@ where
         join_errors_or_ok(set_controllers_results)
     }
 
-    /// Remove the SNS wasm canister as the controller of the canisters
-    async fn remove_self_as_controller(
+    /// Remove the SNS-W canister as the controller of the SNS framework canisters.
+    async fn remove_sns_w_as_controller(
         canister_api: &impl CanisterApi,
         canisters: &SnsCanisterIds,
     ) -> Result<(), String> {
         let set_controllers_results = vec![
-            // Removing self, leaving SNS Root.
+            // Removing SNS-W, leaving SNS Root.
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.governance.unwrap()),
                     vec![canisters.root.unwrap()],
                 )
                 .await
-                .map_err(|e| {
-                    format!(
-                        "Unable to remove SNS-WASM as Governance's controller: {}",
-                        e
-                    )
+                .map_err(|err| {
+                    format!("Unable to remove SNS-W as Governance's controller: {}", err)
                 }),
-            // Removing self, leaving SNS Root.
+            // Removing SNS-W, leaving SNS Root.
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.ledger.unwrap()),
                     vec![canisters.root.unwrap()],
                 )
                 .await
-                .map_err(|e| format!("Unable to remove SNS-WASM as Ledger's controller: {}", e)),
-            // Removing self, leaving SNS Governance.
+                .map_err(|err| format!("Unable to remove SNS-W as Ledger's controller: {}", err)),
+            // Removing SNS-W, leaving SNS Governance.
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.root.unwrap()),
                     vec![canisters.governance.unwrap()],
                 )
                 .await
-                .map_err(|e| format!("Unable to remove SNS-WASM as Root's controller: {}", e)),
-            // Removing self, leaving SNS Root and NNS Root.
+                .map_err(|err| format!("Unable to remove SNS-W as Root's controller: {}", err)),
+            // Removing SNS-W, leaving SNS Root and NNS Root.
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.swap.unwrap()),
-                    vec![canisters.root.unwrap(), ROOT_CANISTER_ID.get()],
+                    vec![canisters.root.unwrap()],
                 )
                 .await
-                .map_err(|e| format!("Unable to remove SNS-WASM as Swap's controller: {}", e)),
-            // Removing self, leaving root.
+                .map_err(|err| format!("Unable to remove SNS-W as Swap's controller: {}", err)),
+            // Removing SNS-W, leaving Root.
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.index.unwrap()),
                     vec![canisters.root.unwrap()],
                 )
                 .await
-                .map_err(|e| format!("Unable to remove SNS-WASM as Ledger's controller: {}", e)),
+                .map_err(|err| format!("Unable to remove SNS-W as Index's controller: {}", err)),
         ];
 
         join_errors_or_ok(set_controllers_results)
@@ -1294,10 +1307,7 @@ where
             .map(|(name, result)| {
                 result.map_err(|e| format!("Could not delete {} canister: {}", name, e))
             })
-            .flat_map(|result| match result {
-                Ok(_) => None,
-                Err(e) => Some(e),
-            })
+            .flat_map(|result| result.err())
             .collect::<Vec<_>>();
 
         let restore_dapp_canister_errors = match restore_dapp_canisters_result {
@@ -1817,7 +1827,11 @@ pub struct UpgradePath {
 }
 
 impl UpgradePath {
-    pub fn add_wasm(&mut self, canister_type: SnsCanisterType, wasm_hash: &[u8; 32]) {
+    pub fn get_new_latest_version(
+        &self,
+        canister_type: SnsCanisterType,
+        wasm_hash: &[u8; 32],
+    ) -> Result<SnsVersion, String> {
         let mut new_latest_version = self.latest_version.clone();
 
         match canister_type {
@@ -1832,6 +1846,24 @@ impl UpgradePath {
             SnsCanisterType::Index => new_latest_version.index_wasm_hash = wasm_hash.to_vec(),
         }
 
+        if self.upgrade_path.contains_key(&new_latest_version) {
+            return Err(format!(
+                "Version {} already exists along the upgrade path - cannot add it again",
+                new_latest_version
+            ));
+        }
+
+        if self.latest_version == new_latest_version {
+            return Err(format!(
+                "Version {} is already the latest version",
+                new_latest_version
+            ));
+        }
+
+        Ok(new_latest_version)
+    }
+
+    pub fn add_wasm(&mut self, new_latest_version: SnsVersion) {
         self.upgrade_path
             .insert(self.latest_version.clone(), new_latest_version.clone());
         self.latest_version = new_latest_version;
@@ -1999,6 +2031,7 @@ mod test {
     use crate::{canister_stable_memory::TestCanisterStableMemory, pb::v1::SnsUpgrade};
     use async_trait::async_trait;
     use ic_base_types::PrincipalId;
+    use ic_cdk::println;
     use ic_crypto_sha2::Sha256;
     use ic_nervous_system_common_test_utils::wasm_helpers;
     use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
@@ -2051,7 +2084,7 @@ mod test {
             _wasm_memory_limit: u64,
         ) -> Result<CanisterId, String> {
             let mut errors = self.errors_on_create_canister.lock().unwrap();
-            if errors.len() > 0 {
+            if !errors.is_empty() {
                 if let Some(message) = errors.remove(0) {
                     return Err(message);
                 }
@@ -2067,7 +2100,7 @@ mod test {
             self.canisters_deleted.lock().unwrap().push(canister);
 
             let mut errors = self.errors_on_delete_canister.lock().unwrap();
-            if errors.len() > 0 {
+            if !errors.is_empty() {
                 if let Some(message) = errors.remove(0) {
                     return Err(message);
                 }
@@ -2088,7 +2121,7 @@ mod test {
                 .push((target_canister, wasm, init_payload));
 
             let mut errors = self.errors_on_install_wasms.lock().unwrap();
-            if errors.len() > 0 {
+            if !errors.is_empty() {
                 if let Some(message) = errors.remove(0) {
                     return Err(message);
                 }
@@ -2108,7 +2141,7 @@ mod test {
                 .push((canister, controllers));
 
             let mut errors = self.errors_on_set_controller.lock().unwrap();
-            if errors.len() > 0 {
+            if !errors.is_empty() {
                 if let Some(message) = errors.remove(0) {
                     return Err(message);
                 }
@@ -2444,6 +2477,65 @@ mod test {
             proposal_id_response.proposal_id.unwrap(),
             expected_proposal_id
         );
+    }
+
+    #[test]
+    fn test_api_add_wasm_fails_on_duplicate_version() {
+        let mut canister = new_wasm_canister();
+
+        // Add first wasm
+        let wasm = SnsWasm {
+            canister_type: SnsCanisterType::Root.into(),
+            ..small_valid_wasm_with_id("Root")
+        };
+        let wasm_hash = wasm.sha256_hash().to_vec();
+        let response = canister.add_wasm(AddWasmRequest {
+            wasm: Some(wasm.clone()),
+            hash: wasm_hash.clone(),
+        });
+        assert_eq!(
+            response.result.unwrap(),
+            add_wasm_response::Result::Hash(wasm_hash.clone())
+        );
+
+        // Try to add same wasm again - should fail
+        let AddWasmResponse {
+            result: Some(add_wasm_response::Result::Error(SnsWasmError { message: _ })),
+        } = canister.add_wasm(AddWasmRequest {
+            wasm: Some(wasm.clone()),
+            hash: wasm_hash.clone(),
+        })
+        else {
+            panic!("Expected to fail to add duplicate version");
+        };
+
+        // Try to add a different wasm - should succeed
+        {
+            let wasm = SnsWasm {
+                canister_type: SnsCanisterType::Ledger.into(),
+                ..small_valid_wasm_with_id("Ledger")
+            };
+            let wasm_hash = wasm.sha256_hash().to_vec();
+            let response = canister.add_wasm(AddWasmRequest {
+                wasm: Some(wasm),
+                hash: wasm_hash.clone(),
+            });
+            assert_eq!(
+                response.result.unwrap(),
+                add_wasm_response::Result::Hash(wasm_hash)
+            );
+        }
+
+        // Re-add the first wasm - should still fail
+        let AddWasmResponse {
+            result: Some(add_wasm_response::Result::Error(SnsWasmError { message: _ })),
+        } = canister.add_wasm(AddWasmRequest {
+            wasm: Some(wasm.clone()),
+            hash: wasm_hash.clone(),
+        })
+        else {
+            panic!("Expected to fail to add duplicate version");
+        };
     }
 
     #[test]
@@ -3490,7 +3582,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn fail_add_controllers() {
+    async fn fail_add_sns_w_and_root_controllers() {
         let canister_api = new_canister_api();
         canister_api
             .errors_on_set_controller
@@ -3534,7 +3626,7 @@ mod test {
                 (root_id, vec![this_id.get(), governance_id.get()]),
                 (
                     swap_id,
-                    vec![this_id.get(), root_id.get(), ROOT_CANISTER_ID.get()],
+                    vec![this_id.get(), root_id.get()],
                 ),
             ],
             vec![],
@@ -3550,7 +3642,7 @@ mod test {
                 }),
                 error: Some(SnsWasmError {
                     message:
-                        "Unable to set Root as Ledger canister controller: Set controller fail"
+                        "Unable to set SNS-W and Root as Ledger canister controller: Set controller fail"
                             .to_string(),
                 }),
                 dapp_canisters_transfer_result: Some(DappCanistersTransferResult {
@@ -3564,7 +3656,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn fail_add_controllers_with_dapp_canisters() {
+    async fn fail_add_sns_w_and_root_controllers_with_dapp_canisters() {
         let mut canister_api = new_canister_api();
         canister_api.cycles_found_in_request = Arc::new(Mutex::new(0));
         canister_api
@@ -3617,7 +3709,7 @@ mod test {
                 (root_id, vec![this_id.get(), governance_id.get()]),
                 (
                     swap_id,
-                    vec![this_id.get(), root_id.get(), ROOT_CANISTER_ID.get()],
+                    vec![this_id.get(), root_id.get()],
                 ),
             ],
             vec![
@@ -3639,7 +3731,7 @@ mod test {
                 }),
                 error: Some(SnsWasmError {
                     message:
-                        "Unable to set Root as Ledger canister controller: Set controller fail"
+                        "Unable to set SNS-W and Root as Ledger canister controller: Set controller fail"
                             .to_string(),
                 }),
                 dapp_canisters_transfer_result: Some(DappCanistersTransferResult {
@@ -3653,7 +3745,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn fail_remove_self_as_controllers() {
+    async fn fail_remove_sns_w_as_controllers() {
         let canister_api = new_canister_api();
         let mut errors = vec![
             None,
@@ -3712,14 +3804,11 @@ mod test {
                 (ledger_id, vec![this_id.get(), root_id.get()]),
                 (index_id, vec![this_id.get(), root_id.get()]),
                 (root_id, vec![this_id.get(), governance_id.get()]),
-                (
-                    swap_id,
-                    vec![this_id.get(), root_id.get(), ROOT_CANISTER_ID.get()],
-                ),
+                (swap_id, vec![this_id.get(), root_id.get()]),
                 (governance_id, vec![root_id.get()]),
                 (ledger_id, vec![root_id.get()]),
                 (root_id, vec![governance_id.get()]),
-                (swap_id, vec![root_id.get(), ROOT_CANISTER_ID.get()]),
+                (swap_id, vec![root_id.get()]),
                 (index_id, vec![root_id.get()]),
             ],
             vec![],
@@ -3736,7 +3825,7 @@ mod test {
 
                 error: Some(SnsWasmError {
                     message:
-                        "Unable to remove SNS-WASM as Governance's controller: Set controller fail"
+                        "Unable to remove SNS-W as Governance's controller: Set controller fail"
                             .to_string(),
                 }),
                 dapp_canisters_transfer_result: Some(DappCanistersTransferResult {
@@ -3750,7 +3839,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn fail_remove_self_as_controllers_with_dapp_canisters() {
+    async fn fail_remove_sns_w_as_controllers_with_dapp_canisters() {
         let mut canister_api = new_canister_api();
         canister_api
             .errors_on_set_controller
@@ -3826,14 +3915,11 @@ mod test {
                 (ledger_id, vec![this_id.get(), root_id.get()]),
                 (index_id, vec![this_id.get(), root_id.get()]),
                 (root_id, vec![this_id.get(), governance_id.get()]),
-                (
-                    swap_id,
-                    vec![this_id.get(), root_id.get(), ROOT_CANISTER_ID.get()],
-                ),
+                (swap_id, vec![this_id.get(), root_id.get()]),
                 (governance_id, vec![root_id.get()]),
                 (ledger_id, vec![root_id.get()]),
                 (root_id, vec![governance_id.get()]),
-                (swap_id, vec![root_id.get(), ROOT_CANISTER_ID.get()]),
+                (swap_id, vec![root_id.get()]),
                 (index_id, vec![root_id.get()]),
             ],
             vec![
@@ -3856,7 +3942,7 @@ mod test {
 
                 error: Some(SnsWasmError {
                     message:
-                        "Unable to remove SNS-WASM as Governance's controller: Set controller fail"
+                        "Unable to remove SNS-W as Governance's controller: Set controller fail"
                             .to_string(),
                 }),
                 dapp_canisters_transfer_result: Some(DappCanistersTransferResult {
@@ -3995,14 +4081,11 @@ mod test {
                 (ledger_id, vec![this_id.get(), root_id.get()]),
                 (index_id, vec![this_id.get(), root_id.get()]),
                 (root_id, vec![this_id.get(), governance_id.get()]),
-                (
-                    swap_id,
-                    vec![this_id.get(), root_id.get(), ROOT_CANISTER_ID.get()],
-                ),
+                (swap_id, vec![this_id.get(), root_id.get()]),
                 (governance_id, vec![root_id.get()]),
                 (ledger_id, vec![root_id.get()]),
                 (root_id, vec![governance_id.get()]),
-                (swap_id, vec![root_id.get(), ROOT_CANISTER_ID.get()]),
+                (swap_id, vec![root_id.get()]),
                 (index_id, vec![root_id.get()]),
             ],
             vec![],
@@ -4579,14 +4662,11 @@ mod test {
                 (ledger_id, vec![this_id.get(), root_id.get()]),
                 (index_id, vec![this_id.get(), root_id.get()]),
                 (root_id, vec![this_id.get(), governance_id.get()]),
-                (
-                    swap_id,
-                    vec![this_id.get(), root_id.get(), ROOT_CANISTER_ID.get()],
-                ),
+                (swap_id, vec![this_id.get(), root_id.get()]),
                 (governance_id, vec![root_id.get()]),
                 (ledger_id, vec![root_id.get()]),
                 (root_id, vec![governance_id.get()]),
-                (swap_id, vec![root_id.get(), ROOT_CANISTER_ID.get()]),
+                (swap_id, vec![root_id.get()]),
                 (index_id, vec![root_id.get()]),
             ],
             vec![
@@ -4963,11 +5043,11 @@ mod test {
                 (ledger_id, vec![this_id.get(), root_id.get()]),
                 (index_id, vec![this_id.get(), root_id.get()]),
                 (root_id, vec![this_id.get(), governance_id.get()]),
-                (swap_id, vec![this_id.get(), root_id.get(), ROOT_CANISTER_ID.get()]),
+                (swap_id, vec![this_id.get(), root_id.get()]),
                 (governance_id, vec![root_id.get()]),
                 (ledger_id, vec![root_id.get()]),
                 (root_id, vec![governance_id.get()]),
-                (swap_id, vec![root_id.get(), ROOT_CANISTER_ID.get()]),
+                (swap_id, vec![root_id.get()]),
                 (index_id, vec![root_id.get()]),
             ],
             vec![

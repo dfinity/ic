@@ -1,3 +1,4 @@
+use ic_types::NumBytes;
 use lazy_static::lazy_static;
 
 // Utilities to collect OS metrics from processes.
@@ -18,6 +19,28 @@ pub fn get_anon_rss(pid: u32) -> std::io::Result<u64> {
     let rss_anon = get_named_field_kb(&fields, "RssAnon")?;
 
     Ok(rss_anon)
+}
+
+fn parse_available_memory(meminfo: &str) -> Option<NumBytes> {
+    let mem_available = meminfo
+        .lines()
+        .find(|line| line.starts_with("MemAvailable"))?;
+    // Example line: `MemAvailable:   162421056 kB`
+    let mut iter = mem_available.split_ascii_whitespace();
+    let _name = iter.next();
+    let size = iter.next()?;
+    let available_mem_kib = size.parse::<u64>().ok()?;
+    let kb = iter.next()?;
+    if !kb.eq_ignore_ascii_case("kb") {
+        return None;
+    }
+    Some((available_mem_kib * 1024).into())
+}
+
+/// Returns available memory or `None` if the information could not be obtained.
+pub fn available_memory() -> Option<NumBytes> {
+    let meminfo = std::fs::read_to_string("/proc/meminfo").ok()?;
+    parse_available_memory(&meminfo)
 }
 
 // Helpers for parsing contents of /proc files below.
@@ -919,5 +942,36 @@ VmFlags: rd wr sh mr mw me ms sd
         assert_eq!(vmas[21].pathname, b"/var/lib/ic/data/ic_state/page_deltas/dfe89acc-16c2-4f38-9965-5d108b01a012.mem (deleted)");
         assert_eq!(get_named_field_kb(&vmas[21].fields, "Rss").unwrap(), 60);
         assert_eq!(compute_memory_allocator_rss_total(&vmas), 316);
+    }
+
+    #[test]
+    fn test_parse_available_memory() {
+        macro_rules! check {
+            ($meminfo: expr, $kib: expr) => {
+                assert_eq!(
+                    parse_available_memory($meminfo),
+                    $kib.map(|kib: u64| (kib * 1024).into())
+                );
+            };
+        }
+
+        check!("", None);
+        check!("5 kb", None);
+        check!("Mem:   2 kB", None);
+        check!("MemAvailable:2 kB", None);
+        check!("MemAvailable: 2kB", None);
+        check!("MemAvailable: 2 B", None);
+        check!("MemAvailable: 2", None);
+        check!("MemAvailable: 2  kb", Some(2));
+        check!("MemAvailable:   2  KB ", Some(2));
+        check!("\n\r\nMemAvailable:   2  KB \n\r\n", Some(2));
+        check!("MemAvailable:   2 kB", Some(2));
+        let meminfo = "\n\
+            MemTotal:       527992616 kB\n\
+            MemFree:        72818316 kB\n\
+            MemAvailable:   163060112 kB\n\
+            Buffers:         4322460 kB\n\
+        ";
+        check!(meminfo, Some(163060112));
     }
 }

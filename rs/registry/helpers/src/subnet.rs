@@ -7,7 +7,7 @@ use ic_protobuf::{
     registry::{
         node::v1::NodeRecord,
         replica_version::v1::ReplicaVersionRecord,
-        subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord},
+        subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord, SubnetType},
     },
     types::v1::SubnetId as SubnetIdProto,
 };
@@ -185,6 +185,13 @@ pub trait SubnetRegistry {
         subnet_id: SubnetId,
         version: RegistryVersion,
     ) -> RegistryClientResult<u64>;
+
+    /// Returns the subnet type (e.g., application, system, ...)
+    fn get_subnet_type(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<SubnetType>;
 }
 
 impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
@@ -451,6 +458,15 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
         Ok(deserialize_registry_value::<SubnetRecord>(bytes)?
             .map(|subnet| subnet.max_block_payload_size))
     }
+
+    fn get_subnet_type(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<SubnetType> {
+        let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
+        Ok(deserialize_registry_value::<SubnetRecord>(bytes)?.map(|subnet| subnet.subnet_type()))
+    }
 }
 
 pub fn get_node_ids_from_subnet_record(
@@ -467,6 +483,10 @@ pub fn get_node_ids_from_subnet_record(
 /// of the current topology of the IC.
 pub trait SubnetListRegistry {
     fn get_subnet_ids(&self, version: RegistryVersion) -> RegistryClientResult<Vec<SubnetId>>;
+    fn get_system_subnet_ids(
+        &self,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<Vec<SubnetId>>;
 }
 
 impl<T: RegistryClient + ?Sized> SubnetListRegistry for T {
@@ -487,6 +507,24 @@ impl<T: RegistryClient + ?Sized> SubnetListRegistry for T {
                     .collect::<Result<Vec<_>, _>>()
             })
             .transpose()
+    }
+
+    fn get_system_subnet_ids(
+        &self,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<Vec<SubnetId>> {
+        let subnet_ids = self.get_subnet_ids(version)?;
+        let system_subnet_ids = subnet_ids.map(|ids| {
+            ids.into_iter()
+                .filter(|subnet_id| {
+                    matches!(
+                        self.get_subnet_type(*subnet_id, version),
+                        Ok(Some(SubnetType::System))
+                    )
+                })
+                .collect()
+        });
+        Ok(system_subnet_ids)
     }
 }
 

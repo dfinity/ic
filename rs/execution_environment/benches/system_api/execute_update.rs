@@ -1,6 +1,14 @@
-///
-/// Benchmark System API performance in `execute_update()`.
-///
+//! Benchmark System API performance in `execute_update()`.
+//!
+//! This benchmark runs nightly in CI, and the results are available in Grafana.
+//! See: `schedule-rust-bench.yml`
+//!
+//! To run the benchmark locally:
+//!
+//! ```shell
+//! bazel run //rs/execution_environment:execute_update_bench
+//! ```
+
 use criterion::{criterion_group, criterion_main, Criterion};
 use execution_environment_bench::{common, wat::*};
 use ic_error_types::ErrorCode;
@@ -336,7 +344,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ), // 10B max
-            529001006,
+            529004006,
         ),
         common::Benchmark(
             "wasm32/ic0_debug_print()/1B".into(),
@@ -664,7 +672,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
             517000006,
         ),
         common::Benchmark(
-            "wasm32/ic0_time()".into(),
+            "wasm64/ic0_time()".into(),
             Module::Test.from_ic0("time", NoParams, Result::I64, Wasm64::Enabled),
             517000006,
         ),
@@ -736,7 +744,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ),
-            517001006,
+            517004006,
         ),
         common::Benchmark(
             "wasm32/ic0_msg_cycles_available()".into(),
@@ -879,6 +887,26 @@ pub fn execute_update_bench(c: &mut Criterion) {
             18000006,
         ),
         common::Benchmark(
+            "wasm32/ic0_mint_cycles128()".into(),
+            Module::Test.from_ic0(
+                "mint_cycles128",
+                Params3(1_i64, 2_i64, 3_i32),
+                Result::No,
+                Wasm64::Disabled,
+            ),
+            19001006,
+        ),
+        common::Benchmark(
+            "wasm64/ic0_mint_cycles128()".into(),
+            Module::Test.from_ic0(
+                "mint_cycles128",
+                Params3(1_i64, 2_i64, 3_i64),
+                Result::No,
+                Wasm64::Enabled,
+            ),
+            19004006,
+        ),
+        common::Benchmark(
             "wasm32/ic0_is_controller()".into(),
             Module::Test.from_ic0(
                 "is_controller",
@@ -922,11 +950,11 @@ pub fn execute_update_bench(c: &mut Criterion) {
             "wasm32/ic0_cycles_burn128()".into(),
             Module::Test.from_ic0(
                 "cycles_burn128",
-                Params3(1_i64, 2_i64, 3),
+                Params3(1_i64, 2_i64, 3_i32),
                 Result::No,
                 Wasm64::Disabled,
             ),
-            19000006,
+            519000006,
         ),
         common::Benchmark(
             "wasm64/ic0_cycles_burn128()".into(),
@@ -936,7 +964,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ),
-            19000006,
+            519000006,
         ),
         common::Benchmark(
             "wasm32/ic0_msg_deadline()".into(),
@@ -948,13 +976,134 @@ pub fn execute_update_bench(c: &mut Criterion) {
             Module::Test.from_ic0("msg_deadline", NoParams, Result::I64, Wasm64::Enabled),
             517000006,
         ),
+        common::Benchmark(
+            "wasm32/ic0_cost_call()".into(),
+            Module::Test.from_ic0(
+                "cost_call",
+                Params3(1_i64, 2_i64, 3_i32),
+                Result::No,
+                Wasm64::Disabled,
+            ),
+            519001006,
+        ),
+        common::Benchmark(
+            "wasm64/ic0_cost_call()".into(),
+            Module::Test.from_ic0(
+                "cost_call",
+                Params3(1_i64, 2_i64, 3_i64),
+                Result::No,
+                Wasm64::Enabled,
+            ),
+            519004006,
+        ),
+        common::Benchmark(
+            "wasm32/ic0_cost_create_canister()".into(),
+            Module::Test.from_ic0(
+                "cost_create_canister",
+                Param1(1_i32),
+                Result::No,
+                Wasm64::Disabled,
+            ),
+            517001006,
+        ),
+        common::Benchmark(
+            "wasm64/ic0_cost_create_canister()".into(),
+            Module::Test.from_ic0(
+                "cost_create_canister",
+                Param1(1_i64),
+                Result::No,
+                Wasm64::Enabled,
+            ),
+            517004006,
+        ),
+        common::Benchmark(
+            "wasm32/ic0_cost_http_request()".into(),
+            Module::Test.from_ic0(
+                "cost_http_request",
+                Params3(1_i64, 2_i64, 3_i32),
+                Result::No,
+                Wasm64::Disabled,
+            ),
+            519001006,
+        ),
+        common::Benchmark(
+            "wasm64/ic0_cost_http_request()".into(),
+            Module::Test.from_ic0(
+                "cost_http_request",
+                Params3(1_i64, 2_i64, 3_i64),
+                Result::No,
+                Wasm64::Enabled,
+            ),
+            519004006,
+        ),
+        common::Benchmark(
+            "wasm32/ic0_cost_sign_with_ecdsa()".into(),
+            Module::Test.from_ic0(
+                "cost_sign_with_ecdsa",
+                Params4(1_i32, 2_i32, 3_i32, 3_i32),
+                Result::I32,
+                Wasm64::Disabled,
+            ),
+            523000006,
+        ),
+        common::Benchmark(
+            "wasm64/ic0_cost_sign_with_ecdsa()".into(),
+            Module::Test.from_ic0(
+                "cost_sign_with_ecdsa",
+                Params4(1_i64, 2_i64, 3_i32, 3_i64),
+                Result::I32,
+                Wasm64::Enabled,
+            ),
+            523000006,
+        ),
+        common::Benchmark(
+            "wasm32/ic0_cost_sign_with_schnorr()".into(),
+            Module::Test.from_ic0(
+                "cost_sign_with_schnorr",
+                Params4(1_i32, 2_i32, 3_i32, 3_i32),
+                Result::I32,
+                Wasm64::Disabled,
+            ),
+            523000006,
+        ),
+        common::Benchmark(
+            "wasm64/ic0_cost_sign_with_schnorr()".into(),
+            Module::Test.from_ic0(
+                "cost_sign_with_schnorr",
+                Params4(1_i64, 2_i64, 3_i32, 3_i64),
+                Result::I32,
+                Wasm64::Enabled,
+            ),
+            523000006,
+        ),
+        common::Benchmark(
+            "wasm32/ic0_cost_vetkd_derive_key()".into(),
+            Module::Test.from_ic0(
+                "cost_vetkd_derive_key",
+                Params4(1_i32, 2_i32, 3_i32, 3_i32),
+                Result::I32,
+                Wasm64::Disabled,
+            ),
+            523000006,
+        ),
+        common::Benchmark(
+            "wasm64/ic0_cost_vetkd_derive_key()".into(),
+            Module::Test.from_ic0(
+                "cost_vetkd_derive_key",
+                Params4(1_i64, 2_i64, 3_i32, 3_i64),
+                Result::I32,
+                Wasm64::Enabled,
+            ),
+            523000006,
+        ),
     ];
 
     common::run_benchmarks(
         c,
-        "update",
+        "execution_environment:update",
         &benchmarks,
-        |exec_env: &ExecutionEnvironment,
+        |id: &str,
+         exec_env: &ExecutionEnvironment,
          expected_instructions,
          common::BenchmarkArgs {
              canister_state,
@@ -963,6 +1112,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
              network_topology,
              execution_parameters,
              subnet_available_memory,
+             subnet_available_callbacks,
              ..
          }| {
             let mut round_limits = RoundLimits {
@@ -970,6 +1120,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                     execution_parameters.instruction_limits.message(),
                 ),
                 subnet_available_memory,
+                subnet_available_callbacks,
                 compute_allocation_used: 0,
             };
             let instructions_before = round_limits.instructions;
@@ -1002,11 +1153,16 @@ pub fn execute_update_bench(c: &mut Criterion) {
             assert_eq!(
                 expected_instructions,
                 executed_instructions.get(),
-                "Error comparing number of actual and expected instructions"
+                "update the reference number of instructions for '{id}' to {}",
+                executed_instructions.get()
             );
         },
     );
 }
 
-criterion_group!(benchmarks, execute_update_bench);
+criterion_group! {
+    name = benchmarks;
+    config = Criterion::default().sample_size(10);
+    targets = execute_update_bench
+}
 criterion_main!(benchmarks);

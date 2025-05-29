@@ -1,0 +1,28 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:serde",
+    "@crate_index//:strum",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:strum_macros",
+]
+
+rust_library(
+    name = "ic-error-types",
+    srcs = glob(["src/**"]),
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.2.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "ic-error-types-tests",
+    srcs = glob(["src/**/*.rs"]),
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)

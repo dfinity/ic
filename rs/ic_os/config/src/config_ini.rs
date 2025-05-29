@@ -1,13 +1,13 @@
-use regex::Regex;
-use std::collections::HashMap;
 use std::fs::read_to_string;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::Path;
 
+use config_types::ConfigMap;
+
 use anyhow::bail;
 use anyhow::{Context, Result};
+use regex::Regex;
 
-pub type ConfigMap = HashMap<String, String>;
 pub struct ConfigIniSettings {
     pub ipv6_prefix: String,
     pub ipv6_prefix_length: u8,
@@ -15,8 +15,9 @@ pub struct ConfigIniSettings {
     pub ipv4_address: Option<Ipv4Addr>,
     pub ipv4_gateway: Option<Ipv4Addr>,
     pub ipv4_prefix_length: Option<u8>,
-    pub domain: Option<String>,
+    pub domain_name: Option<String>,
     pub verbose: bool,
+    pub node_reward_type: Option<String>,
 }
 
 // Prefix should have a max length of 19 ("1234:6789:1234:6789")
@@ -82,11 +83,16 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
         })
         .transpose()?;
 
-    let domain = config_map.get("domain").cloned();
+    let domain_name = config_map.get("domain").cloned();
 
     let verbose = config_map
         .get("verbose")
         .is_some_and(|s| s.eq_ignore_ascii_case("true"));
+
+    let node_reward_type = config_map
+        .get("node_reward_type")
+        .filter(|s| !s.is_empty())
+        .cloned();
 
     Ok(ConfigIniSettings {
         ipv6_prefix,
@@ -95,8 +101,9 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
         ipv4_address,
         ipv4_gateway,
         ipv4_prefix_length,
-        domain,
+        domain_name,
         verbose,
+        node_reward_type,
     })
 }
 
@@ -116,7 +123,7 @@ fn parse_config_line(line: &str) -> Option<(String, String)> {
     }
 }
 
-pub fn config_map_from_path(config_file_path: &Path) -> Result<ConfigMap> {
+fn config_map_from_path(config_file_path: &Path) -> Result<ConfigMap> {
     let file_contents = read_to_string(config_file_path)
         .with_context(|| format!("Error reading file: {}", config_file_path.display()))?;
 
@@ -265,7 +272,10 @@ mod tests {
             "212.71.124.177".parse::<Ipv4Addr>()?
         );
         assert_eq!(config_ini_settings.ipv4_prefix_length.unwrap(), 28);
-        assert_eq!(config_ini_settings.domain, Some("example.com".to_string()));
+        assert_eq!(
+            config_ini_settings.domain_name,
+            Some("example.com".to_string())
+        );
         assert!(!config_ini_settings.verbose);
 
         // Test missing ipv6

@@ -351,7 +351,10 @@ fn build_types_proto(def: &Path, out: &Path) {
     config.type_attribute(".types.v1.SubnetId", "#[derive(Eq, Hash)]");
     config.type_attribute(".types.v1.NiDkgId", "#[derive(Eq, Hash)]");
     config.type_attribute(".types.v1.PrincipalId", "#[derive(Eq, Hash)]");
-    config.type_attribute(".types.v1.EcdsaKeyId", "#[derive(Eq)]");
+    config.type_attribute(".types.v1.MasterPublicKeyId", "#[derive(Eq, Hash)]");
+    config.type_attribute(".types.v1.EcdsaKeyId", "#[derive(Eq, Hash)]");
+    config.type_attribute(".types.v1.SchnorrKeyId", "#[derive(Eq, Hash)]");
+    config.type_attribute(".types.v1.VetKdKeyId", "#[derive(Eq, Hash)]");
     config.type_attribute(".types.v1.EcdsaCurve", "#[derive(candid::CandidType)]");
     config.type_attribute(".types.v1.EcdsaKeyId", "#[derive(candid::CandidType)]");
     config.type_attribute(

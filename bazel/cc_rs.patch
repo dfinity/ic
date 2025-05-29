@@ -1,18 +1,28 @@
+# Adjust target naming to match what zig expects.
+#
+# zig does not plan to change their target naming: https://github.com/ziglang/zig/issues/4911
+# and cc-rs is waiting on a 1.0 release to support zig's scheme: https://github.com/rust-lang/cc-rs/pull/986
+# Other related links: https://github.com/bazelbuild/rules_rust/issues/2529
+#                      https://github.com/Asana/cc-rs
 diff --git a/src/lib.rs b/src/lib.rs
-index 2fe30b9..88cd566 100644
+index 260b850..83fa53f 100644
 --- a/src/lib.rs
 +++ b/src/lib.rs
-@@ -1121,6 +1121,13 @@ impl Build {
-                     .ok_or_else(|| Error::new(ErrorKind::InvalidArgument, "parent() failure"))?
-                     .to_string_lossy();
-                 let mut hasher = hash_map::DefaultHasher::new();
-+                let out_dir = self.get_out_dir().expect("Could not get out dir");
+@@ -2262,6 +2262,17 @@ impl Build {
+ 
+                     let clang_target =
+                         target.llvm_target(&self.get_raw_target()?, version.as_deref());
 +
-+                let prefix = out_dir.parent().expect("Could not get parent");
-+                let prefix: &str = &prefix.to_string_lossy();
++                    let clang_target = match &clang_target {
++                        std::borrow::Cow::Borrowed("x86_64-unknown-linux-gnu") => {
++                            "x86_64-linux-gnu"
++                        }
++                        std::borrow::Cow::Borrowed("wasm32-unknown-unknown") => {
++                            "wasm32-freestanding-musl"
++                        }
++                        _other => &clang_target,
++                    };
 +
-+                let err = format!("could not strip prefix {prefix} from {dirname}");
-+                let dirname = dirname.strip_prefix(prefix).expect(&err);
-                 hasher.write(dirname.to_string().as_bytes());
-                 dst.join(format!("{:016x}-{}", hasher.finish(), basename))
-                     .with_extension("o")
+                     cmd.push_cc_arg(format!("--target={clang_target}").into());
+                 }
+             }

@@ -770,6 +770,8 @@ impl IncompleteState {
         metrics.remaining.sub(1);
     }
 
+    // Return wether a checkpoint has been created; otherwise we must ignore state sync and proceed execution as usual.
+    #[must_use]
     fn make_checkpoint(
         log: &ReplicaLogger,
         metrics: &StateManagerMetrics,
@@ -777,8 +779,7 @@ impl IncompleteState {
         root: &Path,
         height: Height,
         state_layout: &StateLayout,
-        thread_pool: &mut scoped_threadpool::Pool,
-    ) {
+    ) -> bool {
         let _timer = metrics
             .state_sync_metrics
             .step_duration
@@ -794,19 +795,7 @@ impl IncompleteState {
             CheckpointLayout::<RwPolicy<()>>::new_untracked(root.to_path_buf(), height)
                 .expect("failed to create checkpoint layout");
 
-        scratchpad_layout
-            .create_unverified_checkpoint_marker()
-            .unwrap_or_else(|err| {
-                fatal!(
-                    log,
-                    "Failed to create a checkpoint marker for state {} at path {}: {}",
-                    height,
-                    scratchpad_layout.raw_path().display(),
-                    err,
-                )
-            });
-
-        match state_layout.scratchpad_to_checkpoint(scratchpad_layout, height, Some(thread_pool)) {
+        match state_layout.promote_scratchpad_to_unverified_checkpoint(scratchpad_layout, height) {
             Ok(_) => {
                 let elapsed = started_at.elapsed();
                 metrics
@@ -819,6 +808,7 @@ impl IncompleteState {
                     log,
                     "Successfully completed sync of state {} in {:?}", height, elapsed
                 );
+                true
             }
             Err(LayoutError::AlreadyExists(_)) => {
                 let elapsed = started_at.elapsed();
@@ -834,6 +824,8 @@ impl IncompleteState {
                     height,
                     elapsed,
                 );
+
+                false
             }
             Err(LayoutError::IoError {
                 path,
@@ -849,7 +841,7 @@ impl IncompleteState {
 
                 fatal!(
                     log,
-                    "Failed to promote synced state to a checkpoint {} after {:?}: {}: {} (at {})",
+                    "Failed to mark scratchpad as unverified or promote it to a checkpoint {} after {:?}: {}: {} (at {})",
                     height,
                     elapsed,
                     message,
@@ -1335,15 +1327,17 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                             "No chunks need to be fetched for state {}", self.height
                         );
 
-                        Self::make_checkpoint(
+                        if !Self::make_checkpoint(
                             &self.log,
                             &self.metrics,
                             self.started_at,
                             &self.root,
                             self.height,
                             &self.state_layout,
-                            &mut self.thread_pool.lock().unwrap(),
-                        );
+                        ) {
+                            self.state = DownloadState::Complete;
+                            return Ok(());
+                        }
 
                         self.state_sync.deliver_state_sync(
                             self.height,
@@ -1512,15 +1506,17 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                         )
                     }
 
-                    Self::make_checkpoint(
+                    if !Self::make_checkpoint(
                         &self.log,
                         &self.metrics,
                         self.started_at,
                         &self.root,
                         self.height,
                         &self.state_layout,
-                        &mut self.thread_pool.lock().unwrap(),
-                    );
+                    ) {
+                        self.state = DownloadState::Complete;
+                        return Ok(());
+                    }
 
                     self.state_sync.deliver_state_sync(
                         self.height,
@@ -1529,6 +1525,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                         Arc::new(meta_manifest.clone()),
                     );
                     self.state = DownloadState::Complete;
+
                     self.state_sync_refs
                         .cache
                         .write()

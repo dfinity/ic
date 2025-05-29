@@ -1,6 +1,6 @@
 use candid::CandidType;
 use ic_base_types::PrincipalId;
-use ic_management_canister_types::IC_00;
+use ic_management_canister_types_private::IC_00;
 use ic_nervous_system_runtime::Runtime;
 use serde::Deserialize;
 
@@ -33,6 +33,7 @@ pub struct CanisterSettings {
     pub reserved_cycles_limit: Option<candid::Nat>,
     pub log_visibility: Option<LogVisibility>,
     pub wasm_memory_limit: Option<candid::Nat>,
+    pub wasm_memory_threshold: Option<candid::Nat>,
 }
 
 /// A wrapper call to the management canister `update_settings` API.

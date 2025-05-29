@@ -25,4 +25,5 @@ pub enum OperationType {
     NeuronInfo,
     ListNeurons,
     Follow,
+    RefreshVotingPower,
 }

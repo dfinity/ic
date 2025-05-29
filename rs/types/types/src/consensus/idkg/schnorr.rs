@@ -1,11 +1,12 @@
 //! Threshold Schnorr transcripts and references related definitions.
 use crate::crypto::canister_threshold_sig::{
-    ExtendedDerivationPath, SchnorrPreSignatureTranscript, ThresholdSchnorrSigInputs,
+    SchnorrPreSignatureTranscript, ThresholdSchnorrSigInputs,
 };
+use crate::crypto::ExtendedDerivationPath;
 use crate::{Height, Randomness};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::SchnorrKeyId;
+use ic_management_canister_types_private::SchnorrKeyId;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
@@ -208,6 +209,7 @@ pub struct ThresholdSchnorrSigInputsRef {
     pub message: Arc<Vec<u8>>,
     pub nonce: Randomness,
     pub presig_transcript_ref: PreSignatureTranscriptRef,
+    pub taproot_tree_root: Option<Arc<Vec<u8>>>,
 }
 
 impl fmt::Debug for ThresholdSchnorrSigInputsRef {
@@ -234,12 +236,14 @@ impl ThresholdSchnorrSigInputsRef {
         message: Arc<Vec<u8>>,
         nonce: Randomness,
         presig_transcript_ref: PreSignatureTranscriptRef,
+        taproot_tree_root: Option<Arc<Vec<u8>>>,
     ) -> Self {
         Self {
             derivation_path,
             message,
             nonce,
             presig_transcript_ref,
+            taproot_tree_root,
         }
     }
 
@@ -258,7 +262,7 @@ impl ThresholdSchnorrSigInputsRef {
         ThresholdSchnorrSigInputs::new(
             &self.derivation_path,
             &self.message,
-            None, // TODO(CRP-2630)
+            self.taproot_tree_root.as_ref().map(|v| &***v),
             self.nonce,
             presig_transcript,
             key_transcript,

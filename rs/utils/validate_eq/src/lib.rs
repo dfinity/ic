@@ -6,7 +6,6 @@ use std::fmt::Debug;
 ///
 /// Gigantic fields such as PageMaps that are unfeasible to compare in production are meant to
 /// be exempted from comparison.
-
 pub trait ValidateEq {
     fn validate_eq(&self, rhs: &Self) -> Result<(), String>;
 }

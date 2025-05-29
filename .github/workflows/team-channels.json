@@ -1,7 +1,7 @@
 {
     "boundary-node": "eng-boundary-nodes",
-    "Consensus": "eng-consensus",
-    "cross-chain-team": "eng-cross-chain",
+    "Consensus": "eng-consensus-prs",
+    "cross-chain-team": "eng-cross-chain-prs",
     "crypto-team": "eng-crypto-mr",
     "DRE": "eng-release-bots",
     "execution": "eng-execution-mrs",
@@ -13,7 +13,7 @@
     "InfraSec": "eng-infrasec",
     "languages": "eng-motoko",
     "networking": "eng-networking",
-    "nns-team": "eng-nns-prs",
+    "governance-team": "eng-nns-prs",
     "node": "eng-node-prs",
     "Platform Operations": "eng-platform-ops",
     "pocket-ic": "pocket-ic",

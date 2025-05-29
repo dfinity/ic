@@ -4,7 +4,8 @@ use crate::numeric::LedgerBurnIndex;
 use crate::state::{transactions, transactions::EthWithdrawalRequest};
 use crate::tx::{SignedEip1559TransactionRequest, TransactionPrice};
 use candid::{CandidType, Deserialize, Nat, Principal};
-use icrc_ledger_types::icrc1::account::Account;
+use evm_rpc_client::BlockTag;
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use minicbor::{Decode, Encode};
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
@@ -67,6 +68,7 @@ pub struct MinterInfo {
     pub smart_contract_address: Option<String>,
     pub eth_helper_contract_address: Option<String>,
     pub erc20_helper_contract_address: Option<String>,
+    pub deposit_with_subaccount_helper_contract_address: Option<String>,
     pub supported_ckerc20_tokens: Option<Vec<CkErc20Token>>,
     pub minimum_withdrawal_amount: Option<Nat>,
     pub ethereum_block_height: Option<CandidBlockTag>,
@@ -133,6 +135,16 @@ pub enum CandidBlockTag {
     Finalized,
 }
 
+impl From<CandidBlockTag> for BlockTag {
+    fn from(block_tag: CandidBlockTag) -> BlockTag {
+        match block_tag {
+            CandidBlockTag::Latest => BlockTag::Latest,
+            CandidBlockTag::Safe => BlockTag::Safe,
+            CandidBlockTag::Finalized => BlockTag::Finalized,
+        }
+    }
+}
+
 impl From<EthWithdrawalRequest> for RetrieveEthRequest {
     fn from(value: EthWithdrawalRequest) -> Self {
         Self {
@@ -196,6 +208,7 @@ impl Display for RetrieveEthStatus {
 pub struct WithdrawalArg {
     pub amount: Nat,
     pub recipient: String,
+    pub from_subaccount: Option<Subaccount>,
 }
 
 #[derive(PartialEq, Debug, CandidType, Deserialize)]

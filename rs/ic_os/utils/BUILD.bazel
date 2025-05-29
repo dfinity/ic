@@ -14,7 +14,6 @@ rust_library(
     ),
     aliases = {},
     crate_name = "utils",
-    edition = "2021",
     proc_macro_deps = [],
     deps = DEPENDENCIES,
 )

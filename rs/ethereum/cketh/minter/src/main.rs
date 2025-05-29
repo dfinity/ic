@@ -1,7 +1,8 @@
+use crate::dashboard::DashboardPaginationParameters;
 use candid::Nat;
+use dashboard::DashboardTemplate;
 use ic_canister_log::log;
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
+use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cketh_minter::address::{validate_address_as_destination, AddressValidationError};
 use ic_cketh_minter::deposit::scrape_logs;
 use ic_cketh_minter::endpoints::ckerc20::{
@@ -26,7 +27,7 @@ use ic_cketh_minter::logs::INFO;
 use ic_cketh_minter::memo::BurnMemo;
 use ic_cketh_minter::numeric::{Erc20Value, LedgerBurnIndex, Wei};
 use ic_cketh_minter::state::audit::{process_event, Event, EventType};
-use ic_cketh_minter::state::eth_logs_scraping::LogScrapingId;
+use ic_cketh_minter::state::eth_logs_scraping::{LogScrapingId, LogScrapingInfo};
 use ic_cketh_minter::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
     ReimbursementRequest,
@@ -45,6 +46,8 @@ use ic_cketh_minter::{
     SCRAPING_ETH_LOGS_INTERVAL,
 };
 use ic_ethereum_types::Address;
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use icrc_ledger_types::icrc1::account::Account;
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
 use std::str::FromStr;
@@ -221,21 +224,24 @@ async fn get_minter_info() -> MinterInfo {
             (None, None)
         };
 
-        let eth_helper_contract_address = s
-            .log_scrapings
-            .contract_address(LogScrapingId::EthDepositWithoutSubaccount)
-            .map(|a| a.to_string());
+        let LogScrapingInfo {
+            eth_helper_contract_address,
+            last_eth_scraped_block_number,
+            erc20_helper_contract_address,
+            last_erc20_scraped_block_number,
+            deposit_with_subaccount_helper_contract_address,
+            last_deposit_with_subaccount_scraped_block_number,
+        } = s.log_scrapings.info();
+
         MinterInfo {
             minter_address: s.minter_address().map(|a| a.to_string()),
             smart_contract_address: eth_helper_contract_address.clone(),
             eth_helper_contract_address,
-            erc20_helper_contract_address: s
-                .log_scrapings
-                .contract_address(LogScrapingId::Erc20DepositWithoutSubaccount)
-                .map(|a| a.to_string()),
+            erc20_helper_contract_address,
+            deposit_with_subaccount_helper_contract_address,
             supported_ckerc20_tokens,
             minimum_withdrawal_amount: Some(s.cketh_minimum_withdrawal_amount.into()),
-            ethereum_block_height: Some(s.ethereum_block_height.into()),
+            ethereum_block_height: Some(s.ethereum_block_height.clone()),
             last_observed_block_number: s.last_observed_block_number.map(|n| n.into()),
             eth_balance: Some(s.eth_balance.eth_balance().into()),
             last_gas_fee_estimate: s.last_transaction_price_estimate.as_ref().map(
@@ -246,30 +252,22 @@ async fn get_minter_info() -> MinterInfo {
                 },
             ),
             erc20_balances,
-            last_eth_scraped_block_number: Some(
-                s.log_scrapings
-                    .last_scraped_block_number(LogScrapingId::EthDepositWithoutSubaccount)
-                    .into(),
-            ),
-            last_erc20_scraped_block_number: Some(
-                s.log_scrapings
-                    .last_scraped_block_number(LogScrapingId::Erc20DepositWithoutSubaccount)
-                    .into(),
-            ),
-            last_deposit_with_subaccount_scraped_block_number: Some(
-                s.log_scrapings
-                    .last_scraped_block_number(LogScrapingId::EthOrErc20DepositWithSubaccount)
-                    .into(),
-            ),
+            last_eth_scraped_block_number,
+            last_erc20_scraped_block_number,
+            last_deposit_with_subaccount_scraped_block_number,
             cketh_ledger_id: Some(s.cketh_ledger_id),
-            evm_rpc_id: s.evm_rpc_id,
+            evm_rpc_id: Some(s.evm_rpc_id),
         }
     })
 }
 
 #[update]
 async fn withdraw_eth(
-    WithdrawalArg { amount, recipient }: WithdrawalArg,
+    WithdrawalArg {
+        amount,
+        recipient,
+        from_subaccount,
+    }: WithdrawalArg,
 ) -> Result<RetrieveEthRequest, WithdrawalError> {
     let caller = validate_caller_not_anonymous();
     let _guard = retrieve_withdraw_guard(caller).unwrap_or_else(|e| {
@@ -302,7 +300,10 @@ async fn withdraw_eth(
     log!(INFO, "[withdraw]: burning {:?}", amount);
     match client
         .burn_from(
-            caller.into(),
+            Account {
+                owner: caller,
+                subaccount: from_subaccount,
+            },
             amount,
             BurnMemo::Convert {
                 to_address: destination,
@@ -316,7 +317,7 @@ async fn withdraw_eth(
                 destination,
                 ledger_burn_index,
                 from: caller,
-                from_subaccount: None,
+                from_subaccount: from_subaccount.and_then(LedgerSubaccount::from_bytes),
                 created_at: Some(now),
             };
 
@@ -391,6 +392,8 @@ async fn withdraw_erc20(
         amount,
         ckerc20_ledger_id,
         recipient,
+        from_cketh_subaccount,
+        from_ckerc20_subaccount,
     }: WithdrawErc20Arg,
 ) -> Result<RetrieveErc20Request, WithdrawErc20Error> {
     validate_ckerc20_active();
@@ -428,11 +431,24 @@ async fn withdraw_erc20(
     let erc20_tx_fee = estimate_erc20_transaction_fee().await.ok_or_else(|| {
         WithdrawErc20Error::TemporarilyUnavailable("Failed to retrieve current gas fee".to_string())
     })?;
+    let cketh_account = Account {
+        owner: caller,
+        subaccount: from_cketh_subaccount,
+    };
+    let ckerc20_account = Account {
+        owner: caller,
+        subaccount: from_ckerc20_subaccount,
+    };
     let now = ic_cdk::api::time();
-    log!(INFO, "[withdraw_erc20]: burning {:?} ckETH", erc20_tx_fee);
+    log!(
+        INFO,
+        "[withdraw_erc20]: burning {:?} ckETH from account {}",
+        erc20_tx_fee,
+        cketh_account
+    );
     match cketh_ledger
         .burn_from(
-            caller.into(),
+            cketh_account,
             erc20_tx_fee,
             BurnMemo::Erc20GasFee {
                 ckerc20_token_symbol: ckerc20_token.ckerc20_token_symbol.clone(),
@@ -445,13 +461,14 @@ async fn withdraw_erc20(
         Ok(cketh_ledger_burn_index) => {
             log!(
                 INFO,
-                "[withdraw_erc20]: burning {} {}",
+                "[withdraw_erc20]: burning {} {} from account {}",
                 ckerc20_withdrawal_amount,
-                ckerc20_token.ckerc20_token_symbol
+                ckerc20_token.ckerc20_token_symbol,
+                ckerc20_account
             );
             match LedgerClient::ckerc20_ledger(&ckerc20_token)
                 .burn_from(
-                    caller.into(),
+                    ckerc20_account,
                     ckerc20_withdrawal_amount,
                     BurnMemo::Erc20Convert {
                         ckerc20_withdrawal_id: cketh_ledger_burn_index.get(),
@@ -470,7 +487,8 @@ async fn withdraw_erc20(
                         ckerc20_ledger_burn_index,
                         erc20_contract_address: ckerc20_token.erc20_contract_address,
                         from: caller,
-                        from_subaccount: None,
+                        from_subaccount: from_ckerc20_subaccount
+                            .and_then(LedgerSubaccount::from_bytes),
                         created_at: now,
                     };
                     log!(
@@ -499,8 +517,10 @@ async fn withdraw_erc20(
                         let reimbursement_request = ReimbursementRequest {
                             ledger_burn_index: cketh_ledger_burn_index,
                             reimbursed_amount: reimbursed_amount.change_units(),
-                            to: caller,
-                            to_subaccount: None,
+                            to: cketh_account.owner,
+                            to_subaccount: cketh_account
+                                .subaccount
+                                .and_then(LedgerSubaccount::from_bytes),
                             transaction_hash: None,
                         };
                         mutate_state(|s| {
@@ -870,7 +890,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
 fn http_request(req: HttpRequest) -> HttpResponse {
     use ic_metrics_encoder::MetricsEncoder;
 
-    if ic_cdk::api::data_certificate().is_none() {
+    if ic_cdk::api::in_replicated_execution() {
         ic_cdk::trap("update call rejected");
     }
 
@@ -996,8 +1016,6 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "Last max fee per gas",
                 )?;
 
-                ic_cketh_minter::eth_rpc::encode_metrics(w)?;
-
                 Ok(())
             })
         }
@@ -1005,6 +1023,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         match encode_metrics(&mut writer) {
             Ok(()) => HttpResponseBuilder::ok()
                 .header("Content-Type", "text/plain; version=0.0.4")
+                .header("Cache-Control", "no-store")
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {
@@ -1014,7 +1033,16 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         }
     } else if req.path() == "/dashboard" {
         use askama::Template;
-        let dashboard = read_state(dashboard::DashboardTemplate::from_state);
+
+        let paging_parameters = match DashboardPaginationParameters::from_query_params(&req) {
+            Ok(args) => args,
+            Err(error) => {
+                return HttpResponseBuilder::bad_request()
+                    .with_body_and_content_length(error)
+                    .build()
+            }
+        };
+        let dashboard = read_state(|state| DashboardTemplate::from_state(state, paging_parameters));
         HttpResponseBuilder::ok()
             .header("Content-Type", "text/html; charset=utf-8")
             .with_body_and_content_length(dashboard.render().unwrap())

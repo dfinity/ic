@@ -34,6 +34,7 @@ mod ic0 {
         pub fn msg_cycles_accept128(max_amount_high: u64, max_amount_low: u64, dst: u32) -> ();
         pub fn canister_cycle_balance() -> u64;
         pub fn canister_cycle_balance128(dst: u32) -> ();
+        pub fn canister_liquid_cycle_balance128(dst: u32) -> ();
         pub fn trap(offset: u32, size: u32) -> !;
         pub fn call_new(
             callee_src: u32,
@@ -60,6 +61,8 @@ mod ic0 {
         pub fn stable64_grow(additional_pages: u64) -> u64;
         pub fn stable64_read(dst: u64, offset: u64, size: u64) -> ();
         pub fn stable64_write(offset: u64, src: u64, size: u64) -> ();
+        pub fn root_key_size() -> u32;
+        pub fn root_key_copy(dst: u32, offset: u32, size: u32) -> ();
         pub fn certified_data_set(src: u32, size: u32) -> ();
         pub fn data_certificate_present() -> u32;
         pub fn data_certificate_size() -> u32;
@@ -71,11 +74,20 @@ mod ic0 {
         pub fn canister_version() -> u64;
 
         pub fn mint_cycles(amount: u64) -> u64;
+        pub fn mint_cycles128(amount_high: u64, amount_low: u64, dst: u32) -> ();
 
         pub fn is_controller(src: u32, size: u32) -> u32;
         pub fn in_replicated_execution() -> u32;
 
         pub fn cycles_burn128(amount_high: u64, amount_low: u64, dst: u32) -> ();
+
+        pub fn cost_call(method_name_size: u64, payload_size: u64, dst: u32) -> ();
+        pub fn cost_create_canister(dst: u32) -> ();
+        pub fn cost_http_request(request_size: u64, max_res_bytes: u64, dst: u32) -> ();
+        pub fn cost_sign_with_ecdsa(src: u32, size: u32, ecdsa_curve: u32, dst: u32) -> u32;
+        pub fn cost_sign_with_schnorr(src: u32, size: u32, algorithm: u32, dst: u32) -> u32;
+        pub fn cost_vetkd_derive_key(src: u32, size: u32, vetkd_curve: u32, dst: u32) -> u32;
+
     }
 }
 
@@ -285,6 +297,12 @@ pub fn balance128() -> Vec<u8> {
     bytes
 }
 
+pub fn liquid_balance128() -> Vec<u8> {
+    let mut bytes = vec![0u8; CYCLES_SIZE];
+    unsafe { ic0::canister_liquid_cycle_balance128(bytes.as_mut_ptr() as u32) }
+    bytes
+}
+
 pub fn stable_size() -> u32 {
     unsafe { ic0::stable_size() }
 }
@@ -327,6 +345,23 @@ pub fn stable64_write(offset: u64, data: &[u8]) {
     unsafe {
         ic0::stable64_write(offset, data.as_ptr() as u64, data.len() as u64);
     }
+}
+
+pub fn root_key_size() -> u32 {
+    unsafe { ic0::root_key_size() }
+}
+
+pub fn root_key_copy(offset: u32, size: u32) -> Vec<u8> {
+    let mut bytes = vec![0; size as usize];
+    unsafe {
+        ic0::root_key_copy(bytes.as_mut_ptr() as u32, offset, size);
+    }
+    bytes
+}
+
+/// Returns the root key.
+pub fn root_key() -> Vec<u8> {
+    root_key_copy(0, root_key_size())
 }
 
 pub fn certified_data_set(data: &[u8]) {
@@ -404,6 +439,13 @@ pub fn mint_cycles(amount: u64) -> u64 {
     unsafe { ic0::mint_cycles(amount) }
 }
 
+/// Mint cycles (only works on CMC).
+pub fn mint_cycles128(amount_high: u64, amount_low: u64) -> Vec<u8> {
+    let mut result_bytes = vec![0u8; CYCLES_SIZE];
+    unsafe { ic0::mint_cycles128(amount_high, amount_low, result_bytes.as_mut_ptr() as u32) }
+    result_bytes
+}
+
 pub fn is_controller(data: &[u8]) -> u32 {
     unsafe { ic0::is_controller(data.as_ptr() as u32, data.len() as u32) }
 }
@@ -419,7 +461,78 @@ pub fn cycles_burn128(amount_high: u64, amount_low: u64) -> Vec<u8> {
     bytes
 }
 
+pub fn cost_call(method_name_size: u64, payload_size: u64) -> Vec<u8> {
+    let mut bytes = vec![0u8; CYCLES_SIZE];
+    unsafe {
+        ic0::cost_call(method_name_size, payload_size, bytes.as_mut_ptr() as u32);
+    }
+    bytes
+}
+pub fn cost_create_canister() -> Vec<u8> {
+    let mut bytes = vec![0u8; CYCLES_SIZE];
+    unsafe {
+        ic0::cost_create_canister(bytes.as_mut_ptr() as u32);
+    }
+    bytes
+}
+pub fn cost_http_request(request_size: u64, max_res_bytes: u64) -> Vec<u8> {
+    let mut bytes = vec![0u8; CYCLES_SIZE];
+    unsafe {
+        ic0::cost_http_request(request_size, max_res_bytes, bytes.as_mut_ptr() as u32);
+    }
+    bytes
+}
+pub fn cost_sign_with_ecdsa(data: &[u8], ecdsa_curve: u32) -> Result<Vec<u8>, u32> {
+    let mut bytes = vec![0u8; CYCLES_SIZE];
+    let result = unsafe {
+        ic0::cost_sign_with_ecdsa(
+            data.as_ptr() as u32,
+            data.len() as u32,
+            ecdsa_curve,
+            bytes.as_mut_ptr() as u32,
+        )
+    };
+    if result == 0 {
+        Ok(bytes)
+    } else {
+        Err(result)
+    }
+}
+pub fn cost_sign_with_schnorr(data: &[u8], algorithm: u32) -> Result<Vec<u8>, u32> {
+    let mut bytes = vec![0u8; CYCLES_SIZE];
+    let result = unsafe {
+        ic0::cost_sign_with_schnorr(
+            data.as_ptr() as u32,
+            data.len() as u32,
+            algorithm,
+            bytes.as_mut_ptr() as u32,
+        )
+    };
+    if result == 0 {
+        Ok(bytes)
+    } else {
+        Err(result)
+    }
+}
+pub fn cost_vetkd_derive_key(data: &[u8], vetkd_curve: u32) -> Result<Vec<u8>, u32> {
+    let mut bytes = vec![0u8; CYCLES_SIZE];
+    let result = unsafe {
+        ic0::cost_vetkd_derive_key(
+            data.as_ptr() as u32,
+            data.len() as u32,
+            vetkd_curve,
+            bytes.as_mut_ptr() as u32,
+        )
+    };
+    if result == 0 {
+        Ok(bytes)
+    } else {
+        Err(result)
+    }
+}
+
 use std::panic;
+
 pub fn set_panic_hook() {
     panic::set_hook(Box::new(|i| {
         let s = i.to_string();

@@ -6,7 +6,7 @@ use crate::{
 use assert_matches::assert_matches;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1 as pb;
-use ic_nns_governance_api::pb::v1 as pb_api;
+use ic_nns_governance_api as pb_api;
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use maplit::btreemap;
 use test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING;
@@ -26,9 +26,10 @@ fn proposal_passes_if_not_too_many_nf_neurons_can_occur() {
     };
     let mut governance = Governance::new(
         governance_proto.into(),
-        Box::<MockEnvironment>::default(),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::<MockEnvironment>::default(),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
     // Run code under test
     governance
@@ -92,9 +93,10 @@ fn proposal_fails_if_too_many_nf_neurons_can_occur() {
     };
     let mut governance = Governance::new(
         governance_proto.into(),
-        Box::<MockEnvironment>::default(),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::<MockEnvironment>::default(),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
     // Run code under test
     let err = governance
@@ -133,9 +135,10 @@ fn proposal_fails_if_no_nf_neurons_exist() {
     };
     let mut governance = Governance::new(
         governance_proto.into(),
-        Box::<MockEnvironment>::default(),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::<MockEnvironment>::default(),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
     // Run code under test
     let err = governance

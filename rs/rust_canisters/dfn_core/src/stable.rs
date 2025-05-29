@@ -11,7 +11,6 @@ const PAGE_SIZE: f64 = 64.0 * 1024.0;
 /// +--------+-----------------+-------->
 /// | length |     content     |  junk
 /// +--------+-----------------+-------->
-
 const LENGTH_BYTES: u32 = 4;
 
 pub fn stable64_size() -> u64 {

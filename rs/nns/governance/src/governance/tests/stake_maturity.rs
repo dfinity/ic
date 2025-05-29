@@ -1,17 +1,16 @@
+use crate::test_utils::MockRandomness;
 use crate::{
     governance::{
         tests::{MockEnvironment, StubCMC, StubIcpLedger},
         Governance,
     },
-    pb::v1::{
-        manage_neuron::StakeMaturity,
-        manage_neuron_response::{MergeMaturityResponse, StakeMaturityResponse},
-        neuron, Governance as GovernanceProto, Neuron,
-    },
+    pb::v1::{manage_neuron::StakeMaturity, neuron, Governance as GovernanceProto, Neuron},
 };
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_governance_api::manage_neuron_response::StakeMaturityResponse;
 use maplit::btreemap;
+use std::sync::Arc;
 
 #[test]
 fn test_stake_maturity() {
@@ -27,7 +26,6 @@ fn test_stake_maturity() {
         staked_maturity_e8s_equivalent: Some(100),
         ..Default::default()
     };
-
     let mut governance = Governance::new(
         GovernanceProto {
             neurons: btreemap! {
@@ -35,32 +33,25 @@ fn test_stake_maturity() {
             },
             ..GovernanceProto::default()
         },
-        Box::new(MockEnvironment::new(vec![], 0)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::new(MockEnvironment::new(vec![], 0)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
 
     let request = StakeMaturity {
         percentage_to_stake: Some(40),
     };
-    let responses = governance
+
+    let stake_maturity_response = governance
         .stake_maturity_of_neuron(&NeuronId { id: 1 }, &principal_1, &request)
         .expect("Expected call to succeed");
-
-    let (stake_maturity_response, legacy_merge_maturity_response) = responses;
 
     assert_eq!(
         stake_maturity_response,
         StakeMaturityResponse {
             maturity_e8s: 600,
             staked_maturity_e8s: 500
-        }
-    );
-    assert_eq!(
-        legacy_merge_maturity_response,
-        MergeMaturityResponse {
-            merged_maturity_e8s: 400,
-            new_stake_e8s: 523
         }
     );
 }

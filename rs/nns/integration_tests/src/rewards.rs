@@ -6,7 +6,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL,
 };
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     add_or_remove_node_provider::Change,
     manage_neuron::NeuronIdOrSubaccount,
     manage_neuron_response::Command as CommandResponse,
@@ -93,8 +93,8 @@ fn test_node_provider_rewards() {
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, ProposalId::from(pid))
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
 
         let to_subaccount = Subaccount({
@@ -157,8 +157,8 @@ fn test_node_provider_rewards() {
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, ProposalId::from(pid))
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
 
         // The balance of the main account should now include the rewards.

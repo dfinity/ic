@@ -5,20 +5,19 @@ use tikv_jemallocator::Jemalloc;
 use crate::cli::Cli;
 
 mod bouncer;
-mod cache;
 mod check;
 mod cli;
 mod core;
 mod dns;
+mod errors;
 mod firewall;
-mod geoip;
 mod http;
 mod log;
 mod metrics;
 mod persist;
 mod rate_limiting;
-mod retry;
 mod routes;
+mod salt_fetcher;
 mod snapshot;
 #[cfg(any(test, feature = "bench"))]
 pub mod test_utils;

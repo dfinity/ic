@@ -5,8 +5,7 @@ use ic_interfaces_certified_stream_store::{
 };
 use ic_interfaces_state_manager::{
     CertificationScope, CertifiedStateSnapshot, Labeled, PermanentStateHashError::*,
-    StateHashError, StateManager, StateManagerError, StateManagerResult, StateReader,
-    TransientStateHashError::*,
+    StateHashError, StateManager, StateReader, TransientStateHashError::*,
 };
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_registry_subnet_type::SubnetType;
@@ -15,9 +14,12 @@ use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
     batch::BatchSummary,
     consensus::certification::Certification,
-    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-    crypto::{CryptoHash, CryptoHashOf},
+    crypto::{
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        CryptoHash, CryptoHashOf,
+    },
     messages::{Request, RequestOrResponse, Response},
+    state_manager::{StateManagerError, StateManagerResult},
     xnet::{
         CertifiedStreamSlice, RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex,
         StreamIndexedQueue, StreamSlice,
@@ -256,7 +258,7 @@ impl StateReader for FakeStateManager {
             .iter()
             .filter(|s| s.height > Height::from(0) && s.certification.is_some())
             .map(|s| s.height)
-            .last()
+            .next_back()
             .unwrap_or_else(|| Height::from(0))
     }
 

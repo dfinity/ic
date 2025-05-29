@@ -6,15 +6,14 @@ load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_mkdirs")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("//rs/tests:system_tests.bzl", "oci_tar")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/crypto/tree_hash",
     "//rs/ledger_suite/common/ledger_canister_core",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icrc1",
@@ -31,9 +30,9 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:clap",  # no clap because feature derive
+    "@crate_index//:futures",
     "@crate_index//:hex",
     "@crate_index//:ic-agent",
-    "@crate_index//:ic-certification",
     "@crate_index//:indicatif",
     "@crate_index//:lazy_static",
     "@crate_index//:num-bigint",
@@ -47,7 +46,6 @@ DEPENDENCIES = [
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
-    "@crate_index//:serde_with",
     "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
@@ -69,7 +67,6 @@ DEV_DEPENDENCIES = [
     "//rs/rosetta-api/icrc1/client:ic-icrc-rosetta-client",
     "//rs/rosetta-api/icrc1/runner:ic-icrc-rosetta-runner",
     "//rs/test_utilities/load_wasm",
-    "@crate_index//:futures",
     "@crate_index//:ic-utils",
     "@crate_index//:once_cell",
 ]
@@ -85,7 +82,7 @@ MACRO_DEV_DEPENDENCIES = [
 ALIASES = {
 }
 
-ROSETTA_VERSION = "1.1.1"
+ROSETTA_VERSION = "1.2.3"
 
 rust_library(
     name = "ic-icrc-rosetta",
@@ -115,15 +112,23 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
+rust_test(
+    name = "storage-operations-tests",
+    srcs = ["src/common/storage/storage_operations_test.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":ic-icrc-rosetta"],
+)
+
 LOCAL_REPLICA_DATA = [
     "//rs/canister_sandbox",
     "//rs/canister_sandbox:sandbox_launcher",
     "//rs/replica",
     "//rs/ledger_suite/icrc1/archive:archive_canister",
-    "//rs/ledger_suite/icrc1/ledger:ledger_canister",
     "//rs/rosetta-api/icrc1:ic-icrc-rosetta-bin",
     "//rs/rosetta-api/icrc1/client:ic-icrc-rosetta-client-bin",
     "//rs/pocket_ic_server:pocket-ic-server",
+    "//rs/ledger_suite/icrc1/ledger:ledger_canister",
 ]
 
 LOCAL_REPLICA_ENV = {
@@ -151,7 +156,6 @@ rust_test_suite_with_extra_srcs(
         "tests/integration_test_components/blocks_synchronizer/*.rs",
         "tests/integration_test_components/storage/*.rs",
     ]),
-    flaky = True,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )
@@ -176,6 +180,31 @@ rust_test_suite_with_extra_srcs(
     ]),
     flaky = True,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES + DEPENDENCIES,
+)
+
+rust_test_suite_with_extra_srcs(
+    name = "icrc_multitoken_rosetta_system",
+    srcs = [
+        "tests/multitoken_system_tests.rs",
+    ],
+    data = LOCAL_REPLICA_DATA + glob([
+        "tests/*.json",
+        "tests/*.ros",
+    ]) + [
+        "@rosetta-cli//:rosetta-cli",
+    ],
+    env = LOCAL_REPLICA_ENV | {
+        "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/",
+        "ROSETTA_CLI": "$(rootpath @rosetta-cli//:rosetta-cli)",
+        "RUST_TEST_THREADS": "4",
+    },
+    extra_srcs = glob([
+        "tests/common/*.rs",
+    ]),
+    flaky = True,
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
+    tags = ["cpu:4"],
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )
 
@@ -256,7 +285,7 @@ oci_image(
     name = "ic_icrc_rosetta_image",
     base = ":ic_icrc_rosetta_image_base",
     entrypoint = ["/home/ic_icrc_rosetta/ic-icrc-rosetta-bin"],
-    tags = ["manual"],
+    tags = ["local"],
     target_compatible_with = [
         "@platforms//os:linux",
     ],
@@ -277,6 +306,12 @@ expand_template(
     template = [
         "0.0.0",
     ],
+)
+
+oci_tar(
+    name = "icrc_rosetta_image.tar",
+    image = ":ic_icrc_rosetta_image",
+    repo_tags = ["icrc-rosetta:local"],
 )
 
 # Push image with:

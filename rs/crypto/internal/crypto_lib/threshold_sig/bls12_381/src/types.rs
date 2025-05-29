@@ -55,6 +55,10 @@ impl SecretKeyBytes {
     pub fn new(val: SecretArray<{ SecretKeyBytes::SIZE }>) -> Self {
         Self(val)
     }
+
+    pub fn inner_secret(&self) -> &SecretArray<{ SecretKeyBytes::SIZE }> {
+        &self.0
+    }
 }
 
 /// A wrapped BLS public key.

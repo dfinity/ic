@@ -19,8 +19,8 @@ pub struct AnonymousContent {
 
 impl AnonymousContent {
     fn sender(&self) -> Blob {
-        const ANONYMOUS_SENDER: u8 = 0x04;
-        Blob(vec![ANONYMOUS_SENDER])
+        const RANDOM_SENDER: [u8; 3] = [7, 1, 1];
+        Blob(Vec::from(RANDOM_SENDER))
     }
 }
 

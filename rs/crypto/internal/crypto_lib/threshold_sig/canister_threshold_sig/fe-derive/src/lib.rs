@@ -24,7 +24,7 @@ struct FieldElementConfig {
 impl FieldElementConfig {
     fn new(ident: syn::Ident, modulus: BigUint, mut params: BTreeMap<String, BigUint>) -> Self {
         let limb_size = 64; // bits of u64
-        let limbs = (modulus.bits() + limb_size - 1) / limb_size;
+        let limbs = modulus.bits().div_ceil(limb_size);
 
         let m64 = BigUint::one() << limb_size;
 

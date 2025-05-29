@@ -1,8 +1,10 @@
 use ic_base_types::PrincipalId;
+use ic_cdk::println;
 use std::fmt::Write;
 
 pub type RegionNodeTypeCategory = (String, String);
 
+#[derive(Debug, PartialEq)]
 pub enum LogEntry {
     RateNotFoundInRewardTable {
         region: String,
@@ -64,9 +66,10 @@ impl std::fmt::Display for LogEntry {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct RewardsPerNodeProviderLog {
-    node_provider_id: PrincipalId,
-    entries: Vec<LogEntry>,
+    pub node_provider_id: PrincipalId,
+    pub entries: Vec<LogEntry>,
 }
 
 impl RewardsPerNodeProviderLog {

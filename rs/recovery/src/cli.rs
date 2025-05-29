@@ -11,8 +11,9 @@ use crate::{
     registry_helper::RegistryHelper,
     steps::Step,
     util,
+    util::data_location_from_str,
     util::subnet_id_from_str,
-    NeuronArgs, RecoveryArgs,
+    DataLocation, NeuronArgs, RecoveryArgs,
 };
 use core::fmt::Debug;
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
@@ -267,6 +268,10 @@ pub fn read_optional_version(logger: &Logger, prompt: &str) -> Option<ReplicaVer
 
 pub fn read_optional_subnet_id(logger: &Logger, prompt: &str) -> Option<SubnetId> {
     read_optional_type(logger, prompt, subnet_id_from_str)
+}
+
+pub fn read_optional_data_location(logger: &Logger, prompt: &str) -> Option<DataLocation> {
+    read_optional_type(logger, prompt, data_location_from_str)
 }
 
 /// Optionally read an input of the generic type by applying the given deserialization function.

@@ -4,7 +4,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_ID, TEST_NEURON_2_OWNER_KEYPAIR,
 };
 use ic_nns_common::types::{NeuronId, ProposalId};
-use ic_nns_governance_api::pb::v1::{GovernanceError, NnsFunction, ProposalStatus};
+use ic_nns_governance_api::{GovernanceError, NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{
@@ -76,8 +76,8 @@ fn test_submit_add_or_remove_data_centers_proposal() {
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, proposal_id)
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
 
         // No proposals should be pending now.
@@ -144,8 +144,8 @@ fn test_submit_add_or_remove_data_centers_proposal() {
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, proposal_id)
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
 
         // No proposals should be pending now.

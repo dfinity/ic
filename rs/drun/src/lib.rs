@@ -250,6 +250,7 @@ pub async fn run_drun(uo: DrunOptions) -> Result<(), String> {
             Arc::clone(&state_manager) as Arc<_>,
             state_manager.get_fd_factory(),
             completed_execution_messages_tx,
+            &state_manager.state_layout().tmp(),
         )
         .into_parts();
 
@@ -383,8 +384,9 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
             ..BatchMessages::default()
         },
         randomness: Randomness::from(get_random_seed()),
-        idkg_subnet_public_keys: BTreeMap::new(),
+        chain_key_subnet_public_keys: BTreeMap::new(),
         idkg_pre_signature_ids: BTreeMap::new(),
+        ni_dkg_ids: BTreeMap::new(),
         registry_version: RegistryVersion::from(1),
         time: time::current_time(),
         consensus_responses: vec![],

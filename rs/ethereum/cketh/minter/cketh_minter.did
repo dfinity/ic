@@ -33,6 +33,7 @@ type DefiniteCanisterSettings = record {
 type LogVisibility = variant {
     controllers;
     public;
+    allowed_viewers : vec principal;
 };
 
 type QueryStats = record {
@@ -82,6 +83,11 @@ type InitArg = record {
     // Block number to start scrapping from on the Ethereum network.
     // Scrapping the logs will resume at `last_scraped_block_number + 1` (inclusive).
     last_scraped_block_number : nat;
+
+    // The principal of the EVM RPC canister that handles the communication
+    // with the Ethereum blockchain. If not specified, uses the production or
+    // staging EVM RPC canister based on the ethereum_network field.
+    evm_rpc_id : opt principal;
 };
 
 type UpgradeArg = record {
@@ -171,6 +177,9 @@ type MinterInfo = record {
 
     // Address of the ERC20 helper smart contract
     erc20_helper_contract_address: opt text;
+
+    // Address of the ETH or ERC20 deposit with subaccount helper smart contract.
+    deposit_with_subaccount_helper_contract_address: opt text;
 
     // Information of supported ERC20 tokens.
     supported_ckerc20_tokens: opt vec CkErc20Token;
@@ -265,7 +274,16 @@ type RetrieveEthStatus = variant {
     TxFinalized : TxFinalizedStatus;
 };
 
-type WithdrawalArg = record { recipient : text; amount : nat };
+type WithdrawalArg = record {
+    // The address to which the minter should deposit ETH.
+    recipient : text;
+
+    // The amount of ckETH in Wei that the client wants to withdraw.
+    amount : nat;
+
+    // The subaccount to burn ckETH from.
+    from_subaccount : opt Subaccount;
+};
 
 // Details of a withdrawal request and its status.
 type WithdrawalDetail = record {
@@ -353,6 +371,12 @@ type WithdrawErc20Arg = record {
 
     // Ethereum address to withdraw to.
     recipient : text;
+
+    // The subaccount to burn ckETH from to pay for the transaction fee.
+    from_cketh_subaccount : opt Subaccount;
+
+    // The subaccount to burn ckERC20 from.
+    from_ckerc20_subaccount : opt Subaccount;
 };
 
 type RetrieveErc20Request = record {

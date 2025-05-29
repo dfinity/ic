@@ -2,7 +2,7 @@
 name = "ic-icrc-rosetta"
 description = "Build Once. Integrate Your Blockchain Everywhere. "
 default-run = "ic-icrc-rosetta"
-version = "1.1.1"
+version = "1.2.3"
 authors.workspace = true
 edition.workspace = true
 documentation.workspace = true
@@ -17,19 +17,17 @@ axum = { workspace = true }
 candid = { workspace = true }
 ciborium = { workspace = true }
 clap = { workspace = true }
+futures = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic-certification = { workspace = true }
 ic-limits = { path = "../../limits" }
-ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-icrc1 = { path = "../../ledger_suite/icrc1" }
 ic-icrc1-ledger = { path = "../../ledger_suite/icrc1/ledger" }
 ic-icrc1-tokens-u256 = { path = "../../ledger_suite/icrc1/tokens_u256" }
 ic-icrc1-tokens-u64 = { path = "../../ledger_suite/icrc1/tokens_u64" }
 ic-ledger-canister-core = { path = "../../ledger_suite/common/ledger_canister_core" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
-ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
 ic-rosetta-api = { path = "../icp" }
 ic-sys = { path = "../../sys" }
 icrc-ledger-agent = { path = "../../../packages/icrc-ledger-agent" }
@@ -48,7 +46,6 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
-serde_with = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 tempfile = { workspace = true }
@@ -85,3 +82,7 @@ path = "tests/integration_tests.rs"
 [[test]]
 name = "system_tests"
 path = "tests/system_tests.rs"
+
+[[test]]
+name = "multitoken_system_tests"
+path = "tests/multitoken_system_tests.rs"

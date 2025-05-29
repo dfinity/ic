@@ -20,7 +20,7 @@ jobs:
         run: |
           set -euxo pipefail
 
-          DOWNLOAD_PREFIX="http://download.dfinity.systems/ic/$GITHUB_SHA"
+          DOWNLOAD_PREFIX="https://download.dfinity.systems/ic/$GITHUB_SHA"
 
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/setup-os/disk-img/disk-img.tar.zst" -o setup-os-img.tar.zst
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/guest-os/update-img/update-img.tar.zst" -o update-os-img.tar.zst
@@ -59,7 +59,6 @@ jobs:
             "sns-root-canister.wasm"
             "sns-swap-canister.wasm"
             "sns-wasm-canister.wasm"
-            "wasm.wasm"
           )
 
           mkdir canisters && pushd canisters
@@ -77,7 +76,6 @@ jobs:
         # v0.1.15
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
         with:
-          token: ${{secrets.IDX_PUSH_TO_PR}}
           body: "IC ${{github.ref_name}}"
           files: |
             canisters.tar

@@ -122,9 +122,7 @@ impl AdminHelper {
         let mut ic_admin = self.get_ic_admin_cmd_base();
 
         ic_admin
-            // TODO: Switch to the new command name:
-            // .add_positional_argument("propose-to-revise-elected-guestos-versions")
-            .add_positional_argument("propose-to-update-elected-replica-versions")
+            .add_positional_argument("propose-to-revise-elected-guestos-versions")
             .add_argument("replica-version-to-elect", quote(upgrade_version))
             .add_argument("release-package-urls", quote(upgrade_url))
             .add_argument("release-package-sha256-hex", quote(sha256))
@@ -149,9 +147,7 @@ impl AdminHelper {
         let mut ic_admin = self.get_ic_admin_cmd_base();
 
         ic_admin
-            // TODO: Switch to the new command name:
-            // .add_positional_argument("propose-to-deploy-guestos-to-all-subnet-nodes")
-            .add_positional_argument("propose-to-update-subnet-replica-version")
+            .add_positional_argument("propose-to-deploy-guestos-to-all-subnet-nodes")
             .add_positional_argument(subnet_id)
             .add_positional_argument(upgrade_version)
             .add_argument(
@@ -340,8 +336,9 @@ mod tests {
     use super::*;
 
     use ic_base_types::PrincipalId;
-    use ic_management_canister_types::{
-        EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    use ic_management_canister_types_private::{
+        EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
+        VetKdKeyId,
     };
     use ic_registry_subnet_features::KeyConfig;
     use std::{str::FromStr, time::Duration};
@@ -416,7 +413,7 @@ mod tests {
             result,
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
-            propose-to-update-elected-replica-versions \
+            propose-to-revise-elected-guestos-versions \
             --replica-version-to-elect \"fake_replica_version\" \
             --release-package-urls \"https://fake_upgrade_url.com/\" \
             --release-package-sha256-hex \"fake_sha_256\" \
@@ -471,6 +468,14 @@ mod tests {
                     pre_signatures_to_create_in_advance: 12,
                     max_queue_size: 32,
                 },
+                KeyConfig {
+                    key_id: MasterPublicKeyId::VetKd(VetKdKeyId {
+                        curve: VetKdCurve::Bls12_381_G2,
+                        name: "test_key_3".to_string(),
+                    }),
+                    pre_signatures_to_create_in_advance: 0,
+                    max_queue_size: 32,
+                },
             ],
             signature_request_timeout_ns: Some(123_456),
             idkg_key_rotation_period_ms: Some(321_654),
@@ -505,7 +510,8 @@ mod tests {
             --state-hash fake_state_hash \
             --initial-chain-key-configs-to-request '[\
                 {\"subnet_id\":\"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\",\"key_id\":\"ecdsa:Secp256k1:test_key_1\",\"pre_signatures_to_create_in_advance\":\"77\",\"max_queue_size\":\"30\"},\
-                {\"subnet_id\":\"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\",\"key_id\":\"schnorr:Bip340Secp256k1:test_key_2\",\"pre_signatures_to_create_in_advance\":\"12\",\"max_queue_size\":\"32\"}]' \
+                {\"subnet_id\":\"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\",\"key_id\":\"schnorr:Bip340Secp256k1:test_key_2\",\"pre_signatures_to_create_in_advance\":\"12\",\"max_queue_size\":\"32\"},\
+                {\"subnet_id\":\"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\",\"key_id\":\"vetkd:Bls12_381_G2:test_key_3\",\"pre_signatures_to_create_in_advance\":\"0\",\"max_queue_size\":\"32\"}]' \
             --idkg-key-rotation-period-ms 321654 \
             --signature-request-timeout-ns 123456 \
             --replacement-nodes \"nqpqw-cp42a-rmdsx-fpui3-ncne5-kzq6o-m67an-w25cx-zu636-lcf2v-fqe\" \
@@ -529,7 +535,7 @@ mod tests {
         assert_eq!(result,
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
-            propose-to-update-subnet-replica-version \
+            propose-to-deploy-guestos-to-all-subnet-nodes \
             gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
             fake_replica_version \
             --summary \"Upgrade replica version of subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe.\" \

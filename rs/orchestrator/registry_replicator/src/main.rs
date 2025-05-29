@@ -24,6 +24,5 @@ async fn main() {
         .start_polling(nns_urls, nns_pub_key)
         .await
         .expect("Failed to start registry replicator")
-        .await
-        .expect("Failed to join registry replicator thread handle");
+        .await;
 }

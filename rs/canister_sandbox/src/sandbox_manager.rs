@@ -13,30 +13,32 @@
 //! towards the controller are found in this module.
 use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::fs::File;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::protocol::id::{ExecId, MemoryId, WasmId};
-use crate::protocol::sbxsvc::{
-    CreateExecutionStateSerializedSuccessReply, CreateExecutionStateSuccessReply, OpenMemoryRequest,
-};
+use crate::protocol::sbxsvc::{CreateExecutionStateSuccessReply, OpenMemoryRequest};
 use crate::protocol::structs::{
-    MemoryModifications, SandboxExecInput, SandboxExecOutput, StateModifications,
+    ExecutionStateModifications, MemoryModifications, SandboxExecInput, SandboxExecOutput,
+    StateModifications,
 };
 use crate::{controller_service::ControllerService, protocol};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
-    wasm_executor::WasmStateChanges,
-    wasm_utils::{compile, decoding::decode_wasm, Segments},
-    CompilationResult, SerializedModule, SerializedModuleBytes, WasmtimeEmbedder,
+    wasm_executor::WasmStateChanges, wasm_utils::Segments, InitialStateData, SerializedModuleBytes,
+    WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::{
-    ExecutionMode, HypervisorError, HypervisorResult, WasmExecutionOutput,
+    ExecutionMode, HypervisorError, HypervisorResult, SystemApi, WasmExecutionOutput,
 };
 use ic_logger::ReplicaLogger;
-use ic_replicated_state::page_map::{PageAllocatorRegistry, PageMapSerialization};
-use ic_replicated_state::{EmbedderCache, Global, Memory, PageMap};
+use ic_management_canister_types_private::Global;
+use ic_replicated_state::{
+    page_map::{PageAllocatorRegistry, PageMapSerialization},
+    EmbedderCache, Memory, PageMap,
+};
 use ic_types::CanisterId;
 
 use crate::dts::{DeterministicTimeSlicingHandler, PausedExecution};
@@ -131,13 +133,12 @@ impl Execution {
                 wasm_result,
                 num_instructions_left,
                 allocated_bytes,
-                allocated_message_bytes,
+                allocated_guaranteed_response_message_bytes,
                 instance_stats,
                 system_api_call_counters,
-                canister_log,
             },
             deltas,
-            instance_or_system_api,
+            mut instance_or_system_api,
         ) = ic_embedders::wasm_executor::process(
             exec_input.func_ref,
             exec_input.api_type,
@@ -156,39 +157,45 @@ impl Execution {
             Rc::new(out_of_instructions_handler),
         );
 
+        let system_api = match &mut instance_or_system_api {
+            // Here we use `store_data_mut` instead of
+            // `into_store_data` because the later will drop the
+            // wasmtime Instance which can be an expensive
+            // operation. Mutating the store instead allows us
+            // to delay the drop until after the execution
+            // completed message is sent back to the main
+            // process.
+            Ok(instance) => instance
+                .store_data_mut()
+                .system_api_mut()
+                .expect("System api not present in the wasmtime instance"),
+            Err(system_api) => system_api,
+        };
+
         match wasm_result {
             Ok(_) => {
-                let state_modifications = deltas.map(
-                    |WasmStateChanges {
-                         dirty_page_indices,
-                         globals,
-                     }| {
-                        let system_state_changes = match instance_or_system_api {
-                            // Here we use `store_data_mut` instead of
-                            // `into_store_data` because the later will drop the
-                            // wasmtime Instance which can be an expensive
-                            // operation. Mutating the store instead allows us
-                            // to delay the drop until after the execution
-                            // completed message is sent back to the main
-                            // process.
-                            Ok(mut instance) => instance
-                                .store_data_mut()
-                                .system_api_mut()
-                                .expect("System api not present in the wasmtime instance")
-                                .take_system_state_changes(),
-                            Err(system_api) => system_api.into_system_state_changes(),
-                        };
-                        StateModifications::new(
-                            globals,
-                            &wasm_memory,
-                            &stable_memory,
-                            &dirty_page_indices.wasm_memory_delta,
-                            &dirty_page_indices.stable_memory_delta,
-                            system_state_changes,
-                        )
-                    },
-                );
-                if state_modifications.is_some() {
+                let state_modifications = {
+                    let execution_state_modifications = deltas.map(
+                        |WasmStateChanges {
+                             dirty_page_indices,
+                             globals,
+                         }| {
+                            ExecutionStateModifications::new(
+                                globals,
+                                &wasm_memory,
+                                &stable_memory,
+                                &dirty_page_indices.wasm_memory_delta,
+                                &dirty_page_indices.stable_memory_delta,
+                            )
+                        },
+                    );
+
+                    StateModifications {
+                        execution_state_modifications,
+                        system_state_modifications: system_api.take_system_state_modifications(),
+                    }
+                };
+                if state_modifications.execution_state_modifications.is_some() {
                     self.sandbox_manager
                         .add_memory(exec_input.next_wasm_memory_id, wasm_memory);
                     self.sandbox_manager
@@ -197,11 +204,10 @@ impl Execution {
                 let wasm_output = WasmExecutionOutput {
                     wasm_result,
                     allocated_bytes,
-                    allocated_message_bytes,
+                    allocated_guaranteed_response_message_bytes,
                     num_instructions_left,
                     instance_stats,
                     system_api_call_counters,
-                    canister_log,
                 };
                 self.sandbox_manager.controller.execution_finished(
                     protocol::ctlsvc::ExecutionFinishedRequest {
@@ -221,14 +227,18 @@ impl Execution {
                 // was aborted and the controller removed `exec_id` on its side.
             }
             Err(err) => {
+                // Set the execution error in the system API to capture cases
+                // where the Wasm execution trapped outside of the system API.
+                // This is important to ensure that the proper state modifications
+                // are extracted from the system API.
+                system_api.set_execution_error(err.clone());
                 let wasm_output = WasmExecutionOutput {
                     wasm_result: Err(err),
                     num_instructions_left,
                     allocated_bytes,
-                    allocated_message_bytes,
+                    allocated_guaranteed_response_message_bytes,
                     instance_stats,
                     system_api_call_counters,
-                    canister_log,
                 };
 
                 self.sandbox_manager.controller.execution_finished(
@@ -237,7 +247,13 @@ impl Execution {
                         exec_output: SandboxExecOutput {
                             slice,
                             wasm: wasm_output,
-                            state: None,
+                            // If the execution resulted in an error, we only want to persist
+                            // the system state modifications.
+                            state: StateModifications {
+                                execution_state_modifications: None,
+                                system_state_modifications: system_api
+                                    .take_system_state_modifications(),
+                            },
                             execute_total_duration: total_timer.elapsed(),
                             execute_run_duration: run_timer.elapsed(),
                         },
@@ -295,35 +311,6 @@ impl SandboxManager {
         }
     }
 
-    /// Compiles the given Wasm binary and registers it under the given id.
-    /// The function may fail if the Wasm binary is invalid.
-    pub fn open_wasm(
-        &self,
-        wasm_id: WasmId,
-        wasm_src: Vec<u8>,
-    ) -> HypervisorResult<(Arc<EmbedderCache>, CompilationResult, SerializedModule)> {
-        let mut guard = self.repr.lock().unwrap();
-        assert!(
-            !guard.caches.contains_key(&wasm_id),
-            "Failed to open wasm session {}: id is already in use",
-            wasm_id,
-        );
-        let wasm = decode_wasm(self.embedder.config().wasm_max_size, Arc::new(wasm_src))?;
-        let (cache, result) = compile(&self.embedder, &wasm);
-        let embedder_cache = Arc::new(cache);
-        guard.caches.insert(wasm_id, Arc::clone(&embedder_cache));
-        // Return as much memory as possible because compiling seems to use up
-        // some extra memory that can be returned.
-        //
-        // SAFETY: 0 is always a valid argument to `malloc_trim`.
-        #[cfg(target_os = "linux")]
-        unsafe {
-            libc::malloc_trim(0);
-        }
-        let (compilation_result, serialized_module) = result?;
-        Ok((embedder_cache, compilation_result, serialized_module))
-    }
-
     pub fn open_wasm_serialized(
         &self,
         wasm_id: WasmId,
@@ -339,6 +326,30 @@ impl SandboxManager {
         let instance_pre = self
             .embedder
             .deserialize_module_and_pre_instantiate(serialized_module);
+        let cache = Arc::new(EmbedderCache::new(instance_pre.clone()));
+        let deserialization_time = deserialization_timer.elapsed();
+        guard.caches.insert(wasm_id, Arc::clone(&cache));
+        match instance_pre {
+            Ok(_) => Ok((cache, deserialization_time)),
+            Err(err) => Err(err),
+        }
+    }
+
+    pub fn open_wasm_via_file(
+        &self,
+        wasm_id: WasmId,
+        serialized_module_file: File,
+    ) -> HypervisorResult<(Arc<EmbedderCache>, Duration)> {
+        let mut guard = self.repr.lock().unwrap();
+        assert!(
+            !guard.caches.contains_key(&wasm_id),
+            "Failed to open wasm session {}: id is already in use",
+            wasm_id,
+        );
+        let deserialization_timer = Instant::now();
+        let instance_pre = self
+            .embedder
+            .read_file_and_pre_instantiate(serialized_module_file);
         let cache = Arc::new(EmbedderCache::new(instance_pre.clone()));
         let deserialization_time = deserialization_timer.elapsed();
         guard.caches.insert(wasm_id, Arc::clone(&cache));
@@ -467,59 +478,64 @@ impl SandboxManager {
         paused_execution.abort();
     }
 
+    /// Takes ownership of the passed in file descriptors.
     pub fn create_execution_state(
         &self,
         wasm_id: WasmId,
-        wasm_source: Vec<u8>,
+        bytes: File,
+        initial_state_data: File,
         wasm_page_map: PageMapSerialization,
         next_wasm_memory_id: MemoryId,
         canister_id: CanisterId,
         stable_memory_page_map: PageMapSerialization,
     ) -> HypervisorResult<CreateExecutionStateSuccessReply> {
-        // Validate, instrument, and compile the binary.
-        let (embedder_cache, compilation_result, serialized_module) =
-            self.open_wasm(wasm_id, wasm_source)?;
-
-        let (wasm_memory_modifications, exported_globals) = self
-            .create_initial_memory_and_globals(
-                &embedder_cache,
-                &serialized_module.data_segments,
-                wasm_page_map,
-                next_wasm_memory_id,
-                canister_id,
-                stable_memory_page_map,
-            )?;
-
-        Ok(CreateExecutionStateSuccessReply {
-            wasm_memory_modifications,
-            exported_globals,
-            compilation_result,
-            serialized_module,
-        })
-    }
-
-    pub fn create_execution_state_serialized(
-        &self,
-        wasm_id: WasmId,
-        serialized_module: Arc<SerializedModule>,
-        wasm_page_map: PageMapSerialization,
-        next_wasm_memory_id: MemoryId,
-        canister_id: CanisterId,
-        stable_memory_page_map: PageMapSerialization,
-    ) -> HypervisorResult<CreateExecutionStateSerializedSuccessReply> {
         let timer = Instant::now();
-        let (embedder_cache, deserialization_time) =
-            self.open_wasm_serialized(wasm_id, &serialized_module.bytes)?;
+        let (embedder_cache, deserialization_time) = self.open_wasm_via_file(wasm_id, bytes)?;
+
+        // Reading from the initial state file would mutate the file descriptor
+        // and later or concurrent uses of the same cache entry would fail. But
+        // we can mmap the data without mutating the fd.
+        let initial_state_data: InitialStateData = {
+            use nix::sys::mman::{mmap, MapFlags, ProtFlags};
+            use std::os::{fd::AsRawFd, unix::fs::MetadataExt};
+
+            let mmap_size = initial_state_data.metadata().unwrap().size() as usize;
+            let data = if mmap_size == 0 {
+                &[]
+            } else {
+                // SAFETY: The address is valid because it is null, we have checked
+                // the size is positive and the fd is valid since it comes from a
+                // `File`. We're mapping privately so the data won't be mutated.
+                let mmap_ptr = unsafe {
+                    mmap(
+                        std::ptr::null_mut(),
+                        mmap_size,
+                        ProtFlags::PROT_READ,
+                        MapFlags::MAP_PRIVATE,
+                        initial_state_data.as_raw_fd(),
+                        0,
+                    )
+                }
+                .unwrap_or_else(|err| panic!("Reading InitialStateData failed: {:?}", err))
+                    as *mut u8;
+                // SAFETY: We've mmapped `mmap_size` and gotten a succesful
+                // reply at address `mmap_ptr` and the mapping is readonly
+                // private.
+                unsafe { std::slice::from_raw_parts(mmap_ptr, mmap_size) }
+            };
+            bincode::deserialize(data).unwrap()
+        };
+
         let (wasm_memory_modifications, exported_globals) = self
             .create_initial_memory_and_globals(
                 &embedder_cache,
-                &serialized_module.data_segments,
+                &initial_state_data.data_segments,
                 wasm_page_map,
                 next_wasm_memory_id,
                 canister_id,
                 stable_memory_page_map,
             )?;
-        Ok(CreateExecutionStateSerializedSuccessReply {
+        Ok(CreateExecutionStateSuccessReply {
             wasm_memory_modifications,
             exported_globals,
             deserialization_time,

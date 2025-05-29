@@ -51,7 +51,7 @@ list_new_canister_commits() {
     )
 
     INTERESTING_COMMITS=$(
-        grep -v -E ' .{10} (chore|refactor|test)\b' <<<"$NEW_COMMITS" \
+        grep -v -E ' [0-9a-z]{10,12} (chore|refactor|test)\b' <<<"$NEW_COMMITS" \
             || true
     )
 
@@ -75,12 +75,12 @@ list_new_canister_commits() {
     if [[ "${INTERESTING_COMMIT_COUNT}" -gt 0 || "${COMMIT_COUNT}" -ge 5 ]]; then
         print_green "${HEADING}"
     else
-        print_cyan "${HEADING}"
+        print_light_gray "${HEADING}"
     fi
 
     while IFS= read -r COMMIT_MESSAGE; do
-        if [[ $(echo "$COMMIT_MESSAGE" | grep -v -E ' .{10} (chore|refactor|test)\b' | wc -l) -gt 0 ]]; then
-            print_blue "${COMMIT_MESSAGE}"
+        if echo "$COMMIT_MESSAGE" | grep -v -E ' [0-9a-z]{10,12} (chore|refactor|test)\b' >/dev/null; then
+            print_green "${COMMIT_MESSAGE}"
         else
             print_light_gray "${COMMIT_MESSAGE}"
         fi

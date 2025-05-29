@@ -13,25 +13,12 @@ use crate::{
 use ic_base_types::CanisterId;
 use ic_cdk::api::stable::StableMemory;
 use ic_crypto_sha2::Sha256;
-use std::{
-    collections::HashMap,
-    convert::TryFrom,
-    fmt::{Display, Write},
-    str::FromStr,
-};
+use ic_nervous_system_common::hash_to_hex_string;
+use std::{collections::HashMap, convert::TryFrom, str::FromStr};
 
 #[allow(clippy::all)]
 #[path = "../gen/ic_sns_wasm.pb.v1.rs"]
 pub mod v1;
-
-/// Converts a sha256 hash into a hex string representation
-pub fn hash_to_hex_string(hash: &[u8; 32]) -> String {
-    let mut result_hash = String::new();
-    for b in hash {
-        let _ = write!(result_hash, "{:02X}", b);
-    }
-    result_hash
-}
 
 impl AddWasmResponse {
     pub fn error(message: String) -> Self {
@@ -123,7 +110,7 @@ impl From<SnsVersion> for GetNextSnsVersionResponse {
     }
 }
 
-impl Display for SnsVersion {
+impl std::fmt::Display for SnsVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut versions_str = HashMap::<&str, String>::new();
 
