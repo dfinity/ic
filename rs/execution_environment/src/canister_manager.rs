@@ -1980,9 +1980,6 @@ impl CanisterManager {
 
         let res = match kind {
             CanisterSnapshotDataKind::StableMemory { offset, size } => {
-                if size > MAX_SLICE_SIZE_BYTES {
-                    return Err(CanisterManagerError::InvalidSubslice { offset, size });
-                }
                 let stable_memory = snapshot.execution_snapshot().stable_memory.clone();
                 match CanisterSnapshot::get_memory_chunk(stable_memory, offset, size) {
                     Ok(chunk) => Ok(chunk),
@@ -1990,9 +1987,6 @@ impl CanisterManager {
                 }
             }
             CanisterSnapshotDataKind::MainMemory { offset, size } => {
-                if size > MAX_SLICE_SIZE_BYTES {
-                    return Err(CanisterManagerError::InvalidSubslice { offset, size });
-                }
                 let main_memory = snapshot.execution_snapshot().wasm_memory.clone();
                 match CanisterSnapshot::get_memory_chunk(main_memory, offset, size) {
                     Ok(chunk) => Ok(chunk),
@@ -2000,9 +1994,6 @@ impl CanisterManager {
                 }
             }
             CanisterSnapshotDataKind::WasmModule { offset, size } => {
-                if size > MAX_SLICE_SIZE_BYTES {
-                    return Err(CanisterManagerError::InvalidSubslice { offset, size });
-                }
                 match snapshot.get_wasm_module_chunk(offset, size) {
                     Ok(chunk) => Ok(chunk),
                     Err(e) => Err(e.into()),
