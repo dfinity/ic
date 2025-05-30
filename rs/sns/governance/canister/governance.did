@@ -26,20 +26,6 @@ type Action = variant {
   ExecuteExtensionFunction : ExecuteExtensionFunction;
 };
 
-type ExistingCanister = record {
-  canister_id : opt principal;
-  wasm_module_hash : opt blob;
-};
-
-type NewCanister = record {
-  chunked_canister_wasm : opt ChunkedCanisterWasm;
-};
-
-type Installation = variant {
-  existing_canister : ExistingCanister;
-  new_canister : NewCanister;
-};
-
 type Token = variant {
   NativeSnsToken : record {};
   Icp : record {};
@@ -79,9 +65,7 @@ type ExtensionInit = variant {
 
 // Native proposal type: RegisterExtension.
 type RegisterExtension = record {
-  // Determines the type of installation for the extension canister; e.g., whether it is
-  // a new canister to be installed by the SNS or an existing one.
-  installation : opt Installation;
+  chunked_canister_wasm : opt ChunkedCanisterWasm;
 
   extension_init : opt ExtensionInit;
 };
