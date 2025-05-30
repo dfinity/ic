@@ -19,12 +19,8 @@ fn upload_snapshot_with_checkpoint() {
         .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
         .unwrap()
         .snapshot_id();
-    let module_dl = env
-        .get_snapshot_canister_module(&ReadCanisterSnapshotMetadataArgs::new(
-            canister_id,
-            snapshot_id,
-        ))
-        .unwrap();
+    let md_args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id);
+    let module_dl = env.get_snapshot_canister_module(&md_args).unwrap();
 
     assert_eq!(counter_canister_wasm, module_dl);
 }
