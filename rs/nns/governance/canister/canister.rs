@@ -579,6 +579,17 @@ fn http_request(request: HttpRequest) -> HttpResponse {
     }
 }
 
+#[cfg(feature = "test")]
+#[update]
+fn add_maturity(id: u64, amount_e8s: u64) {
+    debug_log("add_maturity");
+    governance_mut()
+        .with_neuron_mut(&NeuronIdProto { id }, |neuron| {
+            neuron.maturity_e8s_equivalent += amount_e8s
+        })
+        .expect("Failed to add maturity to neuron");
+}
+
 fn main() {
     // This block is intentionally left blank.
 }
