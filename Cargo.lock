@@ -16065,6 +16065,7 @@ name = "ledger-canister"
 version = "0.9.0"
 dependencies = [
  "async-trait",
+ "canbench-rs",
  "candid",
  "candid_parser",
  "ciborium",
@@ -22734,6 +22735,7 @@ dependencies = [
  "async-trait",
  "candid",
  "local_key",
+ "serde",
  "sha2 0.10.9",
  "tla_instrumentation_proc_macros",
  "tokio-test",
