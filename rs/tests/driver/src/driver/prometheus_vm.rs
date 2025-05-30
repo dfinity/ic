@@ -15,9 +15,11 @@ use serde_json::json;
 use slog::{debug, info, warn, Logger};
 
 use crate::driver::{
+    boundary_node::BoundaryNodeVm,
     constants::SSH_USERNAME,
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
+    ic_gateway_vm::HasIcGatewayVm,
     log_events,
     resource::{DiskImage, ImageType},
     test_env::TestEnv,
@@ -36,8 +38,6 @@ use crate::driver::{
 use crate::k8s::config::TNET_DNS_SUFFIX;
 use crate::k8s::tnet::TNet;
 use crate::retry_with_msg;
-
-use super::boundary_node::BoundaryNodeVm;
 
 const PROMETHEUS_VM_NAME: &str = "prometheus";
 
@@ -61,6 +61,7 @@ const REPLICA_METRICS_PORT: u16 = 9090;
 const ORCHESTRATOR_METRICS_PORT: u16 = 9091;
 const NODE_EXPORTER_METRICS_PORT: u16 = 9100;
 const IC_BOUNDARY_METRICS_PORT: u16 = 9324;
+const IC_GATEWAY_METRICS_PORT: u16 = 9325;
 
 const PROMETHEUS_DOMAIN_NAME: &str = "prometheus";
 const GRAFANA_DOMAIN_NAME: &str = "grafana";
@@ -83,6 +84,7 @@ const BITCOIN_WATCHDOG_MAINNET_CANISTER_PROMETHEUS_TARGET: &str =
 const BITCOIN_WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET: &str =
     "bitcoin_watchdog_testnet_canister.json";
 const BN_PROMETHEUS_TARGET: &str = "boundary_nodes.json";
+const IC_GATEWAY_PROMETHEUS_TARGET: &str = "ic_gateways.json";
 const BN_EXPORTER_PROMETHEUS_TARGET: &str = "boundary_nodes_exporter.json";
 const IC_BOUNDARY_PROMETHEUS_TARGET: &str = "ic_boundary.json";
 const GRAFANA_DASHBOARDS: &str = "grafana_dashboards";
@@ -418,9 +420,17 @@ impl HasPrometheus for TestEnv {
         sync_prometheus_config_dir_with_boundary_nodes(
             self,
             prometheus_config_dir.clone(),
-            group_name,
+            group_name.clone(),
         )
         .expect("Failed to synchronize prometheus config with the last deployments of the boundary nodes");
+        sync_prometheus_config_dir_with_ic_gateways(
+            self,
+            prometheus_config_dir.clone(),
+            group_name,
+        )
+        .expect(
+            "Failed to synchronize prometheus config with the last deployments of the ic-gateways",
+        );
         // Setup an SSH session to the prometheus VM which we'll use to scp the JSON files.
         let deployed_prometheus_vm = self.get_deployed_universal_vm(&vm_name).unwrap();
         let session = deployed_prometheus_vm
@@ -434,6 +444,7 @@ impl HasPrometheus for TestEnv {
             BN_PROMETHEUS_TARGET,
             BN_EXPORTER_PROMETHEUS_TARGET,
             IC_BOUNDARY_PROMETHEUS_TARGET,
+            IC_GATEWAY_PROMETHEUS_TARGET,
         ];
         if playnet_url.is_some() {
             target_json_files.push(LEDGER_CANISTER_PROMETHEUS_TARGET);
@@ -535,6 +546,8 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(BN_EXPORTER_PROMETHEUS_TARGET);
     let ic_boundary_scraping_targets_path =
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(IC_BOUNDARY_PROMETHEUS_TARGET);
+    let ic_gateways_scraping_targets_path =
+        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(IC_GATEWAY_PROMETHEUS_TARGET);
     let replica_scraping_targets_path =
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(REPLICA_PROMETHEUS_TARGET);
     let orchestrator_scraping_targets_path =
@@ -566,6 +579,11 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
                 "job_name": "boundary_nodes_exporter",
                 "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "file_sd_configs": [{"files": [boundary_nodes_exporter_scraping_targets_path]}],
+            },
+            {
+                "job_name": "ic_gateways",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
+                "file_sd_configs": [{"files": [ic_gateways_scraping_targets_path]}],
             },
             {
                 "job_name": "ic_boundary",
@@ -693,6 +711,44 @@ fn sync_prometheus_config_dir_with_boundary_nodes(
             &p8s_static_configs,
         )?;
     }
+    Ok(())
+}
+
+fn sync_prometheus_config_dir_with_ic_gateways(
+    env: &TestEnv,
+    prometheus_config_dir: PathBuf,
+    group_name: String,
+) -> Result<()> {
+    let mut ic_gateways_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
+
+    let ic_gateways: Vec<(String, Ipv6Addr)> = env
+        .get_deployed_ic_gateways()?
+        .into_iter()
+        .map(|gateway| {
+            let allocated_vm = gateway.get_vm();
+            Ok((allocated_vm.name, allocated_vm.ipv6))
+        })
+        .collect::<Result<_>>()?;
+
+    for (name, ipv6) in ic_gateways.iter() {
+        let labels: HashMap<String, String> = [
+            ("ic".to_string(), group_name.clone()),
+            ("gateways".to_string(), name.to_string()),
+        ]
+        .iter()
+        .cloned()
+        .collect();
+        ic_gateways_p8s_static_configs.push(PrometheusStaticConfig {
+            targets: vec![format!("[{:?}]:{:?}", ipv6, IC_GATEWAY_METRICS_PORT)],
+            labels: labels.clone(),
+        });
+    }
+
+    ::serde_json::to_writer(
+        &File::create(prometheus_config_dir.join(IC_GATEWAY_PROMETHEUS_TARGET))?,
+        &ic_gateways_p8s_static_configs,
+    )?;
+
     Ok(())
 }
 
