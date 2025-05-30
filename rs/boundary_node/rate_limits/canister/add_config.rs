@@ -185,7 +185,7 @@ impl<A: CanisterApi> AddsConfig for ConfigAdder<A> {
 
 fn generate_random_uuid() -> Result<Uuid, anyhow::Error> {
     let mut buf = [0u8; 16];
-    getrandom::getrandom(&mut buf)
+    getrandom::fill(&mut buf)
         .map_err(|e| anyhow::anyhow!(e))
         .context("Failed to generate random bytes")?;
     let uuid = Uuid::from_slice(&buf).context("Failed to create UUID from bytes")?;

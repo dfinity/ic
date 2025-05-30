@@ -1,5 +1,5 @@
 {
-  "checksum": "2195b8e1fb20526ea13d9a2485b7cb0a67e7ffd82bc5ec3eecd65d9fbb78b80b",
+  "checksum": "43dadaddba32c306b61e8cd2139ea299b44518d57825c2d2002bd8c42df2da3c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -20294,7 +20294,7 @@
               "target": "get_if_addrs"
             },
             {
-              "id": "getrandom 0.2.16",
+              "id": "getrandom 0.3.3",
               "target": "getrandom"
             },
             {
@@ -27694,7 +27694,6 @@
         ],
         "crate_features": {
           "common": [
-            "custom",
             "std"
           ],
           "selects": {
@@ -27738,6 +27737,15 @@
           }
         },
         "edition": "2018",
+        "rustc_flags": {
+          "common": [],
+          "selects": {
+            "wasm32-unknown-unknown": [
+              "--cfg",
+              "getrandom_backend=\"custom\""
+            ]
+          }
+        },
         "version": "0.2.16"
       },
       "license": "MIT OR Apache-2.0",
@@ -27876,6 +27884,15 @@
           }
         },
         "edition": "2021",
+        "rustc_flags": {
+          "common": [],
+          "selects": {
+            "wasm32-unknown-unknown": [
+              "--cfg",
+              "getrandom_backend=\"custom\""
+            ]
+          }
+        },
         "version": "0.3.3"
       },
       "build_script_attrs": {
@@ -91286,7 +91303,7 @@
     "futures 0.3.31",
     "futures-util 0.3.31",
     "get_if_addrs 0.5.3",
-    "getrandom 0.2.16",
+    "getrandom 0.3.3",
     "goldenfile 1.8.0",
     "group 0.13.0",
     "hashlink 0.8.4",
