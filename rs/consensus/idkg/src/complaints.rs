@@ -2,8 +2,9 @@
 use crate::{
     metrics::{timed_call, IDkgComplaintMetrics},
     utils::{update_purge_height, IDkgBlockReaderImpl},
+    IDkgSchedule,
 };
-use ic_consensus_utils::{crypto::ConsensusCrypto, RoundRobin};
+use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_interfaces::{
     consensus_pool::ConsensusBlockCache,
     crypto::{ErrorReproducibility, IDkgProtocol},
@@ -24,14 +25,17 @@ use ic_types::{
     Height, NodeId, RegistryVersion,
 };
 use std::{
-    cell::RefCell,
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
 };
 
 pub(crate) trait IDkgComplaintHandler: Send {
     /// The on_state_change() called from the main IDKG path.
-    fn on_state_change(&self, idkg_pool: &dyn IDkgPool) -> IDkgChangeSet;
+    fn on_state_change(
+        &self,
+        idkg_pool: &dyn IDkgPool,
+        schedule: &IDkgSchedule<Height>,
+    ) -> IDkgChangeSet;
 
     /// Get a reference to the transcript loader.
     fn as_transcript_loader(&self) -> &dyn IDkgTranscriptLoader;
@@ -75,10 +79,8 @@ pub(crate) struct IDkgComplaintHandlerImpl {
     node_id: NodeId,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     crypto: Arc<dyn ConsensusCrypto>,
-    schedule: RoundRobin,
     metrics: IDkgComplaintMetrics,
     log: ReplicaLogger,
-    prev_finalized_height: RefCell<Height>,
 }
 
 impl IDkgComplaintHandlerImpl {
@@ -93,10 +95,8 @@ impl IDkgComplaintHandlerImpl {
             node_id,
             consensus_block_cache,
             crypto,
-            schedule: RoundRobin::default(),
             metrics: IDkgComplaintMetrics::new(metrics_registry),
             log,
-            prev_finalized_height: RefCell::new(Height::from(0)),
         }
     }
 
@@ -778,20 +778,23 @@ impl IDkgComplaintHandlerImpl {
 }
 
 impl IDkgComplaintHandler for IDkgComplaintHandlerImpl {
-    fn on_state_change(&self, idkg_pool: &dyn IDkgPool) -> IDkgChangeSet {
+    fn on_state_change(
+        &self,
+        idkg_pool: &dyn IDkgPool,
+        schedule: &IDkgSchedule<Height>,
+    ) -> IDkgChangeSet {
         let block_reader = IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let metrics = self.metrics.clone();
 
-        let mut changes =
-            update_purge_height(&self.prev_finalized_height, block_reader.tip_height())
-                .then(|| {
-                    timed_call(
-                        "purge_artifacts",
-                        || self.purge_artifacts(idkg_pool, &block_reader),
-                        &metrics.on_state_change_duration,
-                    )
-                })
-                .unwrap_or_default();
+        let mut changes = update_purge_height(&schedule.last_purge, block_reader.tip_height())
+            .then(|| {
+                timed_call(
+                    "purge_artifacts",
+                    || self.purge_artifacts(idkg_pool, &block_reader),
+                    &metrics.on_state_change_duration,
+                )
+            })
+            .unwrap_or_default();
 
         let validate_complaints = || {
             timed_call(
@@ -818,7 +821,7 @@ impl IDkgComplaintHandler for IDkgComplaintHandlerImpl {
         let calls: [&'_ dyn Fn() -> IDkgChangeSet; 3] =
             [&validate_complaints, &send_openings, &validate_openings];
 
-        changes.append(&mut self.schedule.call_next(&calls));
+        changes.append(&mut schedule.call_next(&calls));
         changes
     }
 
@@ -827,7 +830,7 @@ impl IDkgComplaintHandler for IDkgComplaintHandlerImpl {
     }
 }
 
-pub(crate) trait IDkgTranscriptLoader: Send {
+pub(crate) trait IDkgTranscriptLoader: Send + Sync {
     /// Loads the given transcript
     fn load_transcript(
         &self,
@@ -1233,21 +1236,16 @@ mod tests {
                 ];
                 idkg_pool.apply(change_set);
 
+                let schedule = IDkgSchedule::new(Height::from(0));
                 // Finalized height doesn't increase, so complaint1 shouldn't be purged
-                let change_set = complaint_handler.on_state_change(&idkg_pool);
-                assert_eq!(
-                    *complaint_handler.prev_finalized_height.borrow(),
-                    Height::from(0)
-                );
+                let change_set = complaint_handler.on_state_change(&idkg_pool, &schedule);
+                assert_eq!(*schedule.last_purge.borrow(), Height::from(0));
                 assert!(change_set.is_empty());
 
                 // Finalized height increases, so complaint1 is purged
                 let new_height = consensus_pool.advance_round_normal_operation_n(29);
-                let change_set = complaint_handler.on_state_change(&idkg_pool);
-                assert_eq!(
-                    *complaint_handler.prev_finalized_height.borrow(),
-                    new_height
-                );
+                let change_set = complaint_handler.on_state_change(&idkg_pool, &schedule);
+                assert_eq!(*schedule.last_purge.borrow(), new_height);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_validated(&change_set, &msg_id1));
 
@@ -1255,11 +1253,8 @@ mod tests {
 
                 // Finalized height increases above complaint2, so it is purged
                 let new_height = consensus_pool.advance_round_normal_operation();
-                let change_set = complaint_handler.on_state_change(&idkg_pool);
-                assert_eq!(
-                    *complaint_handler.prev_finalized_height.borrow(),
-                    new_height
-                );
+                let change_set = complaint_handler.on_state_change(&idkg_pool, &schedule);
+                assert_eq!(*schedule.last_purge.borrow(), new_height);
                 assert_eq!(transcript_height, new_height);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_validated(&change_set, &msg_id2));

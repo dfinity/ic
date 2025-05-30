@@ -5,6 +5,7 @@ use crate::{
     metrics::IDkgPayloadMetrics,
 };
 use ic_consensus_utils::pool_reader::PoolReader;
+use ic_consensus_utils::RoundRobin;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_interfaces::{
     consensus_pool::ConsensusBlockChain,
@@ -54,6 +55,8 @@ use std::{
     fmt::{self, Display, Formatter},
     sync::Arc,
 };
+
+pub(crate) const MAX_PARALLELISM: usize = 8;
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct InvalidChainCacheError(String);
@@ -625,6 +628,24 @@ fn get_subnet_master_public_key(
 
             None
         }
+    }
+}
+
+pub(crate) struct IDkgSchedule<T> {
+    schedule: RoundRobin,
+    pub last_purge: RefCell<T>,
+}
+
+impl<T> IDkgSchedule<T> {
+    pub(crate) fn new(init: T) -> Self {
+        Self {
+            schedule: RoundRobin::default(),
+            last_purge: RefCell::new(init),
+        }
+    }
+
+    pub(crate) fn call_next<C>(&self, calls: &[&dyn Fn() -> Vec<C>]) -> Vec<C> {
+        self.schedule.call_next(calls)
     }
 }
 

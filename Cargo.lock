@@ -7410,6 +7410,7 @@ dependencies = [
  "phantom_newtype",
  "prometheus 0.13.4",
  "rand 0.8.5",
+ "rayon",
  "slog",
  "strum 0.26.3",
 ]
