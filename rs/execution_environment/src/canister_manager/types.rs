@@ -473,9 +473,6 @@ pub(crate) enum CanisterManagerError {
     InvalidSpecifiedId {
         specified_id: CanisterId,
     },
-    SpecifiedIdUnsupported {
-        reason: String,
-    },
 }
 
 impl AsErrorHelp for CanisterManagerError {
@@ -664,10 +661,6 @@ impl AsErrorHelp for CanisterManagerError {
             },
             CanisterManagerError::InvalidSpecifiedId { .. } => ErrorHelp::UserError {
                 suggestion: "Use a `specified_id` that matches a canister ID on the ICP mainnet.".to_string(),
-                doc_link: "".to_string(),
-            },
-            CanisterManagerError::SpecifiedIdUnsupported { .. } => ErrorHelp::UserError {
-                suggestion: "Use a test environment supporting canister creation with `specified_id`, e.g., PocketIC.".to_string(),
                 doc_link: "".to_string(),
             },
         }
@@ -1009,12 +1002,6 @@ impl From<CanisterManagerError> for UserError {
                 Self::new(
                     ErrorCode::InvalidManagementPayload,
                     format!("The `specified_id` {specified_id} is invalid because it belongs to the canister allocation ranges of the test environment.{additional_help}")
-                )
-            }
-            SpecifiedIdUnsupported { reason } => {
-                Self::new(
-                    ErrorCode::InvalidManagementPayload,
-                    format!("The test environment does not support canister creation with `specified_id`: {reason}{additional_help}")
                 )
             }
         }

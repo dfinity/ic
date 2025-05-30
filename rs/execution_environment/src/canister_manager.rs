@@ -943,11 +943,8 @@ impl CanisterManager {
         }
 
         if let Some(specified_id) = specified_id {
-            if let Err(err) = state.metadata.supports_specified_id() {
-                return Err(CanisterManagerError::SpecifiedIdUnsupported { reason: err });
-            }
             let specified_id = CanisterId::unchecked_from_principal(specified_id);
-            if state.metadata.validate_specified_id(specified_id).is_err() {
+            if !state.metadata.validate_specified_id(specified_id) {
                 return Err(CanisterManagerError::InvalidSpecifiedId { specified_id });
             }
         }

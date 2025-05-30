@@ -929,54 +929,13 @@ impl SystemMetadata {
         self.canister_allocation_ranges.total_count() as u64 - generated_canister_ids
     }
 
-    /// Returns canister ranges with valid `specified_id` when used in `provisional_create_canister_with_cycles`, i.e.,
-    /// `routing_table.ranges(own_subnet_id) \ canister_allocation_ranges`.
-    fn specified_id_ranges(&self) -> Result<CanisterIdRanges, String> {
-        let own_subnet_ranges = self
-            .network_topology
-            .routing_table
-            .ranges(self.own_subnet_id);
-        difference(
-            own_subnet_ranges.iter(),
-            self.canister_allocation_ranges.iter(),
-        )
-        .map_err(|_| {
-            format!(
-                "Canister ranges of subnet {} are invalid.",
-                self.own_subnet_id,
-            )
-        })
-    }
-
-    /// Checks that this subnet supports creating canisters with `specified_id` in `provisional_create_canister_with_cycles`, i.e.,
-    /// there exists a valid `specified_id`.
-    pub fn supports_specified_id(&self) -> Result<(), String> {
-        let specified_id_ranges = self.specified_id_ranges()?;
-        if specified_id_ranges.is_empty() {
-            Err(format!(
-                "There exists no valid `specified_id` on the subnet {}.",
-                self.own_subnet_id
-            ))
-        } else {
-            Ok(())
-        }
-    }
-
-    /// Checks that the given `specified_id` is valid when used in `provisional_create_canister_with_cycles`, i.e.,
-    /// that it belongs to `self.specified_id_ranges()`.
-    pub fn validate_specified_id(&self, specified_id: CanisterId) -> Result<(), String> {
-        let specified_id_ranges = self.specified_id_ranges()?;
-        if specified_id_ranges
+    /// Returns `true` iff the given `specified_id` is valid when used in `provisional_create_canister_with_cycles`, i.e.,
+    /// iff the given `specified_id` does not belong to the canister allocation ranges.
+    pub fn validate_specified_id(&self, specified_id: CanisterId) -> bool {
+        !self
+            .canister_allocation_ranges
             .iter()
             .any(|range| range.contains(&specified_id))
-        {
-            Ok(())
-        } else {
-            Err(format!(
-                "The `specified_id` {} is not valid on the subnet {}.",
-                specified_id, self.own_subnet_id
-            ))
-        }
     }
 
     /// Splits the `MetadataState` as part of subnet splitting phase 1:
