@@ -49,11 +49,11 @@ use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types_private::{
-    self as ic00, CanisterIdRecord, CanisterSnapshotDataKind, InstallCodeArgs, MasterPublicKeyId,
-    Method, Payload, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotDataResponse,
-    ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
-    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadCanisterSnapshotMetadataResponse,
+    self as ic00, CanisterIdRecord, CanisterSnapshotDataKind, ChunkHash, InstallCodeArgs,
+    MasterPublicKeyId, Method, Payload, ReadCanisterSnapshotDataArgs,
+    ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataArgs,
+    ReadCanisterSnapshotMetadataResponse, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse,
 };
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
@@ -102,7 +102,10 @@ use ic_registry_subnet_features::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::{system_state::CyclesUseCase, NumWasmPages, WASM_PAGE_SIZE_IN_BYTES},
+    canister_state::{
+        system_state::{wasm_chunk_store::WasmChunkHash, CyclesUseCase},
+        NumWasmPages, WASM_PAGE_SIZE_IN_BYTES,
+    },
     metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
     page_map::Buffer,
     CheckpointLoadingMetrics, Memory, PageMap, ReplicatedState,
@@ -174,7 +177,7 @@ use rand::{rngs::StdRng, Rng, SeedableRng};
 use serde::Serialize;
 use slog::Level;
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     convert::TryFrom,
     fmt,
     io::{self, stderr},
@@ -196,7 +199,7 @@ use tower::ServiceExt;
 /// execution. Mirrors the size used in production defined in `setup_ic_stack.rs`
 const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
 
-const SNAPSHOT_DATA_CHUNK_SIZE: u64 = 1_000_000;
+const SNAPSHOT_DATA_CHUNK_SIZE: u64 = 2_000_000;
 
 #[cfg(test)]
 mod tests;
@@ -3350,24 +3353,83 @@ impl StateMachine {
         })?
     }
 
+    /// Helper to download the whole snapshot chunk store.
+    pub fn get_snapshot_chunk_store(
+        &self,
+        args: &ReadCanisterSnapshotMetadataArgs,
+    ) -> Result<HashMap<Vec<u8>, Vec<u8>>, UserError> {
+        let md = self.read_canister_snapshot_metadata(args)?;
+        let chunk_hashes = md.wasm_chunk_store;
+        let mut res = HashMap::new();
+        for hash in chunk_hashes.into_iter() {
+            let ReadCanisterSnapshotDataResponse { chunk } =
+                self.read_canister_snapshot_data(&ReadCanisterSnapshotDataArgs {
+                    canister_id: args.canister_id,
+                    snapshot_id: args.snapshot_id.clone(),
+                    kind: CanisterSnapshotDataKind::WasmChunk {
+                        hash: hash.hash.clone(),
+                    },
+                })?;
+            res.insert(hash.hash, chunk);
+        }
+        Ok(res)
+    }
+
     /// Helper to download the whole snapshot canister module.
     pub fn get_snapshot_canister_module(
         &self,
         args: &ReadCanisterSnapshotMetadataArgs,
     ) -> Result<Vec<u8>, UserError> {
+        self.get_snapshot_canister_star(
+            args,
+            |md: &ReadCanisterSnapshotMetadataResponse| md.wasm_module_size,
+            |offset, size| CanisterSnapshotDataKind::WasmModule { offset, size },
+        )
+    }
+
+    /// Helper to download the whole snapshot canister heap.
+    pub fn get_snapshot_canister_heap(
+        &self,
+        args: &ReadCanisterSnapshotMetadataArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        self.get_snapshot_canister_star(
+            args,
+            |md: &ReadCanisterSnapshotMetadataResponse| md.wasm_memory_size,
+            |offset, size| CanisterSnapshotDataKind::MainMemory { offset, size },
+        )
+    }
+
+    /// Helper to download the whole snapshot canister stable memory.
+    pub fn get_snapshot_canister_stable_memory(
+        &self,
+        args: &ReadCanisterSnapshotMetadataArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        self.get_snapshot_canister_star(
+            args,
+            |md: &ReadCanisterSnapshotMetadataResponse| md.stable_memory_size,
+            |offset, size| CanisterSnapshotDataKind::StableMemory { offset, size },
+        )
+    }
+
+    /// Downloads one of the snapshot blobs as a whole.
+    /// Takes two selector closures that determine which blob to target:
+    /// Canister module, heap or stable memory.
+    fn get_snapshot_canister_star(
+        &self,
+        args: &ReadCanisterSnapshotMetadataArgs,
+        size_extractor: impl Fn(&ReadCanisterSnapshotMetadataResponse) -> u64,
+        kind_gen: impl Fn(u64, u64) -> CanisterSnapshotDataKind,
+    ) -> Result<Vec<u8>, UserError> {
         let md = self.read_canister_snapshot_metadata(args)?;
         let mut res = vec![];
-        let module_size = md.wasm_module_size;
+        let module_size = size_extractor(&md);
         let mut start = 0;
         while start < module_size {
             let size = u64::min(SNAPSHOT_DATA_CHUNK_SIZE, module_size - start);
             let args = ReadCanisterSnapshotDataArgs {
                 canister_id: args.canister_id,
                 snapshot_id: args.snapshot_id.clone(),
-                kind: CanisterSnapshotDataKind::WasmModule {
-                    offset: start,
-                    size,
-                },
+                kind: kind_gen(start, size),
             };
             start += size;
             let mut bytes = self.read_canister_snapshot_data(&args)?.chunk;
