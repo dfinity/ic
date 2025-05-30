@@ -5920,6 +5920,74 @@ pub mod archiving {
         T: CandidType,
         B: Eq + Debug,
     {
+        /// Assert that a transfer hits the instruction limit when purging blocks from the ledger.
+        fn assert_transfer_hits_instruction_limit(
+            env: &StateMachine,
+            ledger_id: CanisterId,
+            from: PrincipalId,
+            to: PrincipalId,
+        ) {
+            let transfer_error = env
+                .execute_ingress_as(
+                    from,
+                    ledger_id,
+                    "icrc1_transfer",
+                    encode_transfer_args(from.0, to.0, 12_344),
+                )
+                .expect_err("transfer should not fit in the instruction limit");
+            assert_eq!(
+                transfer_error.code(),
+                ErrorCode::CanisterInstructionLimitExceeded
+            );
+        }
+
+        /// Verify that the first block can be retrieved both from the ledger and the archive.
+        fn verify_first_block_in_ledger_and_archive<B>(
+            env: &StateMachine,
+            ledger_id: CanisterId,
+            archive_canister_id: CanisterId,
+            get_blocks_fn: fn(&StateMachine, CanisterId, u64, usize) -> GenericGetBlocksResponse<B>,
+            archive_get_blocks_fn: fn(
+                &StateMachine,
+                CanisterId,
+                u64,
+                usize,
+            ) -> GenericGetBlocksResponse<B>,
+        ) where
+            B: Eq + Debug,
+        {
+            let ledger_blocks_res = get_blocks_fn(&env, ledger_id, 0, 1);
+            let archive_blocks_res = archive_get_blocks_fn(&env, archive_canister_id, 0, 1);
+            assert_eq!(
+                ledger_blocks_res
+                    .blocks
+                    .first()
+                    .expect("ledger should contain block 0"),
+                archive_blocks_res
+                    .blocks
+                    .first()
+                    .expect("archive should contain block 0")
+            );
+        }
+
+        /// Get the remaining capacity of the archive canister.
+        fn get_archive_remaining_capacity(
+            env: &StateMachine,
+            archive_canister_id: CanisterId,
+        ) -> u64 {
+            Decode!(
+                &env.query(
+                    archive_canister_id,
+                    "remaining_capacity",
+                    Encode!().unwrap(),
+                )
+                .expect("failed to query remaining capacity")
+                .bytes(),
+                u64
+            )
+            .expect("failed to decode remaining capacity response")
+        }
+
         const NUM_BLOCKS_TO_ARCHIVE: usize = 800_000;
         const TRIGGER_THRESHOLD: usize = 2_000;
         let p1 = PrincipalId::new_user_test_id(1);
@@ -5961,46 +6029,59 @@ pub mod archiving {
         // blocks are purged from the stable BTreeMap one at a time, this consumes so many
         // instructions that the instruction limit is hit, and the response to the transfer is an
         // error.
-        let transfer_error = env
-            .execute_ingress_as(
-                p1,
-                ledger_id,
-                "icrc1_transfer",
-                encode_transfer_args(p1.0, p2.0, 12_344),
-            )
-            .expect_err("transfer should not fit in the instruction limit");
-        assert_eq!(
-            transfer_error.code(),
-            ErrorCode::CanisterInstructionLimitExceeded
-        );
+        assert_transfer_hits_instruction_limit(&env, ledger_id, p1, p2);
 
         // However, since the archiving is done using asynchronous inter-canister calls, the
         // transfer actually succeeded and was committed.
         let chain_length = get_blocks_fn(&env, ledger_id, initial_chain_length, 1).chain_length;
         assert_eq!(initial_chain_length + 1, chain_length);
 
+        // Get the canister ID of the archive that was created.
+        let archive_ids = get_archives(&env, ledger_id);
+        let archive_canister_id = CanisterId::unchecked_from_principal(PrincipalId::from(
+            *archive_ids.first().expect("should have one archive"),
+        ));
+
         // Since a number of blocks were sent to the archive, but not successfully purged from the
         // ledger, it is possible to get some of them from either location. In particular, block 0
         // should appear in both locations.
-        let ledger_blocks_res = get_blocks_fn(&env, ledger_id, 0, 1);
-        let archive_ids = get_archives(&env, ledger_id);
-        let archive_blocks_res = archive_get_blocks_fn(
+        verify_first_block_in_ledger_and_archive(
             &env,
-            CanisterId::unchecked_from_principal(PrincipalId::from(
-                *archive_ids.first().expect("should have one archive"),
-            )),
-            0,
-            1,
+            ledger_id,
+            archive_canister_id,
+            get_blocks_fn,
+            archive_get_blocks_fn,
         );
+
+        let archive_initial_remaining_capacity =
+            get_archive_remaining_capacity(&env, archive_canister_id);
+
+        // Attempt another transfer, and verify that it also fails with the same error.
+        assert_transfer_hits_instruction_limit(&env, ledger_id, p1, p2);
+
+        let archive_subsequent_remaining_capacity =
+            get_archive_remaining_capacity(&env, archive_canister_id);
+
+        // Verify that the remaining capacity of the archive canister has decreased after the
+        // second transfer. This is because the same blocks were sent to the archive twice, since
+        // they were not purged from the ledger after the first archiving operation that was
+        // triggered by the first transfer.
+        assert!(
+            archive_initial_remaining_capacity > archive_subsequent_remaining_capacity,
+            "archive remaining capacity should have decreased after the transfer, since the same blocks were sent to the archive twice ({} vs {})",
+            archive_initial_remaining_capacity,
+            archive_subsequent_remaining_capacity
+        );
+
+        let archive_blocks_res =
+            archive_get_blocks_fn(&env, archive_canister_id, num_initial_balances + 5, 1);
+        // The archive returned a block with index `num_initial_balances` + 5, which shouldn't be
+        // possible, since only `num_initial_balances` + 2 transactions were sent to the ledger.
         assert_eq!(
-            ledger_blocks_res
-                .blocks
-                .first()
-                .expect("ledger should contain block 0"),
-            archive_blocks_res
-                .blocks
-                .first()
-                .expect("archive should contain block 0")
+            archive_blocks_res.blocks.len(),
+            1,
+            "expected the archive to return one block, but it returned {} blocks",
+            archive_blocks_res.blocks.len()
         );
     }
 
