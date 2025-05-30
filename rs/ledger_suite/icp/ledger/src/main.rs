@@ -1,4 +1,9 @@
-use candid::{candid_method, Decode, Nat, Principal};
+#[cfg(feature = "canbench-rs")]
+mod canbench;
+
+#[cfg(not(feature = "canbench-rs"))]
+use candid::Decode;
+use candid::{candid_method, Nat, Principal};
 #[cfg(feature = "notify-method")]
 use dfn_candid::CandidOne;
 #[cfg(feature = "notify-method")]
@@ -35,15 +40,16 @@ use ic_stable_structures::writer::{BufferedWriter, Writer};
 use icp_ledger::BlockRes;
 #[cfg(feature = "icp-allowance-getter")]
 use icp_ledger::IcpAllowanceArgs;
+#[cfg(not(feature = "canbench-rs"))]
+use icp_ledger::InitArgs;
 use icp_ledger::{
     from_proto_bytes, max_blocks_per_request, protobuf, to_proto_bytes, tokens_into_proto,
     AccountBalanceArgs, AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, ArchiveInfo,
     ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block,
-    BlockArg, CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, GetBlocksRes, InitArgs,
-    IterBlocksArgs, IterBlocksRes, LedgerCanisterPayload, Memo, Name, Operation, PaymentError,
-    QueryBlocksResponse, QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes,
-    TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs,
-    MEMO_SIZE_BYTES,
+    BlockArg, CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, GetBlocksRes, IterBlocksArgs,
+    IterBlocksRes, LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
+    QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs,
+    Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs, MEMO_SIZE_BYTES,
 };
 use icrc_ledger_types::icrc1::transfer::TransferError as Icrc1TransferError;
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
@@ -148,6 +154,7 @@ fn init(
             ));
         }
     }
+    #[cfg(not(feature = "canbench-rs"))]
     set_certified_data(
         &LEDGER
             .read()
@@ -265,7 +272,7 @@ async fn send(
     Ok(height)
 }
 
-async fn icrc1_send(
+fn icrc1_send_not_async(
     memo: Option<icrc_ledger_types::icrc1::transfer::Memo>,
     amount: Nat,
     fee: Option<Nat>,
@@ -356,12 +363,39 @@ async fn icrc1_send(
             icrc1_memo: memo.map(|x| x.0),
             created_at_time,
         };
+
+        #[cfg(not(feature = "canbench-rs"))]
         let (block_index, hash) = apply_transaction(&mut *ledger, tx, now, effective_fee)?;
 
+        #[cfg(feature = "canbench-rs")]
+        let (block_index, _hash) = apply_transaction(&mut *ledger, tx, now, effective_fee)?;
+
+        #[cfg(not(feature = "canbench-rs"))]
         set_certified_data(&hash.into_bytes());
 
         block_index
     };
+    Ok(block_index)
+}
+
+async fn icrc1_send(
+    memo: Option<icrc_ledger_types::icrc1::transfer::Memo>,
+    amount: Nat,
+    fee: Option<Nat>,
+    from_account: Account,
+    to_account: Account,
+    spender_account: Option<Account>,
+    created_at_time: Option<u64>,
+) -> Result<BlockIndex, CoreTransferError<Tokens>> {
+    let block_index = icrc1_send_not_async(
+        memo,
+        amount,
+        fee,
+        from_account,
+        to_account,
+        spender_account,
+        created_at_time,
+    )?;
 
     let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
     archive_blocks::<Access>(DebugOutSink, max_msg_size as u64).await;
@@ -731,6 +765,7 @@ fn canister_init(arg: LedgerCanisterPayload) {
     }
 }
 
+#[cfg(not(feature = "canbench-rs"))]
 #[export_name = "canister_init"]
 fn main() {
     ic_cdk::setup();
@@ -763,6 +798,9 @@ fn main() {
         }
     }
 }
+
+#[cfg(feature = "canbench-rs")]
+fn main() {}
 
 // We use 8MiB buffer
 const BUFFER_SIZE: usize = 8388608;
