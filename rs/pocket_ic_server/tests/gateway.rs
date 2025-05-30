@@ -455,7 +455,10 @@ fn test_gateway_backend_invalid_replica_url() {
             panic!("Suceeded to create http gateway!")
         }
         CreateHttpGatewayResponse::Error { message } => {
+            #[cfg(not(target_os = "macos"))]
             assert!(message.contains(&format!("Timed out fetching root key from {}", backend_url)));
+            #[cfg(target_os = "macos")]
+            assert!(message.contains(&format!("An error happened during communication with the replica: error sending request for url ({}/api/v2/status)", backend_url)));
         }
     };
 }
