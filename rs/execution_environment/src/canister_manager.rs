@@ -62,7 +62,6 @@ use ic_types::{
     NumInstructions, PrincipalId, SnapshotId, SubnetId, Time,
 };
 use ic_wasm_types::WasmHash;
-use more_asserts::debug_unreachable;
 use num_traits::{SaturatingAdd, SaturatingSub};
 use prometheus::IntCounter;
 use std::path::PathBuf;
@@ -2344,17 +2343,11 @@ impl CanisterManager {
 }
 
 fn get_response_size(kind: &CanisterSnapshotDataKind) -> Result<u64, CanisterManagerError> {
-    if !matches!(&kind, CanisterSnapshotDataKind::WasmChunk { .. }) {
-        return Ok(CHUNK_SIZE);
-    }
     let size = match kind {
         CanisterSnapshotDataKind::WasmModule { size, .. } => *size,
         CanisterSnapshotDataKind::MainMemory { size, .. } => *size,
         CanisterSnapshotDataKind::StableMemory { size, .. } => *size,
-        CanisterSnapshotDataKind::WasmChunk { .. } => {
-            debug_unreachable!();
-            CHUNK_SIZE
-        }
+        CanisterSnapshotDataKind::WasmChunk { .. } => return Ok(CHUNK_SIZE),
     };
     if size > MAX_SLICE_SIZE_BYTES {
         return Err(CanisterManagerError::SliceTooLarge {
