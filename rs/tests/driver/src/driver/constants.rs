@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-#[allow(clippy::doc_overindented_list_items)]
 /// New directory structure:
 ///
 /// - dependencies/
