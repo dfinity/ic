@@ -40,9 +40,17 @@ type Installation = variant {
   new_canister : NewCanister;
 };
 
-type Icrc2Token = variant {
+type Token = variant {
   NativeSnsToken : record {};
   Icp : record {};
+  Symbol : record {
+    symbol : opt text;
+  };
+};
+
+type Icrc2Token = record {
+  token : opt Token;
+  ledger_canister_id : opt principal;
 };
 
 type Icrc2Allowance = record {
