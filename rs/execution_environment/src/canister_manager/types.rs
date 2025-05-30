@@ -473,6 +473,9 @@ pub(crate) enum CanisterManagerError {
     InvalidSpecifiedId {
         specified_id: CanisterId,
     },
+    SpecifiedIdUnsupported {
+        reason: String,
+    },
 }
 
 impl AsErrorHelp for CanisterManagerError {
@@ -659,8 +662,12 @@ impl AsErrorHelp for CanisterManagerError {
                         .to_string(),
                 doc_link: "".to_string(),
             },
-            CanisterManagerError::InvalidSpecifiedId { specified_id: _ } => ErrorHelp::UserError {
-                suggestion: "Use a `specified_id` that matches a canister ID on the ICP mainnet (and thus does not belong to the canister allocation ranges of the test environment).".to_string(),
+            CanisterManagerError::InvalidSpecifiedId { .. } => ErrorHelp::UserError {
+                suggestion: "Use a `specified_id` that matches a canister ID on the ICP mainnet.".to_string(),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::SpecifiedIdUnsupported { .. } => ErrorHelp::UserError {
+                suggestion: "Use a test environment supporting canister creation with `specified_id`, e.g., PocketIC.".to_string(),
                 doc_link: "".to_string(),
             },
         }
@@ -1001,7 +1008,13 @@ impl From<CanisterManagerError> for UserError {
             InvalidSpecifiedId { specified_id } => {
                 Self::new(
                     ErrorCode::InvalidManagementPayload,
-                    format!("The `specified_id` {} is invalid because it belongs to the canister allocation ranges of the test environment.{additional_help}", specified_id)
+                    format!("The `specified_id` {specified_id} is invalid because it belongs to the canister allocation ranges of the test environment.{additional_help}")
+                )
+            }
+            SpecifiedIdUnsupported { reason } => {
+                Self::new(
+                    ErrorCode::InvalidManagementPayload,
+                    format!("The test environment does not support canister creation with `specified_id`: {reason}{additional_help}")
                 )
             }
         }

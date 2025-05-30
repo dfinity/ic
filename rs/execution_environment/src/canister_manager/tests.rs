@@ -1577,7 +1577,7 @@ fn create_canister_with_invalid_specified_id_creator_in_whitelist() {
 
     assert_matches!(
         creation_result,
-        Err(CanisterManagerError::CanisterNotHostedBySubnet { .. })
+        Err(CanisterManagerError::InvalidSpecifiedId { .. })
     );
 }
 
