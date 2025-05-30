@@ -21,6 +21,140 @@ type Action = variant {
   ExecuteGenericNervousSystemFunction : ExecuteGenericNervousSystemFunction;
   ManageLedgerParameters : ManageLedgerParameters;
   Motion : Motion;
+  RegisterExtension : RegisterExtension;
+  DeregisterExtension : DeregisterExtension;
+  ExecuteExtensionFunction : ExecuteExtensionFunction;
+};
+
+type ExistingCanister = record {
+  canister_id : opt principal;
+  wasm_module_hash : opt blob;
+};
+
+type NewCanister = record {
+  chunked_canister_wasm : opt ChunkedCanisterWasm;
+};
+
+type Installation = variant {
+  existing_canister : ExistingCanister;
+  new_canister : NewCanister;
+};
+
+type Icrc2Token = variant {
+  NativeSnsToken : record {};
+  Icp : record {};
+};
+
+type Icrc2Allowance = record {
+    token : opt Icrc2Token;
+    amount_e8s : opt nat64;
+};
+
+type Allowances = record {
+  icrc2_allowances : opt vec Icrc2Allowance;
+};
+
+// Used in responses, e.g., list_nervous_system_functions.
+type ExtensionType = variant {
+  TreasuryManager;
+};
+
+// Used in requests, e.g., manage_neuron (to submit a RegisterExtension proposal).
+type TreasuryManagerInit = record {
+  // The initial allowances for the Treasury Manager.
+  initial_allowances : opt Allowances;
+};
+
+type ExtensionInit = variant {
+  TreasuryManagerInit : TreasuryManagerInit;
+};
+
+// Native proposal type: RegisterExtension.
+type RegisterExtension = record {
+  // Determines the type of installation for the extension canister; e.g., whether it is
+  // a new canister to be installed by the SNS or an existing one.
+  installation : opt Installation;
+
+  extension_init : opt ExtensionInit;
+};
+
+// Native proposal type: DeregisterExtension.
+type DeregisterExtension = record {
+  extension_canister_id : opt principal;
+};
+
+type Deposit = record {
+  allowances : opt Allowances;
+};
+
+type Withdraw = record {};
+
+type TreasuryManagerFunctionArg = variant {
+  Deposit : Deposit;
+  Withdraw : Withdraw;
+};
+
+// Used in requests, e.g., manage_neuron (to submit an ExecuteExtensionFunction proposal).
+type ExtensionFunctionArg = variant {
+  TreasuryManagerFunctionArg : TreasuryManagerFunctionArg;
+};
+
+type TreasuryManagerFunctionType = record {
+  function_type : opt variant {
+    Deposit;
+    Withdraw;
+  };
+  function_type_name : opt text;
+};
+
+// Used in responses, e.g., list_nervous_system_functions.
+type ExtensionFunctionType = variant {
+  TreasuryManagerFunctionType : TreasuryManagerFunctionType;
+};
+
+// Native proposal type: ExecuteExtensionFunction.
+type ExecuteExtensionFunction = record {
+  extension_canister_id : opt principal;
+
+  function_arg : opt ExtensionFunctionArg;
+};
+
+type ListExtensionsRequest = record {};
+
+type ExtensionalQueries = record {
+  // Queries provided by the extension to observe its state.
+  queries : vec () -> record {
+    query_name : text;
+    query_payload : blob;
+  };
+};
+
+type ExtensionDescription = record {
+  // Extension metadata, defined automatically by the SNS.
+  name : opt text;
+  declared_purpose : opt text;
+  wasm_module_hash : opt blob;
+  source_code_url : opt text;
+  audit_url : opt text;
+  registered_timestamp_seconds : opt nat64;
+
+  extension_canister_id : opt principal;
+  extension_type : opt ExtensionType;
+  extension_type_name : opt text;
+};
+
+type Extension = record {
+  description : opt ExtensionDescription;
+
+  extension_functions : opt vec ExtensionFunctionType;
+
+  // While an extension's perations require custom proposals, its state is public, and it can
+  // be observed via these queries.
+  extension_queries : opt vec text;
+};
+
+type ListExtensionsResponse = record {
+  extensions : opt vec Extension;
 };
 
 type ActionAuxiliary = variant {
@@ -235,6 +369,11 @@ type GenericNervousSystemFunction = record {
   validator_method_name : opt text;
   target_method_name : opt text;
   topic : opt Topic;
+
+  // Indicates whether some SNS extension has registered this function which belongs to it.
+  // If so, provides the details of the owner extension.
+  extension_description : opt ExtensionDescription;
+  extension_function_type : opt ExtensionFunctionType;
 };
 
 type GetMaturityModulationResponse = record {
@@ -925,6 +1064,7 @@ service : (Governance) -> {
   list_neurons : (ListNeurons) -> (ListNeuronsResponse) query;
   list_proposals : (ListProposals) -> (ListProposalsResponse) query;
   list_topics : (ListTopicsRequest) -> (ListTopicsResponse) query;
+  list_extensions : (ListExtensionsRequest) -> (ListExtensionsResponse) query;
   manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);
   set_mode : (SetMode) -> (record {});
   reset_timers : (record {}) -> (record {});
