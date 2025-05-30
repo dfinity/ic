@@ -8802,7 +8802,7 @@ dependencies = [
 name = "ic-dummy-getrandom-for-wasm"
 version = "0.1.0"
 dependencies = [
- "getrandom 0.2.15",
+ "getrandom 0.3.1",
 ]
 
 [[package]]
@@ -19645,7 +19645,7 @@ dependencies = [
  "anyhow",
  "candid",
  "candid_parser",
- "getrandom 0.2.15",
+ "getrandom 0.3.1",
  "ic-canister-log 0.2.0",
  "ic-cdk 0.17.2",
  "ic-cdk-timers",
