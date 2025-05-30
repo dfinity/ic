@@ -118,7 +118,8 @@ lazy_static! {
             }),
         }),
         dapp_canisters: vec![pb::Canister {
-            id: Some(CanisterId::from_u64(1000).get())
+            // must match `SPECIFIED_CANISTER_ID` defined in `ic-nns-test-utils`
+            id: Some(CanisterId::from_u64(0x2100000).get())
         }],
 
         swap_parameters: Some(src::SwapParameters {

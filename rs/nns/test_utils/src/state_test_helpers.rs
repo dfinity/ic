@@ -92,6 +92,9 @@ use registry_canister::init::RegistryCanisterInitPayload;
 use serde::Serialize;
 use std::{convert::TryInto, time::Duration};
 
+/// This canister ID can be used as `specified_id` in tests on `state_machine_builder_for_nns_tests`.
+pub const SPECIFIED_CANISTER_ID: CanisterId = CanisterId::from_u64(0x2100000);
+
 /// A `StateMachine` builder setting the IC time to the current time
 /// and using the canister ranges of both the NNS and II subnets.
 /// Note. The last canister ID in the canister range of the II subnet
