@@ -100,11 +100,16 @@ impl IcGatewayVm {
 
     /// Retrieves API boundary node URLs from the topology.
     fn get_api_nodes_urls(&self, env: &TestEnv) -> Result<String> {
-        env.topology_snapshot()
+        let urls: Vec<_> = env
+            .topology_snapshot()
             .api_boundary_nodes()
             .map(|node| format!("https://[{}]", node.get_ip_addr()))
-            .reduce(|acc, url| format!("{},{}", acc, url))
-            .ok_or_else(|| anyhow!("No API boundary nodes found in topology"))
+            .collect();
+        if urls.is_empty() {
+            Err(anyhow!("No API boundary nodes found in topology"))
+        } else {
+            Ok(urls.join(","))
+        }
     }
 
     /// Loads existing playnet configuration or creates a new one.
