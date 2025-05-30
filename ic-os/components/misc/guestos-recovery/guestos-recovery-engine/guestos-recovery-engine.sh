@@ -8,7 +8,7 @@ echo "Starting GuestOS recovery engine..."
 
 trap 'popd > /dev/null 2>&1 || true' EXIT
 mkdir -p /tmp/subnet_recovery
-pushd /tmp/subnet_recovery > /dev/null
+pushd /tmp/subnet_recovery >/dev/null
 
 download_artifacts_from_url() {
     local base_url="$1"
@@ -18,8 +18,8 @@ download_artifacts_from_url() {
     echo "Attempting to download recovery artifacts from $base_url"
 
     # Download both artifacts - if either fails, the function fails
-    if curl -L --fail -o "ic_registry_local_store.tar.zst" "$registry_url" && \
-       curl -L --fail -o "cup.proto" "$cup_url"; then
+    if curl -L --fail -o "ic_registry_local_store.tar.zst" "$registry_url" \
+        && curl -L --fail -o "cup.proto" "$cup_url"; then
         echo "Successfully downloaded recovery artifacts from $base_url"
         return 0
     else
