@@ -35,8 +35,8 @@ use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
     CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions,
-    ChunkHash, ClearChunkStoreArgs, CreateCanisterArgs, DeleteCanisterSnapshotArgs, EmptyBlob,
-    InstallCodeArgsV2, Method, NodeMetricsHistoryArgs, NodeMetricsHistoryResponse,
+    ChunkHash, ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2,
+    LoadCanisterSnapshotArgs, Method, NodeMetricsHistoryArgs, NodeMetricsHistoryResponse,
     OnLowWasmMemoryHookStatus, Payload, StoredChunksArgs, StoredChunksReply, SubnetInfoArgs,
     SubnetInfoResponse, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
     UploadChunkReply, WasmMemoryPersistence,
@@ -6609,9 +6609,6 @@ fn memory_usage_updates_increment_subnet_available_memory() {
     ))
     .unwrap();
 
-    // capture current subnet available memory
-    let initial_subnet_available_memory = test.subnet_available_memory();
-
     // take a canister snapshot
     let take_snapshot_args = TakeCanisterSnapshotArgs {
         canister_id: canister_id.get(),
@@ -6625,22 +6622,27 @@ fn memory_usage_updates_increment_subnet_available_memory() {
         WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
     };
 
-    // execution memory should *increase* after taking a snapshot => available memory should *decrease*
+    // capture current subnet available memory
+    let initial_subnet_available_memory = test.subnet_available_memory();
+
+    // grow stable memory
+    let payload = wasm().stable_grow(100).reply().build();
+    test.ingress(canister_id, "update", payload).unwrap();
+
+    // execution memory should *increase* after growing stable memory => available memory should *decrease*
     let subnet_available_memory = test.subnet_available_memory();
     assert_lt!(
         subnet_available_memory.get_execution_memory(),
         initial_subnet_available_memory.get_execution_memory()
     );
 
-    // delete the canister snapshot
-    let delete_snapshot_args = DeleteCanisterSnapshotArgs {
-        canister_id: canister_id.get(),
-        snapshot_id,
-    };
-    test.subnet_message("delete_canister_snapshot", delete_snapshot_args.encode())
+    // load canister snapshot
+    let load_snapshot_args =
+        LoadCanisterSnapshotArgs::new(canister_id, snapshot_id.try_into().unwrap(), None);
+    test.subnet_message("load_canister_snapshot", load_snapshot_args.encode())
         .unwrap();
 
-    // execution memory should get back to its initial value before taking a snapshot
+    // execution memory should get back to its initial value before growing stable memory
     let subnet_available_memory = test.subnet_available_memory();
     assert_eq!(initial_subnet_available_memory, subnet_available_memory);
 }
