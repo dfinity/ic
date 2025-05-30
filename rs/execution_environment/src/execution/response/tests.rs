@@ -1,12 +1,10 @@
 use assert_matches::assert_matches;
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_config::flag_status::FlagStatus;
 use ic_error_types::ErrorCode;
-use ic_error_types::UserError;
-use ic_management_canister_types::CanisterStatusType;
+use ic_management_canister_types_private::CanisterStatusType;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::testing::SystemStateTesting;
-use ic_replicated_state::NumWasmPages;
+use ic_replicated_state::{MessageMemoryUsage, NumWasmPages};
 use ic_test_utilities_execution_environment::{
     check_ingress_status, ExecutionResponse, ExecutionTest, ExecutionTestBuilder,
 };
@@ -2636,7 +2634,7 @@ fn test_cycles_burn() {
     let test = ExecutionTestBuilder::new().build();
 
     let canister_memory_usage = NumBytes::from(1_000_000);
-    let canister_message_memory_usage = NumBytes::from(0);
+    let canister_message_memory_usage = MessageMemoryUsage::ZERO;
 
     let amount = 1_000_000_000;
     let mut balance = Cycles::new(amount);
@@ -2663,7 +2661,7 @@ fn cycles_burn_up_to_the_threshold_on_not_enough_cycles() {
     let test = ExecutionTestBuilder::new().build();
 
     let canister_memory_usage = NumBytes::from(1_000_000);
-    let canister_message_memory_usage = NumBytes::from(0);
+    let canister_message_memory_usage = MessageMemoryUsage::ZERO;
 
     let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
         ic_config::execution_environment::Config::default().default_freeze_threshold,
@@ -3044,10 +3042,9 @@ fn test_call_context_performance_counter_correctly_reported_on_cleanup() {
     assert!(counters[1] < counters[2]);
 }
 
-fn test_best_effort_responses_feature_flag(flag: FlagStatus) -> Result<WasmResult, UserError> {
-    let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(flag)
-        .build();
+#[test]
+fn test_best_effort_responses() {
+    let mut test = ExecutionTestBuilder::new().build();
 
     let a_id = test
         .universal_canister_with_cycles(Cycles::new(10_000_000_000_000))
@@ -3056,7 +3053,7 @@ fn test_best_effort_responses_feature_flag(flag: FlagStatus) -> Result<WasmResul
         .universal_canister_with_cycles(Cycles::new(10_000_000_000_000))
         .unwrap();
 
-    test.ingress(
+    let result = test.ingress(
         b_id,
         "update",
         wasm()
@@ -3069,64 +3066,27 @@ fn test_best_effort_responses_feature_flag(flag: FlagStatus) -> Result<WasmResul
             )
             .reply()
             .build(),
-    )
+    );
+    assert_eq!(result, Ok(WasmResult::Reply(vec![])))
 }
 
 #[test]
-fn test_best_effort_responses_feature_flag_enabled() {
-    match test_best_effort_responses_feature_flag(FlagStatus::Enabled) {
-        Ok(result) => assert_eq!(result, WasmResult::Reply(vec![])),
-        _ => panic!("Unexpected result"),
-    };
-}
-
-#[test]
-fn test_best_effort_responses_feature_flag_disabled() {
-    match test_best_effort_responses_feature_flag(FlagStatus::Disabled) {
-        Err(e) => {
-            e.assert_contains(
-                ErrorCode::CanisterContractViolation,
-                "ic0::call_with_best_effort_response is not enabled.",
-            );
-        }
-        _ => panic!("Unexpected result"),
-    };
-}
-
-fn helper_ic0_msg_deadline_best_effort_responses_feature_flag(
-    flag: FlagStatus,
-) -> Result<WasmResult, UserError> {
-    let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(flag)
-        .build();
+fn test_ic0_msg_deadline_best_effort_responses() {
+    let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test
         .universal_canister_with_cycles(Cycles::new(10_000_000_000_000))
         .unwrap();
 
-    test.ingress(
+    let result = test.ingress(
         canister_id,
         "update",
         wasm().msg_deadline().reply_int64().build(),
-    )
-}
+    );
 
-#[test]
-fn test_ic0_msg_deadline_best_effort_responses_feature_flag_enabled() {
     let no_deadline = Time::from(NO_DEADLINE).as_nanos_since_unix_epoch();
     assert_eq!(
-        helper_ic0_msg_deadline_best_effort_responses_feature_flag(FlagStatus::Enabled).unwrap(),
-        WasmResult::Reply(no_deadline.to_le_bytes().into())
-    );
-}
-
-#[test]
-fn test_ic0_msg_deadline_best_effort_responses_feature_flag_disabled() {
-    let err = helper_ic0_msg_deadline_best_effort_responses_feature_flag(FlagStatus::Disabled)
-        .unwrap_err();
-
-    err.assert_contains(
-        ErrorCode::CanisterContractViolation,
-        "ic0::msg_deadline is not enabled.",
+        result,
+        Ok(WasmResult::Reply(no_deadline.to_le_bytes().into()))
     );
 }

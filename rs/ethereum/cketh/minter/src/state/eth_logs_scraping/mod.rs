@@ -1,4 +1,8 @@
+#[cfg(test)]
+mod tests;
+
 use crate::numeric::BlockNumber;
+use candid::Nat;
 use ic_ethereum_types::Address;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Display, Formatter};
@@ -15,7 +19,10 @@ impl LogScrapings {
     pub fn new(last_scraped_block_number: BlockNumber) -> Self {
         let mut scrapings = BTreeMap::new();
         for id in LogScrapingId::iter() {
-            scrapings.insert(id, LogScrapingState::new(last_scraped_block_number));
+            scrapings.insert(
+                id,
+                LogScrapingState::new(last_scraped_block_number, id.status()),
+            );
         }
         Self { scrapings }
     }
@@ -55,6 +62,30 @@ impl LogScrapings {
             .get(&id)
             .expect("BUG: LogScrapings should contain all LogScrapingId")
     }
+
+    pub fn info(&self) -> LogScrapingInfo {
+        let to_info = |state: &LogScrapingState| {
+            let contract_address = state.contract_address().map(|a| a.to_string());
+            let last_scraped_block_number = Some(Nat::from(state.last_scraped_block_number()));
+            (contract_address, last_scraped_block_number)
+        };
+        let (eth_helper_contract_address, last_eth_scraped_block_number) =
+            to_info(self.get(LogScrapingId::EthDepositWithoutSubaccount));
+        let (erc20_helper_contract_address, last_erc20_scraped_block_number) =
+            to_info(self.get(LogScrapingId::Erc20DepositWithoutSubaccount));
+        let (
+            deposit_with_subaccount_helper_contract_address,
+            last_deposit_with_subaccount_scraped_block_number,
+        ) = to_info(self.get(LogScrapingId::EthOrErc20DepositWithSubaccount));
+        LogScrapingInfo {
+            eth_helper_contract_address,
+            last_eth_scraped_block_number,
+            erc20_helper_contract_address,
+            last_erc20_scraped_block_number,
+            deposit_with_subaccount_helper_contract_address,
+            last_deposit_with_subaccount_scraped_block_number,
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Copy, Debug, PartialOrd, Ord, Eq, EnumIter)]
@@ -63,6 +94,16 @@ pub enum LogScrapingId {
     EthDepositWithoutSubaccount,
     Erc20DepositWithoutSubaccount,
     EthOrErc20DepositWithSubaccount,
+}
+
+impl LogScrapingId {
+    fn status(&self) -> LogScrapingStatus {
+        match self {
+            LogScrapingId::EthDepositWithoutSubaccount => LogScrapingStatus::Deprecated,
+            LogScrapingId::Erc20DepositWithoutSubaccount => LogScrapingStatus::Deprecated,
+            LogScrapingId::EthOrErc20DepositWithSubaccount => LogScrapingStatus::Active,
+        }
+    }
 }
 
 impl Display for LogScrapingId {
@@ -82,17 +123,39 @@ pub enum LogScrapingStateError {
     InvalidContractAddress(String),
 }
 
+#[derive(Clone, Copy, PartialEq, Debug)]
+#[repr(u8)]
+pub enum LogScrapingStatus {
+    Active,
+    Deprecated,
+}
+
+impl Display for LogScrapingStatus {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LogScrapingStatus::Active => {
+                write!(f, "active 🟢")
+            }
+            LogScrapingStatus::Deprecated => {
+                write!(f, "deprecated 🟠")
+            }
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Debug)]
 pub struct LogScrapingState {
     contract_address: Option<Address>,
     last_scraped_block_number: BlockNumber,
+    status: LogScrapingStatus,
 }
 
 impl LogScrapingState {
-    pub fn new(last_scraped_block_number: BlockNumber) -> Self {
+    pub fn new(last_scraped_block_number: BlockNumber, status: LogScrapingStatus) -> Self {
         Self {
             contract_address: None,
             last_scraped_block_number,
+            status,
         }
     }
 
@@ -120,4 +183,18 @@ impl LogScrapingState {
     pub fn contract_address(&self) -> Option<&Address> {
         self.contract_address.as_ref()
     }
+
+    pub fn status(&self) -> LogScrapingStatus {
+        self.status
+    }
+}
+
+#[derive(Clone, PartialEq, Debug, Default)]
+pub struct LogScrapingInfo {
+    pub eth_helper_contract_address: Option<String>,
+    pub last_eth_scraped_block_number: Option<Nat>,
+    pub erc20_helper_contract_address: Option<String>,
+    pub last_erc20_scraped_block_number: Option<Nat>,
+    pub deposit_with_subaccount_helper_contract_address: Option<String>,
+    pub last_deposit_with_subaccount_scraped_block_number: Option<Nat>,
 }

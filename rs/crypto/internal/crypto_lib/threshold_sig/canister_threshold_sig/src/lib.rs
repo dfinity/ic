@@ -187,8 +187,8 @@
 #![forbid(unsafe_code)]
 
 use ic_crypto_internal_seed::XmdError;
-use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey};
-use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
+use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
 use ic_types::{NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;

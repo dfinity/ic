@@ -7,7 +7,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_ID, TEST_NEURON_2_OWNER_KEYPAIR,
 };
 use ic_nns_common::types::{NeuronId, ProposalId};
-use ic_nns_governance_api::pb::v1::{ManageNeuronResponse, NnsFunction, ProposalStatus, Vote};
+use ic_nns_governance_api::{ManageNeuronResponse, NnsFunction, ProposalStatus, Vote};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{get_pending_proposals, submit_external_update_proposal, wait_for_final_state},
@@ -41,7 +41,7 @@ async fn submit(
 
 async fn assert_failed_with_reason(gov: &Canister<'_>, proposal_id: ProposalId, reason: &str) {
     let info = wait_for_final_state(gov, proposal_id).await;
-    assert_eq!(info.status(), ProposalStatus::Failed);
+    assert_eq!(info.status, ProposalStatus::Failed as i32);
     assert_matches!(
         info.failure_reason,
         Some(error) if error.error_message.contains(reason)
@@ -100,8 +100,8 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
             let proposal_id = submit(gov, NnsFunction::ReviseElectedGuestosVersions, payload).await;
             let _result: ManageNeuronResponse = cast_votes(proposal_id).await.expect("Vote failed");
             assert_eq!(
-                wait_for_final_state(gov, proposal_id).await.status(),
-                ProposalStatus::Executed
+                wait_for_final_state(gov, proposal_id).await.status,
+                ProposalStatus::Executed as i32
             );
         }
 
@@ -133,8 +133,8 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
         .await;
         let _result: ManageNeuronResponse = cast_votes(proposal_id).await.expect("Vote failed");
         assert_eq!(
-            wait_for_final_state(gov, proposal_id).await.status(),
-            ProposalStatus::Executed
+            wait_for_final_state(gov, proposal_id).await.status,
+            ProposalStatus::Executed as i32
         );
 
         let test_cases = vec![
@@ -192,8 +192,8 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
                 assert_failed_with_reason(gov, proposal_id, reason).await;
             } else {
                 assert_eq!(
-                    wait_for_final_state(gov, proposal_id).await.status(),
-                    ProposalStatus::Executed
+                    wait_for_final_state(gov, proposal_id).await.status,
+                    ProposalStatus::Executed as i32
                 );
             }
         }

@@ -6,6 +6,7 @@ use crate::{
     registry_helper::RegistryHelper,
 };
 use async_trait::async_trait;
+use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_image_upgrader::{
@@ -14,7 +15,7 @@ use ic_image_upgrader::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::proxy::try_from_option_field;
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
@@ -28,9 +29,10 @@ use ic_types::{
     Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
 };
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap},
     path::PathBuf,
     sync::{Arc, Mutex},
+    time::Instant,
 };
 
 const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
@@ -56,6 +58,10 @@ impl Process for ReplicaProcess {
 
     fn get_args(&self) -> &[String] {
         &self.args
+    }
+
+    fn get_env(&self) -> HashMap<String, String> {
+        HashMap::new()
     }
 }
 
@@ -194,7 +200,7 @@ impl Upgrade {
                                     // Otherwise we would have left the subnet before upgrading. This means
                                     // we will trust the registry and go ahead with removing the node's state
                                     // including the broken local CUP.
-                                    self.remove_state()?;
+                                    self.remove_state().await?;
                                     return Ok(None);
                                 }
                                 Err(other) => return Err(other),
@@ -269,8 +275,17 @@ impl Upgrade {
             &latest_cup,
         ) {
             self.stop_replica()?;
-            self.remove_state()?;
-            return Ok(None);
+            return match self.remove_state().await {
+                Ok(()) => Ok(None),
+                Err(err) => {
+                    warn!(
+                        self.logger,
+                        "Removal of the node state failed with error {}", err
+                    );
+                    self.metrics.critical_error_state_removal_failed.inc();
+                    Err(err)
+                }
+            };
         }
 
         // If we arrived here, we have the newest CUP and we're still assigned.
@@ -359,7 +374,7 @@ impl Upgrade {
         Ok(())
     }
 
-    fn remove_state(&self) -> OrchestratorResult<()> {
+    async fn remove_state(&self) -> OrchestratorResult<()> {
         // Reset the key changed errors counter to not raise alerts in other subnets
         self.metrics.master_public_key_changed_errors.reset();
         remove_node_state(
@@ -369,6 +384,18 @@ impl Upgrade {
         )
         .map_err(OrchestratorError::UpgradeError)?;
         info!(self.logger, "Subnet state removed");
+
+        let instant = Instant::now();
+        sync_and_trim_fs(&self.logger)
+            .await
+            .map_err(OrchestratorError::UpgradeError)?;
+        let elapsed = instant.elapsed().as_millis();
+        self.metrics.fstrim_duration.set(elapsed as i64);
+        info!(
+            self.logger,
+            "Filesystem synced and trimmed in {}ms", elapsed
+        );
+
         Ok(())
     }
 
@@ -622,6 +649,28 @@ fn should_node_become_unassigned(
     true
 }
 
+// Call `sync` and `fstrim` on the data partition
+async fn sync_and_trim_fs(logger: &ReplicaLogger) -> Result<(), String> {
+    let mut fstrim_script = tokio::process::Command::new("/opt/ic/bin/sync_fstrim.sh");
+    info!(logger, "Running command '{:?}'...", fstrim_script);
+    match fstrim_script.status().await {
+        Ok(status) => {
+            if status.success() {
+                Ok(())
+            } else {
+                Err(format!(
+                    "Failed to run command '{:?}', return value: {}",
+                    fstrim_script, status
+                ))
+            }
+        }
+        Err(err) => Err(format!(
+            "Failed to run command '{:?}', error: {}",
+            fstrim_script, err
+        )),
+    }
+}
+
 // Deletes the subnet state consisting of the consensus pool, execution state,
 // the local CUP and the persisted error metric of threshold key changes.
 fn remove_node_state(
@@ -754,9 +803,11 @@ fn get_master_public_keys(
     cup: &CatchUpPackage,
     log: &ReplicaLogger,
 ) -> BTreeMap<MasterPublicKeyId, MasterPublicKey> {
-    let mut public_keys = BTreeMap::new();
+    let payload = cup.content.block.get_value().payload.as_ref();
 
-    let Some(idkg) = cup.content.block.get_value().payload.as_ref().as_idkg() else {
+    let (mut public_keys, _) = get_vetkey_public_keys(&payload.as_summary().dkg, log);
+
+    let Some(idkg) = payload.as_idkg() else {
         return public_keys;
     };
 
@@ -771,7 +822,7 @@ fn get_master_public_keys(
 
         match get_master_public_key_from_transcript(transcript) {
             Ok(public_key) => {
-                public_keys.insert(key_id.clone(), public_key);
+                public_keys.insert(key_id.clone().into(), public_key);
             }
             Err(err) => {
                 warn!(
@@ -888,8 +939,13 @@ mod tests {
     use ic_crypto_test_utils_canister_threshold_sigs::{
         generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
+    use ic_crypto_test_utils_ni_dkg::{
+        run_ni_dkg_and_create_single_transcript, NiDkgTestEnvironment, RandomNiDkgConfig,
+    };
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
-    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
+    use ic_management_canister_types_private::{
+        EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
+    };
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_consensus::fake::{Fake, FakeContent};
     use ic_test_utilities_logger::with_test_replica_logger;
@@ -897,43 +953,97 @@ mod tests {
     use ic_types::{
         batch::ValidationContext,
         consensus::{
+            dkg::DkgSummary,
             idkg::{self, MasterKeyTranscript, TranscriptAttributes},
             Block, BlockPayload, CatchUpContent, HashedBlock, HashedRandomBeacon, Payload,
             RandomBeacon, RandomBeaconContent, Rank, SummaryPayload,
         },
         crypto::{
-            canister_threshold_sig::idkg::IDkgTranscript, AlgorithmId, CryptoHash, CryptoHashOf,
+            canister_threshold_sig::idkg::IDkgTranscript,
+            threshold_sig::ni_dkg::{NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTranscript},
+            AlgorithmId, CryptoHash, CryptoHashOf,
         },
         signature::ThresholdSignature,
         time::UNIX_EPOCH,
     };
     use tempfile::{tempdir, TempDir};
 
+    fn make_ecdsa_key_id() -> MasterPublicKeyId {
+        MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "some_ecdsa_key".to_string(),
+        })
+    }
+
+    fn make_schnorr_key_id() -> MasterPublicKeyId {
+        MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Ed25519,
+            name: "some_eddsa_key".to_string(),
+        })
+    }
+
+    fn make_vetkd_key_id() -> MasterPublicKeyId {
+        MasterPublicKeyId::VetKd(VetKdKeyId {
+            curve: VetKdCurve::Bls12_381_G2,
+            name: "some_vetkd_key".to_string(),
+        })
+    }
+
+    fn make_key_ids_for_all_schemes() -> Vec<MasterPublicKeyId> {
+        vec![
+            make_ecdsa_key_id(),
+            make_schnorr_key_id(),
+            make_vetkd_key_id(),
+        ]
+    }
+
+    fn clone_key_id_with_name(key_id: &MasterPublicKeyId, name: &str) -> MasterPublicKeyId {
+        let mut key_id = key_id.clone();
+        match key_id {
+            MasterPublicKeyId::Ecdsa(ref mut key_id) => key_id.name = name.into(),
+            MasterPublicKeyId::Schnorr(ref mut key_id) => key_id.name = name.into(),
+            MasterPublicKeyId::VetKd(ref mut key_id) => key_id.name = name.into(),
+        }
+        key_id
+    }
+
+    #[derive(Clone)]
+    enum KeyTranscript {
+        IDkg(IDkgTranscript),
+        NiDkg(NiDkgTranscript),
+    }
+
     fn make_cup(
         h: Height,
-        key_id: MasterPublicKeyId,
-        key_transcript: Option<&IDkgTranscript>,
+        key_transcript: Option<(MasterPublicKeyId, KeyTranscript)>,
     ) -> CatchUpPackage {
-        let unmasked = key_transcript.map(|t| {
-            idkg::UnmaskedTranscriptWithAttributes::new(
-                t.to_attributes(),
-                idkg::UnmaskedTranscript::try_from((h, t)).unwrap(),
-            )
-        });
+        let mut nidkg_transcripts = BTreeMap::new();
+        let mut idkg_transcripts = BTreeMap::new();
+        let mut idkg_key_transcripts = Vec::new();
 
-        let idkg_transcripts = key_transcript
-            .map(|t| BTreeMap::from_iter(vec![(t.transcript_id, t.clone())]))
-            .unwrap_or_default();
+        if let Some((key_id, transcript)) = key_transcript {
+            match (&key_id, transcript) {
+                (MasterPublicKeyId::VetKd(_), KeyTranscript::NiDkg(transcript)) => {
+                    nidkg_transcripts.insert(transcript.dkg_id.dkg_tag.clone(), transcript);
+                }
+                (MasterPublicKeyId::Ecdsa(_), KeyTranscript::IDkg(transcript))
+                | (MasterPublicKeyId::Schnorr(_), KeyTranscript::IDkg(transcript)) => {
+                    idkg_transcripts.insert(transcript.transcript_id, transcript.clone());
+                    let unmasked = idkg::UnmaskedTranscriptWithAttributes::new(
+                        transcript.to_attributes(),
+                        idkg::UnmaskedTranscript::try_from((h, &transcript)).unwrap(),
+                    );
+                    idkg_key_transcripts.push(MasterKeyTranscript {
+                        current: Some(unmasked),
+                        next_in_creation: idkg::KeyTranscriptCreation::Begin,
+                        master_key_id: key_id.clone().try_into().unwrap(),
+                    });
+                }
+                _ => panic!("Unexpected key ID, transcript combination"),
+            }
+        }
 
-        let mut idkg = idkg::IDkgPayload::empty(
-            h,
-            subnet_test_id(0),
-            vec![MasterKeyTranscript {
-                current: unmasked,
-                next_in_creation: idkg::KeyTranscriptCreation::Begin,
-                master_key_id: key_id.clone(),
-            }],
-        );
+        let mut idkg = idkg::IDkgPayload::empty(h, subnet_test_id(0), idkg_key_transcripts);
         idkg.idkg_transcripts = idkg_transcripts;
 
         let block = Block::new(
@@ -941,7 +1051,7 @@ mod tests {
             Payload::new(
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Summary(SummaryPayload {
-                    dkg: ic_types::consensus::dkg::Summary::fake(),
+                    dkg: DkgSummary::fake().with_current_transcripts(nidkg_transcripts),
                     idkg: Some(idkg),
                 }),
             ),
@@ -983,7 +1093,6 @@ mod tests {
     }
 
     struct Setup {
-        env: CanisterThresholdSigTestEnvironment,
         rng: ReproducibleRng,
         tmp: TempDir,
     }
@@ -991,23 +1100,65 @@ mod tests {
     impl Setup {
         fn new() -> Self {
             let tmp = tempdir().expect("Unable to create temp directory");
-            let mut rng = reproducible_rng();
-            let env = CanisterThresholdSigTestEnvironment::new(1, &mut rng);
-            Self { env, rng, tmp }
+            let rng = reproducible_rng();
+            Self { rng, tmp }
         }
 
-        fn generate_key_transcript(&mut self) -> IDkgTranscript {
-            let (dealers, receivers) = self.env.choose_dealers_and_receivers(
+        fn generate_key_transcript(
+            &mut self,
+            key_id: &MasterPublicKeyId,
+        ) -> (MasterPublicKeyId, KeyTranscript) {
+            let transcript = match key_id {
+                MasterPublicKeyId::Ecdsa(ecdsa_key_id) => match ecdsa_key_id.curve {
+                    EcdsaCurve::Secp256k1 => {
+                        self.generate_idkg_key_transcript(AlgorithmId::ThresholdEcdsaSecp256k1)
+                    }
+                },
+                MasterPublicKeyId::Schnorr(schnorr_key_id) => match schnorr_key_id.algorithm {
+                    SchnorrAlgorithm::Bip340Secp256k1 => {
+                        self.generate_idkg_key_transcript(AlgorithmId::ThresholdSchnorrBip340)
+                    }
+
+                    SchnorrAlgorithm::Ed25519 => {
+                        self.generate_idkg_key_transcript(AlgorithmId::ThresholdEd25519)
+                    }
+                },
+                MasterPublicKeyId::VetKd(_) => self.generate_nidkg_key_transcript(key_id),
+            };
+            (key_id.clone(), transcript)
+        }
+
+        fn generate_idkg_key_transcript(&mut self, alg: AlgorithmId) -> KeyTranscript {
+            let env = CanisterThresholdSigTestEnvironment::new(1, &mut self.rng);
+            let (dealers, receivers) = env.choose_dealers_and_receivers(
                 &IDkgParticipants::AllNodesAsDealersAndReceivers,
                 &mut self.rng,
             );
-            generate_key_transcript(
-                &self.env,
+            KeyTranscript::IDkg(generate_key_transcript(
+                &env,
                 &dealers,
                 &receivers,
-                AlgorithmId::ThresholdEcdsaSecp256k1,
+                alg,
                 &mut self.rng,
-            )
+            ))
+        }
+
+        fn generate_nidkg_key_transcript(&mut self, key_id: &MasterPublicKeyId) -> KeyTranscript {
+            let MasterPublicKeyId::VetKd(vetkd_key_id) = key_id.clone() else {
+                panic!("Can't generate nidkg transcript for {}", key_id);
+            };
+            let config = RandomNiDkgConfig::builder()
+                .dkg_tag(NiDkgTag::HighThresholdForKey(
+                    NiDkgMasterPublicKeyId::VetKd(vetkd_key_id),
+                ))
+                .subnet_size(4)
+                .build(&mut self.rng);
+            let env =
+                NiDkgTestEnvironment::new_for_config_with_remote_vault(config.get(), &mut self.rng);
+            KeyTranscript::NiDkg(run_ni_dkg_and_create_single_transcript(
+                config.get(),
+                &env.crypto_components,
+            ))
         }
 
         fn path(&self) -> PathBuf {
@@ -1016,17 +1167,19 @@ mod tests {
     }
 
     #[test]
-    fn test_ecdsa_key_deletion_raises_alert() {
+    fn test_key_deletion_raises_alert_all_schemes() {
+        for key_id in make_key_ids_for_all_schemes() {
+            test_key_deletion_raises_alert(key_id)
+        }
+    }
+
+    fn test_key_deletion_raises_alert(key_id: MasterPublicKeyId) {
         with_test_replica_logger(|log| {
             let mut setup = Setup::new();
-            let key = setup.generate_key_transcript();
-            let key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: String::from("some_key"),
-            });
+            let key = setup.generate_key_transcript(&key_id);
 
-            let c1 = make_cup(Height::from(10), key_id.clone(), Some(&key));
-            let c2 = make_cup(Height::from(100), key_id.clone(), None);
+            let c1 = make_cup(Height::from(10), Some(key));
+            let c2 = make_cup(Height::from(100), None);
 
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
@@ -1053,18 +1206,20 @@ mod tests {
     }
 
     #[test]
-    fn test_ecdsa_key_change_raises_alert() {
+    fn test_key_change_raises_alert_all_schemes() {
+        for key_id in make_key_ids_for_all_schemes() {
+            test_key_change_raises_alert(key_id)
+        }
+    }
+
+    fn test_key_change_raises_alert(key_id: MasterPublicKeyId) {
         with_test_replica_logger(|log| {
             let mut setup = Setup::new();
-            let key1 = setup.generate_key_transcript();
-            let key2 = setup.generate_key_transcript();
-            let key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: String::from("some_key"),
-            });
+            let key1 = setup.generate_key_transcript(&key_id);
+            let key2 = setup.generate_key_transcript(&key_id);
 
-            let c1 = make_cup(Height::from(10), key_id.clone(), Some(&key1));
-            let c2 = make_cup(Height::from(100), key_id.clone(), Some(&key2));
+            let c1 = make_cup(Height::from(10), Some(key1));
+            let c2 = make_cup(Height::from(100), Some(key2));
 
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
@@ -1077,17 +1232,19 @@ mod tests {
     }
 
     #[test]
-    fn test_ecdsa_key_unchanged_does_not_raise_alert() {
+    fn test_key_unchanged_does_not_raise_alert_all_schemes() {
+        for key_id in make_key_ids_for_all_schemes() {
+            test_key_unchanged_does_not_raise_alert(key_id)
+        }
+    }
+
+    fn test_key_unchanged_does_not_raise_alert(key_id: MasterPublicKeyId) {
         with_test_replica_logger(|log| {
             let mut setup = Setup::new();
-            let key = setup.generate_key_transcript();
-            let key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: String::from("some_key"),
-            });
+            let key = setup.generate_key_transcript(&key_id);
 
-            let c1 = make_cup(Height::from(10), key_id.clone(), Some(&key));
-            let c2 = make_cup(Height::from(100), key_id.clone(), Some(&key));
+            let c1 = make_cup(Height::from(10), Some(key.clone()));
+            let c2 = make_cup(Height::from(100), Some(key));
 
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
@@ -1100,21 +1257,34 @@ mod tests {
     }
 
     #[test]
-    fn test_ecdsa_key_id_change_raises_alert() {
+    fn test_key_id_change_raises_alert_all_schemes() {
+        for key_id in make_key_ids_for_all_schemes() {
+            test_key_id_change_raises_alert(key_id)
+        }
+    }
+
+    fn test_key_id_change_raises_alert(key_id1: MasterPublicKeyId) {
         with_test_replica_logger(|log| {
             let mut setup = Setup::new();
-            let key = setup.generate_key_transcript();
-            let key_id1 = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: String::from("some_key1"),
-            });
-            let key_id2 = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: String::from("some_key2"),
-            });
+            let key = setup.generate_key_transcript(&key_id1);
+            let c1 = make_cup(Height::from(10), Some(key.clone()));
 
-            let c1 = make_cup(Height::from(10), key_id1.clone(), Some(&key));
-            let c2 = make_cup(Height::from(100), key_id2, Some(&key));
+            let key_id2 = clone_key_id_with_name(&key_id1, "other_key");
+            let c2 = if let (
+                MasterPublicKeyId::VetKd(ref key_id),
+                KeyTranscript::NiDkg(ref transcript),
+            ) = (&key_id2, &key.1)
+            {
+                let mut transcript2 = transcript.clone();
+                transcript2.dkg_id.dkg_tag =
+                    NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(key_id.clone()));
+                make_cup(
+                    Height::from(100),
+                    Some((key_id2, KeyTranscript::NiDkg(transcript2))),
+                )
+            } else {
+                make_cup(Height::from(100), Some((key_id2, key.1)))
+            };
 
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
@@ -1127,17 +1297,19 @@ mod tests {
     }
 
     #[test]
-    fn test_ecdsa_key_created_does_not_raise_alert() {
+    fn test_key_created_does_not_raise_alert_all_schemes() {
+        for key_id in make_key_ids_for_all_schemes() {
+            test_key_created_does_not_raise_alert(key_id)
+        }
+    }
+
+    fn test_key_created_does_not_raise_alert(key_id: MasterPublicKeyId) {
         with_test_replica_logger(|log| {
             let mut setup = Setup::new();
-            let key = setup.generate_key_transcript();
-            let key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: String::from("some_key"),
-            });
+            let key = setup.generate_key_transcript(&key_id);
 
-            let c1 = make_cup(Height::from(10), key_id.clone(), None);
-            let c2 = make_cup(Height::from(100), key_id.clone(), Some(&key));
+            let c1 = make_cup(Height::from(10), None);
+            let c2 = make_cup(Height::from(100), Some(key));
 
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
@@ -1150,16 +1322,13 @@ mod tests {
     }
 
     #[test]
-    fn test_ecdsa_no_keys_created_does_not_raise_alert() {
+    fn test_no_keys_created_does_not_raise_alert() {
         with_test_replica_logger(|log| {
             let setup = Setup::new();
-            let key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: String::from("some_key"),
-            });
+            let key_id = make_ecdsa_key_id();
 
-            let c1 = make_cup(Height::from(10), key_id.clone(), None);
-            let c2 = make_cup(Height::from(100), key_id.clone(), None);
+            let c1 = make_cup(Height::from(10), None);
+            let c2 = make_cup(Height::from(100), None);
 
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 

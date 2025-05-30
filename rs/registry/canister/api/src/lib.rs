@@ -4,6 +4,8 @@ use serde::Serialize;
 use std::{collections::HashSet, fmt, net::Ipv4Addr, str::FromStr};
 use thiserror::Error;
 
+pub mod mutate_test_high_capacity_records;
+
 #[derive(Debug, Error)]
 pub enum IPv4ConfigError {
     #[error("Invalid IPv4 address")]
@@ -160,6 +162,11 @@ impl fmt::Display for IPv4Config {
     }
 }
 
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
+pub struct GetNodeProvidersMonthlyXdrRewardsRequest {
+    pub registry_version: Option<u64>,
+}
+
 /// The payload of an update request to add a new node.
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct AddNodePayload {
@@ -201,6 +208,21 @@ pub struct UpdateNodeDirectlyPayload {
 pub struct UpdateNodeIPv4ConfigDirectlyPayload {
     pub node_id: NodeId,
     pub ipv4_config: Option<IPv4Config>,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct GetChunkRequest {
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub content_sha256: Option<Vec<u8>>,
+}
+
+/// When an entry is too large to fit into a "normal" response, the response
+/// references multiple chunks, which need to be fetched in follow-up get_chunk
+/// requests. (This is the main part of `get_chunk` responses.)
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct Chunk {
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub content: Option<Vec<u8>>,
 }
 
 #[cfg(test)]

@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "MAINNET_REVISION_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MAINNET_ENV", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -6,8 +6,6 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 system_test_nns(
     name = "node_assign_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -34,8 +32,6 @@ system_test_nns(
 system_test_nns(
     name = "node_reassignment_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -56,8 +52,6 @@ system_test_nns(
 
 system_test_nns(
     name = "node_registration_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
@@ -81,9 +75,9 @@ system_test_nns(
 
 system_test(
     name = "cup_compatibility_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    env = MAINNET_ENV,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = MAINNET_REVISION_RUNTIME_DEPS + [
+    runtime_deps = [
         "//rs/tests:cup_compatibility/binaries",
     ],
     deps = [
@@ -101,8 +95,6 @@ system_test(
 system_test_nns(
     name = "ssh_access_to_nodes_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -122,11 +114,10 @@ system_test_nns(
 
 system_test_nns(
     name = "unstuck_subnet_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    flaky = True,  # flakiness rate of over 2.1% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "k8s",
-        "system_test_hourly",
+        "long_test",
     ],
     target_compatible_with = ["@platforms//os:linux"],
     uses_guestos_dev_test = True,
@@ -145,8 +136,6 @@ system_test_nns(
 system_test_nns(
     name = "rotate_ecdsa_idkg_key_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.

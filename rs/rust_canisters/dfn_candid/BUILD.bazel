@@ -12,13 +12,13 @@ package(default_visibility = [
     "//rs/registry/canister:__pkg__",
     "//rs/rosetta-api/icp:__pkg__",
     "//rs/rust_canisters:__subpackages__",
-    "//rs/scenario_tests:__pkg__",
     "//rs/sns:__subpackages__",
     "//rs/tests:__subpackages__",
 ])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-http-types",
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",

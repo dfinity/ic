@@ -3,31 +3,27 @@ use ic_metrics::{
     buckets::decimal_buckets, tokio_metrics_collector::TokioTaskMetricsCollector, MetricsRegistry,
 };
 use prometheus::{GaugeVec, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
-use quinn::{Connection, ConnectionError, ReadError, WriteError};
+use quinn::{Connection, ConnectionError, ReadError, ReadToEndError, StoppedError, WriteError};
 use tokio_metrics::TaskMonitor;
 
 const CONNECTION_RESULT_LABEL: &str = "status";
 const PEER_ID_LABEL: &str = "peer";
 const REQUEST_TASK_MONITOR_NAME: &str = "quic_transport_request_handler";
-const STREAM_TYPE_LABEL: &str = "stream";
 const HANDLER_LABEL: &str = "handler";
 const ERROR_TYPE_LABEL: &str = "error";
-const REQUEST_TYPE_LABEL: &str = "request";
+const QUINN_API_LABEL: &str = "quinn_api";
 pub(crate) const CONNECTION_RESULT_SUCCESS_LABEL: &str = "success";
 pub(crate) const CONNECTION_RESULT_FAILED_LABEL: &str = "failed";
-pub(crate) const ERROR_TYPE_ACCEPT: &str = "accept";
 pub(crate) const ERROR_TYPE_APP: &str = "app";
-pub(crate) const ERROR_TYPE_FINISH: &str = "finish";
-pub(crate) const ERROR_TYPE_STOPPED: &str = "stopped";
-pub(crate) const ERROR_TYPE_READ: &str = "read";
+// A serious internal invariant is broken (i.e. worthy of a bug or outage report)
 pub(crate) const INFALIBBLE: &str = "infallible";
-pub(crate) const ERROR_TYPE_WRITE: &str = "write";
-const ERROR_CLOSED_STREAM: &str = "closed_stream";
 const ERROR_RESET_STREAM: &str = "reset_stream";
 const ERROR_STOPPED_STREAM: &str = "stopped_stream";
 const ERROR_APP_CLOSED_CONN: &str = "app_closed_conn";
+const ERROR_TIMED_OUT_CONN: &str = "timed_out_conn";
+const ERROR_RESET_CONN: &str = "timed_reset_conn";
+const ERROR_TRANSPORT_ERROR: &str = "transport_error_conn";
 const ERROR_LOCALLY_CLOSED_CONN: &str = "locally_closed_conn";
-const ERROR_QUIC_CLOSED_CONN: &str = "quic_closed_conn";
 
 pub(crate) const STREAM_TYPE_BIDI: &str = "bidi";
 
@@ -90,7 +86,7 @@ impl QuicTransportMetrics {
             ),
             peers_removed_total: metrics_registry.int_counter(
                 "quic_transport_peers_removed_total",
-                "Peers removed because they are not part of topology anymore.",
+                "Peers removed from the peer map.",
             ),
             inbound_connection_total: metrics_registry.int_counter(
                 "quic_transport_inbound_connection_total",
@@ -120,7 +116,7 @@ impl QuicTransportMetrics {
             request_handle_errors_total: metrics_registry.int_counter_vec(
                 "quic_transport_request_handle_errors_total",
                 "Request handler errors by stream type and error type.",
-                &[STREAM_TYPE_LABEL, ERROR_TYPE_LABEL],
+                &[QUINN_API_LABEL, ERROR_TYPE_LABEL],
             ),
             request_handle_bytes_received_total: metrics_registry.int_counter_vec(
                 "quic_transport_request_handle_bytes_received_total",
@@ -158,9 +154,8 @@ impl QuicTransportMetrics {
             connection_handle_errors_total: metrics_registry.int_counter_vec(
                 "quic_transport_connection_handle_errors_total",
                 "Request handler errors by stream type and error type.",
-                &[REQUEST_TYPE_LABEL, ERROR_TYPE_LABEL],
+                &[QUINN_API_LABEL, ERROR_TYPE_LABEL],
             ),
-
             // Quinn stats
             quinn_path_rtt_seconds: metrics_registry.gauge_vec(
                 "quic_transport_quinn_path_rtt_seconds",
@@ -209,35 +204,49 @@ impl QuicTransportMetrics {
 
 pub fn observe_conn_error(err: &ConnectionError, op: &str, counter: &IntCounterVec) {
     match err {
-        // TODO: most likely this can be made infallible
+        // This can occur during a topology change or when the connection manager attempts to replace an old, broken connection with a new one.
         ConnectionError::LocallyClosed => counter
             .with_label_values(&[op, ERROR_LOCALLY_CLOSED_CONN])
             .inc(),
+        // This can occur during a topology change or when the connection manager attempts to replace an old, broken connection with a new one.
         ConnectionError::ApplicationClosed(_) => counter
             .with_label_values(&[op, ERROR_APP_CLOSED_CONN])
             .inc(),
-        // A connection was closed by the QUIC protocol.
-        _ => counter
-            .with_label_values(&[op, ERROR_QUIC_CLOSED_CONN])
+        // This can occur if the peer crashes or experiences connectivity issues.
+        ConnectionError::TimedOut => counter.with_label_values(&[op, ERROR_TIMED_OUT_CONN]).inc(),
+        // TODO: This should be made infallible. It is unclear why we observe those errors.
+        // It is similar to a TimedOut error, but the key difference is that TimedOut
+        // usually indicates a failure during data transmission.
+        ConnectionError::Reset => counter.with_label_values(&[op, ERROR_RESET_CONN]).inc(),
+        // TODO: This should be made infallible. It is unclear why we observe those errors.
+        ConnectionError::TransportError(_) => counter
+            .with_label_values(&[op, ERROR_TRANSPORT_ERROR])
             .inc(),
+        // A connection was closed by the QUIC protocol. Overall should be infallible.
+        ConnectionError::VersionMismatch
+        | ConnectionError::ConnectionClosed(_)
+        | ConnectionError::CidsExhausted => counter.with_label_values(&[op, INFALIBBLE]).inc(),
     }
 }
 
 pub fn observe_write_error(err: &WriteError, op: &str, counter: &IntCounterVec) {
     match err {
-        // This should be infallible. The peer will never stop a stream, it can only reset it.
+        // Occurs when the peer cancels the `RecvStream` future, similar to `ERROR_RESET_STREAM` semantics.
+        // e.g., can happen on the receive side when the RPC method is part of a `select` branch.
         WriteError::Stopped(_) => counter.with_label_values(&[op, ERROR_STOPPED_STREAM]).inc(),
         WriteError::ConnectionLost(conn_err) => observe_conn_error(conn_err, op, counter),
-        // This should be infallible
-        WriteError::ClosedStream => counter.with_label_values(&[op, ERROR_CLOSED_STREAM]).inc(),
-        _ => counter.with_label_values(&[op, INFALIBBLE]).inc(),
+        // If any of the following errors occur it means that we have a bug in the protocol implementation or
+        // there is malicious peer on the other side.
+        WriteError::ClosedStream | WriteError::ZeroRttRejected => {
+            counter.with_label_values(&[op, INFALIBBLE]).inc()
+        }
     }
 }
 
 pub fn observe_read_error(err: &ReadError, op: &str, counter: &IntCounterVec) {
     match err {
-        // This can happen if the peer reset the stream due to aborting the future that writes to the stream.
-        // E.g. the RPC method is part of a select branch.
+        // Occurs when the peer drops the `ResetStreamOnDrop` guard, similar to `ERROR_STOPPED_STREAM` semantics,
+        // e.g., can happen on the receive side when the RPC method is part of a `select` branch.
         ReadError::Reset(_) => counter.with_label_values(&[op, ERROR_RESET_STREAM]).inc(),
         ReadError::ConnectionLost(conn_err) => observe_conn_error(conn_err, op, counter),
         // If any of the following errors occur it means that we have a bug in the protocol implementation or
@@ -245,5 +254,19 @@ pub fn observe_read_error(err: &ReadError, op: &str, counter: &IntCounterVec) {
         ReadError::IllegalOrderedRead | ReadError::ClosedStream | ReadError::ZeroRttRejected => {
             counter.with_label_values(&[op, INFALIBBLE]).inc()
         }
+    }
+}
+
+pub fn observe_stopped_error(err: &StoppedError, op: &str, counter: &IntCounterVec) {
+    match err {
+        StoppedError::ConnectionLost(conn_err) => observe_conn_error(conn_err, op, counter),
+        StoppedError::ZeroRttRejected => counter.with_label_values(&[op, INFALIBBLE]).inc(),
+    }
+}
+
+pub fn observe_read_to_end_error(err: &ReadToEndError, op: &str, counter: &IntCounterVec) {
+    match err {
+        ReadToEndError::TooLong => counter.with_label_values(&[op, INFALIBBLE]).inc(),
+        ReadToEndError::Read(read_err) => observe_read_error(read_err, op, counter),
     }
 }

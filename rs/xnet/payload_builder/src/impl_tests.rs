@@ -99,6 +99,7 @@ async fn validate_signals() {
                 &Default::default(),
                 StreamIndex::new(expected),
                 state,
+                slog::Level::Warning,
             )
         };
 
@@ -160,6 +161,7 @@ async fn validate_signals_expected_before_messages_begin() {
             &Default::default(),
             expected,
             &state,
+            slog::Level::Warning,
         );
     });
 }
@@ -183,6 +185,7 @@ async fn validate_signals_expected_after_messages_begin() {
             &Default::default(),
             expected,
             &state,
+            slog::Level::Warning,
         );
     });
 }
@@ -220,6 +223,7 @@ async fn validate_signals_invalid_reject_signals() {
                 .into(),
                 5.into(), // Expected signal index.
                 &state,
+                slog::Level::Warning
             )
         );
         // Signals larger than or equal to `signals_end` are invalid.
@@ -237,6 +241,7 @@ async fn validate_signals_invalid_reject_signals() {
                 .into(),
                 5.into(), // Expected signal index.
                 &state,
+                slog::Level::Warning
             )
         );
         assert_eq!(
@@ -253,6 +258,27 @@ async fn validate_signals_invalid_reject_signals() {
                 .into(),
                 5.into(), // Expected signal index.
                 &state,
+                slog::Level::Warning
+            )
+        );
+
+        // Number of signals above 2 * `MAX_STREAM_MESSAGES` are invalid (dishonest subnet guard).
+        const MAX_SIGNALS: u64 = 2 * MAX_STREAM_MESSAGES as u64;
+        assert_eq!(
+            Invalid,
+            xnet_payload_builder.validate_signals(
+                SUBNET_1,
+                (MAX_SIGNALS + 42).into(),
+                &vec![
+                    RejectSignal::new(RejectReason::CanisterStopped, 10.into()),
+                    RejectSignal::new(RejectReason::Unknown, (MAX_SIGNALS / 2 + 123).into()),
+                    RejectSignal::new(RejectReason::QueueFull, MAX_SIGNALS.into()),
+                    RejectSignal::new(RejectReason::OutOfMemory, ((MAX_SIGNALS * 3) / 2).into()),
+                ]
+                .into(),
+                5.into(), // Expected signal index.
+                &state,
+                slog::Level::Warning
             )
         );
     });
@@ -303,6 +329,7 @@ async fn validate_slice() {
                 &EXPECTED,
                 &validation_context,
                 &state,
+                slog::Level::Warning,
             )
         };
 
@@ -351,6 +378,7 @@ async fn validate_slice() {
                 &EXPECTED,
                 &validation_context,
                 &state,
+                slog::Level::Warning
             ),
             SliceValidationResult::Invalid(_)
         );
@@ -415,6 +443,7 @@ async fn validate_slice_invalid_signature() {
                 &expected,
                 &validation_context,
                 &state,
+                slog::Level::Warning
             ),
             SliceValidationResult::Invalid(_)
         );
@@ -468,6 +497,7 @@ async fn validate_slice_above_msg_limit() {
                 &EXPECTED,
                 &validation_context,
                 state,
+                slog::Level::Warning,
             )
         };
 
@@ -561,6 +591,7 @@ async fn validate_slice_above_signal_limit() {
                 },
                 &validation_context,
                 state,
+                slog::Level::Warning,
             )
         };
 
@@ -646,6 +677,7 @@ async fn validate_slice_loopback_stream() {
                 &EXPECTED,
                 &validation_context,
                 &state,
+                slog::Level::Warning,
             )
         };
 
@@ -692,6 +724,7 @@ async fn validate_slice_loopback_stream() {
                 &EXPECTED,
                 &validation_context,
                 &state,
+                slog::Level::Warning
             ),
         );
     });

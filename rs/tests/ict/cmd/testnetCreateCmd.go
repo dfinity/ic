@@ -83,6 +83,7 @@ type TestnetConfig struct {
 	farmBaseUrl          string
 	requiredHostFeatures string
 	icConfigPath         string
+	k8sBranch            string
 }
 
 // Testnet config summary published to json file.
@@ -183,6 +184,18 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 		}
 		command := []string{"bazel", "test", target, "--config=systest"}
 		command = append(command, "--cache_test_results=no")
+		cmd.Println(GREEN + "Will try to sync dashboards from k8s branch: " + cfg.k8sBranch)
+		icDashboardsDir, err := sparse_checkout("git@github.com:dfinity-ops/k8s.git", "", []string{"bases/apps/ic-dashboards"}, cfg.k8sBranch)
+		if err != nil {
+			cmd.PrintErrln(YELLOW + "Failed to sync k8s dashboards. Received the following error: " + err.Error())
+		} else {
+			cmd.PrintErrln(GREEN + "Successfully synced dashboards to path " + icDashboardsDir)
+			icDashboardsDir = filepath.Join(icDashboardsDir, "bases", "apps", "ic-dashboards")
+			cmd.Println(GREEN + "Will use " + icDashboardsDir + " as a root for dashboards")
+
+			command = append(command, fmt.Sprintf("--test_env=IC_DASHBOARDS_DIR=%s", icDashboardsDir))
+			command = append(command, fmt.Sprintf("--sandbox_add_mount_pair=%s", icDashboardsDir))
+		}
 		command = append(command, fmt.Sprintf("--test_timeout=%s", strconv.Itoa(TESTNET_DEPLOYMENT_TIMEOUT_SEC)))
 		// We let the test-driver (and Bazel command) finish without deleting Farm group.
 		// Afterwards, we interact with the group's ttl via Farm API.
@@ -288,6 +301,7 @@ func NewTestnetCreateCmd() *cobra.Command {
 	cmd.PersistentFlags().StringVarP(&cfg.farmBaseUrl, "farm-url", "", "", "Use a custom url for the Farm webservice.")
 	cmd.PersistentFlags().StringVarP(&cfg.requiredHostFeatures, "set-required-host-features", "", "", "Set and override required host features of all hosts spawned.\nFeatures must be one or more of [dc=<dc-name>, host=<host-name>, AMD-SEV-SNP, SNS-load-test, performance], separated by comma (see Examples).")
 	cmd.SetOut(os.Stdout)
+	cmd.PersistentFlags().StringVarP(&cfg.k8sBranch, "k8s-branch", "", "main", "Override the branch from which the dashboards are being synced. Default: main")
 	return cmd
 }
 

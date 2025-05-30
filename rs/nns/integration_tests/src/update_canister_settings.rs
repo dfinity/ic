@@ -2,7 +2,7 @@ use candid::Nat;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_clients::canister_status::{DefiniteCanisterSettings, LogVisibility};
 use ic_nns_constants::{LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     manage_neuron_response::Command,
     update_canister_settings::{
         CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
@@ -36,7 +36,8 @@ fn test_update_canister_settings_proposal(
     let target_memory_allocation = 1u64 << 33;
     let target_compute_allocation = 10u64;
     let target_freezing_threshold = 100_000u64;
-    let target_wasm_memory_limit = 1u64 << 32;
+    let target_wasm_memory_limit = 1u64 << 36;
+    let target_wasm_memory_threshold = 1u64 << 34;
     let target_log_visibility = Some(LogVisibility::Public);
     let canister_settings = || -> DefiniteCanisterSettings {
         get_canister_status(
@@ -66,6 +67,10 @@ fn test_update_canister_settings_proposal(
         original_settings.wasm_memory_limit,
         Some(Nat::from(target_wasm_memory_limit))
     );
+    assert_ne!(
+        original_settings.wasm_memory_threshold,
+        Some(Nat::from(target_wasm_memory_threshold))
+    );
     assert_ne!(original_settings.log_visibility, target_log_visibility);
 
     // Step 3: Make a proposal to update settings of the registry canister and make sure the
@@ -88,6 +93,7 @@ fn test_update_canister_settings_proposal(
                         freezing_threshold: Some(target_freezing_threshold),
                         wasm_memory_limit: Some(target_wasm_memory_limit),
                         log_visibility: Some(GovernanceLogVisibility::Public as i32),
+                        wasm_memory_threshold: Some(target_wasm_memory_threshold),
                     }),
                 },
             )),
@@ -118,6 +124,10 @@ fn test_update_canister_settings_proposal(
     assert_eq!(
         updated_settings.wasm_memory_limit,
         Some(Nat::from(target_wasm_memory_limit))
+    );
+    assert_eq!(
+        updated_settings.wasm_memory_threshold,
+        Some(Nat::from(target_wasm_memory_threshold))
     );
     assert_eq!(updated_settings.log_visibility, target_log_visibility);
 }

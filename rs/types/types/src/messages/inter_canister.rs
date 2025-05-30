@@ -1,14 +1,18 @@
 use crate::{
-    ingress::WasmResult, time::CoarseTime, CanisterId, CountBytes, Cycles, Funds, NumBytes, Time,
+    ingress::WasmResult,
+    time::{CoarseTime, UNIX_EPOCH},
+    CanisterId, CountBytes, Cycles, Funds, NumBytes, Time,
 };
 use ic_error_types::{RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
     InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    Method, Payload as _, ProvisionalTopUpCanisterArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
-    UpdateSettingsArgs, UploadChunkArgs,
+    Method, Payload as _, ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs,
+    ReadCanisterSnapshotMetadataArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
+    UpdateSettingsArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    UploadChunkArgs,
 };
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -61,6 +65,12 @@ pub struct RequestMetadata {
     call_tree_start_time: Time,
 }
 
+impl Default for RequestMetadata {
+    fn default() -> Self {
+        Self::new(0, UNIX_EPOCH)
+    }
+}
+
 impl RequestMetadata {
     pub fn new(call_tree_depth: u64, call_tree_start_time: Time) -> Self {
         Self {
@@ -101,7 +111,7 @@ pub struct Request {
     #[serde(with = "serde_bytes")]
     #[validate_eq(Ignore)]
     pub method_payload: Vec<u8>,
-    pub metadata: Option<RequestMetadata>,
+    pub metadata: RequestMetadata,
     /// If non-zero, this is a best-effort call.
     pub deadline: CoarseTime,
 }
@@ -127,6 +137,12 @@ impl Request {
     pub fn payload_size_bytes(&self) -> NumBytes {
         let bytes = self.method_name.len() + self.method_payload.len();
         NumBytes::from(bytes as u64)
+    }
+
+    /// Returns `true` if this is the request of a best-effort call
+    /// (i.e. if it has a non-zero deadline).
+    pub fn is_best_effort(&self) -> bool {
+        self.deadline != NO_DEADLINE
     }
 
     /// Helper function to extract the effective canister id from the payload.
@@ -204,6 +220,30 @@ impl Request {
                     Err(_) => None,
                 }
             }
+            Ok(Method::ReadCanisterSnapshotMetadata) => {
+                match ReadCanisterSnapshotMetadataArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::ReadCanisterSnapshotData) => {
+                match ReadCanisterSnapshotDataArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::UploadCanisterSnapshotMetadata) => {
+                match UploadCanisterSnapshotMetadataArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::UploadCanisterSnapshotData) => {
+                match UploadCanisterSnapshotDataArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
             Ok(Method::CreateCanister)
             | Ok(Method::SetupInitialDKG)
             | Ok(Method::HttpRequest)
@@ -211,8 +251,11 @@ impl Request {
             | Ok(Method::ECDSAPublicKey)
             | Ok(Method::SignWithECDSA)
             | Ok(Method::ComputeInitialIDkgDealings)
+            | Ok(Method::ReshareChainKey)
             | Ok(Method::SchnorrPublicKey)
             | Ok(Method::SignWithSchnorr)
+            | Ok(Method::VetKdPublicKey)
+            | Ok(Method::VetKdDeriveKey)
             | Ok(Method::BitcoinGetBalance)
             | Ok(Method::BitcoinGetUtxos)
             | Ok(Method::BitcoinGetBlockHeaders)
@@ -453,6 +496,12 @@ impl Response {
     pub fn payload_size_bytes(&self) -> NumBytes {
         self.response_payload.size_bytes()
     }
+
+    /// Returns `true` if this is the response of a best-effort call
+    /// (i.e. if it has a non-zero deadline).
+    pub fn is_best_effort(&self) -> bool {
+        self.deadline != NO_DEADLINE
+    }
 }
 
 /// Custom hash implementation, ensuring consistency with previous version
@@ -604,10 +653,8 @@ impl From<Response> for RequestOrResponse {
 impl From<&RequestMetadata> for pb_queues::RequestMetadata {
     fn from(metadata: &RequestMetadata) -> Self {
         Self {
-            call_tree_depth: Some(metadata.call_tree_depth),
-            call_tree_start_time_nanos: Some(
-                metadata.call_tree_start_time.as_nanos_since_unix_epoch(),
-            ),
+            call_tree_depth: metadata.call_tree_depth,
+            call_tree_start_time_nanos: metadata.call_tree_start_time.as_nanos_since_unix_epoch(),
             call_subtree_deadline_nanos: None,
         }
     }
@@ -623,7 +670,7 @@ impl From<&Request> for pb_queues::Request {
             method_name: req.method_name.clone(),
             method_payload: req.method_payload.clone(),
             cycles_payment: Some((req.payment).into()),
-            metadata: req.metadata.as_ref().map(From::from),
+            metadata: Some((&req.metadata).into()),
             deadline_seconds: req.deadline.as_secs_since_unix_epoch(),
         }
     }
@@ -632,9 +679,9 @@ impl From<&Request> for pb_queues::Request {
 impl From<pb_queues::RequestMetadata> for RequestMetadata {
     fn from(metadata: pb_queues::RequestMetadata) -> Self {
         Self {
-            call_tree_depth: metadata.call_tree_depth.unwrap_or(0),
+            call_tree_depth: metadata.call_tree_depth,
             call_tree_start_time: Time::from_nanos_since_unix_epoch(
-                metadata.call_tree_start_time_nanos.unwrap_or(0),
+                metadata.call_tree_start_time_nanos,
             ),
         }
     }
@@ -659,7 +706,7 @@ impl TryFrom<pb_queues::Request> for Request {
             payment,
             method_name: req.method_name,
             method_payload: req.method_payload,
-            metadata: req.metadata.map(From::from),
+            metadata: req.metadata.map_or_else(Default::default, From::from),
             deadline: CoarseTime::from_secs_since_unix_epoch(req.deadline_seconds),
         })
     }

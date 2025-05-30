@@ -229,7 +229,7 @@ pub fn request_id_signature_and_public_key_with_domain_separator(
                 )
             }
             AlgorithmId::Ed25519 => {
-                let signing_key = ic_crypto_ed25519::PrivateKey::generate_using_rng(rng);
+                let signing_key = ic_ed25519::PrivateKey::generate_using_rng(rng);
                 (
                     signing_key.public_key().serialize_raw().to_vec(),
                     signing_key.sign_message(&bytes_to_sign).to_vec(),

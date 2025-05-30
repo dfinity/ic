@@ -1,8 +1,16 @@
 use candid::{CandidType, Nat};
-// TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
-use ic_management_canister_types::{
-    BoundedControllers, CanisterSettingsArgs as Ic00CanisterSettingsArgs, LogVisibilityV2,
+use ic_cdk::api::call::{CallResult, RejectionCode};
+use std::time::{Duration, SystemTime};
+
+use dfn_protobuf::{ProtoBuf, ToProto};
+use ic_management_canister_types_private::{
+    // TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
+    BoundedControllers,
+    CanisterSettingsArgs as Ic00CanisterSettingsArgs,
+    LogVisibilityV2,
 };
+
+use ic_nervous_system_time_helpers::now_nanoseconds;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use ic_xrc_types::ExchangeRate;
@@ -10,6 +18,7 @@ use icp_ledger::{
     AccountIdentifier, BlockIndex, Memo, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
+use on_wire::{FromWire, IntoWire, NewType};
 use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_CYCLES_PER_XDR: u128 = 1_000_000_000_000u128; // 1T cycles = 1 XDR
@@ -25,6 +34,62 @@ pub const BAD_REQUEST_CYCLES_PENALTY: u128 = 100_000_000; // TODO(SDK-1248) revi
 
 pub const DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS: u64 = 1_620_633_600; // 10 May 2021 10:00:00 AM CEST
 pub const DEFAULT_XDR_PERMYRIAD_PER_ICP_CONVERSION_RATE: u64 = 1_000_000; // 1 ICP = 100 XDR
+
+#[cfg(target_arch = "wasm32")]
+#[link(wasm_import_module = "ic0")]
+extern "C" {
+    pub fn mint_cycles(amount: u64) -> u64;
+}
+
+/// # Safety
+/// This function always panics outside of wasm32, but the wasm32 version is safe to call from CMC.
+#[cfg(not(target_arch = "wasm32"))]
+pub unsafe fn mint_cycles(_amount: u64) -> u64 {
+    panic!("mint_cycles should only be called inside canisters.");
+}
+
+// Not available in ic_cdk
+/// This function can only be called from the CMC canister, and this is the CMC canister.
+/// It is not exposed in ic-cdk because it can't be called from anywhere else.
+pub fn ic0_mint_cycles(amount: u64) -> u64 {
+    unsafe { mint_cycles(amount) }
+}
+
+/// caller that returns principalId instead of Principal
+pub fn caller() -> PrincipalId {
+    PrincipalId::from(ic_cdk::caller())
+}
+
+// Duplicating some functionality that is no longer available
+// after migration to ic_cdk
+pub async fn call_protobuf<Arg, Res>(
+    canister_id: CanisterId,
+    method_name: &str,
+    arg: Arg,
+) -> CallResult<Res>
+where
+    Arg: ToProto,
+    Res: ToProto,
+{
+    let bytes = ProtoBuf::new(arg)
+        .into_bytes()
+        .map_err(|e| (RejectionCode::Unknown, e.to_string()))?;
+
+    let res: CallResult<Vec<u8>> =
+        ic_cdk::api::call::call_raw(canister_id.get().0, method_name, bytes.as_slice(), 0).await;
+
+    res.and_then(|bytes| {
+        Ok(ProtoBuf::<Res>::from_bytes(bytes)
+            .map_err(|e| (RejectionCode::Unknown, e.to_string()))?
+            .into_inner())
+    })
+}
+
+pub fn now_system_time() -> SystemTime {
+    let nanos = now_nanoseconds();
+    let duration = Duration::from_nanos(nanos);
+    SystemTime::UNIX_EPOCH + duration
+}
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum ExchangeRateCanister {
@@ -313,9 +378,22 @@ pub struct CyclesLedgerDepositResult {
     pub block_index: Nat,
 }
 
+// When a user sends us ICP, they indicate via memo (or icrc1_memo) what
+// operation they want to perform.
+//
+// We promise that we will NEVER use 0 as one of these values. (This would be
+// very bad, because then, we would have no way to disambiguate between "the
+// user wanted X" vs. "the user made an oversight".)
+//
+// Note to developers: If you add new values, update MEANINGFUL_MEMOS.
 pub const MEMO_CREATE_CANISTER: Memo = Memo(0x41455243); // == 'CREA'
 pub const MEMO_TOP_UP_CANISTER: Memo = Memo(0x50555054); // == 'TPUP'
 pub const MEMO_MINT_CYCLES: Memo = Memo(0x544e494d); // == 'MINT'
+
+// New values might be added to this later. Do NOT assume that values won't be
+// added to this array later.
+pub const MEANINGFUL_MEMOS: [Memo; 3] =
+    [MEMO_CREATE_CANISTER, MEMO_TOP_UP_CANISTER, MEMO_MINT_CYCLES];
 
 pub fn create_canister_txn(
     amount: Tokens,

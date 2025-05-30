@@ -33,8 +33,8 @@ pub struct StorableRuleId(pub Uuid);
 #[derive(Clone, Debug, Serialize, Deserialize, PartialOrd, Ord, PartialEq, Eq)]
 pub struct StorableIncidentId(pub Uuid);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct StorableRuleMetadata {
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct StorableRule {
     pub incident_id: IncidentId,
     pub rule_raw: Vec<u8>,
     pub description: String,
@@ -51,7 +51,7 @@ pub struct StorableConfig {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct StorableIncidentMetadata {
+pub struct StorableIncident {
     pub is_disclosed: bool,
     pub rule_ids: HashSet<RuleId>,
 }
@@ -92,25 +92,25 @@ impl Storable for StorableConfig {
     const BOUND: Bound = Bound::Unbounded;
 }
 
-impl Storable for StorableIncidentMetadata {
+impl Storable for StorableIncident {
     fn to_bytes(&self) -> Cow<[u8]> {
-        Cow::Owned(to_vec(&self).expect("StorableIncidentMetadata serialization failed"))
+        Cow::Owned(to_vec(&self).expect("StorableIncident serialization failed"))
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        from_slice(&bytes).expect("StorableIncidentMetadata deserialization failed")
+        from_slice(&bytes).expect("StorableIncident deserialization failed")
     }
 
     const BOUND: Bound = Bound::Unbounded;
 }
 
-impl Storable for StorableRuleMetadata {
+impl Storable for StorableRule {
     fn to_bytes(&self) -> Cow<[u8]> {
-        Cow::Owned(to_vec(&self).expect("StorableRuleMetadata serialization failed"))
+        Cow::Owned(to_vec(&self).expect("StorableRule serialization failed"))
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        from_slice(&bytes).expect("StorableRuleMetadata deserialization failed")
+        from_slice(&bytes).expect("StorableRule deserialization failed")
     }
 
     const BOUND: Bound = Bound::Unbounded;
@@ -128,7 +128,7 @@ thread_local! {
         )
     );
 
-    pub static RULES: RefCell<StableMap<StorableRuleId, StorableRuleMetadata>> = RefCell::new(
+    pub static RULES: RefCell<StableMap<StorableRuleId, StorableRule>> = RefCell::new(
         StableMap::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MEMORY_ID_RULES)),
         )
@@ -140,7 +140,7 @@ thread_local! {
         )
     );
 
-    pub static INCIDENTS: RefCell<StableMap<StorableIncidentId, StorableIncidentMetadata>> = RefCell::new(
+    pub static INCIDENTS: RefCell<StableMap<StorableIncidentId, StorableIncident>> = RefCell::new(
         StableMap::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MEMORY_ID_INCIDENTS)),
         )

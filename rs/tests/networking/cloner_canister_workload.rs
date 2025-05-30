@@ -133,9 +133,10 @@ pub fn install_cloner_canisters(env: TestEnv) {
             &logger,
             "{i}/{AMOUNT_OF_CLONER_CANISTERS}: Installing cloner canister."
         );
-        let cloner_canister_id = app_node.create_and_install_canister_with_arg(
+        let cloner_canister_id = app_node.create_and_install_canister_with_arg_and_cycles(
             &std::env::var("CLONER_CANISTER_WASM_PATH").expect("CLONER_CANISTER_WASM_PATH not set"),
             None,
+            Some(1_001_000_000_000_000), // 1001T cycles is enough to spin up 500 canisters
         );
         info!(
             &logger,

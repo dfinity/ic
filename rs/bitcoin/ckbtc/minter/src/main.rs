@@ -1,13 +1,13 @@
 use candid::Principal;
 use ic_btc_interface::Utxo;
 use ic_canister_log::export as export_logs;
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk_macros::{init, post_upgrade, query, update};
+use ic_cdk::{init, post_upgrade, query, update};
 use ic_ckbtc_minter::dashboard::build_dashboard;
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::lifecycle::{self, init::MinterArg};
 use ic_ckbtc_minter::metrics::encode_metrics;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
+use ic_ckbtc_minter::state::eventlog::Event;
 use ic_ckbtc_minter::state::{
     read_state, BtcRetrievalStatusV2, RetrieveBtcStatus, RetrieveBtcStatusV2,
 };
@@ -21,11 +21,12 @@ use ic_ckbtc_minter::updates::{
     get_btc_address::GetBtcAddressArgs,
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
-use ic_ckbtc_minter::MinterInfo;
 use ic_ckbtc_minter::{
-    state::eventlog::{Event, GetEventsArg},
+    state::eventlog::{EventType, GetEventsArg},
     storage, {Log, LogEntry, Priority},
 };
+use ic_ckbtc_minter::{MinterInfo, IC_CANISTER_RUNTIME};
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use icrc_ledger_types::icrc1::account::Account;
 use std::str::FromStr;
 
@@ -33,11 +34,9 @@ use std::str::FromStr;
 fn init(args: MinterArg) {
     match args {
         MinterArg::Init(args) => {
-            storage::record_event(&Event::Init(args.clone()));
+            storage::record_event(EventType::Init(args.clone()), &IC_CANISTER_RUNTIME);
             lifecycle::init::init(args);
-            schedule_now(TaskType::ProcessLogic);
-            schedule_now(TaskType::RefreshFeePercentiles);
-            schedule_now(TaskType::DistributeKytFee);
+            setup_tasks();
 
             #[cfg(feature = "self_check")]
             ok_or_die(check_invariants())
@@ -46,6 +45,11 @@ fn init(args: MinterArg) {
             panic!("expected InitArgs got UpgradeArgs");
         }
     }
+}
+
+fn setup_tasks() {
+    schedule_now(TaskType::ProcessLogic, &IC_CANISTER_RUNTIME);
+    schedule_now(TaskType::RefreshFeePercentiles, &IC_CANISTER_RUNTIME);
 }
 
 #[cfg(feature = "self_check")]
@@ -59,13 +63,13 @@ fn ok_or_die(result: Result<(), String>) {
 /// Checks that ckBTC minter state internally consistent.
 #[cfg(feature = "self_check")]
 fn check_invariants() -> Result<(), String> {
-    use ic_ckbtc_minter::state::eventlog::replay;
+    use ic_ckbtc_minter::state::{eventlog::replay, invariants::CheckInvariantsImpl};
 
     read_state(|s| {
         s.check_invariants()?;
 
         let events: Vec<_> = storage::events().collect();
-        let recovered_state = replay(events.clone().into_iter())
+        let recovered_state = replay::<CheckInvariantsImpl>(events.clone().into_iter())
             .unwrap_or_else(|e| panic!("failed to replay log {:?}: {:?}", events, e));
 
         recovered_state.check_invariants()?;
@@ -77,16 +81,6 @@ fn check_invariants() -> Result<(), String> {
 
         Ok(())
     })
-}
-
-#[cfg(feature = "self_check")]
-#[update]
-async fn distribute_kyt_fee() {
-    let _guard = match ic_ckbtc_minter::guard::DistributeKytFeeGuard::new() {
-        Some(guard) => guard,
-        None => return,
-    };
-    ic_ckbtc_minter::distribute_kyt_fees().await;
 }
 
 #[cfg(feature = "self_check")]
@@ -120,7 +114,7 @@ fn timer() {
     #[cfg(feature = "self_check")]
     ok_or_die(check_invariants());
 
-    ic_ckbtc_minter::timer();
+    ic_ckbtc_minter::timer(IC_CANISTER_RUNTIME);
 }
 
 #[post_upgrade]
@@ -133,14 +127,11 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
         };
     }
     lifecycle::upgrade::post_upgrade(upgrade_arg);
-    schedule_now(TaskType::ProcessLogic);
-    schedule_now(TaskType::RefreshFeePercentiles);
-    schedule_now(TaskType::DistributeKytFee);
+    setup_tasks();
 }
 
 #[update]
 async fn get_btc_address(args: GetBtcAddressArgs) -> String {
-    check_anonymous_caller();
     updates::get_btc_address::get_btc_address(args).await
 }
 
@@ -192,7 +183,7 @@ fn get_known_utxos(args: UpdateBalanceArgs) -> Vec<Utxo> {
 #[update]
 async fn update_balance(args: UpdateBalanceArgs) -> Result<Vec<UtxoStatus>, UpdateBalanceError> {
     check_anonymous_caller();
-    check_postcondition(updates::update_balance::update_balance(args).await)
+    check_postcondition(updates::update_balance::update_balance(args, &IC_CANISTER_RUNTIME).await)
 }
 
 #[update]
@@ -207,14 +198,21 @@ async fn get_canister_status() -> ic_cdk::api::management_canister::main::Canist
     .0
 }
 
+#[cfg(feature = "self_check")]
+#[update]
+async fn upload_events(events: Vec<Event>) {
+    for event in events {
+        storage::record_event_v0(event.payload, &IC_CANISTER_RUNTIME);
+    }
+}
+
 #[query]
 fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
     read_state(|s| {
-        ic_ckbtc_minter::estimate_fee(
+        ic_ckbtc_minter::estimate_retrieve_btc_fee(
             &s.available_utxos,
             arg.amount,
             s.last_fee_per_vbyte[50],
-            s.kyt_fee,
         )
     })
 }
@@ -222,7 +220,7 @@ fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
 #[query]
 fn get_minter_info() -> MinterInfo {
     read_state(|s| MinterInfo {
-        kyt_fee: s.kyt_fee,
+        check_fee: s.check_fee,
         min_confirmations: s.min_confirmations,
         retrieve_btc_min_amount: s.fee_based_retrieve_btc_min_amount,
     })
@@ -230,12 +228,12 @@ fn get_minter_info() -> MinterInfo {
 
 #[query]
 fn get_deposit_fee() -> u64 {
-    read_state(|s| s.kyt_fee)
+    read_state(|s| s.check_fee)
 }
 
 #[query(hidden = true)]
 fn http_request(req: HttpRequest) -> HttpResponse {
-    if ic_cdk::api::data_certificate().is_none() {
+    if ic_cdk::api::in_replicated_execution() {
         ic_cdk::trap("update call rejected");
     }
 
@@ -246,6 +244,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         match encode_metrics(&mut writer) {
             Ok(()) => HttpResponseBuilder::ok()
                 .header("Content-Type", "text/plain; version=0.0.4")
+                .header("Cache-Control", "no-store")
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {

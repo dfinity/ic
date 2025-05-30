@@ -15,6 +15,7 @@ pub type Map = BTreeMap<String, Value>;
 pub type ICRC3Map = BTreeMap<String, ICRC3Value>;
 pub type Hash = [u8; 32];
 
+/// A value defined in [the ICRC-3 standard](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-3/README.md#value).
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ICRC3Value {
     Blob(ByteBuf),
@@ -33,6 +34,7 @@ impl std::fmt::Display for ICRC3Value {
 }
 
 impl ICRC3Value {
+    /// Compute [the hash of an ICRC-3 value](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-3/README.md#value).
     pub fn hash(self) -> Hash {
         // TODO(FI-1263): copy the value hash function to avoid cloning self
         Value::from(self).hash()

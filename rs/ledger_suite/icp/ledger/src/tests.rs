@@ -1,4 +1,4 @@
-use crate::{AccountIdentifier, Ledger};
+use crate::{balances_len, AccountIdentifier, Ledger, StorableAllowance};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_canister_core::{
     archive::Archive,
@@ -7,14 +7,18 @@ use ic_ledger_canister_core::{
 };
 use ic_ledger_core::{
     approvals::Allowance,
+    balances::BalancesStore,
     block::{BlockIndex, BlockType},
     timestamp::TimeStamp,
-    tokens::{CheckedAdd, CheckedSub, Tokens},
+    tokens::Tokens,
 };
+use ic_stable_structures::Storable;
 use icp_ledger::{
-    apply_operation, ArchiveOptions, Block, LedgerBalances, Memo, Operation, PaymentError,
-    Transaction, TransferError, DEFAULT_TRANSFER_FEE,
+    apply_operation, ArchiveOptions, Block, Memo, Operation, PaymentError, Transaction,
+    TransferError, DEFAULT_TRANSFER_FEE,
 };
+use proptest::prelude::{any, prop_assert_eq, proptest};
+use proptest::strategy::Strategy;
 use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
@@ -29,71 +33,6 @@ fn tokens(n: u64) -> Tokens {
 
 fn ts(n: u64) -> TimeStamp {
     TimeStamp::from_nanos_since_unix_epoch(n)
-}
-
-#[test]
-fn balances_overflow() {
-    let balances = LedgerBalances::new();
-    let mut state = Ledger {
-        balances,
-        maximum_number_of_accounts: 8,
-        accounts_overflow_trim_quantity: 2,
-        minting_account_id: Some(PrincipalId::new_user_test_id(137).into()),
-        ..Default::default()
-    };
-    assert_eq!(state.balances.token_pool, Tokens::MAX);
-    println!(
-        "minting canister initial balance: {}",
-        state.balances.token_pool
-    );
-    let mut credited = Tokens::ZERO;
-
-    // 11 accounts. The one with 0 will not be added
-    // The rest will be added and trigger a trim of 2 once
-    // the total number reaches 8 + 2
-    // the number of active accounts won't go below 8 after trimming
-    for i in 0..11 {
-        let amount = Tokens::new(i, 0).unwrap();
-        state
-            .add_payment(
-                Memo::default(),
-                Operation::Mint {
-                    to: PrincipalId::new_user_test_id(i).into(),
-                    amount,
-                },
-                None,
-            )
-            .unwrap();
-        credited = credited.checked_add(&amount).unwrap();
-    }
-    println!("amount credited to accounts: {}", credited);
-
-    println!("balances: {:?}", state.balances);
-
-    // The two accounts with lowest balances, 0 and 1 respectively, have been
-    // removed
-    assert_eq!(state.balances.store.len(), 8);
-    assert_eq!(
-        state
-            .balances
-            .account_balance(&PrincipalId::new_user_test_id(0).into()),
-        Tokens::ZERO
-    );
-    assert_eq!(
-        state
-            .balances
-            .account_balance(&PrincipalId::new_user_test_id(1).into()),
-        Tokens::ZERO
-    );
-    // We have credited 55 Tokens to various accounts but the three accounts
-    // with lowest balances, 0, 1 and 2, should have been removed and their
-    // balance returned to the minting canister
-    let expected_minting_canister_balance = Tokens::MAX
-        .checked_sub(&credited)
-        .unwrap()
-        .checked_add(&Tokens::new(1 + 2, 0).unwrap())
-        .unwrap();
-    assert_eq!(state.balances.token_pool, expected_minting_canister_balance);
 }
 
 #[test]
@@ -113,8 +52,8 @@ fn balances_remove_accounts_with_zero_balance() {
     .unwrap();
     // verify that an account entry exists for the `canister`
     assert_eq!(
-        ctx.balances().store.get(&canister),
-        Some(&Tokens::from_e8s(1000))
+        ctx.balances().store.get_balance(&canister),
+        Some(&Tokens::from_e8s(1000)).copied()
     );
     // make 2 transfers that empty the account
     for _ in 0..2 {
@@ -133,15 +72,15 @@ fn balances_remove_accounts_with_zero_balance() {
     }
     // target canister's balance adds up
     assert_eq!(
-        ctx.balances().store.get(&target_canister),
-        Some(&Tokens::from_e8s(800))
+        ctx.balances().store.get_balance(&target_canister),
+        Some(&Tokens::from_e8s(800)).copied()
     );
     // source canister has been removed
-    assert_eq!(ctx.balances().store.get(&canister), None);
+    assert_eq!(ctx.balances().store.get_balance(&canister), None);
     assert_eq!(ctx.balances().account_balance(&canister), Tokens::ZERO);
 
     // one account left in the store
-    assert_eq!(ctx.balances().store.len(), 1);
+    assert_eq!(balances_len(), 1);
 
     apply_operation(
         &mut ctx,
@@ -156,11 +95,11 @@ fn balances_remove_accounts_with_zero_balance() {
     )
     .unwrap();
     // No new account should have been created
-    assert_eq!(ctx.balances().store.len(), 1);
+    assert_eq!(balances_len(), 1);
     // and the fee should have been taken from sender
     assert_eq!(
-        ctx.balances().store.get(&target_canister),
-        Some(&Tokens::from_e8s(700))
+        ctx.balances().store.get_balance(&target_canister),
+        Some(&Tokens::from_e8s(700)).copied()
     );
 
     apply_operation(
@@ -174,7 +113,7 @@ fn balances_remove_accounts_with_zero_balance() {
     .unwrap();
 
     // No new account should have been created
-    assert_eq!(ctx.balances().store.len(), 1);
+    assert_eq!(balances_len(), 1);
 
     apply_operation(
         &mut ctx,
@@ -188,7 +127,7 @@ fn balances_remove_accounts_with_zero_balance() {
     .unwrap();
 
     // And burn should have exhausted the target_canister
-    assert_eq!(ctx.balances().store.len(), 0);
+    assert_eq!(balances_len(), 0);
 }
 
 #[test]
@@ -261,8 +200,6 @@ fn serialize() {
         Some("ICP".into()),
         Some("icp".into()),
         None,
-        None,
-        None,
     );
 
     let txn = Transaction::new(
@@ -322,8 +259,8 @@ fn serialize() {
         state_decoded.blockchain.last_hash
     );
     assert_eq!(
-        state.blockchain.blocks.len(),
-        state_decoded.blockchain.blocks.len()
+        state.blockchain.num_unarchived_blocks(),
+        state_decoded.blockchain.num_unarchived_blocks()
     );
     assert_eq!(state.balances.store, state_decoded.balances.store);
 }
@@ -341,41 +278,46 @@ fn bad_created_at_time() {
         amount: Tokens::from_e8s(1000),
     };
 
-    let now = dfn_core::api::now().into();
+    let now = SystemTime::now().into();
 
     assert_eq!(
         PaymentError::TransferError(TransferError::TxTooOld {
             allowed_window_nanos: Duration::from_secs(24 * 60 * 60).as_nanos() as u64,
         }),
         state
-            .add_payment(
+            .add_payment_with_timestamp(
                 Memo(1),
                 transfer.clone(),
-                Some(now - state.transaction_window - Duration::from_secs(1))
+                Some(now - state.transaction_window - Duration::from_secs(1)),
+                now
             )
             .unwrap_err()
     );
 
     state
-        .add_payment(
+        .add_payment_with_timestamp(
             Memo(2),
             transfer.clone(),
             Some(now - Duration::from_secs(1)),
+            now,
         )
         .unwrap();
 
     assert_eq!(
         PaymentError::TransferError(TransferError::TxCreatedInFuture),
         state
-            .add_payment(
+            .add_payment_with_timestamp(
                 Memo(3),
                 transfer.clone(),
-                Some(now + Duration::from_secs(120))
+                Some(now + Duration::from_secs(120)),
+                now
             )
             .unwrap_err()
     );
 
-    state.add_payment(Memo(4), transfer, Some(now)).unwrap();
+    state
+        .add_payment_with_timestamp(Memo(4), transfer, Some(now), now)
+        .unwrap();
 }
 
 /// Check that block timestamps don't go backwards.
@@ -391,9 +333,15 @@ fn monotonic_timestamps() {
         amount: Tokens::from_e8s(1000),
     };
 
-    state.add_payment(Memo(1), transfer.clone(), None).unwrap();
+    let now = TimeStamp::from_nanos_since_unix_epoch(1_000_000_000);
 
-    state.add_payment(Memo(2), transfer.clone(), None).unwrap();
+    state
+        .add_payment_with_timestamp(Memo(1), transfer.clone(), None, now)
+        .unwrap();
+
+    state
+        .add_payment_with_timestamp(Memo(2), transfer.clone(), None, now)
+        .unwrap();
 
     state
         .add_payment_with_timestamp(
@@ -429,11 +377,11 @@ fn duplicate_txns() {
         amount: Tokens::from_e8s(1000),
     };
 
-    let now = dfn_core::api::now().into();
+    let now = SystemTime::now().into();
 
     assert_eq!(
         state
-            .add_payment(Memo::default(), transfer.clone(), Some(now))
+            .add_payment_with_timestamp(Memo::default(), transfer.clone(), Some(now), now)
             .unwrap()
             .0,
         0
@@ -441,7 +389,7 @@ fn duplicate_txns() {
 
     assert_eq!(
         state
-            .add_payment(Memo(123), transfer.clone(), Some(now))
+            .add_payment_with_timestamp(Memo(123), transfer.clone(), Some(now), now)
             .unwrap()
             .0,
         1
@@ -449,10 +397,11 @@ fn duplicate_txns() {
 
     assert_eq!(
         state
-            .add_payment(
+            .add_payment_with_timestamp(
                 Memo::default(),
                 transfer.clone(),
-                Some(now - Duration::from_secs(1))
+                Some(now - Duration::from_secs(1)),
+                now
             )
             .unwrap()
             .0,
@@ -475,7 +424,7 @@ fn duplicate_txns() {
     assert_eq!(
         PaymentError::TransferError(TransferError::TxDuplicate { duplicate_of: 0 }),
         state
-            .add_payment(Memo::default(), transfer.clone(), Some(now))
+            .add_payment_with_timestamp(Memo::default(), transfer.clone(), Some(now), now)
             .unwrap_err()
     );
 
@@ -583,26 +532,24 @@ fn duplicate_txns() {
 
 #[test]
 fn get_blocks_returns_correct_blocks() {
-    let mut state = Ledger::default();
+    let mut blocks = vec![];
 
-    state.from_init(
-        vec![(
-            PrincipalId::new_user_test_id(0).into(),
-            Tokens::new(1000000, 0).unwrap(),
-        )]
-        .into_iter()
-        .collect(),
-        PrincipalId::new_user_test_id(1000).into(),
-        Some(PrincipalId::new_user_test_id(1000).0.into()),
-        SystemTime::UNIX_EPOCH.into(),
-        None,
-        HashSet::new(),
-        None,
-        Some("ICP".into()),
-        Some("icp".into()),
-        None,
-        None,
-        None,
+    let tx = Transaction {
+        operation: Operation::Mint {
+            to: PrincipalId::new_user_test_id(0).into(),
+            amount: Tokens::from_e8s(1000),
+        },
+        memo: Memo(0),
+        created_at_time: None,
+        icrc1_memo: None,
+    };
+    blocks.push(
+        Block {
+            parent_hash: None,
+            transaction: tx,
+            timestamp: (SystemTime::UNIX_EPOCH + Duration::new(1, 0)).into(),
+        }
+        .encode(),
     );
 
     for i in 0..10 {
@@ -611,29 +558,27 @@ fn get_blocks_returns_correct_blocks() {
             PrincipalId::new_user_test_id(1).into(),
             None,
             Tokens::new(1, 0).unwrap(),
-            state.transfer_fee,
+            tokens(1),
             Memo(i),
             TimeStamp::new(1, 0),
         );
 
         let block = Block {
-            parent_hash: state.blockchain.last_hash,
+            parent_hash: None,
             transaction: txn,
             timestamp: (SystemTime::UNIX_EPOCH + Duration::new(1, 0)).into(),
         };
 
-        state.add_block(block).unwrap();
+        blocks.push(block.encode());
     }
 
-    let blocks = &state.blockchain.blocks;
-
-    let first_blocks = icp_ledger::get_blocks(blocks, 0, 1, 5).0.unwrap();
+    let first_blocks = icp_ledger::get_blocks(&blocks, 0, 1, 5).0.unwrap();
     for i in 0..first_blocks.len() {
         let block = Block::decode(first_blocks.get(i).unwrap().clone()).unwrap();
         assert_eq!(block.transaction.memo.0, i as u64);
     }
 
-    let last_blocks = icp_ledger::get_blocks(blocks, 0, 6, 5).0.unwrap();
+    let last_blocks = icp_ledger::get_blocks(&blocks, 0, 6, 5).0.unwrap();
     for i in 0..last_blocks.len() {
         let block = Block::decode(last_blocks.get(i).unwrap().clone()).unwrap();
         assert_eq!(block.transaction.memo.0, 5 + i as u64);
@@ -665,8 +610,6 @@ fn test_purge() {
         None,
         Some("ICP".into()),
         Some("icp".into()),
-        None,
-        None,
         None,
     );
     let little_later = genesis + Duration::from_millis(1);
@@ -737,7 +680,7 @@ fn test_throttle_tx_per_second_nok() {
         amount: Tokens::from_e8s(1000),
     };
 
-    let now: TimeStamp = dfn_core::api::now().into();
+    let now = TimeStamp::from_nanos_since_unix_epoch(1000000);
 
     assert_eq!(apply_at(&mut ledger, &op, now + millis(1)), 0);
     assert_eq!(apply_at(&mut ledger, &op, now + millis(1002)), 1);
@@ -760,7 +703,7 @@ fn test_throttle_tx_per_second_ok() {
         to: PrincipalId::new_user_test_id(1).into(),
         amount: Tokens::from_e8s(1000),
     };
-    let now: TimeStamp = dfn_core::api::now().into();
+    let now = TimeStamp::from_nanos_since_unix_epoch(1000000);
 
     assert_eq!(apply_at(&mut ledger, &op, now + millis(1)), 0);
     assert_eq!(apply_at(&mut ledger, &op, now + millis(1002)), 1);
@@ -781,7 +724,7 @@ fn test_throttle_two_tx_per_second_after_soft_limit_ok() {
         to: PrincipalId::new_user_test_id(1).into(),
         amount: Tokens::from_e8s(1000),
     };
-    let now: TimeStamp = dfn_core::api::now().into();
+    let now = TimeStamp::from_nanos_since_unix_epoch(1000000);
 
     assert_eq!(apply_at(&mut ledger, &op, now + millis(1)), 0);
     assert_eq!(apply_at(&mut ledger, &op, now + millis(2)), 1);
@@ -808,7 +751,7 @@ fn test_throttle_two_tx_per_second_after_soft_limit_nok() {
         to: PrincipalId::new_user_test_id(1).into(),
         amount: Tokens::from_e8s(1000),
     };
-    let now: TimeStamp = dfn_core::api::now().into();
+    let now = TimeStamp::from_nanos_since_unix_epoch(1000000);
 
     assert_eq!(apply_at(&mut ledger, &op, now + millis(1)), 0);
     assert_eq!(apply_at(&mut ledger, &op, now + millis(2)), 1);
@@ -887,7 +830,7 @@ fn test_approvals_are_not_cumulative() {
         Allowance {
             amount: approved_amount,
             expires_at: None,
-            arrived_at: now,
+            arrived_at: TimeStamp::from_nanos_since_unix_epoch(0),
         },
     );
 
@@ -915,7 +858,7 @@ fn test_approvals_are_not_cumulative() {
         Allowance {
             amount: new_allowance,
             expires_at: Some(expiration),
-            arrived_at: now,
+            arrived_at: TimeStamp::from_nanos_since_unix_epoch(0),
         }
     );
 }
@@ -988,7 +931,7 @@ fn test_approval_transfer_from() {
         Allowance {
             amount: tokens(40_000),
             expires_at: None,
-            arrived_at: now,
+            arrived_at: TimeStamp::from_nanos_since_unix_epoch(0),
         },
     );
 
@@ -1015,7 +958,7 @@ fn test_approval_transfer_from() {
         Allowance {
             amount: tokens(40_000),
             expires_at: None,
-            arrived_at: now,
+            arrived_at: TimeStamp::from_nanos_since_unix_epoch(0),
         },
     );
     assert_eq!(ctx.balances().account_balance(&from), tokens(80_000),);
@@ -1048,7 +991,7 @@ fn test_approval_expiration_override() {
         Allowance {
             amount: tokens(100_000),
             expires_at: Some(ts(2000)),
-            arrived_at: now,
+            arrived_at: TimeStamp::from_nanos_since_unix_epoch(0),
         },
     );
 
@@ -1059,7 +1002,7 @@ fn test_approval_expiration_override() {
         Allowance {
             amount: tokens(200_000),
             expires_at: Some(ts(1500)),
-            arrived_at: now,
+            arrived_at: TimeStamp::from_nanos_since_unix_epoch(0),
         },
     );
 
@@ -1070,7 +1013,7 @@ fn test_approval_expiration_override() {
         Allowance {
             amount: tokens(300_000),
             expires_at: Some(ts(2500)),
-            arrived_at: now,
+            arrived_at: TimeStamp::from_nanos_since_unix_epoch(0),
         },
     );
 
@@ -1085,7 +1028,7 @@ fn test_approval_expiration_override() {
         Allowance {
             amount: tokens(300_000),
             expires_at: Some(ts(2500)),
-            arrived_at: now,
+            arrived_at: TimeStamp::from_nanos_since_unix_epoch(0),
         },
     );
 }
@@ -1339,7 +1282,7 @@ fn test_approval_burn_from() {
         Allowance {
             amount: tokens(50_000),
             expires_at: None,
-            arrived_at: now,
+            arrived_at: TimeStamp::from_nanos_since_unix_epoch(0),
         },
     );
 
@@ -1364,10 +1307,43 @@ fn test_approval_burn_from() {
         Allowance {
             amount: tokens(50_000),
             expires_at: None,
-            arrived_at: now,
+            arrived_at: TimeStamp::from_nanos_since_unix_epoch(0),
         },
     );
     assert_eq!(ctx.balances().account_balance(&from), tokens(90_000));
     assert_eq!(ctx.balances().account_balance(&spender), Tokens::ZERO);
     assert_eq!(ctx.balances().total_supply().get_e8s(), 90_000);
+}
+
+#[test]
+fn allowance_serialization() {
+    fn arb_token() -> impl Strategy<Value = Tokens> {
+        any::<u64>().prop_map(tokens)
+    }
+
+    fn arb_timestamp() -> impl Strategy<Value = TimeStamp> {
+        any::<u64>().prop_map(TimeStamp::from_nanos_since_unix_epoch)
+    }
+    fn arb_opt_expiration() -> impl Strategy<Value = Option<TimeStamp>> {
+        proptest::option::of(any::<u64>().prop_map(TimeStamp::from_nanos_since_unix_epoch))
+    }
+    fn arb_allowance() -> impl Strategy<Value = Allowance<Tokens>> {
+        (arb_token(), arb_opt_expiration(), arb_timestamp()).prop_map(
+            |(amount, expires_at, arrived_at)| Allowance {
+                amount,
+                expires_at,
+                arrived_at,
+            },
+        )
+    }
+    proptest!(|(allowance in arb_allowance())| {
+        let storable_allowance: StorableAllowance = allowance.clone().into();
+        let new_allowance: Allowance<Tokens> = StorableAllowance::from_bytes(storable_allowance.to_bytes()).into();
+        prop_assert_eq!(new_allowance.amount, allowance.amount);
+        prop_assert_eq!(new_allowance.expires_at, allowance.expires_at);
+        prop_assert_eq!(
+            new_allowance.arrived_at,
+            TimeStamp::from_nanos_since_unix_epoch(0)
+        );
+    })
 }

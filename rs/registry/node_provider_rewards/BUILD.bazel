@@ -5,10 +5,12 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/types/base_types",
     "//rs/protobuf",
+    "@crate_index//:ic-cdk",
 ]
 
 DEV_DEPENDENCIES = [
     "@crate_index//:maplit",
+    "@crate_index//:pretty_assertions",
 ]
 
 rust_library(

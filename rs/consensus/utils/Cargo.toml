@@ -11,17 +11,19 @@ ic-crypto-prng = { path = "../../crypto/prng" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-logger = { path = "../../monitoring/logger" }
+ic-metrics = { path = "../../monitoring/metrics" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-types = { path = "../../types/types" }
+prometheus = { workspace = true }
 rand = { workspace = true }
 slog = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
 ic-consensus-mocks = { path = "../mocks" }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 ic-test-utilities-state = { path = "../../test_utilities/state" }

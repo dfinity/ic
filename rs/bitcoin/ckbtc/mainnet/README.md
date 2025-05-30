@@ -3,7 +3,6 @@
 Root canister id: `r7inp-6aaaa-aaaaa-aaabq-cai`.
 Subnet: `pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae`
 
-
 ## Installing the minter ([`mqygn-kiaaa-aaaar-qaadq-cai`](https://dashboard.internetcomputer.org/canister/mqygn-kiaaa-aaaar-qaadq-cai))
 
 Notes on init args:
@@ -81,7 +80,7 @@ Notes on init args:
 * The transfer fee is 10 ckBTC Satoshis.
 * There are no initial balances: the minter is responsible for minting all ckBTC.
 * Archive max memory size is 3 GiB, or 3_221_225_472 bytes. We can afford to use that much memory because archives store transactions in stable memory.
-* The `max_memo_length` was last udpated to 80 in [NNS proposal 123422](https://dashboard.internetcomputer.org/proposal/123422).
+* The `max_memo_length` was last updated to 80 in [NNS proposal 123422](https://dashboard.internetcomputer.org/proposal/123422).
 
 The metadata contains the official ckBTC logo.
 
@@ -138,7 +137,7 @@ bazel build //rs/registry/admin:ic-admin
 Encoding the init args:
 
 ```shell
-didc encode -d ../../../ledger_suite/icrc1/index/index.did -t '(InitArgs)' '(record { ledger_id = principal "mxzaz-hqaaa-aaaar-qaada-cai" })' | xxd -r -p > index_arg.bin
+didc encode -d ../../../ledger_suite/icrc1/index-ng/index-ng.did -t '(opt IndexArg)' '(opt variant { Init = record { ledger_id = principal "mxzaz-hqaaa-aaaar-qaada-cai" } })' | xxd -r -p > index_arg.bin
 ```
 
 Submitting the install proposal:
@@ -156,7 +155,7 @@ bazel build //rs/registry/admin:ic-admin
     --proposer $NEURON_ID \
     --canister-id n5wcd-faaaa-aaaar-qaaea-cai \
     --mode install \
-    --wasm-module-path ./ic-icrc1-index.wasm.gz \
+    --wasm-module-path ./ic-icrc1-index-ng.wasm.gz \
     --wasm-module-sha256 $WASM_SHA256 \
     --arg index_arg.bin \
     --summary-file ./index_proposal.md
@@ -177,7 +176,7 @@ bazel build //rs/registry/admin:ic-admin
     --proposer $NEURON_ID \
     --canister-id n5wcd-faaaa-aaaar-qaaea-cai \
     --mode upgrade \
-    --wasm-module-path ./ic-icrc1-index.wasm.gz \
+    --wasm-module-path ./ic-icrc1-index-ng.wasm.gz \
     --wasm-module-sha256 $WASM_SHA256 \
     --summary-file ./index_upgrade.md
 ```

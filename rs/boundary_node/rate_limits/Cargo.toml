@@ -9,24 +9,26 @@ documentation.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 candid = { workspace = true }
-getrandom = { version = "0.2", features = ["custom"] }
-hex = { workspace = true }
-ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
+getrandom = { workspace = true }
+ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-cdk = { workspace = true }
-ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
-ic-metrics-encoder = "1"
+ic-http-types = { path = "../../../packages/ic-http-types" }
+ic-nns-constants = { path = "../../nns/constants" }
 ic-stable-structures = { workspace = true }
 mockall = { workspace = true }
+prometheus.workspace = true
 rand_chacha = { workspace = true }
 rate-limits-api = { path = "./api" }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
+strum = { workspace = true }
 thiserror = { workspace = true }
-uuid = { workspace = true, features = ['serde', 'v4'] }
+uuid = { workspace = true }
 
 [dev-dependencies]
+candid_parser = { workspace = true }
 rate-limit-canister-integration-tests = { path = "./integration_tests" }
 
 [lib]

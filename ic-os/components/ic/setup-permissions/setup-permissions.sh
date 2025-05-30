@@ -24,14 +24,14 @@ function make_group_owned_and_sticky() {
     local GROUP="$3"
 
     mkdir -p "${TARGET_DIR}"
-    chown -R "${USER}:${GROUP}" "${TARGET_DIR}"
-    chmod u=rwX,g=rX,o= -R "${TARGET_DIR}"
+    find "${TARGET_DIR}" -print0 | xargs -0 -P 0 chown "${USER}:${GROUP}"
+    find "${TARGET_DIR}" -print0 | xargs -0 -P 0 chmod u=rwX,g=rX,o=
     find "${TARGET_DIR}" -type d | xargs chmod g+s
 }
 
 make_group_owned_and_sticky /var/lib/ic/backup ic-replica backup
 make_group_owned_and_sticky /var/lib/ic/crypto ic-csp-vault ic-csp-vault
-make_group_owned_and_sticky /var/lib/ic/data/ic_consensus_pool ic-replica nonconfidential
+make_group_owned_and_sticky /var/lib/ic/data/ic_consensus_pool ic-replica ic-consensus-pool
 make_group_owned_and_sticky /var/lib/ic/data/ic_state ic-replica nonconfidential
 make_group_owned_and_sticky /var/lib/ic/data/cups ic-replica nonconfidential
 make_group_owned_and_sticky /var/lib/ic/data/orchestrator ic-replica nonconfidential
@@ -41,7 +41,7 @@ make_group_owned_and_sticky /var/lib/ic/data/recovery admin nonconfidential
 
 # Fix up security labels for everything.
 echo "Restoring SELinux security contexts in /var/lib/ic"
-/opt/ic/bin/prestorecon -j 0 /var/lib/ic/data /var/lib/ic/crypto
+/opt/ic/bin/erestorecon.sh /var/lib/ic/data /var/lib/ic/crypto
 
 # Note: we are not setting up contexts individually for /var/lib/ic/backup.
 # This is handled instead by mount option for the filesystem in its entirety.

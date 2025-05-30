@@ -1,8 +1,11 @@
-use crate::in_memory_ledger::{ApprovalKey, InMemoryLedger, InMemoryLedgerState, Tokens};
+use crate::in_memory_ledger::{ApprovalKey, InMemoryLedger, InMemoryLedgerState};
+
 use ic_ledger_core::approvals::Allowance;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_types::PrincipalId;
+#[cfg(feature = "icp-tokens")]
+use icp_ledger::AccountIdentifier;
 use icrc_ledger_types::icrc1::account::Account;
 
 const ACCOUNT_ID_1: u64 = 134;
@@ -17,9 +20,25 @@ const ZERO_AMOUNT: u64 = 0u64;
 const FEE_AMOUNT: u64 = 10_000u64;
 const TIMESTAMP_NOW: u64 = 0;
 const TIMESTAMP_LATER: u64 = 1;
+const TIMESTAMP_EVEN_LATER: u64 = 2;
+
+#[cfg(not(any(feature = "u256-tokens", feature = "icp-tokens")))]
+type Tokens = ic_icrc1_tokens_u64::U64;
+
+#[cfg(all(feature = "u256-tokens", not(feature = "icp-tokens")))]
+type Tokens = ic_icrc1_tokens_u256::U256;
+
+#[cfg(feature = "icp-tokens")]
+type Tokens = ic_ledger_core::Tokens;
+
+#[cfg(feature = "icp-tokens")]
+type AccountType = AccountIdentifier;
+
+#[cfg(not(feature = "icp-tokens"))]
+type AccountType = Account;
 
 struct LedgerBuilder {
-    ledger: InMemoryLedger<ApprovalKey, Account, Tokens>,
+    ledger: InMemoryLedger<AccountType, Tokens>,
 }
 
 impl LedgerBuilder {
@@ -29,13 +48,18 @@ impl LedgerBuilder {
         }
     }
 
-    fn with_mint(mut self, to: &Account, amount: &Tokens) -> Self {
+    fn with_mint(mut self, to: &AccountType, amount: &Tokens) -> Self {
         self.ledger.process_mint(to, amount);
         self.ledger.validate_invariants();
         self
     }
 
-    fn with_burn(mut self, from: &Account, spender: &Option<Account>, amount: &Tokens) -> Self {
+    fn with_burn(
+        mut self,
+        from: &AccountType,
+        spender: &Option<AccountType>,
+        amount: &Tokens,
+    ) -> Self {
         let irrelevant_index = 0;
         self.ledger
             .process_burn(from, spender, amount, irrelevant_index);
@@ -45,9 +69,9 @@ impl LedgerBuilder {
 
     fn with_transfer(
         mut self,
-        from: &Account,
-        to: &Account,
-        spender: &Option<Account>,
+        from: &AccountType,
+        to: &AccountType,
+        spender: &Option<AccountType>,
         amount: &Tokens,
         fee: &Option<Tokens>,
     ) -> Self {
@@ -58,8 +82,8 @@ impl LedgerBuilder {
 
     fn with_approve(
         mut self,
-        from: &Account,
-        spender: &Account,
+        from: &AccountType,
+        spender: &AccountType,
         amount: &Tokens,
         expected_allowance: &Option<Tokens>,
         expires_at: &Option<u64>,
@@ -79,7 +103,7 @@ impl LedgerBuilder {
         self
     }
 
-    fn build(self) -> InMemoryLedger<ApprovalKey, Account, Tokens> {
+    fn build(self) -> InMemoryLedger<AccountType, Tokens> {
         self.ledger
     }
 }
@@ -319,6 +343,139 @@ fn should_remove_allowance_when_set_to_zero() {
 }
 
 #[test]
+fn should_set_allowance_with_expected_allowance_and_no_existing_allowance() {
+    let now = TimeStamp::from_nanos_since_unix_epoch(TIMESTAMP_NOW);
+    let ledger = LedgerBuilder::new()
+        .with_mint(&account_from_u64(ACCOUNT_ID_1), &Tokens::from(MINT_AMOUNT))
+        .with_approve(
+            &account_from_u64(ACCOUNT_ID_1),
+            &account_from_u64(ACCOUNT_ID_2),
+            &Tokens::from(APPROVE_AMOUNT),
+            &Some(Tokens::from(0u64)),
+            &None,
+            &Some(Tokens::from(FEE_AMOUNT)),
+            now,
+        )
+        .build();
+
+    let allowance_key = ApprovalKey::from((
+        &account_from_u64(ACCOUNT_ID_1),
+        &account_from_u64(ACCOUNT_ID_2),
+    ));
+    let account2_allowance = ledger.allowances.get(&allowance_key);
+    let expected_allowance2: Allowance<Tokens> = Allowance {
+        amount: Tokens::from(APPROVE_AMOUNT),
+        expires_at: None,
+        arrived_at: now,
+    };
+    assert_eq!(account2_allowance, Some(&expected_allowance2));
+}
+
+#[test]
+fn should_set_allowance_with_expected_allowance_and_existing_allowance() {
+    let now = TimeStamp::from_nanos_since_unix_epoch(TIMESTAMP_NOW);
+    let ledger = LedgerBuilder::new()
+        .with_mint(&account_from_u64(ACCOUNT_ID_1), &Tokens::from(MINT_AMOUNT))
+        .with_approve(
+            &account_from_u64(ACCOUNT_ID_1),
+            &account_from_u64(ACCOUNT_ID_2),
+            &Tokens::from(APPROVE_AMOUNT),
+            &None,
+            &None,
+            &Some(Tokens::from(FEE_AMOUNT)),
+            now,
+        )
+        .with_approve(
+            &account_from_u64(ACCOUNT_ID_1),
+            &account_from_u64(ACCOUNT_ID_2),
+            &Tokens::from(ANOTHER_APPROVE_AMOUNT),
+            &Some(Tokens::from(APPROVE_AMOUNT)),
+            &None,
+            &Some(Tokens::from(FEE_AMOUNT)),
+            now,
+        )
+        .build();
+
+    let allowance_key = ApprovalKey::from((
+        &account_from_u64(ACCOUNT_ID_1),
+        &account_from_u64(ACCOUNT_ID_2),
+    ));
+    let account2_allowance = ledger.allowances.get(&allowance_key);
+    let expected_allowance2: Allowance<Tokens> = Allowance {
+        amount: Tokens::from(ANOTHER_APPROVE_AMOUNT),
+        expires_at: None,
+        arrived_at: now,
+    };
+    assert_eq!(account2_allowance, Some(&expected_allowance2));
+}
+
+#[test]
+fn should_set_allowance_with_expected_allowance_and_expired_existing_allowance() {
+    let now = TimeStamp::from_nanos_since_unix_epoch(TIMESTAMP_NOW);
+    let even_later = TimeStamp::from_nanos_since_unix_epoch(TIMESTAMP_EVEN_LATER);
+    let ledger = LedgerBuilder::new()
+        .with_mint(&account_from_u64(ACCOUNT_ID_1), &Tokens::from(MINT_AMOUNT))
+        .with_approve(
+            &account_from_u64(ACCOUNT_ID_1),
+            &account_from_u64(ACCOUNT_ID_2),
+            &Tokens::from(APPROVE_AMOUNT),
+            &None,
+            &Some(TIMESTAMP_LATER),
+            &Some(Tokens::from(FEE_AMOUNT)),
+            now,
+        )
+        .with_approve(
+            &account_from_u64(ACCOUNT_ID_1),
+            &account_from_u64(ACCOUNT_ID_2),
+            &Tokens::from(ANOTHER_APPROVE_AMOUNT),
+            &Some(Tokens::from(0u64)),
+            &None,
+            &Some(Tokens::from(FEE_AMOUNT)),
+            even_later,
+        )
+        .build();
+
+    let allowance_key = ApprovalKey::from((
+        &account_from_u64(ACCOUNT_ID_1),
+        &account_from_u64(ACCOUNT_ID_2),
+    ));
+    let account2_allowance = ledger.allowances.get(&allowance_key);
+    let expected_allowance2: Allowance<Tokens> = Allowance {
+        amount: Tokens::from(ANOTHER_APPROVE_AMOUNT),
+        expires_at: None,
+        arrived_at: even_later,
+    };
+    assert_eq!(account2_allowance, Some(&expected_allowance2));
+}
+
+#[test]
+#[should_panic(expected = "does not match in-memory allowance")]
+fn should_panic_if_expected_allowance_different_than_existing_allowance() {
+    let now = TimeStamp::from_nanos_since_unix_epoch(TIMESTAMP_NOW);
+    LedgerBuilder::new()
+        .with_mint(&account_from_u64(ACCOUNT_ID_1), &Tokens::from(MINT_AMOUNT))
+        .with_approve(
+            &account_from_u64(ACCOUNT_ID_1),
+            &account_from_u64(ACCOUNT_ID_2),
+            &Tokens::from(APPROVE_AMOUNT),
+            &Some(Tokens::from(0u64)),
+            &None,
+            &Some(Tokens::from(FEE_AMOUNT)),
+            now,
+        )
+        .with_approve(
+            &account_from_u64(ACCOUNT_ID_1),
+            &account_from_u64(ACCOUNT_ID_2),
+            &Tokens::from(APPROVE_AMOUNT),
+            &Some(Tokens::from(0u64)),
+            &None,
+            &Some(Tokens::from(FEE_AMOUNT)),
+            now,
+        )
+        .build();
+}
+
+#[test]
 fn should_remove_allowance_when_used_up() {
     let now = TimeStamp::from_nanos_since_unix_epoch(TIMESTAMP_NOW);
     let ledger = LedgerBuilder::new()
@@ -413,9 +570,9 @@ fn should_increase_and_decrease_balance_with_transfer_from() {
     assert_eq!(Some(&Tokens::from(TRANSFER_AMOUNT)), actual_balance3);
 }
 
-fn account_from_u64(account_id: u64) -> Account {
-    Account {
+fn account_from_u64(account_id: u64) -> AccountType {
+    AccountType::from(Account {
         owner: PrincipalId::new_user_test_id(account_id).0,
         subaccount: None,
-    }
+    })
 }

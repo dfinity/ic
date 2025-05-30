@@ -1,16 +1,15 @@
 //! Threshold ECDSA transcripts and references related definitions.
+use crate::crypto::ExtendedDerivationPath;
 use crate::crypto::{
     canister_threshold_sig::error::{
         EcdsaPresignatureQuadrupleCreationError, ThresholdEcdsaSigInputsCreationError,
     },
-    canister_threshold_sig::{
-        EcdsaPreSignatureQuadruple, ExtendedDerivationPath, ThresholdEcdsaSigInputs,
-    },
+    canister_threshold_sig::{EcdsaPreSignatureQuadruple, ThresholdEcdsaSigInputs},
 };
 use crate::{Height, Randomness};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::EcdsaKeyId;
+use ic_management_canister_types_private::EcdsaKeyId;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};

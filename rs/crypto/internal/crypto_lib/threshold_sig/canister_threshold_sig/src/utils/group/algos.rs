@@ -124,7 +124,7 @@ macro_rules! declare_mul2_table_impl {
 
             // The number of windows (of WINDOW_BITS size) required to examine every
             // bit of a scalar of this curve.
-            const WINDOWS: usize = (<$scalar>::BITS + Self::WINDOW_BITS - 1) / Self::WINDOW_BITS;
+            const WINDOWS: usize = <$scalar>::BITS.div_ceil(Self::WINDOW_BITS);
 
             pub fn for_standard_generators() -> Self {
                 let g = <$projective>::generator();
@@ -216,7 +216,7 @@ macro_rules! declare_sswu_p_3_mod_4_map_to_curve_impl {
                 const P_BITS: usize = $fe::BYTES * 8;
                 const SECURITY_LEVEL: usize = P_BITS / 2;
 
-                const FIELD_BYTES: usize = (P_BITS + SECURITY_LEVEL + 7) / 8; // "L" in spec
+                const FIELD_BYTES: usize = (P_BITS + SECURITY_LEVEL).div_ceil(8); // "L" in spec
                 const XMD_BYTES: usize = 2 * FIELD_BYTES;
                 const WIDE_BYTES_OFFSET: usize = 2 * $fe::BYTES - FIELD_BYTES;
 

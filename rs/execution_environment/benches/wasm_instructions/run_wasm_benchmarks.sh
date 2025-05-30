@@ -63,7 +63,7 @@ cat "${RES_FILE}" | while read _test name _ellipsis _bench result _rest; do
     K=$(((${result} - ${overhead_result}) / (${baseline_result} - ${overhead_result})))
 
     offset_name="${name#*-}"
-    offset_name="${offset_name#${name}}"
+    offset_name="${offset_name%${name}}"
     if [ -n "${offset_name}" ]; then
         offset_result=$(rg -wF "${offset_name}" ${RES_FILE} | head -1 | awk '{print $5}')
         # Use the diff only when $result is greater than $offset_result

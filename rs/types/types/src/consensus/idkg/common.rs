@@ -10,6 +10,7 @@ use crate::{
             ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
             ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs,
         },
+        vetkd::{VetKdArgs, VetKdEncryptedKey},
         AlgorithmId,
     },
     messages::CallbackId,
@@ -18,7 +19,6 @@ use crate::{Height, RegistryVersion};
 use ic_base_types::{NodeId, PrincipalId};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::MasterPublicKeyId;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::registry::subnet::v1 as subnet_pb;
 use ic_protobuf::types::v1 as pb;
@@ -39,6 +39,7 @@ use super::{
         PreSignatureTranscriptRef, ThresholdSchnorrSigInputsError, ThresholdSchnorrSigInputsRef,
         TranscriptInCreation,
     },
+    IDkgMasterPublicKeyId,
 };
 
 /// PseudoRandomId is defined in execution context as plain 32-byte vector, we give it a synonym here.
@@ -645,7 +646,7 @@ pub trait IDkgBlockReader: Send + Sync {
     /// Returns the IDs of pre-signatures in creation by the tip.
     fn pre_signatures_in_creation(
         &self,
-    ) -> Box<dyn Iterator<Item = (PreSigId, MasterPublicKeyId)> + '_>;
+    ) -> Box<dyn Iterator<Item = (PreSigId, IDkgMasterPublicKeyId)> + '_>;
 
     /// For the given pre-signature ID, returns the pre-signature ref if available.
     fn available_pre_signature(&self, id: &PreSigId) -> Option<&PreSignatureRef>;
@@ -1105,28 +1106,22 @@ fn err_schnorr(err: ThresholdSchnorrSigInputsError) -> ThresholdSigInputsResult 
     Err(ThresholdSigInputsError::Schnorr(err))
 }
 
+// This warning is suppressed because Clippy incorrectly reports the size of the
+// `ThresholdEcdsaSigInputsRef` and `ThresholdSchnorrSigInputsRef` variants to be "at least 0 bytes".
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ThresholdSigInputsRef {
     Ecdsa(ThresholdEcdsaSigInputsRef),
     Schnorr(ThresholdSchnorrSigInputsRef),
+    VetKd(VetKdArgs),
 }
 
 impl ThresholdSigInputsRef {
-    pub fn pre_signature(&self) -> PreSignatureRef {
-        match self {
-            ThresholdSigInputsRef::Ecdsa(inputs) => {
-                PreSignatureRef::Ecdsa(inputs.presig_quadruple_ref.clone())
-            }
-            ThresholdSigInputsRef::Schnorr(inputs) => {
-                PreSignatureRef::Schnorr(inputs.presig_transcript_ref.clone())
-            }
-        }
-    }
-
     pub fn caller(&self) -> PrincipalId {
         match self {
             ThresholdSigInputsRef::Ecdsa(inputs) => inputs.derivation_path.caller,
             ThresholdSigInputsRef::Schnorr(inputs) => inputs.derivation_path.caller,
+            ThresholdSigInputsRef::VetKd(inputs) => inputs.context.caller,
         }
     }
 
@@ -1134,6 +1129,7 @@ impl ThresholdSigInputsRef {
         match self {
             ThresholdSigInputsRef::Ecdsa(_) => SignatureScheme::Ecdsa,
             ThresholdSigInputsRef::Schnorr(_) => SignatureScheme::Schnorr,
+            ThresholdSigInputsRef::VetKd(_) => SignatureScheme::VetKd,
         }
     }
 
@@ -1145,25 +1141,32 @@ impl ThresholdSigInputsRef {
             ThresholdSigInputsRef::Schnorr(inputs_ref) => inputs_ref
                 .translate(resolver)
                 .map_or_else(err_schnorr, ok_schnorr),
+            ThresholdSigInputsRef::VetKd(inputs) => Ok(ThresholdSigInputs::VetKd(inputs.clone())),
         }
     }
 }
 
+// This warning is suppressed because Clippy incorrectly reports the size of the
+// `ThresholdEcdsaSigInputs` and `ThresholdSchnorrSigInputs` variants to be "at least 0 bytes".
+#[allow(clippy::large_enum_variant)]
 pub enum ThresholdSigInputs {
     Ecdsa(ThresholdEcdsaSigInputs),
     Schnorr(ThresholdSchnorrSigInputs),
+    VetKd(VetKdArgs),
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CombinedSignature {
     Ecdsa(ThresholdEcdsaCombinedSignature),
     Schnorr(ThresholdSchnorrCombinedSignature),
+    VetKd(VetKdEncryptedKey),
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum SignatureScheme {
     Ecdsa,
     Schnorr,
+    VetKd,
 }
 
 impl Display for SignatureScheme {
@@ -1171,6 +1174,7 @@ impl Display for SignatureScheme {
         match self {
             SignatureScheme::Ecdsa => write!(f, "ECDSA"),
             SignatureScheme::Schnorr => write!(f, "Schnorr"),
+            SignatureScheme::VetKd => write!(f, "VetKd"),
         }
     }
 }

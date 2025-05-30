@@ -1,4 +1,4 @@
-use candid::{CandidType, Nat, Principal};
+use candid::{CandidType, Int as CInt, Nat, Principal};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::{
     fmt,
@@ -14,8 +14,17 @@ pub enum TlaValue {
     Literal(String),
     Constant(String),
     Bool(bool),
-    Int(Nat),
+    Int(CInt),
     Variant { tag: String, value: Box<TlaValue> },
+}
+
+#[derive(Clone, Debug)]
+pub enum Diff {
+    /// For records and functions, have a fine-grained diff
+    RecordDiff(HashMap<String, Box<Diff>>),
+    FunctionDiff(HashMap<TlaValue, Box<Diff>>),
+    /// For other value types, just record the difference
+    Other(Option<TlaValue>, Option<TlaValue>),
 }
 
 impl TlaValue {
@@ -32,6 +41,84 @@ impl TlaValue {
             TlaValue::Bool(_) => 1,
             TlaValue::Int(_) => 1,
             TlaValue::Variant { tag: _, value } => 1 + value.size(),
+        }
+    }
+
+    /// Returns a list of fields that differ between this value and the other one
+    /// The difference is fine-grained, so if a field is a (potentially nested) record or a function,
+    /// the difference lists just the fields that differ (respectively, the argument/value pairs that differ)
+    pub fn diff(&self, other: &TlaValue) -> Option<Diff> {
+        if self == other {
+            return None;
+        }
+        match (self, other) {
+            (TlaValue::Record(map1), TlaValue::Record(map2)) => {
+                let mut diff = vec![];
+                for (k, v1) in map1 {
+                    if let Some(v2) = map2.get(k) {
+                        let sub_diff = v1.diff(v2);
+                        match sub_diff {
+                            Some(Diff::RecordDiff(m)) => {
+                                diff.extend(
+                                    m.into_iter().map(|(k2, dv)| (format!("{}.{}", k, k2), dv)),
+                                );
+                            }
+                            Some(Diff::FunctionDiff(m)) => {
+                                diff.extend(
+                                    m.into_iter()
+                                        .map(|(k2, dv)| (format!("{}[{:?}]", k, k2), dv)),
+                                );
+                            }
+                            Some(d @ Diff::Other(_, _)) => {
+                                diff.push((k.clone(), Box::new(d)));
+                            }
+                            None => {}
+                        }
+                    } else {
+                        diff.push((k.clone(), Box::new(Diff::Other(Some(v1.clone()), None))));
+                    }
+                }
+                for (k, v2) in map2 {
+                    if !map1.contains_key(k) {
+                        diff.push((k.clone(), Box::new(Diff::Other(None, Some(v2.clone())))));
+                    }
+                }
+                if diff.is_empty() {
+                    None
+                } else {
+                    Some(Diff::RecordDiff(diff.into_iter().collect()))
+                }
+            }
+            (TlaValue::Function(map1), TlaValue::Function(map2)) => {
+                let mut diff = vec![];
+                for (k, v1) in map1 {
+                    if let Some(v2) = map2.get(k) {
+                        let sub_diff = v1.diff(v2);
+                        if let Some(d) = sub_diff {
+                            diff.push((k.clone(), Box::new(d)));
+                        }
+                    } else {
+                        diff.push((k.clone(), Box::new(Diff::Other(Some(v1.clone()), None))));
+                    }
+                }
+                for (k, v2) in map2 {
+                    if !map1.contains_key(k) {
+                        diff.push((k.clone(), Box::new(Diff::Other(None, Some(v2.clone())))));
+                    }
+                }
+                if diff.is_empty() {
+                    None
+                } else {
+                    Some(Diff::FunctionDiff(diff.into_iter().collect()))
+                }
+            }
+            (val1, val2) => {
+                if val1 == val2 {
+                    None
+                } else {
+                    Some(Diff::Other(Some(val1.clone()), Some(val2.clone())))
+                }
+            }
         }
     }
 }
@@ -161,9 +248,21 @@ impl ToTla for u64 {
     }
 }
 
-impl ToTla for Nat {
+impl ToTla for i32 {
+    fn to_tla_value(&self) -> TlaValue {
+        TlaValue::Int((*self).into())
+    }
+}
+
+impl ToTla for CInt {
     fn to_tla_value(&self) -> TlaValue {
         TlaValue::Int(self.clone())
+    }
+}
+
+impl ToTla for Nat {
+    fn to_tla_value(&self) -> TlaValue {
+        TlaValue::Int(self.clone().into())
     }
 }
 

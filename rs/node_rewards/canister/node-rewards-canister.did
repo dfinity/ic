@@ -1,0 +1,19 @@
+type GetNodeProvidersMonthlyXdrRewardsRequest = record {
+    registry_version: opt nat64;
+};
+
+type GetNodeProvidersMonthlyXdrRewardsResponse = record {
+    rewards : opt NodeProvidersMonthlyXdrRewards;
+    error: opt text;
+};
+
+type NodeProvidersMonthlyXdrRewards = record {
+    rewards: vec record { principal; nat64 };
+    registry_version: opt nat64;
+};
+
+service : () -> {
+    get_node_providers_monthly_xdr_rewards: (GetNodeProvidersMonthlyXdrRewardsRequest) -> (
+        GetNodeProvidersMonthlyXdrRewardsResponse
+    );
+}

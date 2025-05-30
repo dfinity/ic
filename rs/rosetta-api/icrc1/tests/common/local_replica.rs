@@ -2,7 +2,7 @@
 use candid::{Encode, Principal};
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Agent;
-use ic_agent::{agent::http_transport::reqwest_transport::ReqwestTransport, Identity};
+use ic_agent::Identity;
 use ic_base_types::PrincipalId;
 use ic_icrc1_ledger::FeatureFlags;
 use ic_icrc1_ledger::{InitArgs, InitArgsBuilder, LedgerArgument};
@@ -39,10 +39,10 @@ pub async fn get_custom_agent(basic_identity: Arc<dyn Identity>, port: u16) -> A
     let replica_url = Url::parse(&format!("http://localhost:{}", port)).unwrap();
 
     // Setup the agent
-    let transport = ReqwestTransport::create(replica_url.clone()).unwrap();
     let agent = Agent::builder()
+        .with_url(replica_url.clone())
         .with_identity(basic_identity)
-        .with_arc_transport(Arc::new(transport))
+        .with_http_client(reqwest::Client::new())
         .build()
         .unwrap();
 
@@ -75,7 +75,7 @@ pub fn icrc_ledger_default_args_builder() -> InitArgsBuilder {
 }
 
 // Return the wasm of the icrc ledger
-fn icrc_ledger_wasm() -> Vec<u8> {
+pub fn icrc_ledger_wasm() -> Vec<u8> {
     let icrc_ledger_project_path =
         std::path::Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap())
             .parent()
@@ -89,10 +89,25 @@ fn icrc_ledger_wasm() -> Vec<u8> {
 
 const STARTING_CYCLES_PER_CANISTER: u128 = 2_000_000_000_000_000;
 
-pub fn create_and_install_icrc_ledger(pocket_ic: &PocketIc, init_args: InitArgs) -> Principal {
+pub fn create_and_install_icrc_ledger(
+    pocket_ic: &PocketIc,
+    init_args: InitArgs,
+    custom_canister_id: Option<Principal>,
+) -> Principal {
     let wasm_module = local_replica::icrc_ledger_wasm();
-    let canister_id = Principal::from_str("2ouva-viaaa-aaaaq-aaamq-cai").unwrap();
+    create_and_install_custom_icrc_ledger(pocket_ic, init_args, wasm_module, custom_canister_id)
+}
+
+pub fn create_and_install_custom_icrc_ledger(
+    pocket_ic: &PocketIc,
+    init_args: InitArgs,
+    wasm_module: Vec<u8>,
+    custom_canister_id: Option<Principal>,
+) -> Principal {
     let custom_encoded_init_args = Encode!(&(LedgerArgument::Init(init_args.clone()))).unwrap();
+    let canister_id =
+        custom_canister_id.or(Principal::from_str("2ouva-viaaa-aaaaq-aaamq-cai").ok());
+    let canister_id = canister_id.unwrap();
     pocket_ic
         .create_canister_with_id(None, None, canister_id)
         .unwrap();

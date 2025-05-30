@@ -45,7 +45,7 @@ impl EccCurveType {
     /// Scalar here refers to the byte size of an integer which has the range
     /// [0,z) where z is the group order.
     pub const fn scalar_bytes(&self) -> usize {
-        (self.scalar_bits() + 7) / 8
+        self.scalar_bits().div_ceil(8)
     }
 
     /// Security level of the curve, in bits
@@ -256,7 +256,7 @@ impl EccScalar {
         let s_bits = curve.scalar_bits();
         let security_level = curve.security_level();
 
-        let field_len = (s_bits + security_level + 7) / 8; // "L" in spec
+        let field_len = (s_bits + security_level).div_ceil(8); // "L" in spec
         let len_in_bytes = count * field_len;
 
         let uniform_bytes = ic_crypto_internal_seed::xmd::<ic_crypto_sha2::Sha256>(
@@ -1317,7 +1317,7 @@ impl<const WINDOW_SIZE: usize> WindowInfo<WINDOW_SIZE> {
     /// Returns the number of windows if scalar_bits bits are used
     #[inline(always)]
     pub(crate) const fn number_of_windows_for_bits(scalar_bits: usize) -> usize {
-        (scalar_bits + WINDOW_SIZE - 1) / WINDOW_SIZE
+        scalar_bits.div_ceil(WINDOW_SIZE)
     }
 
     /// Extract a window from a serialized scalar value
@@ -1336,7 +1336,7 @@ impl<const WINDOW_SIZE: usize> WindowInfo<WINDOW_SIZE> {
         const BITS_IN_BYTE: usize = 8;
 
         let scalar_bytes = scalar.len();
-        let windows = (scalar_bytes * 8 + WINDOW_SIZE - 1) / WINDOW_SIZE;
+        let windows = (scalar_bytes * 8).div_ceil(WINDOW_SIZE);
 
         // to compute the correct bit offset for bit lengths that are not a power of 2,
         // we need to start from the inverted value or otherwise we will have multiple options

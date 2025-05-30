@@ -1,10 +1,9 @@
 /* tag::catalog[]
 end::catalog[] */
 
-use candid::Principal;
-use ic_agent::{agent::RejectCode, Agent, AgentError};
+use ic_agent::{agent::RejectCode, Agent};
 use ic_base_types::PrincipalId;
-use ic_management_canister_types::{self as ic00, EmptyBlob, Method, Payload};
+use ic_management_canister_types_private::{self as ic00, EmptyBlob, Method, Payload};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::GetFirstHealthyNodeSnapshot;
 use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
@@ -12,6 +11,14 @@ use ic_system_test_driver::driver::test_env_api::IcNodeSnapshot;
 use ic_system_test_driver::util::*;
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm};
+use slog::Logger;
+
+/// Helper function to setup an NNS node and an agent.
+fn setup_nns_node_and_agent(env: &TestEnv) -> (IcNodeSnapshot, Agent) {
+    let nns_node = env.get_first_healthy_nns_node_snapshot();
+    let agent = nns_node.build_default_agent();
+    (nns_node, agent)
+}
 
 /// Helper function to setup an application node and an agent.
 fn setup_app_node_and_agent(env: &TestEnv) -> (IcNodeSnapshot, Agent) {
@@ -208,42 +215,6 @@ pub fn test_cycles_burn(env: TestEnv) {
     })
 }
 
-pub fn node_metrics_history_update_succeeds(env: TestEnv) {
-    // Arrange.
-    let (app_node, agent) = setup_app_node_and_agent(&env);
-    let logger = env.logger();
-    let subnet_id = app_node.subnet_id().unwrap().get();
-    block_on({
-        async move {
-            let canister = UniversalCanister::new_with_retries(
-                &agent,
-                app_node.effective_canister_id(),
-                &logger,
-            )
-            .await;
-            // Act.
-            let result = canister
-                .update(
-                    wasm().call_simple(
-                        ic00::IC_00,
-                        Method::NodeMetricsHistory,
-                        call_args().other_side(
-                            ic00::NodeMetricsHistoryArgs {
-                                subnet_id,
-                                start_at_timestamp_nanos: 0,
-                            }
-                            .encode(),
-                        ),
-                    ),
-                )
-                .await;
-            // Assert.
-            assert!(result.is_ok());
-            assert!(!result.ok().unwrap().is_empty()); // Assert it has some non zero data.
-        }
-    })
-}
-
 pub fn node_metrics_history_query_fails(env: TestEnv) {
     // Arrange.
     let (app_node, agent) = setup_app_node_and_agent(&env);
@@ -357,54 +328,24 @@ pub fn node_metrics_history_non_existing_subnet_fails(env: TestEnv) {
     })
 }
 
-pub fn node_metrics_history_ingress_update_fails(env: TestEnv) {
-    // Arrange.
-    let (app_node, agent) = setup_app_node_and_agent(&env);
-    let subnet_id = app_node.subnet_id().unwrap().get();
+fn root_key_test(agent: &Agent, effective_canister_id: PrincipalId, logger: &Logger) {
     block_on({
         async move {
-            // Act.
-            let result = agent
-                .update(&Principal::management_canister(), "node_metrics_history")
-                .with_arg(
-                    ic00::NodeMetricsHistoryArgs {
-                        subnet_id,
-                        start_at_timestamp_nanos: 0,
-                    }
-                    .encode(),
-                )
-                .call_and_wait()
-                .await;
-            // Assert.
-            assert_reject_msg(
-                result,
-                RejectCode::CanisterReject,
-                "ic00 method node_metrics_history can not be called via ingress messages",
-            );
+            let canister =
+                UniversalCanister::new_with_retries(agent, effective_canister_id, logger).await;
+            let result = canister.update(wasm().root_key().append_and_reply()).await;
+            let root_key = result.unwrap();
+            assert_eq!(root_key, agent.read_root_key());
         }
     })
 }
 
-pub fn node_metrics_history_ingress_query_fails(env: TestEnv) {
-    // Arrange.
+pub fn root_key_on_nns_subnet(env: TestEnv) {
+    let (nns_node, agent) = setup_nns_node_and_agent(&env);
+    root_key_test(&agent, nns_node.effective_canister_id(), &env.logger());
+}
+
+pub fn root_key_on_non_nns_subnet(env: TestEnv) {
     let (app_node, agent) = setup_app_node_and_agent(&env);
-    let subnet_id = app_node.subnet_id().unwrap().get();
-    block_on({
-        async move {
-            // Act.
-            let result = agent
-                .query(&Principal::management_canister(), "node_metrics_history")
-                .with_arg(
-                    ic00::NodeMetricsHistoryArgs {
-                        subnet_id,
-                        start_at_timestamp_nanos: 0,
-                    }
-                    .encode(),
-                )
-                .call()
-                .await;
-            // Assert.
-            assert_eq!(result, Err(AgentError::CertificateNotAuthorized()));
-        }
-    })
+    root_key_test(&agent, app_node.effective_canister_id(), &env.logger());
 }

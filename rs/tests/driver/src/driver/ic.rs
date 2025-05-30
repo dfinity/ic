@@ -8,7 +8,6 @@ use crate::driver::{
     test_setup::{GroupSetup, InfraProvider},
 };
 use crate::k8s::tnet::TNet;
-use crate::util::block_on;
 use anyhow::Result;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningState};
@@ -249,8 +248,10 @@ impl InternetComputer {
 
         if InfraProvider::read_attribute(env) == InfraProvider::K8s {
             let image_url = res_request.primary_image.url.clone();
-            let tnet = TNet::read_attribute(env).image_url(image_url.as_ref());
-            block_on(tnet.deploy_guestos_image()).expect("failed to deploy guestos image");
+            let image_sha = res_request.primary_image.sha256.clone();
+            let tnet = TNet::read_attribute(env)
+                .image_url(image_url.as_ref())
+                .image_sha(image_sha.as_ref());
             tnet.write_attribute(env);
         }
 
@@ -529,7 +530,7 @@ impl Subnet {
         Self::new(subnet_type)
             // Shorter block time.
             .with_unit_delay(Duration::from_millis(200))
-            .with_initial_notary_delay(Duration::from_millis(500))
+            .with_initial_notary_delay(Duration::from_millis(200))
             .add_nodes(no_of_nodes)
     }
 

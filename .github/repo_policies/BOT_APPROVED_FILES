@@ -1,0 +1,8 @@
+# List of approved files that can be changed by a bot via an automated PR
+# This is to increase security and prevent accidentally updating files that shouldn't be changed by a bot
+
+ic-os/boundary-guestos/context/docker-base.*
+ic-os/guestos/context/docker-base.*
+ic-os/hostos/context/docker-base.*
+ic-os/setupos/context/docker-base.*
+mainnet-*-revisions.json

@@ -5,7 +5,7 @@ use dfn_core::bytes;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_client_sender::Sender;
 use ic_ledger_core::Tokens;
-use ic_management_canister_types::{CanisterInstallMode, CanisterSettingsArgsBuilder};
+use ic_management_canister_types_private::{CanisterInstallMode, CanisterSettingsArgsBuilder};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType},
@@ -25,8 +25,8 @@ use ic_sns_governance::pb::v1::{
 use ic_sns_test_utils::{
     itest_helpers::{
         install_governance_canister, install_ledger_canister, install_root_canister,
-        install_swap_canister, local_test_on_sns_subnet, state_machine_test_on_sns_subnet,
-        SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo,
+        install_swap_canister, state_machine_test_on_sns_subnet, SnsCanisters,
+        SnsTestsInitPayloadBuilder, UserInfo,
     },
     state_test_helpers::{
         setup_sns_canisters, sns_root_register_dapp_canisters, state_machine_builder_for_sns_tests,
@@ -44,6 +44,8 @@ use tokio::time::Duration;
 lazy_static! {
     pub static ref EMPTY_WASM: Vec<u8> = vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0];
 }
+
+const EXPECTED_SNS_DAPP_CANISTER_UPGRADE_TIME_SECONDS: u64 = 60;
 
 // Note: Tests for UpgradeSnsToNextVersion action is in rs/nns/sns-wasm/tests/upgrade_sns_instance.rs
 
@@ -135,6 +137,7 @@ fn test_upgrade_canister_proposal_is_successful() {
                 canister_upgrade_arg: Some(wasm().set_global_data(&[42]).build()),
                 // mode: None corresponds to CanisterInstallModeProto::Upgrade
                 mode: None,
+                chunked_canister_wasm: None,
             },
         )),
         ..Default::default()
@@ -180,7 +183,7 @@ fn test_upgrade_canister_proposal_is_successful() {
 
 #[test]
 fn test_upgrade_canister_proposal_reinstall() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Step 1: Prepare
 
         // Step 1.a: Boot up SNS with one user.
@@ -261,6 +264,7 @@ fn test_upgrade_canister_proposal_reinstall() {
                     new_canister_wasm: new_dapp_wasm,
                     canister_upgrade_arg: Some(wasm().build()),
                     mode: Some(CanisterInstallModeProto::Reinstall.into()),
+                    chunked_canister_wasm: None,
                 },
             )),
             ..Default::default()
@@ -327,7 +331,7 @@ fn test_upgrade_canister_proposal_reinstall() {
 
 #[test]
 fn test_upgrade_canister_proposal_execution_fail() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Step 1: Prepare
 
         // Step 1.a: Boot up SNS with one user.
@@ -418,6 +422,7 @@ fn test_upgrade_canister_proposal_execution_fail() {
                     new_canister_wasm: new_dapp_wasm,
                     canister_upgrade_arg: None,
                     mode: Some(CanisterInstallModeProto::Upgrade.into()),
+                    chunked_canister_wasm: None,
                 },
             )),
             ..Default::default()
@@ -442,16 +447,16 @@ fn test_upgrade_canister_proposal_execution_fail() {
                 action
             ),
         };
-        fn age_s(t: u64) -> f64 {
+        fn age_s(t: u64) -> u64 {
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
-                .as_secs_f64()
-                - (t as f64)
+                .as_secs()
+                .saturating_sub(t)
         }
         let decision_age_s = age_s(proposal.decided_timestamp_seconds);
         assert!(
-            decision_age_s < 30.0,
+            decision_age_s < EXPECTED_SNS_DAPP_CANISTER_UPGRADE_TIME_SECONDS,
             "decision_age_s: {}, proposal: {:?}",
             decision_age_s,
             proposal
@@ -463,7 +468,7 @@ fn test_upgrade_canister_proposal_execution_fail() {
         );
         let failure_age_s = age_s(proposal.failed_timestamp_seconds);
         assert!(
-            failure_age_s < 30.0,
+            failure_age_s < EXPECTED_SNS_DAPP_CANISTER_UPGRADE_TIME_SECONDS,
             "failure_age_s: {}, proposal: {:?}",
             failure_age_s,
             proposal
@@ -520,6 +525,7 @@ fn test_upgrade_canister_proposal_too_large() {
                 canister_upgrade_arg: Some(wasm().set_global_data(&[42; 2_000_000]).build()),
                 // mode: None corresponds to CanisterInstallModeProto::Upgrade
                 mode: None,
+                chunked_canister_wasm: None,
             },
         )),
         ..Default::default()
@@ -587,7 +593,7 @@ fn governance_mem_test() {
 /// in a trap in post_upgrade.
 #[test]
 fn test_upgrade_after_state_shrink() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Initialize a User with a unique principal to claim a neuron
         let neuron_claimer = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         // Initialize an extra user who's unique principal will be used to shrink the state
@@ -641,6 +647,7 @@ fn test_upgrade_after_state_shrink() {
                     new_canister_wasm: governance_wasm,
                     canister_upgrade_arg: None,
                     mode: Some(CanisterInstallModeProto::Upgrade.into()),
+                    chunked_canister_wasm: None,
                 },
             )),
             ..Default::default()
@@ -690,7 +697,7 @@ fn test_upgrade_after_state_shrink() {
 /// Test that SNS canisters can be installed in any order.
 #[test]
 fn test_install_canisters_in_any_order() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         let mut sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_nervous_system_parameters(NervousSystemParameters::with_default_values())
             .build();

@@ -120,3 +120,72 @@ malicious_binary = rule(
         "binary": attr.label(mandatory = True, cfg = malicious_code_enabled_transition, allow_single_file = True),
     },
 )
+
+def _artifact_bundle_impl(ctx):
+    # List of input files
+    input_files = ctx.files.inputs
+
+    bundle_root = ctx.actions.declare_directory("bundle-{}".format(ctx.attr.name))
+
+    bundle_prefix = ctx.attr.prefix
+
+    if bundle_prefix == "":
+        fail("artifact bundle prefix must be set")
+
+    # Compute checksums and print it to stdout & out file.
+    # The filenames are stripped from anything but the basename.
+    # NOTE: This might produce confusing output if `input_files` contain
+    # files with identical names in different directories.
+    ctx.actions.run_shell(
+        inputs = input_files,
+        arguments = [file.path for file in input_files],
+        env = {
+            "BUNDLE_ROOT": bundle_root.path,
+            "BUNDLE_PREFIX": bundle_prefix,
+        },
+        outputs = [bundle_root],
+        tools = [ctx.executable._sha256],
+        command = """
+        set -euo pipefail
+
+        outdir="$BUNDLE_ROOT/$BUNDLE_PREFIX"
+
+        mkdir -p "$outdir"
+
+        out_checksums="$outdir/SHA256SUMS"
+
+        output=$(mktemp) # temporary file bc sha256 doesn't support writing to stdout (or /dev/stdout) directly
+        for input in "$@"; do
+            {sha256} "$input" "$output"
+            cat "$output" >> "$out_checksums"
+            echo " $(basename $input)" >> "$out_checksums"
+            ln -s "$( realpath "$input" )" "$outdir/$(basename $input)"
+        done
+
+        sort -o "$out_checksums" -k 2 "$out_checksums"
+        """.format(sha256 = ctx.executable._sha256.path),
+    )
+
+    # Return the output file
+    return [DefaultInfo(files = depset([bundle_root]))]
+
+# A rule that re-exports symlinks to all the inputs as well
+# as an extra file 'SHA256SUMS' containing the checksums of inputs.
+artifact_bundle = rule(
+    implementation = _artifact_bundle_impl,
+    attrs = {
+        "inputs": attr.label_list(
+            allow_files = True,
+            mandatory = True,
+        ),
+        "prefix": attr.string(
+            mandatory = True,
+        ),
+        # The bazel-provided sha256 tool to avoid relying on tools from the container/env
+        "_sha256": attr.label(
+            default = "@bazel_tools//tools/build_defs/hash:sha256",
+            executable = True,
+            cfg = "exec",
+        ),
+    },
+)

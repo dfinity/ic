@@ -4,9 +4,9 @@ use candid::Encode;
 use canister_test::{Canister, Runtime};
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     DerivationPath, ECDSAPublicKeyArgs, EcdsaKeyId, MasterPublicKeyId, Method as Ic00Method,
-    SchnorrKeyId, SchnorrPublicKeyArgs,
+    SchnorrKeyId, SchnorrPublicKeyArgs, VetKdKeyId, VetKdPublicKeyArgs,
 };
 use ic_nns_test_utils::itest_helpers::{
     set_up_registry_canister, set_up_universal_canister, try_call_via_universal_canister,
@@ -23,9 +23,7 @@ use ic_registry_keys::{
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::RoutingTable;
-use ic_registry_subnet_features::{
-    ChainKeyConfig, EcdsaConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
-};
+use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_types::ReplicaVersion;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
@@ -46,31 +44,6 @@ pub async fn get_subnet_record(registry: &Canister<'_>, subnet_id: SubnetId) -> 
     get_value_or_panic::<SubnetRecord>(registry, make_subnet_record_key(subnet_id).as_bytes()).await
 }
 
-pub fn get_subnet_holding_ecdsa_keys(
-    ecdsa_key_ids: &[EcdsaKeyId],
-    node_ids: Vec<NodeId>,
-) -> SubnetRecord {
-    let mut record: SubnetRecord = CreateSubnetPayload {
-        unit_delay_millis: 10,
-        replica_version_id: ReplicaVersion::default().into(),
-        node_ids,
-        ..Default::default()
-    }
-    .into();
-
-    let ecdsa_config = EcdsaConfig {
-        quadruples_to_create_in_advance: 1,
-        key_ids: ecdsa_key_ids.to_vec(),
-        max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-        signature_request_timeout_ns: None,
-        idkg_key_rotation_period_ms: None,
-    };
-    record.chain_key_config = Some(ChainKeyConfig::from(ecdsa_config.clone()).into());
-    record.ecdsa_config = Some(ecdsa_config.into());
-
-    record
-}
-
 pub fn get_subnet_holding_chain_keys(
     key_ids: Vec<MasterPublicKeyId>,
     node_ids: Vec<NodeId>,
@@ -87,8 +60,12 @@ pub fn get_subnet_holding_chain_keys(
         key_configs: key_ids
             .into_iter()
             .map(|key_id| KeyConfig {
-                key_id,
-                pre_signatures_to_create_in_advance: 1,
+                key_id: key_id.clone(),
+                pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
+                    1
+                } else {
+                    0
+                },
                 max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
             })
             .collect(),
@@ -267,7 +244,7 @@ pub async fn get_cup_contents(
 }
 
 /// Requests an ECDSA public key several times until it succeeds.
-pub async fn wait_for_ecdsa_setup(
+async fn wait_for_ecdsa_setup(
     runtime: &Runtime,
     calling_canister: &Canister<'_>,
     key_id: &EcdsaKeyId,
@@ -301,7 +278,7 @@ pub async fn wait_for_ecdsa_setup(
 }
 
 /// Requests a Schnorr public key several times until it succeeds.
-pub async fn wait_for_schnorr_setup(
+async fn wait_for_schnorr_setup(
     runtime: &Runtime,
     calling_canister: &Canister<'_>,
     key_id: &SchnorrKeyId,
@@ -334,6 +311,40 @@ pub async fn wait_for_schnorr_setup(
     public_key_result.unwrap().unwrap();
 }
 
+/// Requests a Vetkey public key several times until it succeeds.
+async fn wait_for_vetkd_setup(
+    runtime: &Runtime,
+    calling_canister: &Canister<'_>,
+    key_id: &VetKdKeyId,
+) {
+    let public_key_request = VetKdPublicKeyArgs {
+        canister_id: None,
+        context: vec![],
+        key_id: key_id.clone(),
+    };
+    let mut public_key_result = None;
+    for i in 0..100 {
+        public_key_result = Some(
+            try_call_via_universal_canister(
+                calling_canister,
+                &runtime.get_management_canister_with_effective_canister_id(
+                    calling_canister.canister_id().into(),
+                ),
+                &Ic00Method::VetKdPublicKey.to_string(),
+                Encode!(&public_key_request).unwrap(),
+            )
+            .await,
+        );
+        println!("Response: {:?}", public_key_result);
+        if public_key_result.as_ref().unwrap().is_ok() {
+            break;
+        }
+        println!("Waiting for public key... {}", i);
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    public_key_result.unwrap().unwrap();
+}
+
 pub async fn wait_for_chain_key_setup(
     runtime: &Runtime,
     calling_canister: &Canister<'_>,
@@ -346,8 +357,8 @@ pub async fn wait_for_chain_key_setup(
         MasterPublicKeyId::Schnorr(key_id) => {
             wait_for_schnorr_setup(runtime, calling_canister, key_id).await;
         }
-        MasterPublicKeyId::VetKd(_key_id) => {
-            todo!("CRP-2632 Extend registry canister tests")
+        MasterPublicKeyId::VetKd(key_id) => {
+            wait_for_vetkd_setup(runtime, calling_canister, key_id).await;
         }
     }
 }

@@ -3,7 +3,7 @@ use ic_cycles_account_manager::{
 };
 use ic_error_types::ErrorCode;
 use ic_logger::{error, ReplicaLogger};
-use ic_management_canister_types as ic00;
+use ic_management_canister_types_private as ic00;
 use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
@@ -23,8 +23,6 @@ pub const CRITICAL_ERROR_CALL_ID_WITHOUT_INSTALL_CODE_CALL: &str =
 pub(crate) struct ExecutionEnvironmentMetrics {
     subnet_messages: HistogramVec,
     pub executions_aborted: IntCounter,
-    pub(crate) compute_allocation_in_install_code_total: IntCounter,
-    pub(crate) memory_allocation_in_install_code_total: IntCounter,
     pub(crate) call_durations: Histogram,
 
     /// Critical error for responses above the maximum allowed size.
@@ -76,14 +74,6 @@ impl ExecutionEnvironmentMetrics {
             ),
             executions_aborted: metrics_registry
                 .int_counter("executions_aborted", "Total number of aborted executions"),
-            compute_allocation_in_install_code_total: metrics_registry.int_counter(
-                "execution_compute_allocation_in_install_code_total",
-                "Total number of times compute allocation used in install_code requests",
-            ),
-            memory_allocation_in_install_code_total: metrics_registry.int_counter(
-                "execution_memory_allocation_in_install_code_total",
-                "Total number of times memory allocation used in install_code requests",
-            ),
             call_durations: metrics_registry.histogram(
                 "execution_call_duration_seconds",
                 "Call durations, measured as call context age when completed / dropped.",
@@ -186,6 +176,7 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::UninstallCode
                     | ic00::Method::ECDSAPublicKey
                     | ic00::Method::SchnorrPublicKey
+                    | ic00::Method::VetKdPublicKey
                     | ic00::Method::UpdateSettings
                     | ic00::Method::BitcoinGetBalance
                     | ic00::Method::BitcoinGetUtxos
@@ -203,7 +194,11 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::TakeCanisterSnapshot
                     | ic00::Method::LoadCanisterSnapshot
                     | ic00::Method::ListCanisterSnapshots
-                    | ic00::Method::DeleteCanisterSnapshot => String::from("fast"),
+                    | ic00::Method::DeleteCanisterSnapshot
+                    | ic00::Method::ReadCanisterSnapshotMetadata
+                    | ic00::Method::ReadCanisterSnapshotData
+                    | ic00::Method::UploadCanisterSnapshotMetadata
+                    | ic00::Method::UploadCanisterSnapshotData => String::from("fast"),
 
                     // "Slow" management methods that might require several execution
                     // rounds to be completed, either due to using DTS or due to
@@ -216,7 +211,9 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::HttpRequest
                     | ic00::Method::SignWithECDSA
                     | ic00::Method::SignWithSchnorr
+                    | ic00::Method::VetKdDeriveKey
                     | ic00::Method::ComputeInitialIDkgDealings
+                    | ic00::Method::ReshareChainKey
                     | ic00::Method::BitcoinSendTransactionInternal
                     | ic00::Method::BitcoinGetSuccessors => String::from("slow"),
                 };

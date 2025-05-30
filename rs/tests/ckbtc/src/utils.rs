@@ -85,8 +85,8 @@ pub fn generate_blocks(btc_client: &Client, logger: &Logger, nb_blocks: u64, add
 
 /// Wait for the expected balance to be available at the given btc address.
 /// Timeout after SHORT_TIMEOUT if the expected balance is not reached.
-pub async fn wait_for_bitcoin_balance<'a>(
-    canister: &UniversalCanister<'a>,
+pub async fn wait_for_bitcoin_balance(
+    canister: &UniversalCanister<'_>,
     logger: &Logger,
     expected_balance_in_satoshis: u64,
     btc_address: &Address,
@@ -107,7 +107,7 @@ pub async fn wait_for_bitcoin_balance<'a>(
 
 /// Wait for the expected balance to be available at the given account.
 /// Timeout after SHORT_TIMEOUT if the expected balance is not reached.
-pub async fn wait_for_ledger_balance<'a>(
+pub async fn wait_for_ledger_balance(
     ledger_agent: &Icrc1Agent,
     logger: &Logger,
     expected_balance: Nat,
@@ -382,7 +382,7 @@ pub async fn get_btc_address(
     debug!(logger, "Btc address for subaccount is: {}", address);
     // Checking only proper format of address since ECDSA signature is non-deterministic.
     assert_eq!(ADDRESS_LENGTH, address.len());
-    address.parse().unwrap()
+    address.parse::<Address<_>>().unwrap().assume_checked()
 }
 
 pub async fn send_to_btc_address(btc_rpc: &Client, logger: &Logger, dst: &Address, amount: u64) {
@@ -410,21 +410,19 @@ pub fn get_btc_client(env: &TestEnv) -> Client {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
     Client::new(
         &format!(
-            "http://[{}]:8332",
-            deployed_universal_vm.get_vm().unwrap().ipv6
+            "http://[{}]:{}",
+            deployed_universal_vm.get_vm().unwrap().ipv6,
+            crate::BITCOIND_RPC_PORT
         ),
         Auth::UserPass(
-            "btc-dev-preview".to_string(),
-            "Wjh4u6SAjT4UMJKxPmoZ0AN2r9qbE-ksXQ5I2_-Hm4w=".to_string(),
+            crate::BITCOIND_RPC_USER.to_string(),
+            crate::BITCOIND_RPC_PASSWORD.to_string(),
         ),
     )
     .unwrap()
 }
 
-pub async fn get_bitcoin_balance<'a>(
-    canister: &UniversalCanister<'a>,
-    btc_address: &Address,
-) -> u64 {
+pub async fn get_bitcoin_balance(canister: &UniversalCanister<'_>, btc_address: &Address) -> u64 {
     canister
         .update(wasm().call(management::bitcoin_get_balance(
             btc_address.to_string(),

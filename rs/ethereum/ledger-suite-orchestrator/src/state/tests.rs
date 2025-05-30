@@ -480,6 +480,7 @@ mod schema_upgrades {
         fn from(
             State {
                 managed_canisters,
+                completed_upgrades: _,
                 cycles_management,
                 more_controller_ids,
                 minter_id,

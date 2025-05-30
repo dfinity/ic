@@ -1,8 +1,7 @@
-//! Utilities to derive, display, and parse bitcoin addresses.
+//! Utilities to derive, display, and parse Bitcoin addresses.
 
-use crate::ECDSAPublicKey;
+use crate::{ECDSAPublicKey, Network};
 use bech32::Variant;
-use ic_btc_interface::Network;
 use ic_crypto_sha2::Sha256;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
@@ -67,7 +66,7 @@ impl BitcoinAddress {
         }
     }
 
-    /// Parses a bitcoin address and checks that it belongs to the specified network.
+    /// Parses a Bitcoin address and checks that it belongs to the specified network.
     pub fn parse(address: &str, network: Network) -> Result<BitcoinAddress, ParseAddressError> {
         // See https://en.bitcoin.it/wiki/Base58Check_encoding#Version_bytes.
         match address.chars().next() {
@@ -99,7 +98,7 @@ pub fn derivation_path(account: &Account) -> Vec<ByteBuf> {
 
 /// Returns a valid extended BIP-32 derivation path from an Account (Principal + subaccount)
 pub fn derive_public_key(ecdsa_public_key: &ECDSAPublicKey, account: &Account) -> ECDSAPublicKey {
-    use ic_crypto_secp256k1::{DerivationIndex, DerivationPath, PublicKey};
+    use ic_secp256k1::{DerivationIndex, DerivationPath, PublicKey};
 
     let path = DerivationPath::new(
         derivation_path(account)
@@ -139,7 +138,7 @@ pub fn account_to_p2wpkh_address(
     )
 }
 
-/// Constructs the bitcoin address corresponding to the specified account.
+/// Constructs the Bitcoin address corresponding to the specified account.
 pub fn account_to_bitcoin_address(
     ecdsa_public_key: &ECDSAPublicKey,
     account: &Account,
@@ -195,9 +194,9 @@ pub fn network_and_public_key_to_p2wpkh(network: Network, public_key: &[u8]) -> 
 /// Returns the human-readable part of a bech32 address
 pub fn hrp(network: Network) -> &'static str {
     match network {
-        ic_btc_interface::Network::Mainnet => "bc",
-        ic_btc_interface::Network::Testnet => "tb",
-        ic_btc_interface::Network::Regtest => "bcrt",
+        Network::Mainnet => "bc",
+        Network::Testnet => "tb",
+        Network::Regtest => "bcrt",
     }
 }
 
@@ -425,8 +424,8 @@ fn parse_bip173_address(
 #[cfg(test)]
 mod tests {
     use super::{hrp, BitcoinAddress, ParseAddressError};
+    use crate::Network;
     use bech32::u5;
-    use ic_btc_interface::Network;
 
     fn generate_address(witness_version: Option<u8>, data: &[u8], network: Network) -> String {
         let data: Vec<u5> = witness_version

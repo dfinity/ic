@@ -1,12 +1,12 @@
 use crate::{
-    environment::Environment, mutate_state, read_state, set_icp_xdr_conversion_rate, State,
+    do_set_icp_xdr_conversion_rate, environment::Environment, mutate_state, read_state, State,
     ONE_MINUTE_SECONDS,
 };
 use async_trait::async_trait;
 use candid::CandidType;
 use cycles_minting_canister::IcpXdrConversionRate;
-use dfn_candid::candid_one;
-use dfn_core::{api::call_with_cleanup, CanisterId};
+use ic_base_types::CanisterId;
+use ic_cdk::api::call::CallResult;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayloadReason;
 use ic_xrc_types::{
     Asset, AssetClass, ExchangeRate, ExchangeRateError, GetExchangeRateRequest,
@@ -55,13 +55,14 @@ impl ExchangeRateCanisterClient for RealExchangeRateCanisterClient {
             },
             timestamp: None,
         };
-        let result: Result<GetExchangeRateResult, (Option<i32>, String)> =
-            call_with_cleanup(self.0, "get_exchange_rate", candid_one, payload).await;
+        let result: CallResult<(GetExchangeRateResult,)> =
+            ic_cdk::call(self.0.get().0, "get_exchange_rate", (payload,)).await;
         result
             .map_err(|(code, message)| GetExchangeRateError::Call {
-                code: code.unwrap_or(-1),
+                code: code as i32,
                 message,
             })?
+            .0
             .map_err(GetExchangeRateError::Xrc)
     }
 }
@@ -390,7 +391,7 @@ pub async fn update_exchange_rate(
                     .map_err(|error| UpdateExchangeRateError::InvalidRate(error.to_string()))?;
                 let icp_xdr_conversion_rate = IcpXdrConversionRate::from(exchange_rate);
                 if let Err(error) =
-                    set_icp_xdr_conversion_rate(safe_state, env, icp_xdr_conversion_rate)
+                    do_set_icp_xdr_conversion_rate(safe_state, env, icp_xdr_conversion_rate)
                 {
                     return Err(UpdateExchangeRateError::FailedToSetRate(error));
                 }
@@ -499,12 +500,12 @@ mod test {
         DEFAULT_XDR_PERMYRIAD_PER_ICP_CONVERSION_RATE,
     };
     use futures::FutureExt;
+    use ic_nervous_system_time_helpers::now_seconds;
     use ic_xrc_types::ExchangeRateMetadata;
     use std::{
         cell::RefCell,
         collections::VecDeque,
         sync::{Arc, Mutex},
-        time::UNIX_EPOCH,
     };
 
     #[derive(Default)]
@@ -956,12 +957,7 @@ mod test {
             initial_average_icp_xdr_conversion_rate
         );
 
-        let now_timestamp_seconds = (dfn_core::api::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
-            / 60)
-            * 60;
+        let now_timestamp_seconds = (now_seconds() / 60) * 60;
 
         let env = TestExchangeRateCanisterEnvironment {
             now_timestamp_seconds,

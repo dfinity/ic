@@ -6,14 +6,15 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::Block;
 use ic_icrc1_index_ng::{IndexArg, UpgradeArg as IndexUpgradeArg};
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
-    ApprovalKey, BurnsWithoutSpender, InMemoryLedger,
+    BlockConsumer, BurnsWithoutSpender, InMemoryLedger,
 };
+use ic_ledger_suite_state_machine_tests::metrics::retrieve_metrics;
 use ic_ledger_suite_state_machine_tests::{
     generate_transactions, get_all_ledger_and_archive_blocks, get_blocks, list_archives,
     TransactionGenerationParameters,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic;
-use ic_state_machine_tests::StateMachine;
+use ic_state_machine_tests::{StateMachine, UserError};
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use std::str::FromStr;
@@ -26,6 +27,8 @@ const TRANSFER_MULTIPLIER: u64 = 1000;
 const APPROVE_MULTIPLIER: u64 = 100;
 const TRANSFER_FROM_MULTIPLIER: u64 = 10;
 const BURN_MULTIPLIER: u64 = 1;
+// Corresponds to ic_icrc1_ledger::LEDGER_VERSION where blocks are migrated to stable structures
+const LEDGER_VERSION_3: u64 = 3;
 
 #[cfg(not(feature = "u256-tokens"))]
 type Tokens = ic_icrc1_tokens_u64::U64;
@@ -44,7 +47,9 @@ lazy_static! {
         )),
         Wasm::from_bytes(load_wasm_using_env_var(
             "CKBTC_IC_ICRC1_ARCHIVE_DEPLOYED_VERSION_WASM_PATH",
-        ))
+        )),
+        LEDGER_VERSION_3,
+        None,
     );
     pub static ref MAINNET_SNS_WASMS: Wasms = Wasms::new(
         Wasm::from_bytes(load_wasm_using_env_var(
@@ -55,13 +60,25 @@ lazy_static! {
         )),
         Wasm::from_bytes(load_wasm_using_env_var(
             "IC_ICRC1_ARCHIVE_DEPLOYED_VERSION_WASM_PATH",
-        ))
+        )),
+        LEDGER_VERSION_3,
+        Some(Wasm::from_bytes(load_wasm_using_env_var(
+            "IC_ICRC1_LEDGER_DEPLOYED_VERSION_2_WASM_PATH"
+        ))),
     );
     pub static ref MASTER_WASMS: Wasms = Wasms::new(
         Wasm::from_bytes(index_ng_wasm()),
         Wasm::from_bytes(ledger_wasm()),
-        Wasm::from_bytes(archive_wasm())
+        Wasm::from_bytes(archive_wasm()),
+        ic_icrc1_ledger::LEDGER_VERSION,
+        None,
     );
+    // Corresponds to https://github.com/dfinity/ic/releases/tag/ledger-suite-icrc-2025-02-27
+    // This shall be the ledger version referenced using
+    // `CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH` and
+    // `IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH` above.
+    pub static ref BLOCKS_MIGRATED_LEDGER_MODULE_HASH: Vec<u8> =
+        hex::decode("dca85fc694c18181b5c67c93194a7fc72f00226f3b54ac6e4630a9dfe8187503").unwrap();
 }
 
 #[cfg(feature = "u256-tokens")]
@@ -75,27 +92,46 @@ lazy_static! {
         )),
         Wasm::from_bytes(load_wasm_using_env_var(
             "CKETH_IC_ICRC1_ARCHIVE_DEPLOYED_VERSION_WASM_PATH",
-        ))
+        )),
+        LEDGER_VERSION_3,
+        None,
     );
     pub static ref MASTER_WASMS: Wasms = Wasms::new(
         Wasm::from_bytes(index_ng_wasm()),
         Wasm::from_bytes(ledger_wasm()),
-        Wasm::from_bytes(archive_wasm())
+        Wasm::from_bytes(archive_wasm()),
+        ic_icrc1_ledger::LEDGER_VERSION,
+        None,
     );
+    // Corresponds to https://github.com/dfinity/ic/releases/tag/ledger-suite-icrc-2025-02-27
+    // This shall be the ledger version referenced using
+    // `CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH` above.
+    pub static ref BLOCKS_MIGRATED_LEDGER_MODULE_HASH: Vec<u8> =
+        hex::decode("d94d8283e2a71550bac5da0365ca719545e97d05c88787efb679993e2e8c12f4").unwrap();
 }
 
 pub struct Wasms {
     index_wasm: Wasm,
     ledger_wasm: Wasm,
     archive_wasm: Wasm,
+    ledger_version: u64,
+    ledger_wasm_v2: Option<Wasm>,
 }
 
 impl Wasms {
-    fn new(index_wasm: Wasm, ledger_wasm: Wasm, archive_wasm: Wasm) -> Self {
+    fn new(
+        index_wasm: Wasm,
+        ledger_wasm: Wasm,
+        archive_wasm: Wasm,
+        ledger_version: u64,
+        ledger_wasm_v2: Option<Wasm>,
+    ) -> Self {
         Self {
             index_wasm,
             ledger_wasm,
             archive_wasm,
+            ledger_version,
+            ledger_wasm_v2,
         }
     }
 }
@@ -151,6 +187,9 @@ impl LedgerSuiteConfig {
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.ledger_id).unwrap());
         let index_canister_id =
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.index_id).unwrap());
+        // Top up the ledger suite canisters so that they do not risk running out of cycles as
+        // part of the upgrade/downgrade testing.
+        top_up_canisters(state_machine, ledger_canister_id, index_canister_id);
         let mut previous_ledger_state = None;
         if self.extended_testing {
             previous_ledger_state = Some(LedgerState::verify_state_and_generate_transactions(
@@ -173,7 +212,7 @@ impl LedgerSuiteConfig {
             ));
         }
         // Downgrade back to the mainnet canister versions
-        self.upgrade_to_mainnet(state_machine);
+        self.downgrade_to_mainnet(state_machine);
         if self.extended_testing {
             let _ = LedgerState::verify_state_and_generate_transactions(
                 state_machine,
@@ -185,7 +224,17 @@ impl LedgerSuiteConfig {
         }
     }
 
-    fn upgrade_archives(&self, state_machine: &StateMachine, wasm: &Wasm) {
+    fn print_ledger_metrics(&self, state_machine: &StateMachine) {
+        let ledger_id =
+            CanisterId::unchecked_from_principal(PrincipalId::from_str(self.ledger_id).unwrap());
+        let metrics = retrieve_metrics(state_machine, ledger_id);
+        println!("Ledger metrics:");
+        for metric in metrics {
+            println!("  {}", metric);
+        }
+    }
+
+    fn upgrade_archives_or_panic(&self, state_machine: &StateMachine, wasm: &Wasm) {
         let canister_id =
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.ledger_id).unwrap());
         let archives = list_archives(state_machine, canister_id);
@@ -205,7 +254,7 @@ impl LedgerSuiteConfig {
         println!("Upgraded {} archive(s)", num_archives);
     }
 
-    fn upgrade_index(&self, state_machine: &StateMachine, wasm: &Wasm) {
+    fn upgrade_index_or_panic(&self, state_machine: &StateMachine, wasm: &Wasm) {
         let canister_id =
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.index_id).unwrap());
         let index_upgrade_arg = IndexArg::Upgrade(IndexUpgradeArg {
@@ -219,38 +268,90 @@ impl LedgerSuiteConfig {
         println!("Upgraded {} index '{}'", self.canister_name, self.index_id);
     }
 
-    fn upgrade_ledger(&self, state_machine: &StateMachine, wasm: &Wasm) {
+    fn upgrade_ledger(&self, state_machine: &StateMachine, wasm: &Wasm) -> Result<(), UserError> {
         let canister_id =
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.ledger_id).unwrap());
         let args = ic_icrc1_ledger::LedgerArgument::Upgrade(None);
         let args = Encode!(&args).unwrap();
-        state_machine
-            .upgrade_canister(canister_id, wasm.clone().bytes(), args.clone())
-            .expect("should successfully upgrade ledger canister");
-        println!(
-            "Upgraded {} ledger '{}'",
-            self.canister_name, self.ledger_id
-        );
+        match state_machine.upgrade_canister(canister_id, wasm.clone().bytes(), args.clone()) {
+            Ok(_) => {
+                println!(
+                    "Upgraded {} ledger '{}'",
+                    self.canister_name, self.ledger_id
+                );
+                self.print_ledger_metrics(state_machine);
+                Ok(())
+            }
+            Err(e) => {
+                println!(
+                    "Error upgrading {} ledger '{}': {:?}",
+                    self.canister_name, self.ledger_id, e
+                );
+                Err(e)
+            }
+        }
     }
 
-    fn upgrade_to_mainnet(&self, state_machine: &StateMachine) {
-        // Upgrade each canister twice to exercise pre-upgrade
-        self.upgrade_index(state_machine, &self.mainnet_wasms.index_wasm);
-        self.upgrade_index(state_machine, &self.mainnet_wasms.index_wasm);
-        self.upgrade_ledger(state_machine, &self.mainnet_wasms.ledger_wasm);
-        self.upgrade_ledger(state_machine, &self.mainnet_wasms.ledger_wasm);
-        self.upgrade_archives(state_machine, &self.mainnet_wasms.archive_wasm);
-        self.upgrade_archives(state_machine, &self.mainnet_wasms.archive_wasm);
+    fn downgrade_to_mainnet(&self, state_machine: &StateMachine) {
+        // Downgrade each canister twice to exercise pre-upgrade
+        self.upgrade_index_or_panic(state_machine, &self.mainnet_wasms.index_wasm);
+        self.upgrade_index_or_panic(state_machine, &self.mainnet_wasms.index_wasm);
+        let expected_downgrade_result =
+            self.mainnet_wasms.ledger_version == self.master_wasms.ledger_version;
+        let ledger_upgrade_res =
+            self.upgrade_ledger(state_machine, &self.mainnet_wasms.ledger_wasm);
+        match (expected_downgrade_result, ledger_upgrade_res) {
+            (true, Ok(_)) => {
+                // Perform another downgrade to exercise the pre-upgrade
+                self.upgrade_ledger(state_machine, &self.mainnet_wasms.ledger_wasm)
+                    .expect("should downgrade to mainnet ledger version");
+            }
+            (true, Err(e)) => {
+                panic!(
+                    "should successfully downgrade to mainnet ledger version: {}",
+                    e
+                );
+            }
+            (false, Ok(_)) => {
+                panic!("should not successfully downgrade to mainnet ledger version");
+            }
+            (false, Err(_)) => {
+                println!("Failed to downgrade to mainnet ledger version as expected");
+            }
+        }
+        self.upgrade_archives_or_panic(state_machine, &self.mainnet_wasms.archive_wasm);
+        self.upgrade_archives_or_panic(state_machine, &self.mainnet_wasms.archive_wasm);
     }
 
     fn upgrade_to_master(&self, state_machine: &StateMachine) {
         // Upgrade each canister twice to exercise pre-upgrade
-        self.upgrade_index(state_machine, &self.master_wasms.index_wasm);
-        self.upgrade_index(state_machine, &self.master_wasms.index_wasm);
-        self.upgrade_ledger(state_machine, &self.master_wasms.ledger_wasm);
-        self.upgrade_ledger(state_machine, &self.master_wasms.ledger_wasm);
-        self.upgrade_archives(state_machine, &self.master_wasms.archive_wasm);
-        self.upgrade_archives(state_machine, &self.master_wasms.archive_wasm);
+        self.upgrade_index_or_panic(state_machine, &self.master_wasms.index_wasm);
+        self.upgrade_index_or_panic(state_machine, &self.master_wasms.index_wasm);
+        self.upgrade_ledger(state_machine, &self.master_wasms.ledger_wasm)
+            .or_else(|e| {
+                match (
+                    e.description().contains(
+                        "Cannot upgrade from scratch stable memory, please upgrade to memory manager first."
+                    ),
+                    &self.mainnet_wasms.ledger_wasm_v2
+                ) {
+                    // The upgrade may fail if the target canister is too old - in the case of
+                    // migration to stable structures, the ledger canister must be at least at V2,
+                    // i.e., the ledger state must be managed by the memory manager.
+                    (true, Some(wasm_v2)) => {
+                        self.upgrade_ledger(state_machine, wasm_v2)
+                            .expect("should successfully upgrade ledger to V2");
+                        self.upgrade_ledger(state_machine, &self.master_wasms.ledger_wasm)
+                    }
+                    _ => Err(e)
+                }
+            })
+            .expect("should successfully upgrade ledger");
+        // No migration expected in second upgrade to the same version
+        self.upgrade_ledger(state_machine, &self.master_wasms.ledger_wasm)
+            .expect("should successfully upgrade ledger");
+        self.upgrade_archives_or_panic(state_machine, &self.master_wasms.archive_wasm);
+        self.upgrade_archives_or_panic(state_machine, &self.master_wasms.archive_wasm);
     }
 }
 
@@ -260,7 +361,7 @@ struct FetchedBlocks {
 }
 
 struct LedgerState {
-    in_memory_ledger: InMemoryLedger<ApprovalKey, Account, Tokens>,
+    in_memory_ledger: InMemoryLedger<Account, Tokens>,
     num_blocks: u64,
 }
 
@@ -301,7 +402,7 @@ impl LedgerState {
             .num_blocks
             .checked_add(blocks.len() as u64)
             .expect("number of blocks should fit in u64");
-        self.in_memory_ledger.ingest_icrc1_ledger_blocks(&blocks);
+        self.in_memory_ledger.consume_blocks(&blocks);
         FetchedBlocks {
             blocks,
             start_index,
@@ -543,7 +644,6 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
     )];
     for canister_id_and_name in vec![
         CK_SEPOLIA_LINK_LEDGER_SUITE,
-        CK_SEPOLIA_LINK_LEDGER_SUITE,
         CK_SEPOLIA_PEPE_LEDGER_SUITE,
         CK_SEPOLIA_USDC_LEDGER_SUITE,
         CK_EURC_LEDGER_SUITE,
@@ -576,6 +676,11 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
 #[test]
 fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     // SNS canisters
+    const ALICE_LEDGER_SUITE: (&str, &str, &str) = (
+        "oj6if-riaaa-aaaaq-aaeha-cai",
+        "mtcaz-pyaaa-aaaaq-aaeia-cai",
+        "Alice",
+    );
     const BOOMDAO_LEDGER_SUITE: (&str, &str, &str) = (
         "vtrom-gqaaa-aaaaq-aabia-cai",
         "v5tde-5aaaa-aaaaq-aabja-cai",
@@ -586,11 +691,6 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         "ux4b6-7qaaa-aaaaq-aaboa-cai",
         "Catalyze",
     );
-    const CYCLES_TRANSFER_STATION_LEDGER_SUITE: (&str, &str, &str) = (
-        "itgqj-7qaaa-aaaaq-aadoa-cai",
-        "i5e5b-eaaaa-aaaaq-aadpa-cai",
-        "CyclesTransferStation",
-    );
     const DECIDEAI_LEDGER_SUITE: (&str, &str, &str) = (
         "xsi2v-cyaaa-aaaaq-aabfq-cai",
         "xaonm-oiaaa-aaaaq-aabgq-cai",
@@ -600,6 +700,11 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         "np5km-uyaaa-aaaaq-aadrq-cai",
         "n535v-yiaaa-aaaaq-aadsq-cai",
         "DOGMI",
+    );
+    const DOLR_AI_LEDGER_SUITE: (&str, &str, &str) = (
+        "6rdgd-kyaaa-aaaaq-aaavq-cai",
+        "6dfr2-giaaa-aaaaq-aaawq-cai",
+        "YRAL",
     );
     const DRAGGINZ_LEDGER_SUITE: (&str, &str, &str) = (
         "zfcdd-tqaaa-aaaaq-aaaga-cai",
@@ -616,6 +721,16 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         "bfk5s-wyaaa-aaaaq-aac5q-cai",
         "EstateDAO",
     );
+    const FOMOWELL_LEDGER_SUITE: (&str, &str, &str) = (
+        "o4zzi-qaaaa-aaaaq-aaeeq-cai",
+        "os3ua-lqaaa-aaaaq-aaefq-cai",
+        "FomoWell",
+    );
+    // const FUEL_EV_LEDGER_SUITE: (&str, &str, &str) = (
+    //     "nfjys-2iaaa-aaaaq-aaena-cai",
+    //     "nxppl-wyaaa-aaaaq-aaeoa-cai",
+    //     "FuelEV",
+    // );
     const GOLDDAO_LEDGER_SUITE: (&str, &str, &str) = (
         "tyyy3-4aaaa-aaaaq-aab7a-cai",
         "efv5g-kqaaa-aaaaq-aacaa-cai",
@@ -656,6 +771,11 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         "7vojr-tyaaa-aaaaq-aaatq-cai",
         "Kinic",
     );
+    const KONG_SWAP_LEDGER_SUITE: (&str, &str, &str) = (
+        "o7oak-iyaaa-aaaaq-aadzq-cai",
+        "onixt-eiaaa-aaaaq-aad2q-cai",
+        "KongSwap",
+    );
     const MOTOKO_LEDGER_SUITE: (&str, &str, &str) = (
         "k45jy-aiaaa-aaaaq-aadcq-cai",
         "ks7eq-3yaaa-aaaaq-aaddq-cai",
@@ -665,6 +785,11 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         "f54if-eqaaa-aaaaq-aacea-cai",
         "ft6fn-7aaaa-aaaaq-aacfa-cai",
         "Neutrinite",
+    );
+    const NFID_WALLET_LEDGER_SUITE: (&str, &str, &str) = (
+        "mih44-vaaaa-aaaaq-aaekq-cai",
+        "mgfru-oqaaa-aaaaq-aaelq-cai",
+        "NFID Wallet",
     );
     const NUANCE_LEDGER_SUITE: (&str, &str, &str) = (
         "rxdbk-dyaaa-aaaaq-aabtq-cai",
@@ -711,11 +836,6 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         "iidmm-fiaaa-aaaaq-aadmq-cai",
         "WaterNeuron",
     );
-    const YRAL_LEDGER_SUITE: (&str, &str, &str) = (
-        "6rdgd-kyaaa-aaaaq-aaavq-cai",
-        "6dfr2-giaaa-aaaaq-aaawq-cai",
-        "YRAL",
-    );
     const YUKU_LEDGER_SUITE: (&str, &str, &str) = (
         "atbfz-diaaa-aaaaq-aacyq-cai",
         "a5dir-yyaaa-aaaaq-aaczq-cai",
@@ -730,14 +850,17 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         true,
     )];
     for canister_id_and_name in vec![
+        ALICE_LEDGER_SUITE,
         BOOMDAO_LEDGER_SUITE,
         CATALYZE_LEDGER_SUITE,
-        CYCLES_TRANSFER_STATION_LEDGER_SUITE,
         DECIDEAI_LEDGER_SUITE,
         DOGMI_LEDGER_SUITE,
+        DOLR_AI_LEDGER_SUITE,
         DRAGGINZ_LEDGER_SUITE,
         ELNAAI_LEDGER_SUITE,
         ESTATEDAO_LEDGER_SUITE,
+        FOMOWELL_LEDGER_SUITE,
+        // FUEL_EV_LEDGER_SUITE, // Skipping FuelEV for now, as the index canister was uninstalled
         GOLDDAO_LEDGER_SUITE,
         ICGHOST_LEDGER_SUITE,
         ICLIGHTHOUSE_LEDGER_SUITE,
@@ -746,8 +869,10 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         ICPSWAP_LEDGER_SUITE,
         ICVC_LEDGER_SUITE,
         KINIC_LEDGER_SUITE,
+        KONG_SWAP_LEDGER_SUITE,
         MOTOKO_LEDGER_SUITE,
         NEUTRINITE_LEDGER_SUITE,
+        NFID_WALLET_LEDGER_SUITE,
         NUANCE_LEDGER_SUITE,
         OPENFPL_LEDGER_SUITE,
         ORIGYN_LEDGER_SUITE,
@@ -756,7 +881,6 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         SONIC_LEDGER_SUITE,
         TRAX_LEDGER_SUITE,
         WATERNEURON_LEDGER_SUITE,
-        YRAL_LEDGER_SUITE,
         YUKU_LEDGER_SUITE,
     ] {
         canister_configs.push(LedgerSuiteConfig::new(
@@ -776,6 +900,22 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
 
 fn archive_wasm() -> Vec<u8> {
     load_wasm_using_env_var("IC_ICRC1_ARCHIVE_WASM_PATH")
+}
+
+fn top_up_canisters(
+    state_machine: &StateMachine,
+    ledger_canister_id: CanisterId,
+    index_canister_id: CanisterId,
+) {
+    const TOP_UP_AMOUNT: u128 = 2_000_000_000_000_000; // 2_000 T cycles
+    let archives = list_archives(state_machine, ledger_canister_id);
+    for archive in archives {
+        let archive_canister_id =
+            CanisterId::unchecked_from_principal(PrincipalId(archive.canister_id));
+        state_machine.add_cycles(archive_canister_id, TOP_UP_AMOUNT);
+    }
+    state_machine.add_cycles(ledger_canister_id, TOP_UP_AMOUNT);
+    state_machine.add_cycles(index_canister_id, TOP_UP_AMOUNT);
 }
 
 mod index {

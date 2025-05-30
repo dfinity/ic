@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/rust_canisters/http_types",
+    "//packages/ic-http-types",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:futures",
@@ -23,14 +23,12 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:async-trait",
-    "@crate_index//:ic-cdk-macros",
 ]
 
 rust_library(
     name = "xrc_mock",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "xrc_mock",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )

@@ -1,29 +1,20 @@
 load("@bazel_skylib//rules:common_settings.bzl", "string_setting")
 load("@gazelle//:def.bzl", "gazelle")
 load("@rules_python//python:pip.bzl", "compile_pip_requirements")
+load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 
 package(default_visibility = ["//visibility:public"])
 
 # WARNING! .git is the directory, not a regular file! only consume it in your rules if you know how exactly bazel works and understand implications!
 exports_files([
     ".git",
-    ".rclone.conf",
-    ".rclone-anon.conf",
     "buf.yaml",
     "clippy.toml",
     "rustfmt.toml",
     "WORKSPACE.bazel",
-    "mainnet-canisters.json",
+    "mainnet-canister-revisions.json",
+    "mainnet-icos-images.bzl",
 ])
-
-# bazel/workspace_status.sh will write the current timestamp to this file on every run to provade an input that always changes for some targets.
-# The file does not have to and should not be committed, therefore will not exist on the first run on a clean source tree.
-# Therefore glob is used to not fail when the file does not exist.
-# buildifier: disable=constant-glob
-filegroup(
-    name = "bazel-timestamp",
-    srcs = glob(["bazel-timestamp.txt"]),
-)
 
 alias(
     name = "buildifier",
@@ -95,7 +86,18 @@ compile_pip_requirements(
 test_suite(
     name = "single_large_node",  # the "_test" postfix is dropped on purpose since this target is meant for interactive use.
     tags = ["manual"],
-    tests = ["//rs/tests/testing_verification/testnets:single_large_node"],
+    tests = ["//rs/tests/testnets:single_large_node"],
+)
+
+### Bitcoind
+
+alias(
+    name = "bitcoind",
+    actual = select({
+        "@bazel_tools//src/conditions:darwin_arm64": "@bitcoin_core_darwin_arm64//:bitcoind",
+        "@bazel_tools//src/conditions:darwin_x86_64": "@bitcoin_core_darwin_x86//:bitcoind",
+        "@bazel_tools//src/conditions:linux_x86_64": "@bitcoin_core_linux_x86//:bitcoind",
+    }),
 )
 
 ### Pocket IC
@@ -147,4 +149,30 @@ genrule(
     srcs = ["@pocket-ic-mainnet-gz//file"],
     outs = ["pocket-ic"],
     cmd = "gunzip -c $< > $@",
+)
+
+# Upload artifacts to the CDN
+upload_artifacts(
+    name = "upload-artifacts",
+    testonly = True,
+    inputs = [
+        "//publish/binaries:bundle",
+        "//publish/binaries:bundle-legacy",
+        "//publish/binaries:bundle-sns-testing",
+    ] + select({
+        "@platforms//os:osx": [],
+        "//conditions:default": [
+            "//publish/canisters:bundle",
+            "//ic-os/boundary-guestos/envs/dev:bundle",
+            "//ic-os/boundary-guestos/envs/prod:bundle",
+            "//ic-os/guestos/envs/dev:bundle-disk",
+            "//ic-os/guestos/envs/dev:bundle-update",
+            "//ic-os/guestos/envs/prod:bundle-disk",
+            "//ic-os/guestos/envs/prod:bundle-update",
+            "//ic-os/hostos/envs/prod:bundle-disk",
+            "//ic-os/hostos/envs/prod:bundle-update",
+            "//ic-os/setupos/envs/prod:bundle",
+        ],
+    }),
+    visibility = ["//visibility:public"],
 )

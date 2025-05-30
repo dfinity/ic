@@ -11,8 +11,8 @@ use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     IDkgTranscriptInternal, ThresholdBip340GenerateSigShareInternalError,
     ThresholdEd25519GenerateSigShareInternalError,
 };
-use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::Randomness;
 use rand::{CryptoRng, Rng};
 

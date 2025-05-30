@@ -1,0 +1,29 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+rust_library(
+    name = "cycles_minting",
+    testonly = True,
+    srcs = ["cycles_minting.rs"],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    deps = [
+        "//rs/canister_client",
+        "//rs/canister_client/sender",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/nns/cmc",
+        "//rs/nns/constants",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/rust_canisters/dfn_protobuf",
+        "//rs/rust_canisters/on_wire",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:rand",
+        "@crate_index//:serde",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:url",
+        "@crate_index//:wat",
+    ],
+)

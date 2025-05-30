@@ -1,13 +1,11 @@
 #![deny(missing_docs)]
-use crate::{
-    consensus::{
-        metrics::BlockMakerMetrics,
-        status::{self, Status},
-        ConsensusCrypto,
-    },
-    dkg::payload_builder::create_payload as create_dkg_payload,
-    idkg::{self, metrics::IDkgPayloadMetrics},
+use crate::consensus::{
+    metrics::BlockMakerMetrics,
+    status::{self, Status},
+    ConsensusCrypto,
 };
+use ic_consensus_dkg::payload_builder::create_payload as create_dkg_payload;
+use ic_consensus_idkg::{self as idkg, metrics::IDkgPayloadMetrics};
 use ic_consensus_utils::{
     find_lowest_ranked_non_disqualified_proposals, get_notarization_delay_settings,
     get_subnet_record, membership::Membership, pool_reader::PoolReader,
@@ -23,8 +21,10 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::{BatchPayload, ValidationContext},
     consensus::{
-        block_maker::SubnetRecords, dkg, hashed, Block, BlockMetadata, BlockPayload, BlockProposal,
-        DataPayload, HasHeight, HasRank, HashedBlock, Payload, RandomBeacon, Rank, SummaryPayload,
+        block_maker::SubnetRecords,
+        dkg::{DkgDataPayload, DkgPayload},
+        hashed, Block, BlockMetadata, BlockPayload, BlockProposal, DataPayload, HasHeight, HasRank,
+        HashedBlock, Payload, RandomBeacon, Rank, SummaryPayload,
     },
     replica_config::ReplicaConfig,
     time::current_time,
@@ -270,7 +270,6 @@ impl BlockMaker {
             context,
             parent,
             height,
-            certified_height,
             rank,
             registry_version,
             &subnet_records,
@@ -280,14 +279,12 @@ impl BlockMaker {
     /// Construct a block proposal with specified validation context, parent
     /// block, rank, and batch payload. This function completes the block by
     /// adding a DKG payload and signs the block to obtain a block proposal.
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn construct_block_proposal(
         &self,
         pool: &PoolReader<'_>,
         context: ValidationContext,
         parent: HashedBlock,
         height: Height,
-        certified_height: Height,
         rank: Rank,
         registry_version: RegistryVersion,
         subnet_records: &SubnetRecords,
@@ -313,7 +310,7 @@ impl BlockMaker {
         let payload = Payload::new(
             ic_types::crypto::crypto_hash,
             match dkg_payload {
-                dkg::Payload::Summary(summary) => {
+                DkgPayload::Summary(summary) => {
                     // Summary block does not have batch payload.
                     self.metrics.report_byte_estimate_metrics(0, 0);
                     let idkg_summary = idkg::create_summary_payload(
@@ -334,8 +331,8 @@ impl BlockMaker {
                         idkg: idkg_summary,
                     })
                 }
-                dkg::Payload::Dealings(dealings) => {
-                    let (batch_payload, dealings, idkg_data) = match status::get_status(
+                DkgPayload::Data(dkg) => {
+                    let (batch_payload, dkg, idkg_data) = match status::get_status(
                         height,
                         self.registry_client.as_ref(),
                         self.replica_config.subnet_id,
@@ -349,14 +346,13 @@ impl BlockMaker {
                         // Use empty payload and empty DKG dealings if the replica is halting.
                         Status::Halting => (
                             BatchPayload::default(),
-                            dkg::Dealings::new_empty(dealings.start_height),
+                            DkgDataPayload::new_empty(dkg.start_height),
                             /*idkg_data=*/ None,
                         ),
                         Status::Running => {
                             let batch_payload = self.build_batch_payload(
                                 pool,
                                 height,
-                                certified_height,
                                 &context,
                                 parent.as_ref(),
                                 subnet_records,
@@ -380,7 +376,7 @@ impl BlockMaker {
                             .ok()
                             .flatten();
 
-                            (batch_payload, dealings, idkg_data)
+                            (batch_payload, dkg, idkg_data)
                         }
                     };
 
@@ -391,7 +387,7 @@ impl BlockMaker {
 
                     BlockPayload::Data(DataPayload {
                         batch: batch_payload,
-                        dealings,
+                        dkg,
                         idkg: idkg_data,
                     })
                 }
@@ -415,18 +411,16 @@ impl BlockMaker {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn build_batch_payload(
         &self,
         pool: &PoolReader<'_>,
         height: Height,
-        certified_height: Height,
         context: &ValidationContext,
         parent: &Block,
         subnet_records: &SubnetRecords,
     ) -> BatchPayload {
         let past_payloads =
-            pool.get_payloads_from_height(certified_height.increment(), parent.clone());
+            pool.get_payloads_from_height(context.certified_height.increment(), parent.clone());
         let payload =
             self.payload_builder
                 .get_payload(height, &past_payloads, context, subnet_records);
@@ -606,13 +600,12 @@ pub(super) fn is_time_to_make_block(
 
 #[cfg(test)]
 mod tests {
-    use crate::idkg::test_utils::create_idkg_pool;
-
     use super::*;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies, MockPayloadBuilder};
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
+    use ic_test_utilities_consensus::IDkgStatsNoOp;
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
@@ -700,7 +693,7 @@ mod tests {
             let expected_payloads = PoolReader::new(&pool)
                 .get_payloads_from_height(certified_height.increment(), start.as_ref().clone());
             let returned_payload =
-                dkg::Payload::Dealings(dkg::Dealings::new_empty(Height::from(0)));
+                DkgPayload::Data(dkg::DkgDataPayload::new_empty(Height::from(0)));
             let pool_reader = PoolReader::new(&pool);
             let expected_time = expected_payloads[0].1
                 + get_block_maker_delay(
@@ -847,10 +840,12 @@ mod tests {
                 MetricsRegistry::new(),
                 no_op_logger(),
             )));
-            let idkg_pool = Arc::new(RwLock::new(create_idkg_pool(
+
+            let idkg_pool = Arc::new(RwLock::new(ic_artifact_pool::idkg_pool::IDkgPoolImpl::new(
                 pool_config,
                 no_op_logger(),
                 MetricsRegistry::new(),
+                Box::new(IDkgStatsNoOp {}),
             )));
 
             state_manager
@@ -1061,9 +1056,9 @@ mod tests {
         #[case] expected_block_maker_delay: Duration,
     ) {
         // there should be 11 non-rank-0 blocks in the past 30 heights
-        let initial = std::iter::repeat(Rank(1)).take(5);
-        let mid = std::iter::repeat(Rank(0)).take(19);
-        let terminal = std::iter::repeat(Rank(2)).take(8);
+        let initial = std::iter::repeat_n(Rank(1), 5);
+        let mid = std::iter::repeat_n(Rank(0), 19);
+        let terminal = std::iter::repeat_n(Rank(2), 8);
 
         let ranks: Vec<Rank> = initial.chain(mid).chain(terminal).collect();
 
@@ -1083,9 +1078,9 @@ mod tests {
         #[case] expected_block_maker_delay: Duration,
     ) {
         // there should be 10 non-rank-0 blocks in the past 30 heights
-        let initial = std::iter::repeat(Rank(1)).take(5);
-        let mid = std::iter::repeat(Rank(0)).take(20);
-        let terminal = std::iter::repeat(Rank(2)).take(8);
+        let initial = std::iter::repeat_n(Rank(1), 5);
+        let mid = std::iter::repeat_n(Rank(0), 20);
+        let terminal = std::iter::repeat_n(Rank(2), 8);
 
         let ranks: Vec<Rank> = initial.chain(mid).chain(terminal).collect();
 
@@ -1097,7 +1092,7 @@ mod tests {
 
     #[test]
     fn get_block_maker_delay_short_chain_many_non_rank_0_blocks_test() {
-        let previous_ranks = std::iter::repeat(Rank(1)).take(11).collect::<Vec<_>>();
+        let previous_ranks = std::iter::repeat_n(Rank(1), 11).collect::<Vec<_>>();
         assert_eq!(
             block_maker_delay_test_case(
                 &previous_ranks,

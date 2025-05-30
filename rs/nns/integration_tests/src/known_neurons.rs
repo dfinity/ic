@@ -4,7 +4,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_ID, TEST_NEURON_3_ID,
 };
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     manage_neuron::NeuronIdOrSubaccount, manage_neuron_response::Command as CommandResponse,
     GovernanceError, KnownNeuron, KnownNeuronData, ListKnownNeuronsResponse, MakeProposalRequest,
     ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, NeuronInfo,
@@ -135,14 +135,14 @@ fn test_known_neurons() {
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, ProposalId::from(pid_1))
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, ProposalId::from(pid_2))
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
 
         // Check that neuron 2 has the correct name

@@ -4,8 +4,8 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-ed25519",
     "//rs/canister_client/sender",
-    "//rs/crypto/ed25519",
     "//rs/types/types",
     "//rs/types/types_test_utils",
     "@crate_index//:rand",
@@ -25,7 +25,6 @@ rust_test(
     crate = ":types",
     deps = [
         # Keep sorted.
-        "@crate_index//:assert_matches",
         "@crate_index//:bincode",
         "@crate_index//:serde_cbor",
     ],

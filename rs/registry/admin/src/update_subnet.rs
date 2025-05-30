@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use clap::Parser;
 use ic_admin_derive::derive_common_proposal_fields;
 use ic_canister_client::{Agent, Sender};
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_common::types::NeuronId;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_features::SubnetFeatures;
@@ -323,9 +323,6 @@ impl ProposeToUpdateSubnetCmd {
             chain_key_signing_disable,
 
             // Deprecated fields
-            ecdsa_config: None,
-            ecdsa_key_signing_enable: None,
-            ecdsa_key_signing_disable: None,
             max_artifact_streams_per_peer: None,
             max_chunk_wait_ms: None,
             max_duplicity: None,
@@ -351,7 +348,9 @@ impl ProposalPayload<do_update_subnet::UpdateSubnetPayload> for ProposeToUpdateS
 
 #[cfg(test)]
 mod tests {
-    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId};
+    use ic_management_canister_types_private::{
+        EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
+    };
     use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
     use ic_types::PrincipalId;
 
@@ -381,9 +380,6 @@ mod tests {
             is_halted: None,
             halt_at_cup_height: None,
             features: None,
-            ecdsa_config: None,
-            ecdsa_key_signing_enable: None,
-            ecdsa_key_signing_disable: None,
             max_number_of_canisters: None,
             ssh_readonly_access: None,
             ssh_backup_access: None,
@@ -466,6 +462,11 @@ mod tests {
                 "key_id": "schnorr:Bip340Secp256k1:some_key_name_2",
                 "pre_signatures_to_create_in_advance": "98",
                 "max_queue_size": "154"
+            },
+            {
+                "key_id": "vetkd:Bls12_381_G2:some_key_name_5",
+                "pre_signatures_to_create_in_advance": "0",
+                "max_queue_size": "154"
             }]"#
         .to_string();
         let chain_key_configs_to_generate = Some(chain_key_configs_to_generate);
@@ -530,6 +531,15 @@ mod tests {
                             pre_signatures_to_create_in_advance: Some(98),
                             max_queue_size: Some(154),
                         },
+                        // A VetKd config, now being added.
+                        do_update_subnet::KeyConfig {
+                            key_id: Some(MasterPublicKeyId::VetKd(VetKdKeyId {
+                                curve: VetKdCurve::Bls12_381_G2,
+                                name: "some_key_name_5".to_string(),
+                            })),
+                            pre_signatures_to_create_in_advance: Some(0),
+                            max_queue_size: Some(154),
+                        },
                     ],
                     signature_request_timeout_ns: Some(222_222),
                     idkg_key_rotation_period_ms: Some(222),
@@ -566,6 +576,11 @@ mod tests {
                 "key_id": "schnorr:Bip340Secp256k1:some_key_name_2",
                 "pre_signatures_to_create_in_advance": "98",
                 "max_queue_size": "154"
+            },
+            {
+                "key_id": "vetkd:Bls12_381_G2:some_key_name_3",
+                "pre_signatures_to_create_in_advance": "0",
+                "max_queue_size": "154"
             }]"#
         .to_string();
         let chain_key_configs_to_generate = Some(chain_key_configs_to_generate);
@@ -600,6 +615,14 @@ mod tests {
                                 name: "some_key_name_2".to_string(),
                             })),
                             pre_signatures_to_create_in_advance: Some(98),
+                            max_queue_size: Some(154),
+                        },
+                        do_update_subnet::KeyConfig {
+                            key_id: Some(MasterPublicKeyId::VetKd(VetKdKeyId {
+                                curve: VetKdCurve::Bls12_381_G2,
+                                name: "some_key_name_3".to_string(),
+                            })),
+                            pre_signatures_to_create_in_advance: Some(0),
                             max_queue_size: Some(154),
                         },
                     ],
@@ -641,6 +664,11 @@ mod tests {
                 "key_id": "schnorr:Bip340Secp256k1:some_key_name_2",
                 "pre_signatures_to_create_in_advance": "333",
                 "max_queue_size": "444"
+            },
+            {
+                "key_id": "vetkd:Bls12_381_G2:some_key_name_3",
+                "pre_signatures_to_create_in_advance": "0",
+                "max_queue_size": "444"
             }]"#
         .to_string();
         let chain_key_configs_to_generate = Some(chain_key_configs_to_generate);
@@ -677,6 +705,15 @@ mod tests {
                                 name: "some_key_name_2".to_string(),
                             })),
                             pre_signatures_to_create_in_advance: Some(333),
+                            max_queue_size: Some(444),
+                        },
+                        // New config, now being added.
+                        do_update_subnet::KeyConfig {
+                            key_id: Some(MasterPublicKeyId::VetKd(VetKdKeyId {
+                                curve: VetKdCurve::Bls12_381_G2,
+                                name: "some_key_name_3".to_string(),
+                            })),
+                            pre_signatures_to_create_in_advance: Some(0),
                             max_queue_size: Some(444),
                         },
                     ],

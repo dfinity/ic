@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use candid::CandidType;
 use ic_canister_client::{Agent, Sender};
 use ic_nns_common::types::NeuronId;
-use ic_nns_governance_api::pb::v1::ProposalActionRequest;
+use ic_nns_governance_api::ProposalActionRequest;
 use ic_protobuf::registry::{
     node::v1::IPv4InterfaceConfig,
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
@@ -13,7 +13,7 @@ use ic_protobuf::registry::{
 };
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, SubnetFeatures};
+use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{PrincipalId, SubnetId};
 use indexmap::IndexMap;
@@ -67,13 +67,13 @@ pub(crate) struct SubnetRecord {
     pub initial_notary_delay_millis: u64,
     pub replica_version_id: String,
     pub dkg_interval_length: u64,
+    pub dkg_dealings_per_block: u64,
     pub start_as_nns: bool,
     pub subnet_type: SubnetType,
     pub features: SubnetFeatures,
     pub max_number_of_canisters: u64,
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
-    pub ecdsa_config: Option<EcdsaConfig>,
     pub chain_key_config: Option<ChainKeyConfig>,
 }
 
@@ -116,16 +116,13 @@ impl From<&SubnetRecordProto> for SubnetRecord {
             initial_notary_delay_millis: value.initial_notary_delay_millis,
             replica_version_id: value.replica_version_id.clone(),
             dkg_interval_length: value.dkg_interval_length,
+            dkg_dealings_per_block: value.dkg_dealings_per_block,
             start_as_nns: value.start_as_nns,
             subnet_type: SubnetType::try_from(value.subnet_type).unwrap(),
             features: value.features.unwrap_or_default().into(),
             max_number_of_canisters: value.max_number_of_canisters,
             ssh_readonly_access: value.ssh_readonly_access.clone(),
             ssh_backup_access: value.ssh_backup_access.clone(),
-            ecdsa_config: value
-                .ecdsa_config
-                .as_ref()
-                .map(|c| c.clone().try_into().unwrap()),
             chain_key_config: value
                 .chain_key_config
                 .as_ref()

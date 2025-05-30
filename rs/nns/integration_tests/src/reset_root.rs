@@ -3,8 +3,8 @@ use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_P
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::{
-    pb::v1::{manage_neuron_response::Command, NnsFunction},
-    proposal_submission_helpers::create_external_update_proposal_candid,
+    manage_neuron_response::Command,
+    proposal_submission_helpers::create_external_update_proposal_candid, NnsFunction,
 };
 use ic_nns_test_utils::{
     common::{build_root_wasm, modify_wasm_bytes, NnsInitPayloadsBuilder},
@@ -111,6 +111,6 @@ fn test_other_controllers_cannot_reset_root() {
 
     assert!(response.is_err());
     assert!(response.unwrap_err().contains(
-        "Error from Canister rno2w-sqaaa-aaaaa-aaacq-cai: Canister called `ic0.trap` with message: assertion failed at lifeline.mo",
+        "Error from Canister rno2w-sqaaa-aaaaa-aaacq-cai: Canister called `ic0.trap` with message: 'assertion failed at lifeline.mo",
     ));
 }

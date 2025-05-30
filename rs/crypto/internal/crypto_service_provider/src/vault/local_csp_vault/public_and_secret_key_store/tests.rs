@@ -1476,22 +1476,20 @@ mod validate_pks_and_sks {
     }
 
     fn node_signing_secret_key_id() -> KeyId {
-        KeyId::try_from(
+        KeyId::from(
             &CspPublicKey::try_from(&valid_node_signing_public_key()).expect("invalid public key"),
         )
-        .expect("invalid public key")
     }
 
     fn committee_signing_secret_key_id() -> KeyId {
-        KeyId::try_from(
+        KeyId::from(
             &CspPublicKey::try_from(&valid_committee_signing_public_key())
                 .expect("invalid public key"),
         )
-        .expect("invalid public key")
     }
 
     fn tls_certificate_key_id() -> KeyId {
-        KeyId::try_from(
+        KeyId::from(
             &TlsPublicKeyCert::new_from_der(
                 valid_tls_certificate_and_validation_time()
                     .0
@@ -1499,7 +1497,6 @@ mod validate_pks_and_sks {
             )
             .expect("invalid certificate"),
         )
-        .expect("invalid certificate")
     }
 
     fn dkg_dealing_encryption_key_id() -> KeyId {

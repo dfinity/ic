@@ -1,6 +1,6 @@
 use ic_base_types::{NumBytes, PrincipalIdBlobParseError};
 use ic_error_types::UserError;
-use ic_types::{methods::WasmMethod, CanisterId, CountBytes, Cycles, NumInstructions};
+use ic_types::{methods::WasmMethod, CanisterId, Cycles, MemoryDiskBytes, NumInstructions};
 use ic_wasm_types::{
     doc_ref, AsErrorHelp, ErrorHelp, WasmEngineError, WasmInstrumentationError, WasmValidationError,
 };
@@ -102,9 +102,9 @@ pub enum HypervisorError {
     ToolchainContractViolation {
         error: String,
     },
-    /// System API contract was violated. They payload contains a
+    /// System API contract was violated. The payload contains a
     /// detailed explanation of the issue suitable for displaying it
-    /// to a user of IC.
+    /// to a user of the IC.
     UserContractViolation {
         error: String,
         suggestion: String,
@@ -112,9 +112,9 @@ pub enum HypervisorError {
     },
     /// Wasm execution consumed too many instructions.
     InstructionLimitExceeded(NumInstructions),
-    /// We could not validate the wasm module
+    /// We could not validate the wasm module.
     InvalidWasm(WasmValidationError),
-    /// We could not instrument the wasm module
+    /// We could not instrument the wasm module.
     InstrumentationFailed(WasmInstrumentationError),
     /// Canister Wasm trapped (e.g. by executing the `unreachable`
     /// instruction or dividing by zero).
@@ -126,6 +126,9 @@ pub enum HypervisorError {
         backtrace: Option<CanisterBacktrace>,
     },
     /// Canister explicitly called `ic.trap`.
+    /// The contained backtrace may be `None` if the canister does not include
+    /// suitable debug information or if the caller does not have permission to
+    /// view the backtrace.
     CalledTrap {
         message: String,
         backtrace: Option<CanisterBacktrace>,
@@ -264,7 +267,7 @@ impl std::fmt::Display for HypervisorError {
                 }
             }
             Self::CalledTrap { message, backtrace } => {
-                write!(f, "Canister called `ic0.trap` with message: {}", message)?;
+                write!(f, "Canister called `ic0.trap` with message: '{}'", message)?;
                 if let Some(bt) = backtrace {
                     write!(f, "\n{}", bt)
                 } else {
@@ -385,9 +388,13 @@ impl std::fmt::Display for HypervisorError {
     }
 }
 
-impl CountBytes for HypervisorError {
-    fn count_bytes(&self) -> usize {
+impl MemoryDiskBytes for HypervisorError {
+    fn memory_bytes(&self) -> usize {
         std::mem::size_of::<Self>()
+    }
+
+    fn disk_bytes(&self) -> usize {
+        0
     }
 }
 

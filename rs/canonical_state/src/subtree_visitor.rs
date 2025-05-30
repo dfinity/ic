@@ -91,7 +91,7 @@ impl<'a, V> SubtreeVisitor<'a, V> {
     }
 }
 
-impl<'a, V> Visitor for SubtreeVisitor<'a, V>
+impl<V> Visitor for SubtreeVisitor<'_, V>
 where
     V: Visitor,
 {

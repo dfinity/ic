@@ -9,7 +9,7 @@ use std::{
 
 use crate::page_map::{
     storage::{
-        verify, Checkpoint, FileIndex, MergeCandidate, MergeDestination, OverlayFile,
+        validate, Checkpoint, FileIndex, MergeCandidate, MergeDestination, OverlayFile,
         PageIndexRange, Shard, Storage, StorageLayout, CURRENT_OVERLAY_VERSION,
         PAGE_INDEX_RANGE_NUM_BYTES, SIZE_NUM_BYTES, VERSION_NUM_BYTES,
     },
@@ -19,7 +19,6 @@ use crate::page_map::{
 };
 use assert_matches::assert_matches;
 use bit_vec::BitVec;
-use ic_config::flag_status::FlagStatus;
 use ic_config::state_manager::LsmtConfig;
 use ic_metrics::MetricsRegistry;
 use ic_sys::{PageIndex, PAGE_SIZE};
@@ -475,26 +474,19 @@ fn write_overlay(
         delta,
         &storage_layout,
         height,
-        &LsmtConfig {
-            lsmt_status: FlagStatus::Enabled,
-            shard_num_pages: u64::MAX,
-        },
+        &lsmt_config_unsharded(),
         metrics,
     )
 }
 
 fn lsmt_config_unsharded() -> LsmtConfig {
     LsmtConfig {
-        lsmt_status: FlagStatus::Enabled,
         shard_num_pages: u64::MAX,
     }
 }
 
 fn lsmt_config_sharded() -> LsmtConfig {
-    LsmtConfig {
-        lsmt_status: FlagStatus::Enabled,
-        shard_num_pages: 3,
-    }
+    LsmtConfig { shard_num_pages: 3 }
 }
 
 /// This function applies `instructions` to a new `Storage` in a temporary directory.
@@ -562,7 +554,7 @@ fn write_overlays_and_verify_with_tempdir(
                 page_map.update(
                     combined_delta
                         .iter()
-                        .map(|(i, p)| (i, p.contents()))
+                        .map(|(i, p)| (*i, p.contents()))
                         .collect::<Vec<_>>()
                         .as_slice(),
                 );
@@ -676,15 +668,16 @@ fn write_overlays_and_verify_with_tempdir(
 /// after every step.
 /// Use unsharded LSMT config.
 fn write_overlays_and_verify_unsharded(instructions: Vec<Instruction>) -> MetricsRegistry {
-    let tempdir = Builder::new()
+    let tdir = Builder::new()
         .prefix("write_overlays_and_verify_unsharded")
         .tempdir()
         .unwrap();
     let metrics =
-        write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_unsharded(), &tempdir);
-    tempdir
-        .close()
-        .expect("Unable to delete temporary directory");
+        write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_unsharded(), &tdir);
+
+    #[cfg(feature = "fuzzing_code")]
+    remove_tempdir(tdir);
+
     metrics
 }
 
@@ -692,15 +685,16 @@ fn write_overlays_and_verify_unsharded(instructions: Vec<Instruction>) -> Metric
 /// after every step.
 /// Use sharded LSMT config
 fn write_overlays_and_verify_sharded(instructions: Vec<Instruction>) -> MetricsRegistry {
-    let tempdir = Builder::new()
+    let tdir = Builder::new()
         .prefix("write_overlays_and_verify_sharded")
         .tempdir()
         .unwrap();
     let metrics =
-        write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_sharded(), &tempdir);
-    tempdir
-        .close()
-        .expect("Unable to delete temporary directory");
+        write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_sharded(), &tdir);
+
+    #[cfg(feature = "fuzzing_code")]
+    remove_tempdir(tdir);
+
     metrics
 }
 
@@ -709,6 +703,21 @@ fn write_overlays_and_verify_sharded(instructions: Vec<Instruction>) -> MetricsR
 pub fn write_overlays_and_verify(instructions: Vec<Instruction>) {
     write_overlays_and_verify_sharded(instructions.clone());
     write_overlays_and_verify_unsharded(instructions);
+}
+
+/// Force removes a given temporary directory
+/// Only used in fuzzing due to AFL's handling of terminating forked processes.
+/// See: https://docs.rs/tempfile/latest/tempfile/struct.TempDir.html#resource-leaking
+///
+/// For normal tests, the drop implementation is sufficient.
+///
+/// # Panics
+/// This method panics if the remove didn't succeed
+#[doc(hidden)]
+#[cfg(feature = "fuzzing_code")]
+fn remove_tempdir(tdir: TempDir) {
+    let tmp_path = tdir.into_path();
+    std::fs::remove_dir_all(tmp_path).expect("Unable to delete temporary directoy");
 }
 
 #[test]
@@ -896,10 +905,7 @@ fn wrong_shard_pages_is_an_error() {
             WriteOverlay((0..9).collect::<Vec<_>>()),
             WriteOverlay((0..9).collect::<Vec<_>>()),
         ],
-        &LsmtConfig {
-            lsmt_status: FlagStatus::Enabled,
-            shard_num_pages: 4,
-        },
+        &LsmtConfig { shard_num_pages: 4 },
         &tempdir,
     );
     let merge_candidates = MergeCandidate::new(
@@ -910,10 +916,7 @@ fn wrong_shard_pages_is_an_error() {
         },
         Height::from(0),
         9, /* num_pages */
-        &LsmtConfig {
-            lsmt_status: FlagStatus::Enabled,
-            shard_num_pages: 3,
-        },
+        &LsmtConfig { shard_num_pages: 3 },
         &StorageMetrics::new(&MetricsRegistry::new()),
     )
     .unwrap();
@@ -1058,7 +1061,6 @@ fn test_make_none_merge_candidate() {
 fn test_make_merge_candidates_to_overlay() {
     let tempdir = tempdir().unwrap();
     let lsmt_config = LsmtConfig {
-        lsmt_status: FlagStatus::Enabled,
         shard_num_pages: 15,
     };
 
@@ -1332,10 +1334,7 @@ fn can_write_shards() {
 
     write_overlays_and_verify_with_tempdir(
         instructions,
-        &LsmtConfig {
-            lsmt_status: FlagStatus::Enabled,
-            shard_num_pages: 1,
-        },
+        &LsmtConfig { shard_num_pages: 1 },
         &tempdir,
     );
     let files = storage_files(tempdir.path());
@@ -1357,10 +1356,7 @@ fn overlapping_shards_is_an_error() {
 
     write_overlays_and_verify_with_tempdir(
         instructions,
-        &LsmtConfig {
-            lsmt_status: FlagStatus::Enabled,
-            shard_num_pages: 1,
-        },
+        &LsmtConfig { shard_num_pages: 1 },
         &tempdir,
     );
     let files = storage_files(tempdir.path());
@@ -1371,7 +1367,7 @@ fn overlapping_shards_is_an_error() {
             tempdir.path().join("000000_010_vmemory_0.overlay"),
         ]
     );
-    assert!(verify(&ShardedTestStorageLayout {
+    assert!(validate(&ShardedTestStorageLayout {
         dir_path: tempdir.path().to_path_buf(),
         base: tempdir.path().join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),
@@ -1382,7 +1378,7 @@ fn overlapping_shards_is_an_error() {
         tempdir.path().join("000000_011_vmemory_0.overlay"),
     )
     .unwrap();
-    assert!(verify(&ShardedTestStorageLayout {
+    assert!(validate(&ShardedTestStorageLayout {
         dir_path: tempdir.path().to_path_buf(),
         base: tempdir.path().join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),
@@ -1408,7 +1404,7 @@ fn returns_an_error_if_file_size_is_not_a_multiple_of_page_size() {
         .write_all(&vec![1; PAGE_SIZE / 2])
         .unwrap();
 
-    match verify(&base_only_storage_layout(heap_file.to_path_buf())) {
+    match validate(&base_only_storage_layout(heap_file.to_path_buf())) {
         Err(err) => assert!(
             err.is_invalid_heap_file(),
             "Expected invalid heap file error, got {:?}",
@@ -1546,13 +1542,11 @@ mod proptest_tests {
 
     /// A random vector of instructions.
     fn instructions_strategy() -> impl Strategy<Value = Vec<Instruction>> {
-        prop_vec(instruction_strategy(), 1..20)
+        prop_vec(instruction_strategy(), 1..10)
     }
 
-    proptest! {
-        #[test]
-        fn random_instructions(instructions in instructions_strategy()) {
-            write_overlays_and_verify(instructions);
-        }
+    #[test_strategy::proptest(cases = 10)]
+    fn random_instructions(#[strategy(instructions_strategy())] instructions: Vec<Instruction>) {
+        write_overlays_and_verify(instructions);
     }
 }

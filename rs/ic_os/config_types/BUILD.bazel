@@ -1,0 +1,42 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/types/types",
+    "@crate_index//:anyhow",
+    "@crate_index//:macaddr",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:serde_with",
+    "@crate_index//:thiserror",
+    "@crate_index//:url",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:once_cell",
+    "@crate_index//:tempfile",
+]
+
+rust_library(
+    name = "config_types",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    crate_name = "config_types",
+    visibility = [
+        "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
+    ],
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "config_types_test",
+    crate = ":config_types",
+    # You may add other deps that are specific to the test configuration
+    deps = DEV_DEPENDENCIES,
+)

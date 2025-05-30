@@ -1,6 +1,6 @@
 use candid::{Decode, Encode};
 use ic_base_types::CanisterId;
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use ic_http_types::{HttpRequest, HttpResponse};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID,
     ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
@@ -48,10 +48,10 @@ fn test_http_request_decoding_quota_for_canister(
         .execute_ingress(canister_id, "http_request", large_http_request_bytes)
         .unwrap_err();
     let ic_cdk_expected_err = "Decoding cost exceeds the limit";
-    let dfn_core_expecte_err = "Deserialization Failed";
+    let dfn_core_expected_err = "Deserialization Failed";
     assert!(
         err.description().contains(ic_cdk_expected_err)
-            || err.description().contains(dfn_core_expecte_err)
+            || err.description().contains(dfn_core_expected_err)
     );
 }
 

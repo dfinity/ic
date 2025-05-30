@@ -1,8 +1,17 @@
 use super::*;
 
-use crate::ledger::compute_neuron_staking_subaccount_bytes;
+use crate::{hash_to_hex_string, ledger::compute_neuron_staking_subaccount_bytes};
 use ic_base_types::PrincipalId;
 use ic_crypto_sha2::Sha256;
+
+// In NNS, 1 "month" is defined as exactly 1/12th of a year. However, it is
+// maybe non-obvious that the number of seconds in 1 year is dividible by 12,
+// particularly since 1 "year" is defined as exactly 365.25 days. Therefore, the
+// "point" here is to make sure that there is no remainder that throws off the
+// definition of ONE_MONTH_SECONDS.
+const _: () = {
+    assert!(ONE_MONTH_SECONDS * 12 == ONE_YEAR_SECONDS);
+};
 
 #[test]
 fn test_wide_range_of_u64_values() {
@@ -45,4 +54,22 @@ fn test_compute_neuron_staking_subaccount_bytes() {
         compute_neuron_staking_subaccount_bytes(principal_id, nonce),
         hash
     );
+}
+
+#[test]
+fn test_hash_to_hex_string_empty() {
+    let empty: [u8; 0] = [];
+    assert_eq!(hash_to_hex_string(&empty), "");
+}
+
+#[test]
+fn test_hash_to_hex_string_single_byte() {
+    let single = [0xAB];
+    assert_eq!(hash_to_hex_string(&single), "ab");
+}
+
+#[test]
+fn test_hash_to_hex_string_multiple_bytes() {
+    let bytes = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0];
+    assert_eq!(hash_to_hex_string(&bytes), "123456789abcdef0");
 }

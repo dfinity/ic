@@ -13,7 +13,6 @@ use syn::Data::Struct;
 ///   - Ignore ignores the field.
 ///   - None (default) compares fields using PartialEq and reports their name in case of
 ///     divergence.
-
 enum ValidateEqFieldAttr {
     /// Compare using .eq() and return field name if it diverges.
     CompareWithPartialEq,

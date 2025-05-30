@@ -34,7 +34,7 @@ use ic_consensus_system_test_utils::{
 use ic_recovery::nns_recovery_failover_nodes::{
     NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs, StepType,
 };
-use ic_recovery::{get_node_metrics, RecoveryArgs};
+use ic_recovery::{get_node_metrics, util::DataLocation, RecoveryArgs};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
@@ -52,7 +52,7 @@ use std::fs;
 use url::Url;
 
 const DKG_INTERVAL: u64 = 9;
-const SUBNET_SIZE: usize = 3;
+const SUBNET_SIZE: usize = 4;
 pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 
 fn main() -> Result<()> {
@@ -175,6 +175,7 @@ pub fn test(env: TestEnv) {
         key_file: Some(ssh_authorized_priv_keys_dir.join(SSH_USERNAME)),
         test_mode: true,
         skip_prompts: true,
+        use_local_binaries: false,
     };
     let subnet_args = NNSRecoveryFailoverNodesArgs {
         subnet_id: topo_broken_ic.root_subnet_id(),
@@ -185,7 +186,7 @@ pub fn test(env: TestEnv) {
         registry_url: None,
         validate_nns_url: nns_node.get_public_url(),
         download_node: Some(download_node.get_ip_addr()),
-        upload_node: Some(upload_node.get_ip_addr()),
+        upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
         parent_nns_host_ip: Some(parent_nns_node.get_ip_addr()),
         replacement_nodes: Some(replacement_nodes),
         next_step: None,

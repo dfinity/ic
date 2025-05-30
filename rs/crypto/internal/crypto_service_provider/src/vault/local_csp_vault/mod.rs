@@ -13,6 +13,7 @@ mod tests;
 mod threshold_sig;
 mod tls;
 mod tschnorr;
+mod vetkd;
 
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::public_key_store::PublicKeyStore;
@@ -72,7 +73,6 @@ use std::sync::Arc;
 /// only during node key generation and rotation).
 ///
 /// [1]: https://medium.com/digitalfrontiers/rust-dynamic-dispatching-deep-dive-236a5896e49b
-
 pub struct LocalCspVault<
     R: Rng + CryptoRng,
     S: SecretKeyStore,

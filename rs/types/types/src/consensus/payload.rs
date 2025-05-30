@@ -1,7 +1,12 @@
 //! Defines consensus payload types.
 use crate::{
     batch::BatchPayload,
-    consensus::{dkg, hashed::Hashed, idkg, thunk::Thunk},
+    consensus::{
+        dkg::{DkgDataPayload, DkgPayload, DkgSummary},
+        hashed::Hashed,
+        idkg,
+        thunk::Thunk,
+    },
     crypto::CryptoHashOf,
     *,
 };
@@ -17,7 +22,7 @@ use std::sync::Arc;
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct DataPayload {
     pub batch: BatchPayload,
-    pub dealings: dkg::Dealings,
+    pub dkg: DkgDataPayload,
     pub idkg: idkg::Payload,
 }
 
@@ -25,7 +30,7 @@ pub struct DataPayload {
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct SummaryPayload {
-    pub dkg: dkg::Summary,
+    pub dkg: DkgSummary,
     pub idkg: idkg::Summary,
 }
 
@@ -67,10 +72,10 @@ impl BlockPayload {
     /// Return true if it is a normal block and empty
     pub fn is_empty(&self) -> bool {
         match self {
-            BlockPayload::Data(data) => {
-                data.batch.is_empty() && data.dealings.messages.is_empty() && data.idkg.is_none()
+            BlockPayload::Data(DataPayload { batch, dkg, idkg }) => {
+                batch.is_empty() && dkg.is_empty() && idkg.is_none()
             }
-            _ => false,
+            BlockPayload::Summary(_) => false,
         }
     }
 
@@ -133,7 +138,7 @@ impl BlockPayload {
     pub fn dkg_interval_start_height(&self) -> Height {
         match self {
             BlockPayload::Summary(summary) => summary.dkg.height,
-            BlockPayload::Data(data) => data.dealings.start_height,
+            BlockPayload::Data(data) => data.dkg.start_height,
         }
     }
 }
@@ -237,16 +242,16 @@ impl AsRef<BlockPayload> for Payload {
     }
 }
 
-impl From<dkg::Payload> for BlockPayload {
-    fn from(payload: dkg::Payload) -> BlockPayload {
+impl From<DkgPayload> for BlockPayload {
+    fn from(payload: DkgPayload) -> BlockPayload {
         match payload {
-            dkg::Payload::Summary(summary) => BlockPayload::Summary(SummaryPayload {
+            DkgPayload::Summary(summary) => BlockPayload::Summary(SummaryPayload {
                 dkg: summary,
                 idkg: None,
             }),
-            dkg::Payload::Dealings(dealings) => BlockPayload::Data(DataPayload {
+            DkgPayload::Data(dkg) => BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
-                dealings,
+                dkg,
                 idkg: idkg::Payload::default(),
             }),
         }

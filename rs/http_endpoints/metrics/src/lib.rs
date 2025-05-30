@@ -6,8 +6,8 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
 };
-use ic_async_utils::start_tcp_listener;
 use ic_config::metrics::{Config, Exporter};
+use ic_http_endpoints_async_utils::start_tcp_listener;
 use ic_metrics::registry::MetricsRegistry;
 use prometheus::{Encoder, IntCounterVec, TextEncoder};
 use slog::{error, trace};

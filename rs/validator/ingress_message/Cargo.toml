@@ -8,13 +8,21 @@ documentation.workspace = true
 
 [dependencies]
 base64 = { workspace = true }
+getrandom = { version = "0.2", optional = true }
 hex = { workspace = true }
-ic-cdk = { workspace = true }
 ic-crypto-interfaces-sig-verification = { path = "../../crypto/interfaces/sig_verification" }
 ic-crypto-standalone-sig-verifier = { path = "../../crypto/standalone-sig-verifier" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
 ic-types = { path = "../../types/types" }
 ic-validator = { path = "../../validator" }
+time = { workspace = true }
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+ic-cdk = { version = "0.17.2", optional = true }
+
+[features]
+default = ["dep:ic-cdk"]
+js = ["time/wasm-bindgen", "getrandom/js"]
 
 [dev-dependencies]
 assert_matches = { workspace = true }

@@ -63,8 +63,8 @@ The sequence of the scripts is defined in the main installation script, `setupos
 == Node Providers, Node Technicians, and Node Operators
 
 * *Node Provider*: An entity that purchases and owns the node hardware. Node Providers are rewarded for their node's useful work.
-* *Node Technician*: These are the 'hired hands' or 'remote hands' employed by the Node Providers to maintain and manage the node. They do not necessarily own the hardware, but are responsible for its operation. Note that a single node will often have more than one Node Technician—the Node Technician can be thought of as the individual currently operating the node, so this role can cycle among several parties.
-** Note: While it is possible, it is uncommon for a Node Provider to also act as their own Node Technician.
+* *Node Technician*: Node Technicians are responsible for the physical installation, maintenance, and repair of the node. These are typically 'hired hands' or 'remote hands' employed by the Node Providers to maintain and manage the node. A single node may have more than one Node Technician — the Node Technician can be thought of as the individual currently operating the node, so this role can cycle among several parties. The information about the Node Technician is currently not stored in the NNS.
+** Note: It is possible that a Node Provider and Node Technician are the same entity.
 * *Node Operator*:
 ** The term "Node Operator" refers not to a specific individual or group, but to:
 *** A specific record within the NNS registry—the *Node Operator record*, and to:

@@ -11,6 +11,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+- The endpoint `/instances/<instance_id>/auto_progress` sets the (certified) time of the PocketIC instance
+  to the current system time before starting to execute rounds automatically.
+
+### Removed
+- The endpoint `/instances/<instance_id>/update/await_ingress_message`:
+  use the two endpoints `/instances/<instance_id>/update/tick` and `/instances/<instance_id>/read/ingress_status`
+  to execute a round and fetch the status of the update call instead.
+
+
+
+## 9.0.2 - 2025-05-16
+
+### Fixed
+- Crash when creating a canister with a specified id on a PocketIC instance created from an existing PocketIC state.
+
+
+
+## 9.0.1 - 2025-04-30
+
+### Fixed
+- Crash when creating multiple instances with the same subnet state directory simultaneously.
+
+
+
+## 9.0.0 - 2025-04-23
+
+### Added
+- The `GET` endpoint `/instances/<instance_id>/auto_progress` that returns whether the automatic progress was enabled for the PocketIC instance.
+- Support for VetKd if nonmainnet features are enabled on a PocketIC instance.
+
+### Changed
+- The II canister always belongs to the dedicated II subnet (the II canister used to belong to the NNS subnet if no II subnet was specified).
+- The II subnet size to be 34 nodes as on the ICP mainnet.
+
+
+
+## 8.0.0 - 2025-02-26
+
+### Added
+- New endpoint `/instances/<instance_id>/read/ingress_status` to fetch the status of an update call submitted through an ingress message.
+  If an optional caller is provided, the status of the update call is known, but the update call was submitted by a different caller, then an error is returned.
+- New endpoint `/instances/<instance_id>/update/set_certified_time` to set the current certified time on all subnets of the PocketIC instance.
+- The endpoint `/instances/<instance_id>/update/tick` takes an argument optionally containing the blockmaker and failed blockmakers
+  for every subnet used by the endpoint `node_metrics_history` of the management canister.
+
+### Fixed
+- Canisters created via `provisional_create_canister_with_cycles` with the management canister ID as the effective canister ID
+  are created on an arbitrary subnet.
+
+### Changed
+- The response type `RawSubmitIngressResult` is replaced by `Result<RawMessageId, RejectResponse>`.
+- The response types `RawWasmResult` and `UserError` in `RawCanisterResult` are replaced by `Vec<u8>` and `RejectResponse`.
+
+### Removed
+- The endpoint `/instances/<instance_id>/update/execute_ingress_message`:
+  use the two endpoints `/instances/<instance_id>/update/submit_ingress_message` and `/instances/<instance_id>/update/await_ingress_message`
+  to submit and then await an ingress message instead.
+
+
+
+## 7.0.0 - 2024-11-13
+
 ### Added
 - Support for IC Bitcoin API via the management canister if the bitcoin canister is installed as the bitcoin testnet canister
   (canister ID `g4xu7-jiaaa-aaaan-aaaaq-cai`) on the bitcoin subnet and configured with `Network::Regtest`
@@ -30,6 +93,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Subnet ids can be specified in `SubnetSpec`s for all subnet kinds.
 - The certified time of a round is only bumped by `1ns` if the time of the corresponding PocketIC instance did not increase since the last round.
 - The endpoint `/instances/<instance_id>/update/set_time` returns an error if the time of a PocketIC instance is set into the past.
+- Subnet sizes to match the subnet sizes on the ICP mainnet: II from 28 to 31 nodes, Fiduciary from 28 to 34 nodes.
 
 ### Removed
 - The CLI option `--pid`: use the CLI option `--port-file` instead.

@@ -5,7 +5,6 @@ use std::task::{Context, Poll};
 
 /// Pieces for a very simple bidirectional RPC using an underlying
 /// duplex stream channel.
-
 /// Describe RPC error -- can be either related to transport (i.e.
 /// failure to transport or parse a message) or to server (i.e. server
 /// responded, but gave us a message indicating an error).
@@ -276,7 +275,6 @@ impl<Message> MessageSink<Message> for ReplyManager<Message> {
 
 /// An RPC result that is immediately "ready" (i.e. pass a value to
 /// a caller such that it does not need to wait).
-
 pub struct ReadyResult<Value> {
     value: Mutex<RPCResult<Value>>,
 }

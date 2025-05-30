@@ -10,11 +10,15 @@ use self::message_pool::{
     Context, InboundReference, Kind, MessagePool, OutboundReference, SomeReference,
 };
 use self::queue::{CanisterQueue, IngressQueue, InputQueue, OutputQueue};
+use crate::page_map::int_map::MutableIntMap;
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
-use crate::{CanisterState, CheckpointLoadingMetrics, InputQueueType, InputSource, StateError};
+use crate::{
+    CanisterState, CheckpointLoadingMetrics, DroppedMessageMetrics, InputQueueType, InputSource,
+    MessageMemoryUsage, StateError,
+};
 use ic_base_types::PrincipalId;
 use ic_error_types::RejectCode;
-use ic_management_canister_types::IC_00;
+use ic_management_canister_types_private::IC_00;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_protobuf::state::queues::v1::canister_queues::CanisterQueuePair;
@@ -23,7 +27,7 @@ use ic_types::messages::{
     CallbackId, Ingress, Payload, RejectContext, Request, RequestOrResponse, Response,
     MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
 };
-use ic_types::{CanisterId, CountBytes, Time};
+use ic_types::{CanisterId, CountBytes, Cycles, NumBytes, Time};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use message_pool::ToContext;
@@ -141,7 +145,7 @@ pub struct CanisterQueues {
     /// no corresponding message in the message pool; or entry in the compact
     /// response maps (which record the `CallbackIds` of expired / shed inbound
     /// best-effort responses).
-    canister_queues: BTreeMap<CanisterId, (InputQueue, OutputQueue)>,
+    canister_queues: BTreeMap<CanisterId, (Arc<InputQueue>, Arc<OutputQueue>)>,
 
     /// Backing store for `canister_queues` references, combining a `MessagePool`
     /// and maps of compact responses (`CallbackIds` of expired / shed responses),
@@ -151,6 +155,7 @@ pub struct CanisterQueues {
 
     /// Slot and memory reservation stats. Message count and size stats are
     /// maintained separately in the `MessagePool`.
+    #[validate_eq(CompareWithValidateEq)]
     queue_stats: QueueStats,
 
     /// Round-robin schedule for `pop_input()` across ingress, local subnet senders
@@ -164,7 +169,7 @@ pub struct CanisterQueues {
     ///
     /// Used for response deduplication (whether due to a locally generated reject
     /// response to a best-effort call; or due to a malicious / buggy subnet).
-    callbacks_with_enqueued_response: BTreeSet<CallbackId>,
+    callbacks_with_enqueued_response: MutableIntMap<CallbackId, ()>,
 }
 
 /// Circular iterator that consumes output queue messages: loops over output
@@ -180,7 +185,7 @@ pub struct CanisterQueues {
 pub struct CanisterOutputQueuesIterator<'a> {
     /// Priority queue of non-empty output queues. The next message to be popped
     /// / peeked is the one at the front of the first queue.
-    queues: VecDeque<(&'a CanisterId, &'a mut OutputQueue)>,
+    queues: VecDeque<(&'a CanisterId, &'a mut Arc<OutputQueue>)>,
 
     /// Mutable store holding the messages referenced by `queues`.
     store: &'a mut MessageStoreImpl,
@@ -194,7 +199,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
     /// `CanisterQueues::canister_queues` (a map of `CanisterId` to an input queue,
     /// output queue pair) and `MessagePool`.
     fn new(
-        queues: &'a mut BTreeMap<CanisterId, (InputQueue, OutputQueue)>,
+        queues: &'a mut BTreeMap<CanisterId, (Arc<InputQueue>, Arc<OutputQueue>)>,
         store: &'a mut MessageStoreImpl,
     ) -> Self {
         let queues: VecDeque<_> = queues
@@ -281,7 +286,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
     /// Computes the number of (potentially stale) messages left in `queues`.
     ///
     /// Time complexity: `O(n)`.
-    fn compute_size(queues: &VecDeque<(&'a CanisterId, &'a mut OutputQueue)>) -> usize {
+    fn compute_size(queues: &VecDeque<(&'a CanisterId, &'a mut Arc<OutputQueue>)>) -> usize {
         queues.iter().map(|(_, q)| q.len()).sum()
     }
 }
@@ -351,7 +356,7 @@ impl From<RequestOrResponse> for CanisterInput {
 ///    whose responses have been shed.
 ///
 /// Implements the `MessageStore` trait for both inbound messages
-/// (`T = CanisterInput` items that are eiter pooled messages or compact
+/// (`T = CanisterInput` items that are either pooled messages or compact
 /// responses) and outbound messages (pooled `RequestOrResponse items`).
 #[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 struct MessageStoreImpl {
@@ -364,13 +369,13 @@ struct MessageStoreImpl {
     /// `CanisterInput::DeadlineExpired` by `peek_input()` / `pop_input()` (and
     /// "inflated" by `SystemState` into `SysUnknown` reject responses based on the
     /// callback).
-    expired_callbacks: BTreeMap<InboundReference, CallbackId>,
+    expired_callbacks: MutableIntMap<InboundReference, CallbackId>,
 
     /// Compact reject responses (`CallbackIds`) replacing best-effort responses
     /// that were shed. These are returned as `CanisterInput::ResponseDropped` by
     /// `peek_input()` / `pop_input()` (and "inflated" by `SystemState` into
     /// `SysUnknown` reject responses based on the callback).
-    shed_responses: BTreeMap<InboundReference, CallbackId>,
+    shed_responses: MutableIntMap<InboundReference, CallbackId>,
 }
 
 impl MessageStoreImpl {
@@ -383,10 +388,15 @@ impl MessageStoreImpl {
     /// next non-stale reference.
     ///
     /// Panics if the reference at the front of the queue is stale.
-    fn queue_pop_and_advance<T: Clone>(&mut self, queue: &mut CanisterQueue<T>) -> Option<T>
+    fn queue_pop_and_advance<T: Clone>(&mut self, queue: &mut Arc<CanisterQueue<T>>) -> Option<T>
     where
         MessageStoreImpl: MessageStore<T>,
     {
+        if queue.len() == 0 {
+            return None;
+        }
+
+        let queue = Arc::make_mut(queue);
         let reference = queue.pop()?;
 
         // Advance to the next non-stale reference.
@@ -548,8 +558,8 @@ trait InboundMessageStore: MessageStore<CanisterInput> {
     /// Time complexity: `O(n * log(n))`.
     fn callbacks_with_enqueued_response(
         &self,
-        canister_queues: &BTreeMap<CanisterId, (InputQueue, OutputQueue)>,
-    ) -> Result<BTreeSet<CallbackId>, String>;
+        canister_queues: &BTreeMap<CanisterId, (Arc<InputQueue>, Arc<OutputQueue>)>,
+    ) -> Result<MutableIntMap<CallbackId, ()>, String>;
 }
 
 impl InboundMessageStore for MessageStoreImpl {
@@ -561,9 +571,9 @@ impl InboundMessageStore for MessageStoreImpl {
 
     fn callbacks_with_enqueued_response(
         &self,
-        canister_queues: &BTreeMap<CanisterId, (InputQueue, OutputQueue)>,
-    ) -> Result<BTreeSet<CallbackId>, String> {
-        let mut callbacks = BTreeSet::new();
+        canister_queues: &BTreeMap<CanisterId, (Arc<InputQueue>, Arc<OutputQueue>)>,
+    ) -> Result<MutableIntMap<CallbackId, ()>, String> {
+        let mut callbacks = MutableIntMap::new();
         canister_queues
             .values()
             .flat_map(|(input_queue, _)| input_queue.iter())
@@ -598,7 +608,7 @@ impl InboundMessageStore for MessageStoreImpl {
                     }
                 };
 
-                if callbacks.insert(callback_id) {
+                if callbacks.insert(callback_id, ()).is_none() {
                     Ok(())
                 } else {
                     Err(format!(
@@ -654,7 +664,11 @@ impl CanisterQueues {
         F: FnMut(&CanisterId, &RequestOrResponse) -> Result<(), ()>,
     {
         for (canister_id, (_, queue)) in self.canister_queues.iter_mut() {
-            while let Some(reference) = queue.peek() {
+            loop {
+                let Some(reference) = queue.peek() else {
+                    break;
+                };
+                let queue = Arc::make_mut(queue);
                 let Some(msg) = self.store.pool.get(reference) else {
                     // Expired / dropped message. Pop it and advance.
                     assert_eq!(Some(reference), queue.pop());
@@ -694,20 +708,23 @@ impl CanisterQueues {
 
     /// Enqueues a canister-to-canister message into the induction pool.
     ///
-    /// If the message is a `Request` and is enqueued successfully, this will also
-    /// reserve a slot in the corresponding output queue for the eventual response.
+    /// If the message is a `Request` and it is enqueued successfully `Ok(true)` is
+    /// returned; and a slot is reserved in the corresponding output queue for the
+    /// eventual response.
     ///
     /// If the message is a `Response`, `SystemState` will have already checked for
     /// a matching callback:
     ///
     ///  * If this is a guaranteed `Response`, the protocol should have reserved a
     ///    slot for it, so the push should not fail for lack of one (although an
-    ///    error may be returned in case of a bug in the upper layers).
+    ///    error may be returned in case of a bug in the upper layers) and `Ok(true)`
+    ///    is returned.
     ///  * If this is a best-effort `Response`, a slot is available and no duplicate
-    ///    (time out) response is already enqueued, it is enqueued.
+    ///    (time out) response is already enqueued, it is enqueued and `Ok(true)` is
+    ///    returned.
     ///  * If this is a best-effort `Response` and a duplicate (time out) response
     ///    is already enqueued (which is implicitly true when no slot is available),
-    ///    the response is silently dropped and `Ok(())` is returned.
+    ///    the response is silently dropped and `Ok(false)` is returned.
     ///
     /// If the message was enqueued, adds the sender to the appropriate input
     /// schedule (local or remote), if not already there.
@@ -726,7 +743,7 @@ impl CanisterQueues {
         &mut self,
         msg: RequestOrResponse,
         input_queue_type: InputQueueType,
-    ) -> Result<(), (StateError, RequestOrResponse)> {
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
         let sender = msg.sender();
         let input_queue = match msg {
             RequestOrResponse::Request(_) => {
@@ -737,18 +754,19 @@ impl CanisterQueues {
                 }
                 // Safe to already (attempt to) reserve an output slot here, as the `push()`
                 // below is guaranteed to succeed due to the check above.
-                if let Err(e) = output_queue.try_reserve_response_slot() {
+                if let Err(e) = Arc::make_mut(output_queue).try_reserve_response_slot() {
                     return Err((e, msg));
                 }
-                input_queue
+                Arc::make_mut(input_queue)
             }
             RequestOrResponse::Response(ref response) => {
                 match self.canister_queues.get_mut(&sender) {
                     Some((queue, _)) if queue.check_has_reserved_response_slot().is_ok() => {
                         // Check against duplicate responses.
-                        if !self
+                        if self
                             .callbacks_with_enqueued_response
-                            .insert(response.originator_reply_callback)
+                            .insert(response.originator_reply_callback, ())
+                            .is_some()
                         {
                             debug_assert_eq!(Ok(()), self.test_invariants());
                             if response.deadline == NO_DEADLINE {
@@ -762,10 +780,10 @@ impl CanisterQueues {
                                 ));
                             } else {
                                 // But it's OK for a best-effort response. Silently drop it.
-                                return Ok(());
+                                return Ok(false);
                             }
                         }
-                        queue
+                        Arc::make_mut(queue)
                     }
 
                     // Queue does not exist or has no reserved slot for this response.
@@ -784,8 +802,9 @@ impl CanisterQueues {
                             // aleady checked for a matching callback). Silently drop it.
                             debug_assert!(self
                                 .callbacks_with_enqueued_response
-                                .contains(&response.originator_reply_callback));
-                            return Ok(());
+                                .get(&response.originator_reply_callback)
+                                .is_some());
+                            return Ok(false);
                         }
                     }
                 }
@@ -807,14 +826,16 @@ impl CanisterQueues {
 
         debug_assert_eq!(Ok(()), self.test_invariants());
         debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
-        Ok(())
+        Ok(true)
     }
 
-    /// Enqueues a "deadline expired" compact response for the given callback, iff a
-    /// response for the callback is not already enqueued.
+    /// Enqueues a "deadline expired" compact response for the given best-effort
+    /// callback, iff a response for the callback is not already enqueued.
     ///
-    /// Must only be called for not-yet-executing callbacks (i.e. not for a paused
-    /// or aborted callback).
+    /// Must only be called for existent, not-yet-executing callbacks (i.e. not for
+    /// a paused or aborted callback). This is ensured by `SystemState`, by checking
+    /// against the `CallContextManager`'s set of callbacks.
+    ///
     ///
     /// Returns:
     ///  * `Ok(true)` if a "deadline expired" compact response was enqueued;
@@ -839,7 +860,11 @@ impl CanisterQueues {
         };
 
         // Check against duplicate responses.
-        if !self.callbacks_with_enqueued_response.insert(callback_id) {
+        if self
+            .callbacks_with_enqueued_response
+            .insert(callback_id, ())
+            .is_some()
+        {
             // There is already a response enqueued for the callback.
             return Ok(false);
         }
@@ -855,7 +880,7 @@ impl CanisterQueues {
         }
 
         let reference = self.store.push_inbound_timeout_response(callback_id);
-        input_queue.push_response(reference);
+        Arc::make_mut(input_queue).push_response(reference);
         self.queue_stats.on_push_timeout_response();
 
         // Add sender canister ID to the appropriate input schedule queue if it is not
@@ -906,7 +931,10 @@ impl CanisterQueues {
 
             if let Some(msg_) = &msg {
                 if let Some(callback_id) = msg_.response_callback_id() {
-                    assert!(self.callbacks_with_enqueued_response.remove(&callback_id));
+                    assert!(self
+                        .callbacks_with_enqueued_response
+                        .remove(&callback_id)
+                        .is_some());
                 }
                 debug_assert_eq!(Ok(()), self.test_invariants());
                 debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
@@ -959,7 +987,7 @@ impl CanisterQueues {
             if self
                 .canister_queues
                 .get(sender)
-                .map_or(false, |(input_queue, _)| input_queue.len() != 0)
+                .is_some_and(|(input_queue, _)| input_queue.len() != 0)
             {
                 self.input_schedule.reschedule(*sender, input_queue_type);
                 break;
@@ -1071,7 +1099,7 @@ impl CanisterQueues {
         if let Err(e) = output_queue.check_has_request_slot() {
             return Err((e, request));
         }
-        if let Err(e) = input_queue.try_reserve_response_slot() {
+        if let Err(e) = Arc::make_mut(input_queue).try_reserve_response_slot() {
             return Err((e, request));
         }
 
@@ -1079,7 +1107,7 @@ impl CanisterQueues {
             .on_push_request(&request, Context::Outbound);
 
         let reference = self.store.pool.insert_outbound_request(request, time);
-        output_queue.push_request(reference);
+        Arc::make_mut(output_queue).push_request(reference);
 
         debug_assert_eq!(Ok(()), self.test_invariants());
         Ok(())
@@ -1099,7 +1127,7 @@ impl CanisterQueues {
         &mut self,
         request: Request,
         reject_context: RejectContext,
-        subnet_ids: &[PrincipalId],
+        subnet_ids: &BTreeSet<PrincipalId>,
     ) -> Result<(), StateError> {
         assert!(
             request.receiver == IC_00 || subnet_ids.contains(&request.receiver.get()),
@@ -1108,7 +1136,7 @@ impl CanisterQueues {
 
         let (input_queue, _output_queue) =
             get_or_insert_queues(&mut self.canister_queues, &request.receiver);
-        input_queue.try_reserve_response_slot()?;
+        Arc::make_mut(input_queue).try_reserve_response_slot()?;
         self.queue_stats
             .on_push_request(&request, Context::Outbound);
         debug_assert_eq!(Ok(()), self.test_invariants());
@@ -1122,6 +1150,7 @@ impl CanisterQueues {
             deadline: request.deadline,
         }));
         self.push_input(response, InputQueueType::LocalSubnet)
+            .map(|_| ())
             .map_err(|(e, _msg)| e)
     }
 
@@ -1166,7 +1195,7 @@ impl CanisterQueues {
             .expect("pushing response into inexistent output queue")
             .1;
         let reference = self.store.pool.insert_outbound_response(response);
-        output_queue.push_response(reference);
+        Arc::make_mut(output_queue).push_response(reference);
 
         debug_assert_eq!(Ok(()), self.test_invariants());
     }
@@ -1177,6 +1206,19 @@ impl CanisterQueues {
         let output_queue = &self.canister_queues.get(canister_id)?.1;
 
         Some(self.store.get(output_queue.peek()?))
+    }
+
+    /// Pops the next message from the output queue to `dst_canister`.
+    pub(super) fn pop_canister_output(
+        &mut self,
+        dst_canister: &CanisterId,
+    ) -> Option<RequestOrResponse> {
+        let queue = &mut self.canister_queues.get_mut(dst_canister)?.1;
+        let msg = self.store.queue_pop_and_advance(queue);
+
+        debug_assert_eq!(Ok(()), self.test_invariants());
+        debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
+        msg
     }
 
     /// Tries to induct a message from the output queue to `own_canister_id`
@@ -1305,13 +1347,6 @@ impl CanisterQueues {
             .oversized_guaranteed_requests_extra_bytes
     }
 
-    /// Sets the (transient) size in bytes of guaranteed responses routed from
-    /// output queues into streams and not yet garbage collected.
-    pub(super) fn set_stream_guaranteed_responses_size_bytes(&mut self, size_bytes: usize) {
-        self.queue_stats
-            .transient_stream_guaranteed_responses_size_bytes = size_bytes;
-    }
-
     /// Garbage collects all input and output queue pairs that are both empty.
     ///
     /// Because there is no useful information in an empty queue, there is no
@@ -1366,35 +1401,48 @@ impl CanisterQueues {
         self.store.pool.has_expired_deadlines(current_time)
     }
 
-    /// Drops expired messages given a current time, enqueueing a reject response
-    /// for own requests into the matching reverse queue (input or output).
+    /// Drops expired messages given a current time, releasing any slot reservations
+    /// and enqueueing inbound reject responses for own outbound requests.
+    ///
+    /// This covers all best-effort messages except responses in input queues (which
+    /// we don't want to expire); plus guaranteed response requests in output queues
+    /// (which don't have an explicit deadline, but expire after an implicit
+    /// `REQUEST_LIFETIME`).
     ///
     /// Updating the correct input queues schedule after enqueueing a reject response
     /// into a previously empty input queue also requires the set of local canisters
     /// to decide whether the destination canister was local or remote.
     ///
-    /// Returns the number of messages that were timed out.
+    /// Returns the total amount of attached cycles that was lost (where a reject
+    /// response refunding the cycles was not enqueued).
     pub fn time_out_messages(
         &mut self,
         current_time: Time,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
-    ) -> usize {
+        metrics: &impl DroppedMessageMetrics,
+    ) -> Cycles {
         let expired_messages = self.store.pool.expire_messages(current_time);
-        let expired_message_count = expired_messages.len();
+        let mut cycles_lost = Cycles::zero();
 
         let input_queue_type_fn = input_queue_type_fn(own_canister_id, local_canisters);
         for (reference, msg) in expired_messages.into_iter() {
-            self.on_message_dropped(reference, msg, &input_queue_type_fn);
+            metrics.observe_timed_out_message(
+                reference.kind().to_label_value(),
+                reference.context().to_label_value(),
+                reference.class().to_label_value(),
+            );
+            cycles_lost += self.on_message_dropped(reference, msg, &input_queue_type_fn);
         }
 
         debug_assert_eq!(Ok(()), self.test_invariants());
         debug_assert_eq!(Ok(()), self.schedules_ok(&input_queue_type_fn));
-        expired_message_count
+        cycles_lost
     }
 
     /// Removes the largest best-effort message in the underlying pool. Returns
-    /// `true` if a message was removed; `false` otherwise.
+    /// `true` if a message was removed; `false` otherwise; along with any attached
+    /// cycles that were lost (if a reject response with a refund was not enqueued).
     ///
     /// Updates the stats for the dropped message and (where applicable) the
     /// generated response. `own_canister_id` and `local_canisters` are required
@@ -1405,17 +1453,23 @@ impl CanisterQueues {
         &mut self,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
-    ) -> bool {
+        metrics: &impl DroppedMessageMetrics,
+    ) -> (bool, Cycles) {
         if let Some((reference, msg)) = self.store.pool.shed_largest_message() {
             let input_queue_type_fn = input_queue_type_fn(own_canister_id, local_canisters);
-            self.on_message_dropped(reference, msg, &input_queue_type_fn);
+            metrics.observe_shed_message(
+                reference.kind().to_label_value(),
+                reference.context().to_label_value(),
+                msg.count_bytes(),
+            );
+            let cycles_lost = self.on_message_dropped(reference, msg, &input_queue_type_fn);
 
             debug_assert_eq!(Ok(()), self.test_invariants());
             debug_assert_eq!(Ok(()), self.schedules_ok(&input_queue_type_fn));
-            return true;
+            return (true, cycles_lost);
         }
 
-        false
+        (false, Cycles::zero())
     }
 
     /// Handles the timing out or shedding of a message from the pool.
@@ -1425,18 +1479,19 @@ impl CanisterQueues {
     ///
     /// `input_queue_type_fn` is required to determine the appropriate sender
     /// schedule to update when generating a reject response.
+    ///
+    /// Returns the amount of cycles attached to the dropped message, iff a reject
+    /// response refunding the cycles was not enqueued; i.e. cycles lost.
     fn on_message_dropped(
         &mut self,
         reference: SomeReference,
         msg: RequestOrResponse,
         input_queue_type_fn: impl Fn(&CanisterId) -> InputQueueType,
-    ) {
+    ) -> Cycles {
         match reference {
-            SomeReference::Inbound(reference) => {
-                self.on_inbound_message_dropped(reference, msg);
-            }
+            SomeReference::Inbound(reference) => self.on_inbound_message_dropped(reference, msg),
             SomeReference::Outbound(reference) => {
-                self.on_outbound_message_dropped(reference, msg, input_queue_type_fn);
+                self.on_outbound_message_dropped(reference, msg, input_queue_type_fn)
             }
         }
     }
@@ -1446,7 +1501,14 @@ impl CanisterQueues {
     /// Replaces a shed inbound best-effort response with a compact reject response.
     /// Releases the outbound slot reservation of a shed or expired inbound request.
     /// Updates the stats for the dropped message.
-    fn on_inbound_message_dropped(&mut self, reference: InboundReference, msg: RequestOrResponse) {
+    ///
+    /// Returns the amount of cycles attached to the dropped message; i.e. cycles
+    /// lost.
+    fn on_inbound_message_dropped(
+        &mut self,
+        reference: InboundReference,
+        msg: RequestOrResponse,
+    ) -> Cycles {
         match msg {
             RequestOrResponse::Response(response) => {
                 // This is an inbound response, remember its `originator_reply_callback`, so
@@ -1457,6 +1519,7 @@ impl CanisterQueues {
                         .shed_responses
                         .insert(reference, response.originator_reply_callback)
                 );
+                response.refund
             }
 
             RequestOrResponse::Request(request) => {
@@ -1467,13 +1530,15 @@ impl CanisterQueues {
                     .expect("No matching queue for dropped message.");
 
                 if input_queue.peek() == Some(reference) {
+                    let input_queue = Arc::make_mut(input_queue);
                     input_queue.pop();
                     self.store.queue_advance(input_queue);
                 }
 
                 // Release the outbound response slot.
-                output_queue.release_reserved_response_slot();
+                Arc::make_mut(output_queue).release_reserved_response_slot();
                 self.queue_stats.on_drop_input_request(&request);
+                request.payment
             }
         }
     }
@@ -1486,12 +1551,15 @@ impl CanisterQueues {
     ///
     /// `input_queue_type_fn` is required to determine the appropriate sender
     /// schedule to update when generating a reject response.
+    ///
+    /// Returns the amount of cycles attached to the dropped message, iff a reject
+    /// response refunding the cycles was not enqueued; i.e. cycles lost.
     fn on_outbound_message_dropped(
         &mut self,
         reference: OutboundReference,
         msg: RequestOrResponse,
         input_queue_type_fn: impl Fn(&CanisterId) -> InputQueueType,
-    ) {
+    ) -> Cycles {
         let remote = msg.receiver();
         let (input_queue, output_queue) = self
             .canister_queues
@@ -1506,6 +1574,7 @@ impl CanisterQueues {
         // a queue containing references `[1, 2]`; `1` and `2` expire as part of the
         // same `time_out_messages()` call; `on_message_dropped(1)` will also pop `2`).
         if output_queue.peek() == Some(reference) {
+            let output_queue = Arc::make_mut(output_queue);
             output_queue.pop();
             self.store.queue_advance(output_queue);
         }
@@ -1518,21 +1587,28 @@ impl CanisterQueues {
                 self.queue_stats
                     .on_push_response(&response, Context::Inbound);
 
+                // We protect against duplicate responses here, but we cannot check that this is
+                // an active (i.e. existent and not paused/aborted) callback. This is OK, as we
+                // could not have started executing a response (whether reject or reply) for a
+                // request that was still in an output queue.
                 assert!(self
                     .callbacks_with_enqueued_response
-                    .insert(response.originator_reply_callback));
+                    .insert(response.originator_reply_callback, ())
+                    .is_none());
                 let reference = self.store.insert_inbound(response.into());
-                input_queue.push_response(reference);
+                Arc::make_mut(input_queue).push_response(reference);
 
                 // If the input queue is not already in a sender schedule, add it.
                 if input_queue.len() == 1 {
                     let input_queue_type = input_queue_type_fn(&remote);
                     self.input_schedule.schedule(remote, input_queue_type);
                 }
+                Cycles::zero()
             }
 
-            RequestOrResponse::Response(_) => {
+            RequestOrResponse::Response(response) => {
                 // Outbound (best-effort) responses can be dropped with impunity.
+                response.refund
             }
         }
     }
@@ -1574,7 +1650,7 @@ impl CanisterQueues {
         self.input_schedule.test_invariants(
             self.canister_queues
                 .iter()
-                .map(|(canister_id, (input_queue, _))| (canister_id, input_queue)),
+                .map(|(canister_id, (input_queue, _))| (canister_id, &**input_queue)),
             &input_queue_type_fn,
         )
     }
@@ -1599,8 +1675,6 @@ impl CanisterQueues {
         let calculated_stats = Self::calculate_queue_stats(
             &self.canister_queues,
             self.queue_stats.guaranteed_response_memory_reservations,
-            self.queue_stats
-                .transient_stream_guaranteed_responses_size_bytes,
         );
         if self.queue_stats != calculated_stats {
             return Err(format!(
@@ -1627,13 +1701,13 @@ impl CanisterQueues {
     /// Computes stats for the given canister queues. Used when deserializing and in
     /// `debug_assert!()` checks. Takes the number of memory reservations from the
     /// caller, as the queues have no need to track memory reservations, so it
-    /// cannot be computed. Same with the size of guaranteed responses in streams.
+    /// cannot be computed. Size of guaranteed responses in streams is ignored as it is
+    /// limited.
     ///
     /// Time complexity: `O(canister_queues.len())`.
     fn calculate_queue_stats(
-        canister_queues: &BTreeMap<CanisterId, (InputQueue, OutputQueue)>,
+        canister_queues: &BTreeMap<CanisterId, (Arc<InputQueue>, Arc<OutputQueue>)>,
         guaranteed_response_memory_reservations: usize,
-        transient_stream_guaranteed_responses_size_bytes: usize,
     ) -> QueueStats {
         let (input_queues_reserved_slots, output_queues_reserved_slots) = canister_queues
             .values()
@@ -1645,7 +1719,6 @@ impl CanisterQueues {
             guaranteed_response_memory_reservations,
             input_queues_reserved_slots,
             output_queues_reserved_slots,
-            transient_stream_guaranteed_responses_size_bytes,
         }
     }
 }
@@ -1656,12 +1729,12 @@ impl CanisterQueues {
 /// Written as a free function in order to avoid borrowing the full
 /// `CanisterQueues`, which then requires looking up the queues again.
 fn get_or_insert_queues<'a>(
-    canister_queues: &'a mut BTreeMap<CanisterId, (InputQueue, OutputQueue)>,
+    canister_queues: &'a mut BTreeMap<CanisterId, (Arc<InputQueue>, Arc<OutputQueue>)>,
     canister_id: &CanisterId,
-) -> (&'a mut InputQueue, &'a mut OutputQueue) {
+) -> (&'a mut Arc<InputQueue>, &'a mut Arc<OutputQueue>) {
     let (input_queue, output_queue) = canister_queues.entry(*canister_id).or_insert_with(|| {
-        let input_queue = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
-        let output_queue = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
+        let input_queue = Arc::new(CanisterQueue::new(DEFAULT_QUEUE_CAPACITY));
+        let output_queue = Arc::new(CanisterQueue::new(DEFAULT_QUEUE_CAPACITY));
         (input_queue, output_queue)
     });
     (input_queue, output_queue)
@@ -1683,8 +1756,8 @@ fn generate_timeout_response(request: &Request) -> Response {
     }
 }
 
-/// Returns a function that determines the input queue type (local or remote) of
-/// a given sender, based on a the set of all local canisters, plus
+/// Returns a function that determines the input queue type (local or remote)
+/// of a given sender, based on the set of all local canisters, plus
 /// `own_canister_id` (since Rust's ownership rules would prevent us from
 /// mutating a canister's queues if they were still under `local_canisters`).
 fn input_queue_type_fn<'a>(
@@ -1703,7 +1776,7 @@ fn input_queue_type_fn<'a>(
 impl From<&CanisterQueues> for pb_queues::CanisterQueues {
     fn from(item: &CanisterQueues) -> Self {
         fn callback_references_to_proto(
-            callback_references: &BTreeMap<message_pool::InboundReference, CallbackId>,
+            callback_references: &MutableIntMap<message_pool::InboundReference, CallbackId>,
         ) -> Vec<pb_queues::canister_queues::CallbackReference> {
             callback_references
                 .iter()
@@ -1721,8 +1794,8 @@ impl From<&CanisterQueues> for pb_queues::CanisterQueues {
                 .iter()
                 .map(|(canid, (iq, oq))| CanisterQueuePair {
                     canister_id: Some(pb_types::CanisterId::from(*canid)),
-                    input_queue: Some(iq.into()),
-                    output_queue: Some(oq.into()),
+                    input_queue: Some((&**iq).into()),
+                    output_queue: Some((&**oq).into()),
                 })
                 .collect(),
             pool: if item.store.pool != MessagePool::default() {
@@ -1752,7 +1825,7 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
 
         fn callback_references_try_from_proto(
             callback_references: Vec<pb_queues::canister_queues::CallbackReference>,
-        ) -> Result<BTreeMap<message_pool::InboundReference, CallbackId>, ProxyDecodeError>
+        ) -> Result<MutableIntMap<message_pool::InboundReference, CallbackId>, ProxyDecodeError>
         {
             callback_references
                 .into_iter()
@@ -1798,7 +1871,7 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
                     }
                 });
 
-                Ok((canister_id, (iq, oq)))
+                Ok((canister_id, (Arc::new(iq), Arc::new(oq))))
             })
             .collect::<Result<_, Self::Error>>()?;
 
@@ -1813,7 +1886,6 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
         let queue_stats = Self::calculate_queue_stats(
             &canister_queues,
             item.guaranteed_response_memory_reservations as usize,
-            0,
         );
 
         let input_schedule = InputSchedule::try_from((
@@ -1852,13 +1924,12 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
 }
 
 /// Tracks slot and guaranteed response memory reservations across input and
-/// output queues; and holds a (transient) byte size of responses already routed
-/// into streams (tracked separately, at the replicated state level, as messages
-/// are routed to and GC-ed from streams).
+/// output queues. Transient byte size of responses already routed into streams
+/// is ignored as the streams size is limited.
 ///
 /// Stats for the enqueued messages themselves (counts and sizes by kind,
 /// context and class) are tracked separately in `message_pool::MessageStats`.
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 struct QueueStats {
     /// Count of guaranteed response memory reservations across input and output
     /// queues. This is equivalent to the number of outstanding (inbound or outbound)
@@ -1881,22 +1952,12 @@ struct QueueStats {
     /// Count of slots reserved in output queues. Note that this is different from
     /// memory reservations for guaranteed responses.
     output_queues_reserved_slots: usize,
-
-    /// Transient: size in bytes of guaranteed responses routed from `output_queues`
-    /// into streams and not yet garbage collected.
-    ///
-    /// This is updated by `ReplicatedState::put_streams()`, called by MR after
-    /// every streams mutation (induction, routing, GC). And is (re)populated during
-    /// checkpoint loading by `ReplicatedState::new_from_checkpoint()`.
-    transient_stream_guaranteed_responses_size_bytes: usize,
 }
 
 impl QueueStats {
-    /// Returns the memory usage of reservations for guaranteed responses plus
-    /// guaranteed responses in streans.
+    /// Returns the memory usage of reservations for guaranteed responses.
     pub fn guaranteed_response_memory_usage(&self) -> usize {
         self.guaranteed_response_memory_reservations * MAX_RESPONSE_COUNT_BYTES
-            + self.transient_stream_guaranteed_responses_size_bytes
     }
 
     /// Updates the stats to reflect the enqueueing of the given message in the given
@@ -1966,8 +2027,8 @@ impl QueueStats {
     }
 }
 
-/// Checks whether `available_memory` for guaranteed response messages is
-/// sufficient to allow enqueueing `msg` into an input or output queue.
+/// Checks whether `available_guaranteed_response_memory` is sufficient to allow
+/// enqueueing `msg` into an input or output queue.
 ///
 /// Returns:
 ///  * `Ok(())` if `msg` is a best-effort message, as best-effort messages don't
@@ -1975,14 +2036,18 @@ impl QueueStats {
 ///  * `Ok(())` if `msg` is a guaranteed `Response`, as guaranteed responses
 ///    always return memory.
 ///  * `Ok(())` if `msg` is a guaranteed response `Request` and
-///    `available_memory` is sufficient.
+///    `available_guaranteed_response_memory` is sufficient.
 ///  * `Err(msg.count_bytes())` if `msg` is a guaranteed response `Request` and
-///    `msg.count_bytes() > available_memory`.
-pub fn can_push(msg: &RequestOrResponse, available_memory: i64) -> Result<(), usize> {
+///    `msg.count_bytes() > available_guaranteed_response_memory`.
+pub fn can_push(
+    msg: &RequestOrResponse,
+    available_guaranteed_response_memory: i64,
+) -> Result<(), usize> {
     match msg {
+        RequestOrResponse::Request(req) if req.is_best_effort() => Ok(()),
         RequestOrResponse::Request(req) => {
-            let required = memory_required_to_push_request(req);
-            if required as i64 <= available_memory || required == 0 {
+            let required = req.count_bytes().max(MAX_RESPONSE_COUNT_BYTES);
+            if required as i64 <= available_guaranteed_response_memory {
                 Ok(())
             } else {
                 Err(required)
@@ -1992,18 +2057,25 @@ pub fn can_push(msg: &RequestOrResponse, available_memory: i64) -> Result<(), us
     }
 }
 
-/// Returns the guaranteed response memory required to push `req` onto an input
-/// or output queue.
+/// Returns the guaranteed response and best-effort memory used by `req` if
+/// enqueued into an input or output queue.
 ///
-/// For best-effort requests, this is always zero. For guaranteed response
-/// requests, this is the maximum of `MAX_RESPONSE_COUNT_BYTES` (to be reserved
-/// for a guaranteed response) and `req.count_bytes()` (if larger).
-pub fn memory_required_to_push_request(req: &Request) -> usize {
-    if req.deadline != NO_DEADLINE {
-        return 0;
+/// Best-effort requests use `req.count_bytes()` worth of best-effort memory.
+/// Guaranteed response requests use the maximum of `MAX_RESPONSE_COUNT_BYTES`
+/// (reservation for the largest possible response) and `req.count_bytes()` (if
+/// larger).
+pub fn memory_usage_of_request(req: &Request) -> MessageMemoryUsage {
+    if req.is_best_effort() {
+        MessageMemoryUsage {
+            guaranteed_response: NumBytes::new(0),
+            best_effort: (req.count_bytes() as u64).into(),
+        }
+    } else {
+        MessageMemoryUsage {
+            guaranteed_response: (req.count_bytes().max(MAX_RESPONSE_COUNT_BYTES) as u64).into(),
+            best_effort: NumBytes::new(0),
+        }
     }
-
-    req.count_bytes().max(MAX_RESPONSE_COUNT_BYTES)
 }
 
 pub mod testing {
@@ -2021,22 +2093,18 @@ pub mod testing {
         /// Returns the number of messages in `ingress_queue`.
         fn ingress_queue_size(&self) -> usize;
 
-        /// Pops the next message from the output queue associated with
-        /// `dst_canister`.
+        /// Pops the next message from the output queue to `dst_canister`.
         fn pop_canister_output(&mut self, dst_canister: &CanisterId) -> Option<RequestOrResponse>;
 
         /// Returns the number of output queues, empty or not.
         fn output_queues_len(&self) -> usize;
-
-        /// Returns the number of messages in `output_queues`.
-        fn output_message_count(&self) -> usize;
 
         /// Publicly exposes `CanisterQueues::push_input()`.
         fn push_input(
             &mut self,
             msg: RequestOrResponse,
             input_queue_type: InputQueueType,
-        ) -> Result<(), (StateError, RequestOrResponse)>;
+        ) -> Result<bool, (StateError, RequestOrResponse)>;
 
         /// Publicly exposes the local sender input_schedule.
         fn local_sender_schedule(&self) -> &VecDeque<CanisterId>;
@@ -2058,23 +2126,18 @@ pub mod testing {
         }
 
         fn pop_canister_output(&mut self, dst_canister: &CanisterId) -> Option<RequestOrResponse> {
-            let queue = &mut self.canister_queues.get_mut(dst_canister).unwrap().1;
-            self.store.queue_pop_and_advance(queue)
+            self.pop_canister_output(dst_canister)
         }
 
         fn output_queues_len(&self) -> usize {
             self.canister_queues.len()
         }
 
-        fn output_message_count(&self) -> usize {
-            self.message_stats().outbound_message_count
-        }
-
         fn push_input(
             &mut self,
             msg: RequestOrResponse,
             input_queue_type: InputQueueType,
-        ) -> Result<(), (StateError, RequestOrResponse)> {
+        ) -> Result<bool, (StateError, RequestOrResponse)> {
             self.push_input(msg, input_queue_type)
         }
 

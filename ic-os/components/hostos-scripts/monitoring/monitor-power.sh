@@ -38,8 +38,7 @@ write_line() {
     #    Minimum during sampling period:                132 Watts
     #    Maximum during sampling period:                384 Watts
     #    Average power reading over sample period:      204 Watts
-    #    IPMI timestamp:                           Thu Dec  1 20:05:44 2022
-    #    Sampling period:                          00000005 Seconds.
+    #    IPMI timestamp:                           03/06/2025 07:40:35 UTC    Sampling period:                          00000001 Seconds.
     #    Power reading state is:                   activated
 
     ipmi_output="$(ipmitool dcmi power reading 2>/dev/null)"
@@ -58,7 +57,7 @@ write_line() {
         "Average power reading, Watts" \
         "gauge"
 
-    value=$(echo "${ipmi_output}" | grep "Sampling period:" | awk '{print $3}')
+    value=$(echo "${ipmi_output}" | grep "Sampling period:" | awk '{print $8}')
     value=${value:-"-1"}
     write_line "sampling_period_seconds" \
         "${value}" \

@@ -8,7 +8,7 @@ use canister_test::Project;
 use dfn_candid::candid_one;
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgsBuilder,
 };
 use ic_nervous_system_clients::canister_status::{CanisterStatusResult, CanisterStatusType};
@@ -18,7 +18,7 @@ use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     manage_neuron::{configure, Command, Configure, NeuronIdOrSubaccount, RemoveHotKey},
     ManageNeuron, ManageNeuronResponse,
 };
@@ -27,8 +27,9 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     itest_helpers::{install_governance_canister, state_machine_test_on_nns_subnet},
     state_test_helpers::{
-        create_canister_id_at_position, setup_nns_root_with_correct_canister_id,
-        state_machine_builder_for_nns_tests, update_with_sender,
+        ensure_canister_id_exists_at_position_with_settings,
+        setup_nns_root_with_correct_canister_id, state_machine_builder_for_nns_tests,
+        update_with_sender,
     },
 };
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
@@ -96,7 +97,7 @@ fn test_upgrade_after_state_shrink() {
 #[test]
 fn test_root_restarts_canister_during_upgrade_canister_with_stop_canister_timeout() {
     let state_machine = state_machine_builder_for_nns_tests().build();
-    let governance_id = create_canister_id_at_position(
+    let governance_id = ensure_canister_id_exists_at_position_with_settings(
         &state_machine,
         GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET,
         Some(
@@ -128,8 +129,7 @@ fn test_root_restarts_canister_during_upgrade_canister_with_stop_canister_timeou
         canister_id: GOVERNANCE_CANISTER_ID,
         wasm_module,
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
+        chunked_canister_wasm: None,
     };
 
     let _: () = update_with_sender(

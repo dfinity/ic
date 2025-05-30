@@ -1,6 +1,4 @@
-use crate::ic_wasm::ICWasmModule;
-use ic_config::embedders::Config as EmbeddersConfig;
-use ic_config::flag_status::FlagStatus;
+use crate::ic_wasm::{ic_embedders_config, ICWasmModule};
 use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_types::methods::{FuncRef, WasmMethod};
 use libfuzzer_sys::Corpus;
@@ -11,9 +9,7 @@ pub fn run_fuzzer(module: ICWasmModule) -> Corpus {
     let wasm = module.module.to_bytes();
     let wasm_methods: BTreeSet<WasmMethod> = module.exported_functions;
 
-    let mut config = EmbeddersConfig::default();
-    config.feature_flags.write_barrier = FlagStatus::Enabled;
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_embedders_config(module.config.memory64_enabled);
 
     let instance_result = WasmtimeInstanceBuilder::new()
         .with_wasm(wasm)

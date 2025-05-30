@@ -1,6 +1,5 @@
 use arbitrary::{Arbitrary, Unstructured};
 use clap::Parser;
-use ic_config::embedders::Config as EmbeddersConfig;
 use ic_logger::replica_logger::no_op_logger;
 use std::fs::File;
 use std::io;
@@ -8,7 +7,7 @@ use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::PathBuf;
 use std::sync::Arc;
-use wasm_fuzzers::ic_wasm::ICWasmModule;
+use wasm_fuzzers::ic_wasm::{ic_embedders_config, ICWasmModule};
 use wasmprinter::print_bytes;
 
 use ic_embedders::{
@@ -57,7 +56,7 @@ fn main() -> io::Result<()> {
 
     let instrumentation = CommandLineArgs::parse().inst;
     if instrumentation {
-        let config = EmbeddersConfig::default();
+        let config = ic_embedders_config(module.config.memory64_enabled);
         let decoded = decode_wasm(config.wasm_max_size, Arc::new(wasm))
             .expect("failed to decode canister module");
         let embedder = WasmtimeEmbedder::new(config, no_op_logger());

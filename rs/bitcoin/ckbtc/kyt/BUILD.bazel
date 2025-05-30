@@ -26,12 +26,11 @@ rust_canister(
     compile_data = [
         "templates/dashboard.html",
     ],
-    proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
     service_file = "kyt.did",
     deps = [
         # Keep sorted.
         ":kyt",
-        "//rs/rust_canisters/http_types",
+        "//packages/ic-http-types",
         "@crate_index//:askama",
         "@crate_index//:candid",
         "@crate_index//:ciborium",

@@ -2,7 +2,7 @@ use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GENESIS_TOKEN_CANISTER_ID;
-use ic_nns_governance_api::pb::v1::{neuron::DissolveState, Neuron};
+use ic_nns_governance_api::{neuron::DissolveState, Neuron};
 use ic_nns_gtc::pb::v1::{AccountState, Gtc};
 use icp_ledger::Tokens;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
@@ -252,8 +252,14 @@ fn make_neuron(
         )
     };
 
+    let subaccount_hash = Sha256::hash(&subaccount);
+    let neuron_id = NeuronId {
+        // We just need a unique ID for the neuron, so we use the first 8 bytes to create a u64.
+        id: u64::from_ne_bytes(subaccount_hash[0..8].try_into().unwrap()),
+    };
+
     Neuron {
-        id: Some(NeuronId::from_subaccount(&subaccount)),
+        id: Some(neuron_id),
         account: subaccount.to_vec(),
         controller: Some(GENESIS_TOKEN_CANISTER_ID.get()),
         cached_neuron_stake_e8s: stake_e8s,

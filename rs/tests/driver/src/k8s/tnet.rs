@@ -1,6 +1,7 @@
 use rand::seq::SliceRandom;
 use regex::Regex;
 use slog::Logger;
+use std::cmp::min;
 use std::collections::BTreeMap;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
@@ -9,9 +10,7 @@ use url::Url;
 use anyhow::Result;
 use backon::Retryable;
 use backon::{ConstantBuilder, ExponentialBuilder};
-use k8s_openapi::api::core::v1::{
-    ConfigMap, PersistentVolumeClaim, Pod, Secret, Service, TypedLocalObjectReference,
-};
+use k8s_openapi::api::core::v1::{ConfigMap, PersistentVolumeClaim, Pod, Secret, Service};
 use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
 use k8s_openapi::chrono::DateTime;
@@ -28,15 +27,17 @@ use serde::{Deserialize, Serialize};
 use tokio;
 use tracing::*;
 
+use crate::driver::farm::ImageLocation;
 use crate::driver::farm::{
-    Certificate, CreateVmRequest, DnsRecord, DnsRecordType, ImageLocation, PlaynetCertificate,
-    VMCreateResponse, VmSpec,
+    Certificate, CreateVmRequest, DnsRecord, DnsRecordType, PlaynetCertificate, VMCreateResponse,
+    VmSpec,
 };
 use crate::driver::resource::ImageType;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::k8s::config::*;
 use crate::k8s::datavolume::*;
-use crate::k8s::persistentvolumeclaim::*;
+use crate::k8s::job::*;
+use crate::k8s::reservations::*;
 use crate::k8s::virtualmachine::*;
 
 const PLAYNET_POOL_SIZE: usize = 33;
@@ -157,6 +158,9 @@ pub struct TNet {
     pub unique_name: Option<String>,
     pub version: String,
     pub image_url: String,
+    pub image_sha: String,
+    pub bn_image_url: Option<String>,
+    pub bn_image_sha: Option<String>,
     pub config_url: Option<String>,
     pub access_key: Option<String>,
     pub nodes: Vec<TNode>,
@@ -201,6 +205,11 @@ impl TNet {
 
     pub fn image_url(mut self, url: &str) -> Self {
         self.image_url = url.to_string();
+        self
+    }
+
+    pub fn image_sha(mut self, sha: &str) -> Self {
+        self.image_sha = sha.to_string();
         self
     }
 
@@ -287,11 +296,15 @@ impl TNet {
             &Default::default(),
         )
         .await?;
+        // delete reservations
+        for node in self.nodes {
+            delete_reservation(node.name.clone().unwrap().as_str()).await?;
+        }
         Ok(())
     }
 
     pub async fn deploy_guestos_image(&self) -> Result<()> {
-        let image_name = &format!("{}-image-guestos", self.owner.name_any());
+        let image_name = &format!("image-guestos-{}", self.image_sha);
         self.deploy_image(image_name, &self.image_url).await?;
         Ok(())
     }
@@ -342,31 +355,107 @@ impl TNet {
             "{}-{}",
             self.unique_name.clone().expect("no unique name"),
             match vm_type {
-                ImageType::IcOsImage => self.nodes.len().to_string(),
                 ImageType::UniversalImage | ImageType::PrometheusImage =>
                     format!("{}-{}", self.nodes.len(), vm_req.name),
+                _ => self.nodes.len().to_string(),
             }
         );
-        let pvc_name = format!("{}-guestos", vm_name.clone());
-        let data_source = Some(TypedLocalObjectReference {
-            api_group: None,
-            kind: "PersistentVolumeClaim".to_string(),
-            name: match vm_req.primary_image {
-                ImageLocation::PersistentVolumeClaim { name } => name,
-                _ => unimplemented!(),
-            },
-        });
 
-        create_pvc(
-            &k8s_client.api_pvc,
-            &pvc_name,
-            "100Gi",
-            None,
-            None,
-            data_source,
-            self.owner_reference(),
+        // We make reservation for 45 vcpus only if VM uses 64 vcpus because there are
+        // already other k8s resources having resource requests that prevents reservation to succeeds.
+        // Note that VM still gets 64 vcpus.
+        let vcpus = min(45, vm_req.vcpus.get()).to_string();
+        // Same as above, we make reservation for less memory if VM uses more then memory then specified below
+        // because there are already other k8s resources with resource requests that prevent this reservation to succeeds.
+        let mem = min(422142680, vm_req.memory_kibibytes.get()).to_string();
+        let node = create_reservation(
+            vm_name.clone(),
+            vm_name.clone(),
+            self.unique_name.clone().expect("missing unique name"),
+            "1h".to_string().into(),
+            Some((vcpus, mem + "Ki")),
         )
         .await?;
+
+        if vm_type == ImageType::IcOsImage {
+            // create a job to download the image and extract it
+            let image_url = match vm_req.primary_image {
+                ImageLocation::IcOsImageViaUrl { url, .. } => url.to_string(),
+                ImageLocation::ImageViaUrl { url, .. } => url.to_string(),
+                _ => self.image_url.clone(),
+            };
+            //ImageLocation::IcOsImageViaUrl { url, sha256 }
+            let config_image_url = format!(
+                "{}/{}/config_disk.img.zst",
+                self.config_url.clone().unwrap(),
+                vm_name.clone()
+            )
+            .to_string();
+            // TODO: only download it once and copy it if it's already downloaded
+            let args = format!(
+                "set -xe; \
+                mkdir -p /tnet/{vm_name}; \
+                curl --user-agent curl-k8s-test --retry 10 --retry-delay 1 -o /tnet/{vm_name}/img.tar.zst {image_url}; \
+                file /tnet/{vm_name}/img.tar.zst | grep -i 'zstandard' || exit 1; \
+                tar -x --zstd -vf /tnet/{vm_name}/img.tar.zst -C /tnet/{vm_name}; \
+                file /tnet/{vm_name}/disk.img | grep -q 'DOS/MBR boot sector' || exit 1; \
+                for i in $(seq 1 12); do \
+                    curl --user-agent curl-k8s-test --retry 3 --retry-delay 3 -o /tnet/{vm_name}/config_disk.img.zst {config_image_url}; \
+                    if ! file /tnet/{vm_name}/config_disk.img.zst | grep -i 'zstandard'; then \
+                        sleep 20; \
+                        continue; \
+                    fi; \
+                    unzstd -o /tnet/{vm_name}/config_disk.img /tnet/{vm_name}/config_disk.img.zst; \
+                    break; \
+                done; \
+                test -f /tnet/{vm_name}/config_disk.img || exit 1; \
+                chmod -R 777 /tnet/{vm_name}; \
+                rm -f /tnet/{vm_name}/img.tar.zst /tnet/{vm_name}/img.tar",
+                vm_name = vm_name,
+                image_url = image_url,
+                config_image_url = config_image_url,
+            );
+            create_job(
+                &vm_name.clone(),
+                "dfinity/util:0.2",
+                vec!["/bin/sh", "-c"],
+                vec![&args],
+                "/srv/tnet".into(),
+                self.owner_reference(),
+                Some(vec![(
+                    "tnet.internetcomputer.org/name".to_string(),
+                    self.unique_name.clone().expect("missing unique name"),
+                )]),
+                Some(node.clone()),
+            )
+            .await?;
+        } else {
+            let args = format!(
+                "set -e; \
+                 mkdir -p /tnet/{vm_name}; \
+                 cp /tnet/{image} /tnet/{vm_name}/disk.img; \
+                 chmod -R 777 /tnet/{vm_name}",
+                vm_name = vm_name,
+                image = match vm_type {
+                    ImageType::PrometheusImage => "pvm.img".to_string(),
+                    _ => "uvm.img".to_string(),
+                },
+            );
+            create_job(
+                &vm_name.clone(),
+                "dfinity/util:0.2",
+                vec!["/bin/sh", "-c"],
+                vec![&args],
+                "/srv/tnet".into(),
+                self.owner_reference(),
+                Some(vec![(
+                    "tnet.internetcomputer.org/name".to_string(),
+                    self.unique_name.clone().expect("missing unique name"),
+                )]),
+                Some(node.clone()),
+            )
+            .await?;
+        }
 
         let mut ipam_pod: Pod = serde_yaml::from_str(&format!(
             r#"
@@ -479,6 +568,7 @@ spec:
             self.owner_reference(),
             self.access_key.clone(),
             vm_type.clone(),
+            Some(node),
         )
         .await?;
 

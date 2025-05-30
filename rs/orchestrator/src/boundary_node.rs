@@ -4,9 +4,11 @@ use crate::{
     process_manager::{Process, ProcessManager},
     registry_helper::RegistryHelper,
 };
+use ic_config::crypto::CryptoConfig;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_types::{NodeId, ReplicaVersion};
 use std::{
+    collections::HashMap,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -15,6 +17,7 @@ struct BoundaryNodeProcess {
     version: ReplicaVersion,
     binary: String,
     args: Vec<String>,
+    env: HashMap<String, String>,
 }
 
 impl Process for BoundaryNodeProcess {
@@ -33,6 +36,10 @@ impl Process for BoundaryNodeProcess {
     fn get_args(&self) -> &[String] {
         &self.args
     }
+
+    fn get_env(&self) -> HashMap<String, String> {
+        self.env.clone()
+    }
 }
 
 pub(crate) struct BoundaryNodeManager {
@@ -40,6 +47,7 @@ pub(crate) struct BoundaryNodeManager {
     _metrics: Arc<OrchestratorMetrics>,
     process: Arc<Mutex<ProcessManager<BoundaryNodeProcess>>>,
     ic_binary_dir: PathBuf,
+    crypto_config: CryptoConfig,
     version: ReplicaVersion,
     logger: ReplicaLogger,
     node_id: NodeId,
@@ -53,6 +61,7 @@ impl BoundaryNodeManager {
         version: ReplicaVersion,
         node_id: NodeId,
         ic_binary_dir: PathBuf,
+        crypto_config: CryptoConfig,
         logger: ReplicaLogger,
     ) -> Self {
         Self {
@@ -62,6 +71,7 @@ impl BoundaryNodeManager {
                 logger.clone().inner_logger.root,
             ))),
             ic_binary_dir,
+            crypto_config,
             version,
             logger,
             node_id,
@@ -154,31 +164,17 @@ impl BoundaryNodeManager {
             .as_ref()
             .ok_or_else(|| OrchestratorError::DomainNameMissingError(self.node_id))?;
 
-        // TODO: Should these values be settable via config?
+        let env = env_file_reader::read_file("/opt/ic/share/ic-boundary.env").map_err(|e| {
+            OrchestratorError::IoError("unable to read ic-boundary environment variables".into(), e)
+        })?;
+
         let args = vec![
-            format!("--listen-https-port=443"),
             format!("--tls-hostname={}", domain_name),
-            format!("--tls-cert-path=/var/lib/ic/data/ic-boundary-tls.crt"),
-            format!("--tls-pkey-path=/var/lib/ic/data/ic-boundary-tls.key"),
-            format!("--tls-acme-credentials-path=/var/lib/ic/data"),
-            format!("--http-client-timeout-connect=3s"),
-            format!("--registry-disable-replicator"),
-            format!("--registry-local-store-path=/var/lib/ic/data/ic_registry_local_store"),
-            format!("--obs-log-journald"),
-            format!("--obs-metrics-addr=[::]:9324"),
-            format!("--rate-limit-per-second-per-subnet=1000"),
-            format!("--bouncer-enable"),
-            format!("--bouncer-ratelimit=600"),
-            format!("--bouncer-burst-size=1200"),
-            format!("--bouncer-ban-time=5m"),
-            format!("--bouncer-max-buckets=30000"),
-            format!("--bouncer-bucket-ttl=1m"),
-            format!("--cache-size=1GB"),
-            format!("--cache-max-item-size=10MB"),
-            format!("--cache-ttl=1s"),
-            format!("--shed-system-ewma=0.9"),
-            format!("--shed-system-cpu=0.9"),
-            format!("--shed-system-memory=0.9"),
+            format!(
+                "--crypto-config={}",
+                serde_json::to_string(&self.crypto_config)
+                    .map_err(OrchestratorError::SerializeCryptoConfigError)?
+            ),
         ];
 
         process
@@ -186,6 +182,7 @@ impl BoundaryNodeManager {
                 version: version.clone(),
                 binary,
                 args,
+                env,
             })
             .map_err(|e| {
                 OrchestratorError::IoError(

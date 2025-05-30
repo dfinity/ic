@@ -4,9 +4,10 @@
 //! Mechanism:
 //!  - Ask State sync for which chunks to download
 //!  - Download this batch of chunk in parallel with a concurrency limiter per peer.
-//!    Note: - We randomly chose a peer from the set of peers advertised this state.
-//!          - We don't retry failed downloads immediately. Failed downloads are retried
-//!            in the next batch download.
+//!    Note:
+//!      - We randomly chose a peer from the set of peers advertised this state.
+//!      - We don't retry failed downloads immediately. Failed downloads are retried
+//!        in the next batch download.
 //!  - Add downloaded chunk to state.
 //!  - Repeat until state sync reports completed or we hit the state sync timeout or
 //!    this object is dropped.
@@ -19,8 +20,8 @@ use std::{
 use crate::metrics::OngoingStateSyncMetrics;
 use crate::routes::{build_chunk_handler_request, parse_chunk_handler_response};
 
-use ic_async_utils::JoinMap;
 use ic_base_types::NodeId;
+use ic_http_endpoints_async_utils::JoinMap;
 use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId};
 use ic_logger::{error, info, ReplicaLogger};
 use ic_quic_transport::{Shutdown, Transport};

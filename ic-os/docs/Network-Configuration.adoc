@@ -7,76 +7,15 @@ Network configuration details for each IC-OS:
 * SetupOS
 ** Basic network connectivity is checked via pinging nns.ic0.app and the default gateway. Virtually no network traffic goes through SetupOS.
 * HostOS
-** The br6 bridge network interface is set up and passed to the GuestOS VM through qemu (refer to guestos.xml.template).
+** The br6 bridge network interface is set up and passed to the GuestOS VM through qemu (refer to guestos_template.xml).
 * GuestOS
 ** An internet connection is received via the br6 bridge interface from qemu.
 
 == Deterministic MAC Address
 
-Each IC-OS node must have a unique but deterministic MAC address. To solve this, a schema has been devised.
+Each IC-OS node must have a unique but deterministic MAC address derived from its BMC MAC address, deployment environment (mainnet vs testnet), and variant type (SetupOS, HostOS, GuestOS, BoundaryGuestOS). This MAC address is then utilized to generate the node's network configuration.
 
-=== Schema
-
-* *The first 8-bits:*
-** IPv4 interfaces: 4a
-** IPv6 interfaces: 6a
-
-* *The second 8-bits:*
-** We reserve the following hexadecimal numbers for each IC-OS:
-*** SetupOS: 0f
-*** HostOS: 00
-*** GuestOS: 01
-*** Boundary-GuestOS: 02
-
-** Note: any additional virtual machine on the same physical machine gets the next higher hexadecimal number.
-
-* *The remaining 32-bits:*
-** Deterministically generated
-
-=== Example MAC addresses
-
-* SetupOS: `{4a,6a}:0f:<deterministically-generated-part>`
-* HostOS: `{4a,6a}:00:<deterministically-generated-part>`
-* GuestOS: `{4a,6a}:01:<deterministically-generated-part>`
-* BoundaryOS: `{4a,6a}:02:<deterministically-generated-part>`
-* Next Virtual Machine: `{4a,6a}:03:<deterministically-generated-part>`
-
-Note that the MAC address is expected to be lower-case and to contain colons between the octets.
-
-=== Deterministically Generated Part
-
-The deterministically generated part is generated using the following inputs:
-
-1. IPMI MAC address (the MAC address of the BMC)
-a. Obtained via `$ ipmitool lan print | grep 'MAC Address'``
-2. Deployment name
-a. Ex: `mainnet`
-
-The concatenation of the IPMI MAC address and deployment name is hashed:
-
-  $ sha256sum "<IPMI MAC ADDRESS><DEPLOYMENT NAME>"
-    # Example:
-    $ sha256sum "3c:ec:ef:6b:37:99mainnet"
-
-The first 32-bits of the sha256 checksum are then used as the deterministically generated part of the MAC address.
-
-  # Checksum
-  f409d72aa8c98ea40a82ea5a0a437798a67d36e587b2cc49f9dabf2de1cedeeb
-
-  # Deterministically Generated Part
-  f409d72a
-
-==== Deployment name
-
-The deployment name is added to the MAC address generation to further increase its uniqueness. The deployment name *mainnet* is reserved for production. Testnets must use other names to avoid any chance of a MAC address collision in the same data center.
-
-The deployment name is retrieved from the +deployment.json+ configuration file, generated as part of the SetupOS:
-
-  {
-    "deployment": {
-      "name": "mainnet"
-    }
-  }
+For details, see the link:../../rs/ic_os/deterministic_ips/README.md[mac_address README].
 
 == Hostname
 
@@ -111,7 +50,7 @@ Examples:
   replica--3cecef6b3799-4wd4u
   boundary-3cecef6b3799-4wd4u
 
-== IPv6 Address 
+== IPv6 Address
 
 The IP address can be derived from the MAC address and vice versa: As every virtual machine ends in the same MAC address, the IPv6 address of each node on the same physical machine can be derived, including the hypervisor itself.
 In other words, the prefix of the EUI-64 formatted IPv6 SLAAC address is swapped to get to the IPv6 address of the next node.

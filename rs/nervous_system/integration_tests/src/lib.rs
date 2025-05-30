@@ -13,3 +13,36 @@
 
 pub mod create_service_nervous_system_builder;
 pub mod pocket_ic_helpers;
+
+use std::time::Instant;
+
+/// Used for annotating a "section" of the test with timing information, which is useful for improving the performance of the tests.
+pub struct SectionTimer {
+    name: String,
+    start_time: Instant,
+}
+
+impl SectionTimer {
+    pub fn new(name: impl Into<String>) -> Self {
+        let name = name.into();
+        println!("{}", name);
+        Self {
+            name,
+            start_time: Instant::now(),
+        }
+    }
+}
+
+impl Drop for SectionTimer {
+    fn drop(&mut self) {
+        if std::thread::panicking() {
+            eprintln!("Panicked during `{}`", self.name);
+        } else {
+            eprintln!(
+                "Executed `{}` in {:?}",
+                self.name,
+                self.start_time.elapsed()
+            );
+        }
+    }
+}

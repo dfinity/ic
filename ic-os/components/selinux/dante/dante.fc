@@ -1,0 +1,5 @@
+/etc/danted\.conf	--	gen_context(system_u:object_r:dante_conf_t,s0)
+
+/usr/sbin/danted	--	gen_context(system_u:object_r:dante_exec_t,s0)
+
+/run/danted\.pid	--	gen_context(system_u:object_r:dante_runtime_t,s0)

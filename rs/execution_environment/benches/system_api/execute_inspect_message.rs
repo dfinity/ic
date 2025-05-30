@@ -1,6 +1,14 @@
-///
-/// Benchmark System API performance in `execute_inspect_message()`
-///
+//! Benchmark System API performance in `execute_inspect_message()`.
+//!
+//! This benchmark runs nightly in CI, and the results are available in Grafana.
+//! See: `schedule-rust-bench.yml`
+//!
+//! To run the benchmark locally:
+//!
+//! ```shell
+//! bazel run //rs/execution_environment:execute_inspect_message_bench
+//! ```
+
 use criterion::{criterion_group, criterion_main, Criterion};
 use execution_environment_bench::{common, wat::*};
 use ic_execution_environment::execution::inspect_message;
@@ -89,9 +97,10 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
     ];
     common::run_benchmarks(
         c,
-        "inspect",
+        "execution_environment:inspect_message",
         &benchmarks,
-        |exec_env: &ExecutionEnvironment,
+        |id: &str,
+         exec_env: &ExecutionEnvironment,
          expected_instructions,
          common::BenchmarkArgs {
              canister_state,
@@ -125,7 +134,8 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
             assert_eq!(
                 expected_instructions,
                 common::MAX_NUM_INSTRUCTIONS.get() - instructions_left.get(),
-                "Error comparing number of actual and expected instructions"
+                "update the reference number of instructions for '{id}' to {}",
+                common::MAX_NUM_INSTRUCTIONS.get() - instructions_left.get()
             );
         },
     );

@@ -1,17 +1,25 @@
 use ic_config::execution_environment::Config;
 use ic_error_types::{ErrorCode, RejectCode};
-use ic_interfaces::execution_environment::{
-    IngressHistoryError, IngressHistoryReader, IngressHistoryWriter,
+use ic_interfaces::{
+    execution_environment::{IngressHistoryError, IngressHistoryReader, IngressHistoryWriter},
+    time_source::system_time_now,
 };
-use ic_interfaces_state_manager::{StateManagerError, StateReader};
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{fatal, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_replicated_state::ReplicatedState;
-use ic_types::{ingress::IngressState, ingress::IngressStatus, messages::MessageId, Height, Time};
+use ic_types::{
+    ingress::{IngressState, IngressStatus},
+    messages::MessageId,
+    state_manager::StateManagerError,
+    Height, Time,
+};
 use prometheus::{Histogram, HistogramVec};
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
-use std::time::Instant;
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+    time::Instant,
+};
 use tokio::sync::mpsc::Sender;
 
 /// Struct that implements the ingress history reader trait. Consumers of this
@@ -82,6 +90,9 @@ pub struct IngressHistoryWriterImpl {
     // Wrapped in a RwLock for interior mutability, otherwise &self in methods
     // has to be &mut self.
     received_time: RwLock<HashMap<MessageId, TransitionStartTime>>,
+    message_state_transition_received_duration_seconds: Histogram,
+    message_state_transition_processing_duration_seconds: Histogram,
+    message_state_transition_received_to_processing_duration_seconds: Histogram,
     message_state_transition_completed_ic_duration_seconds: Histogram,
     message_state_transition_completed_wall_clock_duration_seconds: Histogram,
     message_state_transition_failed_ic_duration_seconds: HistogramVec,
@@ -102,6 +113,24 @@ impl IngressHistoryWriterImpl {
             config,
             log,
             received_time: RwLock::new(HashMap::new()),
+            message_state_transition_received_duration_seconds: metrics_registry.histogram(
+                "message_state_transition_received_duration_seconds",
+                "Per-ingress-message wall-clock duration between block maker and ingress queue",
+                // 10ms, 20ms, 50ms, ..., 100s, 200s, 500s
+                decimal_buckets(-2,2),
+            ),
+            message_state_transition_processing_duration_seconds: metrics_registry.histogram(
+                "message_state_transition_processing_duration_seconds",
+                "Per-ingress-message wall-clock duration between block maker and completed (message, not call) execution",
+                // 10ms, 20ms, 50ms, ..., 100s, 200s, 500s
+                decimal_buckets(-2,2),
+            ),
+            message_state_transition_received_to_processing_duration_seconds: metrics_registry.histogram(
+                "message_state_transition_received_to_processing_duration_seconds",
+                "Per-ingress-message wall-clock duration between induction and completed (message, not call) execution",
+                // 10ms, 20ms, 50ms, ..., 100s, 200s, 500s
+                decimal_buckets(-2,2),
+            ),
             message_state_transition_completed_ic_duration_seconds: metrics_registry.histogram(
                 "message_state_transition_completed_ic_duration_seconds",
                 "The IC time taken for a message to transition from the Received state to Completed state",
@@ -164,8 +193,48 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
                 status
             );
         }
+
         use IngressState::*;
         use IngressStatus::*;
+
+        // Latency instrumentation.
+        match (&current_status, &status) {
+            // Newly received message: observe its induction latency.
+            (
+                Unknown,
+                Known {
+                    state: Received, ..
+                },
+            ) => {
+                // Wall clock duration since the message was included into a block.
+                let duration_since_block_made = system_time_now().saturating_duration_since(time);
+                self.message_state_transition_received_duration_seconds
+                    .observe(duration_since_block_made.as_secs_f64());
+            }
+
+            // Message popped from ingress queue: observe its processing latencies.
+            (
+                Known {
+                    state: Received, ..
+                },
+                Known { state, .. },
+            ) if state != &Received => {
+                if let Some(timer) = self.received_time.read().unwrap().get(&message_id) {
+                    // Wall clock duration since the message was included into a block.
+                    let duration_since_block_made =
+                        system_time_now().saturating_duration_since(timer.ic_time);
+                    // Wall clock duration since the message was inducted.
+                    let duration_since_induction =
+                        Instant::now().saturating_duration_since(timer.system_time);
+                    self.message_state_transition_processing_duration_seconds
+                        .observe(duration_since_block_made.as_secs_f64());
+                    self.message_state_transition_received_to_processing_duration_seconds
+                        .observe(duration_since_induction.as_secs_f64());
+                }
+            }
+            _ => {}
+        }
+
         match &status {
             Known {
                 state: Received, ..
@@ -280,6 +349,7 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         // 3xx -- `RejectCode::DestinationInvalid`
         CanisterNotFound => "Canister Not Found",
         CanisterSnapshotNotFound => "Canister Snapshot Not Found",
+        CanisterSnapshotImmutable => "Immutable Canister Snapshot",
         // 4xx -- `RejectCode::CanisterReject`
         InsufficientMemoryAllocation => "Insufficient memory allocation given to canister",
         InsufficientCyclesForCreateCanister => "Insufficient Cycles for Create Canister Request",

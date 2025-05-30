@@ -1,15 +1,14 @@
 //! This module encapsulates functions required for validating consensus
 //! artifacts.
 
-use crate::{
-    consensus::{
-        check_protocol_version,
-        metrics::ValidatorMetrics,
-        status::{self, Status},
-        ConsensusMessageId,
-    },
-    dkg, idkg,
+use crate::consensus::{
+    check_protocol_version,
+    metrics::ValidatorMetrics,
+    status::{self, Status},
+    ConsensusMessageId,
 };
+use ic_consensus_dkg as dkg;
+use ic_consensus_idkg as idkg;
 use ic_consensus_utils::{
     active_high_threshold_nidkg_id, active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
@@ -23,18 +22,18 @@ use ic_interfaces::{
     consensus::{InvalidPayloadReason, PayloadBuilder, PayloadValidationFailure},
     consensus_pool::*,
     dkg::DkgPool,
-    ingress_manager::IngressSelector,
     messaging::MessageRouting,
     time_source::TimeSource,
     validation::{ValidationError, ValidationResult},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::{StateHashError, StateManager, StateManagerError};
+use ic_interfaces_state_manager::{StateHashError, StateManager};
 use ic_logger::{trace, warn, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
+        dkg::{DkgPayloadValidationFailure, InvalidDkgPayloadReason},
         Block, BlockMetadata, BlockPayload, BlockProposal, CatchUpContent, CatchUpPackage,
         CatchUpShareContent, Committee, ConsensusMessage, ConsensusMessageHashable,
         EquivocationProof, FinalizationContent, HasCommittee, HasHash, HasHeight, HasRank,
@@ -45,8 +44,10 @@ use ic_types::{
     registry::RegistryClientError,
     replica_config::ReplicaConfig,
     signature::{BasicSigned, MultiSignature, MultiSignatureShare, ThresholdSignatureShare},
+    state_manager::StateManagerError,
     Height, NodeId, RegistryVersion, SubnetId,
 };
+use idkg::{IDkgPayloadValidationFailure, InvalidIDkgPayloadReason};
 use std::{
     collections::{BTreeMap, HashSet},
     sync::{Arc, RwLock},
@@ -75,8 +76,8 @@ enum ValidationFailure {
     CryptoError(CryptoError),
     RegistryClientError(RegistryClientError),
     PayloadValidationFailed(PayloadValidationFailure),
-    DkgPayloadValidationFailed(dkg::DkgPayloadValidationFailure),
-    IDkgPayloadValidationFailed(idkg::IDkgPayloadValidationFailure),
+    DkgPayloadValidationFailed(DkgPayloadValidationFailure),
+    IDkgPayloadValidationFailed(IDkgPayloadValidationFailure),
     DkgSummaryNotFound(Height),
     RandomBeaconNotFound(Height),
     StateHashError(StateHashError),
@@ -101,8 +102,8 @@ enum InvalidArtifactReason {
     SignerNotInThresholdCommittee(NodeId),
     SignerNotInMultiSigCommittee(NodeId),
     InvalidPayload(InvalidPayloadReason),
-    InvalidDkgPayload(dkg::InvalidDkgPayloadReason),
-    InvalidIDkgPayload(idkg::InvalidIDkgPayloadReason),
+    InvalidDkgPayload(InvalidDkgPayloadReason),
+    InvalidIDkgPayload(InvalidIDkgPayloadReason),
     InsufficientSignatures,
     CannotVerifyBlockHeightZero,
     NonEmptyPayloadPastUpgradePoint,
@@ -687,7 +688,6 @@ pub struct Validator {
     metrics: ValidatorMetrics,
     schedule: RoundRobin,
     time_source: Arc<dyn TimeSource>,
-    ingress_selector: Option<Arc<dyn IngressSelector>>,
 }
 
 impl Validator {
@@ -705,7 +705,6 @@ impl Validator {
         log: ReplicaLogger,
         metrics: ValidatorMetrics,
         time_source: Arc<dyn TimeSource>,
-        ingress_selector: Option<Arc<dyn IngressSelector>>,
     ) -> Validator {
         Validator {
             replica_config,
@@ -720,7 +719,6 @@ impl Validator {
             metrics,
             schedule: RoundRobin::default(),
             time_source,
-            ingress_selector,
         }
     }
 
@@ -973,6 +971,17 @@ impl Validator {
             .get_by_height_range(range)
         {
             // Handle integrity check and verification errors early
+            let verification_result = self.verify_artifact(pool_reader, &proposal);
+            if let Err(error) = verification_result {
+                if let Some(action) = self.compute_action_from_validation_error(
+                    pool_reader,
+                    error,
+                    proposal.into_message(),
+                ) {
+                    change_set.push(action);
+                }
+                continue;
+            }
             if !proposal.check_integrity() {
                 change_set.push(ChangeAction::HandleInvalid(
                     proposal.clone().into_message(),
@@ -983,17 +992,6 @@ impl Validator {
                         proposal.as_ref().payload.as_ref()
                     ),
                 ));
-                continue;
-            }
-            let verification_result = self.verify_artifact(pool_reader, &proposal);
-            if let Err(error) = verification_result {
-                if let Some(action) = self.compute_action_from_validation_error(
-                    pool_reader,
-                    error,
-                    proposal.into_message(),
-                ) {
-                    change_set.push(action);
-                }
                 continue;
             }
 
@@ -1143,8 +1141,7 @@ impl Validator {
         for action in &change_set {
             if let ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(proposal)) = action
             {
-                self.metrics
-                    .observe_data_payload(proposal, self.ingress_selector.as_deref());
+                self.metrics.observe_data_payload(proposal);
                 self.metrics.observe_block(pool_reader, proposal);
             }
         }
@@ -1318,6 +1315,7 @@ impl Validator {
             self.state_manager.as_ref(),
             &proposal.context,
             &self.metrics.dkg_validator,
+            &self.log,
         )
         .map_err(|err| {
             err.map(
@@ -1345,13 +1343,13 @@ impl Validator {
             .random_beacon()
             .get_by_height(last_beacon.content.height().increment())
             .filter_map(|beacon| {
-                if last_hash != beacon.content.parent {
+                let verification = self.verify_artifact(pool_reader, &beacon);
+                if verification.is_ok() && last_hash != beacon.content.parent {
                     Some(ChangeAction::HandleInvalid(
                         beacon.into_message(),
                         "The parent hash of the beacon is not correct".to_string(),
                     ))
                 } else {
-                    let verification = self.verify_artifact(pool_reader, &beacon);
                     self.compute_action_from_artifact_verification(
                         pool_reader,
                         verification,
@@ -1381,14 +1379,14 @@ impl Validator {
             .random_beacon_share()
             .get_by_height(next_height)
             .filter_map(|beacon| {
-                if last_hash != beacon.content.parent {
+                self.metrics.validation_random_beacon_shares_count.add(1);
+                let verification = self.verify_artifact(pool_reader, &beacon);
+                if verification.is_ok() && last_hash != beacon.content.parent {
                     Some(ChangeAction::HandleInvalid(
                         beacon.into_message(),
-                        "The parent hash of the beacon was not correct".to_string(),
+                        "The parent hash of the beacon share is not correct".to_string(),
                     ))
                 } else {
-                    self.metrics.validation_random_beacon_shares_count.add(1);
-                    let verification = self.verify_artifact(pool_reader, &beacon);
                     self.compute_action_from_artifact_verification(
                         pool_reader,
                         verification,
@@ -1899,14 +1897,7 @@ impl Validator {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::{
-        consensus::block_maker::get_block_maker_delay,
-        idkg::test_utils::{
-            add_available_quadruple_to_payload, empty_idkg_payload,
-            fake_ecdsa_master_public_key_id, fake_signature_request_context_with_pre_sig,
-            fake_state_with_signature_requests,
-        },
-    };
+    use crate::consensus::block_maker::get_block_maker_delay;
     use assert_matches::assert_matches;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_config::artifact_pool::ArtifactPoolConfig;
@@ -1926,7 +1917,16 @@ pub mod test {
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::RefMockStateManager};
-    use ic_test_utilities_consensus::{assert_changeset_matches_pattern, fake::*, matches_pattern};
+    use ic_test_utilities_consensus::{
+        assert_changeset_matches_pattern,
+        fake::*,
+        idkg::{
+            add_available_quadruple_to_payload, empty_idkg_payload,
+            fake_ecdsa_idkg_master_public_key_id, fake_signature_request_context_with_pre_sig,
+            fake_state_with_signature_requests, request_id,
+        },
+        matches_pattern,
+    };
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::{
@@ -1936,16 +1936,15 @@ pub mod test {
     use ic_types::{
         batch::{BatchPayload, IngressPayload},
         consensus::{
-            dkg, idkg::PreSigId, BlockPayload, CatchUpPackageShare, DataPayload, EquivocationProof,
-            Finalization, FinalizationShare, HashedBlock, HashedRandomBeacon, NotarizationShare,
-            Payload, RandomBeaconContent, RandomTapeContent, SummaryPayload,
+            dkg::DkgDataPayload, idkg::PreSigId, BlockPayload, CatchUpPackageShare, DataPayload,
+            EquivocationProof, Finalization, FinalizationShare, HashedBlock, HashedRandomBeacon,
+            NotarizationShare, Payload, RandomBeaconContent, RandomTapeContent, SummaryPayload,
         },
         crypto::{BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, CryptoHash},
         replica_config::ReplicaConfig,
         signature::ThresholdSignature,
         CryptoHashOfState, ReplicaVersion, Time,
     };
-    use idkg::test_utils::request_id;
     use std::sync::{Arc, RwLock};
 
     pub fn assert_block_valid(results: &[ChangeAction], block: &BlockProposal) {
@@ -1997,7 +1996,6 @@ pub mod test {
                 no_op_logger(),
                 ValidatorMetrics::new(MetricsRegistry::new()),
                 Arc::clone(&dependencies.time_source) as Arc<_>,
-                /*ingress_selector=*/ None,
             );
             Self {
                 validator,
@@ -2151,7 +2149,7 @@ pub mod test {
                 .return_const(Ok(state_hash.clone()));
 
             let height = Height::from(0);
-            let key_id = fake_ecdsa_master_public_key_id();
+            let key_id = fake_ecdsa_idkg_master_public_key_id();
             // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
             let pre_sig_id1 = PreSigId(1);
             let pre_sig_id2 = PreSigId(2);
@@ -3479,7 +3477,7 @@ pub mod test {
                     ingress,
                     ..BatchPayload::default()
                 },
-                dealings: dkg::Dealings::new_empty(Height::new(0)),
+                dkg: DkgDataPayload::new_empty(Height::new(0)),
                 idkg: None,
             }),
         );
@@ -3493,7 +3491,7 @@ pub mod test {
                     ingress: IngressPayload::from(vec![]),
                     ..BatchPayload::default()
                 },
-                dealings: dkg::Dealings::new_empty(Height::new(0)),
+                dkg: DkgDataPayload::new_empty(Height::new(0)),
                 idkg: None,
             }),
         );

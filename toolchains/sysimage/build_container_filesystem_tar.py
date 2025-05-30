@@ -4,20 +4,21 @@
 from __future__ import annotations
 
 import argparse
+import atexit
 import os
 import shutil
-import sys
-import time
+import signal
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, List, Optional, TypeVar
+from typing import List, Optional
 
 import invoke
+from loguru import logger as log
 
-from toolchains.sysimage.container_utils import (
-    generate_container_command,
+from toolchains.sysimage.utils import (
     path_owned_by_root,
-    process_temp_sys_dir_args,
+    purge_podman,
     remove_image,
     take_ownership_of_file,
 )
@@ -32,30 +33,6 @@ class BaseImageOverride:
         assert self.image_tag is not None
         assert self.image_file is not None
         assert self.image_file.exists()
-
-
-ReturnType = TypeVar("ReturnType")  # https://docs.python.org/3/library/typing.html#generics
-
-
-def retry(func: Callable[[], ReturnType], num_retries: int = 3) -> ReturnType:
-    """
-    Call the given `func`. If an exception is raised, print, and retry `num_retries` times.
-    Back off retries by sleeping for at least 5 secs + an exponential increase.
-    Exception is not caught on the last try.
-    """
-    BASE_BACKOFF_WAIT_SECS = 5
-    for i in range(num_retries):
-        try:
-            return func()
-        except Exception as e:
-            print(f"Exception occurred: {e}", file=sys.stderr)
-            print(f"Retries left: {num_retries - i}", file=sys.stderr)
-            wait_time_secs = BASE_BACKOFF_WAIT_SECS + i**2
-            print(f"Waiting for next retry (secs): {wait_time_secs}")
-            time.sleep(wait_time_secs)  # 5, 6, 9, 14, 21, etc.
-
-    # Let the final try actually throw
-    return func()
 
 
 def load_base_image_tar_file(container_cmd: str, tar_file: Path):
@@ -117,10 +94,7 @@ def build_container(
     cmd += f"{context_dir} "
     print(cmd)
 
-    def build_func():
-        invoke.run(cmd)  # Throws on failure
-
-    retry(build_func)
+    invoke.run(cmd)  # Throws on failure
     return image_tag
 
 
@@ -245,19 +219,6 @@ def get_args():
     )
 
     parser.add_argument(
-        "--temp-container-sys-dir",
-        help="Container engine (podman) will use the specified dir to store its system files. It will remove the files before exiting.",
-        type=str,
-    )
-
-    parser.add_argument(
-        "--tmpfs-container-sys-dir",
-        help="Create and mount a tmpfs to store its system files. It will be unmounted before exiting.",
-        default=False,
-        action="store_true",
-    )
-
-    parser.add_argument(
         "--base-image-tar-file",
         help="Override the base image used by 'podman build'. The 'FROM' line in the target Dockerfile will be ignored",
         default=None,
@@ -287,11 +248,8 @@ def main():
     context_files = args.context_files
     component_files = args.component_files
     no_cache = args.no_cache
-    temp_sys_dir = process_temp_sys_dir_args(args.temp_container_sys_dir, args.tmpfs_container_sys_dir)
 
-    context_dir = os.getenv("ICOS_TMPDIR")
-    if not context_dir:
-        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
+    context_dir = tempfile.mkdtemp()
 
     # Add all context files directly into dir
     for context_file in context_files:
@@ -317,7 +275,20 @@ def main():
     if args.base_image_tar_file:
         base_image_override = BaseImageOverride(Path(args.base_image_tar_file), args.base_image_tar_file_tag)
 
-    container_cmd = generate_container_command("sudo podman ", temp_sys_dir)
+    if "TMPFS_TMPDIR" in os.environ:
+        tmpdir = os.environ.get("TMPFS_TMPDIR")
+    else:
+        log.info("TMPFS_TMPDIR env variable not available, this may be slower than expected")
+        tmpdir = os.environ.get("TMPDIR")
+
+    root = tempfile.mkdtemp(dir=tmpdir)
+    run_root = tempfile.mkdtemp(dir=tmpdir)
+    container_cmd = f"sudo podman --root {root} --runroot {run_root}"
+
+    atexit.register(lambda: purge_podman(container_cmd))
+    signal.signal(signal.SIGTERM, lambda: purge_podman(container_cmd))
+    signal.signal(signal.SIGINT, lambda: purge_podman(container_cmd))
+
     build_and_export(
         container_cmd,
         build_args,
@@ -329,6 +300,8 @@ def main():
         destination_tar_filename,
     )
     remove_image(container_cmd, image_tag)  # No harm removing if in the tmp dir
+
+    # tempfile cleanup is handled by proc_wrapper.sh
 
 
 if __name__ == "__main__":

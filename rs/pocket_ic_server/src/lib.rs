@@ -38,8 +38,10 @@ pub mod pocket_ic;
 pub mod state_api;
 
 use crate::state_api::state::OpOut;
-use ::pocket_ic::common::rest::{BinaryBlob, BlobId};
-use axum::async_trait;
+use ::pocket_ic::common::rest::{BinaryBlob, BlobId, RawSubnetBlockmaker};
+use async_trait::async_trait;
+use candid::Principal;
+use ic_types::{NodeId, PrincipalId, SubnetId};
 use pocket_ic::PocketIc;
 use serde::Deserialize;
 
@@ -75,19 +77,27 @@ pub trait BlobStore: Send + Sync {
 // ================================================================================================================= //
 // Helpers
 
-pub fn copy_dir(
-    src: impl AsRef<std::path::Path>,
-    dst: impl AsRef<std::path::Path>,
-) -> std::io::Result<()> {
-    std::fs::create_dir_all(&dst)?;
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-        let ty = entry.file_type()?;
-        if ty.is_dir() {
-            copy_dir(entry.path(), dst.as_ref().join(entry.file_name()))?;
-        } else {
-            std::fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
+#[derive(Clone, Debug)]
+pub struct SubnetBlockmaker {
+    pub subnet: SubnetId,
+    pub blockmaker: NodeId,
+    pub failed_blockmakers: Vec<NodeId>,
+}
+
+impl From<RawSubnetBlockmaker> for SubnetBlockmaker {
+    fn from(raw: RawSubnetBlockmaker) -> Self {
+        let subnet = SubnetId::from(PrincipalId::from(Principal::from(raw.subnet)));
+        let blockmaker = NodeId::from(PrincipalId::from(Principal::from(raw.blockmaker)));
+        let failed_blockmakers: Vec<NodeId> = raw
+            .failed_blockmakers
+            .into_iter()
+            .map(|node_id| NodeId::from(PrincipalId::from(Principal::from(node_id))))
+            .collect();
+
+        SubnetBlockmaker {
+            subnet,
+            blockmaker,
+            failed_blockmakers,
         }
     }
-    Ok(())
 }

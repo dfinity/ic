@@ -1,4 +1,8 @@
-use crate::{deserialize_registry_value, node::NodeRecord};
+use crate::{
+    deserialize_registry_value,
+    node::NodeRecord,
+    subnet::{SubnetListRegistry, SubnetRegistry},
+};
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_protobuf::registry::{
     firewall::v1::{FirewallConfig, FirewallRuleSet},
@@ -24,6 +28,11 @@ pub trait FirewallRegistry {
     ) -> RegistryClientResult<FirewallRuleSet>;
 
     fn get_all_nodes_ip_addresses(
+        &self,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<Vec<IpAddr>>;
+
+    fn get_system_subnet_nodes_ip_addresses(
         &self,
         version: RegistryVersion,
     ) -> RegistryClientResult<Vec<IpAddr>>;
@@ -84,6 +93,51 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
             .into_iter()
             .collect();
         Ok(Some(result))
+    }
+
+    /// Get the IP addresses of all system subnet nodes in the registry, for endpoints used for core protocol services (p2p, xnet, api)
+    fn get_system_subnet_nodes_ip_addresses(
+        &self,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<Vec<IpAddr>> {
+        let system_subnet_node_ids: Vec<NodeId> = self
+            .get_system_subnet_ids(version)?
+            .unwrap_or_default()
+            .into_iter()
+            .map(
+                |subnet_id| match self.get_node_ids_on_subnet(subnet_id, version) {
+                    Ok(Some(node_ids)) => Ok(node_ids),
+                    Ok(None) => Ok(vec![]),
+                    Err(e) => Err(e),
+                },
+            )
+            .collect::<Result<Vec<Vec<NodeId>>, _>>()?
+            .into_iter()
+            .flatten()
+            .collect();
+
+        let mut system_subnet_endpoints: HashSet<IpAddr> = HashSet::new();
+
+        for node_id in system_subnet_node_ids {
+            if let Some(node_record) = deserialize_registry_value::<NodeRecord>(
+                self.get_value(&make_node_record_key(node_id), version),
+            )? {
+                if let Some(ip_addr) = node_record
+                    .xnet
+                    .and_then(|endpoint| endpoint.ip_addr.parse::<IpAddr>().ok())
+                {
+                    system_subnet_endpoints.insert(ip_addr);
+                }
+                if let Some(ip_addr) = node_record
+                    .http
+                    .and_then(|endpoint| endpoint.ip_addr.parse::<IpAddr>().ok())
+                {
+                    system_subnet_endpoints.insert(ip_addr);
+                }
+            }
+        }
+
+        Ok(Some(Vec::from_iter(system_subnet_endpoints)))
     }
 }
 

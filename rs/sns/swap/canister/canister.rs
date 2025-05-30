@@ -1,8 +1,11 @@
+// TODO: Jira ticket NNS1-3556
+#![allow(static_mut_refs)]
+
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::{api::time, caller, id, init, post_upgrade, pre_upgrade, query, update};
 use ic_cdk_timers::TimerId;
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,

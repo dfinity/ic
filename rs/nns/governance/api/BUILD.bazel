@@ -8,6 +8,7 @@ DEPENDENCIES = [
     "//rs/crypto/sha2",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/nervous_system/clients",
+    "//rs/nervous_system/common",
     "//rs/nervous_system/common/validation",
     "//rs/nervous_system/proto",
     "//rs/nns/common",

@@ -1,9 +1,10 @@
 use candid::{candid_method, Principal};
-use dfn_core::api::caller;
+use ic_base_types::PrincipalId;
 use ic_canister_log::{export as export_logs, log};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk_macros::{init, post_upgrade, query};
+use ic_cdk::api::caller;
+use ic_cdk::{init, post_upgrade, query};
 use ic_cdk_timers::TimerId;
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icp_index::logs::{P0, P1};
 use ic_icp_index::{
     GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
@@ -11,7 +12,7 @@ use ic_icp_index::{
     Priority, SettledTransaction, SettledTransactionWithId, Status,
 };
 use ic_icrc1_index_ng::GetAccountTransactionsArgs;
-use ic_ledger_canister_core::runtime::total_memory_size_bytes;
+use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::StableBTreeMap;
@@ -252,7 +253,7 @@ async fn get_blocks_from_ledger(start: u64) -> Result<QueryEncodedBlocksResponse
     let ledger_id = with_state(|state| state.ledger_id);
     let req = GetBlocksArgs {
         start,
-        length: DEFAULT_MAX_BLOCKS_PER_RESPONSE,
+        length: DEFAULT_MAX_BLOCKS_PER_RESPONSE as u64,
     };
     let (res,): (QueryEncodedBlocksResponse,) =
         ic_cdk::call(ledger_id, "query_encoded_blocks", (req,))
@@ -266,7 +267,7 @@ async fn get_blocks_from_archive(
 ) -> Result<Vec<EncodedBlock>, String> {
     let req = GetBlocksArgs {
         start: block_range.start,
-        length: block_range.length as usize,
+        length: block_range.length,
     };
     let (blocks_res,): (GetEncodedBlocksResult,) = ic_cdk::call(
         block_range.callback.canister_id,
@@ -492,7 +493,8 @@ fn get_block_range_from_stable_memory(
     start: u64,
     length: u64,
 ) -> Result<Vec<EncodedBlock>, String> {
-    let length = length.min(icp_ledger::max_blocks_per_request(&caller()) as u64);
+    let length =
+        length.min(icp_ledger::max_blocks_per_request(&PrincipalId::from(caller())) as u64);
     with_blocks(|blocks| {
         let limit = blocks.len().min(start.saturating_add(length));
         let mut res = vec![];
@@ -536,14 +538,14 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
-        "index_stable_memory_bytes",
+        "stable_memory_bytes",
         (ic_cdk::api::stable::stable_size() * 64 * 1024) as f64,
-        "Size of the stable memory allocated by this canister.",
+        "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
-        "index_total_memory_bytes",
-        total_memory_size_bytes() as f64,
-        "Total amount of memory (heap, stable memory, etc) that has been allocated by this canister.",
+        "heap_memory_bytes",
+        heap_memory_size_bytes() as f64,
+        "Size of the heap memory allocated by this canister measured in bytes.",
     )?;
 
     let cycle_balance = ic_cdk::api::canister_balance128() as f64;
@@ -595,7 +597,7 @@ fn get_account_identifier_transactions(
 ) -> GetAccountIdentifierTransactionsResult {
     let length = arg
         .max_results
-        .min(icp_ledger::max_blocks_per_request(&caller()) as u64)
+        .min(icp_ledger::max_blocks_per_request(&PrincipalId::from(caller())) as u64)
         .min(usize::MAX as u64) as usize;
     // TODO: deal with the user setting start to u64::MAX
     let start = arg.start.map_or(u64::MAX, |n| n);
@@ -667,6 +669,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         match encode_metrics(&mut writer) {
             Ok(()) => HttpResponseBuilder::ok()
                 .header("Content-Type", "text/plain; version=0.0.4")
+                .header("Cache-Control", "no-store")
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {
@@ -750,4 +753,39 @@ fn check_candid_interface_compatibility() {
         CandidSource::File(old_interface.as_path()),
     )
     .unwrap();
+}
+
+#[test]
+fn check_index_and_ledger_encoded_block_compatibility() {
+    // check that ledger.did and index.did agree on the encoded block format
+    let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let ledger_did_file = manifest_dir.join("../ledger.did");
+    let index_did_file = manifest_dir.join("./index.did");
+    let mut ledger_env = candid_parser::utils::CandidSource::File(ledger_did_file.as_path())
+        .load()
+        .unwrap()
+        .0;
+    let index_env = candid_parser::utils::CandidSource::File(index_did_file.as_path())
+        .load()
+        .unwrap()
+        .0;
+    let ledger_encoded_block_response_type = ledger_env
+        .find_type("QueryEncodedBlocksResponse")
+        .unwrap()
+        .to_owned();
+    let index_encoded_block_response_type =
+        index_env.find_type("GetBlocksResponse").unwrap().to_owned();
+
+    let mut gamma = std::collections::HashSet::new();
+    let index_encoded_block_response_type =
+        ledger_env.merge_type(index_env, index_encoded_block_response_type.clone());
+    // Check if the ledger `query_encoded_blocks` response <: the index `get_blocks` response,
+    // i.e., if the index response type is a subtype of the ledger response type.
+    candid::types::subtype::subtype(
+        &mut gamma,
+        &ledger_env,
+        &ledger_encoded_block_response_type,
+        &index_encoded_block_response_type,
+    )
+    .expect("Ledger and Index encoded block types are different");
 }
