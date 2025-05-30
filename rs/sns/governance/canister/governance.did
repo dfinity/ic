@@ -208,11 +208,6 @@ type ExecuteGenericNervousSystemFunction = record {
   payload : blob;
 };
 
-type ExecuteCustomProposal = record {
-  proposal_id : opt ProposalId;
-  payload : blob;
-};
-
 type FinalizeDisburseMaturity = record {
   amount_to_be_disbursed_e8s : nat64;
   to_account : opt Account;
@@ -234,6 +229,7 @@ type Followees = record {
 type FunctionType = variant {
   NativeNervousSystemFunction : record {};
   GenericNervousSystemFunction : GenericNervousSystemFunction;
+  CapabilityBasedFunction : CapabilityBasedFunctionDescription;
 };
 
 type GenericNervousSystemFunction = record {
@@ -241,6 +237,14 @@ type GenericNervousSystemFunction = record {
   target_canister_id : opt principal;
   validator_method_name : opt text;
   target_method_name : opt text;
+  topic : opt Topic;
+};
+
+type CapabilityBasedFunctionDescription = record {
+  dapp_canister_id : opt principal;
+  function_name : opt text;
+  capability_name : opt text;
+  description : opt text;
   topic : opt Topic;
 };
 
