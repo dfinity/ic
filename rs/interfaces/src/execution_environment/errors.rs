@@ -136,8 +136,7 @@ pub enum HypervisorError {
     /// An attempt was made to execute a message on a canister that does not
     /// contain a Wasm module.
     WasmModuleNotFound,
-    /// An attempt was made to grow the canister's memory above its memory
-    /// allocation.
+    /// The canister cannot grow its memory usage.
     OutOfMemory,
     /// The principal ID specified by the canister is invalid.
     InvalidPrincipalId(PrincipalIdBlobParseError),
@@ -433,9 +432,8 @@ impl AsErrorHelp for HypervisorError {
                 doc_link: doc_ref("wasm-module-not-found"),
             },
             Self::OutOfMemory => ErrorHelp::UserError {
-                suggestion: "Check the canister's memory usage against its allocation \
-                and the system wide limits to determine why more memory cannot be \
-                allocated."
+                suggestion: "Check the canister's memory usage against the system-wide limits \
+                to determine why more memory cannot be used."
                     .to_string(),
                 doc_link: doc_ref("out-of-memory"),
             },
