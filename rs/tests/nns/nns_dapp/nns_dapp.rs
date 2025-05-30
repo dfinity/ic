@@ -6,7 +6,6 @@ use ic_ledger_core::Tokens;
 use ic_nns_constants::SUBNET_RENTAL_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
-    boundary_node::BoundaryNodeVm,
     test_env::TestEnv,
     test_env_api::{
         load_wasm, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
@@ -75,16 +74,9 @@ pub fn nns_dapp_customizations() -> NnsCustomizations {
 
 pub fn install_sns_aggregator(
     env: &TestEnv,
-    boundary_node_name: &str,
+    ic_gateway_url: &Url,
     sns_node: IcNodeSnapshot,
 ) -> Principal {
-    let boundary_node = env
-        .get_deployed_boundary_node(boundary_node_name)
-        .unwrap()
-        .get_snapshot()
-        .unwrap();
-    let farm_url = boundary_node.get_playnet().unwrap();
-
     let sns_agent = sns_node.build_default_agent();
     let sns_aggregator_wasm = load_wasm(env::var("SNS_AGGREGATOR_WASM_PATH").unwrap());
     let logger = env.logger();
@@ -102,9 +94,10 @@ pub fn install_sns_aggregator(
             .unwrap(),
         )
         .await;
+        let ic_gateway_domain = ic_gateway_url.domain().unwrap();
         info!(
             logger,
-            "SNS aggregator: https://{}.{}", sns_aggregator_canister_id, farm_url
+            "SNS aggregator: https://{}.{ic_gateway_domain}", sns_aggregator_canister_id,
         );
         sns_aggregator_canister_id
     })
@@ -116,7 +109,7 @@ pub fn install_sns_aggregator(
 /// would conflict with the Subnet Rental Canister ID on mainnet.
 pub fn install_ii_nns_dapp_and_subnet_rental(
     env: &TestEnv,
-    ic_gateway_url: Url,
+    ic_gateway_url: &Url,
     sns_aggregator_canister_id: Option<Principal>,
 ) -> (Principal, Principal) {
     let ic_gateway_domain = ic_gateway_url.domain().unwrap().to_string();
