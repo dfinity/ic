@@ -3,8 +3,7 @@ use http::{Method, StatusCode};
 use reqwest::{Client, Request};
 use serde::{Deserialize, Serialize};
 use slog::{error, info, Logger};
-use std::{fs, future::Future, path::Path, time::Duration};
-use tokio::runtime::{Handle, Runtime};
+use std::{fs, path::Path, time::Duration};
 use url::Url;
 
 use crate::{
@@ -21,6 +20,7 @@ use crate::{
         universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
     },
     retry_with_msg_async,
+    util::block_on,
 };
 
 // Constants
@@ -101,12 +101,17 @@ impl IcGatewayVm {
         // Wait for the service to become ready.
         // Readiness is defined when some API boundary node used by ic-gateway responds with HTTP 200 to /api/v2/status.
         let health_url = playnet_url.join("/api/v2/status")?;
-        let msg = format!("await_status_is_healthy of {}", self.universal_vm.name);
-        let result = execute_async(await_status_is_healthy(&env.logger(), health_url, msg));
+        let msg = format!(
+            "await_status_is_healthy of {} with url {}",
+            self.universal_vm.name,
+            health_url.as_str()
+        );
+        let result = block_on(await_status_is_healthy(&env.logger(), health_url, msg));
         match result {
             Ok(()) => info!(
                 logger,
-                "IC Gateway started successfully with URL: {}", playnet_url
+                "IC Gateway started successfully with URL: {}",
+                playnet_url.as_str()
             ),
             Err(err) => error!(logger, "IC Gateway didn't come up healthy: {err}"),
         }
@@ -369,17 +374,4 @@ async fn await_status_is_healthy(logger: &Logger, url: Url, msg: String) -> Resu
         bail!("ic-gateway not ready yet ...")
     })
     .await
-}
-
-pub fn execute_async<F, T>(future: F) -> T
-where
-    F: Future<Output = T>,
-{
-    match Handle::try_current() {
-        Ok(handle) => handle.block_on(future),
-        Err(_) => {
-            let rt = Runtime::new().expect("Failed to create runtime");
-            rt.block_on(future)
-        }
-    }
 }
