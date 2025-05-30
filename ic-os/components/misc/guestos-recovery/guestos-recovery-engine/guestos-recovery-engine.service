@@ -1,8 +1,6 @@
 [Unit]
 Description=Recovery Engine Service
-# HELP: do we want the service to run after upgrade-shared-data-store or before?
 After=upgrade-shared-data-store.service
-# TODO: scritinize the order of the services
 Wants=network-online.target
 After=network-online.target
 Before=ic-replica.service

@@ -70,8 +70,5 @@ echo "Recovery artifacts applied successfully"
 
 echo "Restarting services..."
 sudo systemctl restart setup-permissions || true
-# TODO: discuss service restarts: we can either restart the ic-replica service here or have the service itself come before ic-replica.service
-# sudo systemctl start ic-replica;
-# sudo systemctl status ic-replica;
 
 echo "GuestOS recovery engine completed"
