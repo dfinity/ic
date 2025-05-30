@@ -1,20 +1,26 @@
 use anyhow::{anyhow, bail, Context, Result};
+use http::{Method, StatusCode};
+use reqwest::{Client, Request};
 use serde::{Deserialize, Serialize};
-use slog::info;
-use std::{fs, path::Path};
+use slog::{error, info, Logger};
+use std::{fs, future::Future, path::Path, time::Duration};
+use tokio::runtime::{Handle, Runtime};
 use url::Url;
 
-use crate::driver::{
-    farm::{DnsRecord, DnsRecordType, PlaynetCertificate},
-    log_events,
-    resource::AllocatedVm,
-    test_env::{TestEnv, TestEnvAttribute},
-    test_env_api::{
-        get_dependency_path, AcquirePlaynetCertificate, CreatePlaynetDnsRecords,
-        HasTopologySnapshot, SshSession,
+use crate::{
+    driver::{
+        farm::{DnsRecord, DnsRecordType, PlaynetCertificate},
+        log_events,
+        resource::AllocatedVm,
+        test_env::{TestEnv, TestEnvAttribute},
+        test_env_api::{
+            get_dependency_path, AcquirePlaynetCertificate, CreatePlaynetDnsRecords,
+            HasTopologySnapshot, SshSession,
+        },
+        test_setup::InfraProvider,
+        universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
     },
-    test_setup::InfraProvider,
-    universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
+    retry_with_msg_async,
 };
 
 // Constants
@@ -24,6 +30,8 @@ const IMAGE_PATH: &str = "rs/tests/ic_gateway_uvm_config_image.zst";
 const IC_GATEWAY_VMS_DIR: &str = "ic_gateway_vms";
 const PLAYNET_FILE: &str = "playnet.json";
 const BN_AAAA_RECORDS_CREATED_EVENT_NAME: &str = "bn_aaaa_records_created_event";
+const READY_TIMEOUT: Duration = Duration::from_secs(60);
+const RETRY_INTERVAL: Duration = Duration::from_secs(5);
 
 /// Represents an IC HTTP Gateway VM, it is a wrapper around Farm's Universal VM.
 #[derive(Debug)]
@@ -75,7 +83,7 @@ impl IcGatewayVm {
 
         // Get IPv6 address and API node URLs
         let vm_ipv6 = allocated_vm.ipv6.to_string();
-        let api_nodes_urls = self.get_api_nodes_urls(env)?;
+        let api_nodes_urls = self.get_api_nodes_urls(env);
 
         // Handle playnet configuration and DNS records
         let playnet = self.load_or_create_playnet(env, &vm_ipv6)?;
@@ -88,28 +96,30 @@ impl IcGatewayVm {
         // Save playnet configuration and start the gateway
         let playnet_url = Url::parse(&format!("https://{}", bn_fqdn))?;
         env.write_deployed_ic_gateway(&self.universal_vm.name, &playnet_url, &allocated_vm)?;
-        self.start_gateway_container(&deployed_vm, &playnet, &api_nodes_urls)?;
+        self.start_gateway_container(&deployed_vm, &playnet, api_nodes_urls)?;
 
-        info!(
-            logger,
-            "IC Gateway started successfully with URL: {}", playnet_url
-        );
+        // Wait for the service to become ready.
+        // Readiness is defined when some API boundary node used by ic-gateway responds with HTTP 200 to /api/v2/status.
+        let health_url = playnet_url.join("/api/v2/status")?;
+        let msg = format!("await_status_is_healthy of {}", self.universal_vm.name);
+        let result = execute_async(await_status_is_healthy(&env.logger(), health_url, msg));
+        match result {
+            Ok(()) => info!(
+                logger,
+                "IC Gateway started successfully with URL: {}", playnet_url
+            ),
+            Err(err) => error!(logger, "IC Gateway didn't come up healthy: {err}",),
+        }
 
         Ok(())
     }
 
     /// Retrieves API boundary node URLs from the topology.
-    fn get_api_nodes_urls(&self, env: &TestEnv) -> Result<String> {
-        let urls: Vec<_> = env
-            .topology_snapshot()
+    fn get_api_nodes_urls(&self, env: &TestEnv) -> Vec<String> {
+        env.topology_snapshot()
             .api_boundary_nodes()
             .map(|node| format!("https://[{}]", node.get_ip_addr()))
-            .collect();
-        if urls.is_empty() {
-            Err(anyhow!("No API boundary nodes found in topology"))
-        } else {
-            Ok(urls.join(","))
-        }
+            .collect()
     }
 
     /// Loads existing playnet configuration or creates a new one.
@@ -191,8 +201,12 @@ impl IcGatewayVm {
         &self,
         deployed_universal_vm: &DeployedUniversalVm,
         playnet: &Playnet,
-        api_nodes_urls: &str,
+        api_nodes_urls: Vec<String>,
     ) -> Result<()> {
+        let api_nodes_urls = (!api_nodes_urls.is_empty())
+            .then(|| api_nodes_urls.join(","))
+            .ok_or_else(|| anyhow!("IC Gateway can't start without API boundary nodes"))?;
+
         let bash_script = format!(
             r#"
 # Prepare certificates and private key
@@ -222,38 +236,6 @@ docker run --name=ic-gateway -d \
   --network host \
   --env-file ic-gateway.env \
   ic_gatewayd:image
-
-# Wait for the service to become ready.
-# Readiness is defined when some API boundary node used by ic-gateway responds with HTTP 200 to /api/v2/status.
-
-URL="https://{domain}/api/v2/status"
-TOTAL_TIMEOUT=80
-REQUEST_TIMEOUT=2
-RETRY_INTERVAL=5
-
-start_time=$(date +%s)
-echo "Waiting for ic-gateway to become ready..."
-
-while true; do
-  current_time=$(date +%s)
-  elapsed=$((current_time - start_time))
-
-  http_code=$(curl --silent --output /dev/null --write-out "%{{http_code}}" \
-                    --max-time "${{REQUEST_TIMEOUT}}" "$URL")
-
-  if [ "$http_code" -eq 200 ]; then
-    echo "ic-gateway is ready to serve traffic"
-    exit 0
-  fi
-
-  if [ "$elapsed" -ge "${{TOTAL_TIMEOUT}}" ]; then
-    echo "ic-gateway did not become ready within ${{TOTAL_TIMEOUT}}s"
-    exit 1
-  fi
-
-  echo "ic-gateway not ready yet (status: $http_code). Retrying in ${{RETRY_INTERVAL}}s..."
-  sleep "$RETRY_INTERVAL"
-done
 "#,
             key = playnet.playnet_cert.cert.priv_key_pem,
             cert = playnet.playnet_cert.cert.cert_pem,
@@ -366,5 +348,34 @@ impl HasIcGatewayVm for TestEnv {
         let path = Path::new(IC_GATEWAY_VMS_DIR).join(name);
         self.write_json_object(path.join(PLAYNET_FILE), playnet)?;
         self.write_json_object(path.join(IC_GATEWAY_VM_FILE), allocated_vm)
+    }
+}
+
+async fn await_status_is_healthy(logger: &Logger, url: Url, msg: String) -> Result<()> {
+    let client = Client::builder().build()?;
+    let request = Request::new(Method::GET, url);
+    retry_with_msg_async!(&msg, logger, READY_TIMEOUT, RETRY_INTERVAL, || async {
+        let response = client
+            .execute(request.try_clone().unwrap())
+            .await
+            .context("failed to execute request")?;
+        if response.status() == StatusCode::OK {
+            return Ok(());
+        }
+        bail!("ic-gateway not ready yet ...")
+    })
+    .await
+}
+
+pub fn execute_async<F, T>(future: F) -> T
+where
+    F: Future<Output = T>,
+{
+    match Handle::try_current() {
+        Ok(handle) => handle.block_on(future),
+        Err(_) => {
+            let rt = Runtime::new().expect("Failed to create runtime");
+            rt.block_on(future)
+        }
     }
 }
