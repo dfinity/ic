@@ -1,0 +1,11 @@
+[package]
+name = "repro"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+documentation.workspace = true
+edition.workspace = true
+
+[dependencies]
+tikv-jemalloc-ctl = { workspace = true }
+tikv-jemallocator = { workspace = true }
