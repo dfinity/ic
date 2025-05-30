@@ -1823,6 +1823,16 @@ fn test_icp_get_encoded_blocks_returns_multiple_archive_callbacks() {
     );
 }
 
+#[test]
+fn test_archiving_hits_instruction_limit_purging_blocks_from_ledger() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_hits_instruction_limit_purging_blocks_from_ledger(
+        ledger_wasm(), encode_init_args, 390_000,
+        ic_ledger_suite_state_machine_tests::archiving::query_encoded_blocks,
+        icp_archives,
+        ic_ledger_suite_state_machine_tests::archiving::get_encoded_blocks,
+    );
+}
+
 mod metrics {
     use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
     use ic_ledger_suite_state_machine_tests::metrics::LedgerSuiteType;
