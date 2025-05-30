@@ -12,7 +12,7 @@ use crate::{
 };
 
 use ic_cdk::println;
-use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
+use ic_nervous_system_common::E8;
 use ic_nervous_system_governance::maturity_modulation::{
     apply_maturity_modulation, MIN_MATURITY_MODULATION_PERMYRIAD,
 };
@@ -36,7 +36,7 @@ use crate::{tla_log_label, tla_log_locals};
 use std::collections::BTreeMap;
 
 /// The delay in seconds between initiating a maturity disbursement and the actual disbursement.
-const DISBURSEMENT_DELAY_SECONDS: u64 = ONE_DAY_SECONDS * 7;
+const DISBURSEMENT_DELAY_SECONDS: u64 = 60;
 /// The maximum number of disbursements in a neuron. This makes it possible to do daily
 /// disbursements after every reward event (as 10 > 7).
 const MAX_NUM_DISBURSEMENTS: usize = 10;
