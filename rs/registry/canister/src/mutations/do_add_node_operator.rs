@@ -112,9 +112,9 @@ mod tests {
             node_operator_principal_id: PrincipalId::new_user_test_id(100).to_vec(),
             node_allowance: 1, // Should be > 0 to add a new node
             node_provider_principal_id: PrincipalId::new_user_test_id(1000).to_vec(),
-            dc_id: "DC1".to_string(),
+            dc_id: "dc1".to_string(),
             rewardable_nodes: btreemap! { "type1.1".to_string() => 1 },
-            ipv6: Some("foo".to_string()),
+            ipv6: Some("bar".to_string()),
             max_rewardable_nodes: btreemap! { "type1.2".to_string() => 1 },
         };
         assert_eq!(node_operator_record, expected);
