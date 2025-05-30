@@ -351,7 +351,8 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                 ),
                 dapp_canisters: Some(sns_init_pb::DappCanisters {
                     canisters: vec![pb::Canister {
-                        id: Some(CanisterId::from_u64(1000).get()),
+                        // must match `SPECIFIED_CANISTER_ID` defined in `ic-nns-test-utils`
+                        id: Some(CanisterId::from_u64(0x2100000).get())
                     }],
                 }),
                 min_participants: original_swap_parameters.minimum_participants,
@@ -689,7 +690,8 @@ mod convert_create_service_nervous_system_proposal_to_sns_init_payload_tests_wit
                 ),
                 dapp_canisters: Some(sns_init_pb::DappCanisters {
                     canisters: vec![pb::Canister {
-                        id: Some(CanisterId::from_u64(1000).get()),
+                        // must match `SPECIFIED_CANISTER_ID` defined in `ic-nns-test-utils`
+                        id: Some(CanisterId::from_u64(0x2100000).get())
                     }],
                 }),
                 min_participants: original_swap_parameters.minimum_participants,
