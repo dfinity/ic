@@ -13,7 +13,7 @@ pub fn get_asset_as_string(
     let log = env.logger();
     info!(log, "GET asset {key} as string from canister {canister_id} through ic-gateway {ic_gateway_vm_name}");
     let ic_gateway = env.get_deployed_ic_gateway(ic_gateway_vm_name).unwrap();
-    let ic_gateway_url = ic_gateway.https_url().unwrap();
+    let ic_gateway_url = ic_gateway.get_public_url();
     let ic_gateway_domain = ic_gateway_url.domain().unwrap();
     let asset_url = format!("https://{canister_id}.{ic_gateway_domain}{key}");
     info!(log, "asset url is {asset_url}");

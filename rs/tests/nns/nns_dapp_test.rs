@@ -111,18 +111,11 @@ fn get_html(env: &TestEnv, ic_gateway_url: Url, canister_id: Principal, dapp_anc
 
 pub fn test(env: TestEnv) {
     let ic_gateway = env.get_deployed_ic_gateway(IC_GATEWAY_VM_NAME).unwrap();
-    let ic_gateway_https: Url = ic_gateway
-        .https_url()
-        .expect("expected a valid HTTPS URL from `{IC_GATEWAY_VM_NAME}`");
+    let ic_gateway_url = ic_gateway.get_public_url();
     let (ii_canister_id, nns_dapp_canister_id) =
-        install_ii_nns_dapp_and_subnet_rental(&env, ic_gateway_https.clone(), None);
+        install_ii_nns_dapp_and_subnet_rental(&env, &ic_gateway_url, None);
     let ii_anchor = "<title>Internet Identity</title>";
     let nns_dapp_anchor = "<title>NNS Dapp</title>";
-    get_html(&env, ic_gateway_https.clone(), ii_canister_id, ii_anchor);
-    get_html(
-        &env,
-        ic_gateway_https,
-        nns_dapp_canister_id,
-        nns_dapp_anchor,
-    );
+    get_html(&env, ic_gateway_url.clone(), ii_canister_id, ii_anchor);
+    get_html(&env, ic_gateway_url, nns_dapp_canister_id, nns_dapp_anchor);
 }

@@ -43,11 +43,11 @@ pub struct IcGatewayVm {
 #[derive(Debug)]
 pub struct DeployedIcGatewayVm {
     vm: AllocatedVm,
-    https_url: Option<Url>,
+    https_url: Url,
 }
 
 impl DeployedIcGatewayVm {
-    pub fn https_url(&self) -> Option<Url> {
+    pub fn get_public_url(&self) -> Url {
         self.https_url.clone()
     }
 
@@ -108,7 +108,7 @@ impl IcGatewayVm {
                 logger,
                 "IC Gateway started successfully with URL: {}", playnet_url
             ),
-            Err(err) => error!(logger, "IC Gateway didn't come up healthy: {err}",),
+            Err(err) => error!(logger, "IC Gateway didn't come up healthy: {err}"),
         }
 
         Ok(())
@@ -305,7 +305,11 @@ impl HasIcGatewayVm for TestEnv {
             .read_json_object(&playnet_path)
             .with_context(|| format!("Failed to read playnet file: {}", playnet_path.display()))?;
 
-        let https_url = playnet.scheme().eq("https").then(|| playnet.clone());
+        let https_url = playnet
+            .scheme()
+            .eq("https")
+            .then(|| playnet.clone())
+            .context("Expected a TLS URL")?;
 
         let vm = self
             .get_deployed_universal_vm(name)
