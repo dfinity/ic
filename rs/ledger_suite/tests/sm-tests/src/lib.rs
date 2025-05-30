@@ -5956,8 +5956,8 @@ pub mod archiving {
         ) where
             B: Eq + Debug,
         {
-            let ledger_blocks_res = get_blocks_fn(&env, ledger_id, 0, 1);
-            let archive_blocks_res = archive_get_blocks_fn(&env, archive_canister_id, 0, 1);
+            let ledger_blocks_res = get_blocks_fn(env, ledger_id, 0, 1);
+            let archive_blocks_res = archive_get_blocks_fn(env, archive_canister_id, 0, 1);
             assert_eq!(
                 ledger_blocks_res
                     .blocks
