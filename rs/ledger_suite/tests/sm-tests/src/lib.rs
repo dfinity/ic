@@ -5973,10 +5973,12 @@ pub mod archiving {
         /// Get the remaining capacity of the archive canister.
         fn get_archive_remaining_capacity(
             env: &StateMachine,
+            ledger_canister_id: CanisterId,
             archive_canister_id: CanisterId,
         ) -> u64 {
             Decode!(
-                &env.query(
+                &env.execute_ingress_as(
+                    ledger_canister_id.get(),
                     archive_canister_id,
                     "remaining_capacity",
                     Encode!().unwrap(),
@@ -6054,13 +6056,13 @@ pub mod archiving {
         );
 
         let archive_initial_remaining_capacity =
-            get_archive_remaining_capacity(&env, archive_canister_id);
+            get_archive_remaining_capacity(&env, ledger_id, archive_canister_id);
 
         // Attempt another transfer, and verify that it also fails with the same error.
         assert_transfer_hits_instruction_limit(&env, ledger_id, p1, p2);
 
         let archive_subsequent_remaining_capacity =
-            get_archive_remaining_capacity(&env, archive_canister_id);
+            get_archive_remaining_capacity(&env, ledger_id, archive_canister_id);
 
         // Verify that the remaining capacity of the archive canister has decreased after the
         // second transfer. This is because the same blocks were sent to the archive twice, since
