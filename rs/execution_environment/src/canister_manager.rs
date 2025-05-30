@@ -62,6 +62,7 @@ use ic_types::{
     NumInstructions, PrincipalId, SnapshotId, SubnetId, Time,
 };
 use ic_wasm_types::WasmHash;
+use more_asserts::debug_unreachable;
 use num_traits::{SaturatingAdd, SaturatingSub};
 use prometheus::IntCounter;
 use std::path::PathBuf;
@@ -1947,30 +1948,13 @@ impl CanisterManager {
         let snapshot = self.get_snapshot(canister.canister_id(), snapshot_id, state)?;
 
         // Charge upfront for the baseline plus the maximum possible size of the returned slice or fail.
-        let (offset, num_response_bytes) = match &kind {
-            CanisterSnapshotDataKind::WasmModule { offset, size } => (*offset, *size),
-            CanisterSnapshotDataKind::MainMemory { offset, size } => (*offset, *size),
-            CanisterSnapshotDataKind::StableMemory { offset, size } => (*offset, *size),
-            // In this case, we might overcharge. But the stored chunks are also charged fully even if they are smaller.
-            CanisterSnapshotDataKind::WasmChunk { .. } => {
-                (0 /* value meaningless but unreachable */, CHUNK_SIZE)
-            }
-        };
-        if num_response_bytes > MAX_SLICE_SIZE_BYTES
-            && !matches!(&kind, CanisterSnapshotDataKind::WasmChunk { .. })
-        {
-            return Err(CanisterManagerError::InvalidSubslice {
-                offset,
-                size: num_response_bytes,
-            });
-        }
-        let size = NumInstructions::new(num_response_bytes);
+        let num_response_bytes = get_response_size(&kind)?;
         if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
             &sender,
             canister,
             self.config
                 .canister_snapshot_data_baseline_instructions
-                .saturating_add(&size),
+                .saturating_add(&NumInstructions::new(num_response_bytes)),
             subnet_size,
             // For the `read_snapshot_data` operation, it does not matter if this is a Wasm64 or Wasm32 module.
             WasmExecutionMode::Wasm32,
@@ -2224,7 +2208,7 @@ impl CanisterManager {
                     .wasm_binary
                     .write(&args.chunk, offset as usize);
                 if res.is_err() {
-                    return Err(CanisterManagerError::InvalidSubslice {
+                    return Err(CanisterManagerError::InvalidSlice {
                         offset,
                         size: args.chunk.len() as u64,
                     });
@@ -2234,7 +2218,7 @@ impl CanisterManager {
                 let max_size_bytes =
                     snapshot_inner.wasm_memory().size.get() * WASM_PAGE_SIZE_IN_BYTES;
                 if max_size_bytes < args.chunk.len().saturating_add(offset as usize) {
-                    return Err(CanisterManagerError::InvalidSubslice {
+                    return Err(CanisterManagerError::InvalidSlice {
                         offset,
                         size: args.chunk.len() as u64,
                     });
@@ -2246,7 +2230,7 @@ impl CanisterManager {
                 let max_size_bytes =
                     snapshot_inner.stable_memory().size.get() * WASM_PAGE_SIZE_IN_BYTES;
                 if max_size_bytes < args.chunk.len().saturating_add(offset as usize) {
-                    return Err(CanisterManagerError::InvalidSubslice {
+                    return Err(CanisterManagerError::InvalidSlice {
                         offset,
                         size: args.chunk.len() as u64,
                     });
@@ -2357,6 +2341,28 @@ impl CanisterManager {
             ),
         }
     }
+}
+
+fn get_response_size(kind: &CanisterSnapshotDataKind) -> Result<u64, CanisterManagerError> {
+    if !matches!(&kind, CanisterSnapshotDataKind::WasmChunk { .. }) {
+        return Ok(CHUNK_SIZE);
+    }
+    let size = match kind {
+        CanisterSnapshotDataKind::WasmModule { size, .. } => *size,
+        CanisterSnapshotDataKind::MainMemory { size, .. } => *size,
+        CanisterSnapshotDataKind::StableMemory { size, .. } => *size,
+        CanisterSnapshotDataKind::WasmChunk { .. } => {
+            debug_unreachable!();
+            CHUNK_SIZE
+        }
+    };
+    if size > MAX_SLICE_SIZE_BYTES {
+        return Err(CanisterManagerError::SliceTooLarge {
+            requested: size,
+            allowed: MAX_SLICE_SIZE_BYTES,
+        });
+    }
+    Ok(size)
 }
 
 /// Uninstalls a canister.
