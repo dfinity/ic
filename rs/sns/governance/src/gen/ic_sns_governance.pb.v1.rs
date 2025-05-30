@@ -2242,11 +2242,11 @@ pub struct GetMetricsRequest {
     PartialEq,
     ::prost::Message,
 )]
-pub struct GetMetricsResponse {
-    #[prost(uint64, optional, tag = "1")]
-    pub num_recently_submitted_proposals: ::core::option::Option<u64>,
-    #[prost(uint64, optional, tag = "2")]
-    pub last_ledger_block_timestamp: ::core::option::Option<u64>,
+pub struct Metrics {
+    #[prost(uint64, tag = "1")]
+    pub num_recently_submitted_proposals: u64,
+    #[prost(uint64, tag = "2")]
+    pub last_ledger_block_timestamp: u64,
 }
 /// Request message for 'get_sns_initialization_parameters'
 #[derive(
