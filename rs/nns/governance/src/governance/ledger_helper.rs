@@ -8,7 +8,6 @@ use crate::{
 use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nns_common::pb::v1::NeuronId;
 use icp_ledger::AccountIdentifier;
-use icrc_ledger_types::icrc1::account::Account;
 
 /// An object that represents the burning of neuron fees.
 #[derive(Clone, PartialEq, Debug)]
@@ -169,12 +168,12 @@ impl NeuronStakeTransferOperation {
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct MintIcpOperation {
-    account: Account,
+    account: AccountIdentifier,
     amount_e8s: u64,
 }
 
 impl MintIcpOperation {
-    pub fn new(account: Account, amount_e8s: u64) -> Self {
+    pub fn new(account: AccountIdentifier, amount_e8s: u64) -> Self {
         Self {
             amount_e8s,
             account,
@@ -188,13 +187,7 @@ impl MintIcpOperation {
         now_seconds: u64,
     ) -> Result<(), GovernanceError> {
         let _ = ledger
-            .transfer_funds(
-                self.amount_e8s,
-                0,
-                None,
-                AccountIdentifier::from(self.account),
-                now_seconds,
-            )
+            .transfer_funds(self.amount_e8s, 0, None, self.account, now_seconds)
             .await
             .map_err(|err| {
                 GovernanceError::new_with_message(

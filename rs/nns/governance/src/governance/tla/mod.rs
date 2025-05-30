@@ -17,8 +17,7 @@ pub use tla_instrumentation::checker::{check_tla_code_link, PredicateDescription
 use std::path::PathBuf;
 
 use ic_cdk::println;
-use icp_ledger::{AccountIdentifier, Subaccount};
-use icrc_ledger_types::icrc1::account::Account as Icrc1Account;
+use icp_ledger::Subaccount;
 
 mod common;
 mod store;
@@ -93,10 +92,12 @@ fn neuron_global() -> TlaValue {
                                         (
                                             "account_id".to_string(),
                                             {
-                                                let account = d.account_to_disburse_to.as_ref().expect("Account are assumed to be Some in maturity_disbursements_in_progress entries.");
-                                                account_to_tla(AccountIdentifier::from(
-                                                    Icrc1Account::try_from(account.clone()).expect("An invalid Icrc1 account found in maturity_disbursements_in_progress: {account:?}"),
-                                                ))
+                                                let account = d.destination
+                                                    .as_ref()
+                                                    .expect("Destination should exist in maturity_disbursements_in_progress entries")
+                                                    .try_into_account_identifier()
+                                                    .expect("Account are assumed to be Some in maturity_disbursements_in_progress entries.");
+                                                account_to_tla(account)
                                             },
                                         ),
                                         ("amount".to_string(), d.amount_e8s.to_tla_value()),

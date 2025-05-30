@@ -3430,6 +3430,7 @@ async fn test_disallow_large_manage_neuron_proposals() {
                 command: Some(Command::DisburseMaturity(DisburseMaturity {
                     percentage_to_disburse: 100,
                     to_account: None,
+                    to_account_identifier: None,
                 })),
             }))),
             ..Default::default()
@@ -3458,6 +3459,38 @@ async fn test_disallow_large_manage_neuron_proposals() {
                             subaccount: Some(GovernanceSubaccount {
                                 subaccount: vec![1u8; 1_000_000],
                             }),
+                        }),
+                        to_account_identifier: None,
+                    })),
+                }))),
+                ..Default::default()
+            },
+        )
+        .now_or_never()
+        .unwrap();
+    assert_matches!(
+        result,
+        Err(GovernanceError { error_type, .. })
+        if error_type == ErrorType::InvalidCommand as i32
+    );
+    // Disburse maturity with invalid to_account_identifier should not be allowed.
+    let result = gov
+        .make_proposal(
+            &NeuronId { id: 2 },
+            // Must match neuron 2's serialized_id.
+            &principal(2),
+            &Proposal {
+                title: Some("A Manage Neuron Proposal".to_string()),
+                action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
+                        id: 1,
+                    })),
+                    id: None,
+                    command: Some(Command::DisburseMaturity(DisburseMaturity {
+                        percentage_to_disburse: 100,
+                        to_account: None,
+                        to_account_identifier: Some(AccountIdentifierProto {
+                            hash: vec![1u8; 1_000_000],
                         }),
                     })),
                 }))),

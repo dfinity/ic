@@ -5,6 +5,7 @@ use crate::{
         governance::{neuron_in_flight_command::Command, NeuronInFlightCommand},
         governance_error::ErrorType,
         manage_neuron::DisburseMaturity,
+        maturity_disbursement::Destination,
         Account, FinalizeDisburseMaturity, GovernanceError, MaturityDisbursement, NeuronState,
         Subaccount,
     },
@@ -17,6 +18,7 @@ use ic_nervous_system_governance::maturity_modulation::{
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_types::PrincipalId;
+use icp_ledger::{protobuf::AccountIdentifier as AccountIdentifierProto, AccountIdentifier};
 use icrc_ledger_types::icrc1::account::Account as Icrc1Account;
 use std::{cell::RefCell, collections::HashMap, fmt::Display, thread::LocalKey, time::Duration};
 
@@ -150,6 +152,63 @@ impl TryFrom<Account> for Icrc1Account {
     }
 }
 
+impl Destination {
+    pub fn try_new(
+        account: &Option<Account>,
+        account_identifier: &Option<AccountIdentifierProto>,
+        caller: PrincipalId,
+    ) -> Result<Self, String> {
+        let destination = match (account, account_identifier) {
+            (Some(account), None) => Destination::AccountToDisburseTo(account.clone()),
+            (None, Some(account_identifier_proto)) => {
+                Destination::AccountIdentifierToDisburseTo(account_identifier_proto.clone())
+            }
+            (None, None) => Destination::AccountToDisburseTo(Account {
+                owner: Some(caller),
+                subaccount: None,
+            }),
+            (Some(_), Some(_)) => {
+                return Err("Cannot provide both to_account and to_account_identifier".to_string())
+            }
+        };
+        // We make sure we only construct a destination that can be converted to a valid account identifier.
+        let _ = destination.try_into_account_identifier()?;
+        Ok(destination)
+    }
+
+    /// Returns the account identifier to disburse to. This should normally not fail because all the
+    /// validations happen at `try_new`. Failure can only happen due to data corruption.
+    pub(crate) fn try_into_account_identifier(&self) -> Result<AccountIdentifier, String> {
+        match self {
+            Destination::AccountToDisburseTo(account) => {
+                let icrc1_account = Icrc1Account::try_from(account.clone())?;
+                Ok(AccountIdentifier::from(icrc1_account))
+            }
+            Destination::AccountIdentifierToDisburseTo(account_identifier_proto) => {
+                AccountIdentifier::try_from(account_identifier_proto)
+                    .map_err(|_| "Invalid account identifier".to_string())
+            }
+        }
+    }
+
+    /// Returns the account to disburse to, if it is specified as `AccountToDisburseTo`. Otherwise,
+    /// returns `None` since an `AccountIdentifier` cannot be converted to an `Account`.
+    pub fn into_account(&self) -> Option<Account> {
+        match self {
+            Destination::AccountToDisburseTo(account) => Some(account.clone()),
+            Destination::AccountIdentifierToDisburseTo(_) => None,
+        }
+    }
+
+    /// Returns the account identifier to disburse to. This should normally not fail because all the
+    /// validations happens at `try_new`. Failure can only happen due to data corruption.
+    pub fn into_account_identifier_proto(&self) -> Option<AccountIdentifierProto> {
+        self.try_into_account_identifier()
+            .ok()
+            .map(AccountIdentifierProto::from)
+    }
+}
+
 // This conversion is needed for neuron lock.
 impl From<Icrc1Account> for Account {
     fn from(account: Icrc1Account) -> Self {
@@ -217,18 +276,15 @@ pub fn initiate_maturity_disbursement(
     let DisburseMaturity {
         percentage_to_disburse,
         to_account,
+        to_account_identifier,
     } = disburse_maturity;
 
     if *percentage_to_disburse == 0 || *percentage_to_disburse > 100 {
         return Err(InitiateMaturityDisbursementError::InvalidPercentage);
     }
 
-    if let Some(to_account) = to_account {
-        // Even though the conversion result is not used when initiating, we still want to validate
-        // the account identifier so that we only store valid account identifiers in the neuron.
-        let _ = Icrc1Account::try_from(to_account.clone())
-            .map_err(|reason| InitiateMaturityDisbursementError::InvalidDestination { reason })?;
-    }
+    let destination = Destination::try_new(to_account, to_account_identifier, *caller)
+        .map_err(|reason| InitiateMaturityDisbursementError::InvalidDestination { reason })?;
 
     let timestamp_of_disbursement_seconds = now_seconds;
     let finalize_disbursement_timestamp_seconds = now_seconds + DISBURSEMENT_DELAY_SECONDS;
@@ -270,13 +326,9 @@ pub fn initiate_maturity_disbursement(
     if num_disbursements >= MAX_NUM_DISBURSEMENTS {
         return Err(InitiateMaturityDisbursementError::TooManyDisbursements);
     }
-    let account_to_disburse_to = Some(to_account.clone().unwrap_or(Account {
-        owner: Some(*caller),
-        subaccount: None,
-    }));
 
     let disbursement_in_progress = MaturityDisbursement {
-        account_to_disburse_to,
+        destination: Some(destination),
         amount_e8s: disbursement_maturity_e8s,
         timestamp_of_disbursement_seconds,
         finalize_disbursement_timestamp_seconds,
@@ -297,12 +349,12 @@ pub fn initiate_maturity_disbursement(
 }
 
 #[derive(Debug, Clone)]
-pub struct MaturityDisbursementFinalization {
-    pub neuron_id: NeuronId,
-    pub account: Icrc1Account,
-    pub amount_to_mint_e8s: u64,
-    pub original_maturity_e8s_equivalent: u64,
-    pub finalize_disbursement_timestamp_seconds: u64,
+struct MaturityDisbursementFinalization {
+    neuron_id: NeuronId,
+    destination: Destination,
+    amount_to_mint_e8s: u64,
+    original_maturity_e8s_equivalent: u64,
+    finalize_disbursement_timestamp_seconds: u64,
 }
 
 /// Errors that can occur when finalizing a maturity disbursement. The error is just for logging
@@ -455,7 +507,7 @@ fn next_maturity_disbursement_to_finalize(
 
     let MaturityDisbursement {
         amount_e8s: original_maturity_e8s_equivalent,
-        account_to_disburse_to,
+        destination,
         finalize_disbursement_timestamp_seconds,
         timestamp_of_disbursement_seconds: _,
     } = maturity_disbursement_in_progress;
@@ -489,15 +541,13 @@ fn next_maturity_disbursement_to_finalize(
 
     // These should be impossible unless there is some bug, since the initiation of the disbursement
     // ensures the conversion works, and only allows `Some`.
-    let account = account_to_disburse_to.ok_or(
+    let destination = destination.ok_or(
         FinalizeMaturityDisbursementError::NoAccountToDisburseTo(neuron_id),
     )?;
-    let account = Icrc1Account::try_from(account)
-        .map_err(|reason| FinalizeMaturityDisbursementError::AccountConversionFailure { reason })?;
 
     Ok(Some(MaturityDisbursementFinalization {
         neuron_id,
-        account,
+        destination,
         amount_to_mint_e8s: maturity_to_disburse_after_modulation_e8s,
         finalize_disbursement_timestamp_seconds,
         original_maturity_e8s_equivalent,
@@ -551,7 +601,7 @@ async fn try_finalize_maturity_disbursement(
 
     let Some(MaturityDisbursementFinalization {
         neuron_id,
-        account,
+        destination,
         amount_to_mint_e8s,
         original_maturity_e8s_equivalent,
         finalize_disbursement_timestamp_seconds,
@@ -571,7 +621,8 @@ async fn try_finalize_maturity_disbursement(
         now_seconds,
         Command::FinalizeDisburseMaturity(FinalizeDisburseMaturity {
             amount_to_mint_e8s,
-            to_account: Some(Account::from(account)),
+            to_account: destination.into_account(),
+            to_account_identifier: destination.into_account_identifier_proto(),
             finalize_disbursement_timestamp_seconds,
             original_maturity_e8s_equivalent,
         }),
@@ -598,13 +649,16 @@ async fn try_finalize_maturity_disbursement(
 
     // Step 3: call ledger to perform the minting. If this fails, the neuron mutation needs to
     // be reversed.
-    let mint_icp_operation = MintIcpOperation::new(account, amount_to_mint_e8s);
+    let account_identifier = destination
+        .try_into_account_identifier()
+        .map_err(|reason| FinalizeMaturityDisbursementError::AccountConversionFailure { reason })?;
+    let mint_icp_operation = MintIcpOperation::new(account_identifier, amount_to_mint_e8s);
     let ledger = governance.with_borrow(|governance| governance.get_ledger());
     tla_log_locals! {
         neuron_id: neuron_id.id,
         current_disbursement: TlaValue::Record(BTreeMap::from(
             [
-                ("account_id".to_string(), account_to_tla(icp_ledger::AccountIdentifier::from(account))),
+                ("account_id".to_string(), account_to_tla(account_identifier)),
                 ("amount".to_string(), maturity_disbursement_in_progress.amount_e8s.to_tla_value()),
             ]
         ))

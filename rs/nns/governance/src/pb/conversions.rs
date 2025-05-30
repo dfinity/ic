@@ -984,6 +984,7 @@ impl From<pb::manage_neuron::DisburseMaturity> for pb_api::manage_neuron::Disbur
         Self {
             percentage_to_disburse: item.percentage_to_disburse,
             to_account: item.to_account.map(|x| x.into()),
+            to_account_identifier: item.to_account_identifier,
         }
     }
 }
@@ -992,6 +993,7 @@ impl From<pb_api::manage_neuron::DisburseMaturity> for pb::manage_neuron::Disbur
         Self {
             percentage_to_disburse: item.percentage_to_disburse,
             to_account: item.to_account.map(|x| x.into()),
+            to_account_identifier: item.to_account_identifier,
         }
     }
 }
@@ -4007,7 +4009,15 @@ impl From<pb::MaturityDisbursement> for pb_api::MaturityDisbursement {
     fn from(item: pb::MaturityDisbursement) -> Self {
         Self {
             amount_e8s: Some(item.amount_e8s),
-            account_to_disburse_to: item.account_to_disburse_to.map(|x| x.into()),
+            account_to_disburse_to: item
+                .destination
+                .as_ref()
+                .and_then(|x| x.into_account())
+                .map(|x| x.into()),
+            account_identifier_to_disburse_to: item
+                .destination
+                .as_ref()
+                .and_then(|x| x.into_account_identifier_proto()),
             timestamp_of_disbursement_seconds: Some(item.timestamp_of_disbursement_seconds),
             finalize_disbursement_timestamp_seconds: Some(
                 item.finalize_disbursement_timestamp_seconds,
