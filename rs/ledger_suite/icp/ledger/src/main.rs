@@ -1507,14 +1507,8 @@ fn query_encoded_blocks(
     }
 }
 
-#[update]
-#[candid_method(update)]
-async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
-    if !LEDGER
-        .read()
-        .unwrap()
-        .can_send(&PrincipalId::from(caller()))
-    {
+fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<Nat, ApproveError> {
+    if !LEDGER.read().unwrap().can_send(&PrincipalId::from(caller)) {
         trap("Anonymous principal cannot approve token transfers on the ledger.");
     }
 
@@ -1524,7 +1518,7 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
     let now = TimeStamp::from_nanos_since_unix_epoch(time());
 
     let from_account = Account {
-        owner: caller(),
+        owner: caller,
         subaccount: arg.from_subaccount,
     };
     let from = AccountIdentifier::from(from_account);
@@ -1589,7 +1583,7 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
             memo: Memo(0),
             icrc1_memo: arg.memo.map(|x| x.0),
         };
-        let (block_index, hash) = apply_transaction(&mut *ledger, tx, now, expected_fee)
+        let result = apply_transaction(&mut *ledger, tx, now, expected_fee)
             .map_err(convert_transfer_error)
             .map_err(|err| {
                 let err: ApproveError = match ApproveError::try_from(err) {
@@ -1599,14 +1593,29 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
                 err
             })?;
 
+        #[cfg(not(feature = "canbench-rs"))]
+        let (block_index, hash) = result;
+
+        #[cfg(feature = "canbench-rs")]
+        let (block_index, _hash) = result;
+
+        #[cfg(not(feature = "canbench-rs"))]
         set_certified_data(&hash.into_bytes());
 
         block_index
     };
 
+    Ok(Nat::from(block_index))
+}
+
+#[update]
+#[candid_method(update)]
+async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
+    let block_index = icrc2_approve_not_async(caller(), arg)?;
+
     let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
     archive_blocks::<Access>(DebugOutSink, max_msg_size as u64).await;
-    Ok(Nat::from(block_index))
+    Ok(block_index)
 }
 
 fn get_allowance(from: AccountIdentifier, spender: AccountIdentifier) -> Allowance {
