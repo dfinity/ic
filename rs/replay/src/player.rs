@@ -27,7 +27,7 @@ use ic_interfaces::{
     messaging::{MessageRouting, MessageRoutingError},
     time_source::SysTimeSource,
 };
-use ic_interfaces_registry::{RegistryClient, RegistryTransportRecord, RegistryValue};
+use ic_interfaces_registry::{RegistryClient, RegistryRecord, RegistryValue};
 use ic_interfaces_state_manager::{
     PermanentStateHashError, StateHashError, StateManager, StateReader,
 };
@@ -46,7 +46,7 @@ use ic_registry_keys::{make_blessed_replica_versions_key, make_subnet_record_key
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
 };
-use ic_registry_nns_data_provider::registry::registry_deltas_to_registry_transport_records;
+use ic_registry_nns_data_provider::registry::registry_deltas_to_registry_records;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{
     dechunkify_delta, dechunkify_get_value_response_content,
@@ -931,7 +931,7 @@ impl Player {
         &self,
         version: u64,
         ingress_expiry: Time,
-    ) -> Result<Vec<RegistryTransportRecord>, String> {
+    ) -> Result<Vec<RegistryRecord>, String> {
         self.certify_state_with_dummy_certification();
 
         let perform_query = Arc::new(Mutex::new(self.query_handler.clone()));
@@ -1218,7 +1218,7 @@ pub async fn public_only_for_test_get_changes_since(
     version: u64,
     ingress_expiry: Time,
     perform_query: &(impl PerformQuery + Sync),
-) -> Result<Vec<RegistryTransportRecord>, String> {
+) -> Result<Vec<RegistryRecord>, String> {
     get_changes_since(version, ingress_expiry, perform_query).await
 }
 
@@ -1226,7 +1226,7 @@ async fn get_changes_since(
     version: u64,
     ingress_expiry: Time,
     perform_query: &(impl PerformQuery + Sync),
-) -> Result<Vec<RegistryTransportRecord>, String> {
+) -> Result<Vec<RegistryRecord>, String> {
     let payload = serialize_get_changes_since_request(version).unwrap();
     let query = Query {
         source: QuerySource::User {
@@ -1256,7 +1256,7 @@ async fn get_changes_since(
                     inlined_deltas.push(delta);
                 }
 
-                registry_deltas_to_registry_transport_records(inlined_deltas)
+                registry_deltas_to_registry_records(inlined_deltas)
                     .map_err(|err| format!("{:?}", err))
             }
 
@@ -1562,7 +1562,7 @@ fn get_share_certified_hashes(
 fn write_records_to_local_store(
     local_store_path: &Path,
     latest_version: RegistryVersion,
-    mut records: Vec<RegistryTransportRecord>,
+    mut records: Vec<RegistryRecord>,
 ) {
     let local_store = LocalStoreImpl::new(local_store_path);
     println!(
@@ -2022,29 +2022,29 @@ mod tests {
         assert_eq!(
             result,
             Ok(vec![
-                RegistryTransportRecord {
+                RegistryRecord {
                     key: "at one point had a large value".to_string(),
                     value: Some(b"inline".to_vec()),
                     version: RegistryVersion::from(43),
                 },
-                RegistryTransportRecord {
+                RegistryRecord {
                     key: "boring".to_string(),
                     value: Some(b"herp".to_vec()),
                     version: RegistryVersion::from(43),
                 },
                 // This is the most interesting one. This shows that monolithic
                 // blob reconstitution worked the way it's supposed to.
-                RegistryTransportRecord {
+                RegistryRecord {
                     key: "at one point had a large value".to_string(),
                     value: Some(b"firstsecond".to_vec()),
                     version: RegistryVersion::from(44),
                 },
-                RegistryTransportRecord {
+                RegistryRecord {
                     key: "at one point had a large value".to_string(),
                     value: None,
                     version: RegistryVersion::from(45),
                 },
-                RegistryTransportRecord {
+                RegistryRecord {
                     key: "boring".to_string(),
                     value: Some(b"derp".to_vec()),
                     version: RegistryVersion::from(50),

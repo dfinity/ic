@@ -9,7 +9,11 @@ on the process that this file is part of, see
 
 ## Added
 
+* Expose a new metric `voting_power_snapshots_latest_snapshot_is_spike`.
+
 ## Changed
+
+* `MAX_NEURON_CREATION_SPIKE` is increased from 120 to 300.
 
 ## Deprecated
 

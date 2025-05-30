@@ -3,7 +3,6 @@ use anyhow::{bail, Context, Result};
 use config_types::GuestOSConfig;
 #[cfg(feature = "dev")]
 use ic_types::malicious_behaviour::MaliciousBehaviour;
-use regex::Regex;
 use std::env;
 use std::fmt::Write as _;
 use std::fs::{self, File};
@@ -374,13 +373,29 @@ impl BootstrapOptions {
         Ok(network_conf)
     }
 
-    fn validate_hostname(hostname: &str) -> Result<()> {
-        let pattern = Regex::new(r"^[a-zA-Z][a-zA-Z0-9]*(-[a-zA-Z0-9]+)*$").unwrap();
-        if hostname.is_empty() || pattern.is_match(hostname) {
-            Ok(())
-        } else {
-            bail!("Invalid hostname: '{hostname}'");
+    fn validate_hostname(hostname_str: &str) -> Result<()> {
+        let hostname = hostname_str.as_bytes();
+        if hostname.is_empty() {
+            return Ok(());
         }
+
+        if hostname.len() > 63 {
+            bail!("Hostname too long (must be max 63 bytes): '{hostname_str}'");
+        }
+
+        // The first and last character must be alphanumeric, middle characters can be alphanumeric
+        // or '-'.
+        let valid = hostname[0].is_ascii_alphanumeric()
+            && hostname.last().unwrap().is_ascii_alphanumeric()
+            && hostname
+                .iter()
+                .all(|c| c.is_ascii_alphanumeric() || *c == b'-');
+
+        if !valid {
+            bail!("Invalid hostname: '{hostname_str}'");
+        }
+
+        Ok(())
     }
 
     fn copy_dir_recursively(src: &Path, dst: &Path) -> Result<()> {
@@ -411,17 +426,22 @@ mod tests {
     fn test_is_valid_hostname() {
         // Valid hostnames
         assert!(BootstrapOptions::validate_hostname("").is_ok());
+        assert!(BootstrapOptions::validate_hostname("h").is_ok());
         assert!(BootstrapOptions::validate_hostname("hostname").is_ok());
         assert!(BootstrapOptions::validate_hostname("hostname123").is_ok());
         assert!(BootstrapOptions::validate_hostname("hostname-part2").is_ok());
         assert!(BootstrapOptions::validate_hostname("h-1-2-3").is_ok());
+        assert!(BootstrapOptions::validate_hostname("123hostname").is_ok());
 
         // Invalid hostnames
-        assert!(BootstrapOptions::validate_hostname("123hostname").is_err());
         assert!(BootstrapOptions::validate_hostname("hostname-").is_err());
         assert!(BootstrapOptions::validate_hostname("-hostname").is_err());
         assert!(BootstrapOptions::validate_hostname("hostname_invalid").is_err());
         assert!(BootstrapOptions::validate_hostname("hostname with spaces").is_err());
+        assert!(BootstrapOptions::validate_hostname(
+            "longlonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglong"
+        )
+        .is_err());
     }
 
     #[test]
@@ -476,6 +496,7 @@ mod tests {
                 use_nns_public_key: false,
                 nns_urls: vec![],
                 use_node_operator_private_key: false,
+                enable_trusted_execution_environment: false,
                 use_ssh_authorized_keys: false,
                 icos_dev_settings: Default::default(),
             },
