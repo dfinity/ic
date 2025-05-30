@@ -1,0 +1,24 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("//rs/repro:defs.bzl", "wrapper")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "@crate_index//:tikv-jemalloc-ctl",
+    "@crate_index//:tikv-jemallocator",
+]
+
+rust_binary(
+    name = "repro",
+    srcs = glob(
+        ["src/**"],
+    ),
+    deps = DEPENDENCIES,
+)
+
+# Build jemalloc as a tool and target at the same time
+wrapper(
+    name = "concurrent_repro",
+    tool = ":repro",
+    deps = [":repro"],
+)
