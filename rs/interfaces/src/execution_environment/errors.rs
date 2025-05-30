@@ -432,8 +432,9 @@ impl AsErrorHelp for HypervisorError {
                 doc_link: doc_ref("wasm-module-not-found"),
             },
             Self::OutOfMemory => ErrorHelp::UserError {
-                suggestion: "Check the canister's memory usage against the system-wide limits \
-                to determine why more memory cannot be used."
+                suggestion: "Check the canister's memory usage against its allocation \
+                and the system wide limits to determine why more memory cannot be \
+                allocated."
                     .to_string(),
                 doc_link: doc_ref("out-of-memory"),
             },
