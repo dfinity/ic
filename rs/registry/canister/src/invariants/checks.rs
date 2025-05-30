@@ -379,3 +379,6 @@ mod tests {
         assert!(snapshot_data.is_none());
     }
 }
+
+#[cfg(feature = "canbench-rs")]
+mod benches;
