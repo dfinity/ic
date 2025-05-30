@@ -230,6 +230,9 @@ pub fn build_icrc1_ledger_canister_method_args(
         crate::common::storage::types::IcrcOperation::Mint { .. } => {
             bail!("Mint Operation not supported")
         }
+        crate::common::storage::types::IcrcOperation::Pause { .. } => {
+            bail!("Pause Operation not supported")
+        }
         crate::common::storage::types::IcrcOperation::Approve {
             from,
             spender,
@@ -296,6 +299,9 @@ fn extract_caller_principal_from_icrc1_ledger_operation(
         }
         crate::common::storage::types::IcrcOperation::Mint { .. } => {
             bail!("Mint Operation not supported")
+        }
+        crate::common::storage::types::IcrcOperation::Pause { .. } => {
+            bail!("Pause Operation not supported")
         }
         crate::common::storage::types::IcrcOperation::Approve { from, .. } => from.owner,
         crate::common::storage::types::IcrcOperation::Transfer { from, spender, .. } => {

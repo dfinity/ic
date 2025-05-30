@@ -280,7 +280,9 @@ impl StorageClient {
                 expected_allowance TEXT,
                 fee TEXT,
                 transaction_created_at_time INTEGER,
-                approval_expires_at INTEGER
+                approval_expires_at INTEGER,
+                caller BLOB,
+                reason TEXT
             )
             "#,
             [],

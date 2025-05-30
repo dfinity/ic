@@ -546,6 +546,7 @@ mod tests {
                             ic_icrc1::Operation::Approve { .. } => CanisterMethodName::Icrc2Approve,
                             ic_icrc1::Operation::Mint { .. } => CanisterMethodName::Icrc1Transfer,
                             ic_icrc1::Operation::Burn { .. } => CanisterMethodName::Icrc1Transfer,
+                            ic_icrc1::Operation::Pause { .. } => continue,
                         };
                         let args = match arg_with_caller.arg {
                             LedgerEndpointArg::TransferArg(arg) => Encode!(&arg),

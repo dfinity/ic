@@ -1,4 +1,4 @@
-use crate::common::storage::types::RosettaBlock;
+use crate::common::storage::types::{IcrcOperation, RosettaBlock};
 use crate::MetadataEntry;
 use anyhow::{bail, Context};
 use candid::Nat;
@@ -203,6 +203,7 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
                         )?;
                     }
                 }
+                IcrcOperation::Pause { .. } => {}
             }
         }
 
@@ -253,6 +254,8 @@ pub fn store_blocks(
             expected_allowance,
             fee,
             approval_expires_at,
+            caller,
+            reason,
         ) = match transaction.operation {
             crate::common::storage::types::IcrcOperation::Mint { to, amount } => (
                 "mint",
@@ -263,6 +266,8 @@ pub fn store_blocks(
                 None,
                 None,
                 amount,
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -285,6 +290,8 @@ pub fn store_blocks(
                 None,
                 fee,
                 None,
+                None,
+                None,
             ),
             crate::common::storage::types::IcrcOperation::Burn { from, amount, .. } => (
                 "burn",
@@ -295,6 +302,8 @@ pub fn store_blocks(
                 None,
                 None,
                 amount,
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -318,10 +327,27 @@ pub fn store_blocks(
                 expected_allowance,
                 fee,
                 expires_at,
+                None,
+                None,
+            ),
+            IcrcOperation::Pause { caller, reason } => (
+                "pause",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Nat::from(0u64),
+                None,
+                None,
+                None,
+                Some(caller),
+                Some(reason),
             ),
         };
         insert_tx.prepare_cached(
-        "INSERT OR IGNORE INTO blocks (idx, hash, serialized_block, parent_hash, timestamp,tx_hash,operation_type,from_principal,from_subaccount,to_principal,to_subaccount,spender_principal,spender_subaccount,memo,amount,expected_allowance,fee,transaction_created_at_time,approval_expires_at) VALUES (:idx, :hash, :serialized_block, :parent_hash, :timestamp,:tx_hash,:operation_type,:from_principal,:from_subaccount,:to_principal,:to_subaccount,:spender_principal,:spender_subaccount,:memo,:amount,:expected_allowance,:fee,:transaction_created_at_time,:approval_expires_at)")?
+        "INSERT OR IGNORE INTO blocks (idx, hash, serialized_block, parent_hash, timestamp,tx_hash,operation_type,from_principal,from_subaccount,to_principal,to_subaccount,spender_principal,spender_subaccount,memo,amount,expected_allowance,fee,transaction_created_at_time,approval_expires_at,caller,reason) VALUES (:idx, :hash, :serialized_block, :parent_hash, :timestamp,:tx_hash,:operation_type,:from_principal,:from_subaccount,:to_principal,:to_subaccount,:spender_principal,:spender_subaccount,:memo,:amount,:expected_allowance,:fee,:transaction_created_at_time,:approval_expires_at,:caller,:reason)")?
                     .execute(named_params! {
                         ":idx":rosetta_block.index,
                         ":hash":rosetta_block.clone().get_block_hash().as_slice().to_vec(),
@@ -341,7 +367,9 @@ pub fn store_blocks(
                         ":expected_allowance":expected_allowance.map(|ea| ea.to_string()),
                         ":fee":fee.map(|fee| fee.to_string()),
                         ":transaction_created_at_time":transaction.created_at_time,
-                        ":approval_expires_at":approval_expires_at
+                        ":approval_expires_at":approval_expires_at,
+                        ":caller": caller.map(|x| x.as_slice().to_vec()),
+                        ":reason": reason
                     })?;
     }
     insert_tx.commit()?;

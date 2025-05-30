@@ -202,6 +202,7 @@ pub enum OperationType {
     Approve,
     Fee,
     FeeCollector,
+    Pause,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]

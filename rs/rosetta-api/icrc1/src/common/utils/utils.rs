@@ -375,6 +375,7 @@ pub fn rosetta_core_operations_to_icrc1_operation(
             }
             // We do not have to convert this Operation on the icrc1 side as the crate::common::storage::types::IcrcOperation does not know anything about the FeeCollector
             OperationType::FeeCollector => icrc1_operation_builder,
+            OperationType::Pause => icrc1_operation_builder,
         };
     }
     icrc1_operation_builder.build()
@@ -556,6 +557,9 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                     ),
                 ));
             }
+        }
+        IcrcOperation::Pause { .. } => {
+            // No Rosetta Core Operation is created for Pause operation
         }
     };
 

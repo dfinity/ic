@@ -1,9 +1,10 @@
 use anyhow::anyhow;
 use anyhow::bail;
-use candid::CandidType;
 use candid::Nat;
+use candid::{CandidType, Principal};
 use candid::{Decode, Encode};
 use ic_icrc1::blocks::encoded_block_to_generic_block;
+use ic_icrc1::Operation;
 use ic_ledger_core::block::EncodedBlock;
 use ic_ledger_core::tokens::TokensType;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
@@ -82,6 +83,7 @@ impl RosettaBlock {
                 IcrcOperation::Transfer { fee, .. } => fee,
                 IcrcOperation::Approve { fee, .. } => fee,
                 IcrcOperation::Burn { .. } => None,
+                IcrcOperation::Pause { .. } => None,
             }))
     }
 
@@ -299,6 +301,10 @@ pub enum IcrcOperation {
         expires_at: Option<u64>,
         fee: Option<Nat>,
     },
+    Pause {
+        caller: Principal,
+        reason: String,
+    },
 }
 
 impl TryFrom<BTreeMap<String, Value>> for IcrcOperation {
@@ -421,6 +427,11 @@ impl From<IcrcOperation> for BTreeMap<String, Value> {
                     map.insert("fee".to_string(), Value::Nat(fee));
                 }
             }
+            IcrcOperation::Pause { caller, reason } => {
+                map.insert("op".to_string(), Value::text("pause"));
+                map.insert("caller".to_string(), Value::blob(caller.as_slice()));
+                map.insert("reason".to_string(), Value::text(reason));
+            }
         }
         map
     }
@@ -531,6 +542,7 @@ where
                 amount: amount.into(),
                 fee: fee.map(Into::into),
             },
+            Operation::Pause { caller, reason } => Self::Pause { caller, reason },
         }
     }
 }

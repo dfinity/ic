@@ -855,7 +855,13 @@ mod test {
                                 "ICP".to_string(),
                                 8,
                             )
-                            .unwrap();
+                            .unwrap_or_else(|err| {
+                                panic!(
+                                    "Failed to search transactions ({:?}): {:?}",
+                                    search_transactions_request.clone(),
+                                    err
+                                )
+                            });
                             transactions.extend(result.clone().transactions);
                             search_transactions_request.offset = result.next_offset;
 
@@ -1082,6 +1088,22 @@ mod test {
                         );
                         assert_eq!(result.len(), num_of_approve_transactions);
 
+                        search_transactions_request.type_ = Some("PAUSE".to_string());
+                        let num_of_pause_transactions = rosetta_blocks
+                            .iter()
+                            .filter(|block| {
+                                matches!(
+                                    block.block.transaction.operation,
+                                    IcrcOperation::Pause { .. }
+                                )
+                            })
+                            .count();
+                        let result = traverse_all_transactions(
+                            &storage_client_memory,
+                            search_transactions_request.clone(),
+                        );
+                        assert_eq!(result.len(), num_of_pause_transactions);
+
                         search_transactions_request = SearchTransactionsRequest {
                             ..Default::default()
                         };
@@ -1093,6 +1115,7 @@ mod test {
                                 IcrcOperation::Mint { to, .. } => to,
                                 IcrcOperation::Burn { from, .. } => from,
                                 IcrcOperation::Approve { from, .. } => from,
+                                IcrcOperation::Pause { caller, .. } => Account::from(caller),
                             }
                             .into(),
                         );
@@ -1131,6 +1154,15 @@ mod test {
                                             .unwrap(),
                                     ),
                                 IcrcOperation::Approve { from, spender, .. } => [from, spender]
+                                    .contains(
+                                        &search_transactions_request
+                                            .account_identifier
+                                            .clone()
+                                            .unwrap()
+                                            .try_into()
+                                            .unwrap(),
+                                    ),
+                                IcrcOperation::Pause { caller, .. } => [Account::from(caller)]
                                     .contains(
                                         &search_transactions_request
                                             .account_identifier
