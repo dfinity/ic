@@ -153,7 +153,7 @@ impl TryFrom<Account> for Icrc1Account {
 }
 
 impl Destination {
-    fn try_new(
+    pub fn try_new(
         account: &Option<Account>,
         account_identifier: &Option<AccountIdentifierProto>,
         caller: PrincipalId,
@@ -178,7 +178,7 @@ impl Destination {
 
     /// Returns the account identifier to disburse to. This should normally not fail because all the
     /// validations happen at `try_new`. Failure can only happen due to data corruption.
-    fn try_into_account_identifier(&self) -> Result<AccountIdentifier, String> {
+    pub(crate) fn try_into_account_identifier(&self) -> Result<AccountIdentifier, String> {
         match self {
             Destination::AccountToDisburseTo(account) => {
                 let icrc1_account = Icrc1Account::try_from(account.clone())?;
@@ -658,7 +658,7 @@ async fn try_finalize_maturity_disbursement(
         neuron_id: neuron_id.id,
         current_disbursement: TlaValue::Record(BTreeMap::from(
             [
-                ("account_id".to_string(), account_to_tla(icp_ledger::AccountIdentifier::from(account))),
+                ("account_id".to_string(), account_to_tla(account_identifier)),
                 ("amount".to_string(), maturity_disbursement_in_progress.amount_e8s.to_tla_value()),
             ]
         ))
