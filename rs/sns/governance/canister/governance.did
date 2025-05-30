@@ -121,14 +121,6 @@ type ExecuteExtensionFunction = record {
 
 type ListExtensionsRequest = record {};
 
-type ExtensionalQueries = record {
-  // Queries provided by the extension to observe its state.
-  queries : vec () -> record {
-    query_name : text;
-    query_payload : blob;
-  };
-};
-
 type ExtensionDescription = record {
   // Extension metadata, defined automatically by the SNS.
   name : opt text;
@@ -136,7 +128,10 @@ type ExtensionDescription = record {
   wasm_module_hash : opt blob;
   source_code_url : opt text;
   audit_url : opt text;
+
+  // The SNS keeps record of all historcally registered extensions.
   registered_timestamp_seconds : opt nat64;
+  deregistered_timestamp_seconds : opt nat64;
 
   extension_canister_id : opt principal;
   extension_type : opt ExtensionType;
