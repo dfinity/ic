@@ -592,6 +592,7 @@ async fn test_finalize_maturity_disbursement_successful() {
     );
 }
 
+// TODO(NNS1-3851): clean this up after no old disbursement format is used anymore.
 /// The `MaturityDisbursement` prost type before changing `account_to_disburse_to` to `oneof
 /// destination` with either `account_to_disburse_to` or `account_identifier_to_disburse_to`. This
 /// type is used for testing whether the old disbursement format can be finalized correctly.
