@@ -6,8 +6,8 @@ use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
-    ic_gateway_vm::{IC_GATEWAY_VM_NAME, IcGatewayVm, HasIcGatewayVm},
     ic::{InternetComputer, Subnet},
+    ic_gateway_vm::{HasIcGatewayVm, IcGatewayVm, IC_GATEWAY_VM_NAME},
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, NnsCustomizations},
