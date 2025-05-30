@@ -96,6 +96,9 @@ class Args:
     # If present - decompress `upload_img` and inject this into config.ini
     inject_image_verbose: Optional[str] = None
 
+    # If present - decompress `upload_img` and inject this into config.ini
+    inject_enable_trusted_execution_environment: Optional[str] = None
+
     # If present - decompress `upload_img` and inject this into ssh_authorized_keys/admin
     inject_image_pub_key: Optional[str] = None
 
@@ -314,15 +317,32 @@ def check_guestos_metrics_version(ip_address: IPv6Address, timeout_secs: int) ->
 
 def check_guestos_hsm_capability(ip_address: IPv6Address, ssh_key_file: Optional[str] = None) -> bool:
     # Check that the HSM is working correctly, over an SSH session with the node.
+    log.info(f"Starting HSM capability check for {ip_address}")
+
     ssh_key_arg = f"-i {ssh_key_file}" if ssh_key_file else ""
     ssh_opts = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+    # Execute the HSM command
+    log.info(f"Executing HSM command on {ip_address}")
+    hsm_command = "/opt/ic/bin/vsock_guest --attach-hsm && sleep 5 && pkcs11-tool --list-slots | grep 'Nitrokey HSM'"
     result = invoke.run(
-        f"ssh {ssh_opts} {ssh_key_arg} admin@{ip_address} '/opt/ic/bin/vsock_guest --attach-hsm && sleep 5 && pkcs11-tool --list-slots | grep \"Nitrokey HSM\"'",
+        f'ssh {ssh_opts} {ssh_key_arg} admin@{ip_address} "{hsm_command}"',
         warn=True,
     )
+
     if not result or not result.ok:
+        log.error(f"HSM command failed on {ip_address}")
+        if result:
+            log.error(f"HSM command stderr: {result.stderr.strip()}")
+            log.error(f"HSM command stdout: {result.stdout.strip()}")
+            # Check if it's an SSH connectivity issue vs HSM-specific issue
+            if result.returncode == 255 or "Connection refused" in result.stderr or "No route to host" in result.stderr:
+                log.error(f"SSH connectivity issue detected for {ip_address}")
+            else:
+                log.error(f"HSM-specific issue detected for {ip_address}")
         return False
 
+    log.info(f"HSM command executed successfully on {ip_address}")
     log.info("HSM check success.")
     return True
 
@@ -663,6 +683,7 @@ def inject_config_into_image(
     node_reward_type: str,
     ipv6_prefix: str,
     ipv6_gateway: str,
+    inject_enable_trusted_execution_environment: Optional[str],
     ipv4_args: Optional[Ipv4Args],
     verbose: Optional[str],
     pub_key: Optional[str],
@@ -699,6 +720,12 @@ def inject_config_into_image(
         ipv4_part += f"--ipv4-prefix-length {ipv4_args.prefix_length} "
         ipv4_part += f"--domain {ipv4_args.domain} "
 
+    enable_trusted_execution_environment_part = ""
+    if inject_enable_trusted_execution_environment is not None:
+        enable_trusted_execution_environment_part += (
+            f"--enable-trusted-execution-environment {inject_enable_trusted_execution_environment}"
+        )
+
     verbose_part = ""
     if verbose:
         verbose_part = f"--verbose {verbose} "
@@ -708,7 +735,7 @@ def inject_config_into_image(
         admin_key_part = f'--public-keys "{pub_key}"'
 
     invoke.run(
-        f"{setupos_inject_config_path} {image_part} {reward_part} {prefix_part} {gateway_part} {ipv4_part} {verbose_part} {admin_key_part}",
+        f"{setupos_inject_config_path} {image_part} {reward_part} {prefix_part} {gateway_part} {ipv4_part} {enable_trusted_execution_environment_part} {verbose_part} {admin_key_part}",
         echo=True,
     )
 
@@ -789,6 +816,7 @@ def main():
                 args.inject_image_node_reward_type,
                 args.inject_image_ipv6_prefix,
                 args.inject_image_ipv6_gateway,
+                args.inject_enable_trusted_execution_environment,
                 ipv4_args,
                 args.inject_image_verbose,
                 args.inject_image_pub_key,

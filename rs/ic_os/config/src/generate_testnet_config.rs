@@ -27,6 +27,7 @@ pub struct GenerateTestnetConfigArgs {
     pub elasticsearch_tags: Option<String>,
     pub use_nns_public_key: Option<bool>,
     pub nns_urls: Option<Vec<String>>,
+    pub enable_trusted_execution_environment: Option<bool>,
     pub use_node_operator_private_key: Option<bool>,
     pub use_ssh_authorized_keys: Option<bool>,
 
@@ -75,6 +76,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         elasticsearch_tags,
         use_nns_public_key,
         nns_urls,
+        enable_trusted_execution_environment,
         use_node_operator_private_key,
         use_ssh_authorized_keys,
         inject_ic_crypto,
@@ -186,6 +188,9 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
 
     let use_ssh_authorized_keys = use_ssh_authorized_keys.unwrap_or(true);
 
+    let enable_trusted_execution_environment =
+        enable_trusted_execution_environment.unwrap_or(false);
+
     let icos_settings = ICOSSettings {
         node_reward_type,
         mgmt_mac,
@@ -194,6 +199,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         use_nns_public_key,
         nns_urls,
         use_node_operator_private_key,
+        enable_trusted_execution_environment,
         use_ssh_authorized_keys,
         icos_dev_settings: ICOSDevSettings::default(),
     };
