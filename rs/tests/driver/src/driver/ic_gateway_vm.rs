@@ -44,12 +44,8 @@ impl DeployedIcGatewayVm {
     }
 
     /// Retrieves the underlying VM.
-    pub fn get_vm(&self, env: &TestEnv) -> Result<AllocatedVm> {
-        let vm_path = Path::new(IC_GATEWAY_VMS_DIR)
-            .join(self.vm.name.clone())
-            .join(IC_GATEWAY_VM_FILE);
-        env.read_json_object(&vm_path)
-            .with_context(|| format!("Failed to read VM data from {}", vm_path.display()))
+    pub fn get_vm(&self) -> AllocatedVm {
+        self.vm.clone()
     }
 }
 

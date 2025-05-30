@@ -725,9 +725,7 @@ fn sync_prometheus_config_dir_with_ic_gateways(
         .get_deployed_ic_gateways()?
         .into_iter()
         .map(|gateway| {
-            let allocated_vm = gateway
-                .get_vm(env)
-                .map_err(|e| anyhow::anyhow!("failed to get VM for ic-gateway: {}", e))?;
+            let allocated_vm = gateway.get_vm();
             Ok((allocated_vm.name, allocated_vm.ipv6))
         })
         .collect::<Result<_>>()?;
