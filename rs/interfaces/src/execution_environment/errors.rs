@@ -278,7 +278,7 @@ impl std::fmt::Display for HypervisorError {
                 f,
                 "Attempted to execute a message, but the canister contains no Wasm module.",
             ),
-            Self::OutOfMemory => write!(f, "Canister exceeded its allowed memory allocation.",),
+            Self::OutOfMemory => write!(f, "Canister cannot grow its memory usage.",),
             Self::InvalidPrincipalId(_) => {
                 write!(f, "Canister provided invalid principal id")
             }
