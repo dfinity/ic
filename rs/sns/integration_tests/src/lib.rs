@@ -59,7 +59,4 @@ mod http_request;
 mod timers;
 
 #[cfg(test)]
-mod sns_metrics;
-
-#[cfg(test)]
 mod golden_state_swap_upgrade_twice;

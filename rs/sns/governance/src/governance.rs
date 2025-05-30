@@ -6248,7 +6248,7 @@ mod proposal_topics_tests;
 mod test_helpers;
 
 #[cfg(test)]
-mod sns_metrics_tests;
+mod get_metrics;
 
 #[cfg(feature = "canbench-rs")]
 mod benches;

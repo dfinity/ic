@@ -1829,7 +1829,11 @@ impl From<pb::Metrics> for pb_api::get_metrics_response::Metrics {
         } = item;
 
         let num_recently_submitted_proposals = Some(num_recently_submitted_proposals);
-        let last_ledger_block_timestamp = Some(last_ledger_block_timestamp);
+        let last_ledger_block_timestamp = if last_ledger_block_timestamp == 0 {
+            None
+        } else {
+            Some(last_ledger_block_timestamp)
+        };
 
         Self {
             num_recently_submitted_proposals,

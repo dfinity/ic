@@ -29,6 +29,7 @@ use ic_sns_governance::{
     types::{Environment, HeapGrowthPotential},
     upgrade_journal::serve_journal,
 };
+use ic_sns_governance_api::pb::v1::GovernanceError;
 use ic_sns_governance_api::pb::v1::{get_metrics_response, governance_error::ErrorType};
 use ic_sns_governance_api::pb::v1::{
     get_running_sns_version_response::UpgradeInProgress,
@@ -48,7 +49,7 @@ use ic_sns_governance_api::pb::v1::{
 #[cfg(feature = "test")]
 use ic_sns_governance_api::pb::v1::{
     AddMaturityRequest, AddMaturityResponse, AdvanceTargetVersionRequest,
-    AdvanceTargetVersionResponse, GovernanceError, MintTokensRequest, MintTokensResponse,
+    AdvanceTargetVersionResponse, MintTokensRequest, MintTokensResponse,
     RefreshCachedUpgradeStepsRequest, RefreshCachedUpgradeStepsResponse,
 };
 use prost::Message;
@@ -354,37 +355,34 @@ fn get_metadata(request: GetMetadataRequest) -> GetMetadataResponse {
 /// Returns statistics of the SNS
 #[query(composite = true)]
 async fn get_metrics(request: GetMetricsRequest) -> get_metrics_response::GetMetricsResponse {
+    use get_metrics_response::*;
+
     log!(INFO, "get_metrics");
 
     let request = sns_gov_pb::GetMetricsRequest::try_from(request);
 
-    if let Err(err) = request {
-        return get_metrics_response::GetMetricsResponse {
-            get_metrics_result: Some(get_metrics_response::GetMetricsResult::Err(
-                ic_sns_governance_api::pb::v1::GovernanceError {
-                    error_type: i32::from(ErrorType::InvalidCommand),
-                    error_message: err,
-                },
-            )),
+    if let Err(error_message) = request {
+        return GetMetricsResponse {
+            get_metrics_result: Some(GetMetricsResult::Err(GovernanceError {
+                error_type: i32::from(ErrorType::InvalidCommand),
+                error_message,
+            })),
         };
     }
 
     let result = governance().get_metrics(request.unwrap()).await;
 
     let get_metrics_result = match result {
-        // if the SNS has been very recently deployed and to transactions made yet
-        // `last_ledger_block_timestamp` field is 0.
-        Ok(metrics) if metrics.last_ledger_block_timestamp == 0 => None,
         Ok(metrics) => {
-            let metrics = get_metrics_response::Metrics::from(metrics);
-            Some(get_metrics_response::GetMetricsResult::Ok(metrics))
+            let metrics = Metrics::from(metrics);
+            Some(GetMetricsResult::Ok(metrics))
         }
         Err(err) => {
-            let err = ic_sns_governance_api::pb::v1::GovernanceError::from(err);
-            Some(get_metrics_response::GetMetricsResult::Err(err))
+            let err = GovernanceError::from(err);
+            Some(GetMetricsResult::Err(err))
         }
     };
-    get_metrics_response::GetMetricsResponse { get_metrics_result }
+    GetMetricsResponse { get_metrics_result }
 }
 
 /// Returns the initialization parameters used to spawn an SNS

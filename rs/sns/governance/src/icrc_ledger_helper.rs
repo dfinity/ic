@@ -4,6 +4,7 @@ use icrc_ledger_types::{
     icrc::generic_value::ICRC3Value,
     icrc3::blocks::{GetBlocksRequest, GetBlocksResult},
 };
+
 /// Timestamp of the block in the GetBlocksResult mapping is accessed by this key.
 const TIMESTAMP: &str = "ts";
 
@@ -19,20 +20,20 @@ impl<'a> ICRCLedgerHelper<'a> {
     }
 
     pub async fn get_latest_block_timestamp_seconds(&self) -> Result<u64, String> {
-        let call_icrc3_get_blocks = |args: Vec<GetBlocksRequest>| async {
+        let call_icrc3_get_blocks = |request: Vec<GetBlocksRequest>| async {
             let result = self
                 .ledger
-                .icrc3_get_blocks(args)
+                .icrc3_get_blocks(request)
                 .await
                 .map_err(|nervous_system_error| nervous_system_error.error_message)?;
 
             Ok::<GetBlocksResult, String>(result)
         };
-        // Make the first call to get the current block number.
+        // Make the first call to get the current block index.
         // No matter if the parameters of `GetBlocksRequest` lie in a valid
-        // range or not, the current block number (which is still not added)
+        // range or not, the current block index (which is still not added)
         // is included in the response. We hence make a call with default parameters
-        // just to find out the last block number added to the blockchain on
+        // just to find out the last block index added to the blockchain on
         // ledger.
         let args = vec![GetBlocksRequest {
             start: Nat::from(0_u64),
@@ -42,8 +43,7 @@ impl<'a> ICRCLedgerHelper<'a> {
         let GetBlocksResult { log_length, .. } = call_icrc3_get_blocks(args).await?;
 
         if log_length == 0_u64 {
-            // treat the special case of a brand new ledger with zero blocks by setting the API
-            // field to null.
+            // treat the special case of a brand new ledger with zero blocks.
             return Ok(0);
         }
 
@@ -87,15 +87,21 @@ impl<'a> ICRCLedgerHelper<'a> {
 
     fn get_block_timestamp_nanos(block: &ICRC3Value) -> Result<Nat, String> {
         let ICRC3Value::Map(map_val) = block else {
-            return Err("Error parsing the block failed: expected a map".to_string());
+            return Err("Error parsing the block: expected a map.".to_string());
         };
 
         let Some(timestamp) = map_val.get(TIMESTAMP) else {
-            return Err("Error parsing the block failed: missing timestamp".to_string());
+            return Err(format!(
+                "Error parsing the block: missing timestamp attribute `{}`",
+                TIMESTAMP
+            ));
         };
 
         let ICRC3Value::Nat(timestamp) = timestamp else {
-            return Err("Error parsing the block failed: timestamp should be in Nat".to_string());
+            return Err(format!(
+                "Error parsing the block: timestamp attribute `{}` must be Nat.",
+                TIMESTAMP
+            ));
         };
 
         Ok(timestamp.clone())
@@ -112,23 +118,45 @@ fn test_decoding_nat() {
 }
 
 #[test]
-fn test_decoding_block() {
-    use candid::{Decode, Deserialize, IDLArgs};
-    use hex::decode;
+fn test_get_block_timestamp_nanos() {
+    use hex;
+    use maplit::btreemap;
+    use serde_bytes::ByteBuf;
 
-    let hex_str = "4449444c0d6c0381d586b70a7d86dda8bf0a0783f4f4c40f0c6b06cf89df017cfc84eb0103c189ee017dfdd2c9df0204cdf1cbbe0371f9baf3c50b056c02007101016d026d7b6d016c02dbb7017dcdeaf1a70b016d066c02e2e8ada0087de6a99ef8097d6d086a0109010001016c02dd9ad2830409c5b39af8070a6d0b0100fa3201f93201030570686173680320e181bc2b63ddea5e2c8b6ec6f2196f4e56026acbc269f8507912222e2e20a24602747302f5acd8d1d1a0e9a118027478010703616d7402ebc3f993130366656502904e0466726f6d0501031da683ba1acf5ff9163b11aa09b183f4c988ae8e9ea2572dd15c47205b02046d656d6f03080000000000000876026f70040478666572077370656e6465720501030a0000000002300b12010102746f0501030a0000000002300b12010100";
-    let bytes = decode(hex_str).expect("Invalid hex string");
+    let timestamp = 1_748_590_463_342_570_803_u64;
+    let btreemap = btreemap! {
+        "phash".to_string() => ICRC3Value::Blob(ByteBuf::from(hex::decode("0869db73507fe3b2da524b533da8b0a11cf2caf772c5e6fef3b9de22eb9684f8").unwrap())),
+        "ts".to_string() => ICRC3Value::Nat(Nat::from(timestamp)),
+    };
+    let block = ICRC3Value::Map(btreemap);
 
-    let args = IDLArgs::from_bytes(&bytes).expect("Ooops");
-    let get_blocks_result: GetBlocksResult = args.args.get(0).unwrap().into();
-}
+    let result = ICRCLedgerHelper::get_block_timestamp_nanos(&block);
+    assert!(result.is_ok(), "decoding the block failed");
+    let ts_nanos = result.unwrap();
+    assert_eq!(
+        ts_nanos,
+        Nat::from(timestamp),
+        "decoded timestamp {} doesn't match the actual value {}",
+        ts_nanos,
+        timestamp
+    );
 
-#[test]
-fn test_abc() {
-    // Prepare the world.
-    let block = ICRC3Value {};
-    let expected = Ok(todo!());
+    let ts = ts_nanos / Nat::from(ONE_SEC_NANOSEC);
 
-    let observed = get_block_timestamp_nanos(args);
-    assert_eq!(observed, expected);
+    let u64_digit_components = ts.0.to_u64_digits();
+
+    assert_eq!(
+        u64_digit_components.len(),
+        1,
+        "decoded timestamp {:?} doesn't fit a u64",
+        ts
+    );
+
+    assert_eq!(
+        u64_digit_components[0],
+        timestamp / ONE_SEC_NANOSEC,
+        "decoded timestamp into nanosceonds {} doesn't match the expected value {}",
+        u64_digit_components[0],
+        timestamp / ONE_SEC_NANOSEC
+    );
 }
