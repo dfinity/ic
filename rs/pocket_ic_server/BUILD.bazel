@@ -222,8 +222,8 @@ rust_test(
         "tests/common.rs",
         "tests/gateway.rs",
     ],
-    crate_root = "tests/gateway.rs",
     aliases = {},
+    crate_root = "tests/gateway.rs",
     data = [
         ":pocket-ic-server",
         "@ii_dev_canister//file",
