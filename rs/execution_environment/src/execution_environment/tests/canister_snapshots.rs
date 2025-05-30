@@ -2850,7 +2850,6 @@ fn canister_snapshot_roundtrip_succeeds() {
         metadata.global_timer,
         metadata.on_low_wasm_memory_hook_status,
     );
-
     let WasmResult::Reply(bytes) = test
         .subnet_message("upload_canister_snapshot_metadata", md_upload_args.encode())
         .unwrap()
