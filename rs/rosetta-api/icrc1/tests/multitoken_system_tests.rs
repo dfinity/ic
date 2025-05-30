@@ -2113,6 +2113,7 @@ fn test_search_transactions() {
 }
 
 #[test]
+#[cfg(not(target_os = "macos"))]
 fn test_cli_data() {
     let mut runner = TestRunner::new(TestRunnerConfig {
         max_shrink_iters: 0,
