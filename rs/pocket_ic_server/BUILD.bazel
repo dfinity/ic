@@ -164,7 +164,7 @@ rust_library(
     ]),
     crate_name = "pocket_ic_server",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "9.0.2",
+    version = "9.0.3",
     deps = LIB_DEPENDENCIES + [":build_script"],
 )
 
