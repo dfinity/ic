@@ -11,8 +11,6 @@ on the process that this file is part of, see
 
 ## Changed
 
-- Use the mint_cycles128 system API, so larger amounts of cycles can now be minted. 
-
 ## Deprecated
 
 ## Removed
