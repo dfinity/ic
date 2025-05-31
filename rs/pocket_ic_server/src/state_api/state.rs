@@ -625,7 +625,7 @@ impl ApiState {
             );
             proxy(Url::parse(&url).unwrap(), request, &client)
                 .await
-                .map_err(|e| ErrorCause(e.to_string()))
+                .map_err(|_| ErrorCause("error: upstream_error".to_string()))
         }
 
         let https_config = if let Some(ref https_config) = http_gateway_config.https_config {
