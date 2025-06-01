@@ -3497,7 +3497,7 @@ dependencies = [
  "ic-canister-sig-creation",
  "ic-cbor",
  "ic-cdk 0.17.2",
- "ic-cdk 0.18.0",
+ "ic-cdk 0.18.0-alpha.2",
  "ic-cdk-timers",
  "ic-certificate-verification",
  "ic-certification 3.0.3",
@@ -5622,7 +5622,7 @@ dependencies = [
 [[package]]
 name = "ic-bn-lib"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/ic-bn-lib?rev=ec4a6b4abab2d94e09c4d5fee2d57d7bb1260835#ec4a6b4abab2d94e09c4d5fee2d57d7bb1260835"
+source = "git+https://github.com/dfinity/ic-bn-lib?rev=23b3b0b76795c9b75eed96742c2185da0ce9ee2a#23b3b0b76795c9b75eed96742c2185da0ce9ee2a"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -5760,12 +5760,12 @@ dependencies = [
 
 [[package]]
 name = "ic-cdk"
-version = "0.18.0"
+version = "0.18.0-alpha.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b11cc255410be6a7e47e1a756ea94c1f31a2397a79e696f6f7d207d5ebd3e144"
+checksum = "3c9c87d961de7d2935a0bf19f4d6afe76f3d508b853ff5267e999beadd7e9286"
 dependencies = [
  "candid",
- "ic-cdk-macros 0.18.0",
+ "ic-cdk-macros 0.18.0-alpha.2",
  "ic-error-types",
  "ic-management-canister-types",
  "ic0 0.24.0",
@@ -5811,9 +5811,9 @@ dependencies = [
 
 [[package]]
 name = "ic-cdk-macros"
-version = "0.18.0"
+version = "0.18.0-alpha.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30bab0b748bc4059f19abbd2c2609761ca6d6c731979f01148b49afcc4fe7a9f"
+checksum = "4987a4c05c25d2871f8a0dd4b726733fbf4c55b5a82656976333ddd79d8e1ce6"
 dependencies = [
  "candid",
  "proc-macro2",
@@ -5905,7 +5905,7 @@ dependencies = [
 [[package]]
 name = "ic-gateway"
 version = "0.2.0"
-source = "git+https://github.com/dfinity/ic-gateway?rev=ed8539d9edd45b97148c46b8020fa6d7ebd48c07#ed8539d9edd45b97148c46b8020fa6d7ebd48c07"
+source = "git+https://github.com/dfinity/ic-gateway?rev=73495da1d5ab99891a3580522958f0f635902a87#73495da1d5ab99891a3580522958f0f635902a87"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",

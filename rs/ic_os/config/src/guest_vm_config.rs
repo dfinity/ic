@@ -3,7 +3,7 @@ use askama::Template;
 use clap::Parser;
 use config::guestos_bootstrap_image::BootstrapOptions;
 use config::guestos_config::generate_guestos_config;
-use config::{serialize_and_write_config, DEFAULT_HOSTOS_CONFIG_OBJECT_PATH};
+use config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH;
 use config_types::{GuestOSConfig, HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant};
@@ -102,18 +102,10 @@ fn run(
 }
 
 fn assemble_config_media(hostos_config: &HostOSConfig, media_path: &Path) -> Result<()> {
-    let guestos_config_file = tempfile::NamedTempFile::new()?;
     let guestos_config =
         generate_guestos_config(hostos_config).context("Failed to generate GuestOS config")?;
-    serialize_and_write_config(guestos_config_file.path(), &guestos_config).with_context(|| {
-        format!(
-            "Failed to write GuestOS config to {}",
-            guestos_config_file.path().display()
-        )
-    })?;
 
-    let bootstrap_options =
-        make_bootstrap_options(hostos_config, guestos_config, guestos_config_file.path())?;
+    let bootstrap_options = make_bootstrap_options(hostos_config, guestos_config)?;
 
     bootstrap_options.build_bootstrap_config_image(media_path)?;
 
@@ -128,10 +120,17 @@ fn assemble_config_media(hostos_config: &HostOSConfig, media_path: &Path) -> Res
 fn make_bootstrap_options(
     hostos_config: &HostOSConfig,
     guestos_config: GuestOSConfig,
-    guestos_config_path: &Path,
 ) -> Result<BootstrapOptions> {
+    let guestos_ipv6_config = match &guestos_config.network_settings.ipv6_config {
+        Ipv6Config::Fixed(ip_config) => ip_config.clone(),
+        _ => bail!(
+            "Expected GuestOS IPv6 address to be fixed but was {:?}",
+            guestos_config.network_settings.ipv6_config
+        ),
+    };
+
     let mut bootstrap_options = BootstrapOptions {
-        guestos_config: Some(guestos_config_path.to_path_buf()),
+        guestos_config: Some(guestos_config),
         ..Default::default()
     };
 
@@ -150,14 +149,7 @@ fn make_bootstrap_options(
             Some(PathBuf::from("/boot/config/node_operator_private_key.pem"));
     }
 
-    let guestos_ipv6_config = match guestos_config.network_settings.ipv6_config {
-        Ipv6Config::Fixed(ip_config) => ip_config,
-        _ => bail!(
-            "Expected GuestOS IPv6 address to be fixed but was {:?}",
-            guestos_config.network_settings.ipv6_config
-        ),
-    };
-    bootstrap_options.ipv6_address = Some(guestos_ipv6_config.address);
+    bootstrap_options.ipv6_address = Some(guestos_ipv6_config.address.clone());
     bootstrap_options.ipv6_gateway = Some(guestos_ipv6_config.gateway.to_string());
 
     if let Some(ipv4_config) = &hostos_config.network_settings.ipv4_config {
@@ -235,10 +227,13 @@ fn restorecon(path: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use config::serialize_and_write_config;
     use config_types::{
         DeploymentEnvironment, DeterministicIpv6Config, HostOSConfig, HostOSSettings, ICOSSettings,
         Ipv4Config, Ipv6Config, Logging, NetworkSettings,
     };
+    use goldenfile::Mint;
+    use std::env;
     use std::os::unix::prelude::MetadataExt;
     use std::path::Path;
     use tempfile::tempdir;
@@ -270,6 +265,7 @@ mod tests {
                 use_nns_public_key: false,
                 nns_urls: vec![url::Url::parse("https://example.com").unwrap()],
                 use_node_operator_private_key: false,
+                enable_trusted_execution_environment: false,
                 use_ssh_authorized_keys: false,
                 icos_dev_settings: Default::default(),
             },
@@ -296,8 +292,7 @@ mod tests {
 
         let guestos_config = generate_guestos_config(&config).unwrap();
 
-        let options =
-            make_bootstrap_options(&config, guestos_config, Path::new("/tmp/test")).unwrap();
+        let options = make_bootstrap_options(&config, guestos_config.clone()).unwrap();
 
         assert_eq!(
             options,
@@ -310,7 +305,7 @@ mod tests {
                 node_reward_type: Some("type3.1".to_string()),
                 hostname: Some("guest-001122334455".to_string()),
                 nns_urls: vec!["https://example.com/".to_string()],
-                guestos_config: Some(PathBuf::from("/tmp/test")),
+                guestos_config: Some(guestos_config),
                 nns_public_key: Some(PathBuf::from("/boot/config/nns_public_key.pem")),
                 node_operator_private_key: Some(PathBuf::from(
                     "/boot/config/node_operator_private_key.pem"
@@ -324,39 +319,36 @@ mod tests {
         );
     }
 
-    // Temporarily comment these out until the next PR where we check in the golden files
-    // (we do that to avoid messing up git history).
+    fn goldenfiles_path() -> PathBuf {
+        let mut path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+        path.push("golden");
+        path
+    }
 
-    // fn goldenfiles_path() -> PathBuf {
-    //     let mut path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    //     path.push("golden");
-    //     path
-    // }
-    //
-    // fn test_vm_config(cpu_type: &str, filename: &str) {
-    //     let mut mint = Mint::new(goldenfiles_path());
-    //     let mut config = create_test_hostos_config();
-    //
-    //     config.hostos_settings = HostOSSettings {
-    //         vm_memory: 490,
-    //         vm_cpu: cpu_type.to_string(),
-    //         vm_nr_of_vcpus: 56,
-    //         verbose: false,
-    //     };
-    //
-    //     let vm_config = generate_vm_config(&config, Path::new("/tmp/config.img")).unwrap();
-    //     fs::write(mint.new_goldenpath(filename).unwrap(), vm_config).unwrap();
-    // }
-    //
-    // #[test]
-    // fn test_generate_vm_config_qemu() {
-    //     test_vm_config("qemu", "guestos_vm_qemu.xml");
-    // }
-    //
-    // #[test]
-    // fn test_generate_vm_config_kvm() {
-    //     test_vm_config("kvm", "guestos_vm_kvm.xml");
-    // }
+    fn test_vm_config(cpu_type: &str, filename: &str) {
+        let mut mint = Mint::new(goldenfiles_path());
+        let mut config = create_test_hostos_config();
+
+        config.hostos_settings = HostOSSettings {
+            vm_memory: 490,
+            vm_cpu: cpu_type.to_string(),
+            vm_nr_of_vcpus: 56,
+            verbose: false,
+        };
+
+        let vm_config = generate_vm_config(&config, Path::new("/tmp/config.img")).unwrap();
+        fs::write(mint.new_goldenpath(filename).unwrap(), vm_config).unwrap();
+    }
+
+    #[test]
+    fn test_generate_vm_config_qemu() {
+        test_vm_config("qemu", "guestos_vm_qemu.xml");
+    }
+
+    #[test]
+    fn test_generate_vm_config_kvm() {
+        test_vm_config("kvm", "guestos_vm_kvm.xml");
+    }
 
     #[test]
     fn test_run_success() {
