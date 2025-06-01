@@ -73,16 +73,7 @@ impl<'a> ICRCLedgerHelper<'a> {
         let ts_nanos = Self::get_block_timestamp_nanos(block)?;
         let ts = ts_nanos / Nat::from(ONE_SEC_NANOSEC);
 
-        let u64_digit_components = ts.0.to_u64_digits();
-
-        match &u64_digit_components[..] {
-            [val] => Ok(*val),
-            vals => Err(format!(
-                "Error parsing the block timestamp `{:?}`: expected a single u64 value, got {:?}",
-                &ts,
-                vals.len(),
-            )),
-        }
+        decode_nat_to_u64(ts)
     }
 
     fn get_block_timestamp_nanos(block: &ICRC3Value) -> Result<Nat, String> {
@@ -110,11 +101,29 @@ impl<'a> ICRCLedgerHelper<'a> {
 
 // We use this approach to convert candid::Nat values
 // to u64 in `get_latest_block_timestamp_seconds`.
+fn decode_nat_to_u64(value: Nat) -> Result<u64, String> {
+    let u64_digit_components = value.0.to_u64_digits();
+
+    match &u64_digit_components[..] {
+        [val] => Ok(*val),
+        vals => Err(format!(
+            "Error parsing a Nat value `{:?}` to u64: expected a single u64 value, got {:?}",
+            &value,
+            vals.len(),
+        )),
+    }
+}
+
 #[test]
 fn test_decoding_nat() {
     let num_nat = Nat::from(1234_u64);
-    let val = num_nat.0.to_u64_digits()[0];
-    assert_eq!(val, 1234);
+    let decoding_result = decode_nat_to_u64(num_nat.clone());
+
+    assert!(
+        matches!(decoding_result, Ok(value) if value == 1234_u64),
+        "Decoding {:?} to u64 failed",
+        num_nat
+    );
 }
 
 #[test]
@@ -123,40 +132,39 @@ fn test_get_block_timestamp_nanos() {
     use maplit::btreemap;
     use serde_bytes::ByteBuf;
 
-    let timestamp = 1_748_590_463_342_570_803_u64;
-    let btreemap = btreemap! {
-        "phash".to_string() => ICRC3Value::Blob(ByteBuf::from(hex::decode("0869db73507fe3b2da524b533da8b0a11cf2caf772c5e6fef3b9de22eb9684f8").unwrap())),
-        "ts".to_string() => ICRC3Value::Nat(Nat::from(timestamp)),
+    // Prepare the world: make an ICRC-compatible ledger block.
+    let expected_timestamp = 1_748_590_463_342_570_803_u64;
+    let block = {
+        let btreemap = btreemap! {
+            "phash".to_string() => ICRC3Value::Blob(ByteBuf::from(hex::decode("0869db73507fe3b2da524b533da8b0a11cf2caf772c5e6fef3b9de22eb9684f8").unwrap())),
+            "ts".to_string() => ICRC3Value::Nat(Nat::from(expected_timestamp)),
+        };
+        ICRC3Value::Map(btreemap)
     };
-    let block = ICRC3Value::Map(btreemap);
 
-    let result = ICRCLedgerHelper::get_block_timestamp_nanos(&block);
-    assert!(result.is_ok(), "decoding the block failed");
-    let ts_nanos = result.unwrap();
+    let observed = ICRCLedgerHelper::get_block_timestamp_nanos(&block);
+
+    assert!(observed.is_ok(), "decoding the block failed");
+    let observed_ts_nanos = observed.unwrap();
     assert_eq!(
-        ts_nanos,
-        Nat::from(timestamp),
+        observed_ts_nanos,
+        Nat::from(expected_timestamp),
         "decoded timestamp {} doesn't match the actual value {}",
-        ts_nanos,
-        timestamp
+        observed_ts_nanos,
+        expected_timestamp
     );
 
-    let ts = ts_nanos / Nat::from(ONE_SEC_NANOSEC);
+    let observed_ts = observed_ts_nanos / Nat::from(ONE_SEC_NANOSEC);
+    let observed_ts_u64 = decode_nat_to_u64(observed_ts);
 
-    let u64_digit_components = ts.0.to_u64_digits();
+    assert!(observed_ts_u64.is_ok(), "Error decoding timestamp to u64");
 
-    assert_eq!(
-        u64_digit_components.len(),
-        1,
-        "decoded timestamp {:?} doesn't fit a u64",
-        ts
-    );
-
-    assert_eq!(
-        u64_digit_components[0],
-        timestamp / ONE_SEC_NANOSEC,
-        "decoded timestamp into nanosceonds {} doesn't match the expected value {}",
-        u64_digit_components[0],
-        timestamp / ONE_SEC_NANOSEC
+    let observed_ts_u64 = observed_ts_u64.unwrap();
+    let expected_time = expected_timestamp / ONE_SEC_NANOSEC;
+    assert!(
+        matches!(observed_ts_u64, time if time == expected_time),
+        "observed timestamp {:?} doesn't match the expected {:?}",
+        observed_ts_u64,
+        expected_time
     );
 }
