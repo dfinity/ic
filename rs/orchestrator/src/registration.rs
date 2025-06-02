@@ -142,7 +142,7 @@ impl NodeRegistration {
         let add_node_payload = self.assemble_add_node_message().await;
 
         while !self.is_node_registered().await {
-            let message = format!("Node registration not complete. Trying to register it");
+            let message = "Node registration not complete. Trying to register it".to_string();
             warn!(self.log, "{}", message);
             UtilityCommand::notify_host(&message, 1);
             match self.signer.get() {
