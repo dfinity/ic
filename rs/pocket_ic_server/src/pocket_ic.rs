@@ -988,12 +988,18 @@ impl PocketIc {
                 let (ranges, alloc_range, subnet_id, time) = if let Some(ref subnet_state_dir) =
                     subnet_state_dir
                 {
+                    // Return a comprehensible error if the provided state directory is not a directory.
+                    if !subnet_state_dir.is_dir() {
+                        return Err(format!(
+                            "The path {} is not a (subnet state) directory.",
+                            subnet_state_dir.display()
+                        ));
+                    }
                     // Return a comprehensible error if the provided state directory is empty.
-                    let is_nonempty = subnet_state_dir.is_dir()
-                        && std::fs::read_dir(subnet_state_dir)
-                            .map(|mut f| f.next().is_some())
-                            .unwrap_or(false);
-                    if !is_nonempty {
+                    let is_empty = std::fs::read_dir(subnet_state_dir)
+                        .map(|mut f| f.next().is_none())
+                        .unwrap_or(true);
+                    if is_empty {
                         return Err(format!(
                             "Provided an empty state dir at path {}.",
                             subnet_state_dir.display()
