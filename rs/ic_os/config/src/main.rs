@@ -107,6 +107,8 @@ pub struct GenerateTestnetConfigClapArgs {
     #[arg(long)]
     pub elasticsearch_tags: Option<String>,
     #[arg(long)]
+    pub enable_trusted_execution_environment: Option<bool>,
+    #[arg(long)]
     pub use_nns_public_key: Option<bool>,
     #[arg(long)]
     pub nns_urls: Option<Vec<String>>,
@@ -168,6 +170,7 @@ pub fn main() -> Result<()> {
                 domain_name,
                 verbose,
                 node_reward_type,
+                enable_trusted_execution_environment,
             } = get_config_ini_settings(&config_ini_path)?;
 
             // create NetworkSettings
@@ -226,6 +229,7 @@ pub fn main() -> Result<()> {
                 nns_urls: deployment_json_settings.nns.url.clone(),
                 use_node_operator_private_key: Path::new("/config/node_operator_private_key.pem")
                     .exists(),
+                enable_trusted_execution_environment,
                 use_ssh_authorized_keys: Path::new("/config/ssh_authorized_keys").exists(),
                 icos_dev_settings: ICOSDevSettings::default(),
             };
@@ -332,6 +336,8 @@ pub fn main() -> Result<()> {
                 elasticsearch_tags: clap_args.elasticsearch_tags,
                 use_nns_public_key: clap_args.use_nns_public_key,
                 nns_urls: clap_args.nns_urls,
+                enable_trusted_execution_environment: clap_args
+                    .enable_trusted_execution_environment,
                 use_node_operator_private_key: clap_args.use_node_operator_private_key,
                 use_ssh_authorized_keys: clap_args.use_ssh_authorized_keys,
                 inject_ic_crypto: clap_args.inject_ic_crypto,
