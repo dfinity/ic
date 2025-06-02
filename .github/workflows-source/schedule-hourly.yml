@@ -48,8 +48,6 @@ jobs:
   bazel-system-test-hourly:
     name: Bazel System Tests Hourly
     <<: *dind-large-setup
-    runs-on:
-      labels: dind-large
     steps:
       - <<: *checkout
       - name: Run Bazel System Test Hourly
@@ -66,8 +64,6 @@ jobs:
   bazel-run-fuzzers-hourly:
     name: Bazel Run Fuzzers Hourly
     <<: *dind-large-setup
-    runs-on:
-      labels: dind-large
     steps:
       - <<: *checkout
       - name: Run Libfuzzer targets
