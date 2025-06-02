@@ -1,15 +1,15 @@
-use crate::eth_rpc::{Data, FixedSizeData, Hash, LogEntry, Quantity, HEADER_SIZE_LIMIT};
+use crate::eth_rpc::{Hash, HEADER_SIZE_LIMIT};
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;
 use crate::logs::{PrintProxySink, INFO, TRACE_HTTP};
-use crate::numeric::{BlockNumber, GasAmount, LogIndex, TransactionCount, WeiPerGas};
+use crate::numeric::{BlockNumber, GasAmount, TransactionCount, WeiPerGas};
 use crate::state::State;
 use candid::Nat;
 use evm_rpc_client::{
     Block, BlockTag, ConsensusStrategy, EthSepoliaService, EvmRpcClient, FeeHistory,
     FeeHistoryArgs, GetLogsArgs, GetTransactionCountArgs as EvmGetTransactionCountArgs, Hex20,
-    HttpOutcallError, IcRuntime, LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult,
-    Nat256, OverrideRpcConfig, RpcConfig as EvmRpcConfig, RpcError, RpcService as EvmRpcService,
+    HttpOutcallError, IcRuntime, LogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256,
+    OverrideRpcConfig, RpcConfig as EvmRpcConfig, RpcError, RpcService as EvmRpcService,
     RpcServices as EvmRpcServices, SendRawTransactionStatus,
     TransactionReceipt as EvmTransactionReceipt, ValidationError,
 };
@@ -90,11 +90,7 @@ impl EthRpcClient {
         &self,
         params: GetLogsArgs,
     ) -> Result<Vec<LogEntry>, MultiCallError<Vec<LogEntry>>> {
-        self.evm_rpc_client
-            .eth_get_logs(params)
-            .await
-            .reduce()
-            .into()
+        convert_multirpcresult(self.evm_rpc_client.eth_get_logs(params).await)
     }
 
     pub async fn eth_get_block_by_number(
@@ -421,39 +417,6 @@ trait ReduceWithStrategy<S> {
 }
 
 pub enum MinByKey {}
-
-impl Reduce for EvmMultiRpcResult<Vec<EvmLogEntry>> {
-    type Item = Vec<LogEntry>;
-
-    fn reduce(self) -> ReducedResult<Self::Item> {
-        fn map_logs(logs: Vec<EvmLogEntry>) -> Result<Vec<LogEntry>, String> {
-            logs.into_iter().map(map_single_log).collect()
-        }
-
-        fn map_single_log(log: EvmLogEntry) -> Result<LogEntry, String> {
-            Ok(LogEntry {
-                address: Address::new(log.address.into()),
-                topics: log
-                    .topics
-                    .into_iter()
-                    .map(|t| FixedSizeData(t.into()))
-                    .collect(),
-                data: Data(log.data.into()),
-                block_number: log.block_number.map(BlockNumber::from),
-                transaction_hash: log.transaction_hash.map(|h| Hash(h.into())),
-                transaction_index: log
-                    .transaction_index
-                    .map(|i| Quantity::from_be_bytes(i.into_be_bytes())),
-                block_hash: log.block_hash.map(|h| Hash(h.into())),
-                log_index: log.log_index.map(LogIndex::from),
-                removed: log.removed,
-            })
-        }
-
-        ReducedResult::from_internal(self)
-            .map_reduce(&map_logs, MultiCallResults::reduce_with_equality)
-    }
-}
 
 impl Reduce for EvmMultiRpcResult<Option<FeeHistory>> {
     type Item = FeeHistory;

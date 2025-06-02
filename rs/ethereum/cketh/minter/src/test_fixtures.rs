@@ -51,12 +51,12 @@ pub fn valid_init_arg() -> InitArg {
 pub mod arb {
     use crate::checked_amount::CheckedAmountOf;
     use crate::eth_logs::LedgerSubaccount;
-    use crate::eth_rpc::{Data, FixedSizeData, Hash, LogEntry};
+    use crate::eth_rpc::Hash;
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
     use crate::numeric::BlockRangeInclusive;
     use candid::Principal;
     use evm_rpc_client::{
-        FeeHistory, Hex, Hex20, Hex256, Hex32, HexByte, HttpOutcallError as EvmHttpOutcallError,
+        FeeHistory, HttpOutcallError as EvmHttpOutcallError,
         JsonRpcError as EvmJsonRpcError, Nat256, ProviderError as EvmProviderError,
         RpcError as EvmRpcError, ValidationError as EvmValidationError,
     };
@@ -65,7 +65,6 @@ pub mod arb {
     use proptest::{
         array::{uniform20, uniform32},
         collection::vec,
-        option,
         prelude::{any, Just, Strategy},
         prop_oneof,
     };
@@ -95,87 +94,12 @@ pub mod arb {
         uniform32(any::<u8>()).prop_map(LedgerSubaccount::from_bytes)
     }
 
-    pub fn arb_hex_byte() -> impl Strategy<Value = HexByte> {
-        use proptest::arbitrary::any;
-        any::<u8>().prop_map(HexByte::from)
-    }
-
-    pub fn arb_hex20() -> impl Strategy<Value = Hex20> {
-        use proptest::arbitrary::any;
-        use proptest::array::uniform20;
-        uniform20(any::<u8>()).prop_map(Hex20::from)
-    }
-
-    pub fn arb_hex32() -> impl Strategy<Value = Hex32> {
-        use proptest::arbitrary::any;
-        use proptest::array::uniform32;
-        uniform32(any::<u8>()).prop_map(Hex32::from)
-    }
-
-    pub fn arb_hex256() -> impl Strategy<Value = Hex256> {
-        use proptest::arbitrary::any;
-        vec(any::<u8>(), 256..=256).prop_map(|bytes| {
-            let array: [u8; 256] = bytes.try_into().unwrap();
-            Hex256::from(array)
-        })
-    }
-
-    pub fn arb_hex() -> impl Strategy<Value = Hex> {
-        use proptest::arbitrary::any;
-        vec(any::<u8>(), 0..100).prop_map(Hex::from)
-    }
-
     pub fn arb_address() -> impl Strategy<Value = Address> {
         uniform20(any::<u8>()).prop_map(Address::new)
     }
 
     pub fn arb_hash() -> impl Strategy<Value = Hash> {
         uniform32(any::<u8>()).prop_map(Hash)
-    }
-
-    pub fn arb_fixed_size_data() -> impl Strategy<Value = FixedSizeData> {
-        uniform32(any::<u8>()).prop_map(FixedSizeData)
-    }
-
-    pub fn arb_data() -> impl Strategy<Value = Data> {
-        vec(any::<u8>(), 1..1000).prop_map(Data)
-    }
-
-    pub fn arb_log_entry() -> impl Strategy<Value = LogEntry> {
-        (
-            arb_address(),
-            vec(arb_fixed_size_data(), 1..=10),
-            arb_data(),
-            option::of(arb_checked_amount_of()),
-            option::of(arb_hash()),
-            option::of(arb_checked_amount_of::<()>()),
-            option::of(arb_hash()),
-            option::of(arb_checked_amount_of()),
-            any::<bool>(),
-        )
-            .prop_map(
-                |(
-                    address,
-                    topics,
-                    data,
-                    block_number,
-                    transaction_hash,
-                    transaction_index,
-                    block_hash,
-                    log_index,
-                    removed,
-                )| LogEntry {
-                    address,
-                    topics,
-                    data,
-                    block_number,
-                    transaction_hash,
-                    transaction_index: transaction_index.map(CheckedAmountOf::into_inner),
-                    block_hash,
-                    log_index,
-                    removed,
-                },
-            )
     }
 
     pub fn arb_fee_history() -> impl Strategy<Value = FeeHistory> {
