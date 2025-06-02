@@ -84,6 +84,13 @@ fn get_html(env: &TestEnv, ic_gateway_url: Url, canister_id: Principal, dapp_anc
                     .send()
                     .await?;
                 let status = resp.status();
+                if !status.is_success() {
+                    bail!(
+                        "Failed to get HTML from {}: status code {:?}",
+                        dapp_url,
+                        status
+                    );
+                }
                 let body_bytes = resp.bytes().await?.to_vec();
                 if let Ok(body) = String::from_utf8(body_bytes.clone()) {
                     if body.contains("503 Service Temporarily Unavailable") {
@@ -91,7 +98,7 @@ fn get_html(env: &TestEnv, ic_gateway_url: Url, canister_id: Principal, dapp_anc
                     } else if body.contains(dapp_anchor) {
                         return Ok(());
                     } else {
-                        bail!("Unexpected response from BN with status: {:?}!", status);
+                        panic!("Unexpected response from BN!");
                     }
                 };
 
