@@ -55,8 +55,8 @@
 use crate::{
     common::rest::{
         BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet, HttpsConfig,
-        InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetId,
-        SubnetKind, SubnetSpec, Topology,
+        IcpFeatures, InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId,
+        SubnetId, SubnetKind, SubnetSpec, Topology,
     },
     nonblocking::PocketIc as PocketIcAsync,
 };
@@ -160,6 +160,7 @@ pub struct PocketIcBuilder {
     nonmainnet_features: bool,
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
+    icp_features: IcpFeatures,
 }
 
 #[allow(clippy::new_without_default)]
@@ -175,6 +176,7 @@ impl PocketIcBuilder {
             nonmainnet_features: false,
             log_level: None,
             bitcoind_addr: None,
+            icp_features: IcpFeatures::default(),
         }
     }
 
@@ -195,6 +197,7 @@ impl PocketIcBuilder {
             self.nonmainnet_features,
             self.log_level,
             self.bitcoind_addr,
+            self.icp_features,
         )
     }
 
@@ -209,6 +212,7 @@ impl PocketIcBuilder {
             self.nonmainnet_features,
             self.log_level,
             self.bitcoind_addr,
+            self.icp_features,
         )
         .await
     }
@@ -402,6 +406,11 @@ impl PocketIcBuilder {
         self.config = Some(config);
         self
     }
+
+    pub fn with_registry(mut self) -> Self {
+        self.icp_features.registry = true;
+        self
+    }
 }
 
 /// Representation of system time as duration since UNIX epoch
@@ -514,6 +523,7 @@ impl PocketIc {
         nonmainnet_features: bool,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
+        icp_features: IcpFeatures,
     ) -> Self {
         let (tx, rx) = channel();
         let thread = thread::spawn(move || {
@@ -536,6 +546,7 @@ impl PocketIc {
                 nonmainnet_features,
                 log_level,
                 bitcoind_addr,
+                icp_features,
             )
             .await
         });

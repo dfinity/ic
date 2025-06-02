@@ -538,12 +538,18 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub struct IcpFeatures {
+    pub registry: bool,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct InstanceConfig {
     pub subnet_config_set: ExtendedSubnetConfigSet,
     pub state_dir: Option<PathBuf>,
     pub nonmainnet_features: bool,
     pub log_level: Option<String>,
     pub bitcoind_addr: Option<Vec<SocketAddr>>,
+    pub icp_features: Option<IcpFeatures>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
@@ -671,6 +677,13 @@ impl ExtendedSubnetConfigSet {
             return Ok(());
         }
         Err("ExtendedSubnetConfigSet must contain at least one subnet".to_owned())
+    }
+
+    pub fn with_icp_features(mut self, icp_features: &IcpFeatures) -> Self {
+        if icp_features.registry {
+            self.nns = Some(self.nns.unwrap_or_default());
+        }
+        self
     }
 }
 

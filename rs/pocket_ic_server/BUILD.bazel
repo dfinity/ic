@@ -22,10 +22,13 @@ LIB_DEPENDENCIES = [
     "//rs/https_outcalls/service",
     "//rs/interfaces",
     "//rs/interfaces/adapter_client",
+    "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
+    "//rs/nns/constants",
     "//rs/protobuf",
+    "//rs/registry/canister",
     "//rs/registry/keys",
     "//rs/registry/proto_data_provider",
     "//rs/registry/routing_table",
@@ -136,6 +139,8 @@ cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
     aliases = ALIASES,
+    # dummy value set to prevent the build script from exporting `REGISTRY_CANISTER_WASM_PATH` itself
+    build_script_env = {"REGISTRY_CANISTER_WASM_PATH": ""},
     data = ["templates/dashboard.html"],  # build script data (e.g. template files) goes here
     deps = BUILD_DEPENDENCIES,
 )
@@ -162,8 +167,12 @@ rust_library(
     ] + glob([
         "src/state_api/**/*.rs",
     ]),
+    compile_data = ["//rs/registry/canister:registry-canister"],
     crate_name = "pocket_ic_server",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    rustc_env = {
+        "REGISTRY_CANISTER_WASM_PATH": "$(location //rs/registry/canister:registry-canister)",
+    },
     version = "9.0.2",
     deps = LIB_DEPENDENCIES + [":build_script"],
 )

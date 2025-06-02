@@ -29,4 +29,15 @@ struct Dashboard<'a> {{
         .as_bytes(),
     )
     .unwrap();
+
+    // Create a dummy registry canister wasm for `cargo` to succeed (`bazel` always sets `REGISTRY_CANISTER_WASM_PATH`).
+    if std::env::var("REGISTRY_CANISTER_WASM_PATH").is_err() {
+        let registry_canister_wasm_path =
+            PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("registry.wasm.gz");
+        File::create(&registry_canister_wasm_path).unwrap();
+        println!(
+            "cargo:rustc-env=REGISTRY_CANISTER_WASM_PATH={}",
+            registry_canister_wasm_path.display()
+        );
+    }
 }

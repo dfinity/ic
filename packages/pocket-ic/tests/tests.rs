@@ -2778,3 +2778,92 @@ fn test_specified_id_on_resumed_state() {
 
     test_specified_id(&pic);
 }
+
+#[test]
+fn with_registry() {
+    let _pic = PocketIcBuilder::new().with_registry().build();
+}
+
+fn get_subnet_from_registry(pic: &PocketIc, canister_id: Principal) -> Principal {
+    #[derive(CandidType)]
+    pub struct GetSubnetForCanisterRequest {
+        pub principal: Option<Principal>,
+    }
+    #[derive(CandidType, Deserialize)]
+    pub struct SubnetForCanister {
+        pub subnet_id: Option<Principal>,
+    }
+
+    let registry_canister_id = Principal::from_text("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
+    update_candid::<_, (Result<SubnetForCanister, String>,)>(
+        pic,
+        registry_canister_id,
+        "get_subnet_for_canister",
+        (GetSubnetForCanisterRequest {
+            principal: Some(canister_id),
+        },),
+    )
+    .unwrap()
+    .0
+    .unwrap()
+    .subnet_id
+    .unwrap()
+}
+
+#[test]
+fn read_registry() {
+    let state = PocketIcState::new();
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_registry()
+        .with_state(state)
+        .build();
+
+    let subnet_0 = pic.topology().get_app_subnets()[0];
+    let canister_0 = pic.create_canister_on_subnet(None, None, subnet_0);
+    assert_eq!(get_subnet_from_registry(&pic, canister_0), subnet_0);
+
+    // We define a "specified" canister ID that exists on the IC mainnet,
+    // but belongs to the canister ranges of no subnet on the PocketIC instance.
+    let specified_1 = Principal::from_text("v7pvf-xyaaa-aaaao-aaaaa-cai").unwrap();
+    assert!(pic.get_subnet(specified_1).is_none());
+
+    // We create a canister with that specified canister ID: this should succeed
+    // and a new subnet should be created.
+    let canister_1 = pic
+        .create_canister_with_id(None, None, specified_1)
+        .unwrap();
+    assert_eq!(canister_1, specified_1);
+    let subnet_1 = pic.get_subnet(specified_1).unwrap();
+    assert_ne!(subnet_0, subnet_1);
+
+    // Check that the subnet from the registry matches
+    // the subnet from the PocketIC topology.
+    assert_eq!(get_subnet_from_registry(&pic, canister_1), subnet_1);
+
+    // Restart the instance from its state.
+    let state = pic.drop_and_take_state().unwrap();
+    let pic = PocketIcBuilder::new().with_state(state).build();
+
+    // Check that the registry contains the expected associations of canisters to subnets.
+    assert_eq!(get_subnet_from_registry(&pic, canister_0), subnet_0);
+    assert_eq!(get_subnet_from_registry(&pic, canister_1), subnet_1);
+
+    // We define another "specified" canister ID that exists on the IC mainnet,
+    // but belongs to the canister ranges of no subnet on the PocketIC instance.
+    let specified_2 = Principal::from_text("z474k-xiaaa-aaaao-qaaaa-cai").unwrap();
+
+    // We create a canister with that specified canister ID: this should succeed
+    // and a new subnet should be created.
+    let canister_2 = pic
+        .create_canister_with_id(None, None, specified_2)
+        .unwrap();
+    assert_eq!(canister_2, specified_2);
+    let subnet_2 = pic.get_subnet(specified_2).unwrap();
+    assert_ne!(subnet_0, subnet_2);
+    assert_ne!(subnet_1, subnet_2);
+
+    // Check that the subnet from the registry matches
+    // the subnet from the PocketIC topology.
+    assert_eq!(get_subnet_from_registry(&pic, canister_2), subnet_2);
+}
