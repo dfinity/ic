@@ -189,7 +189,7 @@ struct RawTopologyInternal {
     pub subnet_configs: BTreeMap<String, RawSubnetConfigInternal>,
     pub default_effective_canister_id: RawCanisterId,
     pub icp_features: Option<IcpFeatures>,
-    pub sync_from_registry_version: Option<u64>,
+    pub synced_registry_version: Option<u64>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -468,7 +468,7 @@ struct PocketIcSubnets {
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
     icp_features: Option<IcpFeatures>,
-    sync_from_registry_version: RegistryVersion,
+    synced_registry_version: RegistryVersion,
     _bitcoin_adapter_parts: Option<BitcoinAdapterParts>,
 }
 
@@ -553,13 +553,14 @@ impl PocketIcSubnets {
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
-        sync_from_registry_version: Option<u64>,
+        synced_registry_version: Option<u64>,
     ) -> Self {
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
         add_initial_registry_records(registry_data_provider.clone());
         let routing_table = RoutingTable::new();
         let chain_keys = BTreeMap::new();
-        let sync_from_registry_version = sync_from_registry_version
+        // `ZERO_REGISTRY_VERSION` is unused in the registry set up by PocketIC.
+        let synced_registry_version = synced_registry_version
             .map(RegistryVersion::new)
             .unwrap_or(ZERO_REGISTRY_VERSION);
         Self {
@@ -574,7 +575,7 @@ impl PocketIcSubnets {
             log_level,
             bitcoind_addr,
             icp_features,
-            sync_from_registry_version,
+            synced_registry_version,
             _bitcoin_adapter_parts: None,
         }
     }
@@ -865,7 +866,7 @@ impl PocketIcSubnets {
             .registry_data_provider
             .export_versions_as_atomic_mutation_requests()
             .into_iter()
-            .skip(self.sync_from_registry_version.get() as usize)
+            .skip(self.synced_registry_version.get() as usize)
             .collect();
         for mutation_request in mutation_requests {
             let mutation_request_bytes = mutation_request.encode_to_vec();
@@ -877,7 +878,7 @@ impl PocketIcSubnets {
                 mutation_request_bytes,
             );
         }
-        self.sync_from_registry_version = self.registry_data_provider.latest_version();
+        self.synced_registry_version = self.registry_data_provider.latest_version();
     }
 
     fn execute_ingress_on(
@@ -951,7 +952,7 @@ impl Drop for PocketIc {
                 subnet_configs,
                 default_effective_canister_id: self.topology.default_effective_canister_id.into(),
                 icp_features: self.subnets.icp_features.clone(),
-                sync_from_registry_version: Some(self.subnets.sync_from_registry_version.get()),
+                synced_registry_version: Some(self.subnets.synced_registry_version.get()),
             };
             let topology_json = serde_json::to_string(&raw_topology).unwrap();
             let mut topology_file = File::create(state_dir.join("topology.json")).unwrap();
@@ -1050,9 +1051,9 @@ impl PocketIc {
             .as_ref()
             .map(|topology| topology.icp_features.clone())
             .unwrap_or(icp_features);
-        let sync_from_registry_version = topology
+        let synced_registry_version = topology
             .as_ref()
-            .and_then(|topology| topology.sync_from_registry_version);
+            .and_then(|topology| topology.synced_registry_version);
 
         let mut range_gen = RangeGen::new();
 
@@ -1226,7 +1227,7 @@ impl PocketIc {
             log_level,
             bitcoind_addr,
             icp_features,
-            sync_from_registry_version,
+            synced_registry_version,
         );
         let mut subnet_configs = BTreeMap::new();
         for subnet_config_info in subnet_config_info.into_iter() {
