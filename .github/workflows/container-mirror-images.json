@@ -11,6 +11,12 @@
       "sha256": "5d070ad5f7fe63623cbb99b4fc0fd997f5591303d4b03ccce50f403957d0ddc4"
     },
     {
+      "note": "ubuntu:noble-20250415.1",
+      "image": "library/ubuntu",
+      "repo": "docker.io",
+      "sha256": "6015f66923d7afbc53558d7ccffd325d43b4e249f41a6e93eef074c9505d2233"
+    },
+    {
       "image": "ryantk/minica",
       "repo": "docker.io",
       "sha256": "c67e2c1885d438b5927176295d41aaab8a72dd9e1272ba85054bfc78191d05b0"
