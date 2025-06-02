@@ -6,7 +6,7 @@ mod tests;
 
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::canister_state::system_state::{ExecutionTask, SystemState};
-use crate::{InputQueueType, MessageMemoryUsage, StateError};
+use crate::{CallContext, CallOrigin, InputQueueType, MessageMemoryUsage, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
 use ic_management_canister_types_private::{CanisterStatusType, LogVisibilityV2};
 use ic_registry_subnet_type::SubnetType;
@@ -14,9 +14,12 @@ use ic_types::batch::TotalQueryStats;
 use ic_types::methods::SystemMethod;
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{
-    messages::{CanisterMessage, Ingress, Request, RequestOrResponse, Response},
-    methods::WasmMethod,
-    AccumulatedPriority, CanisterId, CanisterLog, ComputeAllocation, ExecutionRound,
+    messages::{
+        CallContextId, CallbackId, CanisterMessage, Ingress, Request, RequestMetadata,
+        RequestOrResponse, Response,
+    },
+    methods::{Callback, WasmMethod},
+    AccumulatedPriority, CanisterId, CanisterLog, ComputeAllocation, Cycles, ExecutionRound,
     MemoryAllocation, NumBytes, PrincipalId, Time,
 };
 use ic_types::{LongExecutionMode, NumInstructions};
@@ -106,6 +109,70 @@ impl SchedulerState {
             time_of_last_allocation_charge: time,
             ..Default::default()
         }
+    }
+}
+
+pub struct ExecutingCallOrTaskState {
+    canister_state: CanisterState,
+    call_context_id: CallContextId,
+}
+
+impl ExecutingCallOrTaskState {
+    pub fn from_call_context(
+        canister_state: CanisterState,
+        call_context_id: CallContextId,
+    ) -> Self {
+        Self { canister_state, call_context_id }
+    }
+
+    pub fn with_new_call_context(
+        mut canister_state: CanisterState,
+        call_origin: CallOrigin,
+        cycles: Cycles,
+        time: Time,
+        metadata: RequestMetadata,
+    ) -> Result<Self, StateError> {
+        let call_context_id =
+            canister_state
+                .system_state
+                .new_call_context(call_origin, cycles, time, metadata)?;
+        Ok(Self::from_call_context(canister_state, call_context_id))
+    }
+}
+
+pub struct ExecutingResponseState {
+    canister_state: CanisterState,
+    callback: Callback,
+    callback_id: CallbackId,
+    call_context: CallContext,
+    call_context_id: CallContextId,
+}
+
+impl ExecutingResponseState {
+    pub fn from_canister_state(
+        canister_state: CanisterState,
+        callback_id: CallbackId,
+    ) -> Result<Self, StateError> {
+        fn from_canister_state(
+            mut canister_state: CanisterState,
+            callback_id: CallbackId,
+        ) -> Option<ExecutingResponseState> {
+            let call_context_manager = canister_state.system_state.call_context_manager()?;
+            let callback = call_context_manager.callback(callback_id)?.clone();
+            let call_context_id = callback.call_context_id;
+            let call_context = call_context_manager.call_context(call_context_id)?.clone();
+
+            Some(ExecutingResponseState {
+                canister_state,
+                callback,
+                callback_id,
+                call_context,
+                call_context_id,
+            })
+        }
+        let canister_id = canister_state.canister_id();
+        from_canister_state(canister_state, callback_id)
+            .ok_or(StateError::CanisterStopped(canister_id))
     }
 }
 
