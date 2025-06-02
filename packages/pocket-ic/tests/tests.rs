@@ -2789,7 +2789,7 @@ fn with_subnet_state_file() {
     #[cfg(not(windows))]
     let state_file_path_buf = state_file.path().to_path_buf();
     #[cfg(windows)]
-    let state_file_path_buf = windows_to_wsl(state_file_path_buf.as_os_str().to_str().unwrap())
+    let state_file_path_buf = windows_to_wsl(state_file.path().as_os_str().to_str().unwrap())
         .unwrap()
         .into();
 
@@ -2805,7 +2805,7 @@ fn with_empty_subnet_state() {
     #[cfg(not(windows))]
     let state_dir_path_buf = state_dir.path().to_path_buf();
     #[cfg(windows)]
-    let state_dir_path_buf = windows_to_wsl(state_dir_path_buf.as_os_str().to_str().unwrap())
+    let state_dir_path_buf = windows_to_wsl(state_dir.path().as_os_str().to_str().unwrap())
         .unwrap()
         .into();
 
