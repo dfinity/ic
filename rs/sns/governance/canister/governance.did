@@ -26,41 +26,64 @@ type Action = variant {
   ExecuteExtensionFunction : ExecuteExtensionFunction;
 };
 
-type Token = variant {
-  NativeSnsToken : record {};
-  Icp : record {};
-  Symbol : record {
-    symbol : opt text;
-  };
+// This type is equivalant to `ICRC3Value`, but we give it another name since it is used here not
+// in the context of the ICRC-3 ledger standard. The justification is the same: The candid format
+// supports sharing information even when the client and the server involved do not have the same
+// schema (see the Upgrading and subtyping section of the candid spec). While this mechanism allows
+// to evolve services and clients independently without breaking them, it also means that a client
+// may not receive all the information that the server is sending, e.g. in case the client schema
+// lacks some fields that the server schema has.
+//
+// This loss of information is not an option for SNS voters deciding if an extension with particular
+// init args should be installed or if an extension function with particular arguments should be
+// called. The client must receive the same exact data the server sent in order to verify it.
+//
+// Verification of a priorly installed extension is done by hashing the extension's init arg data
+// and checking that the result is consistent with what has been certified by the SNS.
+type PreciseValue = variant {
+    Blob : blob;
+    Text : text;
+    Nat : nat;
+    Int : int;
+    Array : vec PreciseValue;
+    Map : vec record { text; PreciseValue };
 };
 
-type Icrc2Token = record {
-  token : opt Token;
-  ledger_canister_id : opt principal;
+type AtomicType = variant {
+    Blob : record {
+      literal : opt blob;
+    };
+    Text : record {
+      literal : opt text;
+    };
+    Nat : record {
+      literal : opt nat;
+    };
+    Int : record {
+      literal : opt int;
+    };
 };
 
-type Icrc2Allowance = record {
-    token : opt Icrc2Token;
-    amount_e8s : opt nat64;
-};
-
-type Allowances = record {
-  icrc2_allowances : opt vec Icrc2Allowance;
-};
-
-// Used in responses, e.g., list_nervous_system_functions.
-type ExtensionType = variant {
-  TreasuryManager;
-};
-
-// Used in requests, e.g., manage_neuron (to submit a RegisterExtension proposal).
-type TreasuryManagerInit = record {
-  // The initial allowances for the Treasury Manager.
-  initial_allowances : opt Allowances;
+// A way to communicate the expected scheme to the client.
+type PreciseType = variant {
+    AtomicType : AtomicType;
+    Array : record { elem_type : PreciseType };
+    Map : record { key_type : AtomicType; value_type : PreciseType };
 };
 
 type ExtensionInit = variant {
-  TreasuryManagerInit : TreasuryManagerInit;
+  init : opt PreciseValue;
+};
+
+type ExtensionFunctionArg = variant {
+  arg : opt PreciseValue;
+};
+
+// The SNS determines extension capabilities based on an extension's Wasm module hash, so this
+// does not need to be provided by the client in RegisterExtension. But it provides useful
+// information for clients who call list_extensions.
+type ExtensionCapability = variant {
+  TreasuryManager : record {};
 };
 
 // Native proposal type: RegisterExtension.
@@ -75,38 +98,18 @@ type DeregisterExtension = record {
   extension_canister_id : opt principal;
 };
 
-type Deposit = record {
-  allowances : opt Allowances;
-};
-
-type Withdraw = record {};
-
-type TreasuryManagerFunctionArg = variant {
-  Deposit : Deposit;
-  Withdraw : Withdraw;
-};
-
-// Used in requests, e.g., manage_neuron (to submit an ExecuteExtensionFunction proposal).
-type ExtensionFunctionArg = variant {
-  TreasuryManagerFunctionArg : TreasuryManagerFunctionArg;
-};
-
-type TreasuryManagerFunctionType = record {
-  function_type : opt variant {
-    Deposit;
-    Withdraw;
-  };
-  function_type_name : opt text;
-};
-
 // Used in responses, e.g., list_nervous_system_functions.
-type ExtensionFunctionType = variant {
-  TreasuryManagerFunctionType : TreasuryManagerFunctionType;
+type ExtensionFunctionType = record {
+  function_name : opt text;
+  arg_type : opt PreciseType;
+  description : opt text;
 };
 
 // Native proposal type: ExecuteExtensionFunction.
 type ExecuteExtensionFunction = record {
   extension_canister_id : opt principal;
+
+  function_name : opt text;
 
   function_arg : opt ExtensionFunctionArg;
 };
@@ -118,6 +121,7 @@ type ExtensionDescription = record {
   name : opt text;
   declared_purpose : opt text;
   wasm_module_hash : opt blob;
+  init_hash : opt blob;
   source_code_url : opt text;
   audit_url : opt text;
 
@@ -126,8 +130,11 @@ type ExtensionDescription = record {
   deregistered_timestamp_seconds : opt nat64;
 
   extension_canister_id : opt principal;
-  extension_type : opt ExtensionType;
-  extension_type_name : opt text;
+  extension_capabilities : opt vec ExtensionCapability;
+};
+
+type ExtensionQuery = record {
+  query_name : opt text;
 };
 
 type Extension = record {
@@ -137,7 +144,7 @@ type Extension = record {
 
   // While an extension's perations require custom proposals, its state is public, and it can
   // be observed via these queries.
-  extension_queries : opt vec text;
+  extension_queries : opt vec ExtensionQuery;
 };
 
 type ListExtensionsResponse = record {
@@ -348,6 +355,7 @@ type Followees = record {
 type FunctionType = variant {
   NativeNervousSystemFunction : record {};
   GenericNervousSystemFunction : GenericNervousSystemFunction;
+  ExtensionFunction : ExtensionFunction;
 };
 
 type GenericNervousSystemFunction = record {
@@ -356,11 +364,15 @@ type GenericNervousSystemFunction = record {
   validator_method_name : opt text;
   target_method_name : opt text;
   topic : opt Topic;
+};
 
+type ExtensionFunction = record {
   // Indicates whether some SNS extension has registered this function which belongs to it.
   // If so, provides the details of the owner extension.
   extension_description : opt ExtensionDescription;
   extension_function_type : opt ExtensionFunctionType;
+
+  topic : opt Topic;
 };
 
 type GetMaturityModulationResponse = record {
@@ -748,6 +760,12 @@ type Proposal = record {
   summary : text;
 };
 
+type ExtensionFunctionCall = record {
+  function : opt ExecuteExtensionFunction;
+  function_arg : opt ExtensionFunctionArg;
+  function_arg_hash : opt blob;
+};
+
 type ProposalData = record {
   id : opt ProposalId;
   payload_text_rendering : opt text;
@@ -772,6 +790,7 @@ type ProposalData = record {
   is_eligible_for_rewards : bool;
   executed_timestamp_seconds : nat64;
   topic : opt Topic;
+  extension_function_call : opt ExtensionFunctionCall;
 };
 
 type ProposalId = record {
