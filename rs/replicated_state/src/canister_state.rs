@@ -112,62 +112,6 @@ impl SchedulerState {
     }
 }
 
-pub struct CallOrTaskCanisterState(CanisterState);
-
-impl CallOrTaskCanisterState {
-    pub fn with_new_call_context(
-        mut canister_state: CanisterState,
-        call_origin: CallOrigin,
-        cycles: Cycles,
-        time: Time,
-        metadata: RequestMetadata,
-    ) -> Result<(Self, CallContextId), StateError> {
-        let call_context_id =
-            canister_state
-                .system_state
-                .new_call_context(call_origin, cycles, time, metadata)?;
-        Ok((Self(canister_state), call_context_id))
-    }
-}
-
-/*
-pub struct ResponseCanisterState {
-    canister_state: CanisterState,
-    callback: Callback,
-    callback_id: CallbackId,
-    call_context: CallContext,
-    call_context_id: CallContextId,
-}
-
-impl ResponseCanisterState {
-    pub fn from_canister_state(
-        canister_state: CanisterState,
-        callback_id: CallbackId,
-    ) -> Result<Self, StateError> {
-        fn from_canister_state(
-            mut canister_state: CanisterState,
-            callback_id: CallbackId,
-        ) -> Option<ResponseCanisterState> {
-            let call_context_manager = canister_state.system_state.call_context_manager()?;
-            let callback = call_context_manager.callback(callback_id)?.clone();
-            let call_context_id = callback.call_context_id;
-            let call_context = call_context_manager.call_context(call_context_id)?.clone();
-
-            Some(ResponseCanisterState {
-                canister_state,
-                callback,
-                callback_id,
-                call_context,
-                call_context_id,
-            })
-        }
-        let canister_id = canister_state.canister_id();
-        from_canister_state(canister_state, callback_id)
-            .ok_or(StateError::CanisterStopped(canister_id))
-    }
-}
-*/
-
 /// The full state of a single canister.
 #[derive(Clone, PartialEq, Debug, ValidateEq)]
 pub struct CanisterState {
@@ -655,6 +599,68 @@ impl CanisterState {
             .update_on_low_wasm_memory_hook_status(self.memory_usage(), self.wasm_memory_usage());
     }
 }
+
+pub struct CallOrTaskCanisterState(CanisterState);
+
+impl CallOrTaskCanisterState {
+    pub fn with_new_call_context(
+        mut canister_state: CanisterState,
+        call_origin: CallOrigin,
+        cycles: Cycles,
+        time: Time,
+        metadata: RequestMetadata,
+    ) -> Result<(Self, CallContextId), StateError> {
+        let call_context_id =
+            canister_state
+                .system_state
+                .new_call_context(call_origin, cycles, time, metadata)?;
+        Ok((Self(canister_state), call_context_id))
+    }
+
+    pub fn canister_id(&self) -> CanisterId {
+        self.0.system_state.canister_id()
+    }
+
+    pub fn 
+}
+
+/*
+pub struct ResponseCanisterState {
+    canister_state: CanisterState,
+    callback: Callback,
+    callback_id: CallbackId,
+    call_context: CallContext,
+    call_context_id: CallContextId,
+}
+
+impl ResponseCanisterState {
+    pub fn from_canister_state(
+        canister_state: CanisterState,
+        callback_id: CallbackId,
+    ) -> Result<Self, StateError> {
+        fn from_canister_state(
+            mut canister_state: CanisterState,
+            callback_id: CallbackId,
+        ) -> Option<ResponseCanisterState> {
+            let call_context_manager = canister_state.system_state.call_context_manager()?;
+            let callback = call_context_manager.callback(callback_id)?.clone();
+            let call_context_id = callback.call_context_id;
+            let call_context = call_context_manager.call_context(call_context_id)?.clone();
+
+            Some(ResponseCanisterState {
+                canister_state,
+                callback,
+                callback_id,
+                call_context,
+                call_context_id,
+            })
+        }
+        let canister_id = canister_state.canister_id();
+        from_canister_state(canister_state, callback_id)
+            .ok_or(StateError::CanisterStopped(canister_id))
+    }
+}
+*/
 
 /// The result of `next_execution()` function.
 /// Describes what the canister is going to execute next:
