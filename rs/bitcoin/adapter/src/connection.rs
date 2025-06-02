@@ -246,6 +246,7 @@ impl Connection {
     }
 }
 
+#[cfg(not(feature = "dogecoin"))]
 #[cfg(test)]
 mod test {
     use super::*;

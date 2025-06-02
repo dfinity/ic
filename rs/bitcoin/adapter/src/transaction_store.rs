@@ -141,7 +141,7 @@ impl TransactionStore {
                         channel
                             .send(Command {
                                 address: Some(address),
-                                message: NetworkMessage::Inv(std::mem::take(&mut inventory)),
+                                message: NetworkMessage::Inv(std::mem::take(&mut inventory).into()),
                             })
                             .ok();
                     }
@@ -155,7 +155,7 @@ impl TransactionStore {
                 channel
                     .send(Command {
                         address: Some(address),
-                        message: NetworkMessage::Inv(inventory),
+                        message: NetworkMessage::Inv(inventory.into()),
                     })
                     .ok();
             }
@@ -173,11 +173,11 @@ impl TransactionStore {
         message: &NetworkMessage,
     ) -> Result<(), ProcessBitcoinNetworkMessageError> {
         if let NetworkMessage::GetData(inventory) = message {
-            if inventory.len() > MAXIMUM_TRANSACTION_PER_INV {
+            if inventory.as_ref().len() > MAXIMUM_TRANSACTION_PER_INV {
                 return Err(ProcessBitcoinNetworkMessageError::InvalidMessage);
             }
 
-            for inv in inventory {
+            for inv in inventory.as_ref() {
                 if let Inventory::Transaction(txid) = inv {
                     if let Some(TransactionInfo { transaction, .. }) = self.transactions.get(txid) {
                         channel
@@ -194,6 +194,7 @@ impl TransactionStore {
     }
 }
 
+#[cfg(not(feature = "dogecoin"))]
 #[cfg(test)]
 mod test {
     use super::*;

@@ -224,7 +224,7 @@ impl BlockchainManager {
         let command = Command {
             address: Some(*addr),
             message: NetworkMessage::GetHeaders(GetHeadersMessage {
-                locator_hashes: request.locators.0.clone(),
+                locator_hashes: request.locators.0.clone().into(),
                 stop_hash: request.locators.1,
                 version: MINIMUM_VERSION_NUMBER,
             }),
@@ -303,8 +303,8 @@ impl BlockchainManager {
             .peer_info
             .get_mut(addr)
             .ok_or(ReceivedHeadersMessageError::UnknownPeer)?;
-        trace!(
-            self.logger,
+        eprintln!(
+            //self.logger,
             "Received headers from {}: {}",
             addr,
             headers.len()
@@ -312,11 +312,13 @@ impl BlockchainManager {
         // If no `getheaders` request was sent to the peer, the `headers` message is unsolicited.
         // Don't accept more than a few headers in that case.
         if headers.len() > MAX_UNSOLICITED_HEADERS && !self.getheaders_requests.contains_key(addr) {
+            eprintln!("received too many unsolicitied headers");
             return Err(ReceivedHeadersMessageError::ReceivedTooManyUnsolicitedHeaders);
         }
 
         // There are more than 2000 headers in the `headers` message.
         if headers.len() > MAX_HEADERS_SIZE {
+            eprintln!("received too many headers");
             return Err(ReceivedHeadersMessageError::ReceivedTooManyHeaders);
         }
 
@@ -337,8 +339,8 @@ impl BlockchainManager {
             let (block_hashes_of_added_headers, maybe_err) = blockchain_state.add_headers(headers);
             let active_tip = blockchain_state.get_active_chain_tip();
             if prev_tip_height < active_tip.height {
-                info!(
-                    self.logger,
+                eprintln!(
+                    //self.logger,
                     "Added headers: Height = {}, Active chain's tip = {}",
                     active_tip.height,
                     active_tip.header.block_hash()
@@ -355,8 +357,8 @@ impl BlockchainManager {
                 if last.height > peer.height {
                     peer.tip = last.header.block_hash();
                     peer.height = last.height;
-                    trace!(
-                        self.logger,
+                    eprintln!(
+                        //self.logger,
                         "Peer {}'s height = {}, tip = {}",
                         addr,
                         peer.height,
@@ -365,6 +367,7 @@ impl BlockchainManager {
                 }
             }
 
+            eprintln!("maybe_err = {:?}", maybe_err);
             match maybe_err {
                 Some(AddHeaderError::InvalidHeader(block_hash, validate_header_error)) => {
                     return Err(ReceivedHeadersMessageError::ReceivedInvalidHeader(
@@ -391,6 +394,7 @@ impl BlockchainManager {
             }
         };
 
+        eprintln!("maybe_locators = {:?}", maybe_locators);
         if let Some(locators) = maybe_locators {
             self.send_getheaders(channel, addr, locators);
         } else {
@@ -597,7 +601,8 @@ impl BlockchainManager {
                         selected_inventory
                             .iter()
                             .map(|h| Inventory::Block(*h))
-                            .collect(),
+                            .collect::<Vec<_>>()
+                            .into(),
                     ),
                 })
                 .ok();
@@ -626,7 +631,7 @@ impl BlockchainManager {
     ) -> Result<(), ProcessBitcoinNetworkMessageError> {
         match message {
             NetworkMessage::Inv(inventory) => {
-                if let Err(err) = self.received_inv_message(channel, &addr, inventory) {
+                if let Err(err) = self.received_inv_message(channel, &addr, inventory.as_ref()) {
                     warn!(
                         self.logger,
                         "Received an invalid inv message from {}: {}", addr, err
@@ -635,7 +640,9 @@ impl BlockchainManager {
                 }
             }
             NetworkMessage::Headers(headers) => {
+                eprintln!("here");
                 if let Err(err) = self.received_headers_message(channel, &addr, headers) {
+                eprintln!("received headers message returns error: {:?}", err);
                     warn!(
                         self.logger,
                         "Received an invalid headers message form {}: {}", addr, err
@@ -753,6 +760,7 @@ fn get_next_block_hash_to_sync(
     sync_queue.pop_front().or_else(|| retry_queue.pop_front())
 }
 
+#[cfg(not(feature = "dogecoin"))]
 #[cfg(test)]
 pub mod test {
     use super::*;
@@ -811,7 +819,7 @@ pub mod test {
             matches!(&command.message, NetworkMessage::GetHeaders(GetHeadersMessage { version, locator_hashes: _, stop_hash: _ }) if *version == MINIMUM_VERSION_NUMBER)
         );
         assert!(
-            matches!(&command.message, NetworkMessage::GetHeaders(GetHeadersMessage { version: _, locator_hashes, stop_hash: _ }) if locator_hashes[0] == genesis_hash)
+            matches!(&command.message, NetworkMessage::GetHeaders(GetHeadersMessage { version: _, locator_hashes, stop_hash: _ }) if locator_hashes.as_ref()[0] == genesis_hash)
         );
 
         // Check peer info to ensure it has been updated.
@@ -874,13 +882,13 @@ pub mod test {
             NetworkMessage::GetHeaders(get_headers_message) => get_headers_message,
             _ => GetHeadersMessage {
                 version: 0,
-                locator_hashes: vec![],
+                locator_hashes: Default::default(),
                 stop_hash: BlockHash::all_zeros(),
             },
         };
         assert_eq!(
             get_headers_message.locator_hashes,
-            vec![genesis_hash],
+            vec![genesis_hash].into(),
             "Didn't send the right genesis hash for initial syncing"
         );
         assert_eq!(
@@ -912,12 +920,13 @@ pub mod test {
             NetworkMessage::GetHeaders(get_headers_message) => get_headers_message,
             _ => GetHeadersMessage {
                 version: 0,
-                locator_hashes: vec![],
+                locator_hashes: Default::default(),
                 stop_hash: BlockHash::all_zeros(),
             },
         };
         assert_eq!(
-            get_headers_message.locator_hashes, after_first_received_headers_message_hashes,
+            get_headers_message.locator_hashes,
+            after_first_received_headers_message_hashes.into(),
             "Didn't send the right genesis hash for initial syncing"
         );
         assert_eq!(
@@ -976,7 +985,8 @@ pub mod test {
                 .iter()
                 .take(16)
                 .map(|hash| Inventory::Block(*hash))
-                .collect(),
+                .collect::<Vec<_>>()
+                .into(),
         );
         assert!(blockchain_manager
             .process_bitcoin_network_message(&mut channel, sockets[0], &message)
@@ -993,16 +1003,16 @@ pub mod test {
             );
             if let NetworkMessage::GetHeaders(get_headers_message) = &command.message {
                 assert!(
-                    !get_headers_message.locator_hashes.is_empty(),
+                    !get_headers_message.locator_hashes.as_ref().is_empty(),
                     "Sent 0 locator hashes in getheaders message"
                 );
                 assert_eq!(
-                    get_headers_message.locator_hashes.first().unwrap(),
+                    get_headers_message.locator_hashes.as_ref().first().unwrap(),
                     chain_hashes.last().unwrap(),
                     "Didn't send the right locator hashes in response to inv message"
                 );
                 assert_eq!(
-                    *get_headers_message.locator_hashes.last().unwrap(),
+                    *get_headers_message.locator_hashes.as_ref().last().unwrap(),
                     genesis_hash,
                     "Didn't send the right locator hashes in response to inv message"
                 );
@@ -1178,7 +1188,7 @@ pub mod test {
             NetworkMessage::GetData(_)
         ));
         let hashes_sent = match getdata_command.message {
-            NetworkMessage::GetData(inv) => inv,
+            NetworkMessage::GetData(inv) => inv.into(),
             _ => vec![],
         };
         assert_eq!(hashes_sent.len(), 1);
@@ -1233,7 +1243,7 @@ pub mod test {
             NetworkMessage::GetData(_)
         ));
         let hashes_sent = match getdata_command.message {
-            NetworkMessage::GetData(inv) => inv,
+            NetworkMessage::GetData(inv) => inv.into(),
             _ => vec![],
         };
         assert_eq!(hashes_sent.len(), 1);
@@ -1408,6 +1418,8 @@ pub mod test {
         let block = Block {
             header: next_headers[3],
             txdata: vec![],
+            #[cfg(feature = "dogecoin")]
+            auxpow: None,
         };
         {
             let mut blockchain = blockchain_manager.blockchain.lock().unwrap();
@@ -1446,6 +1458,8 @@ pub mod test {
         let block_3 = Block {
             header: next_headers[2],
             txdata: vec![],
+            #[cfg(feature = "dogecoin")]
+            auxpow: None,
         };
 
         {
@@ -1504,6 +1518,8 @@ pub mod test {
         let block_5 = Block {
             header: next_headers[4],
             txdata: vec![],
+            #[cfg(feature = "dogecoin")]
+            auxpow: None,
         };
 
         {

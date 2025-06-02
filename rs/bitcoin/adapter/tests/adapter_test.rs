@@ -1,6 +1,6 @@
 use bitcoincore_rpc::{bitcoincore_rpc_json::CreateRawTransactionInput, Auth, Client, RpcApi};
 use bitcoind::{BitcoinD, Conf, P2P};
-use ic_btc_adapter::import::{deserialize, Address, Amount, Block, BlockHash};
+use ic_btc_adapter::import;
 use ic_btc_adapter::{start_server, Config, IncomingSource};
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_interface::Network;
@@ -13,6 +13,7 @@ use ic_config::bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderCo
 use ic_interfaces_adapter_client::{Options, RpcAdapterClient, RpcError};
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use import::{deserialize, Address, Amount, Block, BlockHash};
 use std::{
     collections::{HashMap, HashSet},
     net::{SocketAddr, SocketAddrV4},
@@ -94,7 +95,7 @@ fn start_adapter(
     rt_handle: &tokio::runtime::Handle,
     nodes: Vec<SocketAddr>,
     uds_path: &Path,
-    network: bitcoin::Network,
+    network: import::Network,
 ) {
     let config = Config {
         network,
@@ -150,6 +151,7 @@ fn check_received_blocks(client: &Client, blocks: &[Vec<u8>], start_index: usize
 
 fn get_bitcoind_url(bitcoind: &BitcoinD) -> Option<SocketAddrV4> {
     if let P2P::Connect(url, _) = bitcoind.p2p_connect(true).unwrap() {
+        println!("get_bitcoind_url {}", url);
         Some(url)
     } else {
         None
@@ -160,7 +162,7 @@ fn start_adapter_and_client(
     rt: &Runtime,
     urls: Vec<SocketAddr>,
     logger: ReplicaLogger,
-    network: bitcoin::Network,
+    network: import::Network,
     adapter_state: AdapterState,
 ) -> (BitcoinAdapterClient, TempPath) {
     let metrics_registry = MetricsRegistry::new();
@@ -199,7 +201,7 @@ fn start_idle_adapter_and_client(
     rt: &Runtime,
     urls: Vec<SocketAddr>,
     logger: ReplicaLogger,
-    network: bitcoin::Network,
+    network: import::Network,
 ) -> (BitcoinAdapterClient, TempPath) {
     start_adapter_and_client(rt, urls, logger, network, AdapterState::Idle)
 }
@@ -208,7 +210,7 @@ fn start_active_adapter_and_client(
     rt: &Runtime,
     urls: Vec<SocketAddr>,
     logger: ReplicaLogger,
-    network: bitcoin::Network,
+    network: import::Network,
 ) -> (BitcoinAdapterClient, TempPath) {
     start_adapter_and_client(rt, urls, logger, network, AdapterState::Active)
 }
@@ -260,8 +262,9 @@ fn sync_until_end_block(
     let mut anchor = client.get_block_hash(start_index).unwrap()[..].to_vec();
     let mut tries = 0;
 
-    let end_hash = client.get_best_block_hash().unwrap()[..].to_vec();
+    let end_hash = client.get_best_block_hash().unwrap();
     println!("end_hash = {:?}", end_hash);
+    let end_hash = end_hash.to_vec();
     while anchor != end_hash && tries < max_tries {
         let res = make_get_successors_request(adapter_client, anchor.clone(), headers.clone());
         println!("res = {:?}", res);
@@ -385,6 +388,7 @@ fn get_blackhole_address() -> Address {
 
 fn create_alice_and_bob_wallets(bitcoind: &BitcoinD) -> (Client, Client, Address, Address) {
     let alice_client = Client::new(
+        import::Network::Regtest,
         format!("{}/wallet/{}", bitcoind.rpc_url(), "alice").as_str(),
         Auth::CookieFile(bitcoind.params.cookie_file.clone()),
     )
@@ -394,6 +398,7 @@ fn create_alice_and_bob_wallets(bitcoind: &BitcoinD) -> (Client, Client, Address
         .unwrap();
 
     let bob_client = Client::new(
+        import::Network::Regtest,
         format!("{}/wallet/{}", bitcoind.rpc_url(), "bob").as_str(),
         Auth::CookieFile(bitcoind.params.cookie_file.clone()),
     )
@@ -526,11 +531,13 @@ fn test_receives_blocks() {
     let logger = no_op_logger();
     let bitcoind = get_default_bitcoind();
     let client = Client::new(
+        import::Network::Regtest,
         bitcoind.rpc_url().as_str(),
         Auth::CookieFile(bitcoind.params.cookie_file.clone()),
     )
     .unwrap();
 
+    eprintln!("{:?}", client.get_blockchain_info());
     assert_eq!(0, client.get_blockchain_info().unwrap().blocks);
 
     let address = client.get_new_address(None, None).unwrap().assume_checked();
@@ -543,10 +550,10 @@ fn test_receives_blocks() {
         &rt,
         vec![SocketAddr::V4(get_bitcoind_url(&bitcoind).unwrap())],
         logger,
-        bitcoin::Network::Regtest,
+        import::Network::Regtest,
     );
 
-    let blocks = sync_until_end_block(&adapter_client, &client, 0, &mut vec![], 15);
+    let blocks = sync_until_end_block(&adapter_client, &client, 0, &mut vec![], 1500);
 
     assert_eq!(blocks.len(), 150);
 }
@@ -558,6 +565,7 @@ fn test_adapter_disconnects_when_idle() {
 
     let bitcoind = get_default_bitcoind();
     let client = Client::new(
+        import::Network::Regtest,
         bitcoind.rpc_url().as_str(),
         Auth::CookieFile(bitcoind.params.cookie_file.clone()),
     )
@@ -567,7 +575,7 @@ fn test_adapter_disconnects_when_idle() {
 
     let rt: Runtime = tokio::runtime::Runtime::new().unwrap();
 
-    let _r = start_active_adapter_and_client(&rt, vec![url], logger, bitcoin::Network::Regtest);
+    let _r = start_active_adapter_and_client(&rt, vec![url], logger, import::Network::Regtest);
 
     // The client should be connected to the adapter
     wait_for_connection(&client, 1);
@@ -587,6 +595,7 @@ fn idle_adapter_does_not_connect_to_peers() {
 
     let bitcoind = get_default_bitcoind();
     let client = Client::new(
+        import::Network::Regtest,
         bitcoind.rpc_url().as_str(),
         Auth::CookieFile(bitcoind.params.cookie_file.clone()),
     )
@@ -599,7 +608,7 @@ fn idle_adapter_does_not_connect_to_peers() {
 
     let rt = tokio::runtime::Runtime::new().unwrap();
 
-    let _r = start_idle_adapter_and_client(&rt, vec![url], logger, bitcoin::Network::Regtest);
+    let _r = start_idle_adapter_and_client(&rt, vec![url], logger, import::Network::Regtest);
 
     // The client still does not have any connections
     exact_connections(&client, 0);
@@ -612,6 +621,7 @@ fn test_connection_to_multiple_peers() {
 
     let bitcoind1 = get_default_bitcoind();
     let client1 = Client::new(
+        import::Network::Regtest,
         bitcoind1.rpc_url().as_str(),
         Auth::CookieFile(bitcoind1.params.cookie_file.clone()),
     )
@@ -619,6 +629,7 @@ fn test_connection_to_multiple_peers() {
 
     let bitcoind2 = get_default_bitcoind();
     let client2 = Client::new(
+        import::Network::Regtest,
         bitcoind2.rpc_url().as_str(),
         Auth::CookieFile(bitcoind2.params.cookie_file.clone()),
     )
@@ -626,6 +637,7 @@ fn test_connection_to_multiple_peers() {
 
     let bitcoind3 = get_default_bitcoind();
     let client3 = Client::new(
+        import::Network::Regtest,
         bitcoind3.rpc_url().as_str(),
         Auth::CookieFile(bitcoind3.params.cookie_file.clone()),
     )
@@ -655,7 +667,7 @@ fn test_connection_to_multiple_peers() {
         &rt,
         vec![url1, url2, url3],
         logger,
-        bitcoin::Network::Regtest,
+        import::Network::Regtest,
     );
 
     wait_for_connection(&client1, 3);
@@ -674,7 +686,7 @@ fn test_receives_new_3rd_party_txs() {
         &rt,
         vec![SocketAddr::V4(get_bitcoind_url(&bitcoind).unwrap())],
         logger,
-        bitcoin::Network::Regtest,
+        import::Network::Regtest,
     );
 
     let (alice_client, bob_client, alice_address, bob_address) =
@@ -730,7 +742,7 @@ fn test_send_tx() {
         &rt,
         vec![SocketAddr::V4(get_bitcoind_url(&bitcoind).unwrap())],
         logger,
-        bitcoin::Network::Regtest,
+        import::Network::Regtest,
     );
 
     let (alice_client, bob_client, alice_address, bob_address) =
@@ -797,6 +809,7 @@ fn test_receives_blocks_from_forks() {
     let logger = no_op_logger();
     let bitcoind1 = get_default_bitcoind();
     let client1 = Client::new(
+        import::Network::Regtest,
         bitcoind1.rpc_url().as_str(),
         Auth::CookieFile(bitcoind1.params.cookie_file.clone()),
     )
@@ -804,6 +817,7 @@ fn test_receives_blocks_from_forks() {
 
     let bitcoind2 = get_default_bitcoind();
     let client2 = Client::new(
+        import::Network::Regtest,
         bitcoind2.rpc_url().as_str(),
         Auth::CookieFile(bitcoind2.params.cookie_file.clone()),
     )
@@ -817,7 +831,7 @@ fn test_receives_blocks_from_forks() {
         &rt,
         vec![SocketAddr::V4(url1), SocketAddr::V4(url2)],
         logger,
-        bitcoin::Network::Regtest,
+        import::Network::Regtest,
     );
 
     // Connect the nodes and mine some shared blocks
@@ -871,6 +885,7 @@ fn test_bfs_order() {
     let logger = no_op_logger();
     let bitcoind1 = get_default_bitcoind();
     let client1 = Client::new(
+        import::Network::Regtest,
         bitcoind1.rpc_url().as_str(),
         Auth::CookieFile(bitcoind1.params.cookie_file.clone()),
     )
@@ -878,6 +893,7 @@ fn test_bfs_order() {
 
     let bitcoind2 = get_default_bitcoind();
     let client2 = Client::new(
+        import::Network::Regtest,
         bitcoind2.rpc_url().as_str(),
         Auth::CookieFile(bitcoind2.params.cookie_file.clone()),
     )
@@ -891,7 +907,7 @@ fn test_bfs_order() {
         &rt,
         vec![SocketAddr::V4(url1), SocketAddr::V4(url2)],
         logger,
-        bitcoin::Network::Regtest,
+        import::Network::Regtest,
     );
 
     // Connect the nodes and mine some shared blocks
@@ -1011,12 +1027,8 @@ fn test_mainnet_data() {
     );
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let (adapter_client, _path) = start_active_adapter_and_client(
-        &rt,
-        vec![bitcoind_addr],
-        logger,
-        bitcoin::Network::Bitcoin,
-    );
+    let (adapter_client, _path) =
+        start_active_adapter_and_client(&rt, vec![bitcoind_addr], logger, import::Network::Regtest);
     sync_headers_until_checkpoint(&adapter_client, genesis[..].to_vec());
 
     // Block 350,989's block hash.
@@ -1050,12 +1062,8 @@ fn test_testnet_data() {
     );
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let (adapter_client, _path) = start_active_adapter_and_client(
-        &rt,
-        vec![bitcoind_addr],
-        logger,
-        bitcoin::Network::Testnet,
-    );
+    let (adapter_client, _path) =
+        start_active_adapter_and_client(&rt, vec![bitcoind_addr], logger, import::Network::Testnet);
     sync_headers_until_checkpoint(&adapter_client, genesis[..].to_vec());
 
     let anchor: BlockHash = "0000000000ec75f32a0805740a6fa1364cc1683e419e915d99892db97c3e80b2"

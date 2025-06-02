@@ -1,4 +1,4 @@
-use crate::import::{bitcoin_io, encode, serialize, Magic, NetworkMessage, RawNetworkMessage};
+use crate::import::{encode, serialize, Magic, NetworkMessage, RawNetworkMessage};
 use futures::TryFutureExt;
 use http::Uri;
 use ic_logger::{debug, error, info, ReplicaLogger};
@@ -225,7 +225,7 @@ impl Stream {
                 // unparsed buffer to attempt another deserialize call. If no bytes found,
                 // return the unexpected end-of-file error.
                 Err(encode::Error::Io(ref err))
-                    if err.kind() == bitcoin_io::ErrorKind::UnexpectedEof =>
+                    if err.kind() == bitcoin::io::ErrorKind::UnexpectedEof =>
                 {
                     let count = self
                         .read_half
@@ -283,7 +283,6 @@ impl Stream {
         }
 
         let raw_message = self.read_message();
-        println!("raw_message = {:?}", raw_message);
         let raw_message = raw_message?;
         let result = self
             .network_message_sender
@@ -363,6 +362,7 @@ pub fn handle_stream(config: StreamConfig) -> tokio::task::JoinHandle<()> {
     })
 }
 
+#[cfg(not(feature = "dogecoin"))]
 #[cfg(test)]
 pub mod test {
 

@@ -311,6 +311,11 @@ mod test {
     use ic_logger::replica_logger::no_op_logger;
     use std::str::FromStr;
 
+    #[cfg(not(feature = "dogecoin"))]
+    const TEST_NETWORK: Network = Network::Signet;
+    #[cfg(feature = "dogecoin")]
+    const TEST_NETWORK: Network = Network::Testnet;
+
     /// This function tests the address manager basic interactions `mark_as_active`
     /// and `remove_from_active`.
     #[test]
@@ -467,7 +472,7 @@ mod test {
     #[test]
     fn test_pop_seed() {
         let config = ConfigBuilder::new()
-            .with_network(Network::Signet)
+            .with_network(TEST_NETWORK)
             .with_dns_seeds(vec![String::from("127.0.0.1"), String::from("192.168.1.1")])
             .build();
         let mut book = AddressBook::new(&config, no_op_logger());
@@ -495,7 +500,7 @@ mod test {
     #[test]
     fn test_seeds_ipv6_only() {
         let config = ConfigBuilder::new()
-            .with_network(Network::Signet)
+            .with_network(TEST_NETWORK)
             .with_dns_seeds(vec![
                 String::from("127.0.0.1"),
                 String::from("[2401:3f00:1000:23:5000:7bff:fe3d:b81d]"),

@@ -155,7 +155,10 @@ pub mod test {
         };
         let result = cli.get_config();
         let config = result.unwrap();
+        #[cfg(not(feature = "dogecoin"))]
         assert_eq!(config.network, Network::Bitcoin);
+        #[cfg(feature = "dogecoin")]
+        assert_eq!(config.network, Network::Dogecoin);
         assert_eq!(config.address_limits, (500, 2000));
         assert_eq!(config.dns_seeds.len(), 9);
         assert_eq!(config.socks_proxy, None);

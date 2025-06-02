@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::{
     collections::{HashSet, VecDeque},
     sync::{Arc, Mutex},
@@ -201,6 +203,7 @@ fn get_successor_blocks(
         .unwrap_or_default();
 
     let max_blocks_size = match network {
+        #[cfg(not(feature = "dogecoin"))]
         Network::Testnet4 => TESTNET4_MAX_BLOCKS_BYTES,
         _ => MAX_BLOCKS_BYTES,
     };
@@ -266,6 +269,7 @@ fn get_next_headers(
         .unwrap_or_default();
 
     let max_in_flight_blocks = match network {
+        #[cfg(not(feature = "dogecoin"))]
         Network::Testnet4 => TESTNET4_MAX_IN_FLIGHT_BLOCKS,
         _ => MAX_IN_FLIGHT_BLOCKS,
     };
@@ -286,15 +290,20 @@ fn get_next_headers(
     next_headers
 }
 
+#[allow(unused_variables)]
 /// Helper used to determine if multiple blocks should be returned.
 fn are_multiple_blocks_allowed(network: Network, anchor_height: BlockHeight) -> bool {
-    match network {
+    #[cfg(feature = "dogecoin")]
+    return false;
+    #[cfg(not(feature = "dogecoin"))]
+    match network.into().is_mainnet() {
         Network::Bitcoin => anchor_height <= MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT,
         Network::Testnet | Network::Signet | Network::Regtest | Network::Testnet4 => true,
         other => unreachable!("Unsupported network: {:?}", other),
     }
 }
 
+#[cfg(not(feature = "dogecoin"))]
 #[cfg(test)]
 mod test {
     use super::*;

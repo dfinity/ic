@@ -4,19 +4,19 @@
 //! and publish transactions. Moreover, it interacts with the Bitcoin system
 //! component to provide blocks and collect outgoing transactions.
 
-#[cfg(feature = "bitcoin")]
+#[cfg(not(feature = "dogecoin"))]
 mod bitcoin;
 
-#[cfg(feature = "nintondo-dogecoin")]
+#[cfg(feature = "dogecoin")]
 mod dogecoin;
 
-#[cfg(feature = "bitcoin")]
+#[cfg(not(feature = "dogecoin"))]
 /// imports from bitcoin.
 pub mod import {
     pub use crate::bitcoin::*;
 }
 
-#[cfg(feature = "nintondo-dogecoin")]
+#[cfg(feature = "dogecoin")]
 /// imports from dogecoin.
 pub mod import {
     pub use crate::dogecoin::*;

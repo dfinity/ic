@@ -161,7 +161,7 @@ impl BlockchainState {
 
         let err = headers
             .iter()
-            .try_for_each(|header| match self.add_header(*header) {
+            .try_for_each(|header| match self.add_header(header.clone()) {
                 Ok(AddHeaderResult::HeaderAdded(block_hash)) => {
                     block_hashes_of_added_headers.push(block_hash);
                     Ok(())
@@ -248,7 +248,7 @@ impl BlockchainState {
 
         // If the block's header is not added before, then add the header into the `header_cache` first.
         let _ = self
-            .add_header(block.header)
+            .add_header(block.header.clone())
             .map_err(AddBlockError::Header)?;
         self.tips.sort_unstable_by(|a, b| b.work.cmp(&a.work));
 
@@ -303,7 +303,7 @@ impl BlockchainState {
     pub fn locator_hashes(&self) -> Vec<BlockHash> {
         let mut hashes = Vec::new();
         let tip = self.get_active_chain_tip();
-        let mut current_header = tip.header;
+        let mut current_header = tip.header.clone();
         let mut current_hash = current_header.block_hash();
         let mut step: u32 = 1;
         let mut last_hash = current_hash;
@@ -317,7 +317,7 @@ impl BlockchainState {
                 let prev_hash = current_header.prev_blockhash;
                 //If the prev header does not exist, then simply return the `hashes` vector.
                 if let Some(cached) = self.header_cache.get(&prev_hash) {
-                    current_header = cached.header;
+                    current_header = cached.header.clone();
                 } else {
                     if last_hash != genesis_hash {
                         hashes.push(genesis_hash);
@@ -360,7 +360,7 @@ impl BlockchainState {
 impl HeaderStore for BlockchainState {
     fn get_header(&self, hash: &BlockHash) -> Option<(BlockHeader, BlockHeight)> {
         self.get_cached_header(hash)
-            .map(|cached| (cached.header, cached.height))
+            .map(|cached| (cached.header.clone(), cached.height))
     }
 
     fn get_initial_hash(&self) -> BlockHash {
@@ -372,6 +372,7 @@ impl HeaderStore for BlockchainState {
     }
 }
 
+#[cfg(not(feature = "dogecoin"))]
 #[cfg(test)]
 mod test {
     use crate::import::{Block, Decodable, TxMerkleNode};

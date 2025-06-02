@@ -626,6 +626,7 @@ impl ProcessEvent for ConnectionManager {
         match &event.kind {
             StreamEventKind::Connected => {
                 let result = self.send_version(&event.address);
+                            eprintln!("send_version result {:?}", result);
                 if let Ok(conn) = self.get_connection(&event.address) {
                     match result {
                         Ok(_) => {
@@ -633,6 +634,7 @@ impl ProcessEvent for ConnectionManager {
                             trace!(self.logger, "Connected to {}", event.address);
                         }
                         Err(err) => {
+                            eprintln!("Disconnected Error {}", err);
                             conn.disconnect();
                             trace!(self.logger, "{}", err);
                         }
@@ -665,7 +667,7 @@ impl ProcessBitcoinNetworkMessage for ConnectionManager {
                 self.process_version_message(&address, version_message)
             }
             NetworkMessage::Verack => self.process_verack_message(&address),
-            NetworkMessage::Addr(addresses) => self.process_addr_message(&address, addresses),
+            NetworkMessage::Addr(addresses) => self.process_addr_message(&address, addresses.as_ref()),
             NetworkMessage::Ping(nonce) => self.process_ping_message(&address, *nonce),
             NetworkMessage::Pong(nonce) => self.process_pong_message(&address, *nonce),
             NetworkMessage::Unknown { command, payload } => {
@@ -686,6 +688,7 @@ fn connection_limits(address_book: &AddressBook) -> (usize, usize) {
     }
 }
 
+#[cfg(not(feature = "dogecoin"))]
 #[cfg(test)]
 mod test {
     use super::*;

@@ -1,9 +1,8 @@
 use std::collections::HashSet;
 
 use hex::FromHex;
-use ic_btc_adapter::import::{
-    deserialize, Block, BlockHash, BlockHeader, Hash, Target, Transaction, TxMerkleNode, Version,
-};
+use ic_btc_adapter::import;
+use import::{deserialize, Block, BlockHash, BlockHeader, Hash, Target, Transaction, TxMerkleNode};
 use rand::{prelude::StdRng, Rng, SeedableRng};
 
 pub mod bitcoind;
@@ -41,9 +40,10 @@ pub fn headers_to_hashes(headers: &[BlockHeader]) -> Vec<BlockHash> {
 
 /// Generates a singular large block.
 fn large_block(prev_blockhash: &BlockHash, prev_time: u32, tx: Transaction) -> Block {
+    #[cfg(not(feature = "dogecoin"))]
     let mut block = Block {
         header: BlockHeader {
-            version: Version::ONE,
+            version: import::Version::ONE,
             prev_blockhash: *prev_blockhash,
             merkle_root: TxMerkleNode::all_zeros(),
             time: prev_time + gen_time_delta(),
@@ -51,6 +51,20 @@ fn large_block(prev_blockhash: &BlockHash, prev_time: u32, tx: Transaction) -> B
             nonce: 0,
         },
         txdata: vec![],
+    };
+
+    #[cfg(feature = "dogecoin")]
+    let mut block = Block {
+        header: BlockHeader {
+            version: 1,
+            prev_blockhash: *prev_blockhash,
+            merkle_root: TxMerkleNode::all_zeros(),
+            time: prev_time + gen_time_delta(),
+            bits: TARGET.to_compact_lossy().to_consensus(),
+            nonce: 0,
+        },
+        txdata: vec![],
+        auxpow: None,
     };
 
     for _ in 0..25_000 {
@@ -119,12 +133,22 @@ pub fn generate_headers(
 
 /// This helper generates a single header with a given previous blockhash.
 pub fn generate_header(prev_blockhash: BlockHash, prev_time: u32, nonce: u32) -> BlockHeader {
+    #[cfg(not(feature = "dogecoin"))]
     let mut header = BlockHeader {
-        version: Version::ONE,
+        version: import::Version::ONE,
         prev_blockhash,
         merkle_root: TxMerkleNode::all_zeros(),
         time: prev_time + gen_time_delta(),
         bits: TARGET.to_compact_lossy(),
+        nonce,
+    };
+    #[cfg(feature = "dogecoin")]
+    let mut header = BlockHeader {
+        version: 1,
+        prev_blockhash,
+        merkle_root: TxMerkleNode::all_zeros(),
+        time: prev_time + gen_time_delta(),
+        bits: TARGET.to_compact_lossy().to_consensus(),
         nonce,
     };
 

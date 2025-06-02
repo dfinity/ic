@@ -16,6 +16,7 @@ pub const DEFAULT_CHANNEL_BUFFER_SIZE: usize = 64;
 /// This field contains the datatype used to store height of a Bitcoin block
 pub type BlockHeight = u32;
 
+#[cfg(not(feature = "dogecoin"))]
 #[cfg(test)]
 pub mod test_common {
 

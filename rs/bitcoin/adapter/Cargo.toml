@@ -7,8 +7,8 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-bitcoin = { workspace = true , optional = true }
-nintondo-dogecoin = { git = "https://github.com/Nintondo/rust-dogecoin", optional = true }
+bitcoin = { workspace = true }
+dogecoin = { git = "https://github.com/ninegua/ck-doge", rev = "f390e5ca6ee244d2b54373aa437828f3c92c00e7", optional = true }
 clap = { workspace = true }
 futures = { workspace = true }
 hashlink = "0.8.0"
@@ -39,8 +39,8 @@ tonic = { workspace = true }
 tower = { workspace = true, optional = true }
 
 [dev-dependencies]
-bitcoincore-rpc = { workspace = true }
-bitcoind = "0.32.0"
+bitcoincore-rpc = { git = "https://github.com/dfinity/rust-bitcoincore-rpc", rev = "91f62f8b8c746cf9e7b4ff0ae2a1b1f99803923d" }
+bitcoind = { git = "https://github.com/ninegua/bitcoind", rev = "60ed030114a826a51ec87688de017ddc82f27fad" }
 criterion = { workspace = true }
 ic-btc-adapter-client = { path = "../client" }
 ic-btc-adapter-test-utils = { path = "./test_utils" }
@@ -60,5 +60,5 @@ path = "src/stress_test.rs"
 required-features = ["tower"]
 
 [features]
-default = [ "bitcoin" ]
-dogecoin = [ "nintondo-dogecoin" ]
+default = [ "dogecoin", "bitcoincore-rpc/dogecoin" ]
+dogecoin = [ "dep:dogecoin" ]
