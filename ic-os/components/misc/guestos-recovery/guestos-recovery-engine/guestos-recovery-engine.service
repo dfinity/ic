@@ -1,5 +1,5 @@
 [Unit]
-Description=Recovery Engine Service
+Description=Recovery Engine
 After=upgrade-shared-data-store.service
 Wants=network-online.target
 After=network-online.target
