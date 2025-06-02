@@ -1746,7 +1746,7 @@ pub enum IngressStatusResult {
 }
 
 #[cfg(windows)]
-pub fn wsl_path(path: &PathBuf, desc: &str) -> String {
+fn wsl_path(path: &PathBuf, desc: &str) -> String {
     windows_to_wsl(
         path.as_os_str()
             .to_str()
