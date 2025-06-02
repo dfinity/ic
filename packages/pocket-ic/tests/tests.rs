@@ -2799,7 +2799,7 @@ fn with_subnet_state_file() {
 }
 
 #[test]
-#[should_panic(expected = "Provided an empty state dir at path")]
+#[should_panic(expected = "Provided an empty state directory at path")]
 fn with_empty_subnet_state() {
     let state_dir = TempDir::new().unwrap();
     #[cfg(not(windows))]

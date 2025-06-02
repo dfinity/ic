@@ -1001,7 +1001,7 @@ impl PocketIc {
                             // Return a comprehensible error if the provided state directory is empty.
                             if dir.next().is_none() {
                                 return Err(format!(
-                                    "Provided an empty state dir at path {}.",
+                                    "Provided an empty state directory at path {}.",
                                     subnet_state_dir.display()
                                 ));
                             }
