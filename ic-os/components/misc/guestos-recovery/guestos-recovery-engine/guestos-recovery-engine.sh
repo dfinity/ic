@@ -2,8 +2,7 @@
 
 set -e
 
-readonly EXPECTED_REGISTRY_HASH=""
-readonly EXPECTED_CUP_HASH=""
+readonly EXPECTED_RECOVERY_HASH=""
 
 # Completes the recovery process by downloading and applying the recovery artifacts
 
@@ -32,56 +31,51 @@ verify_file_hash() {
     fi
 }
 
-download_artifacts_from_url() {
+download_recovery_artifact() {
     local base_url="$1"
-    local registry_url="${base_url}ic_registry_local_store.tar.zst"
-    local cup_url="${base_url}cup.proto"
+    local recovery_url="${base_url}/ic/${EXPECTED_RECOVERY_HASH}/recovery.tar.zst"
 
-    echo "Attempting to download recovery artifacts from $base_url"
+    echo "Attempting to download recovery artifact from $recovery_url"
 
-    # Download both artifacts - if either fails, the function fails
-    if curl -L --fail -o "ic_registry_local_store.tar.zst" "$registry_url" \
-        && curl -L --fail -o "cup.proto" "$cup_url"; then
-        echo "Successfully downloaded recovery artifacts from $base_url"
+    if curl -L --fail -o "recovery.tar.zst" "$recovery_url"; then
+        echo "Successfully downloaded recovery artifact from $base_url"
         return 0
     else
-        echo "WARNING: Failed to download recovery artifacts from $base_url"
-        rm -f "ic_registry_local_store.tar.zst" "cup.proto"
+        echo "WARNING: Failed to download recovery artifact from $base_url"
+        rm -f "recovery.tar.zst"
         return 1
     fi
 }
 
-echo "Downloading recovery artifacts..."
+echo "Downloading recovery artifact..."
 base_urls=(
-    "https://download.dfinity.systems/"
-    "https://download.dfinity.network/"
+    "https://download.dfinity.systems"
+    "https://download.dfinity.network"
 )
 
 download_successful=false
 for base_url in "${base_urls[@]}"; do
-    if download_artifacts_from_url "$base_url"; then
+    if download_recovery_artifact "$base_url"; then
         download_successful=true
         break
     fi
 done
 
 if [ "$download_successful" = false ]; then
-    echo "ERROR: Failed to download recovery artifacts from all available URLs"
+    echo "ERROR: Failed to download recovery artifact from all available URLs"
     exit 1
 fi
 
-echo "Verifying recovery artifacts..."
-if ! verify_file_hash "ic_registry_local_store.tar.zst" "$EXPECTED_REGISTRY_HASH"; then
-    echo "ERROR: Registry artifact hash verification failed"
+echo "Verifying recovery artifact..."
+if ! verify_file_hash "recovery.tar.zst" "$EXPECTED_RECOVERY_HASH"; then
+    echo "ERROR: Recovery artifact hash verification failed"
     exit 1
 fi
 
-if ! verify_file_hash "cup.proto" "$EXPECTED_CUP_HASH"; then
-    echo "ERROR: CUP artifact hash verification failed"
-    exit 1
-fi
+echo "Recovery artifact verified successfully"
 
-echo "All recovery artifacts verified successfully"
+echo "Extracting recovery artifact..."
+tar zxf "recovery.tar.zst"
 
 echo "Preparing recovery artifacts..."
 OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/ic_registry_local_store)
