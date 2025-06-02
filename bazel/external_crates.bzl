@@ -165,6 +165,17 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
         "metrics-proxy": [crate.annotation(
             gen_binaries = True,
         )],
+        "getrandom": [crate.annotation(
+            rustc_flags = crate.select(
+                [],
+                {
+                    "wasm32-unknown-unknown": [
+                        "--cfg",
+                        "getrandom_backend=\"custom\"",
+                    ],
+                },
+            ),
+        )],
     }
     CRATE_ANNOTATIONS.update(sanitize_external_crates(sanitizers_enabled = sanitizers_enabled))
     crates_repository(
@@ -521,10 +532,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.3",
             ),
             "getrandom": crate.spec(
-                version = "^0.2",
-                features = [
-                    "custom",
-                ],
+                version = "^0.3",
             ),
             "goldenfile": crate.spec(
                 version = "^1.8",
