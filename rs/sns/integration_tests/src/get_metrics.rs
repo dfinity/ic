@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use candid::{Decode, Encode};
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
 use ic_ledger_core::timestamp::TimeStamp;
@@ -15,6 +13,8 @@ use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{BlockIndex, NumTokens},
 };
+use std::collections::HashMap;
+
 const FEE: u64 = 10_000;
 
 // const MINTER_PRINCIPAL: PrincipalId = PrincipalId::new(0, [0u8; 29]);
@@ -100,34 +100,47 @@ fn try_get_metrics(
 
 #[test]
 fn test_sns_metrics() {
+    const ALICE: u64 = 1;
+    const BOB: u64 = 2;
+    const INITIAL_BALANCE: u64 = 1_000_000_000;
     let state_machine = state_machine_builder_for_sns_tests().build();
-    let alice = get_account(1, 0);
-    let bob = get_account(2, 0);
-    let now = 1_748_854_120;
+    let alice = get_account(ALICE, 0);
+    let bob = get_account(BOB, 0);
+    const NOW: u64 = 1_748_854_120;
 
+    // Prepare the world:
+    // 1. create the ledger canister and add two accounts
+    // for ALICE and BOB with INITIAL_BALANCE.
     let ledger_canister_id = {
         let mut initial_balances = HashMap::new();
-        add_balance(&mut initial_balances, alice, 1_000_000_000);
-        add_balance(&mut initial_balances, bob, 1_000_000_000);
+        add_balance(&mut initial_balances, alice, INITIAL_BALANCE);
+        add_balance(&mut initial_balances, bob, INITIAL_BALANCE);
         install_ledger(&state_machine, initial_balances)
     };
 
-    // make transfers to create blocks
+    // 2. make transfers to create ledger blocks.
     {
-        let created_at_time = TimeStamp::new(now, 0);
+        const TIME_STEP: u64 = 10;
+        const NUM_TRANSACTIONS: u64 = 10;
+        const TRANSFER_AMOUNT: u64 = 1_000_000;
+        for tx in 0..NUM_TRANSACTIONS {
+            let created_at_time = TimeStamp::new(NOW + tx * TIME_STEP, 0);
 
-        let block_index = icrc1_transfer(
-            &state_machine,
-            ledger_canister_id,
-            alice,
-            bob,
-            1_000_000,
-            Some(created_at_time),
-            Some(FEE),
-            Some(vec![]),
-        );
+            let _ = icrc1_transfer(
+                &state_machine,
+                ledger_canister_id,
+                alice,
+                bob,
+                TRANSFER_AMOUNT,
+                Some(created_at_time),
+                Some(FEE),
+                Some(vec![]),
+            );
+        }
     }
 
+    // 3. start the governance canister and pass the
+    // already initialised ledger canister to it.
     let governance_canister_id = {
         let wasm = build_governance_sns_wasm().wasm;
         let governance = GovernanceCanisterInitPayloadBuilder::new()
@@ -143,20 +156,18 @@ fn test_sns_metrics() {
     };
 
     {
-        // Prepare the payload:
-        let time_window_seconds = 30 * 24 * 3600;
+        // Prepare the payload to get metrics during the last month.
+        let time_window_seconds = 30 * 24 * 3600; // 1 month.
         let payload = GetMetricsRequest {
             time_window_seconds: Some(time_window_seconds),
         };
 
-        let observed_result =
-            try_get_metrics(&state_machine, governance_canister_id, payload).unwrap();
-        let get_metrics_response::GetMetricsResponse { get_metrics_result } = observed_result
+        let Ok(observed_result) = try_get_metrics(&state_machine, governance_canister_id, payload)
         else {
-            panic!("Unexpected get_metrics response");
+            panic!("Received an Error upon fetching the metrics")
         };
 
-        let Some(get_metrics_result) = get_metrics_result else {
+        let Some(get_metrics_result) = observed_result.get_metrics_result else {
             panic!("Expected a non-empty response");
         };
 
@@ -164,7 +175,29 @@ fn test_sns_metrics() {
             panic!("Expected to get an Ok() from the response");
         };
 
-        // TODO
-        // assertions on the received fields
+        {
+            let Some(num_recently_submitted_proposals) = metrics.num_recently_submitted_proposals
+            else {
+                panic!("Expected `num_recently_submitted_proposals` to be Some(0)");
+            };
+
+            assert_eq!(
+                num_recently_submitted_proposals, 0,
+                "Expected 0 proposals to be submitted, got {}",
+                num_recently_submitted_proposals
+            );
+        }
+
+        {
+            let Some(last_ledger_block_timestamp) = metrics.last_ledger_block_timestamp else {
+                panic!("Expected `last_ledger_block_timestamp` to be Some(_)");
+            };
+            assert!(
+                last_ledger_block_timestamp > NOW,
+                "Expected `last_ledger_block_timestamp` ({}) to be bigger than the transaction time ({})",
+                last_ledger_block_timestamp,
+                NOW
+            );
+        }
     }
 }
