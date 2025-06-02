@@ -144,7 +144,7 @@ impl NodeRegistration {
         while !self.is_node_registered().await {
             let message = format!("Node registration not complete. Trying to register it");
             warn!(self.log, "{}", message);
-            UtilityCommand::notify_host(message, 1);
+            UtilityCommand::notify_host(&message, 1);
             match self.signer.get() {
                 Ok(signer) => {
                     let nns_url = self
@@ -167,7 +167,7 @@ impl NodeRegistration {
                             self.node_id, e, add_node_payload
                         );
                         warn!(self.log, "{}", message);
-                        UtilityCommand::notify_host(message.as_str(), 1);
+                        UtilityCommand::notify_host(&message, 1);
                     };
                 }
                 Err(e) => {
