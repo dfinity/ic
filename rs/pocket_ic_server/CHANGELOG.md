@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- The argument of the endpoint `/instances/` takes an additional optional field `icp_features` specifying ICP features (implemented by system canisters) when creating a PocketIC instance.
+  For now, only bootstrapping the registry (canister) and keeping its content in sync with the PocketIC topology is supported.
+
 ### Changed
 - The endpoint `/instances/<instance_id>/auto_progress` sets the (certified) time of the PocketIC instance
   to the current system time before starting to execute rounds automatically.

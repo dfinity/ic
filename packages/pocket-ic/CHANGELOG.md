@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- The function `PocketIcBuilder::with_registry` to specify that the registry canister should be bootstrapped and kept in sync
+  with the PocketIC instance.
+
+
+
 ## 9.0.1 - 2025-05-16
 
 ## 9.0.0 - 2025-04-30
