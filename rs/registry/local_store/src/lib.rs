@@ -1,4 +1,4 @@
-use ic_interfaces_registry::{RegistryDataProvider, RegistryTransportRecord};
+use ic_interfaces_registry::{RegistryDataProvider, RegistryRecord};
 use ic_registry_common_proto::pb::local_store::v1::{
     ChangelogEntry as PbChangelogEntry, Delta as PbDelta, KeyMutation as PbKeyMutation,
     MutationType,
@@ -205,7 +205,7 @@ impl RegistryDataProvider for LocalStoreImpl {
     fn get_updates_since(
         &self,
         version: RegistryVersion,
-    ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
+    ) -> Result<Vec<RegistryRecord>, RegistryDataProviderError> {
         let changelog = self.get_changelog_since_version(version).map_err(|e| {
             RegistryDataProviderError::Transfer {
                 source: format!("Error when reading changelog from local storage: {:?}", e),
@@ -215,7 +215,7 @@ impl RegistryDataProvider for LocalStoreImpl {
             .iter()
             .enumerate()
             .flat_map(|(i, cle)| cle.iter().map(move |km| (i, km)))
-            .map(|(i, km)| RegistryTransportRecord {
+            .map(|(i, km)| RegistryRecord {
                 version: version + RegistryVersion::from((i as u64) + 1),
                 key: km.key.clone(),
                 value: km.value.clone(),

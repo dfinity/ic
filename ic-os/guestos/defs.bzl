@@ -76,6 +76,7 @@ def image_deps(mode, malicious = False):
         # reflected in the overall version hash (the root_hash must include the
         # version hash, it cannot be the other way around).
         "extra_boot_args_template": Label("//ic-os/guestos/context:extra_boot_args.template"),
+        "boot_args_template": Label("//ic-os/guestos/context:boot_args.template"),
     }
 
     dev_build_args = ["BUILD_TYPE=dev", "ROOT_PASSWORD=root"]
@@ -107,6 +108,10 @@ def image_deps(mode, malicious = False):
     }
 
     deps.update(image_variants[mode])
+
+    if "dev" in mode:
+        deps["rootfs"].pop("//rs/ic_os/release:config", None)
+        deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
 
     # Add extra files depending on image variant
     extra_rootfs_deps = {
