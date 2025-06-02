@@ -828,7 +828,7 @@ impl StateMachineNode {
         let seed = rng.gen::<[u8; 32]>();
         let signing_key = SigningKey::from_bytes(&seed);
         let pkcs8_bytes = signing_key.to_pkcs8_der().unwrap().as_bytes().to_vec();
-        let root_key_pair: KeyPair = pkcs8_bytes.clone().try_into().unwrap();
+        let root_key_pair: KeyPair = pkcs8_bytes.try_into().unwrap();
         Self {
             node_id: PrincipalId::new_self_authenticating(
                 &node_signing_key.public_key().serialize_rfc8410_der(),
