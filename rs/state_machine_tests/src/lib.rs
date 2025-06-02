@@ -49,11 +49,11 @@ use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types_private::{
-    self as ic00, CanisterIdRecord, CanisterSnapshotDataKind, InstallCodeArgs, MasterPublicKeyId,
-    Method, Payload, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotDataResponse,
-    ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
-    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadCanisterSnapshotMetadataResponse,
+    self as ic00, CanisterIdRecord, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
+    InstallCodeArgs, MasterPublicKeyId, Method, Payload, ReadCanisterSnapshotDataArgs,
+    ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataArgs,
+    ReadCanisterSnapshotMetadataResponse, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse,
 };
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
@@ -3373,11 +3373,11 @@ impl StateMachine {
     }
 
     /// Helper to download the whole snapshot canister module.
-    pub fn get_snapshot_canister_module(
+    pub fn get_snapshot_module(
         &self,
         args: &ReadCanisterSnapshotMetadataArgs,
     ) -> Result<Vec<u8>, UserError> {
-        self.get_snapshot_canister_star(
+        self.get_snapshot_star(
             args,
             |md: &ReadCanisterSnapshotMetadataResponse| md.wasm_module_size,
             |offset, size| CanisterSnapshotDataKind::WasmModule { offset, size },
@@ -3385,11 +3385,11 @@ impl StateMachine {
     }
 
     /// Helper to download the whole snapshot canister heap.
-    pub fn get_snapshot_canister_heap(
+    pub fn get_snapshot_heap(
         &self,
         args: &ReadCanisterSnapshotMetadataArgs,
     ) -> Result<Vec<u8>, UserError> {
-        self.get_snapshot_canister_star(
+        self.get_snapshot_star(
             args,
             |md: &ReadCanisterSnapshotMetadataResponse| md.wasm_memory_size,
             |offset, size| CanisterSnapshotDataKind::MainMemory { offset, size },
@@ -3397,11 +3397,11 @@ impl StateMachine {
     }
 
     /// Helper to download the whole snapshot canister stable memory.
-    pub fn get_snapshot_canister_stable_memory(
+    pub fn get_snapshot_stable_memory(
         &self,
         args: &ReadCanisterSnapshotMetadataArgs,
     ) -> Result<Vec<u8>, UserError> {
-        self.get_snapshot_canister_star(
+        self.get_snapshot_star(
             args,
             |md: &ReadCanisterSnapshotMetadataResponse| md.stable_memory_size,
             |offset, size| CanisterSnapshotDataKind::StableMemory { offset, size },
@@ -3411,7 +3411,7 @@ impl StateMachine {
     /// Downloads one of the snapshot blobs as a whole.
     /// Takes two selector closures that determine which blob to target:
     /// Canister module, heap or stable memory.
-    fn get_snapshot_canister_star(
+    fn get_snapshot_star(
         &self,
         args: &ReadCanisterSnapshotMetadataArgs,
         size_extractor: impl Fn(&ReadCanisterSnapshotMetadataResponse) -> u64,
@@ -3482,6 +3482,84 @@ impl StateMachine {
                 panic!("upload_canister_snapshot_data call rejected: {}", reason)
             }
         })
+    }
+
+    /// Uploads `data` to a canister snapshot's module by calling `upload_canister_snapshot_data`
+    /// as often as necessary with chunks of size `SNAPSHOT_DATA_CHUNK_SIZE`.
+    ///
+    /// If given, skips `start_chunk` number of chunks.
+    /// If given, only uploads until `end_chunk` (or until complete, whichever happens earlier).
+    pub fn upload_snapshot_module(
+        &self,
+        canister_id: CanisterId,
+        snapshot_id: Vec<u8>,
+        data: Vec<u8>,
+        start_chunk: Option<usize>,
+        end_chunk: Option<usize>,
+    ) -> Result<(), UserError> {
+        let data_size = data.len() as u64;
+        let mut cnt = 0;
+        let mut start = 0;
+        while start < data_size {
+            let size = u64::min(SNAPSHOT_DATA_CHUNK_SIZE, data_size - start);
+            if start_chunk.is_some() && cnt < *start_chunk.as_ref().unwrap()
+                || end_chunk.is_some() && cnt >= *end_chunk.as_ref().unwrap()
+            {
+                start += size;
+                cnt += 1;
+                continue;
+            }
+
+            let kind = CanisterSnapshotDataOffset::WasmModule { offset: start };
+            let chunk = data[start as usize..(start as usize + size as usize)].to_vec();
+            let args = UploadCanisterSnapshotDataArgs {
+                canister_id: canister_id.into(),
+                snapshot_id: snapshot_id.clone(),
+                kind,
+                chunk,
+            };
+            self.upload_canister_snapshot_data(&args)?;
+            start += size;
+            cnt += 1;
+        }
+        Ok(())
+    }
+
+    fn upload_snapshot_star(
+        &self,
+        canister_id: CanisterId,
+        snapshot_id: Vec<u8>,
+        data: Vec<u8>,
+        start_chunk: Option<usize>,
+        end_chunk: Option<usize>,
+        kind_gen: impl Fn(u64) -> CanisterSnapshotDataOffset,
+    ) -> Result<(), UserError> {
+        let data_size = data.len() as u64;
+        let mut cnt = 0;
+        let mut start = 0;
+        while start < data_size {
+            let size = u64::min(SNAPSHOT_DATA_CHUNK_SIZE, data_size - start);
+            if start_chunk.is_some() && cnt < *start_chunk.as_ref().unwrap()
+                || end_chunk.is_some() && cnt >= *end_chunk.as_ref().unwrap()
+            {
+                start += size;
+                cnt += 1;
+                continue;
+            }
+
+            let kind = kind_gen(start); // CanisterSnapshotDataOffset::WasmModule { offset: start }
+            let chunk = data[start as usize..(start as usize + size as usize)].to_vec();
+            let args = UploadCanisterSnapshotDataArgs {
+                canister_id: canister_id.into(),
+                snapshot_id: snapshot_id.clone(),
+                kind,
+                chunk,
+            };
+            self.upload_canister_snapshot_data(&args)?;
+            start += size;
+            cnt += 1;
+        }
+        Ok(())
     }
 
     /// Upload a chunk to the wasm chunk store.

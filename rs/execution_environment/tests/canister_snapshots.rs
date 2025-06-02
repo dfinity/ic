@@ -20,9 +20,9 @@ fn upload_snapshot_with_checkpoint() {
         .unwrap()
         .snapshot_id();
     let md_args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id);
-    let module_dl = env.get_snapshot_canister_module(&md_args).unwrap();
-
+    let module_dl = env.get_snapshot_module(&md_args).unwrap();
     assert_eq!(counter_canister_wasm, module_dl);
+    let heap_dl = env.get_snapshot_heap(&md_args).unwrap();
 }
 
 /// Counter canister that also grows the stable memory by one page on "inc".
