@@ -3581,7 +3581,6 @@ impl StateMachine {
                 cnt += 1;
                 continue;
             }
-
             let kind = kind_gen(start);
             let chunk = data.as_ref()[start as usize..(start as usize + size as usize)].to_vec();
             let args = UploadCanisterSnapshotDataArgs {

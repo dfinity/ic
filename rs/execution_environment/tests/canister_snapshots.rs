@@ -32,6 +32,11 @@ fn upload_snapshot_with_checkpoint() {
     assert_eq!(counter_canister_wasm, module_dl);
     let heap_dl = env.get_snapshot_heap(&md_args).unwrap();
     let stable_memory_dl = env.get_snapshot_stable_memory(&md_args).unwrap();
+    let stable_memory_nonzero: Vec<u8> = stable_memory_dl
+        .clone()
+        .into_iter()
+        .filter(|x| *x != 0)
+        .collect();
     let chunk_store_dl = env.get_snapshot_chunk_store(&md_args).unwrap();
     assert_eq!(stable_memory_dl.len(), num_pages * (1 << 16));
     assert!(stable_memory_dl.ends_with(&[num_pages as u8, 0, 0, 0]));
@@ -46,10 +51,10 @@ fn upload_snapshot_with_checkpoint() {
         canister_id,
         None,
         module_dl.len() as u64,
-        md.exported_globals,
+        md.exported_globals.clone(),
         heap_dl.len() as u64,
         stable_memory_dl.len() as u64,
-        md.certified_data,
+        md.certified_data.clone(),
         None,
         None,
     );
@@ -65,22 +70,56 @@ fn upload_snapshot_with_checkpoint() {
     env.upload_snapshot_stable_memory(
         canister_id,
         snapshot_id.clone(),
-        stable_memory_dl,
+        &stable_memory_dl,
         None,
         None,
     )
     .unwrap();
-    // TODO
+    // println!("1 ----------");
+    // env.upload_snapshot_stable_memory(
+    //     canister_id,
+    //     snapshot_id.clone(),
+    //     &stable_memory_dl,
+    //     None,
+    //     Some(1),
+    // )
+    // .unwrap();
+    // env.checkpointed_tick();
+    // println!("2 ----------");
+    // env.upload_snapshot_stable_memory(
+    //     canister_id,
+    //     snapshot_id.clone(),
+    //     &stable_memory_dl,
+    //     Some(1),
+    //     None,
+    // )
+    // .unwrap();
     // change state to be overwritten:
     let res_1 = env.execute_ingress(canister_id, "inc", vec![]).unwrap();
-    println!("{:?}", res);
     let load_args = LoadCanisterSnapshotArgs::new(
         canister_id,
         SnapshotId::try_from(snapshot_id).unwrap(),
         None,
     );
     env.load_canister_snapshot(load_args).unwrap();
+    // compare metadata
+    let snapshot_id_2 = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .unwrap()
+        .snapshot_id();
+    let md_args_2 = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id_2);
+    let md_2 = env.read_canister_snapshot_metadata(&md_args_2).unwrap();
+    assert_eq!(md.stable_memory_size, md_2.stable_memory_size);
+    let stable_memory_dl_2 = env.get_snapshot_stable_memory(&md_args_2).unwrap();
+    let stable_memory_nonzero_2: Vec<u8> = stable_memory_dl_2
+        .clone()
+        .into_iter()
+        .filter(|x| *x != 0)
+        .collect();
+    assert_eq!(stable_memory_nonzero, stable_memory_nonzero_2);
+    // assert_eq!(stable_memory_dl, stable_memory_dl_2);
     let res_2 = env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    // this implies that the module and heap were restored properly
     assert_eq!(res_1, res_2);
 }
 
