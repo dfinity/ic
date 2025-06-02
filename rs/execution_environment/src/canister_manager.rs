@@ -78,7 +78,8 @@ const MAX_SLICE_SIZE_BYTES: u64 = 2_000_000;
 /// - newly reserved cycles (for canister memory usage) that can be safely moved from the canister's main balance
 ///   to its reserved balance.
 struct ValidatedMemoryUsage {
-    memory_increase: NumBytes,
+    allocated_bytes: NumBytes,
+    deallocated_bytes: NumBytes,
     storage_reservation_cycles: Cycles,
 }
 
@@ -1309,7 +1310,7 @@ impl CanisterManager {
         Ok(StoredChunksReply(keys))
     }
 
-    // Runs the following checks on memory usage and return an error
+    // Runs the following checks on memory usage and returns an error
     // if any fails:
     // 1. Check new usage will not freeze canister
     // 2. Check subnet has available memory
@@ -1323,7 +1324,6 @@ impl CanisterManager {
         old_memory_usage: NumBytes,
         resource_saturation: &ResourceSaturation,
     ) -> Result<ValidatedMemoryUsage, CanisterManagerError> {
-        let memory_increase = new_memory_usage.saturating_sub(&old_memory_usage);
         match canister.memory_allocation() {
             MemoryAllocation::Reserved(bytes) => {
                 if bytes < new_memory_usage {
@@ -1333,13 +1333,17 @@ impl CanisterManager {
                     });
                 }
                 Ok(ValidatedMemoryUsage {
-                    memory_increase: NumBytes::from(0),
+                    allocated_bytes: NumBytes::from(0),
+                    deallocated_bytes: NumBytes::from(0),
                     storage_reservation_cycles: Cycles::zero(),
                 })
             }
             MemoryAllocation::BestEffort => {
+                let allocated_bytes = new_memory_usage.saturating_sub(&old_memory_usage);
+                let deallocated_bytes = old_memory_usage.saturating_sub(&new_memory_usage);
+
                 let reservation_cycles = self.cycles_account_manager.storage_reservation_cycles(
-                    memory_increase,
+                    allocated_bytes,
                     resource_saturation,
                     subnet_size,
                 );
@@ -1358,7 +1362,7 @@ impl CanisterManager {
 
                 if canister.system_state.balance() < threshold + reservation_cycles {
                     return Err(CanisterManagerError::InsufficientCyclesInMemoryGrow {
-                        bytes: memory_increase,
+                        bytes: allocated_bytes,
                         available: canister.system_state.balance(),
                         required: threshold + reservation_cycles,
                     });
@@ -1368,10 +1372,10 @@ impl CanisterManager {
                 // requested change by the canister.
                 round_limits
                     .subnet_available_memory
-                    .check_available_memory(memory_increase, NumBytes::from(0), NumBytes::from(0))
+                    .check_available_memory(allocated_bytes, NumBytes::from(0), NumBytes::from(0))
                     .map_err(
                         |_| CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-                            requested: memory_increase,
+                            requested: allocated_bytes,
                             available: NumBytes::from(
                                 round_limits
                                     .subnet_available_memory
@@ -1390,13 +1394,13 @@ impl CanisterManager {
                             requested,
                             available,
                         } => CanisterManagerError::InsufficientCyclesInMemoryGrow {
-                            bytes: memory_increase,
+                            bytes: allocated_bytes,
                             available,
                             required: requested,
                         },
                         ReservationError::ReservedLimitExceed { requested, limit } => {
                             CanisterManagerError::ReservedCyclesLimitExceededInMemoryGrow {
-                                bytes: memory_increase,
+                                bytes: allocated_bytes,
                                 requested,
                                 limit,
                             }
@@ -1404,7 +1408,8 @@ impl CanisterManager {
                     })?;
 
                 Ok(ValidatedMemoryUsage {
-                    memory_increase,
+                    allocated_bytes,
+                    deallocated_bytes,
                     storage_reservation_cycles: reservation_cycles,
                 })
             }
@@ -1415,7 +1420,7 @@ impl CanisterManager {
     //
     // Performs the following updates:
     // 1. Reserve cycles on canister
-    // 2. Actually deduct memory from subnet
+    // 2. Update subnet available memory
     fn memory_usage_updates(
         &self,
         canister: &mut CanisterState,
@@ -1430,11 +1435,18 @@ impl CanisterManager {
             .reserve_cycles(validated_memory_usage.storage_reservation_cycles)
             .unwrap();
 
-        // Actually deduct memory from the subnet.
+        // Return deallocated bytes back to subnet available memory.
+        round_limits.subnet_available_memory.increment(
+            validated_memory_usage.deallocated_bytes,
+            NumBytes::from(0),
+            NumBytes::from(0),
+        );
+
+        // Deduct allocated memory from the subnet available memory.
         // It's safe to unwrap here because we already checked the available memory before
         // in `self.memory_usage_checks`.
         round_limits.subnet_available_memory
-                            .try_decrement(validated_memory_usage.memory_increase, NumBytes::from(0), NumBytes::from(0))
+                            .try_decrement(validated_memory_usage.allocated_bytes, NumBytes::from(0), NumBytes::from(0))
                             .expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
     }
 
@@ -1954,20 +1966,13 @@ impl CanisterManager {
         let snapshot = self.get_snapshot(canister.canister_id(), snapshot_id, state)?;
 
         // Charge upfront for the baseline plus the maximum possible size of the returned slice or fail.
-        let num_response_bytes = match &kind {
-            CanisterSnapshotDataKind::WasmModule { size, .. } => *size,
-            CanisterSnapshotDataKind::MainMemory { size, .. } => *size,
-            CanisterSnapshotDataKind::StableMemory { size, .. } => *size,
-            // In this case, we might overcharge. But the stored chunks are also charged fully even if they are smaller.
-            CanisterSnapshotDataKind::WasmChunk { .. } => CHUNK_SIZE,
-        };
-        let size = NumInstructions::new(num_response_bytes);
+        let num_response_bytes = get_response_size(&kind)?;
         if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
             &sender,
             canister,
             self.config
                 .canister_snapshot_data_baseline_instructions
-                .saturating_add(&size),
+                .saturating_add(&NumInstructions::new(num_response_bytes)),
             subnet_size,
             // For the `read_snapshot_data` operation, it does not matter if this is a Wasm64 or Wasm32 module.
             WasmExecutionMode::Wasm32,
@@ -1977,9 +1982,6 @@ impl CanisterManager {
 
         let res = match kind {
             CanisterSnapshotDataKind::StableMemory { offset, size } => {
-                if size > MAX_SLICE_SIZE_BYTES {
-                    return Err(CanisterManagerError::InvalidSubslice { offset, size });
-                }
                 let stable_memory = snapshot.execution_snapshot().stable_memory.clone();
                 match CanisterSnapshot::get_memory_chunk(stable_memory, offset, size) {
                     Ok(chunk) => Ok(chunk),
@@ -1987,9 +1989,6 @@ impl CanisterManager {
                 }
             }
             CanisterSnapshotDataKind::MainMemory { offset, size } => {
-                if size > MAX_SLICE_SIZE_BYTES {
-                    return Err(CanisterManagerError::InvalidSubslice { offset, size });
-                }
                 let main_memory = snapshot.execution_snapshot().wasm_memory.clone();
                 match CanisterSnapshot::get_memory_chunk(main_memory, offset, size) {
                     Ok(chunk) => Ok(chunk),
@@ -1997,9 +1996,6 @@ impl CanisterManager {
                 }
             }
             CanisterSnapshotDataKind::WasmModule { offset, size } => {
-                if size > MAX_SLICE_SIZE_BYTES {
-                    return Err(CanisterManagerError::InvalidSubslice { offset, size });
-                }
                 match snapshot.get_wasm_module_chunk(offset, size) {
                     Ok(chunk) => Ok(chunk),
                     Err(e) => Err(e.into()),
@@ -2230,7 +2226,7 @@ impl CanisterManager {
                     .wasm_binary
                     .write(&args.chunk, offset as usize);
                 if res.is_err() {
-                    return Err(CanisterManagerError::InvalidSubslice {
+                    return Err(CanisterManagerError::InvalidSlice {
                         offset,
                         size: args.chunk.len() as u64,
                     });
@@ -2240,7 +2236,7 @@ impl CanisterManager {
                 let max_size_bytes =
                     snapshot_inner.wasm_memory().size.get() * WASM_PAGE_SIZE_IN_BYTES;
                 if max_size_bytes < args.chunk.len().saturating_add(offset as usize) {
-                    return Err(CanisterManagerError::InvalidSubslice {
+                    return Err(CanisterManagerError::InvalidSlice {
                         offset,
                         size: args.chunk.len() as u64,
                     });
@@ -2252,7 +2248,7 @@ impl CanisterManager {
                 let max_size_bytes =
                     snapshot_inner.stable_memory().size.get() * WASM_PAGE_SIZE_IN_BYTES;
                 if max_size_bytes < args.chunk.len().saturating_add(offset as usize) {
-                    return Err(CanisterManagerError::InvalidSubslice {
+                    return Err(CanisterManagerError::InvalidSlice {
                         offset,
                         size: args.chunk.len() as u64,
                     });
@@ -2363,6 +2359,22 @@ impl CanisterManager {
             ),
         }
     }
+}
+
+fn get_response_size(kind: &CanisterSnapshotDataKind) -> Result<u64, CanisterManagerError> {
+    let size = match kind {
+        CanisterSnapshotDataKind::WasmModule { size, .. } => *size,
+        CanisterSnapshotDataKind::MainMemory { size, .. } => *size,
+        CanisterSnapshotDataKind::StableMemory { size, .. } => *size,
+        CanisterSnapshotDataKind::WasmChunk { .. } => return Ok(CHUNK_SIZE),
+    };
+    if size > MAX_SLICE_SIZE_BYTES {
+        return Err(CanisterManagerError::SliceTooLarge {
+            requested: size,
+            allowed: MAX_SLICE_SIZE_BYTES,
+        });
+    }
+    Ok(size)
 }
 
 /// Uninstalls a canister.

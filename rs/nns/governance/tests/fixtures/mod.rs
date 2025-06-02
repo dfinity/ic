@@ -437,7 +437,7 @@ impl NNSFixture {
 
 #[async_trait]
 impl IcpLedger for NNSFixture {
-    #[tla_function(force_async_fn = true)]
+    #[cfg_attr(feature = "tla", tla_function(force_async_fn = true))]
     async fn transfer_funds(
         &self,
         amount_e8s: u64,
