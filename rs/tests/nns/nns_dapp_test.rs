@@ -70,7 +70,7 @@ fn get_html(env: &TestEnv, ic_gateway_url: Url, canister_id: Principal, dapp_anc
             &log,
             secs(600),
             secs(30),
-            || async {
+            async || {
                 let client = reqwest::Client::builder()
                     .use_rustls_tls()
                     .https_only(true)
@@ -83,6 +83,7 @@ fn get_html(env: &TestEnv, ic_gateway_url: Url, canister_id: Principal, dapp_anc
                     .header("User-Agent", "systest") // to prevent getting the service worker
                     .send()
                     .await?;
+
                 let status = resp.status();
                 if !status.is_success() {
                     bail!(
@@ -91,6 +92,7 @@ fn get_html(env: &TestEnv, ic_gateway_url: Url, canister_id: Principal, dapp_anc
                         status
                     );
                 }
+
                 let body_bytes = resp.bytes().await?.to_vec();
                 if let Ok(body) = String::from_utf8(body_bytes.clone()) {
                     if body.contains("503 Service Temporarily Unavailable") {
