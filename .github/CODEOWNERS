@@ -291,6 +291,7 @@ go_deps.bzl               @dfinity/idx
 /rs/types/wasm_types/                                   @dfinity/execution
 /rs/universal_canister/                                 @dfinity/execution
 /rs/utils/                                              @dfinity/ic-interface-owners
+/rs/utils/lru_cache                                     @dfinity/execution
 /rs/utils/thread/                                       @dfinity/ic-message-routing-owners
 /rs/utils/ensure/                                       @dfinity/finint
 /rs/validator/                                          @dfinity/crypto-team
