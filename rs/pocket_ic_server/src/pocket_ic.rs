@@ -988,23 +988,25 @@ impl PocketIc {
                 let (ranges, alloc_range, subnet_id, time) = if let Some(ref subnet_state_dir) =
                     subnet_state_dir
                 {
-                    // Return a comprehensible error if the provided state directory is not a directory.
-                    if !subnet_state_dir.is_dir() {
-                        return Err(format!(
-                            "The path {} is not a (subnet state) directory.",
-                            subnet_state_dir.display()
-                        ));
-                    }
-                    // Return a comprehensible error if the provided state directory is empty.
-                    let is_empty = std::fs::read_dir(subnet_state_dir)
-                        .map(|mut f| f.next().is_none())
-                        .unwrap_or(true);
-                    if is_empty {
-                        return Err(format!(
-                            "Provided an empty state dir at path {}.",
-                            subnet_state_dir.display()
-                        ));
-                    }
+                    match std::fs::read_dir(subnet_state_dir) {
+                        // Return a comprehensible error if the provided state directory is not a (readable) directory.
+                        Err(err) => {
+                            return Err(format!(
+                                "The path {} is not a (subnet state) directory: {}",
+                                subnet_state_dir.display(),
+                                err,
+                            ));
+                        }
+                        Ok(mut dir) => {
+                            // Return a comprehensible error if the provided state directory is empty.
+                            if dir.next().is_none() {
+                                return Err(format!(
+                                    "Provided an empty state dir at path {}.",
+                                    subnet_state_dir.display()
+                                ));
+                            }
+                        }
+                    };
 
                     let metadata = {
                         // We create a temporary state manager used to read the given state metadata.
