@@ -3,7 +3,7 @@ use askama::Template;
 use clap::{Args, Parser};
 use config::guestos_bootstrap_image::BootstrapOptions;
 use config::guestos_config::generate_guestos_config;
-use config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH;
+use config::{deserialize_config, DEFAULT_HOSTOS_CONFIG_OBJECT_PATH};
 use config_types::{GuestOSConfig, HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant};
@@ -55,7 +55,7 @@ pub struct DirectBootArgs {
 
 /// Generate the GuestOS VM configuration by assembling the bootstrap config media image
 /// and creating the libvirt XML configuration file.
-pub fn generate_guest_vm_config(args: GenerateGuestVmConfigArgs) -> Result<()> {
+pub(crate) fn generate_guest_vm_config(args: GenerateGuestVmConfigArgs) -> Result<()> {
     let metrics_writer = MetricsWriter::new(PathBuf::from(
         "/run/node_exporter/collector_textfile/hostos_generate_guestos_config.prom",
     ));
@@ -69,10 +69,8 @@ fn run(
     // We pass a functor to allow mocking in tests.
     restorecon: impl Fn(&Path) -> Result<()>,
 ) -> Result<()> {
-    let hostos_config: HostOSConfig = serde_json::from_reader(
-        File::open(&args.config).context("Failed to open HostOS config file")?,
-    )
-    .context("Failed to parse HostOS config file")?;
+    let hostos_config: HostOSConfig =
+        deserialize_config(&args.config).context("Failed to read HostOS config file")?;
 
     assemble_config_media(&hostos_config, &args.media)
         .context("Failed to assemble config media")?;
@@ -121,7 +119,7 @@ fn run(
     Ok(())
 }
 
-fn assemble_config_media(hostos_config: &HostOSConfig, media_path: &Path) -> Result<()> {
+pub fn assemble_config_media(hostos_config: &HostOSConfig, media_path: &Path) -> Result<()> {
     let guestos_config =
         generate_guestos_config(hostos_config).context("Failed to generate GuestOS config")?;
 
@@ -209,7 +207,7 @@ fn make_bootstrap_options(
 }
 
 /// Generate the GuestOS VM libvirt XML configuration and return it as String.
-fn generate_vm_config(
+pub fn generate_vm_config(
     config: &HostOSConfig,
     media_path: &Path,
     direct_boot_args: &Option<DirectBootArgs>,

@@ -1,3 +1,5 @@
+mod guest_vm;
+
 use std::path::Path;
 
 use anyhow::{anyhow, Result};
@@ -27,6 +29,7 @@ pub enum Commands {
         #[arg(short, long, default_value_t = NodeType::HostOS)]
         node_type: NodeType,
     },
+    RunGuestVm {},
 }
 
 #[derive(Parser)]
@@ -38,7 +41,8 @@ struct HostOSArgs {
     command: Option<Commands>,
 }
 
-pub fn main() -> Result<()> {
+#[tokio::main]
+pub async fn main() -> Result<()> {
     #[cfg(not(target_os = "linux"))]
     {
         eprintln!("ERROR: this only runs on Linux.");
@@ -119,5 +123,6 @@ pub fn main() -> Result<()> {
         None => Err(anyhow!(
             "No subcommand specified. Run with '--help' for subcommands"
         )),
+        Some(Commands::RunGuestVm { .. }) => guest_vm::run_guest_vm().await,
     }
 }

@@ -155,6 +155,7 @@ members = [
     "rs/ic_os/nss_icos",
     "rs/ic_os/dev_test_tools/setupos-image-config",
     "rs/ic_os/build_tools/partition_tools",
+    "rs/ic_os/config_types/compatibility_tests",
     "rs/ic_os/dev_test_tools/setupos-disable-checks",
     "rs/ic_os/os_tools/setupos_tool",
     "rs/ic_os/utils",
