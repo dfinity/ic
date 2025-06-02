@@ -3493,48 +3493,83 @@ impl StateMachine {
         &self,
         canister_id: CanisterId,
         snapshot_id: Vec<u8>,
-        data: Vec<u8>,
+        data: impl AsRef<[u8]>,
         start_chunk: Option<usize>,
         end_chunk: Option<usize>,
     ) -> Result<(), UserError> {
-        let data_size = data.len() as u64;
-        let mut cnt = 0;
-        let mut start = 0;
-        while start < data_size {
-            let size = u64::min(SNAPSHOT_DATA_CHUNK_SIZE, data_size - start);
-            if start_chunk.is_some() && cnt < *start_chunk.as_ref().unwrap()
-                || end_chunk.is_some() && cnt >= *end_chunk.as_ref().unwrap()
-            {
-                start += size;
-                cnt += 1;
-                continue;
-            }
-
-            let kind = CanisterSnapshotDataOffset::WasmModule { offset: start };
-            let chunk = data[start as usize..(start as usize + size as usize)].to_vec();
-            let args = UploadCanisterSnapshotDataArgs {
-                canister_id: canister_id.into(),
-                snapshot_id: snapshot_id.clone(),
-                kind,
-                chunk,
-            };
-            self.upload_canister_snapshot_data(&args)?;
-            start += size;
-            cnt += 1;
-        }
-        Ok(())
+        self.upload_snapshot_star(
+            canister_id,
+            snapshot_id,
+            data,
+            start_chunk,
+            end_chunk,
+            |x| CanisterSnapshotDataOffset::WasmModule { offset: x },
+        )
     }
 
+    /// Uploads `data` to a canister snapshot's heap by calling `upload_canister_snapshot_data`
+    /// as often as necessary with chunks of size `SNAPSHOT_DATA_CHUNK_SIZE`.
+    ///
+    /// If given, skips `start_chunk` number of chunks.
+    /// If given, only uploads until `end_chunk` (or until complete, whichever happens earlier).
+    pub fn upload_snapshot_heap(
+        &self,
+        canister_id: CanisterId,
+        snapshot_id: Vec<u8>,
+        data: impl AsRef<[u8]>,
+        start_chunk: Option<usize>,
+        end_chunk: Option<usize>,
+    ) -> Result<(), UserError> {
+        self.upload_snapshot_star(
+            canister_id,
+            snapshot_id,
+            data,
+            start_chunk,
+            end_chunk,
+            |x| CanisterSnapshotDataOffset::MainMemory { offset: x },
+        )
+    }
+
+    /// Uploads `data` to a canister snapshot's stable memory by calling `upload_canister_snapshot_data`
+    /// as often as necessary with chunks of size `SNAPSHOT_DATA_CHUNK_SIZE`.
+    ///
+    /// If given, skips `start_chunk` number of chunks.
+    /// If given, only uploads until `end_chunk` (or until complete, whichever happens earlier).
+    pub fn upload_snapshot_stable_memory(
+        &self,
+        canister_id: CanisterId,
+        snapshot_id: Vec<u8>,
+        data: impl AsRef<[u8]>,
+        start_chunk: Option<usize>,
+        end_chunk: Option<usize>,
+    ) -> Result<(), UserError> {
+        self.upload_snapshot_star(
+            canister_id,
+            snapshot_id,
+            data,
+            start_chunk,
+            end_chunk,
+            |x| CanisterSnapshotDataOffset::StableMemory { offset: x },
+        )
+    }
+
+    /// Uploads `data` to one of the canister snapshot's blobs (wasm module, heap, stable memory)
+    /// by calling `upload_canister_snapshot_data` as often as necessary with chunks of size
+    /// `SNAPSHOT_DATA_CHUNK_SIZE`.
+    /// The targeted blob is determined by the `kind_gen` selector closure.
+    ///
+    /// If given, skips `start_chunk` number of chunks.
+    /// If given, only uploads until `end_chunk` (or until complete, whichever happens earlier).
     fn upload_snapshot_star(
         &self,
         canister_id: CanisterId,
         snapshot_id: Vec<u8>,
-        data: Vec<u8>,
+        data: impl AsRef<[u8]>,
         start_chunk: Option<usize>,
         end_chunk: Option<usize>,
         kind_gen: impl Fn(u64) -> CanisterSnapshotDataOffset,
     ) -> Result<(), UserError> {
-        let data_size = data.len() as u64;
+        let data_size = data.as_ref().len() as u64;
         let mut cnt = 0;
         let mut start = 0;
         while start < data_size {
@@ -3547,8 +3582,8 @@ impl StateMachine {
                 continue;
             }
 
-            let kind = kind_gen(start); // CanisterSnapshotDataOffset::WasmModule { offset: start }
-            let chunk = data[start as usize..(start as usize + size as usize)].to_vec();
+            let kind = kind_gen(start);
+            let chunk = data.as_ref()[start as usize..(start as usize + size as usize)].to_vec();
             let args = UploadCanisterSnapshotDataArgs {
                 canister_id: canister_id.into(),
                 snapshot_id: snapshot_id.clone(),
