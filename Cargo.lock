@@ -10260,35 +10260,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-mainnet-nns-recovery"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "candid",
- "canister-test",
- "cycles-minting-canister",
- "dfn_candid",
- "flate2",
- "ic-canister-client",
- "ic-canister-client-sender",
- "ic-nervous-system-common",
- "ic-nervous-system-common-test-keys",
- "ic-nns-common",
- "ic-nns-governance-api",
- "ic-nns-test-utils",
- "ic-registry-subnet-type",
- "ic-sns-wasm",
- "ic-system-test-driver",
- "ic-types",
- "ic_consensus_system_test_utils",
- "icp-ledger",
- "reqwest 0.12.15",
- "serde",
- "slog",
- "url",
-]
-
-[[package]]
 name = "ic-make-proposal"
 version = "0.9.0"
 dependencies = [
@@ -16065,6 +16036,7 @@ name = "ledger-canister"
 version = "0.9.0"
 dependencies = [
  "async-trait",
+ "canbench-rs",
  "candid",
  "candid_parser",
  "ciborium",
@@ -17211,7 +17183,6 @@ dependencies = [
  "ic-crypto-utils-threshold-sig-der",
  "ic-ledger-core",
  "ic-limits",
- "ic-mainnet-nns-recovery",
  "ic-management-canister-types-private",
  "ic-nervous-system-clients",
  "ic-nervous-system-common-test-keys",
@@ -17259,6 +17230,7 @@ dependencies = [
  "icp-ledger",
  "serde",
  "slog",
+ "url",
 ]
 
 [[package]]
@@ -22502,7 +22474,6 @@ dependencies = [
  "anyhow",
  "candid",
  "ic-base-types",
- "ic-mainnet-nns-recovery",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
@@ -22734,6 +22705,7 @@ dependencies = [
  "async-trait",
  "candid",
  "local_key",
+ "serde",
  "sha2 0.10.9",
  "tla_instrumentation_proc_macros",
  "tokio-test",

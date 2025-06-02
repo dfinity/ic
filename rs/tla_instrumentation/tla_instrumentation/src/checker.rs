@@ -19,6 +19,15 @@ pub enum ApalacheError {
     SetupError(String),
 }
 
+impl ApalacheError {
+    pub fn is_likely_mismatch(&self) -> bool {
+        match self {
+            ApalacheError::CheckFailed(Some(code), _) => *code == 12,
+            _ => false,
+        }
+    }
+}
+
 impl std::fmt::Debug for ApalacheError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
