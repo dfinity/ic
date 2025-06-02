@@ -988,6 +988,18 @@ impl PocketIc {
                 let (ranges, alloc_range, subnet_id, time) = if let Some(ref subnet_state_dir) =
                     subnet_state_dir
                 {
+                    // Return a comprehensible error if the provided state directory is empty.
+                    let is_nonempty = subnet_state_dir.is_dir()
+                        && std::fs::read_dir(subnet_state_dir)
+                            .map(|mut f| f.next().is_some())
+                            .unwrap_or(false);
+                    if !is_nonempty {
+                        return Err(format!(
+                            "Provided an empty state dir at path {}.",
+                            subnet_state_dir.display()
+                        ));
+                    }
+
                     let metadata = {
                         // We create a temporary state manager used to read the given state metadata.
                         // We first copy the subnet state directory into a temporary directory

@@ -26,6 +26,7 @@ use sha2::{Digest, Sha256};
 #[cfg(windows)]
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::{io::Read, sync::OnceLock, time::SystemTime};
+use tempfile::TempDir;
 
 // 2T cycles
 const INIT_CYCLES: u128 = 2_000_000_000_000;
@@ -2777,4 +2778,15 @@ fn test_specified_id_on_resumed_state() {
     let pic = PocketIcBuilder::new().with_state(state).build();
 
     test_specified_id(&pic);
+}
+
+#[test]
+#[should_panic(expected = "Provided an empty state dir at path")]
+fn with_empty_subnet_state() {
+    let state_dir = TempDir::new().unwrap();
+    let state_dir_path_buf = state_dir.path().to_path_buf();
+
+    let _pic = PocketIcBuilder::new()
+        .with_subnet_state(SubnetKind::Application, state_dir_path_buf)
+        .build();
 }
