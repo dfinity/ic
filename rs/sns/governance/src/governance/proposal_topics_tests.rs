@@ -73,21 +73,21 @@ fn test_all_topics() {
             pb::proposal::Action::ManageNervousSystemParameters(Default::default()),
             Ok((
                 Some(pb::Topic::DaoCommunitySettings),
-                ProposalCriticality::Normal,
+                ProposalCriticality::Critical,
             )),
         ),
         (
             pb::proposal::Action::ManageLedgerParameters(Default::default()),
             Ok((
                 Some(pb::Topic::DaoCommunitySettings),
-                ProposalCriticality::Normal,
+                ProposalCriticality::Critical,
             )),
         ),
         (
             pb::proposal::Action::ManageSnsMetadata(Default::default()),
             Ok((
                 Some(pb::Topic::DaoCommunitySettings),
-                ProposalCriticality::Normal,
+                ProposalCriticality::Critical,
             )),
         ),
         // SnsFrameworkManagement

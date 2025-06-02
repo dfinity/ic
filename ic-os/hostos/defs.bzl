@@ -79,7 +79,8 @@ def image_deps(mode, _malicious = False):
     deps.update(image_variants[mode])
 
     if "dev" in mode:
-        deps["rootfs"].update({"//ic-os/components:hostos-scripts/generate-guestos-config/dev-generate-guestos-config.sh": "/opt/ic/bin/generate-guestos-config.sh:0755"})
+        deps["rootfs"].pop("//rs/ic_os/release:config", None)
+        deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
 
     return deps
 

@@ -15,14 +15,15 @@ use ic_nervous_system_common_test_keys::{
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::governance::INITIAL_NEURON_DISSOLVE_DELAY;
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     governance_error::ErrorType,
     list_neurons::NeuronSubaccount,
-    manage_neuron::{Command, Merge, NeuronIdOrSubaccount, Spawn},
+    manage_neuron::{Command, DisburseMaturity, Merge, NeuronIdOrSubaccount, Spawn},
     manage_neuron_response::{self, Command as CommandResponse},
     neuron::DissolveState,
     Account as GovernanceAccount, GovernanceError, ListNeurons, MakeProposalRequest, ManageNeuron,
-    ManageNeuronResponse, Motion, Neuron, NeuronState, ProposalActionRequest,
+    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, Motion, Neuron,
+    NeuronState, ProposalActionRequest, Topic,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -33,12 +34,17 @@ use ic_nns_test_utils::{
         nns_governance_get_full_neuron, nns_governance_get_neuron_info,
         nns_governance_make_proposal, nns_increase_dissolve_delay, nns_join_community_fund,
         nns_leave_community_fund, nns_remove_hot_key, nns_send_icp_to_claim_or_refresh_neuron,
-        nns_start_dissolving, setup_nns_canisters, state_machine_builder_for_nns_tests,
+        nns_set_followees_for_neuron, nns_start_dissolving, setup_nns_canisters,
+        state_machine_builder_for_nns_tests,
     },
 };
+use ic_state_machine_tests::StateMachine;
 use icp_ledger::{tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Tokens};
 use icrc_ledger_types::icrc1::account::Account;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+#[cfg(feature = "tla")]
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 
 #[test]
 fn test_merge_neurons_and_simulate_merge_neurons() {
@@ -285,41 +291,37 @@ fn test_spawn_neuron() {
     });
 }
 
-#[test]
-fn test_neuron_disburse_maturity() {
-    // Step 1.1: Prepare the world by setting up NNS canisters with 2000 ICP in a ledger account.
-    let state_machine = state_machine_builder_for_nns_tests().build();
-    let test_user_principal = *TEST_NEURON_1_OWNER_PRINCIPAL;
-    let nns_init_payloads = NnsInitPayloadsBuilder::new()
-        .with_ledger_account(
-            AccountIdentifier::new(test_user_principal, None),
-            Tokens::from_e8s(200_000_000_000),
-        )
-        .build();
-    setup_nns_canisters(&state_machine, nns_init_payloads);
-
-    // Step 1.2: Create a neuron with 100 ICP and make sure it has enough dissolve delay.
+fn create_neuron_with_stake(
+    state_machine: &StateMachine,
+    neuron_controller: PrincipalId,
+    stake: Tokens,
+) -> NeuronIdProto {
     let nonce = 123_456;
-    nns_send_icp_to_claim_or_refresh_neuron(
-        &state_machine,
-        test_user_principal,
-        Tokens::from_e8s(100_000_000_000),
-        nonce,
-    );
-    let test_neuron_id = nns_claim_or_refresh_neuron(&state_machine, test_user_principal, nonce);
+    nns_send_icp_to_claim_or_refresh_neuron(state_machine, neuron_controller, stake, nonce);
+    nns_claim_or_refresh_neuron(state_machine, neuron_controller, nonce)
+}
+
+/// Creates a neuron with some maturity, and returns the neuron id. This is done by (1) sending some
+/// ICPs to a governance subaccount for staking (2) claim the neuron (3) increase the dissolve delay
+/// (4) make a proposal, and (5) wait for a few days so that the neuron gets voting rewards. This is
+/// the "normal" way of getting maturity in production.
+fn create_neuron_with_maturity(
+    state_machine: &StateMachine,
+    neuron_controller: PrincipalId,
+    stake: Tokens,
+) -> NeuronIdProto {
+    let neuron_id = create_neuron_with_stake(state_machine, neuron_controller, stake);
     nns_increase_dissolve_delay(
-        &state_machine,
-        test_user_principal,
-        test_neuron_id,
+        state_machine,
+        neuron_controller,
+        neuron_id,
         ONE_YEAR_SECONDS * 7,
     )
     .unwrap();
-
-    // Step 1.3: Make a proposal and wait for rewards distribution so that the neuron has some maturity.
     nns_governance_make_proposal(
-        &state_machine,
-        test_user_principal,
-        test_neuron_id,
+        state_machine,
+        neuron_controller,
+        neuron_id,
         &MakeProposalRequest {
             title: Some("some title".to_string()),
             url: "".to_string(),
@@ -334,18 +336,62 @@ fn test_neuron_disburse_maturity() {
         state_machine.advance_time(Duration::from_secs(1));
         state_machine.tick();
     }
-    let neuron =
-        nns_governance_get_full_neuron(&state_machine, test_user_principal, test_neuron_id.id)
-            .expect("Failed to get neuron");
-    assert!(neuron.maturity_e8s_equivalent > 0, "{:#?}", neuron);
-    println!("{:#?}", neuron);
+
+    let neuron = nns_governance_get_full_neuron(state_machine, neuron_controller, neuron_id.id)
+        .expect("Failed to get neuron");
+    assert!(neuron.maturity_e8s_equivalent > 0);
+
+    neuron_id
+}
+
+fn get_balance_e8s_of_disburse_destination(
+    state_machine: &StateMachine,
+    principal_id: PrincipalId,
+) -> u64 {
+    icrc1_balance(
+        state_machine,
+        LEDGER_CANISTER_ID,
+        Account {
+            owner: principal_id.0,
+            subaccount: None,
+        },
+    )
+    .get_e8s()
+}
+
+#[test]
+fn test_neuron_disburse_maturity() {
+    // Step 1.1: Prepare the world by setting up NNS canisters with 2000 ICP in a ledger account.
+    let state_machine = state_machine_builder_for_nns_tests().build();
+    let test_user_principal = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_ledger_account(
+            AccountIdentifier::new(test_user_principal, None),
+            Tokens::from_tokens(2000).unwrap(),
+        )
+        .build();
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+
+    // Step 1.2: Create a neuron with some maturity.
+    let neuron_id = create_neuron_with_maturity(
+        &state_machine,
+        test_user_principal,
+        Tokens::from_tokens(1000).unwrap(),
+    );
+
+    // Step 1.3: check that the neuron has no maturity disbursement in progress, and record its
+    // original maturity.
+    let neuron = nns_governance_get_full_neuron(&state_machine, test_user_principal, neuron_id.id)
+        .expect("Failed to get neuron");
+    let original_neuron_maturity_e8s_equivalent = neuron.maturity_e8s_equivalent;
+    assert_eq!(neuron.maturity_disbursements_in_progress, Some(vec![]));
 
     // Step 2: Call the code under test - disburse maturity.
     let disburse_destination = PrincipalId::new_self_authenticating(&[1u8]);
     let disburse_response = nns_disburse_maturity(
         &state_machine,
         test_user_principal,
-        test_neuron_id,
+        neuron_id,
         100,
         Some(GovernanceAccount {
             owner: Some(disburse_destination),
@@ -359,24 +405,32 @@ fn test_neuron_disburse_maturity() {
     else {
         panic!("Failed to disburse maturity: {:#?}", disburse_response)
     };
-    assert!(disburse_maturity_response.amount_disbursed_e8s() > 0);
-
-    let get_balance_e8s_of_disburse_destination = || {
-        icrc1_balance(
-            &state_machine,
-            LEDGER_CANISTER_ID,
-            Account {
-                owner: disburse_destination.0,
-                subaccount: None,
-            },
-        )
-        .get_e8s()
-    };
+    assert!(disburse_maturity_response.amount_disbursed_e8s.unwrap() > 0);
+    let neuron = nns_governance_get_full_neuron(&state_machine, test_user_principal, neuron_id.id)
+        .expect("Failed to get neuron");
+    let maturity_disbursement = neuron
+        .maturity_disbursements_in_progress
+        .unwrap()
+        .first()
+        .cloned()
+        .unwrap();
+    assert_eq!(
+        maturity_disbursement.amount_e8s.unwrap(),
+        disburse_maturity_response.amount_disbursed_e8s.unwrap()
+    );
+    assert_eq!(
+        neuron.maturity_e8s_equivalent,
+        original_neuron_maturity_e8s_equivalent
+            - disburse_maturity_response.amount_disbursed_e8s.unwrap()
+    );
 
     // Step 3: Wait for 7 days and check that the disbursement was successful.
     for _ in 0..7 {
         // The destination account should be empty before the disbursement is finalized.
-        assert_eq!(get_balance_e8s_of_disburse_destination(), 0);
+        assert_eq!(
+            get_balance_e8s_of_disburse_destination(&state_machine, disburse_destination),
+            0
+        );
 
         state_machine.advance_time(Duration::from_secs(ONE_DAY_SECONDS));
 
@@ -386,8 +440,157 @@ fn test_neuron_disburse_maturity() {
             state_machine.tick();
         }
     }
-    let balance = get_balance_e8s_of_disburse_destination();
+    let balance = get_balance_e8s_of_disburse_destination(&state_machine, disburse_destination);
     assert!(balance > 0, "{}", balance);
+    let neuron = nns_governance_get_full_neuron(&state_machine, test_user_principal, neuron_id.id)
+        .expect("Failed to get neuron");
+    assert_eq!(neuron.maturity_disbursements_in_progress, Some(vec![]));
+
+    #[cfg(feature = "tla")]
+    check_state_machine_tla_traces(&state_machine, GOVERNANCE_CANISTER_ID);
+}
+
+#[cfg(feature = "tla")]
+fn check_state_machine_tla_traces(
+    sm: &ic_state_machine_tests::StateMachine,
+    gov_canister_id: ic_base_types::CanisterId,
+) {
+    use candid::{Decode, Encode};
+    use canister_test::WasmResult;
+    use ic_nns_governance::governance::tla::{perform_trace_check, UpdateTrace};
+    let wasm_res = sm
+        .query(
+            gov_canister_id,
+            "get_tla_traces",
+            Encode!(&()).expect("Couldn't encode get_tla_traces request"),
+        )
+        .expect("Couldn't call get_tla_traces");
+    let traces = match wasm_res {
+        WasmResult::Reject(r) => panic!("get_tla_traces failed: {}", r),
+        WasmResult::Reply(r) => {
+            Decode!(&r, Vec<UpdateTrace>).expect("Couldn't decode get_tla_traces response")
+        }
+    };
+    perform_trace_check(traces)
+}
+
+#[test]
+fn test_neuron_disburse_maturity_through_neuron_management_proposal() {
+    // Step 1.1: Prepare the world by setting up NNS canisters with 2000 ICP in a ledger account.
+    let state_machine = state_machine_builder_for_nns_tests().build();
+    let managed_neuron_controller = PrincipalId::new_self_authenticating(b"managed_neuron");
+    let neuron_manager_controller = PrincipalId::new_self_authenticating(b"neuron_manager");
+    let disburse_destination = PrincipalId::new_self_authenticating(b"disburse_destination");
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_ledger_accounts(vec![
+            (
+                AccountIdentifier::new(managed_neuron_controller, None),
+                Tokens::from_tokens(2000).unwrap(),
+            ),
+            (
+                AccountIdentifier::new(neuron_manager_controller, None),
+                Tokens::from_tokens(2).unwrap(),
+            ),
+        ])
+        .build();
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+
+    // Step 1.2: Create a neuron with some maturity.
+    let managed_neuron_id = create_neuron_with_maturity(
+        &state_machine,
+        managed_neuron_controller,
+        Tokens::from_tokens(1000).unwrap(),
+    );
+
+    // Step 1.3: check that the neuron has no maturity disbursement in progress, and record its
+    // original maturity.
+    let neuron = nns_governance_get_full_neuron(
+        &state_machine,
+        managed_neuron_controller,
+        managed_neuron_id.id,
+    )
+    .expect("Failed to get neuron");
+    assert_eq!(neuron.maturity_disbursements_in_progress, Some(vec![]));
+
+    // Step 1.4: create another neuron.
+    let neuron_manager_id = create_neuron_with_stake(
+        &state_machine,
+        neuron_manager_controller,
+        Tokens::from_tokens(1).unwrap(),
+    );
+
+    // Step 1.5 set the neuron manager as the followee of the managed neuron on topic 1.
+    nns_set_followees_for_neuron(
+        &state_machine,
+        managed_neuron_controller,
+        managed_neuron_id,
+        &[neuron_manager_id],
+        Topic::NeuronManagement as i32,
+    )
+    .panic_if_error("Failed to set followees");
+
+    // Step 2: Call the code under test - make a neuron management proposal to disburse maturity.
+    nns_governance_make_proposal(
+        &state_machine,
+        neuron_manager_controller,
+        neuron_manager_id,
+        &MakeProposalRequest {
+            title: Some("some title".to_string()),
+            url: "".to_string(),
+            summary: "some summary".to_string(),
+            action: Some(ProposalActionRequest::ManageNeuron(Box::new(
+                ManageNeuronRequest {
+                    id: Some(managed_neuron_id),
+                    neuron_id_or_subaccount: None,
+                    command: Some(ManageNeuronCommandRequest::DisburseMaturity(
+                        DisburseMaturity {
+                            percentage_to_disburse: 100,
+                            to_account: Some(GovernanceAccount {
+                                owner: Some(disburse_destination),
+                                subaccount: None,
+                            }),
+                        },
+                    )),
+                },
+            ))),
+        },
+    )
+    .panic_if_error("Failed to make proposal");
+
+    // Step 3.1: check that maturity disbursement for managed neuron exists, by getting full neuron
+    // through the manager's controller.
+    let neuron = nns_governance_get_full_neuron(
+        &state_machine,
+        neuron_manager_controller,
+        managed_neuron_id.id,
+    )
+    .expect("Failed to get neuron");
+    assert_eq!(neuron.maturity_disbursements_in_progress.unwrap().len(), 1);
+
+    // Step 3.2: check that the destination account is empty before the disbursement is finalized.
+    for _ in 0..7 {
+        assert_eq!(
+            get_balance_e8s_of_disburse_destination(&state_machine, disburse_destination),
+            0
+        );
+        state_machine.advance_time(Duration::from_secs(ONE_DAY_SECONDS));
+        for _ in 0..20 {
+            state_machine.advance_time(Duration::from_secs(1));
+            state_machine.tick();
+        }
+    }
+
+    // Step 4: check that the disbursement was successful after 7 days and the maturity disbursement
+    // is removed from the neuron.
+    let balance = get_balance_e8s_of_disburse_destination(&state_machine, disburse_destination);
+    assert!(balance > 0, "{}", balance);
+    let neuron = nns_governance_get_full_neuron(
+        &state_machine,
+        neuron_manager_controller,
+        managed_neuron_id.id,
+    )
+    .expect("Failed to get neuron");
+    assert_eq!(neuron.maturity_disbursements_in_progress.unwrap().len(), 0);
 }
 
 /// If a neuron's controller is added as a hot key and then removed, assert that Governance
@@ -497,8 +700,8 @@ fn test_hotkey_can_join_and_leave_community_fund() {
             command: Some(manage_neuron_response::Command::Error(error)),
         } => {
             assert_eq!(
-                ErrorType::try_from(error.error_type),
-                Ok(ErrorType::NotAuthorized),
+                error.error_type,
+                ErrorType::NotAuthorized as i32,
                 "{:?}",
                 error
             );

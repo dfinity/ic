@@ -35,3 +35,4 @@ packages:
   - "apt"
   - "bash"
   - "perl"
+  - "xz-utils" # for //rs/backup

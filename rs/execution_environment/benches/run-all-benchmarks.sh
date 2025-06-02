@@ -1,16 +1,29 @@
 #!/usr/bin/env bash
 set -ue
+shopt -s nocasematch
 ##
 ## Top-level script to run all execution and embedder benchmarks.
 ## Usage:
 ##     ./rs/execution_environment/benches/run-all-benchmarks.sh | tee summary.txt
 ##
-## The best (minimum) results are located in the `*.min`` files in the current directory.
+## The best (minimum) results are located in the `*.min` files in the current directory.
 ## These should be manually copied to `rs/execution_environment/benches/baseline/`.
 ## A summary of the results is printed to the standard output.
 ##
+## To compare apples to apples, the script will take into account the results generated
+## on the same host.
+##
+## To run just a subset of benchmarks, filters could be used. The `INCLUDE`
+## matches the benchmark name ("Embedders Heap", case-insensitive substring match),
+## and the `FILTER` matches specific benchmark id ("query_read_fwd_102m_step_4k",
+## case-sensitive regular expression).
+##
 
 printf "%-12s := %s\n" \
+    "COMMIT_ID" "${COMMIT_ID:=$(git rev-list --abbrev-commit -1 HEAD)}" \
+    "FILTER" "${FILTER:=}" \
+    "HOST" "${HOST:=$(hostname -s)}" \
+    "INCLUDE" "${INCLUDE:=${1:-}}" \
     "REPEAT" "${REPEAT:=3}" >&2
 
 RUN_BENCHMARK="${0%/*}/run-benchmark.sh"
@@ -26,6 +39,19 @@ run() {
     local min_file="${4}"
     local filter="${5:-}"
 
+    # Use the `FILTER` env variable if it's defined.
+    filter="${FILTER:-${filter}}"
+    # Match benchmark name case insensitive.
+    case "${name}" in
+        *${INCLUDE}*) ;;
+        *)
+            echo "==> Skipping ${name} benchmarks (INCLUDE=\"${INCLUDE}\")" >&2
+            return
+            ;;
+    esac
+
+    # Add the commit id to ensure results are tied to specific code changes.
+    min_file="${min_file%.min}@${COMMIT_ID}.min"
     # Counter file tracks the number of benchmark executions so far.
     counter_file="${min_file%.*}.counter"
     counter=$(cat "${counter_file}" 2>/dev/null || echo "0")
@@ -53,17 +79,18 @@ run() {
 
 for i in $(seq 1 "${REPEAT}"); do
     run "${i}" "Embedders Compilation" \
-        "//rs/embedders:compilation_bench" "EMBEDDERS_COMPILATION.min"
+        "//rs/embedders:compilation_bench" "EMBEDDERS_COMPILATION.${HOST}.min"
     run "${i}" "Embedders Heap" \
-        "//rs/embedders:heap_bench" "EMBEDDERS_HEAP.min"
+        "//rs/embedders:heap_bench" "EMBEDDERS_HEAP.${HOST}.min"
     run "${i}" "Embedders Stable Memory" \
-        "//rs/embedders:stable_memory_bench" "EMBEDDERS_STABLE_MEMORY.min"
+        "//rs/embedders:stable_memory_bench" "EMBEDDERS_STABLE_MEMORY.${HOST}.min"
     run "${i}" "System API Inspect Message" \
-        "//rs/execution_environment:execute_inspect_message_bench" "SYSTEM_API_INSPECT_MESSAGE.min"
+        "//rs/execution_environment:execute_inspect_message_bench" \
+        "SYSTEM_API_INSPECT_MESSAGE.${HOST}.min"
     run "${i}" "System API Query" \
-        "//rs/execution_environment:execute_query_bench" "SYSTEM_API_QUERY.min"
+        "//rs/execution_environment:execute_query_bench" "SYSTEM_API_QUERY.${HOST}.min"
     run "${i}" "System API Update" \
-        "//rs/execution_environment:execute_update_bench" "SYSTEM_API_UPDATE.min"
+        "//rs/execution_environment:execute_update_bench" "SYSTEM_API_UPDATE.${HOST}.min"
     run "${i}" "Wasm Instructions" \
-        "//rs/execution_environment:wasm_instructions_bench" "WASM_INSTRUCTIONS.min"
+        "//rs/execution_environment:wasm_instructions_bench" "WASM_INSTRUCTIONS.${HOST}.min"
 done

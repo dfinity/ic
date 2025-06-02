@@ -1,3 +1,4 @@
+use crate::allowances::list_allowances;
 use crate::in_memory_ledger::{verify_ledger_state, InMemoryLedger};
 use crate::metrics::{parse_metric, retrieve_metrics};
 use assert_matches::assert_matches;
@@ -29,8 +30,9 @@ use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, IcpAllowanceArgs};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc::generic_value::Value as GenericValue;
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_types::icrc1::account::{Account, Subaccount, DEFAULT_SUBACCOUNT};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
+use icrc_ledger_types::icrc103::get_allowances::{Allowances, GetAllowancesArgs};
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
@@ -51,6 +53,7 @@ use icrc_ledger_types::icrc3::transactions::GetTransactionsResponse;
 use icrc_ledger_types::icrc3::transactions::Transaction as Tx;
 use icrc_ledger_types::icrc3::transactions::TransactionRange;
 use icrc_ledger_types::icrc3::transactions::Transfer;
+use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use proptest::prelude::*;
 use proptest::test_runner::{Config as TestRunnerConfig, TestCaseResult, TestRunner};
@@ -61,6 +64,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+mod allowances;
 pub mod fee_collector;
 pub mod in_memory_ledger;
 pub mod metrics;
@@ -1086,7 +1090,7 @@ where
     standards.sort();
     assert_eq!(
         standards,
-        vec!["ICRC-1", "ICRC-10", "ICRC-2", "ICRC-21", "ICRC-3"]
+        vec!["ICRC-1", "ICRC-10", "ICRC-103", "ICRC-2", "ICRC-21", "ICRC-3"]
     );
 }
 
@@ -3213,7 +3217,7 @@ pub fn test_metrics_while_migrating<T>(
         send_approval(&env, canister_id, account.owner, &approve_args).expect("approval failed");
     }
 
-    for i in 2..30 {
+    for i in 2..31 {
         let to = Account::from(PrincipalId::new_user_test_id(i).0);
         transfer(&env, canister_id, account, to, 100).expect("failed to transfer funds");
     }
@@ -3224,6 +3228,18 @@ pub fn test_metrics_while_migrating<T>(
         Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
     )
     .unwrap();
+
+    // The migration should not yet have completed - if this happens (e.g., due to a bump of some
+    // dependency, leading to more blocks being migrated within the configured instruction limits),
+    // consider adjusting the number of blocks stored in the ledger before starting the migration.
+    let is_ledger_ready = Decode!(
+        &env.query(canister_id, "is_ledger_ready", Encode!().unwrap())
+            .expect("failed to call is_ledger_ready")
+            .bytes(),
+        bool
+    )
+    .expect("failed to decode is_ledger_ready response");
+    assert!(!is_ledger_ready);
 
     let metrics = retrieve_metrics(&env, canister_id);
     assert!(
@@ -3238,15 +3254,6 @@ pub fn test_metrics_while_migrating<T>(
             .any(|line| line.contains("ledger_num_approvals")),
         "ledger_num_approvals should not be in metrics"
     );
-
-    let is_ledger_ready = Decode!(
-        &env.query(canister_id, "is_ledger_ready", Encode!().unwrap())
-            .expect("failed to call is_ledger_ready")
-            .bytes(),
-        bool
-    )
-    .expect("failed to decode is_ledger_ready response");
-    assert!(!is_ledger_ready);
 
     wait_ledger_ready(&env, canister_id, 20);
 
@@ -3668,6 +3675,439 @@ where
         ErrorCode::CanisterCalledTrap,
         "the minting account cannot delegate mints",
     );
+}
+
+// The test focuses on testing whether given an (approver, spender) pair the correct
+// sequence of allowances is returned.
+pub fn test_allowance_listing_sequences<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    const NUM_PRINCIPALS: u64 = 3;
+    const NUM_SUBACCOUNTS: u64 = 3;
+
+    let mut initial_balances = vec![];
+    let mut approvers = vec![];
+    let mut spenders = vec![];
+
+    for pid in 1..NUM_PRINCIPALS + 1 {
+        for sub in 0..NUM_SUBACCOUNTS {
+            let approver = Account {
+                owner: Principal::from_slice(&[pid as u8; 2]),
+                subaccount: Some([sub as u8; 32]),
+            };
+            approvers.push(approver);
+            initial_balances.push((approver, 100_000));
+            spenders.push(Account {
+                owner: Principal::from_slice(&[pid as u8 + NUM_PRINCIPALS as u8; 2]),
+                subaccount: Some([sub as u8; 32]),
+            });
+        }
+    }
+
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, initial_balances);
+
+    // Create approvals between all (approver, spender) pairs from `approvers` and `spenders`.
+    // Additionally store all pairs in an array in sorted order in `approve_pairs`.
+    // This allows us to check if the allowances returned by the `icrc103_get_allowances`
+    // endpoint are correct - they will always form a contiguous subarray of `approve_pairs`.
+    let mut approve_pairs = vec![];
+    for approver in &approvers {
+        for spender in &spenders {
+            let approve_args = ApproveArgs {
+                from_subaccount: approver.subaccount,
+                spender: *spender,
+                amount: Nat::from(10u64),
+                expected_allowance: None,
+                expires_at: None,
+                fee: Some(Nat::from(FEE)),
+                memo: None,
+                created_at_time: None,
+            };
+            let _ = send_approval(&env, canister_id, approver.owner, &approve_args)
+                .expect("approval failed");
+            approve_pairs.push((approver, spender));
+        }
+    }
+    assert!(approve_pairs.is_sorted());
+
+    // Check if given allowances match the elements of `approve_pairs` starting at index `pair_index`.
+    // Additionally check that the next element in `approve_pairs` has a different `from.owner`
+    // and could not be part of the same response of `icrc103_get_allowances`.
+    let check_allowances = |allowances: Allowances, pair_idx: usize, owner: Principal| {
+        for i in 0..allowances.len() {
+            let allowance = &allowances[i];
+            let pair = approve_pairs[pair_idx + i];
+            assert_eq!(allowance.from_account, *pair.0, "incorrect from account");
+            assert_eq!(allowance.to_spender, *pair.1, "incorrect spender account");
+        }
+        let next_pair_idx = pair_idx + allowances.len();
+        if next_pair_idx < approve_pairs.len() {
+            assert_ne!(approve_pairs[next_pair_idx].0.owner, owner);
+        }
+    };
+
+    // Create an Account that is lexicographically smaller than the given Account.
+    // In the above Account generation scheme, the returned account will fall
+    // between two approvers or spenders - we only modify the second byte of
+    // the owner slice or the last byte of the subaccount slice.
+    let prev_account = |account: &Account| {
+        if account.subaccount.unwrap() == [0u8; 32] {
+            let owner = account.owner.as_slice();
+            let prev_owner = [owner[0], owner[1] - 1];
+            Account {
+                owner: Principal::from_slice(&prev_owner),
+                subaccount: account.subaccount,
+            }
+        } else {
+            let mut prev_subaccount = account.subaccount.unwrap();
+            prev_subaccount[31] -= 1;
+            Account {
+                owner: account.owner,
+                subaccount: Some(prev_subaccount),
+            }
+        }
+    };
+
+    let mut prev_from = None;
+    for (idx, (&from, &spender)) in approve_pairs.iter().enumerate() {
+        let mut args = GetAllowancesArgs {
+            from_account: Some(from),
+            prev_spender: None,
+            take: None,
+        };
+
+        if prev_from != Some(from) {
+            prev_from = Some(from);
+
+            // Listing without specifying the spender.
+            let allowances = list_allowances(&env, canister_id, from.owner, args.clone())
+                .expect("failed to list allowances");
+            check_allowances(allowances, idx, from.owner);
+
+            // List from a smaller `from_account`. If the smaller `from_account` has a different owner
+            // the result list is empty - we don't have any approvals for that owner.
+            // If the smaller `from_account` has a different subaccount, the result is the same
+            // as listing for current `from_account` - the smaller subaccount does not match any account we generated.
+            args.from_account = Some(prev_account(&from));
+            let allowances = list_allowances(&env, canister_id, from.owner, args.clone())
+                .expect("failed to list allowances");
+            if args.from_account.unwrap().owner == from.owner {
+                check_allowances(allowances, idx, from.owner);
+            } else {
+                assert_eq!(allowances.len(), 0);
+            }
+            args.from_account = Some(from);
+        }
+
+        // Listing with spender specified, the current `approve_pair` is skipped.
+        args.prev_spender = Some(spender);
+        let allowances = list_allowances(&env, canister_id, from.owner, args.clone())
+            .expect("failed to list allowances");
+        check_allowances(allowances, idx + 1, from.owner);
+
+        // Listing with smaller spender, the current `approve_pair` is included.
+        args.prev_spender = Some(prev_account(&spender));
+        let allowances = list_allowances(&env, canister_id, from.owner, args)
+            .expect("failed to list allowances");
+        check_allowances(allowances, idx, from.owner);
+    }
+}
+
+// The test focuses on testing if the returned allowances have the correct
+// values for all fields (from, spender, amount, expiration).
+pub fn test_allowance_listing_values<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let approver = Account {
+        owner: PrincipalId::new_user_test_id(1).0,
+        subaccount: None,
+    };
+    let approver_sub = Account {
+        owner: PrincipalId::new_user_test_id(2).0,
+        subaccount: Some([2u8; 32]),
+    };
+    let initial_balances = vec![(approver, 100_000), (approver_sub, 100_000)];
+    let spender = Account {
+        owner: PrincipalId::new_user_test_id(3).0,
+        subaccount: None,
+    };
+    let spender_sub = Account {
+        owner: PrincipalId::new_user_test_id(4).0,
+        subaccount: Some([3u8; 32]),
+    };
+
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, initial_balances);
+
+    // Simplest possible approval.
+    let approve_args = default_approve_args(spender, 1);
+    let block_index =
+        send_approval(&env, canister_id, approver.owner, &approve_args).expect("approval failed");
+    assert_eq!(block_index, 2);
+
+    let now = system_time_to_nanos(env.time());
+
+    // Spender subaccount, expiration
+    let expiration_far = Some(now + Duration::from_secs(3600).as_nanos() as u64);
+    let mut approve_args = default_approve_args(spender_sub, 2);
+    approve_args.expires_at = expiration_far;
+    let block_index =
+        send_approval(&env, canister_id, approver.owner, &approve_args).expect("approval failed");
+    assert_eq!(block_index, 3);
+
+    // From subaccount
+    let mut approve_args = default_approve_args(spender, 3);
+    approve_args.from_subaccount = approver_sub.subaccount;
+    let block_index = send_approval(&env, canister_id, approver_sub.owner, &approve_args)
+        .expect("approval failed");
+    assert_eq!(block_index, 4);
+
+    // From subaccount, spender subaccount, expiration
+    let expiration_near = Some(now + Duration::from_secs(10).as_nanos() as u64);
+    let mut approve_args = default_approve_args(spender_sub, 4);
+    approve_args.from_subaccount = approver_sub.subaccount;
+    approve_args.expires_at = expiration_near;
+    let block_index = send_approval(&env, canister_id, approver_sub.owner, &approve_args)
+        .expect("approval failed");
+    assert_eq!(block_index, 5);
+
+    let mut args = GetAllowancesArgs {
+        from_account: Some(approver),
+        prev_spender: None,
+        take: None,
+    };
+
+    let allowances = list_allowances(&env, canister_id, approver.owner, args.clone())
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), 2);
+
+    assert_eq!(allowances[0].from_account, approver);
+    assert_eq!(allowances[0].to_spender, spender);
+    assert_eq!(allowances[0].allowance, Nat::from(1u64));
+    assert_eq!(allowances[0].expires_at, None);
+
+    assert_eq!(allowances[1].from_account, approver);
+    assert_eq!(allowances[1].to_spender, spender_sub);
+    assert_eq!(allowances[1].allowance, Nat::from(2u64));
+    assert_eq!(allowances[1].expires_at, expiration_far);
+
+    args.take = Some(Nat::from(1u64));
+
+    let allowances_take = list_allowances(&env, canister_id, approver.owner, args.clone())
+        .expect("failed to list allowances");
+    assert_eq!(allowances_take.len(), 1);
+    assert_eq!(allowances_take[0], allowances[0]);
+
+    let args = GetAllowancesArgs {
+        from_account: Some(approver_sub),
+        prev_spender: None,
+        take: None,
+    };
+
+    // Here we additionally test listing approvals of another Principal.
+    let allowances = list_allowances(&env, canister_id, approver.owner, args.clone())
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), 2);
+
+    assert_eq!(allowances[0].from_account, approver_sub);
+    assert_eq!(allowances[0].to_spender, spender);
+    assert_eq!(allowances[0].allowance, Nat::from(3u64));
+    assert_eq!(allowances[0].expires_at, None);
+
+    assert_eq!(allowances[1].from_account, approver_sub);
+    assert_eq!(allowances[1].to_spender, spender_sub);
+    assert_eq!(allowances[1].allowance, Nat::from(4u64));
+    assert_eq!(allowances[1].expires_at, expiration_near);
+
+    env.advance_time(Duration::from_secs(10));
+
+    let allowances_later = list_allowances(&env, canister_id, approver.owner, args)
+        .expect("failed to list allowances");
+    assert_eq!(allowances_later.len(), 1);
+    assert_eq!(allowances_later[0], allowances[0]);
+}
+
+// Test whether specifying None/DEFAULT_SUBACCOUNT does not affect the results.
+pub fn test_allowance_listing_subaccount<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let approver_none = Account {
+        owner: PrincipalId::new_user_test_id(1).0,
+        subaccount: None,
+    };
+    let approver_default = Account {
+        owner: PrincipalId::new_user_test_id(2).0,
+        subaccount: Some(*DEFAULT_SUBACCOUNT),
+    };
+    let initial_balances = vec![(approver_none, 100_000), (approver_default, 100_000)];
+    let spender_none = Account {
+        owner: PrincipalId::new_user_test_id(3).0,
+        subaccount: None,
+    };
+    let spender_default = Account {
+        owner: PrincipalId::new_user_test_id(3).0,
+        subaccount: Some(*DEFAULT_SUBACCOUNT),
+    };
+
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, initial_balances);
+
+    let approve_args = default_approve_args(spender_none, 1);
+    let block_index = send_approval(&env, canister_id, approver_none.owner, &approve_args)
+        .expect("approval failed");
+    assert_eq!(block_index, 2);
+
+    let mut approve_args = default_approve_args(spender_default, 1);
+    approve_args.from_subaccount = approver_default.subaccount;
+    let block_index = send_approval(&env, canister_id, approver_default.owner, &approve_args)
+        .expect("approval failed");
+    assert_eq!(block_index, 3);
+
+    // Should return the allowance, if we specify `from_account` as when creating approval
+    let args = GetAllowancesArgs {
+        from_account: Some(approver_none),
+        prev_spender: None,
+        take: None,
+    };
+    let allowances = list_allowances(&env, canister_id, approver_none.owner, args.clone())
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), 1);
+
+    // Should return the allowance, if we specify `from_account` with explicit default subaccount.
+    let mut approver_none_default = approver_none;
+    approver_none_default.subaccount = Some(*DEFAULT_SUBACCOUNT);
+    let args = GetAllowancesArgs {
+        from_account: Some(approver_none_default),
+        prev_spender: None,
+        take: None,
+    };
+    let allowances = list_allowances(&env, canister_id, approver_none.owner, args.clone())
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), 1);
+
+    // Should filter out the allowance if subaccount is none
+    let args = GetAllowancesArgs {
+        from_account: Some(approver_none),
+        prev_spender: Some(spender_none),
+        take: None,
+    };
+    let allowances = list_allowances(&env, canister_id, approver_none.owner, args.clone())
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), 0);
+
+    // Should filter out the allowance if subaccount is default
+    let args = GetAllowancesArgs {
+        from_account: Some(approver_none),
+        prev_spender: Some(spender_default),
+        take: None,
+    };
+    let allowances = list_allowances(&env, canister_id, approver_none.owner, args.clone())
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), 0);
+
+    // Should return the allowance, if we specify `from_account` as when creating approval
+    let args = GetAllowancesArgs {
+        from_account: Some(approver_default),
+        prev_spender: None,
+        take: None,
+    };
+    let allowances = list_allowances(&env, canister_id, approver_default.owner, args.clone())
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), 1);
+
+    // Should return the allowance, if we specify `from_account` with none subaccount.
+    let mut approver_default_none = approver_default;
+    approver_default_none.subaccount = None;
+    let args = GetAllowancesArgs {
+        from_account: Some(approver_default_none),
+        prev_spender: None,
+        take: None,
+    };
+    let allowances = list_allowances(&env, canister_id, approver_default.owner, args)
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), 1);
+}
+
+// The test focuses on testing various values for the `take` parameter.
+pub fn test_allowance_listing_take<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    const MAX_RESULTS: usize = 500;
+    const NUM_SPENDERS: usize = MAX_RESULTS + 1;
+
+    let approver = Account {
+        owner: PrincipalId::new_user_test_id(1).0,
+        subaccount: None,
+    };
+
+    let mut spenders = vec![];
+    for i in 2..NUM_SPENDERS + 2 {
+        spenders.push(Account {
+            owner: PrincipalId::new_user_test_id(i as u64).0,
+            subaccount: None,
+        });
+    }
+    assert_eq!(spenders.len(), NUM_SPENDERS);
+
+    let (env, canister_id) = setup(
+        ledger_wasm,
+        encode_init_args,
+        vec![(approver, 1_000_000_000)],
+    );
+
+    for spender in &spenders {
+        let approve_args = ApproveArgs {
+            from_subaccount: None,
+            spender: *spender,
+            amount: Nat::from(10u64),
+            expected_allowance: None,
+            expires_at: None,
+            fee: Some(Nat::from(FEE)),
+            memo: None,
+            created_at_time: None,
+        };
+        let _ = send_approval(&env, canister_id, approver.owner, &approve_args)
+            .expect("approval failed");
+    }
+
+    let mut args = GetAllowancesArgs {
+        from_account: Some(approver),
+        prev_spender: None,
+        take: None,
+    };
+
+    let allowances = list_allowances(&env, canister_id, approver.owner, args.clone())
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), MAX_RESULTS);
+
+    args.take = Some(Nat::from(0u64));
+    let allowances = list_allowances(&env, canister_id, approver.owner, args.clone())
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), 0);
+
+    args.take = Some(Nat::from(5u64));
+    let allowances = list_allowances(&env, canister_id, approver.owner, args.clone())
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), 5);
+
+    args.take = Some(Nat::from(u64::MAX));
+    let allowances = list_allowances(&env, canister_id, approver.owner, args.clone())
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), MAX_RESULTS);
+
+    args.take = Some(Nat::from(
+        BigUint::parse_bytes(b"1000000000000000000000000000000000000000", 10).unwrap(),
+    ));
+    assert!(args.take.clone().unwrap().0.to_u64().is_none());
+    let allowances = list_allowances(&env, canister_id, approver.owner, args)
+        .expect("failed to list allowances");
+    assert_eq!(allowances.len(), MAX_RESULTS);
 }
 
 pub fn expect_icrc2_disabled(
@@ -4362,9 +4802,9 @@ test_bytes";
     );
     // When the expected allowance is not set, a warning should be displayed.
     let expected_message = expected_approve_message.replace(
-    "\n\n**Current withdrawal allowance:**\n0.01 XTST",
-    "\n\u{26A0} The allowance will be set to 0.01 XTST independently of any previous allowance. Until this transaction has been executed the spender can still exercise the previous allowance (if any) to it's full amount.",
-);
+        "\n\n**Current withdrawal allowance:**\n0.01 XTST",
+        "\n\u{26A0} The allowance will be set to 0.01 XTST independently of any previous allowance. Until this transaction has been executed the spender can still exercise the previous allowance (if any) to it's full amount.",
+    );
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
@@ -4398,8 +4838,8 @@ test_bytes";
             .consent_message,
     );
     let expected_message = expected_approve_message
-.replace("\n\n**Transaction fees to be paid by:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Transaction fees to be paid by your subaccount:**\n101010101010101010101010101010101010101010101010101010101010101" )
-.replace("\n\n**Your account:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Your subaccount:**\n101010101010101010101010101010101010101010101010101010101010101");
+        .replace("\n\n**Transaction fees to be paid by:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Transaction fees to be paid by your subaccount:**\n101010101010101010101010101010101010101010101010101010101010101" )
+        .replace("\n\n**Your account:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Your subaccount:**\n101010101010101010101010101010101010101010101010101010101010101");
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
@@ -4437,7 +4877,7 @@ test_bytes";
     );
 
     let expected_message = expected_approve_message.replace("\n\n**Your account:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Your subaccount:**\n0000000000000000000000000000000000000000000000000000000000000000" )
-    .replace("\n\n**Transaction fees to be paid by:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Transaction fees to be paid by your subaccount:**\n0000000000000000000000000000000000000000000000000000000000000000" );
+        .replace("\n\n**Transaction fees to be paid by:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Transaction fees to be paid by your subaccount:**\n0000000000000000000000000000000000000000000000000000000000000000" );
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
@@ -4514,9 +4954,9 @@ test_bytes";
             .consent_message,
     );
     let expected_message = expected_transfer_from_message.replace(
-    "\n\n**Account sending the transfer request:**\ndjduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303",
-    "\n\n**Subaccount sending the transfer request:**\n303030303030303030303030303030303030303030303030303030303030303",
-);
+        "\n\n**Account sending the transfer request:**\ndjduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303",
+        "\n\n**Subaccount sending the transfer request:**\n303030303030303030303030303030303030303030303030303030303030303",
+    );
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
@@ -5805,4 +6245,38 @@ pub mod archiving {
             _ => None,
         }
     }
+}
+
+pub fn test_setting_fee_collector_to_minting_account<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let env = StateMachine::new();
+
+    let args = encode_init_args(InitArgs {
+        fee_collector_account: Some(MINTER),
+        ..init_args(vec![])
+    });
+    let args = Encode!(&args).unwrap();
+    match env.install_canister(ledger_wasm.clone(), args, None) {
+        Ok(_) => {
+            panic!("should not install ledger with minting account and fee collector set to the same account")
+        }
+        Err(err) => {
+            err.assert_contains(
+                ErrorCode::CanisterCalledTrap,
+                "The fee collector account cannot be the same as the minting account",
+            );
+        }
+    }
+
+    let args = encode_init_args(InitArgs {
+        fee_collector_account: Some(Account::from(PrincipalId::new_user_test_id(1).0)),
+        ..init_args(vec![])
+    });
+    let args = Encode!(&args).unwrap();
+    env.install_canister(ledger_wasm, args, None)
+        .expect("should successfully install ledger");
 }

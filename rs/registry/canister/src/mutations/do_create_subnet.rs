@@ -80,7 +80,7 @@ impl Registry {
             LOG_PREFIX, payload, subnet_id
         );
 
-        // 2b. Invoke compute_initial_i_dkg_dealings on ic_00
+        // 2b. Invoke reshare_chain_key on ic_00
 
         let initial_chain_key_config =
             payload
@@ -93,7 +93,7 @@ impl Registry {
 
         let receiver_nodes = payload.node_ids.clone();
         let chain_key_initializations = self
-            .get_all_initial_i_dkg_dealings_from_ic00(&initial_chain_key_config, receiver_nodes)
+            .get_all_chain_key_reshares_from_ic00(&initial_chain_key_config, receiver_nodes)
             .await;
 
         let payload = CreateSubnetPayload {

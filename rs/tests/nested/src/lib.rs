@@ -47,7 +47,7 @@ pub fn config(env: TestEnv) {
         // So we temporarily require that this test is hosted in dm1 until the other Farm hosts are upgraded to Ubuntu 24.04.
         .with_required_host_features(vec![HostFeature::DC("dm1".to_string())])
         .add_fast_single_node_subnet(SubnetType::System)
-        .with_mainnet_config()
+        // .with_mainnet_config() TODO: uncomment in NODE-1518
         .with_api_boundary_nodes(1)
         .with_node_provider(principal)
         .with_node_operator(principal)
@@ -100,6 +100,10 @@ pub fn upgrade_hostos(env: TestEnv) {
         HostosVersion::try_from(target_version_str.trim()).expect("Invalid mainnet hostos version");
 
     let update_image_url_str = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_URL").unwrap();
+    info!(
+        logger,
+        "HostOS update image URL: '{}'", update_image_url_str
+    );
     let update_image_url =
         Url::parse(update_image_url_str.trim()).expect("Invalid mainnet hostos update image URL");
     let update_image_sha256 = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_SHA").unwrap();

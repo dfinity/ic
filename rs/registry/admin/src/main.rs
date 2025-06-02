@@ -37,36 +37,34 @@ use ic_nervous_system_root::change_canister::{
     AddCanisterRequest, CanisterAction, ChangeCanisterRequest, StopOrStartCanisterRequest,
 };
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
-use ic_nns_constants::{memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::{
+    add_or_remove_node_provider::Change,
     bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
-    pb::v1::{
-        add_or_remove_node_provider::Change,
-        create_service_nervous_system::{
-            governance_parameters::VotingRewardParameters,
-            initial_token_distribution::{
-                developer_distribution::NeuronDistribution, DeveloperDistribution,
-                SwapDistribution, TreasuryDistribution,
-            },
-            swap_parameters, GovernanceParameters, InitialTokenDistribution, LedgerParameters,
-            SwapParameters,
+    create_service_nervous_system::{
+        governance_parameters::VotingRewardParameters,
+        initial_token_distribution::{
+            developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
+            TreasuryDistribution,
         },
-        install_code::CanisterInstallMode as GovernanceInstallMode,
-        proposal::Action,
-        stop_or_start_canister::CanisterAction as GovernanceCanisterAction,
-        update_canister_settings::{
-            CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
-        },
-        AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, InstallCodeRequest,
-        MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest, NnsFunction,
-        NodeProvider, ProposalActionRequest, RewardNodeProviders, StopOrStartCanister,
-        UpdateCanisterSettings,
+        swap_parameters, GovernanceParameters, InitialTokenDistribution, LedgerParameters,
+        SwapParameters,
     },
+    install_code::CanisterInstallMode as GovernanceInstallMode,
+    proposal::Action,
     proposal_submission_helpers::{
         create_external_update_proposal_candid, create_make_proposal_payload,
         decode_make_proposal_response,
     },
+    stop_or_start_canister::CanisterAction as GovernanceCanisterAction,
     subnet_rental::{RentalConditionId, SubnetRentalRequest},
+    update_canister_settings::{
+        CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
+    },
+    AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, InstallCodeRequest,
+    MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest, NnsFunction,
+    NodeProvider, ProposalActionRequest, RewardNodeProviders, StopOrStartCanister,
+    UpdateCanisterSettings,
 };
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_init::make_hsm_sender;
@@ -1019,15 +1017,6 @@ struct ProposeToChangeNnsCanisterCmd {
     /// The sha256 of the arg binary file.
     #[clap(long)]
     arg_sha256: Option<String>,
-
-    #[clap(long)]
-    /// If set, it will update the canister's compute allocation to this value.
-    /// See `ComputeAllocation` for the semantics of this field.
-    compute_allocation: Option<u64>,
-    #[clap(long)]
-    /// If set, it will update the canister's memory allocation to this value.
-    /// See `MemoryAllocation` for the semantics of this field.
-    memory_allocation: Option<u64>,
 }
 
 #[async_trait]
@@ -1077,8 +1066,6 @@ impl ProposalPayload<ChangeCanisterRequest> for ProposeToChangeNnsCanisterCmd {
             canister_id: self.canister_id,
             wasm_module,
             arg,
-            compute_allocation: self.compute_allocation.map(candid::Nat::from),
-            memory_allocation: self.memory_allocation.map(candid::Nat::from),
             chunked_canister_wasm: None,
         }
     }
@@ -5814,7 +5801,7 @@ async fn update_registry_local_store(nns_urls: Vec<Url>, cmd: UpdateRegistryLoca
             let throw_err = |err| panic!("Error retrieving registry records: {:?}", err);
             if cmd.disable_certificate_validation {
                 remote_canister
-                    .get_changes_since_as_transport_records(latest_version.get())
+                    .get_changes_since_as_registry_records(latest_version.get())
                     .await
                     .unwrap_or_else(throw_err)
             } else {
@@ -6190,7 +6177,6 @@ impl RootCanisterClient {
         .await;
         let change_canister_request =
             ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
-                .with_memory_allocation(memory_allocation_of(GOVERNANCE_CANISTER_ID))
                 .with_wasm(wasm_module);
 
         let serialized = Encode!(&CanisterIdRecord::from(GOVERNANCE_CANISTER_ID)).unwrap();

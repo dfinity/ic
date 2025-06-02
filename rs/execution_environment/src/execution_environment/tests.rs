@@ -1,6 +1,5 @@
 use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_config::embedders::BestEffortResponsesFeature;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_management_canister_types_private::{
     self as ic00, BitcoinGetUtxosArgs, BitcoinNetwork, BoundedHttpHeaders, CanisterChange,
@@ -25,7 +24,7 @@ use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
     assert_empty_reply, check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
 };
-use ic_test_utilities_metrics::{fetch_histogram_vec_count, fetch_int_counter, metric_vec};
+use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
 use ic_types::{
     canister_http::{CanisterHttpMethod, Transform},
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -292,21 +291,19 @@ fn output_requests_on_system_subnet_ignore_memory_limits() {
         .with_manual_execution()
         .build();
 
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000));
-    test.install_canister_with_allocation(
-        canister_id,
-        wat::parse_str(CALL_SIMPLE_WAT).unwrap(),
-        None,
-        Some(canister_memory as u64),
-    )
-    .unwrap();
+    let canister_id = test
+        .create_canister_with_allocation(
+            Cycles::new(1_000_000_000),
+            None,
+            Some(canister_memory as u64),
+        )
+        .unwrap();
+    test.install_canister(canister_id, wat::parse_str(CALL_SIMPLE_WAT).unwrap())
+        .unwrap();
     test.ingress_raw(canister_id, "test", vec![]);
     test.execute_message(canister_id);
 
-    assert_eq!(
-        test.subnet_available_memory().get_execution_memory(),
-        (size_of::<CanisterChange>() + size_of::<PrincipalId>()) as i64
-    );
+    assert_eq!(test.subnet_available_memory().get_execution_memory(), 0);
     assert_eq!(
         test.subnet_available_memory()
             .get_guaranteed_response_message_memory(),
@@ -400,7 +397,6 @@ fn output_best_effort_requests_on_application_subnets_update_subnet_available_me
         .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
         .with_subnet_guaranteed_response_message_memory(ONE_GIB)
-        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .with_manual_execution()
         .build();
     let canister_id = test.canister_from_wat(CALL_BEST_EFFORT_WAT).unwrap();
@@ -799,10 +795,15 @@ fn get_canister_status_from_another_canister_when_memory_low() {
     let mut test = ExecutionTestBuilder::new().build();
     let controller = test.universal_canister().unwrap();
     let binary = wat::parse_str("(module)").unwrap();
-    let canister = test.create_canister(Cycles::new(1_000_000_000_000));
     let memory_allocation = NumBytes::from(450);
-    test.install_canister_with_allocation(canister, binary, None, Some(memory_allocation.get()))
+    let canister = test
+        .create_canister_with_allocation(
+            Cycles::new(1_000_000_000_000),
+            None,
+            Some(memory_allocation.get()),
+        )
         .unwrap();
+    test.install_canister(canister, binary).unwrap();
     let canister_status_args = Encode!(&CanisterIdRecord::from(canister)).unwrap();
     let get_canister_status = wasm()
         .call_simple(
@@ -2098,40 +2099,6 @@ fn metrics_are_observed_for_subnet_messages() {
 }
 
 #[test]
-fn metrics_are_observed_for_using_deprecated_fields() {
-    let mut test = ExecutionTestBuilder::new().build();
-
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
-
-    let payload = ic00::InstallCodeArgsV2::new(
-        ic00::CanisterInstallModeV2::Install,
-        canister_id,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-        vec![],
-        Some(1),
-        Some(100 * 1024 * 1024),
-    );
-
-    test.subnet_message(Method::InstallCode, payload.encode())
-        .unwrap();
-
-    assert_eq!(
-        fetch_int_counter(
-            test.metrics_registry(),
-            "execution_compute_allocation_in_install_code_total"
-        ),
-        Some(1),
-    );
-    assert_eq!(
-        fetch_int_counter(
-            test.metrics_registry(),
-            "execution_memory_allocation_in_install_code_total"
-        ),
-        Some(1),
-    );
-}
-
-#[test]
 fn ingress_deducts_execution_cost_from_canister_balance() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister = test.universal_canister().unwrap();
@@ -2823,6 +2790,20 @@ fn can_create_canister_with_specified_id() {
         create_canister_with_specified_id(&mut test, &canister, Some(specified_id.get()));
 
     assert_eq!(specified_id, new_canister.get_canister_id());
+
+    // creating a canister with the same `specified_id` again is an error
+    let args = Encode!(&ProvisionalCreateCanisterWithCyclesArgs::new(
+        None,
+        Some(specified_id.into()),
+    ))
+    .unwrap();
+    let err = test
+        .subnet_message("provisional_create_canister_with_cycles", args)
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterAlreadyInstalled, err.code());
+    assert!(err
+        .description()
+        .contains(&format!("Canister {} is already installed.", specified_id)));
 }
 
 // Returns CanisterId by formula 'range_start + (range_end - range_start) * percentile'

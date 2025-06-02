@@ -3,11 +3,15 @@ use crate::cmd::{
     WithTrustedNeuronsFollowingNeuronCmd,
 };
 use candid::{decode_one, Encode};
-use ic_canister_client::{prepare_update, Agent, Sender};
+use ic_agent::{
+    agent::{signed::SignedUpdate, EnvelopeContent},
+    export::Principal,
+    Agent, Identity, Signature,
+};
 use ic_nervous_system_common::ledger;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     manage_neuron::{
         claim_or_refresh::{By, MemoAndController},
         configure::Operation,
@@ -27,10 +31,14 @@ use ic_registry_transport::{
     pb::v1::{registry_mutation, Precondition, RegistryMutation},
     serialize_atomic_mutate_request,
 };
-use ic_types::{messages::SignedIngress, CanisterId, PrincipalId, SubnetId, Time};
+use ic_types::{
+    messages::{SignedIngress, SignedRequestBytes},
+    CanisterId, PrincipalId, SubnetId, Time,
+};
 use icp_ledger::{AccountIdentifier, Memo, SendArgs, Tokens};
 use prost::Message;
 use std::{convert::TryFrom, str::FromStr, time::Duration};
+use time::OffsetDateTime;
 
 pub struct IngressWithPrinter {
     pub ingress: SignedIngress,
@@ -46,6 +54,29 @@ impl From<SignedIngress> for IngressWithPrinter {
     }
 }
 
+/// Behaves like the anonymous identity for the agent, i.e., does not sign messages.
+/// Though, it still uses a custom PrincipalId as the sender instead of the fixed anonymous
+/// principal.
+struct PrincipalSender(PrincipalId);
+
+impl Identity for PrincipalSender {
+    fn sender(&self) -> Result<Principal, String> {
+        Ok(Principal::from(self.0))
+    }
+
+    fn public_key(&self) -> Option<Vec<u8>> {
+        None
+    }
+
+    fn sign(&self, _content: &EnvelopeContent) -> Result<Signature, String> {
+        Ok(Signature {
+            public_key: None,
+            signature: None,
+            delegations: None,
+        })
+    }
+}
+
 fn make_signed_ingress(
     agent: &Agent,
     canister_id: CanisterId,
@@ -53,28 +84,28 @@ fn make_signed_ingress(
     payload: Vec<u8>,
     expiry: Time,
 ) -> Result<SignedIngress, String> {
-    let nonce = format!("{:?}", std::time::Instant::now())
-        .as_bytes()
-        .to_vec();
-    let (http_body, _request_id) = prepare_update(
-        &agent.sender,
-        &canister_id,
-        method,
-        payload,
-        nonce,
-        expiry,
-        agent.sender_field.clone(),
-    )
-    .map_err(|err| format!("Error preparing update message: {:?}", err))?;
-    SignedIngress::try_from(http_body)
+    let SignedUpdate { signed_update, .. } = agent
+        .update(&Principal::from(canister_id), method)
+        .with_arg(payload)
+        .expire_at(
+            OffsetDateTime::from_unix_timestamp_nanos(expiry.as_nanos_since_unix_epoch().into())
+                .map_err(|err| format!("Error preparing update message: {:?}", err))?,
+        )
+        .sign()
+        .map_err(|err| format!("Error preparing update message: {:?}", err))?;
+
+    SignedIngress::try_from(SignedRequestBytes::from(signed_update))
         .map_err(|err| format!("Error converting to SignedIngress: {:?}", err))
 }
 
-fn agent_with_principal_as_sender(principal: &PrincipalId) -> Agent {
-    Agent::new(
-        url::Url::parse("http://localhost").unwrap(),
-        Sender::PrincipalId(*principal),
-    )
+pub(crate) fn agent_with_principal_as_sender(principal: &PrincipalId) -> Result<Agent, String> {
+    // Use a dummy URL here because we don't send any outgoing ingress.
+    // The agent is only used to construct ingress messages.
+    Agent::builder()
+        .with_url("http://localhost")
+        .with_identity(PrincipalSender(*principal))
+        .build()
+        .map_err(|err| err.to_string())
 }
 
 pub fn cmd_add_neuron(time: Time, cmd: &WithNeuronCmd) -> Result<Vec<IngressWithPrinter>, String> {
@@ -96,10 +127,10 @@ pub fn cmd_add_neuron(time: Time, cmd: &WithNeuronCmd) -> Result<Vec<IngressWith
     })
     .expect("Couldn't candid-encode ledger transfer");
 
-    let governance_agent = agent_with_principal_as_sender(&GOVERNANCE_CANISTER_ID.get());
+    let governance_agent = &agent_with_principal_as_sender(&GOVERNANCE_CANISTER_ID.get())?;
     msgs.push(IngressWithPrinter {
         ingress: make_signed_ingress(
-            &governance_agent,
+            governance_agent,
             LEDGER_CANISTER_ID,
             "send_dfx",
             payload,
@@ -121,7 +152,7 @@ pub fn cmd_add_neuron(time: Time, cmd: &WithNeuronCmd) -> Result<Vec<IngressWith
     })
     .expect("Couldn't candid-encode neuron claim");
 
-    let user_agent = &agent_with_principal_as_sender(&cmd.neuron_controller);
+    let user_agent = &agent_with_principal_as_sender(&cmd.neuron_controller)?;
     msgs.push(IngressWithPrinter {
         ingress: make_signed_ingress(
             user_agent,
@@ -196,7 +227,7 @@ pub fn cmd_make_trusted_neurons_follow_neuron(
             })),
         })
         .expect("Couldn't encode payload for manage neuron command");
-        let user_agent = &agent_with_principal_as_sender(&principal);
+        let user_agent = &agent_with_principal_as_sender(&principal)?;
         msgs.push(
             make_signed_ingress(
                 user_agent,
@@ -210,7 +241,7 @@ pub fn cmd_make_trusted_neurons_follow_neuron(
     }
 
     // Increase the neuron's delay
-    let user_agent = &agent_with_principal_as_sender(&cmd.neuron_controller);
+    let user_agent = &agent_with_principal_as_sender(&cmd.neuron_controller)?;
     let delay_payload = Encode!(&ManageNeuron {
         id: Some(NeuronId { id: cmd.neuron_id }),
         neuron_id_or_subaccount: None,
@@ -250,10 +281,10 @@ pub fn cmd_add_ledger_account(
     })
     .expect("Couldn't candid-encode ledger transfer");
 
-    let governance_agent = agent_with_principal_as_sender(&GOVERNANCE_CANISTER_ID.get());
+    let governance_agent = &agent_with_principal_as_sender(&GOVERNANCE_CANISTER_ID.get())?;
 
     Ok(vec![make_signed_ingress(
-        &governance_agent,
+        governance_agent,
         LEDGER_CANISTER_ID,
         "send_dfx",
         payload,
@@ -408,21 +439,8 @@ pub fn atomic_mutate(
     expiry: Time,
 ) -> Result<SignedIngress, String> {
     let payload = serialize_atomic_mutate_request(mutations, pre_conditions);
-    let nonce = format!("{:?}", std::time::Instant::now())
-        .as_bytes()
-        .to_vec();
-    let (http_body, _request_id) = prepare_update(
-        &agent.sender,
-        &canister_id,
-        "atomic_mutate",
-        payload,
-        nonce,
-        expiry,
-        agent.sender_field.clone(),
-    )
-    .map_err(|err| format!("Error preparing update message: {:?}", err))?;
-    SignedIngress::try_from(http_body)
-        .map_err(|err| format!("Error converting to SignedIngress: {:?}", err))
+
+    make_signed_ingress(agent, canister_id, "atomic_mutate", payload, expiry)
 }
 
 /// Bless a new replica version by mutating the registry canister.

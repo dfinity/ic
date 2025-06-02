@@ -1,32 +1,28 @@
-use crate::core::Run;
+use std::{
+    sync::Arc,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+
 use anyhow::Error;
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
-use candid::Principal;
-use candid::{Decode, Encode};
-use ic_canister_client::Agent;
-use ic_types::CanisterId;
-use prometheus::{
+use candid::{Decode, Encode, Principal};
+use ic_agent::Agent;
+use ic_bn_lib::prometheus::{
     register_int_counter_vec_with_registry, register_int_gauge_with_registry, IntCounterVec,
     IntGauge, Registry,
 };
+use ic_bn_lib::tasks::Run;
 use salt_sharing_api::{GetSaltError, GetSaltResponse};
-use std::time::{SystemTime, UNIX_EPOCH};
-use std::{sync::Arc, time::Duration};
-use tokio::time::{interval, MissedTickBehavior};
+use tokio::{
+    select,
+    time::{interval, MissedTickBehavior},
+};
+use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
 const SERVICE: &str = "AnonymizationSaltFetcher";
 const METRIC_PREFIX: &str = "anonymization_salt";
-
-fn nonce() -> Vec<u8> {
-    SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos()
-        .to_le_bytes()
-        .to_vec()
-}
 
 struct Metrics {
     last_successful_fetch: IntGauge,
@@ -64,7 +60,7 @@ impl Metrics {
 
 pub struct AnonymizationSaltFetcher {
     agent: Agent,
-    canister_id: CanisterId,
+    canister_id: Principal,
     polling_interval: Duration,
     anonymization_salt: Arc<ArcSwapOption<Vec<u8>>>,
     metrics: Metrics,
@@ -80,7 +76,7 @@ impl AnonymizationSaltFetcher {
     ) -> Self {
         Self {
             agent,
-            canister_id: CanisterId::try_from_principal_id(canister_id.into()).unwrap(),
+            canister_id,
             anonymization_salt,
             polling_interval,
             metrics: Metrics::new(registry),
@@ -97,23 +93,17 @@ impl AnonymizationSaltFetcher {
 
         let query_response = match self
             .agent
-            .execute_update(
-                &self.canister_id,
-                &self.canister_id,
-                "get_salt",
-                Encode!().unwrap(),
-                nonce(),
-            )
+            .update(&self.canister_id, "get_salt")
+            .with_arg(Encode!().unwrap())
+            .call_and_wait()
             .await
         {
-            Ok(response) => match response {
-                Some(response) => response,
-                None => {
-                    update_fetch_metric("failure", "empty_response");
-                    warn!("{SERVICE}: got empty response from the canister");
-                    return;
-                }
-            },
+            Ok(response) if !response.is_empty() => response,
+            Ok(_) => {
+                update_fetch_metric("failure", "empty_response");
+                warn!("{SERVICE}: got empty response from the canister");
+                return;
+            }
             Err(err) => {
                 update_fetch_metric("failure", "update_call_failure");
                 warn!("{SERVICE}: failed to get salt from the canister: {err:#}");
@@ -158,19 +148,24 @@ impl AnonymizationSaltFetcher {
 }
 
 #[async_trait]
-impl Run for Arc<AnonymizationSaltFetcher> {
-    async fn run(&mut self) -> Result<(), Error> {
+impl Run for AnonymizationSaltFetcher {
+    async fn run(&self, token: CancellationToken) -> Result<(), Error> {
         // Create an interval to enable strictly periodic execution
         let mut interval = interval(self.polling_interval);
-        // Skip missed ticks to prevent timing drift and maintain absolute schedule
-        // Example: with 5s interval, if fetch_salt() takes 7s at 0s:
-        //   0s: first execution starts
-        //   7s: first execution completes (5s tick was missed)
-        //   10s: next execution starts (skips to next absolute tick)
         interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
         loop {
-            interval.tick().await;
-            self.fetch_salt().await;
+            select! {
+                biased;
+
+                _ = token.cancelled() => {
+                    return Ok(());
+                }
+
+                _ = interval.tick() => {
+                    self.fetch_salt().await
+                }
+            }
         }
     }
 }

@@ -172,7 +172,7 @@ message HighCapacityRegistryValue {
   }
 
   // The timestamp at which the registry mutation happened.
-  uint64 timestamp_seconds = 5;
+  uint64 timestamp_nanoseconds = 5;
 }
 
 // In the not so distant future, this will be used instead of RegistryDelta. See
@@ -278,7 +278,7 @@ message HighCapacityRegistryGetValueResponse {
   }
 
   // The timestamp at which the registry mutation happened.
-  uint64 timestamp_seconds = 5;
+  uint64 timestamp_nanoseconds = 5;
 }
 
 // Deprecated; instead, use HighCapacityRegistryGetValueResponse. See the
@@ -350,7 +350,7 @@ message HighCapacityRegistryAtomicMutateRequest {
   reserved 4;
 
   // The timestamp at which the registry atomic mutate request happened.
-  uint64 timestamp_seconds = 6;
+  uint64 timestamp_nanoseconds = 6;
 }
 
 // A single mutation in the registry.

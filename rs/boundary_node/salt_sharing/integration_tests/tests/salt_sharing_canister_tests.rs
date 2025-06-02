@@ -1,5 +1,5 @@
 use candid::{Encode, Principal};
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use ic_http_types::{HttpRequest, HttpResponse};
 use pocket_ic::nonblocking::PocketIc;
 use salt_sharing_api::{GetSaltError, GetSaltResponse, InitArg, SaltGenerationStrategy};
 use salt_sharing_canister_integration_tests::pocket_ic_helpers::{

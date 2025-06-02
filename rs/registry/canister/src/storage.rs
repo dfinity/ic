@@ -24,7 +24,17 @@ const CHUNKS_MEMORY_ID: MemoryId = MemoryId::new(1);
 /// because if it were only a little bit larger, we are hardly enhancing our
 /// capabilities. At the same time, a higher limit is not needed (yet).
 /// Therefore, 5x the message size limit seems appropriate (for now).
-const MAX_CHUNKABLE_ATOMIC_MUTATION_LEN: usize = 10 * (1024 * 1024);
+pub(crate) const MAX_CHUNKABLE_ATOMIC_MUTATION_LEN: usize = 10 * (1024 * 1024);
+
+/// The value of this is slightly less than MAX_REGISTRY_DELTAS to minimize when
+/// chunking is performed.
+///
+/// The reason this is not exactly equal to MAX_REGISTRY_DELTAS to allow for the
+/// addition of a timestamp, and other such incidental issues.
+///
+/// Notice that the amount by which this is less than MAX_REGISTRY_DELTAS is
+/// very small compared to MAX_REGISTRY_DELTAS itself: approx 1_300_000 vs. 100.
+const MIN_CHUNKABLE_ATOMIC_MUTATION_LEN: usize = MAX_REGISTRY_DELTAS_SIZE - 100;
 
 type VM = VirtualMemory<DefaultMemoryImpl>;
 
@@ -55,32 +65,22 @@ pub(crate) fn with_chunks<R>(f: impl FnOnce(&Chunks<VM>) -> R) -> R {
     })
 }
 
-/// Encodes the argument.
+/// Converts to HighCapacity version of input.
 ///
-/// If the input is too large, this "chunkifies" it. That is, instead of
-/// inlining value, it is replaced with a LargeValueChunkKeys, which points to
-/// pieces of the original value, and each piece can be fetched via the
-/// `get_chunk` canister method.
+/// When the input is "too large" to simply transcribe to the HighCapacity type,
+/// "large" blobs are stored into CHUNKS, rather than remaining inline.
 ///
-/// Possible panic reasons include: input is hyper too large. See
-/// MAX_CHUNKABLE_ATOMIC_MUTATION_LEN.
-pub(crate) fn maybe_chunkify_and_encode(original_mutation: RegistryAtomicMutateRequest) -> Vec<u8> {
-    if !is_chunkifying_large_values_enabled() {
-        return original_mutation.encode_to_vec();
-    }
-    // In release builds, code bellow this line is not active. Instead, only the
-    // old behavior (implemented above) takes place.
-
-    let upgraded_mutation = maybe_chunkify(original_mutation);
-
-    // TODO(Nikola.Milosavljevic@dfinity.org): Populate timestamp_seconds field.
-
-    upgraded_mutation.encode_to_vec()
-}
-
-fn maybe_chunkify(
+/// However, even with chunking, the input's size is limited by
+/// MAX_CHUNKABLE_ATOMIC_MUTATION_LEN. If this limit is exceeded, this function
+/// panics.
+pub(crate) fn chunkify_composite_mutation_if_too_large(
     original_mutation: RegistryAtomicMutateRequest,
 ) -> HighCapacityRegistryAtomicMutateRequest {
+    // If chunking is not enabled, simply transcribe.
+    if !is_chunkifying_large_values_enabled() {
+        return HighCapacityRegistryAtomicMutateRequest::from(original_mutation);
+    }
+
     // Panic if the input is too large.
     if original_mutation.encoded_len() > MAX_CHUNKABLE_ATOMIC_MUTATION_LEN {
         let first_key = original_mutation
@@ -95,13 +95,12 @@ fn maybe_chunkify(
     }
 
     // If the input is small, simply transcribe it.
-    const SIZE_OF_VERSION: usize = std::mem::size_of::<crate::registry::EncodedVersion>();
-    let is_small = original_mutation.encoded_len() + SIZE_OF_VERSION < MAX_REGISTRY_DELTAS_SIZE;
+    let is_small = original_mutation.encoded_len() < MIN_CHUNKABLE_ATOMIC_MUTATION_LEN;
     if is_small {
         return HighCapacityRegistryAtomicMutateRequest::from(original_mutation);
     }
 
-    // Otherwise, if the input is "large", chunkify it.
+    // Otherwise, the input is "large", so, chunkify it.
     CHUNKS.with(|chunks| {
         let mut chunks = chunks.borrow_mut();
         let chunks = &mut *chunks;

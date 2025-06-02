@@ -42,6 +42,7 @@ filegroup(
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-dummy-getrandom-for-wasm",
+    "//packages/ic-http-types",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
     "//rs/ledger_suite/common/ledger_core",
@@ -71,7 +72,6 @@ DEPENDENCIES = [
     "//rs/node_rewards/canister/api",
     "//rs/protobuf",
     "//rs/registry/canister",
-    "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/on_wire",
     "//rs/sns/init",
     "//rs/sns/root",
@@ -117,7 +117,6 @@ MACRO_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
     "@crate_index//:async-trait",
-    "@crate_index//:ic-cdk-macros",
     "@crate_index//:rust_decimal_macros",
     "@crate_index//:strum_macros",
 ]
@@ -276,7 +275,9 @@ rust_canister(
     compile_data = ["canister/governance_test.did"],
     crate_features = test_with_tla(),
     crate_root = "canister/canister.rs",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES + [
+        "//rs/tla_instrumentation:proc_macros",
+    ],
     service_file = ":canister/governance_test.did",
     visibility = ["//visibility:public"],
     deps = DEPENDENCIES + [
@@ -360,15 +361,8 @@ rust_bench(
     deps = [
         # Keep sorted.
         ":governance",
-        "//rs/ledger_suite/icp:icp_ledger",
-        "//rs/nervous_system/canisters",
-        "//rs/nervous_system/common",
-        "//rs/nns/common",
-        "//rs/types/base_types",
         "@crate_index//:criterion",
-        "@crate_index//:futures",
-        "@crate_index//:tokio-test",
-    ],
+    ] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 # all TLA models

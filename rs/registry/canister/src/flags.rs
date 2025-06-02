@@ -4,7 +4,7 @@ use std::cell::Cell;
 use ic_nervous_system_temporary::Temporary;
 
 thread_local! {
-    static IS_CHUNKIFYING_LARGE_VALUES_ENABLED: Cell<bool> = const { Cell::new(false) };
+    static IS_CHUNKIFYING_LARGE_VALUES_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
 }
 
 pub(crate) fn is_chunkifying_large_values_enabled() -> bool {
@@ -12,7 +12,7 @@ pub(crate) fn is_chunkifying_large_values_enabled() -> bool {
 }
 
 #[cfg(test)]
-pub(crate) fn temporarily_enable_chunkifying_large_values() -> Temporary {
+pub fn temporarily_enable_chunkifying_large_values() -> Temporary {
     Temporary::new(&IS_CHUNKIFYING_LARGE_VALUES_ENABLED, true)
 }
 

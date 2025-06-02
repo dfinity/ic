@@ -1,9 +1,10 @@
 use crate::assert_reply;
+use candid::{Decode, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
-pub use ic_management_canister_types_private::{
-    CanisterChangeDetails, CanisterInfoResponse, CanisterInstallMode,
+use ic_management_canister_types::CanisterInfoArgs;
+pub use ic_management_canister_types::{
+    CanisterInfoResult, CanisterStatusType, ChangeDetails, CodeDeploymentMode, CodeDeploymentRecord,
 };
-use ic_management_canister_types_private::{CanisterInfoRequest, Method, Payload};
 use ic_state_machine_tests::StateMachine;
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
@@ -27,11 +28,15 @@ impl UniversalCanister {
         self
     }
 
-    pub fn canister_info(&self, target: CanisterId) -> CanisterInfoResponse {
+    pub fn canister_info(&self, target: CanisterId) -> CanisterInfoResult {
         let info_request_payload = universal_canister_payload(
             &PrincipalId::default(),
-            &Method::CanisterInfo.to_string(),
-            CanisterInfoRequest::new(target, Some(u64::MAX)).encode(),
+            "canister_info",
+            Encode!(&CanisterInfoArgs {
+                canister_id: target.into(),
+                num_requested_changes: Some(u64::MAX),
+            })
+            .unwrap(),
             Cycles::new(0),
         );
         let bytes = assert_reply(
@@ -39,7 +44,7 @@ impl UniversalCanister {
                 .execute_ingress(self.canister_id, "update", info_request_payload)
                 .unwrap(),
         );
-        CanisterInfoResponse::decode(&bytes[..]).expect("failed to decode canister_info response")
+        Decode!(&bytes[..], CanisterInfoResult).expect("failed to decode canister_info response")
     }
 }
 

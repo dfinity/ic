@@ -1,5 +1,4 @@
 use futures::future::join_all;
-
 use ic_base_types::CanisterId;
 use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_agent::{
@@ -24,16 +23,12 @@ use ic_nervous_system_integration_tests::{
     },
 };
 use ic_nns_common::pb::v1::NeuronId;
-
-use ic_nns_governance_api::pb::v1::create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution;
-
+use ic_nns_governance_api::create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution;
 use ic_sns_governance_api::pb::v1::{
-    get_proposal_response::Result as ProposalResult, manage_neuron::Follow, proposal::Action,
-    NeuronId as SnsNeuronId, Proposal, ProposalId, UpgradeSnsControlledCanister,
+    get_proposal_response::Result as ProposalResult, manage_neuron::SetFollowing, neuron::FolloweesForTopic, proposal::Action, topics::Topic, Followee, NeuronId as SnsNeuronId, Proposal, ProposalId, UpgradeSnsControlledCanister
 };
 use ic_sns_swap::pb::v1::{BuyerState, Lifecycle, TransferableAmount};
 use icp_ledger::{AccountIdentifier, Memo, Tokens, TransferArgs, DEFAULT_TRANSFER_FEE};
-
 use crate::utils::{build_ephemeral_agents, BuildEphemeralAgent, TREASURY_SECRET_KEY};
 
 /// Creates SNS using agents provided as arguments:
@@ -302,14 +297,49 @@ pub async fn complete_sns_swap<C: CallCanisters + ProgressNetwork + BuildEphemer
         .get_nervous_system_parameters(agent)
         .await
         .map_err(|e| format!("Failed to get nervous system parameters: {e}"))?;
-    let neuron_mininum_disolve_delay = sns_nervous_system_parameters
+    let minimum_dissolve_delay_seconds = sns_nervous_system_parameters
         .neuron_minimum_dissolve_delay_to_vote_seconds
         .ok_or("Expecting the neuron minimum dissolve delay to be set")?
         as u32;
 
     println!(
+        "Set following for all topics to the neuron {} ...",
+        neurons_to_follow
+            .iter()
+            .map(|neuron_id| format!("{:?}", neuron_id))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    let followees = neurons_to_follow
+        .into_iter()
+        .enumerate()
+        .map(|(i, neuron_id)| Followee {
+            neuron_id: Some(neuron_id),
+            alias: Some(format!("Fellowee #{}", i)),
+        })
+        .collect::<Vec<_>>();
+
+    let set_following = SetFollowing {
+        topic_following: [
+            Topic::DappCanisterManagement,
+            Topic::ApplicationBusinessLogic,
+            Topic::Governance,
+            Topic::TreasuryAssetManagement,
+            Topic::CriticalDappOperations,
+            Topic::DaoCommunitySettings,
+            Topic::SnsFrameworkManagement,
+        ]
+        .iter()
+        .map(|topic| FolloweesForTopic {
+            topic: Some(*topic),
+            followees: followees.clone(),
+        })
+        .collect(),
+    };
+
+    println!(
         "Increasing dissolve delay to {} for swap participants...",
-        neuron_mininum_disolve_delay
+        minimum_dissolve_delay_seconds
     );
     for swap_participant_agent in swap_participants {
         let swap_participant_neuron_id =
@@ -321,44 +351,34 @@ pub async fn complete_sns_swap<C: CallCanisters + ProgressNetwork + BuildEphemer
                         swap_participant_agent.caller().unwrap()
                     )
                 })?;
-        if let Some(swap_participant_neuron_id) = swap_participant_neuron_id {
-            for neuron_to_follow in &neurons_to_follow {
-                let follow = Follow {
-                    followees: vec![neuron_to_follow.clone()],
-                    // UpgradeSnsControlledCanister
-                    // TODO: @rvem: Do we need to enable other functions following too?
-                    function_id: 3,
-                };
-                governance_canister
-                    .follow(
-                        &swap_participant_agent,
-                        swap_participant_neuron_id.clone(),
-                        follow,
-                    )
-                    .await
-                    .map_err(|e| {
-                        format!(
-                            "Neuron {:?} failed to follow the neuron: {}",
-                            swap_participant_neuron_id.clone(),
-                            e
-                        )
-                    })?;
-            }
 
-            governance_canister
-                .increase_dissolve_delay(
-                    &swap_participant_agent,
-                    swap_participant_neuron_id.clone(),
-                    neuron_mininum_disolve_delay,
+        let Some(swap_participant_neuron_id) = swap_participant_neuron_id else {
+            println!("The swap participant doesn't have a neuron, skipping ...");
+            continue;
+        };
+
+        governance_canister
+            .set_following(
+                &swap_participant_agent,
+                swap_participant_neuron_id.clone(),
+                set_following.clone(),
+            )
+            .await
+            .expect("Failed to follow the dev neuron");
+
+        governance_canister
+            .increase_dissolve_delay(
+                &swap_participant_agent,
+                swap_participant_neuron_id.clone(),
+                minimum_dissolve_delay_seconds,
+            )
+            .await
+            .map_err(|e| {
+                format!(
+                    "Failed to increase dissolve delay for neuron {:?}: {}",
+                    swap_participant_neuron_id, e
                 )
-                .await
-                .map_err(|e| {
-                    format!(
-                        "Failed to increase dissolve delay for neuron {:?}: {}",
-                        swap_participant_neuron_id, e
-                    )
-                })?;
-        }
+            })?;
     }
 
     Ok(())

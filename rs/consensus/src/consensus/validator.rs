@@ -27,12 +27,13 @@ use ic_interfaces::{
     validation::{ValidationError, ValidationResult},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::{StateHashError, StateManager, StateManagerError};
+use ic_interfaces_state_manager::{StateHashError, StateManager};
 use ic_logger::{trace, warn, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
+        dkg::{DkgPayloadValidationFailure, InvalidDkgPayloadReason},
         Block, BlockMetadata, BlockPayload, BlockProposal, CatchUpContent, CatchUpPackage,
         CatchUpShareContent, Committee, ConsensusMessage, ConsensusMessageHashable,
         EquivocationProof, FinalizationContent, HasCommittee, HasHash, HasHeight, HasRank,
@@ -43,8 +44,10 @@ use ic_types::{
     registry::RegistryClientError,
     replica_config::ReplicaConfig,
     signature::{BasicSigned, MultiSignature, MultiSignatureShare, ThresholdSignatureShare},
+    state_manager::StateManagerError,
     Height, NodeId, RegistryVersion, SubnetId,
 };
+use idkg::{IDkgPayloadValidationFailure, InvalidIDkgPayloadReason};
 use std::{
     collections::{BTreeMap, HashSet},
     sync::{Arc, RwLock},
@@ -73,8 +76,8 @@ enum ValidationFailure {
     CryptoError(CryptoError),
     RegistryClientError(RegistryClientError),
     PayloadValidationFailed(PayloadValidationFailure),
-    DkgPayloadValidationFailed(dkg::DkgPayloadValidationFailure),
-    IDkgPayloadValidationFailed(idkg::IDkgPayloadValidationFailure),
+    DkgPayloadValidationFailed(DkgPayloadValidationFailure),
+    IDkgPayloadValidationFailed(IDkgPayloadValidationFailure),
     DkgSummaryNotFound(Height),
     RandomBeaconNotFound(Height),
     StateHashError(StateHashError),
@@ -99,8 +102,8 @@ enum InvalidArtifactReason {
     SignerNotInThresholdCommittee(NodeId),
     SignerNotInMultiSigCommittee(NodeId),
     InvalidPayload(InvalidPayloadReason),
-    InvalidDkgPayload(dkg::InvalidDkgPayloadReason),
-    InvalidIDkgPayload(idkg::InvalidIDkgPayloadReason),
+    InvalidDkgPayload(InvalidDkgPayloadReason),
+    InvalidIDkgPayload(InvalidIDkgPayloadReason),
     InsufficientSignatures,
     CannotVerifyBlockHeightZero,
     NonEmptyPayloadPastUpgradePoint,

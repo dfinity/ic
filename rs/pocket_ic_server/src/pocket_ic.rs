@@ -923,14 +923,22 @@ impl PocketIc {
             topology
                 .subnet_configs
                 .into_values()
-                .map(|config| SubnetConfigInfo {
-                    ranges: config.subnet_config.ranges,
-                    alloc_range: config.subnet_config.alloc_range,
-                    subnet_id: Some(config.subnet_config.subnet_id),
-                    subnet_state_dir: None,
-                    subnet_kind: config.subnet_config.subnet_kind,
-                    instruction_config: config.subnet_config.instruction_config,
-                    time: config.time,
+                .map(|config| {
+                    range_gen
+                        .add_assigned(config.subnet_config.ranges.clone())
+                        .unwrap();
+                    if let Some(allocation_range) = config.subnet_config.alloc_range {
+                        range_gen.add_assigned(vec![allocation_range]).unwrap();
+                    }
+                    SubnetConfigInfo {
+                        ranges: config.subnet_config.ranges,
+                        alloc_range: config.subnet_config.alloc_range,
+                        subnet_id: Some(config.subnet_config.subnet_id),
+                        subnet_state_dir: None,
+                        subnet_kind: config.subnet_config.subnet_kind,
+                        instruction_config: config.subnet_config.instruction_config,
+                        time: config.time,
+                    }
                 })
                 .collect()
         } else {
@@ -980,23 +988,31 @@ impl PocketIc {
                 let (ranges, alloc_range, subnet_id, time) = if let Some(ref subnet_state_dir) =
                     subnet_state_dir
                 {
-                    // We create a temporary state manager used to read the given state metadata.
-                    let state_manager = StateManagerImpl::new(
-                        Arc::new(FakeVerifier),
-                        SubnetId::new(PrincipalId::default()),
-                        conv_type(subnet_kind),
-                        no_op_logger(),
-                        &MetricsRegistry::new(),
-                        &ic_config::state_manager::Config::new(
-                            subnet_state_dir.path().to_path_buf(),
-                        ),
-                        None,
-                        MaliciousFlags::default(),
-                    );
-                    let metadata = state_manager.get_latest_state().take().metadata.clone();
-                    // Shut down the temporary state manager to avoid race conditions.
-                    state_manager.flush_tip_channel();
-                    drop(state_manager);
+                    let metadata = {
+                        // We create a temporary state manager used to read the given state metadata.
+                        // We first copy the subnet state directory into a temporary directory
+                        // so that the temporary state manager has a private copy
+                        // of the subnet state directory (otherwise, it might crash).
+                        let temp_state_dir = TempDir::new().unwrap();
+                        copy_dir(subnet_state_dir, temp_state_dir.path())
+                            .expect("Failed to copy state directory");
+                        let state_manager = StateManagerImpl::new(
+                            Arc::new(FakeVerifier),
+                            SubnetId::new(PrincipalId::default()),
+                            conv_type(subnet_kind),
+                            no_op_logger(),
+                            &MetricsRegistry::new(),
+                            &ic_config::state_manager::Config::new(
+                                temp_state_dir.path().to_path_buf(),
+                            ),
+                            None,
+                            MaliciousFlags::default(),
+                        );
+                        let metadata = state_manager.get_latest_state().take().metadata.clone();
+                        // Shut down the temporary state manager to avoid race conditions.
+                        state_manager.flush_tip_channel();
+                        metadata
+                    };
 
                     let subnet_id = metadata.own_subnet_id;
                     let time = metadata.batch_time;
@@ -1889,54 +1905,6 @@ impl TryFrom<RawMessageId> for MessageId {
             effective_principal,
             msg_id,
         })
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct AwaitIngressMessage(pub MessageId);
-
-impl Operation for AwaitIngressMessage {
-    fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        let subnet = route(pic, self.0.effective_principal.clone(), false);
-        match subnet {
-            Ok(subnet) => {
-                // Now, we execute on all subnets until we have the result
-                let max_rounds = 100;
-                for _i in 0..max_rounds {
-                    match subnet.ingress_status(&self.0.msg_id) {
-                        IngressStatus::Known {
-                            state: IngressState::Completed(result),
-                            ..
-                        } => {
-                            return OpOut::CanisterResult(wasm_result_to_canister_result(
-                                result, true,
-                            ));
-                        }
-                        IngressStatus::Known {
-                            state: IngressState::Failed(error),
-                            ..
-                        } => {
-                            return OpOut::CanisterResult(Err(user_error_to_reject_response(
-                                error, true,
-                            )));
-                        }
-                        _ => {}
-                    }
-                    for subnet_ in pic.subnets.get_all() {
-                        subnet_.state_machine.execute_round();
-                    }
-                }
-                OpOut::Error(PocketIcError::BadIngressMessage(format!(
-                    "Failed to answer to ingress {} after {} rounds.",
-                    self.0.msg_id, max_rounds
-                )))
-            }
-            Err(e) => OpOut::Error(PocketIcError::BadIngressMessage(e)),
-        }
-    }
-
-    fn id(&self) -> OpId {
-        OpId(format!("await_update_{}", self.0.msg_id))
     }
 }
 

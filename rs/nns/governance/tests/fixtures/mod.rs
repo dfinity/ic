@@ -37,10 +37,7 @@ use ic_nns_governance::{
     },
     storage::reset_stable_memory,
 };
-use ic_nns_governance_api::pb::v1::{
-    manage_neuron_response::{self, MergeMaturityResponse},
-    ManageNeuronResponse,
-};
+use ic_nns_governance_api::{manage_neuron_response, ManageNeuronResponse};
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use rand::{prelude::StdRng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -54,6 +51,9 @@ use std::{
 use ic_nns_governance::governance::tla::{
     self, account_to_tla, Destination, ToTla, TLA_INSTRUMENTATION_STATE,
 };
+#[cfg(feature = "tla")]
+use tla_instrumentation_proc_macros::tla_function;
+
 use ic_nns_governance::governance::RandomnessGenerator;
 use ic_nns_governance::{tla_log_request, tla_log_response};
 
@@ -437,6 +437,7 @@ impl NNSFixture {
 
 #[async_trait]
 impl IcpLedger for NNSFixture {
+    #[cfg_attr(feature = "tla", tla_function(force_async_fn = true))]
     async fn transfer_funds(
         &self,
         amount_e8s: u64,
@@ -863,36 +864,6 @@ impl NNS {
         summary: String,
     ) -> ProposalId {
         behavior.into().propose_and_vote(self, summary)
-    }
-
-    pub fn merge_maturity(
-        &mut self,
-        id: &NeuronId,
-        controller: &PrincipalId,
-        percentage_to_merge: u32,
-    ) -> Result<MergeMaturityResponse, GovernanceError> {
-        let result = self
-            .governance
-            .manage_neuron(
-                controller,
-                &ManageNeuron {
-                    id: None,
-                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(*id)),
-                    command: Some(Command::MergeMaturity(MergeMaturity {
-                        percentage_to_merge,
-                    })),
-                },
-            )
-            .now_or_never()
-            .unwrap()
-            .command
-            .unwrap();
-
-        match result {
-            manage_neuron_response::Command::Error(e) => Err(GovernanceError::from(e)),
-            manage_neuron_response::Command::MergeMaturity(response) => Ok(response),
-            _ => panic!("Merge maturity command returned unexpected response"),
-        }
     }
 
     pub fn merge_neurons(

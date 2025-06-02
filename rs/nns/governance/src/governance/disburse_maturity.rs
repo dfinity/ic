@@ -10,6 +10,7 @@ use crate::{
     },
 };
 
+use ic_cdk::println;
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_nervous_system_governance::maturity_modulation::{
     apply_maturity_modulation, MIN_MATURITY_MODULATION_PERMYRIAD,
@@ -19,13 +20,26 @@ use ic_types::PrincipalId;
 use icrc_ledger_types::icrc1::account::Account as Icrc1Account;
 use std::{cell::RefCell, collections::HashMap, fmt::Display, thread::LocalKey, time::Duration};
 
+#[cfg(feature = "tla")]
+pub use crate::governance::{
+    tla,
+    tla::{
+        account_to_tla, get_tla_globals, tla_update_method, GlobalState, InstrumentationState,
+        TlaValue, ToTla, FINALIZE_MATURITY_DISBURSEMENT_DESC, TLA_INSTRUMENTATION_STATE,
+        TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
+    },
+};
+use crate::{tla_log_label, tla_log_locals};
+#[cfg(feature = "tla")]
+use std::collections::BTreeMap;
+
 /// The delay in seconds between initiating a maturity disbursement and the actual disbursement.
 const DISBURSEMENT_DELAY_SECONDS: u64 = ONE_DAY_SECONDS * 7;
 /// The maximum number of disbursements in a neuron. This makes it possible to do daily
 /// disbursements after every reward event (as 10 > 7).
 const MAX_NUM_DISBURSEMENTS: usize = 10;
 /// The minimum amount of ICP to disburse in a single transaction.
-const MINIMUM_DISBURSEMENT_E8S: u64 = E8;
+pub const MINIMUM_DISBURSEMENT_E8S: u64 = E8;
 // We do not retry the task more frequently than once a minute, so that if there is anything wrong
 // with the task, we don't use too many resources. How this is chosen: assuming the task can max out
 // the 50B instruction limit and it takes 2B instructions per DTS slice, then the task can run for
@@ -393,7 +407,7 @@ impl Display for FinalizeMaturityDisbursementError {
                 write!(
                     f,
                     "Maturity disbursement was removed from the neuron {:?}, ICP minting failed \
-                    but the disbursement cannot be reversed because of {}. Neuron lock is retained.", 
+                    but the disbursement cannot be reversed because of {}. Neuron lock is retained.",
                     neuron_id,
                     reason
                 )
@@ -490,16 +504,28 @@ fn next_maturity_disbursement_to_finalize(
     }))
 }
 
+#[cfg(feature = "tla")]
+macro_rules! tla_snapshotter {
+    ($first_arg:expr $(, $_rest:tt)* ) => {{
+        let raw_ptr = ::tla_instrumentation::UnsafeSendPtr($first_arg.with(|g| g.as_ptr()));
+        ::std::sync::Arc::new(::std::sync::Mutex::new(move || {
+            $crate::governance::tla::get_tla_globals(&raw_ptr)
+        }))
+    }};
+}
+
 /// Finalizes the maturity disbursement for a neuron. See
 /// `ic_nns_governance::pb::v1::manage_neuron::DisburseMaturity` for more information. Returns the
 /// delay until the time when the finalization should be run again.
+// TODO: finish instrumenting this
+#[cfg_attr(feature = "tla", tla_update_method(FINALIZE_MATURITY_DISBURSEMENT_DESC.clone(), tla_snapshotter!()))]
 pub async fn finalize_maturity_disbursement(
     governance: &'static LocalKey<RefCell<Governance>>,
 ) -> Duration {
     match try_finalize_maturity_disbursement(governance).await {
         Ok(_) => governance.with_borrow(get_delay_until_next_finalization),
         Err(err) => {
-            ic_cdk::println!("FinalizeMaturityDisbursementTask failed: {}", err);
+            println!("FinalizeMaturityDisbursementTask failed: {}", err);
             RETRY_INTERVAL
         }
     }
@@ -574,6 +600,16 @@ async fn try_finalize_maturity_disbursement(
     // be reversed.
     let mint_icp_operation = MintIcpOperation::new(account, amount_to_mint_e8s);
     let ledger = governance.with_borrow(|governance| governance.get_ledger());
+    tla_log_locals! {
+        neuron_id: neuron_id.id,
+        current_disbursement: TlaValue::Record(BTreeMap::from(
+            [
+                ("account_id".to_string(), account_to_tla(icp_ledger::AccountIdentifier::from(account))),
+                ("amount".to_string(), maturity_disbursement_in_progress.amount_e8s.to_tla_value()),
+            ]
+        ))
+    };
+    tla_log_label!("Disburse_Maturity_Timer");
     let mint_result = mint_icp_operation
         .mint_icp_with_ledger(ledger.as_ref(), now_seconds)
         .await;

@@ -35,6 +35,7 @@ jobs:
       release_build: ${{ steps.config.outputs.release_build }}
       diff_only: ${{ steps.config.outputs.diff_only }}
       skip_long_tests: ${{ steps.config.outputs.skip_long_tests }}
+      full_macos_build: ${{ steps.config.outputs.full_macos_build }}
     steps:
       - name: Infer build config
         id: config
@@ -76,6 +77,13 @@ jobs:
               skip_long_tests="true"
           fi
 
+          if [[ $release_build == 'true' ]] || [[ '${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_MACOS_INTEL') }}' == 'true' ]]; then
+              full_macos_build="true"
+          else
+              full_macos_build="false"
+          fi
+
+
           echo "| config | value |" >> "$GITHUB_STEP_SUMMARY"
           echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
 
@@ -90,16 +98,19 @@ jobs:
           echo "skip_long_tests: $skip_long_tests"
           echo "skip_long_tests=$skip_long_tests" >> "$GITHUB_OUTPUT"
           echo "| \`skip_long_tests\` | \`$skip_long_tests\` |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "full_macos_build: $full_macos_build"
+          echo "full_macos_build=$full_macos_build" >> "$GITHUB_OUTPUT"
+          echo "| \`full_macos_build\` | \`$full_macos_build\` |" >> "$GITHUB_STEP_SUMMARY"
   bazel-test-all:
     name: Bazel Test All
     needs: [config]
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 90
     runs-on:
-      group: zh1
       labels: dind-large
     env:
       # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
@@ -139,16 +150,6 @@ jobs:
           # Determine BAZEL_EXTRA_ARGS based on event type or branch name
           BAZEL_EXTRA_ARGS=(
             "--test_tag_filters=$TEST_TAG_FILTERS"
-
-            # default all tests to fail ...
-            #   ... after three attempts for tests marked as flaky
-            #   ... after three attempts for all tests in //rs/tests
-            #   ... after the first attempt for other tests
-            #   see also:
-            #     https://bazel.build/reference/command-line-reference#build-flag--flaky_test_attempts
-            --flaky_test_attempts=default
-            --flaky_test_attempts=//rs/tests/.*@3
-
             --config=lint # enable lint checks
             )
           if [[ "$CI_EVENT_NAME" == 'merge_group' ]]; then
@@ -166,20 +167,20 @@ jobs:
           execlogs-artifact-name: execlogs-bazel-test-all
           diff-only: ${{ needs.config.outputs.diff_only }}
           release-build: ${{ needs.config.outputs.release_build }}
+          upload-artifacts: ${{ needs.config.outputs.release_build }}
           BAZEL_COMMAND: test --config=ci ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
           BAZEL_TARGETS: //...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
+    needs: [config]
     timeout-minutes: 130
     runs-on:
       labels: macOS
     # Run on protected branches, but only on public repo
     # Allow running if CI_MACOS_INTEL label is used
-    if: |
-      (github.ref_protected && github.repository == 'dfinity/ic') ||
-      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_MACOS_INTEL'))
+    if: github.repository == 'dfinity/ic'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -191,12 +192,21 @@ jobs:
           echo "$HOME/.cargo/bin:" >> $GITHUB_PATH
           # use llvm-clang instead of apple's
           echo "CC=/usr/local/opt/llvm/bin/clang" >> "$GITHUB_ENV"
-      - name: Run Bazel Test Darwin x86-64
+      - name: Infer macos intel build command
+        id: cfg
+        run: |
+          if [[ '${{ needs.config.outputs.full_macos_build }}' == 'true' ]]; then
+            echo build-command='test --config=ci --config=macos_ci --test_tag_filters=test_macos' >> "$GITHUB_OUTPUT"
+          else
+            echo build-command='build --config=ci --config=macos_ci --test_tag_filters=test_macos --nobuild' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Run Bazel Checks on Darwin x86-64
         id: bazel-test-darwin-x86-64
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: test --config=ci --config=macos_ci --test_tag_filters=test_macos
-          BAZEL_TARGETS: //rs/... //publish/binaries/...
+          upload-artifacts: ${{ needs.config.outputs.release_build && needs.config.outputs.full_macos_build }}
+          BAZEL_COMMAND: ${{ steps.cfg.outputs.build-command }}
+          BAZEL_TARGETS: //rs/... //:upload-artifacts
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ''
       - name: Purge Bazel Output
@@ -205,14 +215,43 @@ jobs:
         run: |
           # Clean up the output base for the next run
           sudo rm -rf /var/tmp/bazel-output
+  # Build the arm64-linux variant of pocket-ic-server and makes
+  # it available as a GHA artifact
+  # NOTE: uses 'namespace.so' runners
+  bazel-test-arm64-linux:
+    name: Bazel Build arm64-linux
+    runs-on: namespace-profile-arm64-linux # profile created in namespace console
+    if: github.repository == 'dfinity/ic' # only run on public repo, not private since Namespace runners are not configured there, so these CI jobs get stuck otherwise.
+    steps:
+      - name: Set up Bazel cache
+        run: |
+          # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
+          nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
+      - uses: actions/checkout@v4
+      - name: build
+        run: |
+          bazel \
+            --noworkspace_rc \
+            --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
+            build --config=ci //rs/pocket_ic_server:pocket-ic-server
+
+          mkdir -p build
+          cp \
+            ./bazel-bin/rs/pocket_ic_server/pocket-ic-server \
+            ./build/pocket-ic-server-arm64-linux
+      - name: Upload pocket-ic-server
+        uses: actions/upload-artifact@v4
+        with:
+          name: pocket-ic-server-arm64-linux
+          path: ./build/pocket-ic-server-arm64-linux
   bazel-build-fuzzers:
     name: Bazel Build Fuzzers
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -231,9 +270,9 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -252,7 +291,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -283,9 +322,9 @@ jobs:
     needs: [config]
     name: Build IC
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 90
     # keep options from dind-large-setup but run on dind-small-setup
     runs-on:
@@ -364,7 +403,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -399,7 +438,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
+      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
     timeout-minutes: 30
     steps:
       - name: Checkout

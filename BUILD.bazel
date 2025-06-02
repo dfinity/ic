@@ -1,14 +1,13 @@
 load("@bazel_skylib//rules:common_settings.bzl", "string_setting")
 load("@gazelle//:def.bzl", "gazelle")
 load("@rules_python//python:pip.bzl", "compile_pip_requirements")
+load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 
 package(default_visibility = ["//visibility:public"])
 
 # WARNING! .git is the directory, not a regular file! only consume it in your rules if you know how exactly bazel works and understand implications!
 exports_files([
     ".git",
-    ".rclone.conf",
-    ".rclone-anon.conf",
     "buf.yaml",
     "clippy.toml",
     "rustfmt.toml",
@@ -150,4 +149,30 @@ genrule(
     srcs = ["@pocket-ic-mainnet-gz//file"],
     outs = ["pocket-ic"],
     cmd = "gunzip -c $< > $@",
+)
+
+# Upload artifacts to the CDN
+upload_artifacts(
+    name = "upload-artifacts",
+    testonly = True,
+    inputs = [
+        "//publish/binaries:bundle",
+        "//publish/binaries:bundle-legacy",
+        "//publish/binaries:bundle-sns-testing",
+    ] + select({
+        "@platforms//os:osx": [],
+        "//conditions:default": [
+            "//publish/canisters:bundle",
+            "//ic-os/boundary-guestos/envs/dev:bundle",
+            "//ic-os/boundary-guestos/envs/prod:bundle",
+            "//ic-os/guestos/envs/dev:bundle-disk",
+            "//ic-os/guestos/envs/dev:bundle-update",
+            "//ic-os/guestos/envs/prod:bundle-disk",
+            "//ic-os/guestos/envs/prod:bundle-update",
+            "//ic-os/hostos/envs/prod:bundle-disk",
+            "//ic-os/hostos/envs/prod:bundle-update",
+            "//ic-os/setupos/envs/prod:bundle",
+        ],
+    }),
+    visibility = ["//visibility:public"],
 )

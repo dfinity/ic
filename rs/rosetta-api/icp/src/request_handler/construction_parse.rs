@@ -12,7 +12,7 @@ use crate::{
 };
 use rosetta_core::objects::ObjectMap;
 
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     manage_neuron::{self, Command, NeuronIdOrSubaccount},
     ClaimOrRefreshNeuronFromAccount, ManageNeuron,
 };
