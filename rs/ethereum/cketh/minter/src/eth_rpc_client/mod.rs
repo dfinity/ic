@@ -1,8 +1,7 @@
 use crate::eth_rpc::{Hash, HEADER_SIZE_LIMIT};
-use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;
 use crate::logs::{PrintProxySink, INFO, TRACE_HTTP};
-use crate::numeric::{BlockNumber, GasAmount, TransactionCount, WeiPerGas};
+use crate::numeric::TransactionCount;
 use crate::state::State;
 use candid::Nat;
 use evm_rpc_client::{
@@ -10,12 +9,10 @@ use evm_rpc_client::{
     FeeHistoryArgs, GetLogsArgs, GetTransactionCountArgs as EvmGetTransactionCountArgs, Hex20,
     HttpOutcallError, IcRuntime, LogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256,
     OverrideRpcConfig, RpcConfig as EvmRpcConfig, RpcError, RpcService as EvmRpcService,
-    RpcServices as EvmRpcServices, SendRawTransactionStatus,
-    TransactionReceipt as EvmTransactionReceipt, ValidationError,
+    RpcServices as EvmRpcServices, SendRawTransactionStatus, TransactionReceipt, ValidationError,
 };
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
-use num_traits::ToPrimitive;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::Infallible;
 use std::fmt::{Debug, Display};
@@ -104,11 +101,11 @@ impl EthRpcClient {
         &self,
         tx_hash: Hash,
     ) -> Result<Option<TransactionReceipt>, MultiCallError<Option<TransactionReceipt>>> {
-        self.evm_rpc_client
-            .eth_get_transaction_receipt(tx_hash.to_string())
-            .await
-            .reduce()
-            .into()
+        convert_multirpcresult(
+            self.evm_rpc_client
+                .eth_get_transaction_receipt(tx_hash.to_string())
+                .await,
+        )
     }
 
     pub async fn eth_fee_history(
@@ -429,39 +426,6 @@ impl Reduce for EvmMultiRpcResult<Option<FeeHistory>> {
                     Nat::from(fee_history.oldest_block.clone())
                 })
             },
-        )
-    }
-}
-
-impl Reduce for EvmMultiRpcResult<Option<EvmTransactionReceipt>> {
-    type Item = Option<TransactionReceipt>;
-
-    fn reduce(self) -> ReducedResult<Self::Item> {
-        fn map_transaction_receipt(
-            receipt: Option<EvmTransactionReceipt>,
-        ) -> Result<Option<TransactionReceipt>, String> {
-            receipt
-                .map(|evm_receipt| {
-                    Ok(TransactionReceipt {
-                        block_hash: Hash(evm_receipt.block_hash.into()),
-                        block_number: BlockNumber::from(evm_receipt.block_number),
-                        effective_gas_price: WeiPerGas::from(evm_receipt.effective_gas_price),
-                        gas_used: GasAmount::from(evm_receipt.gas_used),
-                        status: TransactionStatus::try_from(
-                            evm_receipt
-                                .status
-                                .and_then(|s| s.as_ref().0.to_u8())
-                                .ok_or("invalid transaction status")?,
-                        )?,
-                        transaction_hash: Hash(evm_receipt.transaction_hash.into()),
-                    })
-                })
-                .transpose()
-        }
-
-        ReducedResult::from_internal(self).map_reduce(
-            &map_transaction_receipt,
-            MultiCallResults::reduce_with_equality,
         )
     }
 }
