@@ -134,6 +134,7 @@ PACKAGES_NOBLE = [
     "@noble//openssh-client/amd64",
     "@noble//rsync/amd64",
     "@noble//tar/amd64",
+    "@noble//xz-utils/amd64",
     "@noble//zstd/amd64",
 ]
 
