@@ -115,7 +115,8 @@ pub fn setup(env: TestEnv) {
     }
     let ic_gateway = env.get_deployed_ic_gateway("ic-gateway-0").unwrap();
     let ic_gateway_url = ic_gateway.get_public_url();
-    env.sync_with_prometheus_by_name("", Some(ic_gateway_url.to_string()));
+    let ic_gateway_domain = ic_gateway_url.domain().unwrap();
+    env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
 
     // pick an SNS subnet among the application subnets
     let topology = env.topology_snapshot();
