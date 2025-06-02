@@ -26,6 +26,8 @@ use ic_wasm_types::{doc_ref, AsErrorHelp, CanisterModule, ErrorHelp, WasmHash};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
+use super::MAX_SLICE_SIZE_BYTES;
+
 #[derive(Eq, PartialEq, Debug)]
 pub(crate) struct InstallCodeResult {
     pub heap_delta: NumBytes,
@@ -456,6 +458,7 @@ pub(crate) enum CanisterManagerError {
         limit: usize,
     },
     CanisterSnapshotNotEnoughCycles(CanisterOutOfCyclesError),
+    CanisterSnapshotImmutable,
     LongExecutionAlreadyInProgress {
         canister_id: CanisterId,
     },
@@ -465,9 +468,13 @@ pub(crate) enum CanisterManagerError {
     InvalidUpgradeOptionError {
         message: String,
     },
-    InvalidSubslice {
+    InvalidSlice {
         offset: u64,
         size: u64,
+    },
+    SliceTooLarge {
+        requested: u64,
+        allowed: u64,
     },
 }
 
@@ -630,6 +637,10 @@ impl AsErrorHelp for CanisterManagerError {
                 suggestion: "Try sending more cycles with the request.".to_string(),
                 doc_link: "canister-snapshot-not-enough-cycles".to_string(),
             },
+            CanisterManagerError::CanisterSnapshotImmutable => ErrorHelp::UserError {
+                suggestion: "Only canister snapshots created by metadata upload can be mutated.".to_string(),
+                doc_link: "".to_string(),
+            },
             CanisterManagerError::LongExecutionAlreadyInProgress { .. } => ErrorHelp::UserError {
                 suggestion: "Try waiting for the long execution to complete.".to_string(),
                 doc_link: doc_ref("long-execution-already-in-progress"),
@@ -645,12 +656,16 @@ impl AsErrorHelp for CanisterManagerError {
                         .to_string(),
                 doc_link: doc_ref("invalid-upgrade-option"),
             },
-            CanisterManagerError::InvalidSubslice{ .. } => ErrorHelp::UserError {
+            CanisterManagerError::InvalidSlice { .. } => ErrorHelp::UserError {
                 suggestion:
                     "Use the snapshot metadata API to learn the size of the wasm module / main memory / stable memory."
                         .to_string(),
                 doc_link: "".to_string(),
             },
+            CanisterManagerError::SliceTooLarge { .. } => ErrorHelp::UserError {
+                suggestion: format!("Use a slice size at most {}", MAX_SLICE_SIZE_BYTES),
+                doc_link: "".to_string(),
+            }
         }
     }
 }
@@ -950,6 +965,12 @@ impl From<CanisterManagerError> for UserError {
                     format!("Canister snapshotting failed with: `{}`{additional_help}", err),
                 )
             }
+            CanisterSnapshotImmutable => {
+                Self::new(
+                ErrorCode::CanisterSnapshotImmutable,
+                    "Only canister snapshots created by metadata upload can be mutated.".to_string(),
+                )
+            }
             LongExecutionAlreadyInProgress { canister_id } => {
                 Self::new(
                     ErrorCode::CanisterRejectedMessage,
@@ -974,10 +995,16 @@ impl From<CanisterManagerError> for UserError {
                     )
                 )
             }
-            InvalidSubslice { offset, size } => {
+            InvalidSlice { offset, size } => {
                 Self::new(
                     ErrorCode::InvalidManagementPayload,
                     format!("Invalid subslice into wasm module / main memory / stable memory: offset: {}, size: {}", offset, size)
+                )
+            }
+            CanisterManagerError::SliceTooLarge { requested, allowed } => {
+                Self::new(
+                    ErrorCode::InvalidManagementPayload,
+                    format!("Requested slice too large: {} > {}", requested, allowed),
                 )
             }
         }
@@ -991,7 +1018,10 @@ impl From<CanisterSnapshotError> for CanisterManagerError {
                 CanisterManagerError::CanisterSnapshotExecutionStateNotFound { canister_id }
             }
             CanisterSnapshotError::InvalidSubslice { offset, size } => {
-                CanisterManagerError::InvalidSubslice { offset, size }
+                CanisterManagerError::InvalidSlice { offset, size }
+            }
+            CanisterSnapshotError::InvalidMetadata { reason } => {
+                CanisterManagerError::InvalidSettings { message: reason }
             }
         }
     }

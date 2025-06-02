@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 async-trait = { workspace = true }
+canbench-rs = { version = "0.1.7", optional = true }
 candid = { workspace = true }
 candid_parser = { workspace = true }
 ciborium = { workspace = true }
@@ -57,3 +58,4 @@ notify-method = []
 icp-allowance-getter = []
 next-ledger-version = []
 prev-ledger-version = []
+canbench-rs = ["dep:canbench-rs"]
