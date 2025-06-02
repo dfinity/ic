@@ -136,8 +136,7 @@ pub enum HypervisorError {
     /// An attempt was made to execute a message on a canister that does not
     /// contain a Wasm module.
     WasmModuleNotFound,
-    /// An attempt was made to grow the canister's memory above its memory
-    /// allocation.
+    /// The canister cannot grow its memory usage.
     OutOfMemory,
     /// The principal ID specified by the canister is invalid.
     InvalidPrincipalId(PrincipalIdBlobParseError),
@@ -278,7 +277,7 @@ impl std::fmt::Display for HypervisorError {
                 f,
                 "Attempted to execute a message, but the canister contains no Wasm module.",
             ),
-            Self::OutOfMemory => write!(f, "Canister exceeded its allowed memory allocation.",),
+            Self::OutOfMemory => write!(f, "Canister cannot grow its memory usage.",),
             Self::InvalidPrincipalId(_) => {
                 write!(f, "Canister provided invalid principal id")
             }

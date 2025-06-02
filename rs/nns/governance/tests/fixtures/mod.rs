@@ -52,6 +52,9 @@ use std::{
 use ic_nns_governance::governance::tla::{
     self, account_to_tla, Destination, ToTla, TLA_INSTRUMENTATION_STATE,
 };
+#[cfg(feature = "tla")]
+use tla_instrumentation_proc_macros::tla_function;
+
 use ic_nns_governance::governance::RandomnessGenerator;
 use ic_nns_governance::{tla_log_request, tla_log_response};
 
@@ -435,6 +438,7 @@ impl NNSFixture {
 
 #[async_trait]
 impl IcpLedger for NNSFixture {
+    #[cfg_attr(feature = "tla", tla_function(force_async_fn = true))]
     async fn transfer_funds(
         &self,
         amount_e8s: u64,
