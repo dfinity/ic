@@ -11999,6 +11999,7 @@ name = "ic-registry-keys"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "hex",
  "ic-base-types",
  "ic-management-canister-types-private",
  "ic-types",
@@ -19816,6 +19817,7 @@ dependencies = [
  "assert_matches",
  "build-info",
  "build-info-build",
+ "canbench-rs",
  "candid",
  "candid_parser",
  "canister-test",
