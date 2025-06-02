@@ -8,8 +8,6 @@ DEPENDENCIES = [
     "//packages/ic-ed25519",
     "//rs/boundary_node/rate_limits/api:rate_limits_api",
     "//rs/boundary_node/salt_sharing/api:salt_sharing_api",
-    "//rs/canister_client",
-    "//rs/canister_client/sender",
     "//rs/certification/test-utils",
     "//rs/config",
     "//rs/crypto",

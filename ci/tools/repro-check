@@ -784,18 +784,18 @@ class ReproducibilityVerifier:
 
         artifacts_path = ic_clone_path / "artifacts" / "icos"
 
-        def move_artifact(os_name: str, filename: str) -> None:
-            src = artifacts_path / os_name / filename
-            dst = storage.dev_out / os_name / filename
+        def move_artifact(path: str) -> None:
+            src = artifacts_path / path
+            dst = storage.dev_out / path
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(src), str(dst))
 
         if self.verify_guestos:
-            move_artifact("guestos", "update-img.tar.zst")
+            move_artifact("guestos/update/update-img.tar.zst")
         if self.verify_hostos:
-            move_artifact("hostos", "update-img.tar.zst")
+            move_artifact("hostos/update/update-img.tar.zst")
         if self.verify_setupos:
-            move_artifact("setupos", "disk-img.tar.zst")
+            move_artifact("setupos/disk-img.tar.zst")
 
     def compare_with_local_build(
         self,
@@ -809,14 +809,14 @@ class ReproducibilityVerifier:
         logger.info("Verifying locally built artifacts against remote CDN artifacts.")
         if guest_os_downloads:
             [f.result() for f in concurrent.futures.as_completed(guest_os_downloads)]
-            local_path = storage.dev_out / "guestos" / "update-img.tar.zst"
+            local_path = storage.dev_out / "guestos" / "update" / "update-img.tar.zst"
             local_hash = compute_sha256(local_path)
             cdn_hash = self.compare_cdn_hash("guest-os", storage)
             compare_hashes(local_hash, cdn_hash, "GuestOS")
 
         if host_os_downloads:
             [f.result() for f in concurrent.futures.as_completed(host_os_downloads)]
-            local_path = storage.dev_out / "hostos" / "update-img.tar.zst"
+            local_path = storage.dev_out / "hostos" / "update" / "update-img.tar.zst"
             local_hash = compute_sha256(local_path)
             cdn_hash = self.compare_cdn_hash("host-os", storage)
             compare_hashes(local_hash, cdn_hash, "HostOS")
