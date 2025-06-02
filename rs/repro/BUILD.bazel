@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_proc_macro")
 load("//rs/repro:defs.bzl", "wrapper")
 
 package(default_visibility = ["//visibility:public"])
@@ -16,9 +16,27 @@ rust_binary(
     deps = DEPENDENCIES,
 )
 
+rust_proc_macro(
+    name = "repro_proc",
+    srcs = glob(
+        ["src/**"],
+    ),
+    deps = DEPENDENCIES,
+)
+
+# Build jemalloc with two different configs at once
+rust_binary(
+    name = "repro_both",
+    srcs = glob(
+        ["src/**"],
+    ),
+    deps = [":repro"],
+    proc_macro_deps = [":repro_proc"],
+)
+
 # Build jemalloc as a tool and target at the same time
 wrapper(
     name = "concurrent_repro",
-    tool = ":repro",
-    deps = [":repro"],
+    tool = ":repro_both",
+    deps = [":repro_both"],
 )
