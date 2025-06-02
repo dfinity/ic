@@ -2790,6 +2790,20 @@ fn can_create_canister_with_specified_id() {
         create_canister_with_specified_id(&mut test, &canister, Some(specified_id.get()));
 
     assert_eq!(specified_id, new_canister.get_canister_id());
+
+    // creating a canister with the same `specified_id` again is an error
+    let args = Encode!(&ProvisionalCreateCanisterWithCyclesArgs::new(
+        None,
+        Some(specified_id.into()),
+    ))
+    .unwrap();
+    let err = test
+        .subnet_message("provisional_create_canister_with_cycles", args)
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterAlreadyInstalled, err.code());
+    assert!(err
+        .description()
+        .contains(&format!("Canister {} is already installed.", specified_id)));
 }
 
 // Returns CanisterId by formula 'range_start + (range_end - range_start) * percentile'

@@ -3746,7 +3746,7 @@ impl<'a> Payload<'a> for ReadCanisterSnapshotMetadataArgs {
 pub enum SnapshotSource {
     #[default]
     TakenFromCanister,
-    UploadedManually,
+    MetadataUpload,
 }
 
 impl From<SnapshotSource> for pb_canister_snapshot_bits::SnapshotSource {
@@ -3755,7 +3755,7 @@ impl From<SnapshotSource> for pb_canister_snapshot_bits::SnapshotSource {
             SnapshotSource::TakenFromCanister => {
                 pb_canister_snapshot_bits::SnapshotSource::TakenFromCanister
             }
-            SnapshotSource::UploadedManually => {
+            SnapshotSource::MetadataUpload => {
                 pb_canister_snapshot_bits::SnapshotSource::UploadedManually
             }
         }
@@ -3777,7 +3777,7 @@ impl TryFrom<pb_canister_snapshot_bits::SnapshotSource> for SnapshotSource {
                 Ok(SnapshotSource::TakenFromCanister)
             }
             pb_canister_snapshot_bits::SnapshotSource::UploadedManually => {
-                Ok(SnapshotSource::UploadedManually)
+                Ok(SnapshotSource::MetadataUpload)
             }
         }
     }
@@ -3941,7 +3941,20 @@ pub struct ReadCanisterSnapshotDataArgs {
     pub kind: CanisterSnapshotDataKind,
 }
 
-impl Payload<'_> for ReadCanisterSnapshotDataArgs {}
+// TODO: EXC-1997.
+impl<'a> Payload<'a> for ReadCanisterSnapshotDataArgs {
+    fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
+        let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
+        // Verify that snapshot ID has the correct format.
+        if let Err(err) = SnapshotId::try_from(&args.snapshot_id) {
+            return Err(UserError::new(
+                ErrorCode::InvalidManagementPayload,
+                format!("Payload deserialization error: {err:?}"),
+            ));
+        }
+        Ok(args)
+    }
+}
 
 impl ReadCanisterSnapshotDataArgs {
     pub fn new(
@@ -4016,11 +4029,11 @@ impl ReadCanisterSnapshotDataResponse {
 ///     wasm_memory_size : nat64;
 ///     stable_memory_size : nat64;
 ///     certified_data : blob;
-///     global_timer : variant {
+///     global_timer : opt variant {
 ///         inactive;
 ///         active : nat64;
 ///     };
-///     on_low_wasm_memory_hook_status : variant {
+///     on_low_wasm_memory_hook_status : opt variant {
 ///         condition_not_satisfied;
 ///         ready;
 ///         executed;
@@ -4037,11 +4050,29 @@ pub struct UploadCanisterSnapshotMetadataArgs {
     pub stable_memory_size: u64,
     #[serde(with = "serde_bytes")]
     pub certified_data: Vec<u8>,
-    pub global_timer: GlobalTimer,
-    pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+    pub global_timer: Option<GlobalTimer>,
+    pub on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
 }
 
-impl Payload<'_> for UploadCanisterSnapshotMetadataArgs {}
+// TODO: EXC-1997.
+impl<'a> Payload<'a> for UploadCanisterSnapshotMetadataArgs {
+    fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
+        let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
+        // Verify that snapshot ID has the correct format.
+        match args.replace_snapshot {
+            None => {}
+            Some(ref snapshot_id) => {
+                if let Err(err) = SnapshotId::try_from(&snapshot_id.to_vec()) {
+                    return Err(UserError::new(
+                        ErrorCode::InvalidManagementPayload,
+                        format!("Payload deserialization error: {err:?}"),
+                    ));
+                }
+            }
+        }
+        Ok(args)
+    }
+}
 
 impl UploadCanisterSnapshotMetadataArgs {
     pub fn new(
@@ -4052,8 +4083,8 @@ impl UploadCanisterSnapshotMetadataArgs {
         wasm_memory_size: u64,
         stable_memory_size: u64,
         certified_data: Vec<u8>,
-        global_timer: GlobalTimer,
-        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+        global_timer: Option<GlobalTimer>,
+        on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
     ) -> Self {
         Self {
             canister_id: canister_id.get(),
@@ -4070,6 +4101,41 @@ impl UploadCanisterSnapshotMetadataArgs {
 
     pub fn get_canister_id(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(self.canister_id)
+    }
+
+    pub fn replace_snapshot(&self) -> Option<SnapshotId> {
+        self.replace_snapshot
+            .as_ref()
+            // TODO: EXC-1997.
+            .map(|bytes| SnapshotId::try_from(&bytes.clone().into_vec()).unwrap())
+    }
+
+    /// Returns the size of this snapshot, excluding the size of the wasm chunk store.
+    pub fn snapshot_size_bytes(&self) -> NumBytes {
+        let num_bytes = self.wasm_module_size
+            + self.wasm_memory_size
+            + self.stable_memory_size
+            + self.certified_data.len() as u64
+            + self.exported_globals.len() as u64 * size_of::<Global>() as u64;
+
+        NumBytes::new(num_bytes)
+    }
+}
+
+/// Struct to encode/decode
+/// (record {
+///     snapshot_id: blob;
+/// };)
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+pub struct UploadCanisterSnapshotMetadataResponse {
+    #[serde(with = "serde_bytes")]
+    pub snapshot_id: Vec<u8>,
+}
+
+impl UploadCanisterSnapshotMetadataResponse {
+    // TODO: EXC-1997.
+    pub fn get_snapshot_id(&self) -> SnapshotId {
+        SnapshotId::try_from(&self.snapshot_id).unwrap()
     }
 }
 
@@ -4102,18 +4168,31 @@ pub struct UploadCanisterSnapshotDataArgs {
     pub chunk: Vec<u8>,
 }
 
-impl Payload<'_> for UploadCanisterSnapshotDataArgs {}
+// TODO: EXC-1997.
+impl<'a> Payload<'a> for UploadCanisterSnapshotDataArgs {
+    fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
+        let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
+        // Verify that snapshot ID has the correct format.
+        if let Err(err) = SnapshotId::try_from(&args.snapshot_id) {
+            return Err(UserError::new(
+                ErrorCode::InvalidManagementPayload,
+                format!("Payload deserialization error: {err:?}"),
+            ));
+        }
+        Ok(args)
+    }
+}
 
 impl UploadCanisterSnapshotDataArgs {
     pub fn new(
         canister_id: CanisterId,
-        snapshot_id: Vec<u8>,
+        snapshot_id: SnapshotId,
         kind: CanisterSnapshotDataOffset,
         chunk: Vec<u8>,
     ) -> Self {
         Self {
             canister_id: canister_id.get(),
-            snapshot_id,
+            snapshot_id: snapshot_id.to_vec(),
             kind,
             chunk,
         }
@@ -4121,6 +4200,10 @@ impl UploadCanisterSnapshotDataArgs {
 
     pub fn get_canister_id(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(self.canister_id)
+    }
+
+    pub fn get_snapshot_id(&self) -> SnapshotId {
+        SnapshotId::try_from(&self.snapshot_id).unwrap()
     }
 }
 

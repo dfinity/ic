@@ -227,3 +227,7 @@ impl Storable for VotingPowerTotal {
 #[path = "voting_power_snapshots_tests.rs"]
 #[cfg(test)]
 mod tests;
+
+#[path = "voting_power_snapshots_benches.rs"]
+#[cfg(feature = "canbench-rs")]
+mod benches;
