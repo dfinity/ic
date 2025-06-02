@@ -1,5 +1,6 @@
 use candid::Decode;
 use core::sync::atomic::Ordering;
+use ed25519_dalek::{pkcs8::EncodePrivateKey, SigningKey};
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_consensus::BitcoinPayloadBuilder;
@@ -343,6 +344,7 @@ fn add_subnet_local_registry_records(
     features: SubnetFeatures,
     nodes: &Vec<StateMachineNode>,
     public_key: ThresholdSigPublicKey,
+    pkcs8_bytes: Vec<u8>,
     chain_keys_enabled_status: &BTreeMap<MasterPublicKeyId, bool>,
     ni_dkg_transcript: NiDkgTranscript,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
@@ -408,7 +410,8 @@ fn add_subnet_local_registry_records(
                 )
                 .unwrap();
         }
-        let root_key_pair = KeyPair::generate().unwrap();
+
+        let root_key_pair: KeyPair = pkcs8_bytes.clone().try_into().unwrap();
         let root_cert = CertificateParams::new(vec![node.node_id.to_string()])
             .unwrap()
             .self_signed(&root_key_pair)
@@ -1676,12 +1679,15 @@ impl StateMachine {
             malicious_flags.clone(),
         ));
 
+        let signing_key = SigningKey::from_bytes(&seed);
+        let pkcs8_bytes = signing_key.to_pkcs8_der().unwrap().as_bytes().to_vec();
         let registry_client = add_subnet_local_registry_records(
             subnet_id,
             subnet_type,
             features,
             &nodes,
             public_key,
+            pkcs8_bytes,
             &chain_keys_enabled_status,
             ni_dkg_transcript,
             registry_data_provider.clone(),
