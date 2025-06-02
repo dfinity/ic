@@ -177,13 +177,6 @@ rust_library(
     deps = LIB_DEPENDENCIES + [":build_script"],
 )
 
-rust_ic_test(
-    name = "pic_test",
-    srcs = glob(["src/**/*.rs"]),
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = LIB_DEPENDENCIES + [":build_script"],
-)
-
 rust_test(
     name = "test",
     size = "medium",
