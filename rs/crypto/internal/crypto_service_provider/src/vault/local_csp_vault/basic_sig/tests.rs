@@ -174,7 +174,7 @@ fn should_correctly_sign_compared_to_testvec() {
 
     let rng = &mut reproducible_rng();
 
-    let key_id = rng.gen::<[u8; 32]>();
+    let key_id = rng.random::<[u8; 32]>();
 
     let (sk, _pk, msg, sig) = csp_testvec(RFC8032_ED25519_SHA_ABC);
 
@@ -185,7 +185,7 @@ fn should_correctly_sign_compared_to_testvec() {
             .insert(KeyId::from(key_id), sk, None)
             .expect("failed to insert key into SKS");
 
-        let csprng = ChaChaRng::from_seed(rng.gen::<[u8; 32]>());
+        let csprng = ChaChaRng::from_seed(rng.random::<[u8; 32]>());
         LocalCspVault::builder_for_test()
             .with_rng(csprng)
             .with_node_secret_key_store(key_store)
@@ -204,7 +204,7 @@ fn should_correctly_sign_compared_to_testvec() {
 fn should_sign_verifiably_with_generated_node_signing_key() {
     let csp_vault = LocalCspVault::builder_for_test().build_into_arc();
     let rng = &mut reproducible_rng();
-    let msg_len_in_bytes = rng.gen_range(0..1024);
+    let msg_len_in_bytes = rng.random_range(0..1024);
     let message = random_message(rng, msg_len_in_bytes);
 
     generate_key_pair_and_sign_and_verify_message(csp_vault, &message);
@@ -239,7 +239,7 @@ fn should_fail_to_sign_with_unsupported_algorithm_id() {
 fn should_fail_to_sign_with_non_existent_key() {
     let rng = &mut reproducible_rng();
     let csp_vault = LocalCspVault::builder_for_test()
-        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .with_rng(ChaCha20Rng::from_seed(rng.random()))
         .build_into_arc();
     let (_, pk_bytes) = ed25519::keypair_from_rng(rng);
 
@@ -253,7 +253,7 @@ fn should_fail_to_sign_with_non_existent_key() {
 fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
     let rng = &mut reproducible_rng();
     let csp_vault = LocalCspVault::builder_for_test()
-        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .with_rng(ChaCha20Rng::from_seed(rng.random()))
         .build();
 
     let threshold = NumberOfNodes::from(1);
@@ -265,8 +265,8 @@ fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
         )
         .expect("failed to generate threshold sig keys");
     let key_id = key_ids[0];
-    let msg_len: usize = rng.gen_range(0..1024);
-    let msg: Vec<u8> = (0..msg_len).map(|_| rng.gen::<u8>()).collect();
+    let msg_len: usize = rng.random_range(0..1024);
+    let msg: Vec<u8> = (0..msg_len).map(|_| rng.random::<u8>()).collect();
 
     let result = csp_vault.sign(AlgorithmId::Ed25519, msg, key_id);
 
@@ -306,7 +306,7 @@ pub fn generate_key_pair_and_sign_message(
 }
 
 fn random_message<R: Rng>(rng: &mut R, msg_len_in_bytes: usize) -> Vec<u8> {
-    let msg: Vec<u8> = (0..msg_len_in_bytes).map(|_| rng.gen::<u8>()).collect();
+    let msg: Vec<u8> = (0..msg_len_in_bytes).map(|_| rng.random::<u8>()).collect();
     assert_eq!(msg.len(), msg_len_in_bytes);
     msg
 }

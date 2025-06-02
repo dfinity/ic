@@ -1061,8 +1061,8 @@ mod tests {
         {
             let mut val = Vec::<u8>::new();
             let p = 1.0 / (self.mean_length + 1.0);
-            while rng.gen::<f32>() > p {
-                val.push(rng.gen());
+            while rng.random::<f32>() > p {
+                val.push(rng.random());
             }
             val
         }
@@ -1101,7 +1101,7 @@ mod tests {
         let initial_len = registry.changelog().iter().count();
         serializable_form
             .changelog
-            .retain(|entry| entry.version == 1 || rng.gen() || entry.version == initial_len as u64);
+            .retain(|entry| entry.version == 1 || rng.random() || entry.version == initial_len as u64);
         let len_after_random_trim = serializable_form.changelog.len();
         assert!(len_after_random_trim < initial_len);
 

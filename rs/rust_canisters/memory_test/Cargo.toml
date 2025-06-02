@@ -10,7 +10,7 @@ path = "src/main.rs"
 [dependencies]
 dfn_core = { path = "../dfn_core" }
 rand = { workspace = true }
-rand_pcg = "0.3"
+rand_pcg = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 

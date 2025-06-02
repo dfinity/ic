@@ -71,12 +71,12 @@ impl ProximityMap {
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
     ) -> ProximityMap {
-        fn thread_rng_gen_range(low: u64, high: u64) -> u64 {
+        fn thread_rng.random_range(low: u64, high: u64) -> u64 {
             thread_rng().gen_range(low..high)
         }
 
         Self::with_rng(
-            Box::new(thread_rng_gen_range),
+            Box::new(thread_rng.random_range),
             node,
             registry,
             metrics_registry,

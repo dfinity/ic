@@ -369,7 +369,7 @@ fn print_wasm_result(wasm_result: WasmResult) {
 
 fn get_random_seed() -> [u8; 32] {
     let step = Uniform::new(0, u8::MAX);
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let seed: Vec<u8> = step.sample_iter(&mut rng).take(32).collect();
     seed.try_into().unwrap()
 }

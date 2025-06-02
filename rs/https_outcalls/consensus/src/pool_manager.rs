@@ -59,8 +59,8 @@ pub struct CanisterHttpPoolManagerImpl {
 
 //TODO(SOCKS_PROXY_DL): Remove this function.
 fn should_dl_socks_proxy() -> bool {
-    let mut rng = rand::thread_rng();
-    let random_number: u32 = rng.gen_range(0..100);
+    let mut rng = rand::rng();
+    let random_number: u32 = rng.random_range(0..100);
     // This is a dark launch feature. We want to test the SOCKS proxy with some percentage of requests.
     random_number < REGISTRY_SOCKS_PROXY_DARK_LAUNCH_PERCENTAGE
 }

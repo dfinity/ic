@@ -93,7 +93,7 @@ fn maliciously_corrupt_idkg_dealings(
     log: &ReplicaLogger,
     metrics: &IDkgPreSignerMetrics,
 ) -> SignedIDkgDealing {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let mut exclude_set = BTreeSet::new();
     exclude_set.insert(node_id);
     match ic_crypto_test_utils_canister_threshold_sigs::corrupt_signed_idkg_dealing(

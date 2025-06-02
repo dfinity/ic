@@ -163,7 +163,7 @@ impl ProtocolSetup {
         let alg = cfg.signature_alg().to_algorithm_id();
 
         let rng = &mut seed.into_rng();
-        let ad = rng.gen::<[u8; 32]>().to_vec();
+        let ad = rng.random::<[u8; 32]>().to_vec();
 
         let mut sk = Vec::with_capacity(receivers);
         let mut pk = Vec::with_capacity(receivers);
@@ -745,7 +745,7 @@ impl ProtocolRound {
 
         for (dealer_index, dealing) in dealings_to_damage {
             let max_corruptions = setup.threshold.get() as usize;
-            let number_of_corruptions = rng.gen_range(1..=max_corruptions);
+            let number_of_corruptions = rng.random_range(1..=max_corruptions);
 
             let corrupted_recip =
                 (0..setup.receivers as NodeIndex).choose_multiple(rng, number_of_corruptions);

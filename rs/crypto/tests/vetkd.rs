@@ -24,7 +24,7 @@ use std::convert::TryFrom;
 #[test]
 fn should_consistently_derive_the_same_vetkey_given_sufficient_shares() {
     let rng = &mut reproducible_rng();
-    let subnet_size = rng.gen_range(1..7);
+    let subnet_size = rng.random_range(1..7);
     let (config, dkg_id, crypto_components) = setup_with_random_ni_dkg_config(subnet_size, rng);
 
     let transcript = run_ni_dkg_and_load_transcript_for_receivers(&config, &crypto_components);
@@ -45,7 +45,7 @@ fn should_consistently_derive_the_same_vetkey_given_sufficient_shares() {
         .serialize();
 
     let transport_secret_key =
-        ic_vetkeys::TransportSecretKey::from_seed(rng.gen::<[u8; 32]>().to_vec())
+        ic_vetkeys::TransportSecretKey::from_seed(rng.random::<[u8; 32]>().to_vec())
             .expect("failed to create transport secret key");
     let vetkd_args = VetKdArgs {
         ni_dkg_id: dkg_id,

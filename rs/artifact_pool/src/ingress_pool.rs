@@ -598,14 +598,14 @@ mod tests {
                 let nodes = 10;
                 let mut changeset = Mutations::new();
                 let ingress_size = 10;
-                let mut rng = rand::thread_rng();
+                let mut rng = rand::rng();
                 let now = time_source.get_relative_time();
                 let cutoff_time = now + MAX_INGRESS_TTL * 3 / 2;
                 let initial_count = 1000;
                 let mut non_expired_count = 0;
                 for i in 0..initial_count {
                     let expiry = Duration::from_millis(
-                        rng.gen::<u64>() % (3 * (MAX_INGRESS_TTL.as_millis() as u64)),
+                        rng.random::<u64>() % (3 * (MAX_INGRESS_TTL.as_millis() as u64)),
                     );
                     if now + expiry >= cutoff_time {
                         non_expired_count += 1;

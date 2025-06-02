@@ -153,7 +153,7 @@ async fn modify_mem_and_verify<R: Rng>(
     agent: &Agent,
     val_to_write: u8,
 ) -> u128 {
-    let rounds: u32 = rng.gen_range(1..8);
+    let rounds: u32 = rng.random_range(1..8);
     let mut should_match = 0;
     for i in 0..rounds {
         let new_val_to_write = i + val_to_write as u32;

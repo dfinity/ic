@@ -829,7 +829,7 @@ fn bip340_combined_share_serialization_roundtrip_works_correctly() {
     let threshold = 2;
     let rng = &mut reproducible_rng();
     let signed_message = random_bytes(rng);
-    let random_beacon = ic_types::Randomness::from(rng.gen::<[u8; 32]>());
+    let random_beacon = ic_types::Randomness::from(rng.random::<[u8; 32]>());
     let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
 
     let cfg = TestConfig::new(IdkgProtocolAlgorithm::Bip340, EccCurveType::K256);
@@ -864,7 +864,7 @@ fn ed25519_combined_share_serialization_roundtrip_works_correctly() {
     let threshold = 2;
     let rng = &mut reproducible_rng();
     let signed_message = random_bytes(rng);
-    let random_beacon = ic_types::Randomness::from(rng.gen::<[u8; 32]>());
+    let random_beacon = ic_types::Randomness::from(rng.random::<[u8; 32]>());
     let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
 
     let cfg = TestConfig::new(IdkgProtocolAlgorithm::Ed25519, EccCurveType::K256);
@@ -892,7 +892,7 @@ fn ed25519_combined_share_serialization_roundtrip_works_correctly() {
 }
 
 fn random_bytes<R: Rng + CryptoRng>(rng: &mut R) -> Vec<u8> {
-    let size = rng.gen_range(0..100);
+    let size = rng.random_range(0..100);
     let mut bytes = vec![0; size];
     rng.fill_bytes(&mut bytes);
     bytes

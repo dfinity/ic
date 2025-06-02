@@ -250,9 +250,9 @@ async fn generate_consensus_events(
         let mut rng = ThreadRng::default();
 
         for _ in 0..num_event {
-            let rand_id = rng.gen_range(id_range.clone());
+            let rand_id = rng.random_range(id_range.clone());
             let insert_time =
-                Duration::from_millis(rng.gen_range(0..test_duration.as_millis()) as u64);
+                Duration::from_millis(rng.random_range(0..test_duration.as_millis()) as u64);
             delay_queue.insert(Event::Insert(rand_id), insert_time);
         }
     }
@@ -263,9 +263,9 @@ async fn generate_consensus_events(
                 processor.push_advert(e);
 
                 let mut rng = ThreadRng::default();
-                let should_purge = rng.gen_bool(purge_fraction);
+                let should_purge = rng.random_bool(purge_fraction);
                 if should_purge {
-                    let purge_delay = rng.gen_range(0..max_purge_delay.as_millis() as u64);
+                    let purge_delay = rng.random_range(0..max_purge_delay.as_millis() as u64);
                     delay_queue.insert(Event::Purge(e), Duration::from_millis(purge_delay));
                 }
             }

@@ -400,13 +400,13 @@ mod tests {
 
     #[test]
     fn should_parse_crypto_node_key() {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         for key_purpose in &[
             KeyPurpose::NodeSigning,
             KeyPurpose::DkgDealingEncryption,
             KeyPurpose::CommitteeSigning,
         ] {
-            let n: u64 = rng.gen();
+            let n: u64 = rng.random();
             let node_id = NodeId::from(PrincipalId::new_node_test_id(n));
             let crypto_node_key = make_crypto_node_key(node_id, *key_purpose);
             let parsed = maybe_parse_crypto_node_key(&crypto_node_key);

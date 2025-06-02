@@ -312,7 +312,7 @@ pub struct PrivateKey {
 impl PrivateKey {
     /// Generate a new random private key
     pub fn generate() -> Self {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         Self::generate_using_rng(&mut rng)
     }
 

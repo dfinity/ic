@@ -827,9 +827,9 @@ fn dummy_initial_idkg_dealing_for_tests<R: Rng + CryptoRng>(
         nodes
     }
     fn random_transcript_id<R: RngCore + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
-        let id = rng.gen::<u64>();
-        let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen::<u64>()));
-        let height = Height::from(rng.gen::<u64>());
+        let id = rng.random::<u64>();
+        let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.random::<u64>()));
+        let height = Height::from(rng.random::<u64>());
 
         IDkgTranscriptId::new(subnet, id, height)
     }

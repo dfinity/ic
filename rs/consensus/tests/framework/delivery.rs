@@ -85,7 +85,7 @@ impl DeliveryStrategy for RandomReceive {
                 for other in instances.iter() {
                     if other.deps.replica_config.node_id != instance.deps.replica_config.node_id {
                         let mut in_queue = other.in_queue.borrow_mut();
-                        let delay = rng.gen_range(UNIT_TIME_STEP..self.max_delta);
+                        let delay = rng.random_range(UNIT_TIME_STEP..self.max_delta);
                         let msg = Message {
                             message: x.message.clone(),
                             timestamp: x.timestamp + Duration::from_millis(delay),
@@ -226,7 +226,7 @@ fn distance_vector(distances: &mut [Vec<usize>]) -> Option<usize> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use rand::thread_rng;
+    use rand::rng;
     use rand_chacha::{rand_core::SeedableRng, ChaChaRng};
 
     fn check_distance(graph: &[Vec<usize>], degree: usize) {

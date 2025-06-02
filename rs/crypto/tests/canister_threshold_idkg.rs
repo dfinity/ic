@@ -51,7 +51,7 @@ mod create_dealing {
         let rng = &mut reproducible_rng();
 
         for alg in all_canister_threshold_algorithms() {
-            let subnet_size = rng.gen_range(1..10);
+            let subnet_size = rng.random_range(1..10);
             let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
             let (dealers, receivers) =
                 env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
@@ -78,7 +78,7 @@ mod create_dealing {
         let rng = &mut reproducible_rng();
 
         for alg in all_canister_threshold_algorithms() {
-            let subnet_size = rng.gen_range(1..10);
+            let subnet_size = rng.random_range(1..10);
             let mut env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
 
             let new_node_id = random_node_id_excluding(&env.nodes.ids(), rng);
@@ -107,7 +107,7 @@ mod create_dealing {
         let rng = &mut reproducible_rng();
 
         for alg in all_canister_threshold_algorithms() {
-            let subnet_size = rng.gen_range(1..10);
+            let subnet_size = rng.random_range(1..10);
             let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
             let (dealers, receivers) =
                 env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
@@ -125,7 +125,7 @@ mod create_dealing {
     fn should_fail_create_reshare_dealing_if_transcript_isnt_loaded() {
         let rng = &mut reproducible_rng();
         for alg in all_canister_threshold_algorithms() {
-            let subnet_size = rng.gen_range(1..10);
+            let subnet_size = rng.random_range(1..10);
             let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
 
             let (dealers, receivers) = env
@@ -161,7 +161,7 @@ mod create_dealing {
         let rng = &mut reproducible_rng();
 
         for alg in all_canister_threshold_algorithms() {
-            let subnet_size = rng.gen_range(1..10);
+            let subnet_size = rng.random_range(1..10);
             let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
             let (dealers, receivers) = env
                 .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
@@ -227,7 +227,7 @@ mod create_dealing {
         let rng = &mut reproducible_rng();
 
         for alg in all_canister_threshold_algorithms() {
-            let subnet_size = rng.gen_range(1..10);
+            let subnet_size = rng.random_range(1..10);
             let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
             let (dealers, receivers) = env
                 .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
@@ -290,7 +290,7 @@ mod create_dealing {
             IDkgTranscriptParams,
             CryptoComponentImpl<Csp>,
         ) {
-            let subnet_size = rng.gen_range(1..10);
+            let subnet_size = rng.random_range(1..10);
             let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
             let (random_dealers, random_receivers) =
                 env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
@@ -408,7 +408,7 @@ mod create_transcript {
         let rng = &mut reproducible_rng();
 
         for alg in all_canister_threshold_algorithms() {
-            let subnet_size = rng.gen_range(1..10);
+            let subnet_size = rng.random_range(1..10);
             let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
             let (dealers, receivers) =
                 env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
@@ -432,7 +432,7 @@ mod create_transcript {
         let rng = &mut reproducible_rng();
 
         for alg in all_canister_threshold_algorithms() {
-            let subnet_size = rng.gen_range(1..30);
+            let subnet_size = rng.random_range(1..30);
             let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
 
             let (dealers, receivers) =
@@ -473,7 +473,7 @@ mod create_transcript {
         let rng = &mut reproducible_rng();
 
         for alg in all_canister_threshold_algorithms() {
-            let subnet_size = rng.gen_range(MIN_NUM_NODES..10);
+            let subnet_size = rng.random_range(MIN_NUM_NODES..10);
             let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
             let (dealers, receivers) = env.choose_dealers_and_receivers(
                 &IDkgParticipants::RandomWithAtLeast {
@@ -521,7 +521,7 @@ mod create_transcript {
         let rng = &mut reproducible_rng();
 
         for alg in all_canister_threshold_algorithms() {
-            let subnet_size = rng.gen_range(MIN_NUM_NODES..10);
+            let subnet_size = rng.random_range(MIN_NUM_NODES..10);
             let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
             let (dealers, receivers) = env.choose_dealers_and_receivers(
                 &IDkgParticipants::RandomWithAtLeast {
@@ -578,7 +578,7 @@ mod create_transcript {
         let rng = &mut reproducible_rng();
 
         for alg in all_canister_threshold_algorithms() {
-            let subnet_size = rng.gen_range(MIN_NUM_NODES..10);
+            let subnet_size = rng.random_range(MIN_NUM_NODES..10);
             let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
             let (dealers, receivers) = env.choose_dealers_and_receivers(
                 &IDkgParticipants::RandomWithAtLeast {
@@ -615,7 +615,7 @@ mod create_transcript {
     #[test]
     fn should_fail_create_transcript_with_all_signatures_bad_in_all_dealings() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
@@ -647,7 +647,7 @@ mod create_transcript {
     #[test]
     fn should_fail_create_transcript_with_all_signatures_bad_in_one_dealing() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
@@ -681,7 +681,7 @@ mod create_transcript {
     #[test]
     fn should_fail_create_transcript_with_one_bad_signature_in_one_dealing() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
@@ -715,7 +715,7 @@ mod create_transcript {
     #[test]
     fn should_fail_create_transcript_on_invalid_encoding_of_transcript_operation() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) =
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
@@ -767,7 +767,7 @@ mod load_transcript {
     #[test]
     fn should_return_ok_from_load_transcript_if_not_a_receiver() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
@@ -793,7 +793,7 @@ mod load_transcript {
     #[test]
     fn should_run_load_transcript_successfully_if_already_loaded() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
@@ -814,7 +814,7 @@ mod load_transcript {
     #[test]
     fn should_load_transcript_without_returning_complaints() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
@@ -868,7 +868,7 @@ mod verify_complaint {
     #[test]
     fn should_return_valid_and_correct_complaints_on_load_transcript_with_invalid_dealings() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
@@ -878,7 +878,7 @@ mod verify_complaint {
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
 
-            let num_of_complaints = rng.gen_range(1..=transcript.verified_dealings.len());
+            let num_of_complaints = rng.random_range(1..=transcript.verified_dealings.len());
             let (complainer, corrupted_dealing_indices, complaints) =
                 corrupt_dealings_and_generate_complaints_for_random_complainer(
                     &mut transcript,
@@ -914,7 +914,7 @@ mod verify_complaint {
     fn should_fail_to_verify_complaint_against_wrong_complainer_id() {
         const MIN_NUM_NODES: usize = 2; //1 complainer and 1 other receiver
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(MIN_NUM_NODES..6);
+        let subnet_size = rng.random_range(MIN_NUM_NODES..6);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(
             &IDkgParticipants::RandomWithAtLeast {
@@ -947,7 +947,7 @@ mod verify_complaint {
     #[test]
     fn should_fail_to_verify_complaint_with_wrong_transcript_id() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(2..6);
+        let subnet_size = rng.random_range(2..6);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
@@ -990,7 +990,7 @@ mod verify_complaint {
     fn should_fail_to_verify_complaint_with_wrong_dealer_id() {
         const MIN_NUM_NODES: usize = 4;
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(MIN_NUM_NODES..6);
+        let subnet_size = rng.random_range(MIN_NUM_NODES..6);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(
             &IDkgParticipants::RandomWithAtLeast {
@@ -1045,7 +1045,7 @@ mod verify_complaint {
         const MIN_NUM_NODES: usize = 4; //needs at least 4 dealers
         let rng = &mut reproducible_rng();
         let num_of_dealings_to_corrupt = 2;
-        let subnet_size = rng.gen_range(MIN_NUM_NODES..6);
+        let subnet_size = rng.random_range(MIN_NUM_NODES..6);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(
             &IDkgParticipants::RandomWithAtLeast {
@@ -1095,7 +1095,7 @@ mod verify_complaint {
         use strum::IntoEnumIterator;
         const MIN_NUM_NODES: usize = 2; //1 complainer and 1 other receiver
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(MIN_NUM_NODES..6);
+        let subnet_size = rng.random_range(MIN_NUM_NODES..6);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(
             &IDkgParticipants::RandomWithAtLeast {
@@ -1135,7 +1135,7 @@ mod verify_transcript {
     #[test]
     fn should_run_idkg_successfully_for_random_dealing() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
 
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
@@ -1154,7 +1154,7 @@ mod verify_transcript {
     #[test]
     fn should_run_idkg_successfully_for_reshare_of_random_dealing() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) =
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
@@ -1185,7 +1185,7 @@ mod verify_transcript {
     #[test]
     fn should_run_idkg_successfully_for_reshare_of_unmasked_dealing() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) =
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
@@ -1224,7 +1224,7 @@ mod verify_transcript {
     #[test]
     fn should_run_idkg_successfully_for_multiplication_of_dealings() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) =
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
@@ -1280,7 +1280,7 @@ mod verify_transcript {
     #[test]
     fn should_include_the_expected_number_of_dealings_in_a_transcript() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) =
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
@@ -1346,7 +1346,7 @@ mod verify_transcript {
     #[test]
     fn should_create_quadruple_successfully_with_new_key() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) =
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
@@ -1369,7 +1369,7 @@ mod verify_transcript {
         const MIN_NUM_NODES: usize = 4;
         let rng = &mut reproducible_rng();
 
-        let subnet_size = rng.gen_range(MIN_NUM_NODES..10);
+        let subnet_size = rng.random_range(MIN_NUM_NODES..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(
             &IDkgParticipants::RandomWithAtLeast {
@@ -1408,7 +1408,7 @@ mod verify_transcript {
     fn should_verify_transcript_reject_reshared_transcript_with_a_duplicated_dealing() {
         const MIN_NUM_NODES: usize = 4;
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(MIN_NUM_NODES..10);
+        let subnet_size = rng.random_range(MIN_NUM_NODES..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) =
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
@@ -1453,7 +1453,7 @@ mod verify_transcript {
     fn should_verify_transcript_reject_random_transcript_with_dealing_replaced() {
         const MIN_NUM_NODES: usize = 4;
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(MIN_NUM_NODES..10);
+        let subnet_size = rng.random_range(MIN_NUM_NODES..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(
             &IDkgParticipants::RandomWithAtLeast {
@@ -1514,7 +1514,7 @@ mod verify_transcript {
     fn should_verify_transcript_reject_transcript_with_insufficient_dealings() {
         const MIN_NUM_NODES: usize = 4;
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(MIN_NUM_NODES..10);
+        let subnet_size = rng.random_range(MIN_NUM_NODES..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(
             &IDkgParticipants::RandomWithAtLeast {
@@ -1558,7 +1558,7 @@ mod verify_transcript {
     fn should_fail_on_invalid_encoding_of_transcript_operation() {
         const MIN_NUM_NODES: usize = 4;
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(MIN_NUM_NODES..10);
+        let subnet_size = rng.random_range(MIN_NUM_NODES..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) =
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
@@ -1649,7 +1649,7 @@ mod verify_transcript {
     #[test]
     fn should_verify_transcript_reject_transcript_with_corrupted_internal_data() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(4..10);
+        let subnet_size = rng.random_range(4..10);
 
         for alg in all_canister_threshold_algorithms() {
             let (env, params, transcript) = setup_for_verify_transcript(alg, rng, subnet_size);
@@ -1681,7 +1681,7 @@ mod verify_transcript {
     #[test]
     fn should_verify_transcript_reject_transcript_with_wrong_transcript_id() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(4..10);
+        let subnet_size = rng.random_range(4..10);
 
         for alg in all_canister_threshold_algorithms() {
             let (env, params, transcript) = setup_for_verify_transcript(alg, rng, subnet_size);
@@ -1702,7 +1702,7 @@ mod verify_transcript {
     #[test]
     fn should_verify_transcript_reject_transcript_with_insufficient_dealing_signatures() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(4..10);
+        let subnet_size = rng.random_range(4..10);
 
         for alg in all_canister_threshold_algorithms() {
             let (env, params, mut transcript) = setup_for_verify_transcript(alg, rng, subnet_size);
@@ -1738,7 +1738,7 @@ mod verify_transcript {
     #[test]
     fn should_verify_transcript_reject_transcript_with_corrupted_dealing_signature() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
 
         for alg in all_canister_threshold_algorithms() {
             let (env, params, mut transcript) = setup_for_verify_transcript(alg, rng, subnet_size);
@@ -1772,7 +1772,7 @@ mod verify_transcript {
     #[test]
     fn should_verify_transcript_reject_transcript_with_wrong_registry_version() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(4..10);
+        let subnet_size = rng.random_range(4..10);
 
         for alg in all_canister_threshold_algorithms() {
             let (env, params, transcript) = setup_for_verify_transcript(alg, rng, subnet_size);
@@ -1793,7 +1793,7 @@ mod verify_transcript {
     #[test]
     fn should_verify_transcript_reject_transcript_with_wrong_algorithm_id() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(4..10);
+        let subnet_size = rng.random_range(4..10);
 
         for alg in all_canister_threshold_algorithms() {
             let (env, params, transcript) = setup_for_verify_transcript(alg, rng, subnet_size);
@@ -1814,7 +1814,7 @@ mod verify_transcript {
     #[test]
     fn should_verify_transcript_reject_transcript_with_an_extra_receiver() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(4..10);
+        let subnet_size = rng.random_range(4..10);
 
         for alg in all_canister_threshold_algorithms() {
             let (env, params, transcript) = setup_for_verify_transcript(alg, rng, subnet_size);
@@ -1835,7 +1835,7 @@ mod verify_transcript {
     #[test]
     fn should_verify_transcript_reject_transcript_with_a_missing_receiver() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(6..10);
+        let subnet_size = rng.random_range(6..10);
 
         for alg in all_canister_threshold_algorithms() {
             let (env, params, transcript) =
@@ -1857,7 +1857,7 @@ mod verify_transcript {
     #[test]
     fn should_verify_transcript_reject_transcript_with_wrong_transcript_type() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(4..10);
+        let subnet_size = rng.random_range(4..10);
 
         for alg in all_canister_threshold_algorithms() {
             let (env, params, transcript) = setup_for_verify_transcript(alg, rng, subnet_size);
@@ -1883,7 +1883,7 @@ mod retain_active_transcripts {
     #[test]
     fn should_be_nop_when_transcripts_empty() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let retainer = env.nodes.random_node(rng);
         let public_keys_before_retaining = retainer.current_node_public_keys().unwrap();
@@ -1906,7 +1906,7 @@ mod retain_active_transcripts {
     #[test]
     fn should_retain_active_transcripts_successfully() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
@@ -1937,7 +1937,7 @@ mod load_transcript_with_openings {
     #[test]
     fn should_load_transcript_without_openings_when_none_required() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
@@ -1960,7 +1960,7 @@ mod load_transcript_with_openings {
     #[test]
     fn should_return_ok_immediately_if_receiver_id_is_not_in_receivers() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
@@ -1971,7 +1971,7 @@ mod load_transcript_with_openings {
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
             // the loader with the id that is not in the receivers
             let node_id_not_in_receivers = loop {
-                let node_id = NodeId::from(PrincipalId::new_node_test_id(rng.gen()));
+                let node_id = NodeId::from(PrincipalId::new_node_test_id(rng.random()));
                 if !params.receivers().contains(node_id) {
                     break node_id;
                 }
@@ -2008,7 +2008,7 @@ mod load_transcript_with_openings {
     fn should_load_with_enough_openings() {
         const MIN_NUM_NODES: usize = 2;
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(MIN_NUM_NODES..6);
+        let subnet_size = rng.random_range(MIN_NUM_NODES..6);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(
             &IDkgParticipants::RandomWithAtLeast {
@@ -2052,7 +2052,7 @@ mod load_transcript_with_openings {
         use ic_interfaces::crypto::{ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
         const MIN_NUM_NODES: usize = 2;
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(MIN_NUM_NODES..6);
+        let subnet_size = rng.random_range(MIN_NUM_NODES..6);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) =
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
@@ -2105,8 +2105,8 @@ mod load_transcript_with_openings {
                     derivation_path: vec![],
                 };
 
-                let hashed_message = rng.gen::<[u8; 32]>();
-                let seed = Randomness::from(rng.gen::<[u8; 32]>());
+                let hashed_message = rng.random::<[u8; 32]>();
+                let seed = Randomness::from(rng.random::<[u8; 32]>());
 
                 ThresholdEcdsaSigInputs::new(
                     &derivation_path,
@@ -2145,7 +2145,7 @@ mod load_transcript_with_openings {
 
         const MIN_NUM_NODES: usize = 2;
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(MIN_NUM_NODES..6);
+        let subnet_size = rng.random_range(MIN_NUM_NODES..6);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) =
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
@@ -2189,18 +2189,18 @@ mod load_transcript_with_openings {
                 caller: PrincipalId::new_user_test_id(1),
                 derivation_path: vec![],
             };
-            let message = rng.gen::<[u8; 32]>();
-            let seed = Randomness::from(rng.gen::<[u8; 32]>());
+            let message = rng.random::<[u8; 32]>();
+            let seed = Randomness::from(rng.random::<[u8; 32]>());
 
             let taproot_tree_root = {
                 if alg == AlgorithmId::ThresholdSchnorrBip340 {
-                    let choose = rng.gen::<u8>();
+                    let choose = rng.random::<u8>();
                     if choose <= 128 {
                         None
                     } else if choose <= 192 {
                         Some(vec![])
                     } else {
-                        Some(rng.gen::<[u8; 32]>().to_vec())
+                        Some(rng.random::<[u8; 32]>().to_vec())
                     }
                 } else {
                     None
@@ -2238,7 +2238,7 @@ mod load_transcript_with_openings {
     fn should_fail_because_not_enough_openings() {
         const MIN_NUM_NODES: usize = 2;
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(MIN_NUM_NODES..6);
+        let subnet_size = rng.random_range(MIN_NUM_NODES..6);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(
             &IDkgParticipants::RandomWithAtLeast {
@@ -2281,7 +2281,7 @@ mod load_transcript_with_openings {
     fn should_fail_if_opener_id_not_in_receivers() {
         const MIN_NUM_NODES: usize = 4;
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(MIN_NUM_NODES..10);
+        let subnet_size = rng.random_range(MIN_NUM_NODES..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(
             &IDkgParticipants::RandomWithAtLeast {
@@ -2337,7 +2337,7 @@ mod load_transcript_with_openings {
     fn should_fail_if_opening_cannot_be_deserialized() {
         const MIN_NUM_NODES: usize = 4;
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(MIN_NUM_NODES..10);
+        let subnet_size = rng.random_range(MIN_NUM_NODES..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(
             &IDkgParticipants::RandomWithAtLeast {
@@ -2389,7 +2389,7 @@ mod load_transcript_with_openings {
     fn should_fail_if_dealer_id_in_complaint_is_not_among_dealers_in_transcript() {
         const MIN_NUM_NODES: usize = 4;
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(MIN_NUM_NODES..10);
+        let subnet_size = rng.random_range(MIN_NUM_NODES..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(
             &IDkgParticipants::RandomWithAtLeast {
@@ -2457,7 +2457,7 @@ mod verify_dealing_private {
     #[test]
     fn should_verify_dealing_private() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
@@ -2478,7 +2478,7 @@ mod verify_dealing_private {
     #[test]
     fn should_verify_dealing_private_with_wrong_signature() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
@@ -2513,7 +2513,7 @@ mod verify_dealing_private {
     #[test]
     fn should_verify_when_dealer_is_also_a_receiver() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let dealer_and_receiver = env.nodes.random_node(rng);
         let (dealers_with_at_least_one_common_node, receivers_with_at_least_one_common_node) = {
@@ -2548,7 +2548,7 @@ mod verify_dealing_private {
     #[test]
     fn should_fail_on_wrong_transcript_id() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
@@ -2575,7 +2575,7 @@ mod verify_dealing_private {
     #[test]
     fn should_fail_on_wrong_internal_dealing_raw() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
@@ -2602,7 +2602,7 @@ mod verify_dealing_private {
     #[test]
     fn should_fail_if_dealing_signer_id_is_not_a_dealer_id() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
@@ -2755,7 +2755,7 @@ mod verify_dealing_private {
             registry_client_result: Option<Result<Option<Vec<u8>>, RegistryClientError>>,
             rng: &mut ReproducibleRng,
         ) -> Setup {
-            let subnet_size = rng.gen_range(1..10);
+            let subnet_size = rng.random_range(1..10);
             let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
             let (dealers, receivers) =
                 env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
@@ -2824,7 +2824,7 @@ mod verify_dealing_public {
     #[test]
     fn should_successfully_verify_random_sharing_dealing_with_valid_input() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
@@ -2849,7 +2849,7 @@ mod verify_dealing_public {
     #[test]
     fn should_fail_verify_dealing_public_with_invalid_signature() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
@@ -2881,7 +2881,7 @@ mod verify_dealing_public {
     #[test]
     fn should_fail_verify_dealing_public_with_wrong_transcript_id() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
@@ -2914,7 +2914,7 @@ mod verify_dealing_public {
     fn should_fail_verify_dealing_public_with_wrong_dealer_id() {
         const MIN_NUM_NODES: usize = 2;
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(MIN_NUM_NODES..10); //need at least 2 nodes to have a dealer and another node
+        let subnet_size = rng.random_range(MIN_NUM_NODES..10); //need at least 2 nodes to have a dealer and another node
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(
             &IDkgParticipants::RandomWithAtLeast {
@@ -2957,7 +2957,7 @@ mod verify_dealing_public {
     #[test]
     fn should_fail_verify_dealing_public_with_wrong_dealer_index() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
@@ -3001,7 +3001,7 @@ mod verify_dealing_public {
     #[test]
     fn should_fail_verify_dealing_public_with_wrong_internal_dealing_raw() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
         for alg in all_canister_threshold_algorithms() {
@@ -3063,8 +3063,8 @@ mod verify_initial_dealings {
     #[test]
     fn should_successfully_verify_initial_dealing_from_non_participating_node() {
         let rng = &mut reproducible_rng();
-        let num_nodes = rng.gen_range(2..10);
-        let num_source_subnet = rng.gen_range(1..num_nodes);
+        let num_nodes = rng.random_range(2..10);
+        let num_source_subnet = rng.random_range(1..num_nodes);
         let num_destination_subnet = num_nodes - num_source_subnet;
         assert!(
             num_destination_subnet >= 1,
@@ -3101,8 +3101,8 @@ mod verify_initial_dealings {
     #[test]
     fn should_fail_on_mismatching_transcript_params() {
         let rng = &mut reproducible_rng();
-        let num_nodes = rng.gen_range(2..10);
-        let num_source_subnet = rng.gen_range(1..num_nodes);
+        let num_nodes = rng.random_range(2..10);
+        let num_source_subnet = rng.random_range(1..num_nodes);
         let num_destination_subnet = num_nodes - num_source_subnet;
         assert!(
             num_destination_subnet >= 1,
@@ -3148,8 +3148,8 @@ mod verify_initial_dealings {
     #[test]
     fn should_fail_if_public_verification_fails() {
         let rng = &mut reproducible_rng();
-        let num_nodes = rng.gen_range(2..10);
-        let num_source_subnet = rng.gen_range(1..num_nodes);
+        let num_nodes = rng.random_range(2..10);
+        let num_source_subnet = rng.random_range(1..num_nodes);
         let num_destination_subnet = num_nodes - num_source_subnet;
         assert!(
             num_destination_subnet >= 1,
@@ -3526,8 +3526,8 @@ mod reshare_key_transcript {
     #[test]
     fn should_reshare_initial_dealings_to_another_subnet() {
         let rng = &mut reproducible_rng();
-        let total_num_nodes = rng.gen_range(2..=20);
-        let partition_index = rng.gen_range(1..total_num_nodes);
+        let total_num_nodes = rng.random_range(2..=20);
+        let partition_index = rng.random_range(1..total_num_nodes);
 
         for alg in all_canister_threshold_algorithms() {
             let env = CanisterThresholdSigTestEnvironment::new(total_num_nodes, rng);
@@ -3618,8 +3618,8 @@ mod reshare_key_transcript {
     #[test]
     fn should_reshare_key_transcript_to_another_subnet() {
         let rng = &mut reproducible_rng();
-        let total_num_nodes = rng.gen_range(2..=20);
-        let partition_index = rng.gen_range(1..total_num_nodes);
+        let total_num_nodes = rng.random_range(2..=20);
+        let partition_index = rng.random_range(1..total_num_nodes);
 
         for alg in all_canister_threshold_algorithms() {
             let env = CanisterThresholdSigTestEnvironment::new(total_num_nodes, rng);
@@ -3681,8 +3681,8 @@ mod reshare_key_transcript {
     #[test]
     fn should_reshare_random_unmasked_transcript_to_new_receivers() {
         let rng = &mut reproducible_rng();
-        let total_num_nodes = rng.gen_range(2..=20);
-        let partition_index = rng.gen_range(1..total_num_nodes);
+        let total_num_nodes = rng.random_range(2..=20);
+        let partition_index = rng.random_range(1..total_num_nodes);
 
         for alg in all_canister_threshold_algorithms() {
             let env = CanisterThresholdSigTestEnvironment::new(total_num_nodes, rng);
@@ -3737,7 +3737,7 @@ mod reshare_key_transcript {
     #[test]
     fn should_reshare_key_transcript_from_dealers_to_receivers_and_back() {
         let rng = &mut ReproducibleRng::new();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) =
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
@@ -3772,7 +3772,7 @@ mod reshare_key_transcript {
     #[test]
     fn should_reshare_key_transcript_when_new_nodes_added() {
         let rng = &mut ReproducibleRng::new();
-        let subnet_size = rng.gen_range(1..10);
+        let subnet_size = rng.random_range(1..10);
         let mut env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) =
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
@@ -3784,7 +3784,7 @@ mod reshare_key_transcript {
 
             let receivers_with_new_node_ids: BTreeSet<_> = {
                 let mut new_receivers = receivers.get().clone();
-                let num_new_nodes = rng.gen_range(1..10);
+                let num_new_nodes = rng.random_range(1..10);
                 let new_random_node_ids = n_random_node_ids(num_new_nodes, rng);
                 for new_node_id in new_random_node_ids.iter() {
                     env.add_node(Node::new(*new_node_id, Arc::clone(&env.registry), rng));
@@ -3817,7 +3817,7 @@ mod reshare_key_transcript {
     #[test]
     fn should_reshare_key_transcript_when_receivers_removed() {
         let rng = &mut ReproducibleRng::new();
-        let subnet_size = rng.gen_range(2..10); //at least 2 receivers to be able to remove 1
+        let subnet_size = rng.random_range(2..10); //at least 2 receivers to be able to remove 1
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) =
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
@@ -3828,7 +3828,7 @@ mod reshare_key_transcript {
                 get_master_public_key_from_transcript(&key_transcript).expect("valid public key");
 
             let receivers_without_removed_receiver = {
-                let num_receivers_to_remove = rng.gen_range(1..=receivers.get().len() - 1);
+                let num_receivers_to_remove = rng.random_range(1..=receivers.get().len() - 1);
                 let removed_receivers = env
                     .nodes
                     .filter_by_receivers(&receivers)
@@ -3889,7 +3889,7 @@ fn environment_and_transcript_for_complaint<R: RngCore + CryptoRng>(
     // Need at least 1 complainer and 1 non-complaining node
     const MIN_NUM_RECEIVERS: usize = 2;
 
-    let subnet_size = rng.gen_range(MIN_NUM_NODES..10);
+    let subnet_size = rng.random_range(MIN_NUM_NODES..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
     let (dealers, receivers) = env.choose_dealers_and_receivers(
         &IDkgParticipants::RandomWithAtLeast {

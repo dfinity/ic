@@ -12,7 +12,7 @@ use ic_boundary::test_utils::setup_test_router;
 fn gen_request(cli: &reqwest::Client, addr: &SocketAddr, bytes_size: usize) -> reqwest::Request {
     let mut rng = thread_rng();
 
-    let canister_id: u64 = rng.gen_range(0..100_000_000);
+    let canister_id: u64 = rng.random_range(0..100_000_000);
     let canister_id = Principal::from_slice(canister_id.to_be_bytes().as_slice());
 
     let content = HttpQueryContent::Query {

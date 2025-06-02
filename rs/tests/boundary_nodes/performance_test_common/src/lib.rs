@@ -22,9 +22,9 @@ use ic_system_test_driver::{
     },
     util::{block_on, create_agent_mapping, spawn_round_robin_workload_engine},
 };
+use rand::rng;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
-use rand::thread_rng;
 use rand::Rng;
 use rand::RngCore;
 use rand::SeedableRng;
@@ -363,7 +363,7 @@ pub fn mainnet_query_calls_ic_gateway_test(env: TestEnv, bn_ipv6: Ipv6Addr) {
 
             async move {
                 let mut rng = StdRng::from_entropy();
-                let prob = rng.gen::<f64>() * 100.0;
+                let prob = rng.random::<f64>() * 100.0;
 
                 let mut payload = [0u8; 8];
                 rng.fill_bytes(&mut payload);

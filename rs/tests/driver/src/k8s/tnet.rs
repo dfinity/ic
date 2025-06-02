@@ -796,7 +796,7 @@ spec:
                     })
                 })
                 .collect::<Vec<_>>()
-                .choose_multiple(&mut rand::thread_rng(), 1)
+                .choose_multiple(&mut rand::rng(), 1)
                 .next()
                 .expect("should be able to choose one playnet");
             config_map_api
