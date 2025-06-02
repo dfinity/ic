@@ -85,7 +85,7 @@ fn try_get_metrics(
     payload: GetMetricsRequest,
 ) -> Result<get_metrics_response::GetMetricsResponse, String> {
     let payload = Encode!(&payload).unwrap();
-    let response = state_machine.execute_ingress(governance_canister_id, "get_metrics", payload);
+    let response = state_machine.query(governance_canister_id, "get_metrics", payload);
 
     match response {
         Ok(response) => {
