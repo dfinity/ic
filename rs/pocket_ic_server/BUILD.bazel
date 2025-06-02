@@ -300,3 +300,41 @@ rust_test(
         "@crate_index//:tokio",
     ],
 )
+
+rust_binary(
+    name = "server",
+    srcs = ["axum-server.rs"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@crate_index//:axum",
+        "@crate_index//:tokio",
+        "@crate_index//:tracing-subscriber",
+    ],
+)
+
+rust_binary(
+    name = "client",
+    srcs = ["client.rs"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@crate_index//:bytes",
+        "@crate_index//:http-1.3.1",
+        "@crate_index//:http-body-util",
+        "@crate_index//:hyper-1.6.0",
+        "@crate_index//:hyper-util",
+        "@crate_index//:tokio",
+    ],
+)
+
+sh_test(
+    name = "server-client-test",
+    srcs = ["server-client-test.sh"],
+    data = [
+        ":client",
+        ":server",
+    ],
+    env = {
+        "SERVER_BIN": "$(rootpath :server)",
+        "CLIENT_BIN": "$(rootpath :client)",
+    },
+)
