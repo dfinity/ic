@@ -39,7 +39,7 @@ pub struct NodeOperatorRecord {
     #[prost(string, optional, tag = "6")]
     pub ipv6: ::core::option::Option<::prost::alloc::string::String>,
     /// A map from node type to the maximum number of nodes for which the associated Node
-    /// Provider should be rewarded for each type of node.
+    /// Provider could be rewarded for each type of node.
     #[prost(btree_map = "string, uint32", tag = "7")]
     pub max_rewardable_nodes:
         ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, u32>,
