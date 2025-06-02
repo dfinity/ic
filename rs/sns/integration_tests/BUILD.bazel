@@ -20,6 +20,7 @@ BASE_DEPENDENCIES = [
     "//rs/nns/cmc",
     "//rs/nns/constants",
     "//rs/nns/governance/api",
+    "//rs/sns/governance/api",
     "//rs/nns/sns-wasm",
     "//rs/registry/subnet_type:subnet_type",
     "//rs/rust_canisters/canister_test",
