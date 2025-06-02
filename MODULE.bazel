@@ -136,6 +136,16 @@ oci.pull(
 )
 use_repo(oci, "bitcoind", "bitcoind_linux_amd64")
 
+# IC HTTP Gateway container used in tests
+oci.pull(
+    name = "ic_gatewayd",
+    image = "ghcr.io/dfinity/ic-gateway@sha256:0a25e9da712202966447919dfce145f9af5df62e282f2dfe8a7ea226a44b077a",
+    platforms = [
+        "linux/amd64",
+    ],
+)
+use_repo(oci, "ic_gatewayd", "ic_gatewayd_linux_amd64")
+
 # foundry container used in test
 oci.pull(
     name = "foundry",

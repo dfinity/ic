@@ -48,7 +48,7 @@
 //!         Err(_) => (RETRY_DELAY, self),
 //!    }
 //!   fn initial_delay(&self) -> Duration { Duration::from_secs(0) }
-//!   
+//!
 //!   const NAME: &'static str = "some_recurring_sync_task";
 //! }
 //!

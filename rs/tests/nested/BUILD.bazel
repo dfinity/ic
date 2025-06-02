@@ -51,9 +51,9 @@ genrule(
 system_test_nns(
     name = "registration",
     env = MAINNET_ENV,
-    extra_head_nns_tags = [],
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,  # flakiness rate of over 2% over the month from 2025-02-11 till 2025-03-11.
-    tags = ["system_test_hourly"],
+    tags = ["long_test"],  # since it takes longer than 5 minutes.
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
     use_empty_image = True,
@@ -96,7 +96,7 @@ system_test_nns(
     },
     extra_head_nns_tags = [],
     flaky = True,  # flakiness rate of 5% over the month from 2025-02-11 till 2025-03-11.
-    tags = ["system_test_hourly"],
+    tags = ["manual"],  # todo: remove after next release
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_driver_target = ":upgrade_test_bin",
     test_timeout = "eternal",

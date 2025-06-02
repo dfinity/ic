@@ -441,6 +441,7 @@ fn start_sync_thread(
         info!("Starting blockchain sync thread");
         let mut interval = interval(BLOCK_SYNC_INTERVAL);
         let mut synced_at = std::time::Instant::now();
+        let mut first_sync_successful = false;
         let rosetta_metrics =
             RosettaMetrics::new("ICP".to_string(), "ryjl3-tyaaa-aaaaa-aaaba-cai".to_string());
         while !stopped.load(Relaxed) {
@@ -459,8 +460,13 @@ fn start_sync_thread(
                 let t = Instant::now().duration_since(synced_at).as_secs_f64();
                 rosetta_metrics.set_out_of_sync_time(t);
                 synced_at = std::time::Instant::now();
+                first_sync_successful = true;
             }
-            heartbeat_fn();
+
+            // Only call heartbeat after the first successful sync
+            if first_sync_successful {
+                heartbeat_fn();
+            }
 
             if exit_on_sync {
                 info!("Blockchain synced, exiting");
