@@ -52,21 +52,13 @@ pub mod arb {
     use crate::checked_amount::CheckedAmountOf;
     use crate::eth_logs::LedgerSubaccount;
     use crate::eth_rpc::Hash;
-    use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
     use crate::numeric::BlockRangeInclusive;
     use candid::Principal;
-    use evm_rpc_client::{
-        FeeHistory, HttpOutcallError as EvmHttpOutcallError,
-        JsonRpcError as EvmJsonRpcError, Nat256, ProviderError as EvmProviderError,
-        RpcError as EvmRpcError, ValidationError as EvmValidationError,
-    };
-    use ic_cdk::api::call::RejectionCode;
     use ic_ethereum_types::Address;
     use proptest::{
         array::{uniform20, uniform32},
         collection::vec,
-        prelude::{any, Just, Strategy},
-        prop_oneof,
+        prelude::{any, Strategy},
     };
 
     pub fn arb_checked_amount_of<Unit>() -> impl Strategy<Value = CheckedAmountOf<Unit>> {
@@ -78,12 +70,6 @@ pub mod arb {
     pub fn arb_block_range_inclusive() -> impl Strategy<Value = BlockRangeInclusive> {
         (arb_checked_amount_of(), arb_checked_amount_of())
             .prop_map(|(start, end)| BlockRangeInclusive::new(start, end))
-    }
-
-    pub fn arb_nat_256() -> impl Strategy<Value = Nat256> {
-        use proptest::arbitrary::any;
-        use proptest::array::uniform32;
-        uniform32(any::<u8>()).prop_map(Nat256::from_be_bytes)
     }
 
     pub fn arb_principal() -> impl Strategy<Value = Principal> {
@@ -100,114 +86,5 @@ pub mod arb {
 
     pub fn arb_hash() -> impl Strategy<Value = Hash> {
         uniform32(any::<u8>()).prop_map(Hash)
-    }
-
-    pub fn arb_fee_history() -> impl Strategy<Value = FeeHistory> {
-        (
-            arb_nat_256(),
-            vec(arb_nat_256(), 1..=10),
-            arb_gas_used_ratio(),
-            vec(vec(arb_nat_256(), 1..=10), 1..=10),
-        )
-            .prop_map(|(oldest_block, base_fee_per_gas, gas_used_ratio, reward)| {
-                FeeHistory {
-                    oldest_block,
-                    base_fee_per_gas,
-                    gas_used_ratio,
-                    reward,
-                }
-            })
-    }
-
-    pub fn arb_gas_used_ratio() -> impl Strategy<Value = Vec<f64>> {
-        vec(any::<f64>(), 1..=10)
-    }
-
-    fn arb_transaction_status() -> impl Strategy<Value = TransactionStatus> {
-        prop_oneof![
-            Just(TransactionStatus::Success),
-            Just(TransactionStatus::Failure)
-        ]
-    }
-
-    pub fn arb_transaction_receipt() -> impl Strategy<Value = TransactionReceipt> {
-        (
-            arb_hash(),
-            arb_checked_amount_of(),
-            arb_checked_amount_of(),
-            arb_checked_amount_of(),
-            arb_transaction_status(),
-            arb_hash(),
-        )
-            .prop_map(
-                |(
-                    block_hash,
-                    block_number,
-                    effective_gas_price,
-                    gas_used,
-                    status,
-                    transaction_hash,
-                )| {
-                    TransactionReceipt {
-                        block_hash,
-                        block_number,
-                        effective_gas_price,
-                        gas_used,
-                        status,
-                        transaction_hash,
-                    }
-                },
-            )
-    }
-
-    pub fn arb_evm_rpc_error() -> impl Strategy<Value = EvmRpcError> {
-        prop_oneof![
-            arb_evm_provider_error().prop_map(EvmRpcError::ProviderError),
-            arb_evm_http_outcall_error().prop_map(EvmRpcError::HttpOutcallError),
-            arb_evm_json_rpc_error().prop_map(EvmRpcError::JsonRpcError),
-            arb_evm_validation_error().prop_map(EvmRpcError::ValidationError),
-        ]
-    }
-
-    fn arb_evm_provider_error() -> impl Strategy<Value = EvmProviderError> {
-        prop_oneof![
-            Just(EvmProviderError::NoPermission),
-            (any::<u128>(), any::<u128>()).prop_map(|(expected, received)| {
-                EvmProviderError::TooFewCycles { expected, received }
-            }),
-            Just(EvmProviderError::ProviderNotFound),
-            Just(EvmProviderError::MissingRequiredProvider),
-        ]
-    }
-
-    fn arb_evm_http_outcall_error() -> impl Strategy<Value = EvmHttpOutcallError> {
-        prop_oneof![
-            (arb_rejection_code(), ".*")
-                .prop_map(|(code, message)| EvmHttpOutcallError::IcError { code, message }),
-            (any::<u16>(), ".*", proptest::option::of(".*")).prop_map(
-                |(status, body, parsing_error)| {
-                    EvmHttpOutcallError::InvalidHttpJsonRpcResponse {
-                        status,
-                        body,
-                        parsing_error,
-                    }
-                }
-            )
-        ]
-    }
-
-    fn arb_evm_json_rpc_error() -> impl Strategy<Value = EvmJsonRpcError> {
-        (any::<i64>(), ".*").prop_map(|(code, message)| EvmJsonRpcError { code, message })
-    }
-
-    fn arb_rejection_code() -> impl Strategy<Value = RejectionCode> {
-        (0..=6).prop_map(RejectionCode::from)
-    }
-
-    fn arb_evm_validation_error() -> impl Strategy<Value = EvmValidationError> {
-        prop_oneof![
-            ".*".prop_map(EvmValidationError::Custom),
-            ".*".prop_map(EvmValidationError::InvalidHex),
-        ]
     }
 }
