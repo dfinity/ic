@@ -112,17 +112,6 @@ def image_deps(mode, malicious = False):
     if "dev" in mode:
         deps["rootfs"].pop("//rs/ic_os/release:config", None)
         deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
-
-    # Add extra files depending on image variant
-    extra_rootfs_deps = {
-        "dev": {
-            "//ic-os/guestos/context:allow_console_root": "/etc/allow_console_root:0644",
-        },
-        "local-base-dev": {
-            "//ic-os/guestos/context:allow_console_root": "/etc/allow_console_root:0644",
-        },
-    }
-
-    deps["rootfs"].update(extra_rootfs_deps.get(mode, {}))
+        deps["rootfs"].update({"//ic-os/guestos/context:allow_console_root": "/etc/allow_console_root:0644"})
 
     return deps
