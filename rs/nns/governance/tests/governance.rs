@@ -3411,13 +3411,34 @@ async fn test_disallow_large_manage_neuron_proposals() {
             },
         )
         .await;
-
     assert_matches!(
         result,
         Err(GovernanceError { error_type, .. })
         if error_type == ErrorType::PreconditionFailed as i32
     );
 
+    // Sanity check: disburse maturity should be allowed.
+    gov.make_proposal(
+        &NeuronId { id: 2 },
+        // Must match neuron 2's serialized_id.
+        &principal(2),
+        &Proposal {
+            title: Some("A Manage Neuron Proposal".to_string()),
+            action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 1 })),
+                id: None,
+                command: Some(Command::DisburseMaturity(DisburseMaturity {
+                    percentage_to_disburse: 100,
+                    to_account: None,
+                })),
+            }))),
+            ..Default::default()
+        },
+    )
+    .now_or_never()
+    .unwrap()
+    .unwrap();
+    // Disburse maturity with invalid to_account should not be allowed.
     let result = gov
         .make_proposal(
             &NeuronId { id: 2 },
@@ -3448,9 +3469,10 @@ async fn test_disallow_large_manage_neuron_proposals() {
     assert_matches!(
         result,
         Err(GovernanceError { error_type, .. })
-        if error_type == ErrorType::PreconditionFailed as i32
+        if error_type == ErrorType::InvalidCommand as i32
     );
 
+    // Disburse with invalid to_account should not be allowed.
     let result = gov
         .make_proposal(
             &NeuronId { id: 2 },
@@ -3481,6 +3503,28 @@ async fn test_disallow_large_manage_neuron_proposals() {
         if error_type == ErrorType::InvalidCommand as i32
     );
 
+    // Sanity check: follow should be allowed.
+    gov.make_proposal(
+        &NeuronId { id: 2 },
+        // Must match neuron 2's serialized_id.
+        &principal(2),
+        &Proposal {
+            title: Some("A Manage Neuron Proposal".to_string()),
+            action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 1 })),
+                id: None,
+                command: Some(Command::Follow(Follow {
+                    topic: Topic::Governance as i32,
+                    followees: vec![NeuronId { id: 1 }],
+                })),
+            }))),
+            ..Default::default()
+        },
+    )
+    .now_or_never()
+    .unwrap()
+    .unwrap();
+    // Follow with too many followees should not be allowed.
     let result = gov
         .make_proposal(
             &NeuronId { id: 2 },
@@ -8741,7 +8785,28 @@ fn test_merge_maturity_returns_expected_error() {
     let neuron = nns.get_neuron(&id);
     let controller = *neuron.controller.as_ref().unwrap();
 
-    let result = nns.merge_maturity(&id, &controller, 10);
+    // This is inlined because the method is removed, so we don't need a general purpose test method
+    let result1 = nns
+        .governance
+        .manage_neuron(
+            &controller,
+            &ManageNeuron {
+                id: None,
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(id)),
+                command: Some(Command::MergeMaturity(MergeMaturity {
+                    percentage_to_merge: 10,
+                })),
+            },
+        )
+        .now_or_never()
+        .unwrap()
+        .command
+        .unwrap();
+    let result = match result1 {
+        manage_neuron_response::Command::Error(e) => Err(GovernanceError::from(e)),
+        manage_neuron_response::Command::MergeMaturity(response) => Ok(response),
+        _ => panic!("Merge maturity command returned unexpected response"),
+    };
     assert!(result.is_err());
 
     let error = result.unwrap_err();

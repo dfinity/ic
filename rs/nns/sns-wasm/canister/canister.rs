@@ -121,8 +121,6 @@ impl CanisterApi for CanisterApiImpl {
             canister_id: target_canister.get(),
             wasm_module: wasm,
             arg: init_payload,
-            compute_allocation: None,
-            memory_allocation: None,
             sender_canister_version: Some(ic_cdk::api::canister_version()),
         };
         let install_res: CallResult<()> =

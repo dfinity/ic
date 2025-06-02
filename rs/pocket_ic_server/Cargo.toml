@@ -4,7 +4,7 @@ version = "9.0.2"
 edition = "2021"
 
 [dependencies]
-aide = { version = "^0.14.1", features = ["axum", "axum-json"] }
+aide = { workspace = true }
 askama = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
@@ -38,7 +38,6 @@ ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der"
 ic-ed25519 = { path = "../../packages/ic-ed25519" }
 ic-error-types = { path = "../../packages/ic-error-types" }
 ic-gateway = { workspace = true }
-ic-http-gateway = { workspace = true }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }
 ic-https-outcalls-adapter = { path = "../https_outcalls/adapter" }
 ic-https-outcalls-adapter-client = { path = "../https_outcalls/client" }
@@ -84,6 +83,7 @@ tower-http = { workspace = true }
 tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
 wat = { workspace = true }
 
 [dev-dependencies]

@@ -6,8 +6,10 @@ use environment::Environment;
 use exchange_rate_canister::{
     RealExchangeRateCanisterClient, UpdateExchangeRateError, UpdateExchangeRateState,
 };
-use ic_cdk::api::call::{arg_data_raw, reply_raw, CallResult, ManualReply};
-use ic_cdk::{heartbeat, init, post_upgrade, pre_upgrade, query, spawn, update};
+use ic_cdk::{
+    api::call::{arg_data_raw, reply_raw, CallResult, ManualReply},
+    heartbeat, init, post_upgrade, pre_upgrade, println, query, spawn, update,
+};
 use ic_crypto_tree_hash::{
     flatmap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
     WitnessGeneratorImpl,
@@ -2254,11 +2256,11 @@ async fn deposit_cycles(
         ensure_balance(cycles)?;
     }
 
-    let res: CallResult<()> = ic_cdk::api::call::call_with_payment(
+    let res: CallResult<()> = ic_cdk::api::call::call_with_payment128(
         IC_00.get().0,
         &Method::DepositCycles.to_string(),
         (CanisterIdRecord::from(canister_id),),
-        u128::from(cycles) as u64,
+        u128::from(cycles),
     )
     .await;
 
@@ -2289,11 +2291,11 @@ async fn do_mint_cycles(
         memo: deposit_memo,
     };
 
-    let result: CallResult<(CyclesLedgerDepositResult,)> = ic_cdk::api::call::call_with_payment(
+    let result: CallResult<(CyclesLedgerDepositResult,)> = ic_cdk::api::call::call_with_payment128(
         cycles_ledger_canister_id.get().0,
         "deposit",
         (arg,),
-        u128::from(cycles) as u64,
+        u128::from(cycles),
     )
     .await;
 
@@ -2396,14 +2398,14 @@ async fn do_create_canister(
         });
 
     for subnet_id in subnets {
-        let result: CallResult<(CanisterIdRecord,)> = ic_cdk::api::call::call_with_payment(
+        let result: CallResult<(CanisterIdRecord,)> = ic_cdk::api::call::call_with_payment128(
             subnet_id.get().0,
             &Method::CreateCanister.to_string(),
             (CreateCanisterArgs {
                 settings: Some(Ic00CanisterSettingsArgs::from(canister_settings.clone())),
                 sender_canister_version: Some(ic_cdk::api::canister_version()),
             },),
-            cycles.get().try_into().unwrap(),
+            u128::from(cycles),
         )
         .await;
 
@@ -2434,7 +2436,7 @@ async fn do_create_canister(
 fn ensure_balance(cycles: Cycles) -> Result<(), String> {
     let now = now_system_time();
 
-    let current_balance = Cycles::from(ic_cdk::api::canister_balance());
+    let current_balance = Cycles::from(ic_cdk::api::canister_balance128());
     let cycles_to_mint = cycles - current_balance;
 
     with_state_mut(|state| {
@@ -2458,13 +2460,9 @@ fn ensure_balance(cycles: Cycles) -> Result<(), String> {
         Ok(())
     })?;
 
-    ic0_mint_cycles(
-        cycles_to_mint
-            .get()
-            .try_into()
-            .map_err(|_| "Cycles u64 overflow".to_owned())?,
-    );
-    assert!(u128::from(ic_cdk::api::canister_balance()) >= cycles.get());
+    // unused because of check above
+    let _minted_cycles = ic0_mint_cycles128(cycles_to_mint);
+    assert!(ic_cdk::api::canister_balance128() >= cycles.get());
     Ok(())
 }
 
