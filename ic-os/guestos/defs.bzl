@@ -89,6 +89,10 @@ def image_deps(mode, malicious = False):
             "build_args": dev_build_args,
             "file_build_arg": dev_file_build_arg,
         },
+        "dev-recovery": {
+            "build_args": dev_build_args,
+            "file_build_arg": dev_file_build_arg,
+        },
         "local-base-dev": {
             "build_args": dev_build_args,
             "file_build_arg": dev_file_build_arg,
@@ -105,6 +109,10 @@ def image_deps(mode, malicious = False):
             "build_args": prod_build_args,
             "file_build_arg": prod_file_build_arg,
         },
+        "prod-recovery": {
+            "build_args": prod_build_args,
+            "file_build_arg": prod_file_build_arg,
+        },
     }
 
     deps.update(image_variants[mode])
@@ -112,9 +120,20 @@ def image_deps(mode, malicious = False):
     if "dev" in mode:
         deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
 
+    if "recovery" in mode:
+        recovery_component_files = dict(component_files)
+        recovery_component_files.update({
+            Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh"): "/opt/ic/bin/guestos-recovery-engine.sh",
+            Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service"): "/etc/systemd/system/guestos-recovery-engine.service",
+        })
+        deps["component_files"] = recovery_component_files
+
     # Add extra files depending on image variant
     extra_rootfs_deps = {
         "dev": {
+            "//ic-os/guestos/context:allow_console_root": "/etc/allow_console_root:0644",
+        },
+        "dev-recovery": {
             "//ic-os/guestos/context:allow_console_root": "/etc/allow_console_root:0644",
         },
         "local-base-dev": {
