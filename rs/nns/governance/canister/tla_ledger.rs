@@ -109,7 +109,6 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for LoggingIcpLedgerCanister<Rt> {
         self.0.canister_id()
     }
 
-    // Shah-TODO: if this function should be implemented?
     async fn icrc3_get_blocks(
         &self,
         _args: Vec<GetBlocksRequest>,
