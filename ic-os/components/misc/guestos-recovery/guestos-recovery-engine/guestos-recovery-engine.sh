@@ -2,6 +2,9 @@
 
 set -e
 
+readonly EXPECTED_REGISTRY_HASH=""
+readonly EXPECTED_CUP_HASH=""
+
 # Completes the recovery process by downloading and applying the recovery artifacts
 
 echo "Starting GuestOS recovery engine..."
@@ -9,6 +12,25 @@ echo "Starting GuestOS recovery engine..."
 trap 'popd > /dev/null 2>&1 || true' EXIT
 mkdir -p /tmp/subnet_recovery
 pushd /tmp/subnet_recovery >/dev/null
+
+verify_file_hash() {
+    local file="$1"
+    local expected_hash="$2"
+    local actual_hash
+
+    echo "Verifying hash for $file..."
+    actual_hash=$(sha256sum "$file" | cut -d' ' -f1)
+
+    if [ "$actual_hash" = "$expected_hash" ]; then
+        echo "✓ Hash verification successful for $file"
+        return 0
+    else
+        echo "✗ Hash verification failed for $file"
+        echo "  Expected: $expected_hash"
+        echo "  Actual:   $actual_hash"
+        return 1
+    fi
+}
 
 download_artifacts_from_url() {
     local base_url="$1"
@@ -47,6 +69,19 @@ if [ "$download_successful" = false ]; then
     echo "ERROR: Failed to download recovery artifacts from all available URLs"
     exit 1
 fi
+
+echo "Verifying recovery artifacts..."
+if ! verify_file_hash "ic_registry_local_store.tar.zst" "$EXPECTED_REGISTRY_HASH"; then
+    echo "ERROR: Registry artifact hash verification failed"
+    exit 1
+fi
+
+if ! verify_file_hash "cup.proto" "$EXPECTED_CUP_HASH"; then
+    echo "ERROR: CUP artifact hash verification failed"
+    exit 1
+fi
+
+echo "All recovery artifacts verified successfully"
 
 echo "Preparing recovery artifacts..."
 OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/ic_registry_local_store)
