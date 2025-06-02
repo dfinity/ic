@@ -114,6 +114,7 @@ use ic_sns_wasm::pb::v1::{
 };
 use ic_stable_structures::{storable::Bound, Storable};
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens, TOKEN_SUBDIVIDABLE_BY};
+use icrc_ledger_types::icrc1::account::Account as Icrc1Account;
 use itertools::Itertools;
 use maplit::hashmap;
 use registry_canister::{
@@ -4779,11 +4780,15 @@ impl Governance {
             // DisburseMaturity contains a subaccount which can be unbounded without checking. This
             // command is not implemented yet, and before we implement it we should also validate
             // its subaccount.
-            Command::DisburseMaturity(_) => {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::PreconditionFailed,
-                    "Disburse maturity is not supported yet",
-                ))
+            Command::DisburseMaturity(disburse_maturity) => {
+                if let Some(to_account) = &disburse_maturity.to_account {
+                    if Icrc1Account::try_from(to_account.clone()).is_err() {
+                        return Err(GovernanceError::new_with_message(
+                            ErrorType::InvalidCommand,
+                            "The to_account field is invalid",
+                        ));
+                    }
+                }
             }
             // Similar to DisburseMaturity, Disburse has a blob as the ICP account address. A
             // successful conversion should indicate that the blob does not contain a large amount

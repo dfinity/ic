@@ -76,3 +76,11 @@ path = "src_testing.rs"
 [[bin]]
 name = "from_config"
 path = "from_config.rs"
+
+[[bin]]
+name = "single_app_large_node_with_nns"
+path = "single_app_large_node_with_nns.rs"
+
+[[bin]]
+name = "small_with_query_stats"
+path = "small_with_query_stats.rs"

@@ -78,7 +78,8 @@ const MAX_SLICE_SIZE_BYTES: u64 = 2_000_000;
 /// - newly reserved cycles (for canister memory usage) that can be safely moved from the canister's main balance
 ///   to its reserved balance.
 struct ValidatedMemoryUsage {
-    memory_increase: NumBytes,
+    allocated_bytes: NumBytes,
+    deallocated_bytes: NumBytes,
     storage_reservation_cycles: Cycles,
 }
 
@@ -1302,7 +1303,7 @@ impl CanisterManager {
         Ok(StoredChunksReply(keys))
     }
 
-    // Runs the following checks on memory usage and return an error
+    // Runs the following checks on memory usage and returns an error
     // if any fails:
     // 1. Check new usage will not freeze canister
     // 2. Check subnet has available memory
@@ -1316,7 +1317,6 @@ impl CanisterManager {
         old_memory_usage: NumBytes,
         resource_saturation: &ResourceSaturation,
     ) -> Result<ValidatedMemoryUsage, CanisterManagerError> {
-        let memory_increase = new_memory_usage.saturating_sub(&old_memory_usage);
         match canister.memory_allocation() {
             MemoryAllocation::Reserved(bytes) => {
                 if bytes < new_memory_usage {
@@ -1326,13 +1326,17 @@ impl CanisterManager {
                     });
                 }
                 Ok(ValidatedMemoryUsage {
-                    memory_increase: NumBytes::from(0),
+                    allocated_bytes: NumBytes::from(0),
+                    deallocated_bytes: NumBytes::from(0),
                     storage_reservation_cycles: Cycles::zero(),
                 })
             }
             MemoryAllocation::BestEffort => {
+                let allocated_bytes = new_memory_usage.saturating_sub(&old_memory_usage);
+                let deallocated_bytes = old_memory_usage.saturating_sub(&new_memory_usage);
+
                 let reservation_cycles = self.cycles_account_manager.storage_reservation_cycles(
-                    memory_increase,
+                    allocated_bytes,
                     resource_saturation,
                     subnet_size,
                 );
@@ -1351,7 +1355,7 @@ impl CanisterManager {
 
                 if canister.system_state.balance() < threshold + reservation_cycles {
                     return Err(CanisterManagerError::InsufficientCyclesInMemoryGrow {
-                        bytes: memory_increase,
+                        bytes: allocated_bytes,
                         available: canister.system_state.balance(),
                         required: threshold + reservation_cycles,
                     });
@@ -1361,10 +1365,10 @@ impl CanisterManager {
                 // requested change by the canister.
                 round_limits
                     .subnet_available_memory
-                    .check_available_memory(memory_increase, NumBytes::from(0), NumBytes::from(0))
+                    .check_available_memory(allocated_bytes, NumBytes::from(0), NumBytes::from(0))
                     .map_err(
                         |_| CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-                            requested: memory_increase,
+                            requested: allocated_bytes,
                             available: NumBytes::from(
                                 round_limits
                                     .subnet_available_memory
@@ -1383,13 +1387,13 @@ impl CanisterManager {
                             requested,
                             available,
                         } => CanisterManagerError::InsufficientCyclesInMemoryGrow {
-                            bytes: memory_increase,
+                            bytes: allocated_bytes,
                             available,
                             required: requested,
                         },
                         ReservationError::ReservedLimitExceed { requested, limit } => {
                             CanisterManagerError::ReservedCyclesLimitExceededInMemoryGrow {
-                                bytes: memory_increase,
+                                bytes: allocated_bytes,
                                 requested,
                                 limit,
                             }
@@ -1397,7 +1401,8 @@ impl CanisterManager {
                     })?;
 
                 Ok(ValidatedMemoryUsage {
-                    memory_increase,
+                    allocated_bytes,
+                    deallocated_bytes,
                     storage_reservation_cycles: reservation_cycles,
                 })
             }
@@ -1408,7 +1413,7 @@ impl CanisterManager {
     //
     // Performs the following updates:
     // 1. Reserve cycles on canister
-    // 2. Actually deduct memory from subnet
+    // 2. Update subnet available memory
     fn memory_usage_updates(
         &self,
         canister: &mut CanisterState,
@@ -1423,11 +1428,18 @@ impl CanisterManager {
             .reserve_cycles(validated_memory_usage.storage_reservation_cycles)
             .unwrap();
 
-        // Actually deduct memory from the subnet.
+        // Return deallocated bytes back to subnet available memory.
+        round_limits.subnet_available_memory.increment(
+            validated_memory_usage.deallocated_bytes,
+            NumBytes::from(0),
+            NumBytes::from(0),
+        );
+
+        // Deduct allocated memory from the subnet available memory.
         // It's safe to unwrap here because we already checked the available memory before
         // in `self.memory_usage_checks`.
         round_limits.subnet_available_memory
-                            .try_decrement(validated_memory_usage.memory_increase, NumBytes::from(0), NumBytes::from(0))
+                            .try_decrement(validated_memory_usage.allocated_bytes, NumBytes::from(0), NumBytes::from(0))
                             .expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
     }
 
