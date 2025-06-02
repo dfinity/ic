@@ -69,7 +69,7 @@ pub use canister_state::{
         CanisterMetrics, CanisterStatus, ExecutionTask, SystemState,
     },
     CanisterQueues, CanisterState, EmbedderCache, ExecutionState, ExportedFunctions, NumWasmPages,
-    SchedulerState,
+    SchedulerState, CallOrTaskCanisterState,
 };
 pub use metadata_state::{
     IngressHistoryState, NetworkTopology, Stream, SubnetTopology, SystemMetadata,

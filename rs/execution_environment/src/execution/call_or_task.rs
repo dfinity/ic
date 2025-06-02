@@ -24,7 +24,7 @@ use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types_private::IC_00;
 use ic_replicated_state::{
     canister_state::execution_state::WasmExecutionMode, num_bytes_try_from, CallContextAction,
-    CallOrigin, CanisterState,
+    CallOrigin, CallOrTaskCanisterState, CanisterState,
 };
 use ic_types::messages::{
     CallContextId, CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask,
@@ -337,7 +337,7 @@ struct PausedCallOrTaskHelper {
 /// A helper that implements and keeps track of update call steps.
 /// It is used to safely pause and resume an update call execution.
 struct CallOrTaskHelper {
-    canister: CanisterState,
+    canister: CallOrTaskCanisterState,
     call_context_id: CallContextId,
     initial_cycles_balance: Cycles,
     deallocation_sender: DeallocationSender,
@@ -388,16 +388,6 @@ impl CallOrTaskHelper {
             }
         }
 
-        let call_context_id = canister
-            .system_state
-            .new_call_context(
-                original.call_origin.clone(),
-                original.call_or_task.cycles(),
-                original.time,
-                original.request_metadata.clone(),
-            )
-            .unwrap();
-
         let initial_cycles_balance = canister.system_state.balance();
 
         match original.call_or_task {
@@ -410,6 +400,15 @@ impl CallOrTaskHelper {
                 canister.system_state.global_timer = CanisterTimer::Inactive;
             }
         }
+
+        let (canister, call_context_id) = CallOrTaskCanisterState::with_new_call_context(
+            canister,
+            original.call_origin.clone(),
+            original.call_or_task.cycles(),
+            original.time,
+            original.request_metadata.clone(),
+        )
+        .unwrap();
 
         Ok(Self {
             canister,

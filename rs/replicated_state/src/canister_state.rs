@@ -112,35 +112,26 @@ impl SchedulerState {
     }
 }
 
-pub struct ExecutingCallOrTaskState {
-    canister_state: CanisterState,
-    call_context_id: CallContextId,
-}
+pub struct CallOrTaskCanisterState(CanisterState);
 
-impl ExecutingCallOrTaskState {
-    pub fn from_call_context(
-        canister_state: CanisterState,
-        call_context_id: CallContextId,
-    ) -> Self {
-        Self { canister_state, call_context_id }
-    }
-
+impl CallOrTaskCanisterState {
     pub fn with_new_call_context(
         mut canister_state: CanisterState,
         call_origin: CallOrigin,
         cycles: Cycles,
         time: Time,
         metadata: RequestMetadata,
-    ) -> Result<Self, StateError> {
+    ) -> Result<(Self, CallContextId), StateError> {
         let call_context_id =
             canister_state
                 .system_state
                 .new_call_context(call_origin, cycles, time, metadata)?;
-        Ok(Self::from_call_context(canister_state, call_context_id))
+        Ok((Self(canister_state), call_context_id))
     }
 }
 
-pub struct ExecutingResponseState {
+/*
+pub struct ResponseCanisterState {
     canister_state: CanisterState,
     callback: Callback,
     callback_id: CallbackId,
@@ -148,7 +139,7 @@ pub struct ExecutingResponseState {
     call_context_id: CallContextId,
 }
 
-impl ExecutingResponseState {
+impl ResponseCanisterState {
     pub fn from_canister_state(
         canister_state: CanisterState,
         callback_id: CallbackId,
@@ -156,13 +147,13 @@ impl ExecutingResponseState {
         fn from_canister_state(
             mut canister_state: CanisterState,
             callback_id: CallbackId,
-        ) -> Option<ExecutingResponseState> {
+        ) -> Option<ResponseCanisterState> {
             let call_context_manager = canister_state.system_state.call_context_manager()?;
             let callback = call_context_manager.callback(callback_id)?.clone();
             let call_context_id = callback.call_context_id;
             let call_context = call_context_manager.call_context(call_context_id)?.clone();
 
-            Some(ExecutingResponseState {
+            Some(ResponseCanisterState {
                 canister_state,
                 callback,
                 callback_id,
@@ -175,6 +166,7 @@ impl ExecutingResponseState {
             .ok_or(StateError::CanisterStopped(canister_id))
     }
 }
+*/
 
 /// The full state of a single canister.
 #[derive(Clone, PartialEq, Debug, ValidateEq)]
