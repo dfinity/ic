@@ -20,7 +20,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::{
 use ic_types::crypto::AlgorithmId;
 use ic_types::{Height, NodeId, NodeIndex, NumberOfNodes, SubnetId};
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
-use rand::{distributions::Alphanumeric, seq::IteratorRandom, Rng};
+use rand::{distr::Alphanumeric, seq::IteratorRandom, Rng};
 use rand_chacha::ChaCha20Rng;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -30,10 +30,10 @@ use strum::{EnumCount, IntoEnumIterator};
 // Alternatively we could implement Distribution for all of these types.
 // Deriving Rand may be enough for many.  See: https://stackoverflow.com/questions/48490049/how-do-i-choose-a-random-value-from-an-enum
 pub fn random_height(rng: &mut ChaCha20Rng) -> Height {
-    Height::from(rng.gen::<u64>())
+    Height::from(rng.random::<u64>())
 }
 pub fn random_subnet_id(rng: &mut ChaCha20Rng) -> SubnetId {
-    subnet_test_id(rng.gen::<u64>())
+    subnet_test_id(rng.random::<u64>())
 }
 pub fn random_ni_dkg_master_public_key_id(rng: &mut ChaCha20Rng) -> NiDkgMasterPublicKeyId {
     assert_eq!(NiDkgMasterPublicKeyId::COUNT, 1);
@@ -86,7 +86,7 @@ impl MockNode {
         rng: &mut ChaCha20Rng,
         csp_vault_factory: impl Fn() -> Arc<dyn CspVault>,
     ) -> Self {
-        let node_id = node_test_id(rng.gen::<u64>());
+        let node_id = node_test_id(rng.random::<u64>());
         Self::from_node_id(node_id, csp_vault_factory)
     }
     pub fn from_node_id(
@@ -232,7 +232,7 @@ impl MockDkgConfig {
             } else {
                 all_node_ids
                     .iter()
-                    .take(rng.gen_range(min_dealers..=num_nodes))
+                    .take(rng.random_range(min_dealers..=num_nodes))
                     .cloned()
                     .collect()
             },
@@ -240,7 +240,7 @@ impl MockDkgConfig {
         .expect("Could not create NiDkgDealers struct for test");
         let num_dealers = dealers.get().len();
 
-        let num_receivers = rng.gen_range(min_receivers..=num_nodes);
+        let num_receivers = rng.random_range(min_receivers..=num_nodes);
         let receivers =
             NiDkgReceivers::new(all_node_ids.iter().take(num_receivers).cloned().collect())
                 .expect("Could not create NiDkgReceivers struct for test");
@@ -248,12 +248,12 @@ impl MockDkgConfig {
         // Config values
         let algorithm_id = AlgorithmId::NiDkg_Groth20_Bls12_381;
         let dkg_id = random_ni_dkg_id(rng);
-        let max_corrupt_dealers = rng.gen_range(0..num_dealers); // Need at least one honest dealer.
-        let threshold = rng.gen_range(min_threshold..=num_receivers); // threshold <= num_receivers
+        let max_corrupt_dealers = rng.random_range(0..num_dealers); // Need at least one honest dealer.
+        let threshold = rng.random_range(min_threshold..=num_receivers); // threshold <= num_receivers
         let max_corrupt_receivers =
-            rng.gen_range(0..std::cmp::min(num_receivers + 1 - threshold, threshold)); // (max_corrupt_receivers <= num_receivers - threshold) &&
+            rng.random_range(0..std::cmp::min(num_receivers + 1 - threshold, threshold)); // (max_corrupt_receivers <= num_receivers - threshold) &&
                                                                                        // (max_corrupt_receivers < threshold)
-        let epoch = Epoch::from(rng.gen::<u32>());
+        let epoch = Epoch::from(rng.random::<u32>());
 
         let receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey> = receivers
             .iter()

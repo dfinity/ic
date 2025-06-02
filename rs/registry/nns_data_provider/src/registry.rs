@@ -100,7 +100,7 @@ impl RegistryCanister {
     /// Returns an `Agent` chosen at random
     fn choose_random_agent(&self) -> &Agent {
         self.agent
-            .choose(&mut rand::thread_rng())
+            .choose(&mut rand::rng())
             .expect("can't fail, ::new asserts list is non-empty")
     }
 

@@ -709,7 +709,7 @@ pub mod node {
                 generate_tls_keys_and_certificate: false,
             })
             .with_logger(logger)
-            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+            .with_rng(ChaCha20Rng::from_seed(rng.random()))
             .build()
     }
 
@@ -732,7 +732,7 @@ pub mod node {
                 generate_tls_keys_and_certificate: false,
             })
             .with_logger(logger)
-            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+            .with_rng(ChaCha20Rng::from_seed(rng.random()))
             .with_remote_vault()
             .build()
     }
@@ -845,7 +845,7 @@ pub mod node {
                 minimum_size,
                 self.len()
             );
-            let subset_size = rng.gen_range(minimum_size..=self.len());
+            let subset_size = rng.random_range(minimum_size..=self.len());
             self.iter().choose_multiple(rng, subset_size).into_iter()
         }
 
@@ -1356,7 +1356,7 @@ pub fn random_node_ids_excluding<R: RngCore + CryptoRng>(
 ) -> BTreeSet<NodeId> {
     let mut node_ids = BTreeSet::new();
     while node_ids.len() < n {
-        let candidate = node_id(rng.gen());
+        let candidate = node_id(rng.random());
         if !exclusions.contains(&candidate) {
             node_ids.insert(candidate);
         }
@@ -1382,13 +1382,13 @@ pub fn set_of_nodes(ids: &[u64]) -> BTreeSet<NodeId> {
 }
 
 fn random_registry_version<R: RngCore + CryptoRng>(rng: &mut R) -> RegistryVersion {
-    RegistryVersion::new(rng.gen_range(1..u32::MAX) as u64)
+    RegistryVersion::new(rng.random_range(1..u32::MAX) as u64)
 }
 
 pub fn random_transcript_id<R: RngCore + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
-    let id = rng.gen::<u64>();
-    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen::<u64>()));
-    let height = Height::from(rng.gen::<u64>());
+    let id = rng.random::<u64>();
+    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.random::<u64>()));
+    let height = Height::from(rng.random::<u64>());
 
     IDkgTranscriptId::new(subnet, id, height)
 }
@@ -1402,7 +1402,7 @@ pub fn n_random_node_ids<R: RngCore + CryptoRng>(n: usize, rng: &mut R) -> BTree
 }
 
 fn random_node_id<R: RngCore + CryptoRng>(rng: &mut R) -> NodeId {
-    node_id(rng.gen())
+    node_id(rng.random())
 }
 
 pub fn random_receiver_id_excluding<R: RngCore + CryptoRng>(
@@ -1425,7 +1425,7 @@ pub fn random_receiver_id_excluding_set<'a, R: CryptoRng + RngCore>(
     if acceptable_receivers.is_empty() {
         return None;
     }
-    Some(acceptable_receivers[rng.gen_range(0..acceptable_receivers.len())])
+    Some(acceptable_receivers[rng.random_range(0..acceptable_receivers.len())])
 }
 
 pub fn random_dealer_id<R: RngCore + CryptoRng>(
@@ -1485,7 +1485,7 @@ pub fn random_crypto_component_not_in_receivers<R: RngCore + CryptoRng>(
     TempCryptoComponent::builder()
         .with_registry(Arc::clone(&env.registry) as Arc<_>)
         .with_node_id(node_id)
-        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .with_rng(ChaCha20Rng::from_seed(rng.random()))
         .build()
 }
 
@@ -1510,7 +1510,7 @@ impl IDkgMode {
             min < max,
             "min ({min}) should not be larger than max ({max}) subnet size"
         );
-        rng.gen_range(min..=max)
+        rng.random_range(min..=max)
     }
 
     /// Returns the minimum subnet size for `&self` that can be used to generate
@@ -1916,7 +1916,7 @@ pub fn run_tecdsa_protocol<R: RngCore + CryptoRng + Sync + Send>(
     let verifier_crypto_component = TempCryptoComponent::builder()
         .with_registry(Arc::clone(&env.registry) as Arc<_>)
         .with_node_id(verifier_id)
-        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .with_rng(ChaCha20Rng::from_seed(rng.random()))
         .build();
     for (signer_id, sig_share) in sig_shares.iter() {
         ThresholdEcdsaSigVerifier::verify_sig_share(
@@ -1931,7 +1931,7 @@ pub fn run_tecdsa_protocol<R: RngCore + CryptoRng + Sync + Send>(
     let combiner_crypto_component = TempCryptoComponent::builder()
         .with_registry(Arc::clone(&env.registry) as Arc<_>)
         .with_node_id(verifier_id)
-        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .with_rng(ChaCha20Rng::from_seed(rng.random()))
         .build();
     ThresholdEcdsaSigVerifier::combine_sig_shares(
         &combiner_crypto_component,
@@ -1984,7 +1984,7 @@ pub fn run_tschnorr_protocol<R: RngCore + CryptoRng + Sync + Send>(
     let verifier_crypto_component = TempCryptoComponent::builder()
         .with_registry(Arc::clone(&env.registry) as Arc<_>)
         .with_node_id(verifier_id)
-        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .with_rng(ChaCha20Rng::from_seed(rng.random()))
         .build();
     for (signer_id, sig_share) in sig_shares.iter() {
         ThresholdSchnorrSigVerifier::verify_sig_share(
@@ -1999,7 +1999,7 @@ pub fn run_tschnorr_protocol<R: RngCore + CryptoRng + Sync + Send>(
     let combiner_crypto_component = TempCryptoComponent::builder()
         .with_registry(Arc::clone(&env.registry) as Arc<_>)
         .with_node_id(verifier_id)
-        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .with_rng(ChaCha20Rng::from_seed(rng.random()))
         .build();
     ThresholdSchnorrSigVerifier::combine_sig_shares(
         &combiner_crypto_component,
@@ -2607,7 +2607,7 @@ impl IDkgTranscriptBuilder {
 
     pub fn corrupt_internal_transcript_raw<R: CryptoRng + RngCore>(mut self, rng: &mut R) -> Self {
         let raw_len = self.internal_transcript_raw.len();
-        let corrupted_idx = rng.gen::<usize>() % raw_len;
+        let corrupted_idx = rng.random::<usize>() % raw_len;
         self.internal_transcript_raw[corrupted_idx] ^= 1;
         self
     }
@@ -2908,7 +2908,7 @@ pub mod ecdsa {
         R: RngCore + CryptoRng,
         S: SampleRange<usize>,
     {
-        let subnet_size = rng.gen_range(subnet_size_range);
+        let subnet_size = rng.random_range(subnet_size_range);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) =
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
@@ -2916,8 +2916,8 @@ pub mod ecdsa {
             caller: PrincipalId::new_user_test_id(1),
             derivation_path: vec![],
         };
-        let seed = Randomness::from(rng.gen::<[u8; 32]>());
-        let message = rng.gen::<[u8; 32]>();
+        let seed = Randomness::from(rng.random::<[u8; 32]>());
+        let message = rng.random::<[u8; 32]>();
 
         let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
         let inputs = generate_tecdsa_protocol_inputs(
@@ -2962,7 +2962,7 @@ pub mod schnorr {
         R: RngCore + CryptoRng,
         S: SampleRange<usize>,
     {
-        let subnet_size = rng.gen_range(subnet_size_range);
+        let subnet_size = rng.random_range(subnet_size_range);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) =
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
@@ -2971,20 +2971,20 @@ pub mod schnorr {
             derivation_path: vec![],
         };
 
-        let message_length = rng.gen_range(0..2_000_000);
+        let message_length = rng.random_range(0..2_000_000);
         let mut message = vec![0; message_length];
         rng.fill_bytes(&mut message);
-        let seed = Randomness::from(rng.gen::<[u8; 32]>());
+        let seed = Randomness::from(rng.random::<[u8; 32]>());
 
         let taproot_tree_root = {
             if alg == AlgorithmId::ThresholdSchnorrBip340 {
-                let choose = rng.gen::<u8>();
+                let choose = rng.random::<u8>();
                 if choose <= 128 {
                     None
                 } else if choose <= 192 {
                     Some(vec![])
                 } else {
-                    Some(rng.gen::<[u8; 32]>().to_vec())
+                    Some(rng.random::<[u8; 32]>().to_vec())
                 }
             } else {
                 None

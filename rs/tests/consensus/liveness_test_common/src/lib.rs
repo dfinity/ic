@@ -113,12 +113,12 @@ async fn push_messages_to<R: Rng>(
         can.canister_id()
     );
     info!(logger, "Sending messages to stable storage...");
-    let rounds: u32 = rng.gen_range(2..5);
+    let rounds: u32 = rng.random_range(2..5);
     let mut msg: [u8; MSG_LEN] = [0; MSG_LEN];
     for i in 0..rounds {
         rng.fill_bytes(&mut msg);
         can.store_to_stable(i * (MSG_LEN as u32), &msg).await;
-        let sleep_t = rng.gen_range(200..1200);
+        let sleep_t = rng.random_range(200..1200);
         tokio::time::sleep(std::time::Duration::from_millis(sleep_t)).await;
         debug!(logger, "push_message_to_stable";
                  "message" => format!("{:?}", msg),

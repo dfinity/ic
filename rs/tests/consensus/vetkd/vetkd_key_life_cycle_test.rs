@@ -281,7 +281,7 @@ fn test(env: TestEnv) {
             &canister_master_pubkey_app.derive_sub_key(context),
             input,
             secret_message,
-            &rng.gen::<[u8; 32]>(),
+            &rng.random::<[u8; 32]>(),
         )
         .expect("failed to IBE-encrypt");
 
@@ -310,7 +310,7 @@ async fn derive_vetkey_with_canister<R: Rng>(
     log: &slog::Logger,
     rng: &mut R,
 ) -> VetKey {
-    let tsk = TransportSecretKey::from_seed(rng.gen::<[u8; 32]>().to_vec())
+    let tsk = TransportSecretKey::from_seed(rng.random::<[u8; 32]>().to_vec())
         .expect("Failed to generate transport secret key");
 
     info!(log, "Deriving vetKey...");

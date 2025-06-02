@@ -52,7 +52,7 @@ pub fn fuzz_mutator(data: &mut [u8], size: usize, max_size: usize, seed: u32) ->
 
     let rng = &mut rng_from_u32(seed);
 
-    let data_size_changed = match rng.gen_range(0..9) {
+    let data_size_changed = match rng.random_range(0..9) {
         0 => try_remove_leaf(&mut tree, rng),
         1 => try_remove_empty_subtree(&mut tree, rng),
         // actions that increase the tree's size have twice the probability of those

@@ -2119,7 +2119,7 @@ mod tests {
                 SignedIngressBuilder::new()
                     .canister_id(cid)
                     .expiry_time(expiry)
-                    .nonce(rand::thread_rng().next_u64())
+                    .nonce(rand::rng().next_u64())
                     .method_payload(vec![0xff; bytes])
                     .build()
             })

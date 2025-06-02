@@ -3461,7 +3461,7 @@ dependencies = [
  "futures",
  "futures-util",
  "get_if_addrs",
- "getrandom 0.2.10",
+ "getrandom 0.3.1",
  "goldenfile",
  "group 0.13.0",
  "hashlink",

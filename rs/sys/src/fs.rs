@@ -568,9 +568,9 @@ fn tmp_name() -> String {
     /// The character length of the random string used for temporary file names.
     const TMP_NAME_LEN: usize = 7;
 
-    use rand::{distributions::Alphanumeric, Rng};
+    use rand::{distr::Alphanumeric, Rng};
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     std::iter::repeat(())
         .map(|_| rng.sample(Alphanumeric))
         .map(char::from)

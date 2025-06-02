@@ -353,7 +353,7 @@ impl RandomNiDkgConfigBuilder {
     pub fn build<R: Rng + CryptoRng>(self, rng: &mut R) -> RandomNiDkgConfig {
         let subnet_size = self.subnet_size.expect("must specify a subnet size");
 
-        let dkg_tag = self.dkg_tag.unwrap_or_else(|| match rng.gen::<bool>() {
+        let dkg_tag = self.dkg_tag.unwrap_or_else(|| match rng.random::<bool>() {
             true => NiDkgTag::LowThreshold,
             false => NiDkgTag::HighThreshold,
         });
@@ -363,18 +363,18 @@ impl RandomNiDkgConfigBuilder {
         // margin that allows for increasing it again sufficiently during tests.
         let registry_version = self
             .registry_version
-            .unwrap_or_else(|| RegistryVersion::new(rng.gen_range(1..u32::MAX - 10_000) as u64));
+            .unwrap_or_else(|| RegistryVersion::new(rng.random_range(1..u32::MAX - 10_000) as u64));
 
         let dealer_count = self.dealer_count.unwrap_or_else(|| {
             let threshold = dkg_tag.threshold_for_subnet_of_size(subnet_size);
             let required_dealer_count = threshold;
-            let dealer_surplus = rng.gen_range(0..3);
+            let dealer_surplus = rng.random_range(0..3);
             required_dealer_count + dealer_surplus
         });
 
         let max_corrupt_dealers = self
             .max_corrupt_dealers
-            .unwrap_or_else(|| rng.gen_range(0..dealer_count));
+            .unwrap_or_else(|| rng.random_range(0..dealer_count));
 
         RandomNiDkgConfig::new(
             subnet_size,
@@ -437,11 +437,11 @@ impl RandomNiDkgConfig {
 
         let config_data = NiDkgConfigData {
             dkg_id: NiDkgId {
-                start_block_height: Height::new(rng.gen()),
-                dealer_subnet: SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen())),
+                start_block_height: Height::new(rng.random()),
+                dealer_subnet: SubnetId::from(PrincipalId::new_subnet_test_id(rng.random())),
                 dkg_tag,
                 // The first DKG is always done by NNS for another (remote) subnet
-                target_subnet: NiDkgTargetSubnet::Remote(NiDkgTargetId::new(rng.gen())),
+                target_subnet: NiDkgTargetSubnet::Remote(NiDkgTargetId::new(rng.random())),
             },
             max_corrupt_dealers: Self::number_of_nodes_from_usize(max_corrupt_dealers),
             dealers,
@@ -472,7 +472,7 @@ impl RandomNiDkgConfig {
         let threshold = dkg_tag.threshold_for_subnet_of_size(subnet_size);
         let dealers = {
             let required_dealer_count = threshold;
-            let dealer_surplus = rng.gen_range(0..3);
+            let dealer_surplus = rng.random_range(0..3);
             // Exclude receivers from being dealers because initial DKG is done by NNS for
             // another (remote) subnet, which means the dealers and receivers are disjoint.
             Self::random_node_ids_excluding(&receivers, required_dealer_count + dealer_surplus, rng)
@@ -485,7 +485,9 @@ impl RandomNiDkgConfig {
                 dkg_tag,
                 target_subnet: self.0.dkg_id().target_subnet,
             },
-            max_corrupt_dealers: Self::number_of_nodes_from_usize(rng.gen_range(0..dealers.len())),
+            max_corrupt_dealers: Self::number_of_nodes_from_usize(
+                rng.random_range(0..dealers.len()),
+            ),
             dealers,
             max_corrupt_receivers: {
                 Self::number_of_nodes_from_usize(get_faults_tolerated(subnet_size))
@@ -522,7 +524,7 @@ impl RandomNiDkgConfig {
                 transcript.threshold.get().get(), // Ensures #dealers >= resharing threshold
             );
             let lower_bound = usize::try_from(lower_bound_u32).expect("conversion error");
-            let dealer_count = rng.gen_range(lower_bound..=transcript.committee.get().len());
+            let dealer_count = rng.random_range(lower_bound..=transcript.committee.get().len());
             let dealers_vec = transcript
                 .committee
                 .get()
@@ -536,7 +538,7 @@ impl RandomNiDkgConfig {
                 isize::try_from(transcript.committee.get().len()).expect("conversion error");
 
             let change_in_subnet_size =
-                rng.gen_range(*subnet_size_change.start()..=*subnet_size_change.end());
+                rng.random_range(*subnet_size_change.start()..=*subnet_size_change.end());
 
             let new_subnet_size_isize =
                 cmp::max(1, transcript_committee_len_isize + change_in_subnet_size);
@@ -661,7 +663,7 @@ impl RandomNiDkgConfig {
     fn random_node_ids<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> BTreeSet<NodeId> {
         let mut node_ids = BTreeSet::new();
         while node_ids.len() < n {
-            node_ids.insert(Self::node_id(rng.gen()));
+            node_ids.insert(Self::node_id(rng.random()));
         }
         node_ids
     }
@@ -673,7 +675,7 @@ impl RandomNiDkgConfig {
     ) -> BTreeSet<NodeId> {
         let mut node_ids = BTreeSet::new();
         while node_ids.len() < n {
-            let candidate = Self::node_id(rng.gen());
+            let candidate = Self::node_id(rng.random());
             if !exclusions.contains(&candidate) {
                 node_ids.insert(candidate);
             }
@@ -843,7 +845,7 @@ impl NiDkgTestEnvironment {
                 .with_temp_dir_source(crypto_root)
                 .with_registry(Arc::clone(&ret.registry) as Arc<_>)
                 .with_node_id(node_id)
-                .with_rng(ChaCha20Rng::from_seed(rng.gen()));
+                .with_rng(ChaCha20Rng::from_seed(rng.random()));
             let crypto_component_builder = if use_remote_vault {
                 crypto_component_builder.with_remote_vault()
             } else {
@@ -883,7 +885,7 @@ impl NiDkgTestEnvironment {
                 generate_dkg_dealing_encryption_keys: true,
                 ..NodeKeysToGenerate::none()
             })
-            .with_rng(ChaCha20Rng::from_seed(rng.gen()));
+            .with_rng(ChaCha20Rng::from_seed(rng.random()));
         let temp_crypto_builder = if use_remote_vault {
             temp_crypto_builder.with_remote_vault()
         } else {

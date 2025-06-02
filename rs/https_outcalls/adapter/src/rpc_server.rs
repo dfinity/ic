@@ -70,8 +70,8 @@ pub struct CanisterHttp {
 fn should_only_use_new_socks_proxy() -> bool {
     // This is a temporary feature flag to allow us to test the new socks proxy implementation
     // without affecting the existing implementation.
-    let mut rng = rand::thread_rng();
-    let random_number: u32 = rng.gen_range(0..100);
+    let mut rng = rand::rng();
+    let random_number: u32 = rng.random_range(0..100);
     random_number < NEW_SOCKS_PROXY_ROLLOUT
 }
 
@@ -446,7 +446,7 @@ impl HttpsOutcallsService for CanisterHttp {
                                 }
                             }
                             None => {
-                                // Eventually only this branch should be active. 
+                                // Eventually only this branch should be active.
                                 dark_launch_result
                             }
                         }
@@ -637,7 +637,7 @@ fn add_fallback_user_agent_header(header_map: &mut HeaderMap) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::distributions::Alphanumeric;
+    use rand::distr::Alphanumeric;
     use rand::{thread_rng, Rng};
 
     #[test]

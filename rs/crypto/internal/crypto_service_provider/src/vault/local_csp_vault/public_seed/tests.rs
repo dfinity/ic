@@ -13,7 +13,7 @@ fn should_generate_correct_public_seeds() {
         .build_into_arc();
     let expected_seeds: Vec<_> = (0..10)
         .map(|_| {
-            let intermediate_seed: [u8; 32] = csprng.gen();
+            let intermediate_seed: [u8; 32] = csprng.random();
             Seed::from_bytes(&intermediate_seed)
         })
         .collect();

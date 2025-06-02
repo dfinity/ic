@@ -311,8 +311,8 @@ mod tests {
     }
 
     fn get_unique_sock_path() -> PathBuf {
-        let mut rng = rand::thread_rng();
-        let random_n: u64 = rng.gen();
+        let mut rng = rand::rng();
+        let random_n: u64 = rng.random();
         let pid = std::process::id();
         let tmpdir = std::env::temp_dir();
 

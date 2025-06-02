@@ -760,7 +760,7 @@ pub(crate) fn create_corrupted_transcript<R: CryptoRng + Rng>(
     let to_corrupt = *transcript.verified_dealings.keys().next().unwrap();
     let complainer_index = params.receiver_index(node_id).unwrap();
     let signed_dealing = transcript.verified_dealings.get_mut(&to_corrupt).unwrap();
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let builder = signed_dealing.content.clone().into_builder();
     signed_dealing.content = builder
         .corrupt_internal_dealing_raw_by_changing_ciphertexts(&[complainer_index], &mut rng)

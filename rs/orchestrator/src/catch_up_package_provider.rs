@@ -112,7 +112,7 @@ impl CatchUpPackageProvider {
             .flatten()
             .unwrap_or_default();
         // Randomize the order of peer_urls
-        nodes.shuffle(&mut rand::thread_rng());
+        nodes.shuffle(&mut rand::rng());
         let current_node = nodes
             .as_slice()
             .iter()

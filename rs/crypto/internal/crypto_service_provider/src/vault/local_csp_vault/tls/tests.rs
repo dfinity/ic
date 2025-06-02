@@ -181,7 +181,7 @@ mod keygen {
         let mut rng = reproducible_rng();
 
         // generate random values
-        let mut inputs: Vec<_> = (0..100).map(|_| rng.gen_range(0..MAX_TIME_SECS)).collect();
+        let mut inputs: Vec<_> = (0..100).map(|_| rng.random_range(0..MAX_TIME_SECS)).collect();
 
         // append edge cases (when time is below `GRACE_PERIOD_SECS`)
         inputs.push(0);
@@ -440,7 +440,7 @@ mod sign {
     fn should_sign_with_valid_key() {
         let rng = &mut reproducible_rng();
         let csp_vault = LocalCspVault::builder_for_test()
-            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+            .with_rng(ChaCha20Rng::from_seed(rng.random()))
             .build();
         let public_key_cert = csp_vault
             .gen_tls_key_pair(node_test_id(NODE_1))
@@ -455,7 +455,7 @@ mod sign {
     fn should_sign_verifiably() {
         let rng = &mut reproducible_rng();
         let csp_vault = LocalCspVault::builder_for_test()
-            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+            .with_rng(ChaCha20Rng::from_seed(rng.random()))
             .build();
         let verifier = Csp::builder_for_test().build();
         let public_key_cert = csp_vault
@@ -492,7 +492,7 @@ mod sign {
     fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
         let rng = &mut reproducible_rng();
         let csp_vault = LocalCspVault::builder_for_test()
-            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+            .with_rng(ChaCha20Rng::from_seed(rng.random()))
             .build();
         let wrong_csp_pub_key = csp_vault
             .gen_node_signing_key_pair()
@@ -517,7 +517,7 @@ mod sign {
         let key_store = secret_key_store_containing_key_with_invalid_encoding(key_id);
         let csp_vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(key_store)
-            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+            .with_rng(ChaCha20Rng::from_seed(rng.random()))
             .build();
 
         assert!(csp_vault.sks_contains(key_id).expect("SKS call failed"));
@@ -536,7 +536,7 @@ mod sign {
         let key_store = secret_key_store_containing_key_with_invalid_length(key_id);
         let csp_vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(key_store)
-            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+            .with_rng(ChaCha20Rng::from_seed(rng.random()))
             .build();
 
         let result = csp_vault.tls_sign(random_message(rng), key_id);
@@ -546,7 +546,7 @@ mod sign {
     }
 
     fn random_message<R: Rng + CryptoRng>(rng: &mut R) -> Vec<u8> {
-        let msg_len: usize = rng.gen_range(0..1024);
-        (0..msg_len).map(|_| rng.gen::<u8>()).collect()
+        let msg_len: usize = rng.random_range(0..1024);
+        (0..msg_len).map(|_| rng.random::<u8>()).collect()
     }
 }

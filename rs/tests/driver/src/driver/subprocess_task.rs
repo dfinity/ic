@@ -60,7 +60,7 @@ impl Task for SubprocessTask {
 
         // select a random socket id used for this child process
         use rand::Rng;
-        let sock_id: u64 = rand::thread_rng().gen();
+        let sock_id: u64 = rand::rng().gen();
         let sock_path = GroupContext::log_socket_path(sock_id);
 
         let mut child_cmd = Command::new(self.group_ctx.exec_path.clone());
@@ -100,7 +100,7 @@ impl Task for SubprocessTask {
                 // if cancellation request: task state is set to cancelled
                 // we still have to wait for jh_res -> leads to report or failure
                 // if cancelled, ignore child report
-                // 
+                //
 
                 // A misbehaving child might have not connected to the parent at all. In such a
                 // case, this join would block forever.

@@ -817,7 +817,7 @@ mod chain_key_enabled_subnet_lists {
         const NUM_KEY_IDS: usize = 100;
         let rng = &mut ic_crypto_test_utils_reproducible_rng::reproducible_rng();
         for _ in 0..NUM_KEY_IDS {
-            let len = rng.gen_range(1..100);
+            let len = rng.random_range(1..100);
             let key_id: String = rng
                 .sample_iter::<char, _>(rand::distributions::Standard)
                 .take(len)

@@ -71,7 +71,7 @@ pub fn test_threshold_signatures(
         //
         // * Signatures cannot be generated with an incorrect key_id:
         if let Some((csp_vault, _key_id)) = signers.first() {
-            let wrong_key_id = KeyId::from(rng.gen::<[u8; 32]>());
+            let wrong_key_id = KeyId::from(rng.random::<[u8; 32]>());
             let mut key_ids = signers.iter().map(|(_, key_id)| *key_id);
 
             assert!(
@@ -243,8 +243,8 @@ pub fn test_threshold_scheme_with_basic_keygen<R, S, C, P>(
     P: PublicKeyStore + 'static,
 {
     let rng = &mut seed.into_rng();
-    let threshold = NumberOfNodes::from(rng.gen_range(1..10));
-    let number_of_signers = NumberOfNodes::from(rng.gen_range(0..10));
+    let threshold = NumberOfNodes::from(rng.random_range(1..10));
+    let number_of_signers = NumberOfNodes::from(rng.random_range(0..10));
     println!(
         "--- threshold: {}, number_of_signers: {}",
         threshold, number_of_signers

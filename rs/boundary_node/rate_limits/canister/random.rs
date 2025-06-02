@@ -19,18 +19,16 @@ thread_local! {
     target_os = "unknown"
 ))]
 /// A getrandom implementation that works in the IC.
-pub fn custom_getrandom_bytes_impl(dest: &mut [u8]) -> Result<(), getrandom::Error> {
+#[no_mangle]
+unsafe extern "Rust" fn __getrandom_v03_custom(
+    dest: *mut u8,
+    len: usize,
+) -> Result<(), getrandom::Error> {
     RNG.with(|rng| {
         let mut rng = rng.borrow_mut();
-        rng.fill_bytes(dest);
+        let slice = std::slice::from_raw_parts_mut(dest, len);
+        rng.fill_bytes(slice);
     });
 
     Ok(())
 }
-
-#[cfg(all(
-    target_arch = "wasm32",
-    target_vendor = "unknown",
-    target_os = "unknown"
-))]
-getrandom::register_custom_getrandom!(custom_getrandom_bytes_impl);

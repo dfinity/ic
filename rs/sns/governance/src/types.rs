@@ -3063,7 +3063,7 @@ pub mod test_helpers {
         }
 
         fn insecure_random_u64(&mut self) -> u64 {
-            rand::thread_rng().gen()
+            rand::rng().gen()
         }
 
         async fn call_canister(

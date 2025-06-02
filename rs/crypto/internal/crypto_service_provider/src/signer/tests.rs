@@ -451,7 +451,7 @@ mod verify_ed25519 {
         }
 
         pub fn random_message<R: Rng + CryptoRng>(rng: &mut R) -> Vec<u8> {
-            let mut msg = vec![0u8; rng.gen_range(0..RANDOM_MSG_MAX_LEN)];
+            let mut msg = vec![0u8; rng.random_range(0..RANDOM_MSG_MAX_LEN)];
             rng.fill_bytes(&mut msg[..]);
             msg
         }
@@ -801,7 +801,7 @@ fn vault_builder_with_different_seeds<const N: usize>() -> [LocalCspVaultBuilder
     let mut vault_builders = Vec::with_capacity(N);
     let mut seeds = HashSet::with_capacity(N);
     for _ in 0..N {
-        let seed: [u8; 32] = rng.gen();
+        let seed: [u8; 32] = rng.random();
         vault_builders
             .push(LocalCspVault::builder_for_test().with_rng(Seed::from_bytes(&seed).into_rng()));
         assert!(seeds.insert(seed));

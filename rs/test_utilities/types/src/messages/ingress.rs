@@ -9,7 +9,7 @@ use ic_types::{
     time::expiry_time_from_now,
     CanisterId, PrincipalId, Time, UserId,
 };
-use rand::thread_rng;
+use rand::rng;
 use std::convert::TryFrom;
 
 /// A simple ingress message builder.

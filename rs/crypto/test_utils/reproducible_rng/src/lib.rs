@@ -24,7 +24,7 @@ impl ReproducibleRng {
     /// Randomly generates a seed and prints it to `stdout`.
     pub fn new() -> Self {
         let mut seed = [0u8; SEED_LEN];
-        rand::thread_rng().fill(&mut seed);
+        rand::rng().fill(&mut seed);
         let rng = Self::from_seed_internal(seed);
         println!("{rng:?}");
         rng
