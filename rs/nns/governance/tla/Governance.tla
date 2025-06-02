@@ -14,12 +14,15 @@ CONSTANTS
     Account_Ids,
     MIN_STAKE,
     TRANSACTION_FEE,
-    MATURITY_BASIS_POINTS
+    MATURITY_BASIS_POINTS,
+    MIN_DISBURSEMENT
 
 POSSIBLE_DISBURSE_AMOUNTS(neurons, nid) == 0..neurons[nid].cached_stake + 1
 
 CONSTANTS
     Claim_Neuron_Process_Ids,
+    Disburse_Maturity_Process_Ids,
+    Disburse_Maturity_Timer_Process_Ids,
     Disburse_Neuron_Process_Ids,
     Disburse_To_Neuron_Process_Ids,
     Merge_Neurons_Process_Ids,
@@ -47,11 +50,11 @@ VARIABLES pc,
           \* Merge_Neuron
           source_neuron_id, target_neuron_id, fees_amount, amount_to_target,
           \* Claim_Neuron
-          account, 
-          \* Claim_Neuron and Disburse_Neuron
+          account,
+          \* Claim_Neuron, Disburse_Neuron and Disburse_Maturity_Timer
           neuron_id,
           \* Disburse_Neuron and Disburse_To_Neuron
-          disburse_amount, 
+          disburse_amount,
           \* Disburse_Neuron
           to_account,
           \* Disburse_To_Neuron
@@ -59,17 +62,23 @@ VARIABLES pc,
           \* Spawn_Neurons
           ready_to_spawn_ids,
           \* Split_Neuron
-          sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id
+          sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id,
+          \* Disburse_Maturity_Timer
+          current_disbursement
 
 global_non_ledger_vars == << neuron, neuron_id_by_account, locks, spawning_neurons >>
-local_vars == << 
+local_vars == <<
     pc,
-    source_neuron_id, target_neuron_id, fees_amount, amount_to_target, account, neuron_id, disburse_amount, to_account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, 
-    sn_child_account_id >>
+    source_neuron_id, target_neuron_id, fees_amount, amount_to_target, account, neuron_id, disburse_amount, to_account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id,
+    sn_child_account_id,
+    current_disbursement
+    >>
 
 Claim == INSTANCE Claim_Neuron
 Disburse == INSTANCE Disburse_Neuron
 Disburse_To == INSTANCE Disburse_To_Neuron
+Disburse_Maturity == INSTANCE Disburse_Maturity
+Disburse_Maturity_Timer == INSTANCE Disburse_Maturity_Timer
 Merge == INSTANCE Merge_Neurons
 Refresh == INSTANCE Refresh_Neuron
 Spawn == INSTANCE Spawn_Neuron
@@ -80,13 +89,13 @@ Split == INSTANCE Split_Neuron
 \* Environment (ledger, rest of governance canister)
 \*******************************************************************************
 
-CONSTANTS 
+CONSTANTS
     NUMBER_OF_TRANSFERS_CAP,
     INITIAL_MAX_BALANCE,
     MAX_NEURON_FEE,
     MAX_MATURITY
 
-CONSTANTS 
+CONSTANTS
     User_Account_Ids
 
 VARIABLES
@@ -108,7 +117,7 @@ Ledger_Init ==
 
 response(caller, response_val) == [caller |-> caller, response |-> response_val]
 
-Ledger_Process_Governance_Request == 
+Ledger_Process_Governance_Request ==
     /\ governance_to_ledger /= <<>>
     /\ governance_to_ledger' = Tail(governance_to_ledger)
     /\
@@ -116,15 +125,15 @@ Ledger_Process_Governance_Request ==
         req == Head(governance_to_ledger)
       IN
         \* Spontaneous rejection, regardless of what the request was
-        \/ 
+        \/
             /\ ledger_to_governance' = ledger_to_governance \union {response(req.caller, Variant("Fail", UNIT))}
             /\ UNCHANGED << minted, burned, balances, nr_transfers, total_rewards >>
         \* Actual processing of messages
         \/
-          LET 
+          LET
             margs == req.method_and_args
             t == VariantTag(margs)
-            caller == req.caller 
+            caller == req.caller
           IN
             \/
                 /\ t = "AccountBalance"
@@ -141,14 +150,14 @@ Ledger_Process_Governance_Request ==
             \/
                 /\ t = "Transfer"
                 /\ UNCHANGED << nr_transfers, total_rewards >>
-                /\  
-                  LET 
+                /\
+                  LET
                     arg == VariantGetUnsafe(t, margs)
                     from_acc == arg.from
                     to_acc == arg.to
                     amnt == arg.amount
                     fee == arg.fee
-                    is_invalid_transfer == 
+                    is_invalid_transfer ==
                         \/
                           /\ from_acc /= Minting_Account_Id
                           /\ to_acc /= Minting_Account_Id
@@ -157,7 +166,7 @@ Ledger_Process_Governance_Request ==
                         \/ from_acc = Minting_Account_Id /\ fee /= 0
                         \/ to_acc = Minting_Account_Id /\ fee /= 0
                         \/ to_acc = Minting_Account_Id /\ amnt < TRANSACTION_FEE
-                        \/ fee + amnt > balances[from_acc] 
+                        \/ fee + amnt > balances[from_acc]
                   IN
                     \/
                         /\ is_invalid_transfer
@@ -165,7 +174,7 @@ Ledger_Process_Governance_Request ==
                         /\ UNCHANGED << minted, burned, balances >>
                     \/
                         /\ ~is_invalid_transfer
-                        /\ balances' = [balances EXCEPT 
+                        /\ balances' = [balances EXCEPT
                                 ![from_acc] = @ - (fee + amnt),
                                 ![to_acc] = @ + amnt]
                         /\ ledger_to_governance' = (ledger_to_governance \union {response(caller, Variant("TransferOk", UNIT))})
@@ -212,6 +221,8 @@ Init == (* Global variables *)
         /\ sn_amount = [self \in Split_Neuron_Process_Ids |-> 0]
         /\ sn_child_neuron_id = [self \in Split_Neuron_Process_Ids |-> 0]
         /\ sn_child_account_id = [self \in Split_Neuron_Process_Ids |-> DUMMY_ACCOUNT]
+        \* Disburse_Maturity_Timer
+        /\ current_disbursement = [self \in Disburse_Maturity_Timer_Process_Ids |-> Disburse_Maturity_Timer!DUMMY_DISBURSEMENT]
         \* Mixed
         /\ disburse_amount = [self \in Disburse_To_Neuron_Process_Ids |-> 0]
          @@ [self \in Disburse_Neuron_Process_Ids |-> 0]
@@ -219,6 +230,7 @@ Init == (* Global variables *)
            @@ [self \in Disburse_Neuron_Process_Ids |-> 0]
            @@ [self \in Spawn_Neurons_Process_Ids |-> 0]
            @@ [self \in Refresh_Neuron_Process_Ids |-> 0]
+           @@ [self \in Disburse_Maturity_Timer_Process_Ids |-> 0]
         /\ fees_amount = [self \in Merge_Neurons_Process_Ids |-> 0]
            @@ [self \in Disburse_Neuron_Process_Ids |-> 0]
         /\ pc = [self \in Split_Neuron_Process_Ids |-> "SplitNeuron1"]
@@ -229,6 +241,7 @@ Init == (* Global variables *)
             @@ [self \in Disburse_Neuron_Process_Ids |-> "DisburseNeuron1"]
             @@ [self \in Claim_Neuron_Process_Ids |-> "ClaimNeuron1"]
             @@ [self \in Refresh_Neuron_Process_Ids |-> "RefreshNeuron1"]
+            @@ [self \in Disburse_Maturity_Timer_Process_Ids |-> "Disburse_Maturity_Timer_Start"]
         /\ Ledger_Init
 
 Change_Neuron_Fee ==
@@ -254,14 +267,16 @@ Increase_Neuron_Maturity ==
 Next ==
     \* Combine the transitions of all the submodules, by taking the disjunction of the transitions of any submodule.
     \* Additionally, each disjunct leaves unchanged the variables that are not used by the submodule.
-    \/ Claim!Next /\  UNCHANGED <<env_vars, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, disburse_amount, to_account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id >>
-    \/ Disburse!Next /\ UNCHANGED <<env_vars, source_neuron_id, target_neuron_id, amount_to_target, account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
-    \/ Disburse_To!Next /\ UNCHANGED <<env_vars, source_neuron_id, target_neuron_id, to_account, account, fees_amount, amount_to_target, neuron_id, account, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
-    \/ Merge!Next /\ UNCHANGED <<env_vars, neuron_id, disburse_amount, to_account, account, disburse_amount, to_account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
-    \/ Refresh!Next /\ UNCHANGED << env_vars, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, account, disburse_amount, to_account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id >>
-    \/ Spawn!Next /\ UNCHANGED pc /\ UNCHANGED <<env_vars, neuron_id, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, disburse_amount, to_account, account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
-    \/ Spawn_Neurons!Next /\ UNCHANGED <<env_vars, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, disburse_amount, to_account, account, child_account_id, child_neuron_id, parent_neuron_id, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
-    \/ Split!Next /\ UNCHANGED << env_vars, neuron_id, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, account, disburse_amount, to_account, ready_to_spawn_ids, child_account_id, child_neuron_id, parent_neuron_id >>
+    \/ Claim!Next /\  UNCHANGED <<env_vars, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, disburse_amount, to_account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id, current_disbursement >>
+    \/ Disburse!Next /\ UNCHANGED <<env_vars, source_neuron_id, target_neuron_id, amount_to_target, account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id, current_disbursement >>
+    \/ Disburse_To!Next /\ UNCHANGED <<env_vars, source_neuron_id, target_neuron_id, to_account, account, fees_amount, amount_to_target, neuron_id, account, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id, current_disbursement >>
+    \/ Merge!Next /\ UNCHANGED <<env_vars, neuron_id, disburse_amount, to_account, account, disburse_amount, to_account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id, current_disbursement >>
+    \/ Refresh!Next /\ UNCHANGED << env_vars, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, account, disburse_amount, to_account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id, current_disbursement  >>
+    \/ Spawn!Next /\ UNCHANGED pc /\ UNCHANGED <<env_vars, neuron_id, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, disburse_amount, to_account, account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id, current_disbursement >>
+    \/ Spawn_Neurons!Next /\ UNCHANGED <<env_vars, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, disburse_amount, to_account, account, child_account_id, child_neuron_id, parent_neuron_id, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id, current_disbursement >>
+    \/ Split!Next /\ UNCHANGED << env_vars, neuron_id, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, account, disburse_amount, to_account, ready_to_spawn_ids, child_account_id, child_neuron_id, parent_neuron_id, current_disbursement  >>
+    \/ Disburse_Maturity!Next /\ UNCHANGED << env_vars, neuron_id, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, account, disburse_amount, to_account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id, current_disbursement, pc >>
+    \* Disburse_Maturity_Timer!Next /\ UNCHANGED << env_vars, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, account, disburse_amount, to_account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id >>
     \* "Environment" transitions
     \/ Ledger_Process_Governance_Request /\ UNCHANGED << global_non_ledger_vars, local_vars >>
     \/ Ledger_User_Transfer /\ UNCHANGED << global_non_ledger_vars, local_vars, governance_to_ledger, ledger_to_governance, total_rewards >>
@@ -315,9 +330,9 @@ Ready_To_Spawn_Ids_Exist == (UNION Range(ready_to_spawn_ids)) \subseteq DOMAIN(n
 \* Symmetry optimizations for model checking
 \*******************************************************************************
 
-Symmetry_Sets == { Claim_Neuron_Process_Ids, 
-    \* Refresh_Neuron_Process_Ids, 
-    Disburse_Neuron_Process_Ids, 
+Symmetry_Sets == { Claim_Neuron_Process_Ids,
+    \* Refresh_Neuron_Process_Ids,
+    Disburse_Neuron_Process_Ids,
     Spawn_Neuron_Process_Ids,
     Disburse_To_Neuron_Process_Ids,
     Split_Neuron_Process_Ids,

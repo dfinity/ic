@@ -155,6 +155,7 @@ go_deps.bzl               @dfinity/idx
 /rs/interfaces/src/crypto.rs                            @dfinity/crypto-team
 /rs/interfaces/src/crypto/                              @dfinity/crypto-team
 /rs/interfaces/src/dkg.rs                               @dfinity/consensus
+/rs/interfaces/src/execution_environment/               @dfinity/execution
 /rs/interfaces/src/execution_environment.rs             @dfinity/execution
 /rs/interfaces/src/messaging.rs                         @dfinity/ic-message-routing-owners
 /rs/interfaces/src/p2p.rs                               @dfinity/consensus

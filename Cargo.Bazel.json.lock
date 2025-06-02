@@ -1,5 +1,5 @@
 {
-  "checksum": "0204e2d538f5c1e7ad274285d7b3ec8751cc59ad162fcd7b31dbfc75ccae4354",
+  "checksum": "689ec8971e40782477aa5d698d60aaec116a2b3f7b683c83ec6797f9bd1d8387",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -20280,7 +20280,7 @@
               "target": "ic_cdk"
             },
             {
-              "id": "ic-cdk 0.18.0",
+              "id": "ic-cdk 0.18.0-alpha.2",
               "target": "ic_cdk",
               "alias": "ic_cdk_next"
             },
@@ -33068,14 +33068,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk 0.18.0": {
+    "ic-cdk 0.18.0-alpha.2": {
       "name": "ic-cdk",
-      "version": "0.18.0",
+      "version": "0.18.0-alpha.2",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk/0.18.0/download",
-          "sha256": "b11cc255410be6a7e47e1a756ea94c1f31a2397a79e696f6f7d207d5ebd3e144"
+          "url": "https://static.crates.io/crates/ic-cdk/0.18.0-alpha.2/download",
+          "sha256": "3c9c87d961de7d2935a0bf19f4d6afe76f3d508b853ff5267e999beadd7e9286"
         }
       },
       "targets": [
@@ -33138,13 +33138,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "ic-cdk-macros 0.18.0",
+              "id": "ic-cdk-macros 0.18.0-alpha.2",
               "target": "ic_cdk_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.18.0"
+        "version": "0.18.0-alpha.2"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -33357,14 +33357,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk-macros 0.18.0": {
+    "ic-cdk-macros 0.18.0-alpha.2": {
       "name": "ic-cdk-macros",
-      "version": "0.18.0",
+      "version": "0.18.0-alpha.2",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk-macros/0.18.0/download",
-          "sha256": "30bab0b748bc4059f19abbd2c2609761ca6d6c731979f01148b49afcc4fe7a9f"
+          "url": "https://static.crates.io/crates/ic-cdk-macros/0.18.0-alpha.2/download",
+          "sha256": "4987a4c05c25d2871f8a0dd4b726733fbf4c55b5a82656976333ddd79d8e1ce6"
         }
       },
       "targets": [
@@ -33416,7 +33416,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.18.0"
+        "version": "0.18.0-alpha.2"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -91501,7 +91501,7 @@
     "ic-canister-sig-creation 1.1.0",
     "ic-cbor 3.0.3",
     "ic-cdk 0.17.2",
-    "ic-cdk 0.18.0",
+    "ic-cdk 0.18.0-alpha.2",
     "ic-cdk-timers 0.11.0",
     "ic-certificate-verification 3.0.3",
     "ic-certification 3.0.3",

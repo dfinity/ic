@@ -127,6 +127,12 @@ benches:
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
+  voting_power_snapshots_is_latest_snapshot_a_spike:
+    total:
+      instructions: 31253
+      heap_increase: 0
+      stable_memory_increase: 0
+    scopes: {}
   with_neuron_mut_all_sections_maximum_stable:
     total:
       instructions: 4347082
