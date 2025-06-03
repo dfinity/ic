@@ -16,7 +16,7 @@ package(default_visibility = ["//visibility:public"])
             # Keep sorted.
         ],
         rustc_env = {
-            "ARCHIVE_DID_PATH": "$(execpath :archive.did)",
+            "ARCHIVE_DID_PATH": "../archive.did",
         },
         service_file = ":archive.did",
         version = "0.9.0",
