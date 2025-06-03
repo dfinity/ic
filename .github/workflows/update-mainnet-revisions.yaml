@@ -63,9 +63,7 @@ jobs:
           curl -O -L https://github.com/cli/cli/releases/download/v2.74.0/gh_2.74.0_linux_386.tar.gz
           tar -xvf gh_2.74.0_linux_386.tar.gz
           chmod +x ./gh_2.74.0_linux_386/bin/gh
-          mkdir -p /home/ubuntu/.local/bin
-          cp ./gh_2.74.0_linux_386/bin/gh /home/ubuntu/.local/bin
-          cp ./gh_2.74.0_linux_386/share /home/ubuntu/.local/share -r 
+          cp ./gh_2.74.0_linux_386/bin/gh /ic
           rm -rf gh_2.74.0_linux_386*
 
       - name: Update Mainnet canisters file
