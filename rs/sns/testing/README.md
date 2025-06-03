@@ -1,5 +1,19 @@
 # SNS testing
 
+The main purpose of `sns-testing` is to enable developers of Internet Computer (IC) dapps to test
+Service Nervous System (SNS) decentralization. 
+
+Assuming you are a developer who wants to test SNS-decentralization of their dapp, you need
+to establish your own dapp's deployment process before using this solution. Usually, a testing
+deployment is done in a shell script that interacts with a local replica via DFX.
+
+You might need to slightly adjust your deployment script to work with sns-testing. In particular,
+please avoid running `dfx start` or `dfx replica` inside your deployment script (`sns-testing` will
+take care of starting a replica instance for you).
+
+If you do not yet have a dapp that is ready for decentralization, you may still run sns-testing with
+the built-in test dapp.
+
 ## Table of Contents
 
 * [Prerequisites](#prerequisites)
@@ -9,29 +23,52 @@
 
 ## Prerequisites
 
-SNS testing CLI uses identities managed by `dfx`. Currently, the scenario requires a single developer
-identity to submit NNS/SNS proposals.
+SNS testing CLI uses identities managed by `dfx`. Currently, the scenario requires a single
+developer identity to submit NNS/SNS proposals.
 
 We suggest creating dedicated identity to use with this scenario:
 ```
 dfx identity new sns-testing --storage-mode=plaintext
 ```
-Mind the `--storage-mode=plaintext` as it is required to have `.pem` files in the `dfx` directory on the disk.
+Mind the `--storage-mode=plaintext` as it is required to have `.pem` files in the `dfx` directory
+on the disk.
 
 The scenario was tested with `dfx` `0.24.3`.
 
-`bazel` is required for building binaires from the IC monorepo.
+There are two ways to install `sns-testing`, either building from sources or downloading
+the pre-built bundle.
 
-All instructions from this README are supposed to be run from the root of `ic-sns-testing` crate (i.e. from `rs/sns/testing`).
+### Option A. Building from sources
 
-The easiest way to setup the environment for `sns-testing` is to run
+This assumes your system has a Bazel installation.
+
 ```
-. scripts/env.sh
+bazel build //rs/sns/testing:sns_testing_bundle
 ```
-This command will build all required binaries, copy them to `bin/` directory, and
-add `$PWD/bin` to `PATH`.
 
-Instructions below assume that `PATH` was updated via `. scripts/env.sh` to include all required binaries.
+### Option B. Downloading the pre-built bundle
+
+Pick the latest Git commit from https://github.com/dfinity/ic/commits/master/ and set
+the `IC_COMMIT` environment variable to it. Then, set the `OS` to either `linux` or `darwin`
+(for macOS).
+
+For example:
+
+```
+IC_COMMIT=e4c691f1ade69eb55b06feadaea5fa9eb334716b
+OS=linux
+```
+
+Now you may download and unpack the bundle as follows:
+
+```
+CDN=https://download.dfinity.systems
+NAME=sns_testing_bundle
+mkdir $NAME
+cd $NAME
+curl --fail -L -O "$CDN/ic/${IC_COMMIT}/binaries/x86_64-${OS}/$NAME.tar.gz"
+tar -xvf $NAME.tar.gz
+```
 
 ## Bootstrap the local sns-testing IC network
 
@@ -40,26 +77,39 @@ Subsequent sections will be using this network.
 
 To launch the network:
 1) Launch PocketIC server:
-   This command will launch the `pocket-ic-server` instance in the foreground, so this step has to be launched
-   in a separate terminal window.
+   This command will launch the `pocket-ic-server` instance in the foreground, so this step has to
+   be launched in a separate terminal window.
    ```
-   pocket-ic-server --ttl 300 --port 8888
+   source sns_testing_env.sh
+   $POCKET_IC_BIN --ttl 300 --port 8888
    ```
-2) Bootstrap the NNS on the launched PocketIC instance:
-   Note that we need to use `bazel run` despite invoking `. scripts/env.sh` previously because
-   `sns-testing-init` requires env variables with paths to canister WASM modules to be set which is done
-   by `bazel run`.
+
+   If you get `Failed to bind PocketIC server to address 127.0.0.1:8888`,
+   try another port, until you succeed. In the following instructions, we
+   assume that the port 8888 worked.
+   
+   Alternatively, you can check which process is occupying the port by running `lsof -i :8888`.
+
+
+2) Bootstrap the NNS on the launched PocketIC instance.
+
+   Open another terminal and run:
+
    ```
-   bazel run //rs/sns/testing:sns-testing-init -- --server-url "http://127.0.0.1:8888" \
+   source sns_testing_env.sh
+   ./sns-testing-init \
+       --server-url "http://127.0.0.1:8888" \
        --dev-identity sns-testing \
        --deciding-nns-neuron-id 1
    ```
 
-Once these steps are completed, the PocketIC will expose the IC network HTTP endpoint on "http://127.0.0.1:8080".
-`sns-testing` identity will be added as a controller to the NNS neuron with the majority voting power, so all NNS proposals made
-by `sns-testing` identity will be automatically adopted.
+Once these steps are completed, the PocketIC will expose the IC network HTTP endpoint
+on "http://127.0.0.1:8080". `sns-testing` identity will be added as a controller to the NNS neuron
+with the majority voting power, so all NNS proposals made by `sns-testing` identity will be
+automatically adopted.
 
-Additionally, `sns-testing-init` will output the ID of the NNS neuron that should be used to create NNS proposals.
+Additionally, `sns-testing-init` will output the ID of the NNS neuron that should be used to create
+NNS proposals.
 ```
 ...
 Use the following NNS neuron ID for further testing: 1
@@ -67,15 +117,15 @@ Use the following NNS neuron ID for further testing: 1
 
 This neuron ID will be used later.
 
-`sns-testing-init` additionally installs NNS dapp and Internet Identity canisters with which you can interact
-through their web UI:
+`sns-testing-init` additionally installs NNS dapp and Internet Identity canisters with which you can
+interact through their web UI:
 * NNS dapp: http://qoctq-giaaa-aaaaa-aaaea-cai.localhost:8080
 * Internet Identity: http://rdmx6-jaaaa-aaaaa-aaadq-cai.localhost:8080
 
 NNS dapp canister can be used to inspect the state of NNS/SNS proposals as well as SNS swaps.
 
-You can add the following network config to `~/.config/dfx/networks.json` to simplify the newly created
-network usage with `dfx`:
+You can add the following network config to `~/.config/dfx/networks.json` to simplify the newly
+created network usage with `dfx`:
 ```
 {
   "sns-testing": {
@@ -84,23 +134,24 @@ network usage with `dfx`:
 }
 ```
 
-To stop the network, stop the running `pocket-ic-server` process.
+To stop the network, stop the running `pocket-ic-server` process. It will automatically terminate
+after 300 seconds of inactivity.
 
 ## Run the basic scenario
 
-This section is dedicated to running a basic non-interactive scenario that goes through the SNS lifecycle:
-SNS creation, SNS swap completion, and SNS-controller canister upgrade.
+This section is dedicated to running a basic non-interactive scenario that goes through the SNS
+lifecycle: SNS creation, SNS swap completion, and SNS-controller canister upgrade.
 
-This scenario uses hard-coded SNS configuration. To create and test user-defined SNS, please refer to
-the [next section](#interact-with-sns-lifecycle).
+This scenario uses hard-coded SNS configuration. To create and test user-defined SNS, please refer
+to the [next section](#interact-with-sns-lifecycle).
 
-Instructions below are based on the [test canister](./canister/canister.rs), feel free to use your own canister
-providing corresponding changes to arguments.
+Instructions below are based on the [test canister](./canister/canister.rs), feel free to use your
+own canister providing corresponding changes to arguments.
 
 To run the basic scenario on the local IC network instance:
 1) Build and deploy canister that will be controlled by the created SNS:
    ```
-   bazel build //rs/sns/testing:sns_testing_canister
+   source sns_testing_env.sh
    NNS_ROOT="r7inp-6aaaa-aaaaa-aaabq-cai"
    dfx canister \
        --network http://127.0.0.1:8080 \
@@ -113,14 +164,14 @@ To run the basic scenario on the local IC network instance:
         --network http://127.0.0.1:8080 \
         --identity sns-testing \
         install test \
-        --wasm "$(bazel info bazel-bin)/rs/sns/testing/sns_testing_canister.wasm.gz"
+        --wasm "$SNS_TESTING_CANISTER_WASM_PATH"
    ```
 2) Launch the basic SNS testing scenario:
    ```
-   sns-testing --network http://127.0.0.1:8080 run-basic-scenario \
+   ./sns-testing --network http://127.0.0.1:8080 run-basic-scenario \
       --dev-identity sns-testing --nns-neuron-id 1 \
       --canister-id "$(dfx canister --network http://127.0.0.1:8080 id test)" \
-      --upgrade-wasm-path "$(bazel info bazel-bin)/rs/sns/testing/sns_testing_canister.wasm.gz" \
+      --upgrade-wasm-path "$SNS_TESTING_CANISTER_WASM_PATH" \
       --upgrade-candid-arg '(record { greeting = "Hi" })'
    ```
 
@@ -129,35 +180,50 @@ To re-run it, remove `$PWD/.dfx` directory to be able to re-deploy the canister 
 
 ## Interact with SNS lifecycle
 
-This section provides a step-by-step guide on how to deploy a user-defined SNS and interact with it during its lifecycle.
+This section provides a step-by-step guide on how to deploy a user-defined SNS and interact with it
+during its lifecycle.
 
 ### Getting ICP tokens
 
-You can use `sns-testing --network http://127.0.0.1:8080 transfer-icp` to get ICP tokens to your account.
+You can use `sns-testing --network http://127.0.0.1:8080 transfer-icp` to get ICP tokens to your
+account.
 
 This subcommand supports transfer to the direct account ID, e.g.:
 ```
-sns-testing --network http://127.0.0.1:8080 transfer-icp --amount 650.0 --to 5c9b28f3e2218975ea76449cf9b949a860d741a3af7dd4dd062f7481e3a99cde
+./sns-testing \
+   --network http://127.0.0.1:8080 \
+   transfer-icp \
+      --amount 650.0 \
+      --to 5c9b28f3e2218975ea76449cf9b949a860d741a3af7dd4dd062f7481e3a99cde
 ```
 
 Or to the principal by its ID (and optionally subaccount):
 ```
-sns-testing --network http://127.0.0.1:8080 transfer-icp --amount 650.0 --to-principal fomoo-4i5fe-epl6n-dc7hi-lfqhi-4ii4q-txsav-xvenw-ffacw-youhl-mae
+./sns-testing \
+   --network http://127.0.0.1:8080 \
+   transfer-icp \
+      --amount 650.0 \
+      --to-principal fomoo-4i5fe-epl6n-dc7hi-lfqhi-4ii4q-txsav-xvenw-ffacw-youhl-mae
 ```
 
-Obtained ICP tokens can be used to buy cycles, participate in SNS swap or you may stake them to get NNS neuron. This can be done either using `dfx`, `quill` or NNS dapp web UI.
+Obtained ICP tokens can be used to buy cycles, participate in SNS swap or you may stake them to get
+NNS neuron. This can be done either using `dfx`, `quill` or NNS dapp web UI.
 
 ### Deploying user-provided SNS and completing the SNS swap
 
-The suggested way to do deploy the new SNS is to use the [`sns` CLI](../cli/README.md) `propose` command. For more information please refer to the [documentation](https://internetcomputer.org/docs/building-apps/governing-apps/launching/launch-steps-1proposal#3-submit-nns-proposal-to-create-sns).
+The suggested way to do deploy the new SNS is to use the [`sns` CLI](../cli/README.md) `propose`
+command. For more information please refer to
+the [documentation](https://internetcomputer.org/docs/building-apps/governing-apps/launching/launch-steps-1proposal#3-submit-nns-proposal-to-create-sns).
 
-Make sure to use `sns-testing` identity when creating the proposal, so that it gets instantly adopted.
+Make sure to use `sns-testing` identity when creating the proposal, so that it gets instantly
+adopted.
 
 <details>
 <summary>Sample SNS proposal creation workflow</summary>
 <br>
 
-The example will use `//rs/sns/testing:sns_testing_canister` canister as SNS-controlled canister and will base on the [init YAML file from SNS CLI](../cli/test_sns_init_v2.yaml).
+The example will use `//rs/sns/testing:sns_testing_canister` canister as SNS-controlled canister
+and will base on the [init YAML file from SNS CLI](../cli/test_sns_init_v2.yaml).
 
 **While using a custom sns_init.yaml file, make sure to set `start_time: null` in the swap parameters to ensure that the swap starts right away after the NNS proposal is executed.**
 
@@ -169,7 +235,7 @@ The example will use `//rs/sns/testing:sns_testing_canister` canister as SNS-con
 
 1) Build and deploy `test` canister:
    ```
-   bazel build //rs/sns/testing:sns_testing_canister
+   source sns_testing_env.sh
    NNS_ROOT="r7inp-6aaaa-aaaaa-aaabq-cai"
    dfx canister \
        --network http://127.0.0.1:8080 \
@@ -182,10 +248,11 @@ The example will use `//rs/sns/testing:sns_testing_canister` canister as SNS-con
         --network http://127.0.0.1:8080 \
         --identity sns-testing \
         install test \
-        --wasm "$(bazel info bazel-bin)/rs/sns/testing/sns_testing_canister.wasm.gz"
+        --wasm "$SNS_TESTING_CANISTER_WASM_PATH"
    ```
 
-2) Adjust init YAML file (you will need [`yq`](https://github.com/mikefarah/yq) to be installed to do this):
+2) Adjust init YAML file (you will need [`yq`](https://github.com/mikefarah/yq) to be installed to 
+do this):
    ```
    # Add deployed test canister to the list of SNS-controlled canisters
    yq -i ".dapp_canisters |= [\""$(dfx canister --network http://127.0.0.1:8080 id test)"\"]" sns_init.yaml
@@ -209,10 +276,12 @@ The example will use `//rs/sns/testing:sns_testing_canister` canister as SNS-con
    ```
 </details>
 
-Once the NNS proposal to create the new SNS is adopted and executed, the SNS swap is supposed to open.
+Once the NNS proposal to create the new SNS is adopted and executed, the SNS swap is supposed
+to open.
 
-You can participate in the swap using NNS dapp web UI by creating a new identity via Internet Identity and transferring
-some ICP to the newly created account via `sns-testing transfer-icp` command.
+You can participate in the swap using NNS dapp web UI by creating a new identity via
+Internet Identity and transferring some ICP to the newly created account
+via `sns-testing transfer-icp` command.
 
 Use `sns-testing swap-complete` to generate swap participations and complete the swap:
 ```
@@ -222,24 +291,29 @@ sns-testing --network http://127.0.0.1:8080 swap-complete \
     --follow-principal-neurons "$(dfx identity get-principal --identity sns-testing)"
 ```
 
-This command will generate required number of participations with the sufficient amount of direct participants to complete the swap.
+This command will generate required number of participations with the sufficient amount of direct
+participants to complete the swap.
 
-This command has optional `--follow-principal-neurons` and `--follow-neuron` arguments that accept `PrincipalId` and `NeuronId` to make swap
-participant neurons follow given neurons.
+This command has optional `--follow-principal-neurons` and `--follow-neuron` arguments that accept
+`PrincipalId` and `NeuronId` to make swap participant neurons follow given neurons.
 
 ### Upgrading SNS-controlled canister via SNS voting
 
-The suggested way to submit SNS proposals is to use [`quill`](https://github.com/dfinity/quill/), for more info please refer to the [official documentation](https://internetcomputer.org/docs/building-apps/governing-apps/managing/making-proposals/).
+The suggested way to submit SNS proposals is to use [`quill`](https://github.com/dfinity/quill/),
+for more info please refer to
+the [official documentation](https://internetcomputer.org/docs/building-apps/governing-apps/managing/making-proposals/).
 
-It's required to set `IC_URL="http://127.0.0.1:8080"` env variable for `quill` and use `--insecure-local-dev-mode` `quill` option
-to be able to use `quill` with network created by `sns-testing`.
+It's required to set `IC_URL="http://127.0.0.1:8080"` env variable for `quill` and
+use `--insecure-local-dev-mode` `quill` option to be able to use `quill` with network created
+by `sns-testing`.
 
 <details>
 <summary>Sample SNS-controlled canister upgrade workflow</summary>
 <br>
 
 At this point we assume that SNS named "Daniel" was created and its swap was successfully completed
-by following "Sample SNS proposal creation workflow" steps from the [previous section](#deploying-user-provided-sns-and-completing-the-sns-swap).
+by following "Sample SNS proposal creation workflow" steps from
+the [previous section](#deploying-user-provided-sns-and-completing-the-sns-swap).
 
 1) Get SNS neuron ID contolled by `sns-testing` identity:
    ```
@@ -274,8 +348,9 @@ by following "Sample SNS proposal creation workflow" steps from the [previous se
 
 3) Prepare quill `message.json` with SNS-controlled canister upgrade proposal:
    ```
+   source sns_testing_env.sh
    quill sns --pem-file ~/.config/dfx/identity/sns-testing/identity.pem --canister-ids-file sns_canister_ids.json make-upgrade-canister-proposal \
-      --target-canister-id lxzze-o7777-77777-aaaaa-cai --wasm-path "$(bazel info bazel-bin)/rs/sns/testing/sns_testing_canister.wasm.gz" \
+      --target-canister-id lxzze-o7777-77777-aaaaa-cai --wasm-path "$SNS_TESTING_CANISTER_WASM_PATH" \
       --title "Upgrade SNS-controlled-canister" --mode upgrade "<Neuron ID>" > message.json
    ```
 
@@ -299,7 +374,8 @@ by following "Sample SNS proposal creation workflow" steps from the [previous se
 </details>
 
 Once the SNS proposal is created, the voting begins.
-To upvote the proposal using Neurons controlled by identities that participated in the swap on the [previous steps](#deploying-user-provided-sns-and-completing-the-sns-swap) run:
+To upvote the proposal using Neurons controlled by identities that participated in the swap on
+the [previous steps](#deploying-user-provided-sns-and-completing-the-sns-swap) run:
 ```
 sns-testing --network http://127.0.0.1:8080 sns-proposal-upvote --sns-name "<SNS name>" --proposal-id "<Proposal ID>" --wait
 ```
