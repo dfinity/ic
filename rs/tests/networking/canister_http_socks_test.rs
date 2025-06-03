@@ -37,7 +37,7 @@ use proxy_canister::UnvalidatedCanisterHttpRequestArgs;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::info;
 
-// NOTE: This test is currently non-functional as API boundary nodes on GuestOS do not support IPv4.
+// NOTE: This test is currently non-functional because API boundary nodes running GuestOS on Farm VMs do not support IPv4.
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
