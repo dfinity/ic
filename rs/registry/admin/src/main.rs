@@ -5801,7 +5801,7 @@ async fn update_registry_local_store(nns_urls: Vec<Url>, cmd: UpdateRegistryLoca
             let throw_err = |err| panic!("Error retrieving registry records: {:?}", err);
             if cmd.disable_certificate_validation {
                 remote_canister
-                    .get_changes_since_as_transport_records(latest_version.get())
+                    .get_changes_since_as_registry_records(latest_version.get())
                     .await
                     .unwrap_or_else(throw_err)
             } else {

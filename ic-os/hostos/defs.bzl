@@ -57,28 +57,21 @@ def image_deps(mode, _malicious = False):
     dev_file_build_arg = "BASE_IMAGE=docker-base.dev"
     prod_file_build_arg = "BASE_IMAGE=docker-base.prod"
 
-    image_variants = {
-        "dev": {
-            "build_args": dev_build_args,
-            "file_build_arg": dev_file_build_arg,
-        },
-        "local-base-dev": {
-            "build_args": dev_build_args,
-            "file_build_arg": dev_file_build_arg,
-        },
-        "local-base-prod": {
-            "build_args": prod_build_args,
-            "file_build_arg": prod_file_build_arg,
-        },
-        "prod": {
-            "build_args": prod_build_args,
-            "file_build_arg": prod_file_build_arg,
-        },
-    }
-
-    deps.update(image_variants[mode])
-
+    # Determine build configuration based on mode name
     if "dev" in mode:
+        deps.update({
+            "build_args": dev_build_args,
+            "file_build_arg": dev_file_build_arg,
+        })
+    else:
+        deps.update({
+            "build_args": prod_build_args,
+            "file_build_arg": prod_file_build_arg,
+        })
+
+    # Update dev rootfs
+    if "dev" in mode:
+        deps["rootfs"].pop("//rs/ic_os/release:config", None)
         deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
 
     return deps

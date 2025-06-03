@@ -23,9 +23,7 @@ use url::Url;
 use x509_cert::der; // re-export of der crate
 use x509_cert::spki; // re-export of spki crate
 
-use ic_interfaces_registry::{
-    RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
-};
+use ic_interfaces_registry::{RegistryDataProvider, RegistryRecord, ZERO_REGISTRY_VERSION};
 
 use ic_protobuf::registry::{
     api_boundary_node::v1::ApiBoundaryNodeRecord,
@@ -695,7 +693,7 @@ impl IcConfig {
         let changelog = updates.iter().fold(
             Changelog::default(),
             |mut cl,
-             RegistryTransportRecord {
+             RegistryRecord {
                  version,
                  key,
                  value,
