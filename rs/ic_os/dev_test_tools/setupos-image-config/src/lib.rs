@@ -36,6 +36,9 @@ pub struct ConfigIni {
     domain: Option<String>,
 
     #[arg(long)]
+    enable_trusted_execution_environment: Option<bool>,
+
+    #[arg(long)]
     verbose: Option<String>,
 }
 
@@ -63,6 +66,12 @@ pub struct DeploymentConfig {
 
     #[arg(long)]
     pub deployment_environment: Option<String>,
+
+    #[arg(long)]
+    pub elasticsearch_hosts: Option<String>,
+
+    #[arg(long)]
+    pub elasticsearch_tags: Option<String>,
 }
 
 pub async fn write_config(path: &Path, cfg: &ConfigIni) -> Result<(), Error> {
@@ -75,6 +84,7 @@ pub async fn write_config(path: &Path, cfg: &ConfigIni) -> Result<(), Error> {
         ipv4_address,
         ipv4_gateway,
         ipv4_prefix_length,
+        enable_trusted_execution_environment,
         domain,
         verbose,
     } = cfg;
@@ -97,6 +107,14 @@ pub async fn write_config(path: &Path, cfg: &ConfigIni) -> Result<(), Error> {
         writeln!(&mut f, "ipv4_gateway={}", ipv4_gateway)?;
         writeln!(&mut f, "ipv4_prefix_length={}", ipv4_prefix_length)?;
         writeln!(&mut f, "domain={}", domain)?;
+    }
+
+    if let Some(enable_trusted_execution_environment) = enable_trusted_execution_environment {
+        writeln!(
+            &mut f,
+            "enable_trusted_execution_environment={}",
+            enable_trusted_execution_environment
+        )?;
     }
 
     if let Some(verbose) = verbose {
@@ -146,6 +164,14 @@ pub async fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<()
 
     if let Some(deployment_environment) = &cfg.deployment_environment {
         deployment_json.deployment.name = deployment_environment.to_owned();
+    }
+
+    if let Some(elasticsearch_hosts) = &cfg.elasticsearch_hosts {
+        deployment_json.logging.hosts = elasticsearch_hosts.to_owned();
+    }
+
+    if let Some(elasticsearch_tags) = &cfg.elasticsearch_tags {
+        deployment_json.logging.tags = Some(elasticsearch_tags.to_owned());
     }
 
     let mut f = File::create(path).context("failed to open deployment config file")?;

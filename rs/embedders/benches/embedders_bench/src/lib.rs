@@ -68,8 +68,6 @@ fn initialize_execution_test(
         canister_id,
         wasm.to_vec(),
         initialization_arg.to_vec(),
-        None,
-        None,
     );
     let result = test.install_code(args).unwrap();
     if let WasmResult::Reject(s) = result {

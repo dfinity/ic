@@ -64,7 +64,6 @@ LIB_DEPENDENCIES = [
     "@crate_index//:ic-agent",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-gateway",
-    "@crate_index//:ic-http-gateway",
     "@crate_index//:ic-utils",
     "@crate_index//:itertools",
     "@crate_index//:libc",
@@ -85,6 +84,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:tracing",
     "@crate_index//:tracing-appender",
     "@crate_index//:tracing-subscriber",
+    "@crate_index//:uuid",
     "@crate_index//:wat",
 ]
 

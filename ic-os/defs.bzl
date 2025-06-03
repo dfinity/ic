@@ -28,7 +28,6 @@ def icos_build(
         visibility = None,
         tags = None,
         build_local_base_image = False,
-        installable = False,
         ic_version = "//bazel:version.txt"):
     """
     Generic ICOS build tooling.
@@ -43,7 +42,6 @@ def icos_build(
       visibility: See Bazel documentation
       tags: See Bazel documentation
       build_local_base_image: if True, build the base images from scratch. Do not download the docker.io base image.
-      installable: if True, create install and debug targets, else create launch ones.
       ic_version: the label pointing to the target that returns IC version
 
     Returns:
@@ -157,6 +155,7 @@ def icos_build(
         partition_root_hash = partition_root + "-hash"
         partition_boot_tzst = "partition-boot" + test_suffix + ".tzst"
         version_txt = "version" + test_suffix + ".txt"
+        boot_args = "boot" + test_suffix + "_args"
         extra_boot_args = "extra_boot" + test_suffix + "_args"
 
         ext4_image(
@@ -187,10 +186,38 @@ def icos_build(
                     image_deps["bootfs"].items() + [
                         (version_txt, "/version.txt:0644"),
                         (extra_boot_args, "/extra_boot_args:0644"),
-                    ]
+                    ] + ([(boot_args, "/boot_args:0644")] if "boot_args_template" in image_deps else [])
                 )
             },
             tags = ["manual", "no-cache"],
+        )
+
+        # The kernel command line (boot args) was previously split into two parts:
+        # 1. Dynamic args calculated at boot time in grub.cfg
+        # 2. Static args stored in EXTRA_BOOT_ARGS on the boot partition
+        #
+        # For stable and predictable measurements with AMD SEV, we now pre-calculate and combine both parts
+        # into a single complete kernel command line that is:
+        # - Generated during image build
+        # - Stored statically on the boot partition
+        # - Measured as part of the SEV launch measurement
+        #
+        # For backwards compatibility in the GuestOS and compatibility with the HostOS and SetupOS, we continue
+        # to support the old way of calculating the dynamic args (see :extra_boot_args) and we derive boot_args
+        # from it.
+        native.genrule(
+            name = "generate-" + boot_args,
+            outs = [boot_args],
+            srcs = [extra_boot_args, ":boot_args_template"],
+            cmd = """
+                source "$(location """ + extra_boot_args + """)"
+                if [ ! -v EXTRA_BOOT_ARGS ]; then
+                    echo "EXTRA_BOOT_ARGS is not set in $(location """ + extra_boot_args + """)"
+                    exit 1
+                fi
+                m4 --define=EXTRA_BOOT_ARGS="$${EXTRA_BOOT_ARGS}" "$(location :boot_args_template)" > $@
+            """,
+            tags = ["manual"],
         )
 
         # Sign only if extra_boot_args_template is provided
@@ -234,6 +261,13 @@ def icos_build(
         # Inherit tags for this test, to avoid triggering builds for local base images
         tags = tags,
     )
+
+    if "boot_args_template" in image_deps:
+        native.alias(
+            name = "boot_args_template",
+            actual = image_deps["boot_args_template"],
+        )
+
     # -------------------- Assemble disk partitions ---------------
 
     # Build a list of custom partitions to allow "injecting" variant-specific partition logic.
@@ -347,7 +381,6 @@ EOF
         srcs = ["//ic-os:dev-tools/launch-remote-vm.sh"],
         data = [
             "//rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm",
-            "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
             ":disk-img.tar.zst",
             "//rs/tests/nested:empty-disk-img.tar.zst",
             ":version.txt",
@@ -356,7 +389,6 @@ EOF
         env = {
             "BIN": "$(location //rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm)",
             "UPLOAD_SYSTEST_DEP": "$(location //bazel:upload_systest_dep)",
-            "SCRIPT": "$(location //ic-os/components:hostos-scripts/build-bootstrap-config-image.sh)",
             "VERSION_FILE": "$(location :version.txt)",
             "DISK_IMG": "$(location :disk-img.tar.zst)",
             "EMPTY_DISK_IMG_PATH": "$(location //rs/tests/nested:empty-disk-img.tar.zst)",
@@ -364,91 +396,6 @@ EOF
         testonly = True,
         tags = ["manual"],
     )
-
-    native.genrule(
-        name = "launch-local-vm-script",
-        outs = ["launch_local_vm_script"],
-        cmd = """
-        cat <<"EOF" > $@
-#!/usr/bin/env bash
-set -eo pipefail
-IMG=$$1
-INSTALLABLE=$$2
-VIRT=$$3
-PREPROC=$$4
-PREPROC_FLAGS=$$5
-set -u
-TEMP=$$(mktemp -d --suffix=.qemu-launch-remote-vm)
-# Clean up after ourselves when exiting.
-trap 'rm -rf "$$TEMP"' EXIT
-CID=$$(($$RANDOM + 3))
-cd "$$TEMP"
-cp --reflink=auto --sparse=always --no-preserve=mode,ownership "$$IMG" disk.img
-if [ "$$PREPROC" != "" ] ; then
-    "$$PREPROC" $$PREPROC_FLAGS --image-path disk.img
-fi
-if [ "$$INSTALLABLE" == "yes" ]
-then
-    truncate -s 128G target.img
-    add_disk="-drive file=target.img,format=raw,if=virtio"
-else
-    add_disk=
-fi
-if [ "$$VIRT" == "kvm" ]; then
-    qemu-system-x86_64 -machine type=q35,accel=kvm -enable-kvm -nographic -m 4G -bios /usr/share/ovmf/OVMF.fd -device vhost-vsock-pci,guest-cid=$$CID -boot c $$add_disk -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
-    exit $$?
-else
-    qemu-system-x86_64 -machine type=q35 -nographic -m 4G -bios /usr/share/ovmf/OVMF.fd -boot c $$add_disk -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
-    exit $$?
-fi
-EOF
-        """,
-        executable = True,
-        tags = ["manual"],
-    )
-
-    for accel, variant in (("kvm", ""), ("qemu", " no kvm")):
-        if installable:
-            # Installable produces interactive-install{,-no-kvm} variants that
-            # cause the install to proceed fearlessly and reboot to HostOS.
-            # It also produces interactive-debug{,-no-kvm} variants that cause
-            # the installer to halt so SetupOS can be interactively debugged without
-            # worrying that the installation routine will install then reboot.
-            preproc_checks = ["//rs/ic_os/dev_test_tools/setupos-disable-checks:setupos-disable-checks"]
-            for action, action_flags in (("install", ""), ("debug", "--defeat-installer")):
-                native.genrule(
-                    name = "interactive-" + action + variant.replace(" ", "-"),
-                    srcs = [":disk.img"],
-                    tools = [":launch-local-vm-script"] + preproc_checks,
-                    outs = ["interactive_" + action + variant.replace(" ", "_")],
-                    cmd = """
-            cat <<"EOF" > $@
-#!/usr/bin/env bash
-set -euo pipefail
-exec $(location :launch-local-vm-script) "$$PWD/$(location :disk.img)" yes """ + accel + """ "$$PWD/$(location //rs/ic_os/dev_test_tools/setupos-disable-checks:setupos-disable-checks)" """ + action_flags + """>&2
-EOF
-                    """,
-                    executable = True,
-                    tags = ["manual"],
-                )
-        else:
-            # Variants provide KVM / non-KVM support to run inside VMs and containers.
-            # VHOST for nested VMs is not configured at the moment (should be possible).
-            native.genrule(
-                name = "launch-local-vm" + variant.replace(" ", "-"),
-                srcs = [":disk.img"],
-                tools = [":launch-local-vm-script"],
-                outs = ["launch_local_vm" + variant.replace(" ", "_")],
-                cmd = """
-                cat <<"EOF" > $@
-#!/usr/bin/env bash
-set -euo pipefail
-exec $(location :launch-local-vm-script) "$$PWD/$(location :disk.img)" no """ + accel + """ >&2
-EOF
-                """,
-                executable = True,
-                tags = ["manual"],
-            )
 
     # -------------------- final "return" target --------------------
     # The good practice is to have the last target in the macro with `name = name`.

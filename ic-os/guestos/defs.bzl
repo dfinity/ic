@@ -76,6 +76,7 @@ def image_deps(mode, malicious = False):
         # reflected in the overall version hash (the root_hash must include the
         # version hash, it cannot be the other way around).
         "extra_boot_args_template": Label("//ic-os/guestos/context:extra_boot_args.template"),
+        "boot_args_template": Label("//ic-os/guestos/context:boot_args.template"),
     }
 
     dev_build_args = ["BUILD_TYPE=dev", "ROOT_PASSWORD=root"]
@@ -83,41 +84,22 @@ def image_deps(mode, malicious = False):
     dev_file_build_arg = "BASE_IMAGE=docker-base.dev"
     prod_file_build_arg = "BASE_IMAGE=docker-base.prod"
 
-    image_variants = {
-        "dev": {
+    # Determine build configuration based on mode name
+    if "dev" in mode:
+        deps.update({
             "build_args": dev_build_args,
             "file_build_arg": dev_file_build_arg,
-        },
-        "local-base-dev": {
-            "build_args": dev_build_args,
-            "file_build_arg": dev_file_build_arg,
-        },
-        "dev-malicious": {
-            "build_args": dev_build_args,
-            "file_build_arg": dev_file_build_arg,
-        },
-        "local-base-prod": {
+        })
+    else:
+        deps.update({
             "build_args": prod_build_args,
             "file_build_arg": prod_file_build_arg,
-        },
-        "prod": {
-            "build_args": prod_build_args,
-            "file_build_arg": prod_file_build_arg,
-        },
-    }
+        })
 
-    deps.update(image_variants[mode])
-
-    # Add extra files depending on image variant
-    extra_rootfs_deps = {
-        "dev": {
-            "//ic-os/guestos/context:allow_console_root": "/etc/allow_console_root:0644",
-        },
-        "local-base-dev": {
-            "//ic-os/guestos/context:allow_console_root": "/etc/allow_console_root:0644",
-        },
-    }
-
-    deps["rootfs"].update(extra_rootfs_deps.get(mode, {}))
+    # Update dev rootfs
+    if "dev" in mode:
+        deps["rootfs"].pop("//rs/ic_os/release:config", None)
+        deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
+        deps["rootfs"].update({"//ic-os/guestos/context:allow_console_root": "/etc/allow_console_root:0644"})
 
     return deps

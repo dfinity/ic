@@ -470,6 +470,23 @@ impl TipHandler {
         }
         Ok(())
     }
+
+    /// Moves the entire canister directory from one canister id to another.
+    pub fn move_canister_directory(
+        &mut self,
+        height: Height,
+        src: CanisterId,
+        dst: CanisterId,
+    ) -> Result<(), LayoutError> {
+        let tip = self.tip(height)?;
+        let src_path = tip.canister(&src)?.raw_path();
+        let dst_path = tip.canister(&dst)?.raw_path();
+        std::fs::rename(&src_path, &dst_path).map_err(|err| LayoutError::IoError {
+            path: src_path,
+            message: "Failed to rename canister".to_string(),
+            io_err: err,
+        })
+    }
 }
 
 enum CheckpointRemovalRequest {

@@ -10,7 +10,7 @@ use ic_types::{
     batch::*,
     consensus::{
         certification::*,
-        dkg::{DkgDataPayload, Summary},
+        dkg::{DkgDataPayload, DkgSummary},
         *,
     },
     crypto::{
@@ -29,7 +29,7 @@ pub trait Fake {
 impl Fake for SummaryPayload {
     fn fake() -> Self {
         Self {
-            dkg: dkg::Summary::fake(),
+            dkg: DkgSummary::fake(),
             idkg: None,
         }
     }
@@ -45,7 +45,7 @@ impl Fake for DataPayload {
     }
 }
 
-impl Fake for Summary {
+impl Fake for DkgSummary {
     fn fake() -> Self {
         let registry_version = 1;
 

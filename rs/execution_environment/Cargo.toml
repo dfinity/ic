@@ -39,7 +39,7 @@ ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-utils-lru-cache = { path = "../utils/lru_cache" }
 ic-utils-thread = { path = "../utils/thread" }
-ic-vetkd-utils = { path = "../../packages/ic-vetkd-utils" }
+ic-vetkeys = { workspace = true }
 ic-wasm-types = { path = "../types/wasm_types" }
 lazy_static = { workspace = true }
 memory_tracker = { path = "../memory_tracker" }

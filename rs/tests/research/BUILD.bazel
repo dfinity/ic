@@ -35,7 +35,6 @@ package(default_visibility = ["//rs:system-tests-pkg"])
         "spec_compliance_system_subnet_test",
         "spec_compliance_group_01_system_subnet_test",
         "spec_compliance_group_02_system_subnet_test",
-        "spec_compliance_group_03_system_subnet_test",
     ]
 ]
 

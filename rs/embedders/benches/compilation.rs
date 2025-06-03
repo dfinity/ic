@@ -1,3 +1,12 @@
+//! This benchmark runs nightly in CI, and the results are available in Grafana.
+//! See: `schedule-rust-bench.yml`
+//!
+//! To run the benchmark locally:
+//!
+//! ```shell
+//! bazel run //rs/embedders:compilation_bench
+//! ```
+
 use candid::Encode;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
