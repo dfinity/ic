@@ -19,17 +19,17 @@ fi
 targets=$(mktemp)
 ci/bazel-scripts/diff.sh "${MERGE_BASE_SHA:-HEAD}..${BRANCH_HEAD_SHA:-}" >"$targets"
 
-ARGS=()
+ARGS=(-c)
 
-if grep -q '^//ic-os' <"$targets"; then
-    ARGS+=(-i)
-fi
-if grep -q '^//publish/canisters' <"$targets"; then
-    ARGS+=(-c)
-fi
-if grep -q '^//publish/binaries' <"$targets"; then
-    ARGS+=(-b)
-fi
+#if grep -q '^//ic-os' <"$targets"; then
+#    ARGS+=(-i)
+#fi
+#if grep -q '^//publish/canisters' <"$targets"; then
+#    ARGS+=(-c)
+#fi
+#if grep -q '^//publish/binaries' <"$targets"; then
+#    ARGS+=(-b)
+#fi
 
 rm "$targets"
 
