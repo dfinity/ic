@@ -7,7 +7,7 @@ use ic_management_canister_types_private as ic00;
 use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
-use ic_types::CanisterId;
+use ic_types::{CanisterId, Cycles};
 use prometheus::{Histogram, HistogramVec, IntCounter};
 use std::str::FromStr;
 
@@ -59,6 +59,16 @@ pub(crate) struct ExecutionEnvironmentMetrics {
     /// Critical error for attempting to execute new message
     /// while already in progress a long-running message.
     pub(crate) long_execution_already_in_progress: IntCounter,
+
+    //TODO(urgent): Add comments.
+    pub(crate) http_outcalls_metrics: HttpOutcallMetrics,
+}
+
+pub(crate) struct HttpOutcallMetrics {
+    pub(crate) old_price: Histogram,
+    pub(crate) new_price: Histogram,
+    pub(crate) price_change: Histogram,
+    pub(crate) ratio: Histogram,
 }
 
 impl ExecutionEnvironmentMetrics {
@@ -119,6 +129,33 @@ impl ExecutionEnvironmentMetrics {
                 "Total number of intra-subnet messages that exceed the 2 MiB limit for inter-subnet messages."
             ),
             long_execution_already_in_progress: metrics_registry.error_counter("execution_environment_long_execution_already_in_progress"),
+            //TODO(urgent): revisit those buckets.
+            // The minimum price of an outcall is ~50 million cycles, while the maximum price is ~30 billion.
+            http_outcalls_metrics: HttpOutcallMetrics {
+                old_price: metrics_registry.histogram(
+                    "execution_http_outcalls_old_price",
+                    "Old price of HTTP outcalls, in B cycles.",
+                    // Buckets: 1 million, 2 million, 5 million, ..., 100 billion, 200 billion, 500 billion
+                    decimal_buckets(-2, 1),
+                ),
+                new_price: metrics_registry.histogram(
+                    "execution_http_outcalls_new_price",
+                    "New price of HTTP outcalls, in B cycles.",
+                    decimal_buckets(-2, 1),
+                ),
+                price_change: metrics_registry.histogram(
+                    "execution_http_outcalls_price_change",
+                    "Change in price of HTTP outcalls, in B cycles.",
+                    decimal_buckets(-2, 1),
+                ),
+                // The ratio can go from -1000 to +1000.
+                ratio: metrics_registry.histogram(
+                    "execution_http_outcalls_ratio",
+                    "Ratio of new to old price of HTTP outcalls.",
+                    //TODO(urgent): these should be different buckets.
+                    decimal_buckets(-3, 3),
+                ),
+            },
         }
     }
 
@@ -162,6 +199,23 @@ impl ExecutionEnvironmentMetrics {
         };
 
         self.observe_message_with_label(method_name, duration, outcome_label, status_label)
+    }
+
+    pub(crate) fn observe_http_outcall_price_change(&self, old_price: Cycles, new_price: Cycles) {
+        self.http_outcalls_metrics
+            .old_price
+            .observe(old_price.get() as f64 / 1_000_000_000.0);
+        self.http_outcalls_metrics
+            .new_price
+            .observe(new_price.get() as f64 / 1_000_000_000.0);
+        self.http_outcalls_metrics
+            .price_change
+        //TODO(urgent): this can get negative. 
+            .observe((new_price - old_price).get() as f64 / 1_000_000_000.0);
+        //TODO(urgent): explain why we can divide by 0.
+        self.http_outcalls_metrics
+            .ratio
+            .observe(new_price.get() as f64 / old_price.get() as f64);
     }
 
     /// Helper function to observe the duration and count of subnet messages.

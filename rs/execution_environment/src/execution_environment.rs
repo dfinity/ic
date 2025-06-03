@@ -529,6 +529,36 @@ impl ExecutionEnvironment {
                             state.time().saturating_duration_since(context.get_time());
                         let request = context.get_request();
 
+                        if let SubnetCallContext::CanisterHttpRequest(context) = &context {
+                            let old_price = self.cycles_account_manager.http_request_fee(
+                                context.variable_parts_size(),
+                                context.max_response_bytes,
+                                registry_settings.subnet_size,
+                            );
+
+                            let payload_size = match &response.response_payload {
+                                Payload::Data(data) => data.len(),
+                                // This is 0 because it's neglijable and hard to explain to canisters.
+                                Payload::Reject(reject) => {
+                                    if context.request.sender_reply_callback.get() % 100 == 0 {
+                                        info!(self.log, "debuggg rejecting message: {:?}", reject);
+                                    }
+                                    0
+                                }
+                            };
+
+                            let new_price = self.cycles_account_manager.http_request_fee_beta(
+                                context.variable_parts_size(),
+                                context.max_response_bytes,
+                                registry_settings.subnet_size,
+                                NumBytes::from(payload_size as u64),
+                            );
+
+                            //TODO(urgent): log those metrics:
+                            self.metrics
+                                .observe_http_outcall_price_change(old_price, new_price);
+                        }
+
                         self.metrics.observe_subnet_message(
                             &request.method_name,
                             time_elapsed.as_secs_f64(),
