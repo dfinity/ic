@@ -47,6 +47,7 @@ use ic_system_test_driver::driver::ic::{
 };
 use ic_system_test_driver::driver::ic_gateway_vm::{HasIcGatewayVm, IcGatewayVm};
 use ic_system_test_driver::driver::{
+    farm::HostFeature,
     group::SystemTestGroup,
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
@@ -58,8 +59,8 @@ use nns_dapp::{
     set_authorized_subnets, set_icp_xdr_exchange_rate, set_sns_subnet,
 };
 
-const NUM_FULL_CONSENSUS_APP_SUBNETS: u64 = 1;
-const NUM_SINGLE_NODE_APP_SUBNETS: u64 = 1;
+const NUM_FULL_CONSENSUS_APP_SUBNETS: u64 = 0;
+const NUM_SINGLE_NODE_APP_SUBNETS: u64 = 0;
 const NUM_IC_GATEWAYS: u64 = 1;
 
 fn main() -> Result<()> {
@@ -79,18 +80,30 @@ pub fn setup(env: TestEnv) {
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(64)),
         memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
-        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(2000)),
+        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(2560)),
     };
     let mut ic = InternetComputer::new()
         .with_api_boundary_nodes(1)
         .with_default_vm_resources(vm_resources);
-    ic = ic.add_subnet(Subnet::new(SubnetType::System).add_nodes(4));
-    for _ in 0..NUM_FULL_CONSENSUS_APP_SUBNETS {
-        ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(4));
+    ic = ic.add_subnet(
+        Subnet::new(SubnetType::System).add_nodes_with_required_host_features(
+            1,
+            vec![HostFeature::Host(
+                "dm1-dll45.dm1.dfinity.network".to_string(),
+            )],
+        ),
+    );
+    if NUM_FULL_CONSENSUS_APP_SUBNETS > 0 {
+        for _ in 0..NUM_FULL_CONSENSUS_APP_SUBNETS {
+            ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(4));
+        }
     }
-    for _ in 0..NUM_SINGLE_NODE_APP_SUBNETS {
-        ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(1));
+    if NUM_SINGLE_NODE_APP_SUBNETS > 0 {
+        for _ in 0..NUM_SINGLE_NODE_APP_SUBNETS {
+            ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(1));
+        }
     }
+
     ic.setup_and_start(&env)
         .expect("Failed to setup IC under test");
 

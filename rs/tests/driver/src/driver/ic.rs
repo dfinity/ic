@@ -582,6 +582,34 @@ impl Subnet {
         })
     }
 
+    pub fn add_nodes_without_required_host_features(self, no_of_nodes: usize) -> Self {
+        (0..no_of_nodes).fold(self, |subnet, _| {
+            let default_vm_resources = subnet.default_vm_resources;
+            let vm_allocation = subnet.vm_allocation.clone();
+            subnet.add_node(Node::new_with_settings(
+                default_vm_resources,
+                vm_allocation,
+                vec![],
+            ))
+        })
+    }
+
+    pub fn add_nodes_with_required_host_features(
+        self,
+        no_of_nodes: usize,
+        required_host_features: Vec<HostFeature>,
+    ) -> Self {
+        (0..no_of_nodes).fold(self, |subnet, _| {
+            let default_vm_resources = subnet.default_vm_resources;
+            let vm_allocation = subnet.vm_allocation.clone();
+            subnet.add_node(Node::new_with_settings(
+                default_vm_resources,
+                vm_allocation,
+                required_host_features.clone(),
+            ))
+        })
+    }
+
     pub fn add_node(mut self, node: Node) -> Self {
         self.nodes.push(node);
         self
