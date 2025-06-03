@@ -157,11 +157,11 @@ upload_artifacts(
     testonly = True,
     inputs = [
         "//publish/binaries:bundle",
-        "//publish/binaries:bundle-legacy",
         "//publish/binaries:bundle-sns-testing",
     ] + select({
         "@platforms//os:osx": [],
         "//conditions:default": [
+            "//publish/binaries:bundle-legacy", # avoid overwriting legacy artifacts
             "//publish/canisters:bundle",
             "//ic-os/boundary-guestos/envs/dev:bundle",
             "//ic-os/boundary-guestos/envs/prod:bundle",
