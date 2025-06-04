@@ -260,21 +260,9 @@ impl<T: PartialEq> MultiCallResults<T> {
         let distinct_errors: BTreeSet<_> = self.errors.values().collect();
         match distinct_errors.len() {
             0 => panic!("BUG: expect errors should be non-empty"),
-            1 => match distinct_errors.into_iter().next().unwrap().clone() {
-                RpcError::HttpOutcallError(error) => {
-                    MultiCallError::ConsistentHttpOutcallError(error)
-                }
-                RpcError::JsonRpcError(error) => MultiCallError::ConsistentJsonRpcError {
-                    code: error.code,
-                    message: error.message,
-                },
-                RpcError::ProviderError(error) => {
-                    MultiCallError::ConsistentEvmRpcCanisterError(error.to_string())
-                }
-                RpcError::ValidationError(error) => {
-                    MultiCallError::ConsistentEvmRpcCanisterError(error.to_string())
-                }
-            },
+            1 => {
+                MultiCallError::ConsistentError(distinct_errors.into_iter().next().unwrap().clone())
+            }
             _ => MultiCallError::InconsistentResults(self),
         }
     }
@@ -282,30 +270,14 @@ impl<T: PartialEq> MultiCallResults<T> {
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum MultiCallError<T> {
-    ConsistentHttpOutcallError(HttpOutcallError),
-    ConsistentJsonRpcError { code: i64, message: String },
-    ConsistentEvmRpcCanisterError(String),
+    ConsistentError(RpcError),
     InconsistentResults(MultiCallResults<T>),
 }
 
 fn convert_multirpcresult<T>(result: EvmMultiRpcResult<T>) -> Result<T, MultiCallError<T>> {
     match result {
         EvmMultiRpcResult::Consistent(Ok(t)) => Ok(t),
-        EvmMultiRpcResult::Consistent(Err(RpcError::HttpOutcallError(e))) => {
-            Err(MultiCallError::ConsistentHttpOutcallError(e))
-        }
-        EvmMultiRpcResult::Consistent(Err(RpcError::JsonRpcError(e))) => {
-            Err(MultiCallError::ConsistentJsonRpcError {
-                code: e.code,
-                message: e.message,
-            })
-        }
-        EvmMultiRpcResult::Consistent(Err(RpcError::ProviderError(e))) => {
-            Err(MultiCallError::ConsistentEvmRpcCanisterError(e.to_string()))
-        }
-        EvmMultiRpcResult::Consistent(Err(RpcError::ValidationError(e))) => {
-            Err(MultiCallError::ConsistentEvmRpcCanisterError(e.to_string()))
-        }
+        EvmMultiRpcResult::Consistent(Err(e)) => Err(MultiCallError::ConsistentError(e)),
         EvmMultiRpcResult::Inconsistent(results) => {
             let mut multi_results = MultiCallResults::new();
             results.into_iter().for_each(|(provider, result)| {
@@ -337,17 +309,12 @@ impl<T> ReducedResult<T> {
         reduction: R,
     ) -> ReducedResult<U> {
         let result = match self.result {
-            Ok(t) => fallible_op(t)
-                .map_err(|e| MultiCallError::<U>::ConsistentEvmRpcCanisterError(e.to_string())),
-            Err(MultiCallError::ConsistentHttpOutcallError(e)) => {
-                Err(MultiCallError::<U>::ConsistentHttpOutcallError(e))
-            }
-            Err(MultiCallError::ConsistentJsonRpcError { code, message }) => {
-                Err(MultiCallError::<U>::ConsistentJsonRpcError { code, message })
-            }
-            Err(MultiCallError::ConsistentEvmRpcCanisterError(e)) => {
-                Err(MultiCallError::<U>::ConsistentEvmRpcCanisterError(e))
-            }
+            Ok(t) => fallible_op(t).map_err(|e| {
+                MultiCallError::<U>::ConsistentError(RpcError::ValidationError(
+                    ValidationError::Custom(e.to_string()),
+                ))
+            }),
+            Err(MultiCallError::ConsistentError(e)) => Err(MultiCallError::ConsistentError(e)),
             Err(MultiCallError::InconsistentResults(results)) => {
                 reduction(results.map(fallible_op, &|e| {
                     RpcError::ValidationError(ValidationError::Custom(e.to_string()))
@@ -361,21 +328,7 @@ impl<T> ReducedResult<T> {
         let result = match value {
             EvmMultiRpcResult::Consistent(result) => match result {
                 Ok(t) => Ok(t),
-                Err(e) => match e {
-                    RpcError::ProviderError(e) => {
-                        Err(MultiCallError::ConsistentEvmRpcCanisterError(e.to_string()))
-                    }
-                    RpcError::HttpOutcallError(e) => {
-                        Err(MultiCallError::ConsistentHttpOutcallError(e))
-                    }
-                    RpcError::JsonRpcError(e) => Err(MultiCallError::ConsistentJsonRpcError {
-                        code: e.code,
-                        message: e.message,
-                    }),
-                    RpcError::ValidationError(e) => {
-                        Err(MultiCallError::ConsistentEvmRpcCanisterError(e.to_string()))
-                    }
-                },
+                Err(e) => Err(MultiCallError::ConsistentError(e)),
             },
             EvmMultiRpcResult::Inconsistent(results) => {
                 let mut multi_results = MultiCallResults::new();
@@ -443,8 +396,10 @@ impl<T> MultiCallError<T> {
         predicate: P,
     ) -> bool {
         match self {
-            MultiCallError::ConsistentHttpOutcallError(error) => predicate(error),
-            MultiCallError::ConsistentJsonRpcError { .. } => false,
+            MultiCallError::ConsistentError(RpcError::HttpOutcallError(error)) => predicate(error),
+            MultiCallError::ConsistentError(RpcError::JsonRpcError { .. }) => false,
+            MultiCallError::ConsistentError(RpcError::ProviderError(_)) => false,
+            MultiCallError::ConsistentError(RpcError::ValidationError(_)) => false,
             MultiCallError::InconsistentResults(results) => {
                 results
                     .errors
@@ -456,7 +411,6 @@ impl<T> MultiCallError<T> {
                         | RpcError::ValidationError(_) => false,
                     })
             }
-            MultiCallError::ConsistentEvmRpcCanisterError(_) => false,
         }
     }
 }

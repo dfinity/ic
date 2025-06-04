@@ -269,7 +269,7 @@ mod multi_call_results {
     mod has_http_outcall_error_matching {
         use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
         use crate::eth_rpc_client::{MultiCallError, MultiCallResults};
-        use evm_rpc_client::{HttpOutcallError, JsonRpcError};
+        use evm_rpc_client::{HttpOutcallError, JsonRpcError, RpcError};
         use ic_cdk::api::call::RejectionCode;
         use proptest::prelude::any;
         use proptest::proptest;
@@ -277,10 +277,10 @@ mod multi_call_results {
         proptest! {
             #[test]
             fn should_not_match_when_consistent_json_rpc_error(code in any::<i64>(), message in ".*") {
-                let error: MultiCallError<String> = MultiCallError::ConsistentJsonRpcError {
+                let error: MultiCallError<String> = MultiCallError::ConsistentError(RpcError::JsonRpcError(JsonRpcError {
                     code,
                     message,
-                };
+                }));
                 let always_true = |_outcall_error: &HttpOutcallError| true;
 
                 assert!(!error.has_http_outcall_error_matching(always_true));
@@ -289,11 +289,12 @@ mod multi_call_results {
 
         #[test]
         fn should_match_when_consistent_http_outcall_error() {
-            let error: MultiCallError<String> =
-                MultiCallError::ConsistentHttpOutcallError(HttpOutcallError::IcError {
+            let error: MultiCallError<String> = MultiCallError::ConsistentError(
+                RpcError::HttpOutcallError(HttpOutcallError::IcError {
                     code: RejectionCode::SysTransient,
                     message: "message".to_string(),
-                });
+                }),
+            );
             let always_true = |_outcall_error: &HttpOutcallError| true;
             let always_false = |_outcall_error: &HttpOutcallError| false;
 
