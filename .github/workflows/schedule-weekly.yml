@@ -31,7 +31,7 @@ jobs:
         env:
           FUZZING_GCP_SERVICE_KEY: ${{ secrets.FUZZING_GCP_SERVICE_KEY }}
         run: |
-          echo $FUZZING_GCP_SERVICE_KEY | base64 --decode > bin/fuzzing_service_account.json
+          echo $FUZZING_GCP_SERVICE_KEY | base64 --decode > bin/fuzzing/fuzzing_service_account.json
       - name: Build and Push Fuzzers to GCP
         shell: bash
         run: |
