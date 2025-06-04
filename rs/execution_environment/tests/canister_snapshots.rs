@@ -40,13 +40,6 @@ fn upload_snapshot_with_checkpoint() {
     let chunk_store_dl = env.get_snapshot_chunk_store(&md_args).unwrap();
     assert_eq!(stable_memory_dl.len(), num_pages * (1 << 16));
     assert!(stable_memory_dl.ends_with(&[num_pages as u8, 0, 0, 0]));
-    println!(
-        "{}, {}, {}, {}",
-        module_dl.len(),
-        heap_dl.len(),
-        stable_memory_dl.len(),
-        chunk_store_dl.len()
-    );
     let args = UploadCanisterSnapshotMetadataArgs::new(
         canister_id,
         None,
@@ -72,28 +65,18 @@ fn upload_snapshot_with_checkpoint() {
         snapshot_id.clone(),
         &stable_memory_dl,
         None,
+        Some(1),
+    )
+    .unwrap();
+    env.checkpointed_tick();
+    env.upload_snapshot_stable_memory(
+        canister_id,
+        snapshot_id.clone(),
+        &stable_memory_dl,
+        Some(1),
         None,
     )
     .unwrap();
-    // println!("1 ----------");
-    // env.upload_snapshot_stable_memory(
-    //     canister_id,
-    //     snapshot_id.clone(),
-    //     &stable_memory_dl,
-    //     None,
-    //     Some(1),
-    // )
-    // .unwrap();
-    // env.checkpointed_tick();
-    // println!("2 ----------");
-    // env.upload_snapshot_stable_memory(
-    //     canister_id,
-    //     snapshot_id.clone(),
-    //     &stable_memory_dl,
-    //     Some(1),
-    //     None,
-    // )
-    // .unwrap();
     // change state to be overwritten:
     let res_1 = env.execute_ingress(canister_id, "inc", vec![]).unwrap();
     let load_args = LoadCanisterSnapshotArgs::new(
@@ -117,7 +100,7 @@ fn upload_snapshot_with_checkpoint() {
         .filter(|x| *x != 0)
         .collect();
     assert_eq!(stable_memory_nonzero, stable_memory_nonzero_2);
-    // assert_eq!(stable_memory_dl, stable_memory_dl_2);
+    assert_eq!(stable_memory_dl, stable_memory_dl_2);
     let res_2 = env.execute_ingress(canister_id, "inc", vec![]).unwrap();
     // this implies that the module and heap were restored properly
     assert_eq!(res_1, res_2);
