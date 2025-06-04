@@ -3582,7 +3582,7 @@ impl StateMachine {
                 continue;
             }
             let kind = kind_gen(start);
-            let chunk = data.as_ref()[start as usize..(start as usize + size as usize)].to_vec();
+            let chunk = data.as_ref()[start as usize..(start + size) as usize].to_vec();
             let args = UploadCanisterSnapshotDataArgs {
                 canister_id: canister_id.into(),
                 snapshot_id: snapshot_id.clone(),
