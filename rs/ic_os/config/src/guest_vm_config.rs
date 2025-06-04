@@ -64,10 +64,12 @@ fn run(
             "HostOS generate GuestOS config",
         )])?;
 
-        bail!(
-            "GuestOS configuration file already exists: {}",
+        println!(
+            "GuestOS VM config file already exists: {}",
             args.output.display()
         );
+
+        return Ok(());
     }
 
     let vm_config_path = &args.output;
@@ -265,6 +267,7 @@ mod tests {
                 use_nns_public_key: false,
                 nns_urls: vec![url::Url::parse("https://example.com").unwrap()],
                 use_node_operator_private_key: false,
+                enable_trusted_execution_environment: false,
                 use_ssh_authorized_keys: false,
                 icos_dev_settings: Default::default(),
             },
@@ -402,17 +405,13 @@ mod tests {
             config: hostos_config_path,
         };
 
-        let result_err = run(
+        let result = run(
             args,
             &MetricsWriter::new(metrics_path.clone()),
             mock_restorecon,
-        )
-        .unwrap_err();
-
-        assert!(
-            result_err.to_string().contains("already exists"),
-            "{result_err:?}"
         );
+
+        assert!(result.is_ok());
 
         assert_eq!(
             fs::read_to_string(metrics_path).unwrap(),

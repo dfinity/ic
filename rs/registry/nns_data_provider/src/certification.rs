@@ -1,6 +1,6 @@
 use ic_certification::{verify_certified_data, CertificateValidationError};
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
-use ic_interfaces_registry::RegistryTransportRecord;
+use ic_interfaces_registry::RegistryRecord;
 use ic_registry_transport::{
     dechunkify_mutation_value,
     pb::v1::{CertifiedResponse, HighCapacityRegistryAtomicMutateRequest},
@@ -125,7 +125,7 @@ pub async fn decode_hash_tree(
     since_version: u64,
     hash_tree: MixedHashTree,
     get_chunk: &(impl GetChunk + Sync),
-) -> Result<(Vec<RegistryTransportRecord>, RegistryVersion), CertificationError> {
+) -> Result<(Vec<RegistryRecord>, RegistryVersion), CertificationError> {
     // Extract structured deltas from their tree representation.
     let labeled_tree = LabeledTree::<Vec<u8>>::try_from(hash_tree).map_err(|err| {
         CertificationError::MalformedHashTree(format!(
@@ -158,7 +158,7 @@ pub async fn decode_hash_tree(
                 .await
                 .map_err(CertificationError::DechunkifyingFailed)?;
 
-            changes.push(RegistryTransportRecord {
+            changes.push(RegistryRecord {
                 key,
                 value,
                 version,
@@ -181,7 +181,7 @@ pub(crate) async fn decode_certified_deltas(
     nns_pk: &ThresholdSigPublicKey,
     payload: &[u8],
     get_chunk: &(impl GetChunk + Sync),
-) -> Result<(Vec<RegistryTransportRecord>, RegistryVersion, Time), CertificationError> {
+) -> Result<(Vec<RegistryRecord>, RegistryVersion, Time), CertificationError> {
     let certified_response = CertifiedResponse::decode(payload).map_err(|err| {
         CertificationError::DeserError(format!(
             "failed to decode certified response from {}: {:?}",
