@@ -2296,7 +2296,7 @@ fn test_env_var_value_operations() {
     );
 
     // Test copying value for existing variable
-    api.ic0_env_var_value_copy(0, 0, 11, 0, var_name.len(), &mut heap)
+    api.ic0_env_var_value_copy(0, var_name.len(), 0, 0, 11, &mut heap)
         .unwrap();
     assert_eq!(&heap[0..11], b"Hello World");
 
@@ -2316,7 +2316,7 @@ fn test_env_var_value_operations() {
             .unwrap(),
         23 // length of "/usr/local/bin:/usr/bin"
     );
-    api.ic0_env_var_value_copy(0, 0, 23, 0, path_var.len(), &mut heap)
+    api.ic0_env_var_value_copy(0, path_var.len(),0, 0, 23, &mut heap)
         .unwrap();
     assert_eq!(&heap[0..23], b"/usr/local/bin:/usr/bin");
 

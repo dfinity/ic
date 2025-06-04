@@ -1883,7 +1883,7 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_env_var_name_size(&self, index: usize) -> HypervisorResult<usize> {
         let result = match &self.api_type {
-            ApiType::Start { .. } => Err(self.error_for("ic0_env_var_count")),
+            ApiType::Start { .. } => Err(self.error_for("ic0_env_var_name_size")),
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -1922,7 +1922,7 @@ impl SystemApi for SystemApiImpl {
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
-            ApiType::Start { .. } => Err(self.error_for("ic0_env_var_count")),
+            ApiType::Start { .. } => Err(self.error_for("ic0_env_var_name_copy")),
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -1983,7 +1983,7 @@ impl SystemApi for SystemApiImpl {
         heap: &[u8],
     ) -> HypervisorResult<usize> {
         let result = match &self.api_type {
-            ApiType::Start { .. } => Err(self.error_for("ic0_env_var_count")),
+            ApiType::Start { .. } => Err(self.error_for("ic0_env_var_value_size")),
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -2003,7 +2003,7 @@ impl SystemApi for SystemApiImpl {
 
                 let name = std::str::from_utf8(name_bytes).map_err(|_| {
                     HypervisorError::UserContractViolation {
-                        error: "ic0.env_var_value_size: the name is not a valid UTF-8 string."
+                        error: "ic0.env_var_value_size: Variable name is not a valid UTF-8 string."
                             .to_string(),
                         suggestion:
                             "Provide a valid UTF-8 string for the environment variable name."
@@ -2030,15 +2030,15 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_env_var_value_copy(
         &self,
+        name_src: usize,
+        name_size: usize,
         dst: usize,
         offset: usize,
         size: usize,
-        name_src: usize,
-        name_size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
-            ApiType::Start { .. } => Err(self.error_for("ic0_env_var_count")),
+            ApiType::Start { .. } => Err(self.error_for("ic0_env_var_value_copy")),
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -2058,7 +2058,7 @@ impl SystemApi for SystemApiImpl {
 
                 let name = std::str::from_utf8(name_bytes).map_err(|_| {
                     HypervisorError::UserContractViolation {
-                        error: "ic0.env_var_value_size: the name is not a valid UTF-8 string."
+                        error: "ic0.env_var_value_copy: the name is not a valid UTF-8 string."
                             .to_string(),
                         suggestion:
                             "Provide a valid UTF-8 string for the environment variable name."

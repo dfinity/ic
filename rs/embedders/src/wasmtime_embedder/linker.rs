@@ -655,7 +655,7 @@ pub fn syscalls<
                 charge_for_cpu_and_mem(&mut caller, overhead::ENV_VAR_VALUE_COPY, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api
-                        .ic0_env_var_value_copy(dst, offset, size, name_src, name_size, memory)
+                        .ic0_env_var_value_copy(name_src, name_size, dst, offset, size, memory)
                 })?;
                 if feature_flags.write_barrier == FlagStatus::Enabled {
                     mark_writes_on_bytemap(&mut caller, dst, size)

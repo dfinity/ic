@@ -677,11 +677,11 @@ pub trait SystemApi {
     /// Copies the value of the environment variable with the given name into memory.
     fn ic0_env_var_value_copy(
         &self,
+        name_src: usize,
+        name_size: usize,
         dst: usize,
         offset: usize,
         size: usize,
-        name_src: usize,
-        name_size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
