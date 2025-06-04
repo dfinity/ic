@@ -1,10 +1,10 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use askama::Template;
 use clap::Parser;
 use config::guestos_bootstrap_image::BootstrapOptions;
 use config::guestos_config::generate_guestos_config;
 use config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH;
-use config_types::{GuestOSConfig, HostOSConfig, Ipv6Config};
+use config_types::{GuestOSConfig, HostOSConfig};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant};
 use ic_metrics_tool::{Metric, MetricsWriter};
@@ -123,14 +123,6 @@ fn make_bootstrap_options(
     hostos_config: &HostOSConfig,
     guestos_config: GuestOSConfig,
 ) -> Result<BootstrapOptions> {
-    let guestos_ipv6_config = match &guestos_config.network_settings.ipv6_config {
-        Ipv6Config::Fixed(ip_config) => ip_config.clone(),
-        _ => bail!(
-            "Expected GuestOS IPv6 address to be fixed but was {:?}",
-            guestos_config.network_settings.ipv6_config
-        ),
-    };
-
     let mut bootstrap_options = BootstrapOptions {
         guestos_config: Some(guestos_config),
         ..Default::default()
@@ -150,42 +142,6 @@ fn make_bootstrap_options(
         bootstrap_options.node_operator_private_key =
             Some(PathBuf::from("/boot/config/node_operator_private_key.pem"));
     }
-
-    bootstrap_options.ipv6_address = Some(guestos_ipv6_config.address.clone());
-    bootstrap_options.ipv6_gateway = Some(guestos_ipv6_config.gateway.to_string());
-
-    if let Some(ipv4_config) = &hostos_config.network_settings.ipv4_config {
-        bootstrap_options.ipv4_address = Some(format!(
-            "{}/{}",
-            ipv4_config.address, ipv4_config.prefix_length
-        ));
-        bootstrap_options.ipv4_gateway = Some(ipv4_config.gateway.to_string());
-    }
-
-    if let Some(domain) = &hostos_config.network_settings.domain_name {
-        bootstrap_options.domain = Some(domain.clone());
-    }
-
-    if let Some(node_reward_type) = &hostos_config.icos_settings.node_reward_type {
-        bootstrap_options.node_reward_type = Some(node_reward_type.clone());
-    }
-
-    let hostname = format!(
-        "guest-{}",
-        hostos_config
-            .icos_settings
-            .mgmt_mac
-            .to_string()
-            .replace(":", "")
-    );
-    bootstrap_options.hostname = Some(hostname);
-
-    bootstrap_options.nns_urls = hostos_config
-        .icos_settings
-        .nns_urls
-        .iter()
-        .map(|url| url.to_string())
-        .collect();
 
     Ok(bootstrap_options)
 }
@@ -299,14 +255,6 @@ mod tests {
         assert_eq!(
             options,
             BootstrapOptions {
-                ipv6_address: Some("2001:db8::6801:aeff:fe1a:9bb/64".to_string()),
-                ipv6_gateway: Some("2001:db8::ffff".to_string()),
-                ipv4_address: Some("192.168.1.2/24".to_string()),
-                ipv4_gateway: Some("192.168.1.1".to_string()),
-                domain: Some("test.domain".to_string()),
-                node_reward_type: Some("type3.1".to_string()),
-                hostname: Some("guest-001122334455".to_string()),
-                nns_urls: vec!["https://example.com/".to_string()],
                 guestos_config: Some(guestos_config),
                 nns_public_key: Some(PathBuf::from("/boot/config/nns_public_key.pem")),
                 node_operator_private_key: Some(PathBuf::from(
