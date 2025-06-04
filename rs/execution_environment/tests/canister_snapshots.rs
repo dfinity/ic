@@ -191,6 +191,8 @@ fn upload_snapshot_with_checkpoint() {
     let res_2 = env.execute_ingress(canister_id, "inc", vec![]).unwrap();
     // this implies that the module and heap were restored properly
     assert_eq!(res_1, res_2);
+    let chunk_store_dl_2 = env.get_snapshot_chunk_store(&md_args_2).unwrap();
+    assert_eq!(chunk_store_dl, chunk_store_dl_2);
 }
 
 /// Counter canister that also grows the stable memory by one page on "inc".
