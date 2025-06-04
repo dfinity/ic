@@ -84,42 +84,27 @@ def image_deps(mode, malicious = False):
     dev_file_build_arg = "BASE_IMAGE=docker-base.dev"
     prod_file_build_arg = "BASE_IMAGE=docker-base.prod"
 
-    image_variants = {
-        "dev": {
-            "build_args": dev_build_args,
-            "file_build_arg": dev_file_build_arg,
-        },
-        "dev-recovery": {
-            "build_args": dev_build_args,
-            "file_build_arg": dev_file_build_arg,
-        },
-        "local-base-dev": {
-            "build_args": dev_build_args,
-            "file_build_arg": dev_file_build_arg,
-        },
-        "dev-malicious": {
-            "build_args": dev_build_args,
-            "file_build_arg": dev_file_build_arg,
-        },
-        "local-base-prod": {
-            "build_args": prod_build_args,
-            "file_build_arg": prod_file_build_arg,
-        },
-        "prod": {
-            "build_args": prod_build_args,
-            "file_build_arg": prod_file_build_arg,
-        },
-        "prod-recovery": {
-            "build_args": prod_build_args,
-            "file_build_arg": prod_file_build_arg,
-        },
-    }
-
-    deps.update(image_variants[mode])
-
+    # Determine build configuration based on mode name
     if "dev" in mode:
+        deps.update({
+            "build_args": dev_build_args,
+            "file_build_arg": dev_file_build_arg,
+        })
+    else:
+        deps.update({
+            "build_args": prod_build_args,
+            "file_build_arg": prod_file_build_arg,
+        })
+
+    # Update dev rootfs
+    if "dev" in mode:
+        # Allow console access
+        deps["rootfs"].update({"//ic-os/guestos/context:allow_console_root": "/etc/allow_console_root:0644"})
+        # Dev config tool
+        deps["rootfs"].pop("//rs/ic_os/release:config", None)
         deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
 
+    # Update recovery rootfs
     if "recovery" in mode:
         recovery_component_files = dict(component_files)
         recovery_component_files.update({
@@ -127,20 +112,5 @@ def image_deps(mode, malicious = False):
             Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service"): "/etc/systemd/system/guestos-recovery-engine.service",
         })
         deps["component_files"] = recovery_component_files
-
-    # Add extra files depending on image variant
-    extra_rootfs_deps = {
-        "dev": {
-            "//ic-os/guestos/context:allow_console_root": "/etc/allow_console_root:0644",
-        },
-        "dev-recovery": {
-            "//ic-os/guestos/context:allow_console_root": "/etc/allow_console_root:0644",
-        },
-        "local-base-dev": {
-            "//ic-os/guestos/context:allow_console_root": "/etc/allow_console_root:0644",
-        },
-    }
-
-    deps["rootfs"].update(extra_rootfs_deps.get(mode, {}))
 
     return deps
