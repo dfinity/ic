@@ -248,6 +248,11 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::MintCycles128 => vec!["U", "Ry", "Rt", "T"],
         SystemApiCallId::SubnetSelfSize => vec!["*"],
         SystemApiCallId::SubnetSelfCopy => vec!["*"],
+        SystemApiCallId::EnvVarCount => vec!["*"],
+        SystemApiCallId::EnvVarNameSize => vec!["*"],
+        SystemApiCallId::EnvVarNameCopy => vec!["*"],
+        SystemApiCallId::EnvVarValueSize => vec!["*"],
+        SystemApiCallId::EnvVarValueCopy => vec!["*"],
     };
     // the semantics of "*" is to cover all modes except for "s"
     matrix.get(&api_type).unwrap().contains(&context)
@@ -777,6 +782,62 @@ fn api_availability_test(
         SystemApiCallId::SubnetSelfCopy => {
             assert_api_availability(
                 |api| api.ic0_subnet_self_copy(0, 0, 0, &mut [42; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::EnvVarCount => {
+            assert_api_availability(
+                |api| api.ic0_env_var_count(),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::EnvVarNameSize => {
+            assert_api_availability(
+                |api| api.ic0_env_var_name_size(0),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::EnvVarNameCopy => {
+            assert_api_availability(
+                |api| api.ic0_env_var_name_copy(0, 0, 0, 0, &mut [0; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::EnvVarValueSize => {
+            let mut heap = vec![0u8; 64];
+            let var_name = b"TEST_VAR_1";
+            copy_to_heap(&mut heap, var_name);
+            assert_api_availability(
+                |api| api.ic0_env_var_value_size(0, 10, &mut heap.clone()),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::EnvVarValueCopy => {
+            let mut heap = vec![0u8; 64];
+            let var_name = b"TEST_VAR_1";
+            copy_to_heap(&mut heap, var_name);
+            assert_api_availability(
+                |api| api.ic0_env_var_value_copy(0, 10, 0, 0, 0, &mut heap.clone()),
                 api_type,
                 &system_state,
                 cycles_account_manager,

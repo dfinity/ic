@@ -268,6 +268,16 @@ pub enum SystemApiCallId {
     Trap,
     /// Tracker for `__.try_grow_wasm_memory()`
     TryGrowWasmMemory,
+    /// Tracker for `ic0.env_var_count()`
+    EnvVarCount,
+    /// Tracker for `ic0.env_var_name_size()`
+    EnvVarNameSize,
+    /// Tracker for `ic0.env_var_name_copy()`
+    EnvVarNameCopy,
+    /// Tracker for `ic0.env_var_value_size()`
+    EnvVarValueSize,
+    /// Tracker for `ic0.env_var_value_copy()`
+    EnvVarValueCopy,
 }
 
 /// System API call counters, i.e. how many times each tracked System API call
