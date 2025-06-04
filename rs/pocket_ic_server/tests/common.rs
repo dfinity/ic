@@ -6,12 +6,24 @@ use pocket_ic::common::rest::CanisterIdRange as RawCanisterIdRange;
 use pocket_ic::PocketIc;
 use reqwest::Url;
 use std::path::PathBuf;
-use std::process::Child;
-use std::process::Command;
+use std::process::{Child, Command};
 use std::time::Duration;
 use tempfile::NamedTempFile;
 
 const LOCALHOST: &str = "127.0.0.1";
+
+// this function is not used by all integration test suites => dead code allowed
+#[allow(dead_code)]
+pub fn raw_canister_id_range_into(r: &RawCanisterIdRange) -> CanisterIdRange {
+    CanisterIdRange {
+        start: PrincipalId(Principal::from_slice(&r.start.canister_id))
+            .try_into()
+            .unwrap(),
+        end: PrincipalId(Principal::from_slice(&r.end.canister_id))
+            .try_into()
+            .unwrap(),
+    }
+}
 
 // this function is not used by all integration test suites => dead code allowed
 #[allow(dead_code)]
@@ -63,19 +75,6 @@ pub fn start_server_helper(
 pub fn start_server() -> Url {
     let test_driver_pid = std::process::id();
     start_server_helper(Some(test_driver_pid), None, false, false).0
-}
-
-// this function is not used by all integration test suites => dead code allowed
-#[allow(dead_code)]
-pub fn raw_canister_id_range_into(r: &RawCanisterIdRange) -> CanisterIdRange {
-    CanisterIdRange {
-        start: PrincipalId(Principal::from_slice(&r.start.canister_id))
-            .try_into()
-            .unwrap(),
-        end: PrincipalId(Principal::from_slice(&r.end.canister_id))
-            .try_into()
-            .unwrap(),
-    }
 }
 
 // this function is not used by all integration test suites => dead code allowed

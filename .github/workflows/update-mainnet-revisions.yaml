@@ -58,17 +58,20 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Setup gh cli
-        uses: ksivamuthu/actions-setup-gh-cli@v3
-        with:
-          version: 2.53.0
+        env:
+          GH_CLI_VERSION: 2.74.0
+        run: |
+          curl -o gh_cli.tar.gz -L https://github.com/cli/cli/releases/download/v${GH_CLI_VERSION}/gh_${GH_CLI_VERSION}_linux_386.tar.gz
+          tar -xvf gh_cli.tar.gz
+          mv "gh_${GH_CLI_VERSION}_linux_386" gh_cli
+          chmod +x ./gh_cli/bin/gh
+          sudo cp ./gh_cli/bin/gh /usr/local/bin/
+          rm -rf gh_cli*
 
       - name: Update Mainnet canisters file
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -eEuxo pipefail
-
-          # Leftover from previous step of setting up gh cli
-          rm gh_tar
 
           time python ci/src/mainnet_revisions/mainnet_revisions.py canisters
