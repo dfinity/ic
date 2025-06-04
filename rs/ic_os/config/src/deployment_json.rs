@@ -16,7 +16,9 @@ pub struct DeploymentSettings {
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct Deployment {
+    /// The deployment environment is either "mainnet" or "testnet"
     pub deployment_environment: String,
+    /// Optional management MAC address for network configuration, used for nested environments
     pub mgmt_mac: Option<String>,
 }
 
@@ -37,7 +39,7 @@ pub struct Nns {
 pub struct VmResources {
     #[serde_as(as = "DisplayFromStr")]
     pub memory: u32,
-    /// Can be "kvm" or "qemu". If None, is treated as "kvm".
+    /// CPU virtualization type: "kvm" or "qemu". If None, defaults to "kvm"
     pub cpu: Option<String>,
     /// Maximum number of virtual CPUs allocated for the GuestOS,
     /// which must be between 1 and the maximum supported by the hypervisor.
