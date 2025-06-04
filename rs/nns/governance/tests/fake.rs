@@ -20,11 +20,11 @@ use ic_nns_governance::{
     governance::{Environment, Governance, HeapGrowthPotential, RngError},
     pb::v1::{
         manage_neuron, manage_neuron::NeuronIdOrSubaccount, proposal, ExecuteNnsFunction,
-        GovernanceError, ManageNeuron, Motion, NetworkEconomics, Neuron, NnsFunction, Proposal,
-        Vote,
+        GovernanceError, ManageNeuron, Motion, NetworkEconomics, NnsFunction, Proposal, Vote,
     },
     use_node_provider_reward_canister,
 };
+use ic_nns_governance_api::Neuron;
 use ic_nns_governance_api::{manage_neuron_response, ManageNeuronResponse};
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_swap::pb::v1 as sns_swap_pb;
