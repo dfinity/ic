@@ -3,7 +3,7 @@
   <uuid>fd897da5-8017-41c8-8575-a706dba30766</uuid>
   <metadata>
     <libosinfo:libosinfo xmlns:libosinfo="http://libosinfo.org/xmlns/libvirt/domain/1.0">
-      <libosinfo:os id="http://ubuntu.com/ubuntu/20.04"/>
+      <libosinfo:os id="http://ubuntu.com/ubuntu/24.04"/>
     </libosinfo:libosinfo>
   </metadata>
   <memory unit='GiB'>{{vm_memory}}</memory>
