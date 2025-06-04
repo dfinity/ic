@@ -166,8 +166,7 @@ pub async fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<()
 
     if let Some(deployment_environment) = &cfg.deployment_environment {
         deployment_json.deployment.deployment_environment =
-            DeploymentEnvironment::from_str(deployment_environment)
-                .context("Invalid deployment environment. Must be 'mainnet' or 'testnet'")?;
+            DeploymentEnvironment::from_str(deployment_environment)?;
     }
 
     if let Some(elasticsearch_hosts) = &cfg.elasticsearch_hosts {
