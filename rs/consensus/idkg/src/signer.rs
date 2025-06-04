@@ -61,7 +61,10 @@ impl CreateSigShareError {
             CreateSigShareError::Ecdsa(_) => false,
             CreateSigShareError::Schnorr(_) => false,
             CreateSigShareError::VetKd(err) => {
-                matches!(err.as_ref(), &VetKdKeyShareCreationError::ThresholdSigDataNotFound(_))
+                matches!(
+                    err.as_ref(),
+                    &VetKdKeyShareCreationError::ThresholdSigDataNotFound(_)
+                )
             }
         }
     }
@@ -90,7 +93,10 @@ impl VerifySigShareError {
             VerifySigShareError::Ecdsa(_) => false,
             VerifySigShareError::Schnorr(_) => false,
             VerifySigShareError::VetKd(err) => {
-                matches!(err, &VetKdKeyShareVerificationError::ThresholdSigDataNotFound(_))
+                matches!(
+                    err,
+                    &VetKdKeyShareVerificationError::ThresholdSigDataNotFound(_)
+                )
             }
             VerifySigShareError::ThresholdSchemeMismatch => false,
         }
