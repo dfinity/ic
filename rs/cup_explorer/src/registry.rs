@@ -10,26 +10,30 @@ use ic_types::{
     registry::RegistryClientError, NodeId, PrincipalId, RegistryVersion, SubnetId, Time,
 };
 use prost::Message;
-use std::{io::Write, sync::Arc, thread};
+use std::{io::Write, path::PathBuf, sync::Arc, thread};
 use tempfile::NamedTempFile;
 use tokio::{runtime::Runtime, task};
 use url::Url;
 
 /// A wrapper struct allowing us to implement the [RegistryClient] interface for [RegistryCanister].
-pub struct RegistryCanisterClient(pub Arc<RegistryCanister>);
+pub(crate) struct RegistryCanisterClient(Arc<RegistryCanister>);
 
 impl RegistryCanisterClient {
     /// Create a new [RegistryCanisterClient]
-    pub fn new(nns_url: Url) -> RegistryCanisterClient {
-        let pem_bytes: &[u8] = include_bytes!("../ic_public_key.pem");
-        // Write public keys to a temp file, because `parse_threshold_sig_key` expects a file path
+    pub fn new(nns_url: Url, nns_pem: Option<PathBuf>) -> RegistryCanisterClient {
         let mut temp = NamedTempFile::new().unwrap();
-        temp.write_all(pem_bytes).unwrap();
+        let nns_pem_path = nns_pem.unwrap_or_else(|| {
+            println!("Using mainnet NNS public key.");
+            let pem_bytes: &[u8] = include_bytes!("../ic_public_key.pem");
+            // Write public keys to a temp file, because `parse_threshold_sig_key` expects a file path
+            temp.write_all(pem_bytes).unwrap();
+            temp.path().into()
+        });
 
         let content = std::fs::read_to_string(temp.path()).unwrap();
         println!("NNS public key being used: \n{}", content);
 
-        let nns_public_key = parse_threshold_sig_key(temp.path()).unwrap();
+        let nns_public_key = parse_threshold_sig_key(nns_pem_path.as_path()).unwrap();
 
         RegistryCanisterClient(Arc::new(RegistryCanister::new_with_agent_transformer(
             vec![nns_url],
@@ -93,7 +97,7 @@ impl RegistryClient for RegistryCanisterClient {
 }
 
 /// Returns the list of nodes assigned to the specified subnet_id.
-pub async fn get_nodes(
+pub(crate) async fn get_nodes(
     registry_canister: &Arc<RegistryCanister>,
     subnet_id: SubnetId,
 ) -> Vec<(NodeId, NodeRecord)> {
