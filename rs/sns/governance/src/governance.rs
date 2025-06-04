@@ -89,6 +89,7 @@ use futures::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canister_profiler::SpanStats;
+use ic_cdk::println;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::spawn;
 use ic_ledger_core::Tokens;
@@ -2032,11 +2033,16 @@ impl Governance {
     }
 
     fn recent_proposals(&self, time_window_seconds: u64) -> u64 {
+        println!("now: {:?}", self.env.now());
         self.proto
             .proposals
             .values()
             .rev()
             .take_while(|proposal| {
+                println!(
+                    "Proposal creation time: {:?}",
+                    proposal.proposal_creation_timestamp_seconds
+                );
                 self.env
                     .now()
                     .saturating_sub(proposal.proposal_creation_timestamp_seconds)

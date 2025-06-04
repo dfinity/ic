@@ -269,27 +269,9 @@ fn test_sns_metrics_0_transactions() {
                 governance.proposals.insert(proposal_id, proposal);
 
                 state_machine.advance_time(Duration::from_secs(ONE_WEEK));
+                // state_machine.tick();
             }
         }
-
-        // {
-        //     let proposals = governance
-        //         .proposals
-        //         .values()
-        //         .map(|proposal| {
-        //             (
-        //                 proposal.id.map(|pid| pid.id),
-        //                 proposal.proposal_creation_timestamp_seconds,
-        //             )
-        //         })
-        //         .collect::<BTreeMap<_, _>>();
-
-        //     panic!(
-        //         "now: {:?},\nProposals: {:?}",
-        //         state_machine.time(),
-        //         proposals
-        //     );
-        // }
 
         let args = Encode!(&governance).unwrap();
         state_machine
@@ -339,6 +321,53 @@ fn test_sns_metrics_0_transactions() {
             "Expected `last_ledger_block_timestamp` to be None",
         );
     }
+
+    {
+        // Prepare the payload to get metrics during the last month.
+        let time_window_seconds = ONE_MONTH;
+        let payload = GetMetricsRequest {
+            time_window_seconds: Some(time_window_seconds),
+        };
+
+        state_machine.advance_time(Duration::from_secs(ONE_DAY));
+        state_machine.tick();
+        let Ok(observed_result) = try_get_metrics(&state_machine, governance_canister_id, payload)
+        else {
+            panic!("Received an Error upon fetching the metrics")
+        };
+
+        let Some(get_metrics_result) = observed_result.get_metrics_result else {
+            panic!("Expected a non-empty response");
+        };
+
+        let get_metrics_response::GetMetricsResult::Ok(metrics) = get_metrics_result else {
+            panic!(
+                "Expected to get an Ok() from the response, got {:?}",
+                get_metrics_result
+            );
+        };
+
+        {
+            let Some(num_recently_submitted_proposals) = metrics.num_recently_submitted_proposals
+            else {
+                panic!("Expected `num_recently_submitted_proposals` to be Some(0)");
+            };
+
+            // @todo
+            assert_eq!(
+                num_recently_submitted_proposals, 3,
+                "Expected 3 proposals to be submitted, got {}",
+                num_recently_submitted_proposals
+            );
+        }
+
+        assert!(
+            metrics.last_ledger_block_timestamp.is_none(),
+            "Expected `last_ledger_block_timestamp` to be None",
+        );
+    }
+
+    panic!();
 }
 
 #[test]

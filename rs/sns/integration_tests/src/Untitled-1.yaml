@@ -1,0 +1,93 @@
+ubuntu@devenv-container:/ic$ bazel test //rs/sns/integration_tests/... --test_arg=test_sns_metrics_0_transaction
+INFO: Invocation ID: 9c728e21-0ddd-4e59-93ff-1089d5a24f4c
+INFO: Analyzed 29 targets (0 packages loaded, 0 targets configured).
+FAIL: //rs/sns/integration_tests:integration_test_src/get_metrics (see /home/ubuntu/.cache/bazel/_bazel_ubuntu/6d065581cce7ad9076e3b8db2b3afaf0/execroot/_main/bazel-out/k8-opt/testlogs/rs/sns/integration_tests/integration_test_src/get_metrics/test.log)
+INFO: From Testing //rs/sns/integration_tests:integration_test_src/get_metrics:
+==================== Test output for //rs/sns/integration_tests:integration_test_src/get_metrics:
+
+running 1 test
+2025-08-27 12:00:52.268660132 UTC: [Canister rrkah-fqaaa-aaaaa-aaaaq-cai] now: 1756296052
+2025-08-27 12:00:52.268660132 UTC: [Canister rrkah-fqaaa-aaaaa-aaaaq-cai] Proposal creation time: 1755691252
+2025-08-27 12:00:52.268660132 UTC: [Canister rrkah-fqaaa-aaaaa-aaaaq-cai] Proposal creation time: 1755086452
+2025-08-27 12:00:52.268660132 UTC: [Canister rrkah-fqaaa-aaaaa-aaaaq-cai] Proposal creation time: 1754481652
+2025-08-27 12:00:52.268660132 UTC: [Canister rrkah-fqaaa-aaaaa-aaaaq-cai] Proposal creation time: 1753876852
+2025-08-27 12:00:52.268660132 UTC: [Canister rrkah-fqaaa-aaaaa-aaaaq-cai] Proposal creation time: 1753272052
+2025-08-28 12:00:52.268660132 UTC: [Canister rrkah-fqaaa-aaaaa-aaaaq-cai] Cannot lock refresh_cached_upgrade_steps: deployed_version not set.
+2025-08-28 12:00:52.268660132 UTC: [Canister rrkah-fqaaa-aaaaa-aaaaq-cai] The SNS does not have a deployed version. Attempting to reset it ...
+2025-08-28 12:00:52.268660132 UTC: [Canister rrkah-fqaaa-aaaaa-aaaaq-cai] now: 1756382452
+2025-08-28 12:00:52.268660132 UTC: [Canister rrkah-fqaaa-aaaaa-aaaaq-cai] Proposal creation time: 1755691252
+2025-08-28 12:00:52.268660132 UTC: [Canister rrkah-fqaaa-aaaaa-aaaaq-cai] Proposal creation time: 1755086452
+2025-08-28 12:00:52.268660132 UTC: [Canister rrkah-fqaaa-aaaaa-aaaaq-cai] Proposal creation time: 1754481652
+2025-08-28 12:00:52.268660132 UTC: [Canister rrkah-fqaaa-aaaaa-aaaaq-cai] Proposal creation time: 1753876852
+test test_sns_metrics_0_transactions ... FAILED
+
+failures:
+
+---- test_sns_metrics_0_transactions stdout ----
+looking up mainnet-ic-icrc1-ledger at MAINNET_IC_ICRC1_LEDGER_WASM_PATH
+Using pre-built binary for mainnet-ic-icrc1-ledger with features: [] (size = 686677, path = external/mainnet_ic-icrc1-ledger/file/ic-icrc1-ledger.wasm.gz)
+looking up sns-governance-canister at SNS_GOVERNANCE_CANISTER_WASM_PATH
+Using pre-built binary for sns-governance-canister with features: [] (size = 1406622, path = rs/sns/governance/sns-governance-canister-test.wasm.gz)
+Jun 04 12:00:56.537 WARN s:/n:/ic_messaging/stream_builder No route to canister 2vxsx-fae
+
+thread 'test_sns_metrics_0_transactions' panicked at rs/sns/integration_tests/src/get_metrics.rs:370:5:
+explicit panic
+stack backtrace:
+   0:     0x5dd4b431bf40 - <std::sys::backtrace::BacktraceLock::print::DisplayBacktrace as core::fmt::Display>::fmt::h6d42cc84fc840290
+   1:     0x5dd4b434ca43 - core::fmt::write::h5af61a909e3ec64d
+   2:     0x5dd4b43174c3 - std::io::Write::write_fmt::h64baa9197d9a3b04
+   3:     0x5dd4b431bd92 - std::sys::backtrace::BacktraceLock::print::h555579e7396c26ac
+   4:     0x5dd4b431d36f - std::panicking::default_hook::{{closure}}::h9128866118196224
+   5:     0x5dd4b431d188 - std::panicking::default_hook::h52e9e7314e0255f6
+   6:     0x5dd4b2722915 - test::test_main::{{closure}}::h903d8079e3c94d93
+   7:     0x5dd4b431de63 - std::panicking::rust_panic_with_hook::h541791bcc774ef34
+   8:     0x5dd4b431db1a - std::panicking::begin_panic_handler::{{closure}}::h6479a2f0137c7d19
+   9:     0x5dd4b431c459 - std::sys::backtrace::__rust_end_short_backtrace::ha04e7c0fc61ded91
+  10:     0x5dd4b431d7ad - rust_begin_unwind
+  11:     0x5dd4b4349a80 - core::panicking::panic_fmt::h5764ee7030b7a73d
+  12:     0x5dd4b4349c06 - core::panicking::panic_explicit::hb520e9b3eed45d82
+  13:     0x5dd4b26ced8e - integration_test_src_get_metrics::test_sns_metrics_0_transactions::panic_cold_explicit::h2aa2ffb02e668dc8
+  14:     0x5dd4b26c6d5b - core::ops::function::FnOnce::call_once::hfb59198fb25e265d
+  15:     0x5dd4b272809b - test::__rust_begin_short_backtrace::h7b10906492afc420
+  16:     0x5dd4b2726f88 - test::run_test::{{closure}}::he209928ac5e8a3b8
+  17:     0x5dd4b26e9e75 - std::sys::backtrace::__rust_begin_short_backtrace::h365aabf21799e6fc
+  18:     0x5dd4b26ed8ea - core::ops::function::FnOnce::call_once{{vtable.shim}}::had7e2d02878d3212
+  19:     0x5dd4b432479b - std::sys::pal::unix::thread::Thread::new::thread_start::hcc5ed016d554f327
+  20:     0x796a22ac5609 - start_thread
+  21:     0x796a229ea353 - clone
+
+
+failures:
+    test_sns_metrics_0_transactions
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 4.31s
+
+================================================================================
+INFO: Found 9 targets and 20 test targets...
+INFO: Elapsed time: 10.931s, Critical Path: 10.22s
+INFO: 4 processes: 4 linux-sandbox.
+INFO: Build completed, 1 test FAILED, 4 total actions
+//rs/sns/integration_tests:golden_state_swap_upgrade_twice_src/golden_state_swap_upgrade_twice (cached) PASSED in 0.1s
+//rs/sns/integration_tests:integration_test_src/governance      (cached) PASSED in 0.0s
+//rs/sns/integration_tests:integration_test_src/http_request    (cached) PASSED in 0.0s
+//rs/sns/integration_tests:integration_test_src/initialization_flow (cached) PASSED in 0.1s
+//rs/sns/integration_tests:integration_test_src/ledger          (cached) PASSED in 0.1s
+//rs/sns/integration_tests:integration_test_src/manage_dapp_canister_settings (cached) PASSED in 0.1s
+//rs/sns/integration_tests:integration_test_src/manage_ledger_parameters (cached) PASSED in 0.1s
+//rs/sns/integration_tests:integration_test_src/nervous_system_functions (cached) PASSED in 0.1s
+//rs/sns/integration_tests:integration_test_src/nervous_system_parameters (cached) PASSED in 0.1s
+//rs/sns/integration_tests:integration_test_src/neuron          (cached) PASSED in 0.1s
+//rs/sns/integration_tests:integration_test_src/payment_flow    (cached) PASSED in 0.0s
+//rs/sns/integration_tests:integration_test_src/proposals       (cached) PASSED in 0.1s
+//rs/sns/integration_tests:integration_test_src/root            (cached) PASSED in 0.1s
+//rs/sns/integration_tests:integration_test_src/sns_treasury    (cached) PASSED in 0.1s
+//rs/sns/integration_tests:integration_test_src/swap            (cached) PASSED in 0.1s
+//rs/sns/integration_tests:integration_test_src/timers          (cached) PASSED in 0.1s
+//rs/sns/integration_tests:integration_test_src/upgrade_canister (cached) PASSED in 0.1s
+//rs/sns/integration_tests:sns-governance-mem-test-canister_did_git_test (cached) PASSED in 0.1s
+//rs/sns/integration_tests:sns-test-dapp-canister_did_git_test  (cached) PASSED in 0.1s
+//rs/sns/integration_tests:integration_test_src/get_metrics              FAILED in 4.4s
+  /home/ubuntu/.cache/bazel/_bazel_ubuntu/6d065581cce7ad9076e3b8db2b3afaf0/execroot/_main/bazel-out/k8-opt/testlogs/rs/sns/integration_tests/integration_test_src/get_metrics/test.log
+
+Executed 1 out of 20 tests: 19 tests pass and 1 fails locally.
+There were tests whose specified size is too big. Use the --test_verbose_timeout_warnings command line option to see which ones these are.
