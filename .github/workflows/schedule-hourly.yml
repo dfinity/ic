@@ -15,7 +15,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
+      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 120
@@ -25,16 +25,17 @@ jobs:
       - name: Run Bazel Build All No Cache
         uses: ./.github/actions/bazel-test-all/
         with:
-          # --config=release is required for the BNs as they rely for both dev and prod deployment
-          # on images being uploaded to the S3 bucket
-          BAZEL_COMMAND: build --config=ci --config=release --repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA} --@rules_rust//rust/settings:pipelined_compilation=True
+          BAZEL_COMMAND: build --config=ci --repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA}
           BAZEL_TARGETS: //...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          # 'upload-artifacts' is required for the BNs as they rely for both dev and prod deployment
+          # on images being uploaded to the S3 bucket
+          upload-artifacts: true
   bazel-system-test-hourly:
     name: Bazel System Tests Hourly
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
+      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 120
@@ -48,15 +49,16 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          # --config=release is required for the BNs as they rely for both dev and prod deployment
-          # on images being uploaded to the S3 bucket
-          BAZEL_COMMAND: test --config=ci --config=release --keep_going --test_tag_filters=system_test_hourly
+          BAZEL_COMMAND: test --config=ci --keep_going --test_tag_filters=system_test_hourly
           BAZEL_TARGETS: //rs/...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          # 'upload-artifacts' is required for the BNs as they rely for both dev and prod deployment
+          # on images being uploaded to the S3 bucket
+          upload-artifacts: true
   bazel-run-fuzzers-hourly:
     name: Bazel Run Fuzzers Hourly
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
+      image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
     timeout-minutes: 120

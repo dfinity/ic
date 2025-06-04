@@ -3,7 +3,7 @@ mod common;
 use candid::Encode;
 use canister_test::{Canister, Project, Runtime};
 use ic_crypto_tree_hash::{lookup_path, LabeledTree, MixedHashTree};
-use ic_interfaces_registry::RegistryTransportRecord;
+use ic_interfaces_registry::RegistryRecord;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_test_utils::itest_helpers::{
     forward_call_via_universal_canister, set_up_universal_canister,
@@ -51,7 +51,7 @@ async fn try_to_install_registry_canister(
 async fn query_certified_changes_since(
     canister: &Canister<'_>,
     version: u64,
-) -> (Vec<RegistryTransportRecord>, RegistryVersion) {
+) -> (Vec<RegistryRecord>, RegistryVersion) {
     let certified_response: CertifiedResponse = canister
         .query_(
             "get_certified_changes_since",

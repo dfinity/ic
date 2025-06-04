@@ -34,19 +34,22 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
-    CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, ChunkHash,
-    ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2, Method,
-    NodeMetricsHistoryArgs, NodeMetricsHistoryResponse, OnLowWasmMemoryHookStatus, Payload,
-    StoredChunksArgs, StoredChunksReply, SubnetInfoArgs, SubnetInfoResponse, UpdateSettingsArgs,
-    UploadChunkArgs, UploadChunkReply, WasmMemoryPersistence,
+    CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions,
+    ChunkHash, ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2,
+    LoadCanisterSnapshotArgs, Method, NodeMetricsHistoryArgs, NodeMetricsHistoryResponse,
+    OnLowWasmMemoryHookStatus, Payload, StoredChunksArgs, StoredChunksReply, SubnetInfoArgs,
+    SubnetInfoResponse, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
+    UploadChunkReply, WasmMemoryPersistence,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::system_state::wasm_chunk_store::ChunkValidationResult,
-    canister_state::system_state::{wasm_chunk_store, CyclesUseCase},
+    canister_state::system_state::{
+        wasm_chunk_store::{self, ChunkValidationResult},
+        CyclesUseCase,
+    },
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
     page_map::TestPageAllocatorFileDescriptorImpl,
     testing::{CanisterQueuesTesting, SystemStateTesting},
@@ -213,8 +216,6 @@ impl Default for InstallCodeContextBuilder {
                     wat::parse_str(EMPTY_WAT).unwrap(),
                 )),
                 arg: vec![],
-                compute_allocation: None,
-                memory_allocation: None,
                 mode: CanisterInstallModeV2::Install,
             },
         }
@@ -365,8 +366,6 @@ fn install_code(
         context.canister_id,
         context.wasm_source.unwrap_as_slice_for_testing().into(),
         context.arg.clone(),
-        None,
-        None,
     );
     let ingress = IngressBuilder::new()
         .source(UserId::from(context.sender()))
@@ -538,8 +537,6 @@ fn install_code_preserves_messages() {
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
         vec![],
-        None,
-        None,
     ))
     .unwrap();
 
@@ -643,8 +640,6 @@ fn cannot_install_non_empty_canister() {
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
         vec![],
-        None,
-        None,
     ))
     .unwrap();
 
@@ -654,8 +649,6 @@ fn cannot_install_non_empty_canister() {
             canister_id,
             UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
-            None,
-            None,
         ))
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterNonEmpty);
@@ -682,8 +675,6 @@ fn install_code_with_wrong_controller_fails() {
             canister_id,
             UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
-            None,
-            None,
         ))
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
@@ -804,8 +795,6 @@ fn reinstall_on_empty_canister_succeeds() {
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
         vec![],
-        None,
-        None,
     ));
 
     let _ = get_reply(result);
@@ -887,8 +876,6 @@ fn install_puts_canister_back_after_invalid_wasm() {
             canister_id,
             wasm.to_vec(),
             vec![],
-            None,
-            None,
         ))
         .unwrap_err();
 
@@ -910,8 +897,6 @@ fn reinstall_clears_stable_memory() {
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
         vec![],
-        None,
-        None,
     ))
     .unwrap();
 
@@ -934,8 +919,6 @@ fn reinstall_clears_stable_memory() {
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
         vec![],
-        None,
-        None,
     ))
     .unwrap();
 
@@ -1741,8 +1724,6 @@ fn installing_a_canister_with_not_enough_cycles_fails() {
             canister_id,
             UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
-            None,
-            None,
         ))
         .unwrap_err();
 
@@ -1854,8 +1835,6 @@ fn failed_upgrade_hooks_consume_instructions() {
                 canister_id,
                 wasm_source: WasmSource::CanisterModule(CanisterModule::new(initial_wasm)),
                 arg: vec![],
-                compute_allocation: None,
-                memory_allocation: None,
                 mode: CanisterInstallModeV2::Install,
             },
             &mut state,
@@ -1879,8 +1858,6 @@ fn failed_upgrade_hooks_consume_instructions() {
                 canister_id,
                 wasm_source: WasmSource::CanisterModule(CanisterModule::new(upgrade_wasm)),
                 arg: vec![],
-                compute_allocation: None,
-                memory_allocation: None,
                 mode: CanisterInstallModeV2::Upgrade(None),
             },
             &mut state,
@@ -2000,8 +1977,6 @@ fn failed_install_hooks_consume_instructions() {
                 canister_id,
                 wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
                 arg: vec![],
-                compute_allocation: None,
-                memory_allocation: None,
                 mode: CanisterInstallModeV2::Install,
             },
             &mut state,
@@ -2122,8 +2097,6 @@ fn install_code_respects_instruction_limit() {
             canister_id,
             wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
             arg: vec![],
-            compute_allocation: None,
-            memory_allocation: None,
             mode: CanisterInstallModeV2::Install,
         },
         &mut state,
@@ -2155,8 +2128,6 @@ fn install_code_respects_instruction_limit() {
             canister_id,
             wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
             arg: vec![],
-            compute_allocation: None,
-            memory_allocation: None,
             mode: CanisterInstallModeV2::Install,
         },
         &mut state,
@@ -2182,8 +2153,6 @@ fn install_code_respects_instruction_limit() {
             canister_id,
             wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
             arg: vec![],
-            compute_allocation: None,
-            memory_allocation: None,
             mode: CanisterInstallModeV2::Upgrade(None),
         },
         &mut state,
@@ -2214,8 +2183,6 @@ fn install_code_respects_instruction_limit() {
             canister_id,
             wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
             arg: vec![],
-            compute_allocation: None,
-            memory_allocation: None,
             mode: CanisterInstallModeV2::Upgrade(None),
         },
         &mut state,
@@ -2429,8 +2396,6 @@ fn lower_memory_allocation_than_usage_fails() {
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
         vec![],
-        None,
-        None,
     ))
     .unwrap();
 
@@ -2462,8 +2427,6 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
             canister_id,
             UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
-            None,
-            None,
         ))
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InsufficientMemoryAllocation);
@@ -2481,8 +2444,6 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
         vec![],
-        None,
-        None,
     ))
     .unwrap();
 }
@@ -2508,8 +2469,6 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
         canister_id,
         wasm.to_vec(),
         vec![],
-        None,
-        None,
     ))
     .unwrap();
 
@@ -2526,8 +2485,6 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
             canister_id,
             wasm.to_vec(),
             vec![],
-            None,
-            None,
         ))
         .unwrap_err();
 
@@ -2549,8 +2506,6 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
         canister_id,
         wasm.to_vec(),
         vec![],
-        None,
-        None,
     ))
     .unwrap();
 }
@@ -2646,8 +2601,6 @@ fn test_install_when_setting_memory_allocation_to_zero() {
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
         vec![],
-        None,
-        None,
     ))
     .unwrap();
 }
@@ -2663,8 +2616,6 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
         vec![],
-        None,
-        None,
     ))
     .unwrap();
 
@@ -2676,8 +2627,6 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
         vec![],
-        None,
-        None,
     ))
     .unwrap();
 }
@@ -3134,28 +3083,6 @@ fn test_install_code_rate_limiting_disabled() {
     let binary = UNIVERSAL_CANISTER_WASM.to_vec();
     test.upgrade_canister(canister_id, binary.clone()).unwrap();
     test.upgrade_canister(canister_id, binary).unwrap();
-}
-
-#[test]
-fn install_code_context_conversion_u128() {
-    let install_args = InstallCodeArgsV2 {
-        mode: CanisterInstallModeV2::Install,
-        canister_id: PrincipalId::try_from([1, 2, 3].as_ref()).unwrap(),
-        wasm_module: vec![],
-        arg: vec![],
-        compute_allocation: Some(candid::Nat::from(u128::MAX)),
-        memory_allocation: Some(candid::Nat::from(u128::MAX)),
-        sender_canister_version: None,
-    };
-
-    assert!(InstallCodeContext::try_from((
-        CanisterChangeOrigin::from_canister(
-            PrincipalId::try_from([1, 2, 3].as_ref()).unwrap(),
-            None
-        ),
-        install_args,
-    ))
-    .is_err());
 }
 
 #[test]
@@ -6668,4 +6595,56 @@ fn update_memory_allocation_updates_hook_status_ready_to_not_satisfied() {
         updated_memory_state,
         false,
     );
+}
+
+#[test]
+fn memory_usage_updates_increment_subnet_available_memory() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    // create a universal canister
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
+    test.install_code_v2(InstallCodeArgsV2::new(
+        CanisterInstallModeV2::Install,
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+    ))
+    .unwrap();
+
+    // take a canister snapshot
+    let take_snapshot_args = TakeCanisterSnapshotArgs {
+        canister_id: canister_id.get(),
+        replace_snapshot: None,
+    };
+    let res = test
+        .subnet_message("take_canister_snapshot", take_snapshot_args.encode())
+        .unwrap();
+    let snapshot_id = match res {
+        WasmResult::Reply(data) => Decode!(&data, CanisterSnapshotResponse).unwrap().id,
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+    };
+
+    // capture current subnet available memory
+    let initial_subnet_available_memory = test.subnet_available_memory();
+
+    // grow stable memory
+    let payload = wasm().stable_grow(100).reply().build();
+    test.ingress(canister_id, "update", payload).unwrap();
+
+    // execution memory should *increase* after growing stable memory => available memory should *decrease*
+    let subnet_available_memory = test.subnet_available_memory();
+    assert_lt!(
+        subnet_available_memory.get_execution_memory(),
+        initial_subnet_available_memory.get_execution_memory()
+    );
+
+    // load canister snapshot
+    let load_snapshot_args =
+        LoadCanisterSnapshotArgs::new(canister_id, snapshot_id.try_into().unwrap(), None);
+    test.subnet_message("load_canister_snapshot", load_snapshot_args.encode())
+        .unwrap();
+
+    // execution memory should get back to its initial value before growing stable memory
+    let subnet_available_memory = test.subnet_available_memory();
+    assert_eq!(initial_subnet_available_memory, subnet_available_memory);
 }

@@ -17,6 +17,7 @@ package(default_visibility = ["//visibility:public"])
         proc_macro_deps = [
             # Keep sorted.
             "@crate_index//:async-trait",
+            "@crate_index//:test-strategy",
         ],
         rustc_env = {
             "IC_ICRC1_ARCHIVE_WASM_PATH": "$(execpath //rs/ledger_suite/icrc1/archive:archive_canister" + archive_name_suffix + ")",

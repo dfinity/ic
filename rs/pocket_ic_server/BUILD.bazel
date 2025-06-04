@@ -64,7 +64,6 @@ LIB_DEPENDENCIES = [
     "@crate_index//:ic-agent",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-gateway",
-    "@crate_index//:ic-http-gateway",
     "@crate_index//:ic-utils",
     "@crate_index//:itertools",
     "@crate_index//:libc",
@@ -85,6 +84,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:tracing",
     "@crate_index//:tracing-appender",
     "@crate_index//:tracing-subscriber",
+    "@crate_index//:uuid",
     "@crate_index//:wat",
 ]
 
@@ -175,49 +175,50 @@ rust_ic_test(
     deps = LIB_DEPENDENCIES + [":build_script"],
 )
 
-rust_test(
-    name = "test",
-    size = "medium",
-    srcs = [
-        "tests/common.rs",
-        "tests/test.rs",
-    ],
-    aliases = {},
-    data = [
-        ":pocket-ic-server",
-        "//rs/registry/canister:registry-canister",
-        "@ii_dev_canister//file",
-        "@mozilla_root_ca_store//file",
-    ],
-    env = {
-        "RUST_TEST_THREADS": "2",
-        "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
-        "REGISTRY_WASM": "$(rootpath //rs/registry/canister:registry-canister)",
-        "II_WASM": "$(rootpath @ii_dev_canister//file)",
-        "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
-    },
-    tags = [
-        "cpu:8",
-        # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
-        #  ---- test_http_gateway stdout ----
-        #  thread 'test_http_gateway' panicked at rs/pocket_ic_server/tests/test.rs:383:48:
-        #  called `Result::unwrap()` on an `Err` value: reqwest::Error {
-        #    kind: Request, url: "http://7tjcv-pp777-77776-qaaaa-cai.raw.localhost:49380/",
-        #    source: hyper_util::client::legacy::Error(
-        #      Connect,
-        #      ConnectError("tcp connect error", Os { code: 1, kind: PermissionDenied, message: "Operation not permitted" })
-        #    )
-        #  }
-        "requires-network",
-        "test_macos",
-    ],
-    # We temporarily disable the test on x86_64-darwin because the hyper HTTP client runs into issues on that platform.
-    target_compatible_with = select({
-        "@platforms//os:osx": ["@platforms//cpu:arm64"],
-        "//conditions:default": [],
-    }),
-    deps = TEST_DEPENDENCIES,
-)
+[
+    rust_test(
+        name = name,
+        size = "medium",
+        srcs = [
+            "tests/common.rs",
+            "tests/" + name + ".rs",
+        ],
+        aliases = {},
+        data = [
+            ":pocket-ic-server",
+            "//rs/registry/canister:registry-canister",
+            "@ii_dev_canister//file",
+            "@mozilla_root_ca_store//file",
+        ],
+        env = {
+            "RUST_TEST_THREADS": "2",
+            "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
+            "REGISTRY_WASM": "$(rootpath //rs/registry/canister:registry-canister)",
+            "II_WASM": "$(rootpath @ii_dev_canister//file)",
+            "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
+        },
+        tags = [
+            "cpu:8",
+            # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
+            #  ---- test_http_gateway stdout ----
+            #  thread 'test_http_gateway' panicked at rs/pocket_ic_server/tests/test.rs:383:48:
+            #  called `Result::unwrap()` on an `Err` value: reqwest::Error {
+            #    kind: Request, url: "http://7tjcv-pp777-77776-qaaaa-cai.raw.localhost:49380/",
+            #    source: hyper_util::client::legacy::Error(
+            #      Connect,
+            #      ConnectError("tcp connect error", Os { code: 1, kind: PermissionDenied, message: "Operation not permitted" })
+            #    )
+            #  }
+            "requires-network",
+            "test_macos",
+        ],
+        deps = TEST_DEPENDENCIES,
+    )
+    for name in [
+        "test",
+        "gateway",
+    ]
+]
 
 rust_test(
     name = "spec_test",
@@ -273,10 +274,5 @@ rust_test(
         "requires-network",
         "test_macos",
     ],
-    # We temporarily disable the test on x86_64-darwin because the hyper HTTP client runs into issues on that platform.
-    target_compatible_with = select({
-        "@platforms//os:osx": ["@platforms//cpu:arm64"],
-        "//conditions:default": [],
-    }),
     deps = TEST_DEPENDENCIES,
 )

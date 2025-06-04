@@ -44,11 +44,22 @@ fn test_recent_proposals() {
         Box::new(FakeCmc::new()),
     );
 
-    let time_window = 2 * ONE_MONTH;
-    assert_eq!(
-        governance.recent_proposals(time_window),
-        2,
-        "Expected only 2 proposals in during the last {} seconds",
-        time_window
-    );
+    #[allow(clippy::identity_op)]
+    let test_cases = [
+        ("zero-size window", 0_u64, 0),
+        ("one-month window", 1 * ONE_MONTH, 1),
+        ("two-months window", 2 * ONE_MONTH, 2),
+        ("three-months window", 3 * ONE_MONTH, 3),
+        ("primeval", u64::MAX, 3),
+    ];
+
+    for (lable, time_window, proposals) in test_cases {
+        assert_eq!(
+            governance.recent_proposals(time_window),
+            proposals,
+            "Expected {} proposals for {}",
+            proposals,
+            lable
+        );
+    }
 }
