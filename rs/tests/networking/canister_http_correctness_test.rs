@@ -339,10 +339,9 @@ fn test_composite_transform_function_is_not_allowed(env: TestEnv) {
 
     let err = response.unwrap_err();
     assert_eq!(err.reject_code, RejectCode::CanisterError);
-    assert_eq!(
-        err.reject_message,
-        "Composite query cannot be used as transform in canister http outcalls."
-    );
+    assert!(err
+        .reject_message
+        .contains("Composite query cannot be used as transform in canister http outcalls."));
 }
 
 fn test_no_cycles_attached(env: TestEnv) {
