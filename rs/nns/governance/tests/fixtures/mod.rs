@@ -39,6 +39,7 @@ use ic_nns_governance::{
 };
 use ic_nns_governance_api::{manage_neuron_response, ManageNeuronResponse};
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use rand::{prelude::StdRng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::{
@@ -437,7 +438,7 @@ impl NNSFixture {
 
 #[async_trait]
 impl IcpLedger for NNSFixture {
-    #[tla_function(force_async_fn = true)]
+    #[cfg_attr(feature = "tla", tla_function(force_async_fn = true))]
     async fn transfer_funds(
         &self,
         amount_e8s: u64,
@@ -512,6 +513,15 @@ impl IcpLedger for NNSFixture {
 
     fn canister_id(&self) -> CanisterId {
         LEDGER_CANISTER_ID
+    }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 }
 
@@ -964,6 +974,15 @@ impl IcpLedger for NNS {
 
     fn canister_id(&self) -> CanisterId {
         self.fixture.canister_id()
+    }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 }
 
