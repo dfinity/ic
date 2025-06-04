@@ -289,7 +289,7 @@ This PR is created automatically using [`mainnet_revisions.py`](https://github.c
             branch,
             [MAINNET_ICOS_REVISIONS_FILE],
             logger,
-            "chore: Update Mainnet IC revisions file",
+            "chore: Update Mainnet ICOS revisions file",
             pr_description.format(
                 description="Update mainnet revisions file to include the latest version released on the mainnet."
             ),
