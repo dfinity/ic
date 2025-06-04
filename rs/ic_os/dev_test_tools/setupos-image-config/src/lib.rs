@@ -151,27 +151,27 @@ pub async fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<()
     }
 
     if let Some(memory) = cfg.memory_gb {
-        deployment_json.resources.memory = memory;
+        deployment_json.vm_resources.memory = memory;
     }
 
     if let Some(cpu) = &cfg.cpu {
-        deployment_json.resources.cpu = Some(cpu.to_owned());
+        deployment_json.vm_resources.cpu = Some(cpu.to_owned());
     }
 
     if let Some(nr_of_vcpus) = &cfg.nr_of_vcpus {
-        deployment_json.resources.nr_of_vcpus = Some(nr_of_vcpus.to_owned());
+        deployment_json.vm_resources.nr_of_vcpus = Some(nr_of_vcpus.to_owned());
     }
 
     if let Some(deployment_environment) = &cfg.deployment_environment {
-        deployment_json.deployment.name = deployment_environment.to_owned();
+        deployment_json.deployment.deployment_environment = deployment_environment.to_owned();
     }
 
     if let Some(elasticsearch_hosts) = &cfg.elasticsearch_hosts {
-        deployment_json.logging.hosts = elasticsearch_hosts.to_owned();
+        deployment_json.logging.elasticsearch_hosts = elasticsearch_hosts.to_owned();
     }
 
     if let Some(elasticsearch_tags) = &cfg.elasticsearch_tags {
-        deployment_json.logging.tags = Some(elasticsearch_tags.to_owned());
+        deployment_json.logging.elasticsearch_tags = Some(elasticsearch_tags.to_owned());
     }
 
     let mut f = File::create(path).context("failed to open deployment config file")?;

@@ -219,11 +219,14 @@ pub fn main() -> Result<()> {
             let icos_settings = ICOSSettings {
                 node_reward_type,
                 mgmt_mac,
-                deployment_environment: deployment_json_settings.deployment.name.parse()?,
+                deployment_environment: deployment_json_settings
+                    .deployment
+                    .deployment_environment
+                    .parse()?,
                 logging: Logging {
-                    elasticsearch_hosts: Some(deployment_json_settings.logging.hosts)
+                    elasticsearch_hosts: Some(deployment_json_settings.logging.elasticsearch_hosts)
                         .filter(|v| !v.is_empty()),
-                    elasticsearch_tags: deployment_json_settings.logging.tags,
+                    elasticsearch_tags: deployment_json_settings.logging.elasticsearch_tags,
                 },
                 use_nns_public_key: Path::new("/data/nns_public_key.pem").exists(),
                 nns_urls: deployment_json_settings.nns.url.clone(),
@@ -237,13 +240,16 @@ pub fn main() -> Result<()> {
             let setupos_settings = SetupOSSettings;
 
             let hostos_settings = HostOSSettings {
-                vm_memory: deployment_json_settings.resources.memory,
+                vm_memory: deployment_json_settings.vm_resources.memory,
                 vm_cpu: deployment_json_settings
-                    .resources
+                    .vm_resources
                     .cpu
                     .clone()
                     .unwrap_or("kvm".to_string()),
-                vm_nr_of_vcpus: deployment_json_settings.resources.nr_of_vcpus.unwrap_or(64),
+                vm_nr_of_vcpus: deployment_json_settings
+                    .vm_resources
+                    .nr_of_vcpus
+                    .unwrap_or(64),
                 verbose,
             };
 

@@ -11,21 +11,21 @@ pub struct DeploymentSettings {
     pub deployment: Deployment,
     pub logging: Logging,
     pub nns: Nns,
-    pub resources: Resources,
+    pub vm_resources: VmResources,
 }
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct Deployment {
-    pub name: String,
+    pub deployment_environment: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mgmt_mac: Option<String>,
 }
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct Logging {
-    pub hosts: String,
+    pub elasticsearch_hosts: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub tags: Option<String>,
+    pub elasticsearch_tags: Option<String>,
 }
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
@@ -36,7 +36,7 @@ pub struct Nns {
 
 #[serde_as]
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
-pub struct Resources {
+pub struct VmResources {
     #[serde_as(as = "DisplayFromStr")]
     pub memory: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -92,16 +92,17 @@ mod test {
     static DEPLOYMENT_VALUE: Lazy<Value> = Lazy::new(|| {
         json!({
               "deployment": {
-                "name": "mainnet",
+                "deployment_environment": "mainnet",
                 "mgmt_mac": null
               },
               "logging": {
-                "hosts": "elasticsearch.ch1-obsdev1.dfinity.network:443"
+                "elasticsearch_hosts": "elasticsearch.ch1-obsdev1.dfinity.network:443",
+                "elasticsearch_tags": null
               },
               "nns": {
                 "url": "https://icp-api.io,https://icp0.io,https://ic0.app"
               },
-              "resources": {
+              "vm_resources": {
                 "memory": "490",
                 "cpu": "kvm",
                 "nr_of_vcpus": null
@@ -112,16 +113,17 @@ mod test {
 
     const DEPLOYMENT_STR: &str = r#"{
   "deployment": {
-    "name": "mainnet",
+    "deployment_environment": "mainnet",
     "mgmt_mac": null
   },
   "logging": {
-    "hosts": "elasticsearch.ch1-obsdev1.dfinity.network:443"
+    "elasticsearch_hosts": "elasticsearch.ch1-obsdev1.dfinity.network:443",
+    "elasticsearch_tags": null
   },
   "nns": {
     "url": "https://icp-api.io,https://icp0.io,https://ic0.app"
   },
-  "resources": {
+  "vm_resources": {
     "memory": "490",
     "cpu": "kvm",
     "nr_of_vcpus": null
@@ -132,10 +134,13 @@ mod test {
         let hosts = ["elasticsearch.ch1-obsdev1.dfinity.network:443"].join(" ");
         DeploymentSettings {
             deployment: Deployment {
-                name: "mainnet".to_string(),
+                deployment_environment: "mainnet".to_string(),
                 mgmt_mac: None,
             },
-            logging: Logging { hosts, tags: None },
+            logging: Logging {
+                elasticsearch_hosts: hosts,
+                elasticsearch_tags: None,
+            },
             nns: Nns {
                 url: vec![
                     Url::parse("https://icp-api.io").unwrap(),
@@ -143,7 +148,7 @@ mod test {
                     Url::parse("https://ic0.app").unwrap(),
                 ],
             },
-            resources: Resources {
+            vm_resources: VmResources {
                 memory: 490,
                 cpu: Some("kvm".to_string()),
                 nr_of_vcpus: None,
