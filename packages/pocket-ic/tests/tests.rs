@@ -26,6 +26,9 @@ use sha2::{Digest, Sha256};
 #[cfg(windows)]
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::{io::Read, sync::OnceLock, time::SystemTime};
+use tempfile::{NamedTempFile, TempDir};
+#[cfg(windows)]
+use wslpath::windows_to_wsl;
 
 // 2T cycles
 const INIT_CYCLES: u128 = 2_000_000_000_000;
@@ -2777,6 +2780,38 @@ fn test_specified_id_on_resumed_state() {
     let pic = PocketIcBuilder::new().with_state(state).build();
 
     test_specified_id(&pic);
+}
+
+#[test]
+#[should_panic(expected = "is not a (subnet state) directory")]
+fn with_subnet_state_file() {
+    let state_file = NamedTempFile::new().unwrap();
+    #[cfg(not(windows))]
+    let state_file_path_buf = state_file.path().to_path_buf();
+    #[cfg(windows)]
+    let state_file_path_buf = windows_to_wsl(state_file.path().as_os_str().to_str().unwrap())
+        .unwrap()
+        .into();
+
+    let _pic = PocketIcBuilder::new()
+        .with_subnet_state(SubnetKind::Application, state_file_path_buf)
+        .build();
+}
+
+#[test]
+#[should_panic(expected = "Provided an empty state directory at path")]
+fn with_empty_subnet_state() {
+    let state_dir = TempDir::new().unwrap();
+    #[cfg(not(windows))]
+    let state_dir_path_buf = state_dir.path().to_path_buf();
+    #[cfg(windows)]
+    let state_dir_path_buf = windows_to_wsl(state_dir.path().as_os_str().to_str().unwrap())
+        .unwrap()
+        .into();
+
+    let _pic = PocketIcBuilder::new()
+        .with_subnet_state(SubnetKind::Application, state_dir_path_buf)
+        .build();
 }
 
 #[test]

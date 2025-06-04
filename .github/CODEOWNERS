@@ -185,12 +185,12 @@ go_deps.bzl               @dfinity/idx
 /rs/protobuf/def/p2p/                                   @dfinity/consensus
 /rs/protobuf/def/registry/                              @dfinity/governance-team
 /rs/protobuf/def/state/                                 @dfinity/execution @dfinity/ic-message-routing-owners
-/rs/protobuf/gen/bitcoin/                               @dfinity/execution
-/rs/protobuf/gen/crypto/                                @dfinity/crypto-team
-/rs/protobuf/gen/messaging/                             @dfinity/ic-message-routing-owners
-/rs/protobuf/gen/p2p/                                   @dfinity/consensus
-/rs/protobuf/gen/registry/                              @dfinity/governance-team
-/rs/protobuf/gen/state/                                 @dfinity/execution @dfinity/ic-message-routing-owners
+/rs/protobuf/src/gen/bitcoin/                           @dfinity/execution
+/rs/protobuf/src/gen/crypto/                            @dfinity/crypto-team
+/rs/protobuf/src/gen/messaging/                         @dfinity/ic-message-routing-owners
+/rs/protobuf/src/gen/p2p/                               @dfinity/consensus
+/rs/protobuf/src/gen/registry/                          @dfinity/governance-team
+/rs/protobuf/src/gen/state/                             @dfinity/execution @dfinity/ic-message-routing-owners
 /rs/query_stats/                                        @dfinity/execution @dfinity/consensus
 /rs/recovery/                                           @dfinity/consensus
 /rs/registry/                                           @dfinity/governance-team

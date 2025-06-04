@@ -48,12 +48,12 @@ use ic_nns_governance_api::{
         Split, StakeMaturity,
     },
     manage_neuron_response::{self, ClaimOrRefreshResponse},
-    Account as GovernanceAccount, Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
-    GetNeuronsFundAuditInfoResponse, Governance, GovernanceError, InstallCodeRequest, ListNeurons,
-    ListNeuronsResponse, ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse,
-    ListProposalInfo, ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest,
-    ManageNeuronRequest, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics,
-    NnsFunction, ProposalActionRequest, ProposalInfo, RewardNodeProviders, Vote,
+    Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+    Governance, GovernanceError, InstallCodeRequest, ListNeurons, ListNeuronsResponse,
+    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfo,
+    ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction,
+    ProposalActionRequest, ProposalInfo, RewardNodeProviders, Vote,
 };
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
@@ -1191,17 +1191,13 @@ pub fn nns_disburse_maturity(
     state_machine: &StateMachine,
     sender: PrincipalId,
     neuron_id: NeuronId,
-    percentage_to_disburse: u32,
-    to_account: Option<GovernanceAccount>,
+    disburse_maturity: DisburseMaturity,
 ) -> ManageNeuronResponse {
     manage_neuron_or_panic(
         state_machine,
         sender,
         neuron_id,
-        ManageNeuronCommandRequest::DisburseMaturity(DisburseMaturity {
-            percentage_to_disburse,
-            to_account,
-        }),
+        ManageNeuronCommandRequest::DisburseMaturity(disburse_maturity),
     )
 }
 
