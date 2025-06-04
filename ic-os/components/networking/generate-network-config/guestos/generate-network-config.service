@@ -3,7 +3,7 @@ Description=Generate network config
 After=bootstrap-ic-node.service
 Wants=bootstrap-ic-node.service
 Before=systemd-networkd.service
-# TODO: Remove update-config references in NODE-1518
+# TODO(NODE-1618):
 After=update-config.service
 Wants=update-config.service
 
