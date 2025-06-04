@@ -2033,16 +2033,11 @@ impl Governance {
     }
 
     fn recent_proposals(&self, time_window_seconds: u64) -> u64 {
-        println!("now: {:?}", self.env.now());
         self.proto
             .proposals
             .values()
             .rev()
             .take_while(|proposal| {
-                println!(
-                    "Proposal creation time: {:?}",
-                    proposal.proposal_creation_timestamp_seconds
-                );
                 self.env
                     .now()
                     .saturating_sub(proposal.proposal_creation_timestamp_seconds)

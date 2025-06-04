@@ -24,7 +24,6 @@ const TOKEN_NAME: &str = "Test Token";
 const TOKEN_SYMBOL: &str = "XTST";
 
 const TRANSFER_AMOUNT: u64 = 1_000_000;
-const TX_STEP: u64 = 100;
 
 const ALICE: u64 = 1;
 const BOB: u64 = 2;
@@ -110,267 +109,6 @@ fn try_get_metrics(
 }
 
 #[test]
-fn test_sns_metrics_0_proposals() {
-    let state_machine = state_machine_builder_for_sns_tests().build();
-    let alice = get_account(ALICE, 0);
-    let bob = get_account(BOB, 0);
-
-    // Prepare the world:
-    // 1. create the ledger canister and add two accounts
-    // for ALICE and BOB with INITIAL_BALANCE.
-    let ledger_canister_id = {
-        let mut initial_balances = HashMap::new();
-        add_balance(&mut initial_balances, alice, INITIAL_BALANCE);
-        add_balance(&mut initial_balances, bob, INITIAL_BALANCE);
-        install_ledger(&state_machine, initial_balances)
-    };
-
-    // 2. make transfers to create ledger blocks.
-    let (t1, t2) = {
-        let t1 = state_machine
-            .time()
-            .duration_since(UNIX_EPOCH)
-            .expect("Time goes backward! Breaking the second law of thermodynamics")
-            .as_secs();
-
-        let _ = icrc1_transfer(
-            &state_machine,
-            ledger_canister_id,
-            alice,
-            bob,
-            TRANSFER_AMOUNT,
-            None,
-            Some(FEE),
-            Some(vec![]),
-        );
-
-        state_machine.advance_time(Duration::from_secs(TX_STEP));
-
-        let t2 = state_machine
-            .time()
-            .duration_since(UNIX_EPOCH)
-            .expect("Time goes backward! Breaking the second law of thermodynamics")
-            .as_secs();
-
-        let _ = icrc1_transfer(
-            &state_machine,
-            ledger_canister_id,
-            alice,
-            bob,
-            TRANSFER_AMOUNT,
-            None,
-            Some(FEE),
-            Some(vec![]),
-        );
-
-        (t1, t2)
-    };
-
-    assert!(
-        t1 < t2,
-        "State machine has not advanced the time as expected"
-    );
-
-    // 3. start the governance canister and pass the
-    // already initialised ledger canister to it.
-    let governance_canister_id = {
-        let wasm = build_governance_sns_wasm().wasm;
-        let governance = GovernanceCanisterInitPayloadBuilder::new()
-            .with_root_canister_id(PrincipalId::new_anonymous())
-            .with_swap_canister_id(PrincipalId::new_anonymous())
-            .with_ledger_canister_id(ledger_canister_id.into())
-            .build();
-
-        let args = Encode!(&governance).unwrap();
-        state_machine
-            .install_canister(wasm.clone(), args, None)
-            .unwrap()
-    };
-
-    {
-        // Prepare the payload to get metrics during the last month.
-        let time_window_seconds = ONE_MONTH;
-        let payload = GetMetricsRequest {
-            time_window_seconds: Some(time_window_seconds),
-        };
-
-        let Ok(observed_result) = try_get_metrics(&state_machine, governance_canister_id, payload)
-        else {
-            panic!("Received an Error upon fetching the metrics")
-        };
-
-        let Some(get_metrics_result) = observed_result.get_metrics_result else {
-            panic!("Expected a non-empty response");
-        };
-
-        let get_metrics_response::GetMetricsResult::Ok(metrics) = get_metrics_result else {
-            panic!("Expected to get an Ok() from the response");
-        };
-
-        {
-            let Some(num_recently_submitted_proposals) = metrics.num_recently_submitted_proposals
-            else {
-                panic!("Expected `num_recently_submitted_proposals` to be Some(0)");
-            };
-
-            assert_eq!(
-                num_recently_submitted_proposals, 0,
-                "Expected 0 proposals to be submitted, got {}",
-                num_recently_submitted_proposals
-            );
-        }
-
-        let Some(last_ledger_block_timestamp) = metrics.last_ledger_block_timestamp else {
-            panic!("Expected `last_ledger_block_timestamp` to be Some(_)");
-        };
-        {
-            assert!(
-                last_ledger_block_timestamp == t2,
-                "Expected `last_ledger_block_timestamp` ({}) to be equal to now ({})",
-                last_ledger_block_timestamp,
-                t2
-            );
-        }
-    }
-}
-
-#[test]
-fn test_sns_metrics_0_transactions() {
-    // Prepare the world
-    let state_machine = state_machine_builder_for_sns_tests().build();
-
-    let ledger_canister_id = { install_ledger(&state_machine, HashMap::new()) };
-
-    let governance_canister_id = {
-        let wasm = build_governance_sns_wasm().wasm;
-        let mut governance = GovernanceCanisterInitPayloadBuilder::new()
-            .with_root_canister_id(PrincipalId::new_anonymous())
-            .with_swap_canister_id(PrincipalId::new_anonymous())
-            .with_ledger_canister_id(ledger_canister_id.into())
-            .build();
-
-        // Create proposals
-        {
-            const NUM_PROPOSALS: u64 = 12;
-
-            for proposal_id in 0..NUM_PROPOSALS {
-                let proposal_creation_timestamp_seconds = state_machine
-                    .time()
-                    .duration_since(UNIX_EPOCH)
-                    .expect("Time goes backward! Breaking the second law of thermodynamics")
-                    .as_secs();
-
-                let proposal = ProposalData {
-                    id: Some(ProposalId { id: proposal_id }),
-                    proposal_creation_timestamp_seconds,
-                    ..Default::default()
-                };
-
-                governance.proposals.insert(proposal_id, proposal);
-
-                state_machine.advance_time(Duration::from_secs(ONE_WEEK));
-                // state_machine.tick();
-            }
-        }
-
-        let args = Encode!(&governance).unwrap();
-        state_machine
-            .install_canister(wasm.clone(), args, None)
-            .unwrap()
-    };
-
-    {
-        // Prepare the payload to get metrics during the last month.
-        let time_window_seconds = ONE_MONTH;
-        let payload = GetMetricsRequest {
-            time_window_seconds: Some(time_window_seconds),
-        };
-
-        let Ok(observed_result) = try_get_metrics(&state_machine, governance_canister_id, payload)
-        else {
-            panic!("Received an Error upon fetching the metrics")
-        };
-
-        let Some(get_metrics_result) = observed_result.get_metrics_result else {
-            panic!("Expected a non-empty response");
-        };
-
-        let get_metrics_response::GetMetricsResult::Ok(metrics) = get_metrics_result else {
-            panic!(
-                "Expected to get an Ok() from the response, got {:?}",
-                get_metrics_result
-            );
-        };
-
-        {
-            let Some(num_recently_submitted_proposals) = metrics.num_recently_submitted_proposals
-            else {
-                panic!("Expected `num_recently_submitted_proposals` to be Some(0)");
-            };
-
-            // @todo
-            assert_eq!(
-                num_recently_submitted_proposals, 4,
-                "Expected 4 proposals to be submitted, got {}",
-                num_recently_submitted_proposals
-            );
-        }
-
-        assert!(
-            metrics.last_ledger_block_timestamp.is_none(),
-            "Expected `last_ledger_block_timestamp` to be None",
-        );
-    }
-
-    {
-        // Prepare the payload to get metrics during the last month.
-        let time_window_seconds = ONE_MONTH;
-        let payload = GetMetricsRequest {
-            time_window_seconds: Some(time_window_seconds),
-        };
-
-        state_machine.advance_time(Duration::from_secs(ONE_DAY));
-        state_machine.tick();
-        let Ok(observed_result) = try_get_metrics(&state_machine, governance_canister_id, payload)
-        else {
-            panic!("Received an Error upon fetching the metrics")
-        };
-
-        let Some(get_metrics_result) = observed_result.get_metrics_result else {
-            panic!("Expected a non-empty response");
-        };
-
-        let get_metrics_response::GetMetricsResult::Ok(metrics) = get_metrics_result else {
-            panic!(
-                "Expected to get an Ok() from the response, got {:?}",
-                get_metrics_result
-            );
-        };
-
-        {
-            let Some(num_recently_submitted_proposals) = metrics.num_recently_submitted_proposals
-            else {
-                panic!("Expected `num_recently_submitted_proposals` to be Some(0)");
-            };
-
-            // @todo
-            assert_eq!(
-                num_recently_submitted_proposals, 3,
-                "Expected 3 proposals to be submitted, got {}",
-                num_recently_submitted_proposals
-            );
-        }
-
-        assert!(
-            metrics.last_ledger_block_timestamp.is_none(),
-            "Expected `last_ledger_block_timestamp` to be None",
-        );
-    }
-
-    panic!();
-}
-
-#[test]
 fn test_sns_metrics() {
     // Prepare the world
     let state_machine = state_machine_builder_for_sns_tests().build();
@@ -387,8 +125,6 @@ fn test_sns_metrics() {
         install_ledger(&state_machine, initial_balances)
     };
 
-    {}
-
     let governance_canister_id = {
         let wasm = build_governance_sns_wasm().wasm;
         let mut governance = GovernanceCanisterInitPayloadBuilder::new()
@@ -397,49 +133,74 @@ fn test_sns_metrics() {
             .with_ledger_canister_id(ledger_canister_id.into())
             .build();
 
-        // Create proposals
+        // Create proposals.
         {
-            const NUM_PROPOSALS: u64 = 12;
-
-            for proposal_id in 0..NUM_PROPOSALS {
-                let proposal_creation_timestamp_seconds = state_machine
+            let state_machine_time = state_machine
                     .time()
                     .duration_since(UNIX_EPOCH)
                     .expect("Time goes backward! Breaking the second law of thermodynamics")
-                    .as_secs();
+                    .as_secs(); 
 
-                let proposal = ProposalData {
-                    id: Some(ProposalId { id: proposal_id }),
-                    proposal_creation_timestamp_seconds,
-                    ..Default::default()
-                };
+            // Make 2 proposals, one for t0 + 2 * ONE_MONTH, one for t0,
+            // where t0 ic the current time of the state machine.
+            let proposal1_id = 1;
+            let proposal1 = ProposalData {
+                id: Some(ProposalId { id: proposal1_id }),
+                proposal_creation_timestamp_seconds: state_machine_time,
+                ..Default::default()
+            }; 
 
-                governance.proposals.insert(proposal_id, proposal);
+            governance.proposals.insert(proposal1_id, proposal1);
 
-                state_machine.advance_time(Duration::from_secs(ONE_WEEK - ONE_DAY));
+            let proposal2_id = 2;
+            let proposal2 = ProposalData {
+                id: Some(ProposalId { id: proposal2_id }),
+                proposal_creation_timestamp_seconds: state_machine_time + 2 * ONE_MONTH,
+                ..Default::default()
+            }; 
 
-                let _ = icrc1_transfer(
-                    &state_machine,
-                    ledger_canister_id,
-                    alice,
-                    bob,
-                    TRANSFER_AMOUNT,
-                    None,
-                    Some(FEE),
-                    Some(vec![]),
-                );
-                state_machine.advance_time(Duration::from_secs(ONE_DAY));
-            }
+            governance.proposals.insert(proposal2_id, proposal2);
         }
+        
+        // Create the transactions.
+        {
+            // We have 2 transactions: one at t0 and the other one after one month
+            let _ = icrc1_transfer(
+                &state_machine,
+                ledger_canister_id,
+                alice,
+                bob,
+                TRANSFER_AMOUNT,
+                None,
+                Some(FEE),
+                Some(vec![]),
+            );
+
+            state_machine.advance_time(Duration::from_secs(2 * ONE_MONTH));
+
+            let _ = icrc1_transfer(
+                &state_machine,
+                ledger_canister_id,
+                alice,
+                bob,
+                TRANSFER_AMOUNT,
+                None,
+                Some(FEE),
+                Some(vec![]),
+            );
+        }
+
         let args = Encode!(&governance).unwrap();
         state_machine
             .install_canister(wasm.clone(), args, None)
             .unwrap()
     };
 
+    state_machine.advance_time(Duration::from_secs(ONE_MONTH));
+    state_machine.tick();
     {
         // Prepare the payload to get metrics during the last month.
-        let time_window_seconds = ONE_MONTH; // 1 month.
+        let time_window_seconds = ONE_MONTH;
         let payload = GetMetricsRequest {
             time_window_seconds: Some(time_window_seconds),
         };
@@ -468,8 +229,8 @@ fn test_sns_metrics() {
 
             // @todo
             assert_eq!(
-                num_recently_submitted_proposals, 4,
-                "Expected 4 proposals to be submitted, got {}",
+                num_recently_submitted_proposals, 1,
+                "Expected 1 proposals to be submitted, got {}",
                 num_recently_submitted_proposals
             );
         }
@@ -487,7 +248,7 @@ fn test_sns_metrics() {
 
             assert_eq!(
                 last_ledger_block_timestamp,
-                now - ONE_DAY,
+                now - ONE_MONTH,
                 "Expected last ledger block timestamp to be {}, got {}",
                 now,
                 last_ledger_block_timestamp
