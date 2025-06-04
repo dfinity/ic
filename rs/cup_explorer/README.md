@@ -38,7 +38,7 @@ bazel run rs/cup_explorer:cup_explorer_bin -- explore --subnet-id <SUBNET_ID> [-
 Verify a CUP file's integrity and threshold signature, and check if the subnet was halted at that height.
 
 ```bash
-bazel run rs/cup_explorer:cup_explorer_bin -- verify --cup-path <CUP_FILE>
+bazel run rs/cup_explorer:cup_explorer_bin -- verify-cup-of-halted-subnet --cup-path <CUP_FILE>
 ```
 
 - `--cup-path`: Path to a local CUP protobuf file (required).

@@ -11,7 +11,7 @@ enum SubCommand {
     /// Explore and optionally download the latest CUP of a subnet
     Explore(ExploreArgs),
     /// Verify a given CUP
-    Verify(VerifyArgs),
+    VerifyCUPOfHaltedSubnet(VerifyArgs),
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
@@ -68,7 +68,7 @@ async fn main() {
             )
             .await;
         }
-        SubCommand::Verify(verify_args) => verify(
+        SubCommand::VerifyCUPOfHaltedSubnet(verify_args) => verify(
             args.nns_url,
             verify_args.nns_pem.clone(),
             &verify_args.cup_path,
