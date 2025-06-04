@@ -1842,7 +1842,6 @@ impl From<pb::Metrics> for pb_api::get_metrics_response::Metrics {
     }
 }
 
-
 impl TryFrom<pb_api::GetMetricsRequest> for pb::GetMetricsRequest {
     type Error = String;
 
@@ -1860,7 +1859,6 @@ impl TryFrom<pb_api::GetMetricsRequest> for pb::GetMetricsRequest {
         })
     }
 }
-
 
 impl From<pb::GetMetadataResponse> for pb_api::GetMetadataResponse {
     fn from(item: pb::GetMetadataResponse) -> Self {
