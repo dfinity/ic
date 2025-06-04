@@ -153,7 +153,7 @@ pub fn verify(nns_url: Url, nns_pem: Option<PathBuf>, cup_path: &Path) {
         Some(tokio::runtime::Handle::current()),
     )
     .expect("error generating node public keys");
-    let client_clone = client.clone();
+    let client_clone = Arc::clone(&client);
     let crypto = Arc::new(CryptoComponent::new(
         &crypto_config,
         Some(tokio::runtime::Handle::current()),
@@ -188,7 +188,7 @@ pub fn verify(nns_url: Url, nns_pem: Option<PathBuf>, cup_path: &Path) {
             block.context.registry_version,
         )
         .map_err(|e| {
-            println!(
+            format!(
                 "Failed to verify CUP signature at: {:?} with: {:?}",
                 cup_path, e
             )
