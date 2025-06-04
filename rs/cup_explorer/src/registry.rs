@@ -96,7 +96,7 @@ impl RegistryClient for RegistryCanisterClient {
     }
 }
 
-/// Returns the list of nodes assigned to the specified subnet_id.
+/// Returns the list of nodes assigned to the specified subnet_id at the latest registry version.
 pub(crate) async fn get_nodes(
     registry_canister: &Arc<RegistryCanister>,
     subnet_id: SubnetId,
