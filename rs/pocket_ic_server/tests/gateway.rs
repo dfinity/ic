@@ -284,6 +284,7 @@ fn http_gateway_canister_not_found() {
     ] {
         let invalid_url = gateway.join(path).unwrap().to_string();
         let error_page = client.get(invalid_url).send().unwrap();
+        assert_eq!(error_page.status(), StatusCode::NOT_FOUND);
         let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
         assert!(page.contains("404 - canister not found"));
     }
@@ -360,6 +361,7 @@ fn test_unresponsive_gateway_backend() {
 
     // Create a PocketIC instance on that server instance.
     let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
         .with_application_subnet()
         .with_server_url(backend_server_url.clone())
         .build();
@@ -536,7 +538,7 @@ fn test_gateway_address_in_use() {
         .with_application_subnet()
         .build();
 
-    // create an HTTP gateway at an arbitrary port
+    // Create an HTTP gateway at an arbitrary port.
     let port = create_gateway(
         server_url.clone(),
         None,
@@ -544,7 +546,7 @@ fn test_gateway_address_in_use() {
     )
     .unwrap();
 
-    // try to create another HTTP gateway at the same port
+    // Trying to create another HTTP gateway at the same port fails.
     let err = create_gateway(
         server_url,
         Some(port),
