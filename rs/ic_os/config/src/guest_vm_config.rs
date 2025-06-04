@@ -1,9 +1,9 @@
+use crate::guestos_bootstrap_image::BootstrapOptions;
+use crate::guestos_config::generate_guestos_config;
+use crate::{deserialize_config, DEFAULT_HOSTOS_CONFIG_OBJECT_PATH};
 use anyhow::{bail, Context, Result};
 use askama::Template;
 use clap::Parser;
-use config::guestos_bootstrap_image::BootstrapOptions;
-use config::guestos_config::generate_guestos_config;
-use config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH;
 use config_types::{GuestOSConfig, HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant};
@@ -49,10 +49,8 @@ fn run(
     // We pass a functor to allow mocking in tests.
     restorecon: impl Fn(&Path) -> Result<()>,
 ) -> Result<()> {
-    let hostos_config: HostOSConfig = serde_json::from_reader(
-        File::open(&args.config).context("Failed to open HostOS config file")?,
-    )
-    .context("Failed to parse HostOS config file")?;
+    let hostos_config: HostOSConfig =
+        deserialize_config(&args.config).context("Failed to read HostOS config file")?;
 
     assemble_config_media(&hostos_config, &args.media)
         .context("Failed to assemble config media")?;
@@ -64,12 +62,10 @@ fn run(
             "HostOS generate GuestOS config",
         )])?;
 
-        println!(
-            "GuestOS VM config file already exists: {}",
+        bail!(
+            "GuestOS configuration file already exists: {}",
             args.output.display()
         );
-
-        return Ok(());
     }
 
     let vm_config_path = &args.output;
@@ -103,7 +99,7 @@ fn run(
     Ok(())
 }
 
-fn assemble_config_media(hostos_config: &HostOSConfig, media_path: &Path) -> Result<()> {
+pub fn assemble_config_media(hostos_config: &HostOSConfig, media_path: &Path) -> Result<()> {
     let guestos_config =
         generate_guestos_config(hostos_config).context("Failed to generate GuestOS config")?;
 
@@ -191,7 +187,7 @@ fn make_bootstrap_options(
 }
 
 /// Generate the GuestOS VM libvirt XML configuration and return it as String.
-fn generate_vm_config(config: &HostOSConfig, media_path: &Path) -> Result<String> {
+pub fn generate_vm_config(config: &HostOSConfig, media_path: &Path) -> Result<String> {
     let mac_address = calculate_deterministic_mac(
         &config.icos_settings.mgmt_mac,
         config.icos_settings.deployment_environment,

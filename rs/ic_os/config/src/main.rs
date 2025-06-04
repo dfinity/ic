@@ -1,4 +1,3 @@
-use crate::guest_vm_config::{generate_guest_vm_config, GenerateGuestVmConfigArgs};
 use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
 use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
@@ -6,6 +5,7 @@ use config::deployment_json::get_deployment_settings;
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
+use config::guest_vm_config::{generate_guest_vm_config, GenerateGuestVmConfigArgs};
 use config::guestos_config::generate_guestos_config;
 use config::serialize_and_write_config;
 use config::update_config::{update_guestos_config, update_hostos_config};
@@ -15,8 +15,6 @@ use network::resolve_mgmt_mac;
 use regex::Regex;
 use std::fs::File;
 use std::path::{Path, PathBuf};
-
-mod guest_vm_config;
 
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]

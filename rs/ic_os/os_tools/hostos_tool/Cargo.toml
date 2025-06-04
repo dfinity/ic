@@ -12,6 +12,16 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 config = { path = "../../config" }
 config_types = { path = "../../config_types" }
+ic-metrics-tool = { path = "../../metrics_tool" }
 network = { path = "../../network" }
 deterministic_ips = { path = "../../deterministic_ips" }
 utils = { path = "../../utils" }
+tokio = { version = "1.45", features = ["process", "time", "macros", "rt-multi-thread", "signal"] }
+virt = "0.4"
+tempfile = "3.16.0"
+nix = { version = "0.30", features = ["signal"] }
+log = "0.4.25"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+systemd = { version = "0.10" }
+
