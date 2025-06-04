@@ -5,6 +5,7 @@ use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
 use ic_nervous_system_common::NervousSystemError;
 use ic_nervous_system_runtime::Runtime;
 use icp_ledger::{AccountIdentifier, Subaccount as IcpSubaccount, Tokens};
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 
 #[cfg(feature = "tla")]
 use ic_nns_governance::governance::tla::{
@@ -111,5 +112,14 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for LoggingIcpLedgerCanister<Rt> {
 
     fn canister_id(&self) -> CanisterId {
         self.0.canister_id()
+    }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 }

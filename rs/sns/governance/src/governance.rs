@@ -53,17 +53,18 @@ use crate::{
             DisburseMaturityInProgress, Empty, ExecuteGenericNervousSystemFunction,
             FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse,
             GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
-            GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse,
-            GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
-            GetSnsInitializationParametersResponse, Governance as GovernanceProto, GovernanceError,
-            ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
-            ListProposalsResponse, ManageDappCanisterSettings, ManageLedgerParameters,
-            ManageNeuron, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens,
-            MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
-            Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
-            Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-            RegisterDappCanisters, RewardEvent, SetTopicsForCustomProposals, Tally, Topic,
-            TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, Vote, WaitForQuietState,
+            GetMetadataResponse, GetMetricsRequest, GetMetricsResponse, GetMode, GetModeResponse,
+            GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
+            GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
+            Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
+            ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
+            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
+            ManageSnsMetadata, MintSnsTokens, MintTokensRequest, MintTokensResponse,
+            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
+            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
+            ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
+            RewardEvent, SetTopicsForCustomProposals, Tally, Topic, TransferSnsTreasuryFunds,
+            UpgradeSnsControlledCanister, Vote, WaitForQuietState,
         },
     },
     proposal::{
@@ -2005,6 +2006,16 @@ impl Governance {
             })
             .min()
             .unwrap_or(u64::MAX);
+    }
+
+    pub async fn get_metrics(
+        &self,
+        _request: GetMetricsRequest,
+    ) -> Result<GetMetricsResponse, GovernanceError> {
+        Err(GovernanceError {
+            error_type: 42,
+            error_message: "Unimplemented".to_string(),
+        })
     }
 
     /// Starts execution of the given proposal in the background.
