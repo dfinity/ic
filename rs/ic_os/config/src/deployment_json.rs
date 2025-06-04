@@ -3,7 +3,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, DisplayFromStr};
+use serde_with::{serde_as, CommaSeparator, DisplayFromStr, StringWithSeparator};
 use url::Url;
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
@@ -28,9 +28,10 @@ pub struct Logging {
     pub elasticsearch_tags: Option<String>,
 }
 
+#[serde_as]
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct Nns {
-    #[serde(with = "comma_urls")]
+    #[serde_as(as = "StringWithSeparator::<CommaSeparator, Url>")]
     pub url: Vec<Url>,
 }
 
@@ -50,35 +51,6 @@ pub struct VmResources {
 pub fn get_deployment_settings(deployment_json: &Path) -> Result<DeploymentSettings> {
     let file = File::open(deployment_json).context("failed to open deployment config file")?;
     serde_json::from_reader(&file).context("Invalid json content")
-}
-
-mod comma_urls {
-    use serde::{de, Deserialize, Deserializer, Serializer};
-    use url::Url;
-
-    pub(crate) fn serialize<S>(urls: &[Url], s: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        s.serialize_str(
-            &urls
-                .iter()
-                .map(|v| v.to_string())
-                .collect::<Vec<_>>()
-                .join(","),
-        )
-    }
-
-    pub(crate) fn deserialize<'de, D>(d: D) -> Result<Vec<Url>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s: String = Deserialize::deserialize(d)?;
-
-        s.split(',')
-            .map(|v| v.parse::<Url>().map_err(de::Error::custom))
-            .collect()
-    }
 }
 
 #[cfg(test)]
