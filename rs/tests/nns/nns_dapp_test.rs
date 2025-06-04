@@ -64,13 +64,13 @@ fn get_html(env: &TestEnv, ic_gateway_url: Url, canister_id: Principal, dapp_anc
     let ic_gateway_domain = ic_gateway_url.domain().unwrap();
     let dapp_url = format!("https://{canister_id}.{ic_gateway_domain}");
     let log = env.logger();
-    ic_system_test_driver::retry_with_msg!(
-        format!("get html from {}", dapp_url),
-        log.clone(),
-        secs(600),
-        secs(30),
-        || {
-            block_on(async {
+    block_on(async {
+        ic_system_test_driver::retry_with_msg_async!(
+            format!("get html from {}", dapp_url),
+            &log,
+            secs(600),
+            secs(30),
+            async || {
                 let client = reqwest::Client::builder()
                     .use_rustls_tls()
                     .https_only(true)
@@ -83,6 +83,15 @@ fn get_html(env: &TestEnv, ic_gateway_url: Url, canister_id: Principal, dapp_anc
                     .header("User-Agent", "systest") // to prevent getting the service worker
                     .send()
                     .await?;
+
+                let status = resp.status();
+                if !status.is_success() {
+                    bail!(
+                        "Failed to get HTML from {}: status code {:?}",
+                        dapp_url,
+                        status
+                    );
+                }
 
                 let body_bytes = resp.bytes().await?.to_vec();
                 if let Ok(body) = String::from_utf8(body_bytes.clone()) {
@@ -103,9 +112,10 @@ fn get_html(env: &TestEnv, ic_gateway_url: Url, canister_id: Principal, dapp_anc
                 assert!(body.contains(dapp_anchor));
 
                 Ok(())
-            })
-        }
-    )
+            }
+        )
+        .await
+    })
     .unwrap_or_else(|_| panic!("{} should deliver a proper HTML page!", dapp_url.as_str()));
 }
 

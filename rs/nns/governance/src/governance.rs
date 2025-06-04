@@ -43,6 +43,7 @@ use crate::{
                 claim_or_refresh::{By, MemoAndController},
                 ClaimOrRefresh, Command, NeuronIdOrSubaccount,
             },
+            maturity_disbursement::Destination,
             neuron::Followees,
             neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
             proposal::Action,
@@ -114,7 +115,6 @@ use ic_sns_wasm::pb::v1::{
 };
 use ic_stable_structures::{storable::Bound, Storable};
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens, TOKEN_SUBDIVIDABLE_BY};
-use icrc_ledger_types::icrc1::account::Account as Icrc1Account;
 use itertools::Itertools;
 use maplit::hashmap;
 use registry_canister::{
@@ -4759,6 +4759,11 @@ impl Governance {
             )
         })?;
 
+        let controller = self
+            .with_neuron_by_neuron_id_or_subaccount(&managed_id, |managed_neuron| {
+                managed_neuron.controller()
+            })?;
+
         // Early exit for deprecated commands.
         if let Command::MergeMaturity(_) = command {
             return Self::merge_maturity_removed_error();
@@ -4781,13 +4786,16 @@ impl Governance {
             // command is not implemented yet, and before we implement it we should also validate
             // its subaccount.
             Command::DisburseMaturity(disburse_maturity) => {
-                if let Some(to_account) = &disburse_maturity.to_account {
-                    if Icrc1Account::try_from(to_account.clone()).is_err() {
-                        return Err(GovernanceError::new_with_message(
-                            ErrorType::InvalidCommand,
-                            "The to_account field is invalid",
-                        ));
-                    }
+                let destination = Destination::try_new(
+                    &disburse_maturity.to_account,
+                    &disburse_maturity.to_account_identifier,
+                    controller,
+                );
+                if destination.is_err() {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidCommand,
+                        "The disburse destination is invalid",
+                    ));
                 }
             }
             // Similar to DisburseMaturity, Disburse has a blob as the ICP account address. A
