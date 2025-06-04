@@ -343,12 +343,8 @@ pub fn update_hostos_config(
 
         let hostos_settings = HostOSSettings {
             vm_memory: deployment_json_settings.vm_resources.memory,
-            vm_cpu: deployment_json_settings
-                .vm_resources
-                .cpu
-                .clone()
-                .unwrap_or("kvm".to_string()),
-            vm_nr_of_vcpus: deployment_json_settings.vm_resources.nr_of_vcpus.unwrap_or(64),
+            vm_cpu: deployment_json_settings.vm_resources.cpu,
+            vm_nr_of_vcpus: deployment_json_settings.vm_resources.nr_of_vcpus,
             verbose,
         };
 

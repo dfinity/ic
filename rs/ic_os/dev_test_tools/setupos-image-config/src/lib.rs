@@ -157,11 +157,11 @@ pub async fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<()
     }
 
     if let Some(cpu) = &cfg.cpu {
-        deployment_json.vm_resources.cpu = Some(cpu.to_owned());
+        deployment_json.vm_resources.cpu = cpu.to_owned();
     }
 
     if let Some(nr_of_vcpus) = &cfg.nr_of_vcpus {
-        deployment_json.vm_resources.nr_of_vcpus = Some(nr_of_vcpus.to_owned());
+        deployment_json.vm_resources.nr_of_vcpus = nr_of_vcpus.to_owned();
     }
 
     if let Some(deployment_environment) = &cfg.deployment_environment {

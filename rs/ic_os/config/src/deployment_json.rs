@@ -44,11 +44,10 @@ pub struct VmResources {
     #[serde_as(as = "DisplayFromStr")]
     pub memory: u32,
     /// CPU virtualization type: "kvm" or "qemu". If None, defaults to "kvm"
-    pub cpu: Option<String>,
+    pub cpu: String,
     /// Maximum number of virtual CPUs allocated for the GuestOS,
     /// which must be between 1 and the maximum supported by the hypervisor.
-    /// If None, defaults to 64.
-    pub nr_of_vcpus: Option<u32>,
+    pub nr_of_vcpus: u32,
 }
 
 pub fn get_deployment_settings(deployment_json: &Path) -> Result<DeploymentSettings> {
@@ -99,7 +98,7 @@ mod test {
   "vm_resources": {
     "memory": "490",
     "cpu": "kvm",
-    "nr_of_vcpus": null
+    "nr_of_vcpus": "64"
   }
 }"#;
 
@@ -123,8 +122,8 @@ mod test {
             },
             vm_resources: VmResources {
                 memory: 490,
-                cpu: Some("kvm".to_string()),
-                nr_of_vcpus: None,
+                cpu: "kvm".to_string(),
+                nr_of_vcpus: 64,
             },
         }
     });

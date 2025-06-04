@@ -219,9 +219,7 @@ pub fn main() -> Result<()> {
             let icos_settings = ICOSSettings {
                 node_reward_type,
                 mgmt_mac,
-                deployment_environment: deployment_json_settings
-                    .deployment
-                    .deployment_environment,
+                deployment_environment: deployment_json_settings.deployment.deployment_environment,
                 logging: Logging {
                     elasticsearch_hosts: deployment_json_settings.logging.elasticsearch_hosts,
                     elasticsearch_tags: deployment_json_settings.logging.elasticsearch_tags,
@@ -239,15 +237,8 @@ pub fn main() -> Result<()> {
 
             let hostos_settings = HostOSSettings {
                 vm_memory: deployment_json_settings.vm_resources.memory,
-                vm_cpu: deployment_json_settings
-                    .vm_resources
-                    .cpu
-                    .clone()
-                    .unwrap_or("kvm".to_string()),
-                vm_nr_of_vcpus: deployment_json_settings
-                    .vm_resources
-                    .nr_of_vcpus
-                    .unwrap_or(64),
+                vm_cpu: deployment_json_settings.vm_resources.cpu,
+                vm_nr_of_vcpus: deployment_json_settings.vm_resources.nr_of_vcpus,
                 verbose,
             };
 
