@@ -3377,7 +3377,7 @@ impl StateMachine {
         &self,
         args: &ReadCanisterSnapshotMetadataArgs,
     ) -> Result<Vec<u8>, UserError> {
-        self.get_snapshot_star(
+        self.get_snapshot_blob(
             args,
             |md: &ReadCanisterSnapshotMetadataResponse| md.wasm_module_size,
             |offset, size| CanisterSnapshotDataKind::WasmModule { offset, size },
@@ -3389,7 +3389,7 @@ impl StateMachine {
         &self,
         args: &ReadCanisterSnapshotMetadataArgs,
     ) -> Result<Vec<u8>, UserError> {
-        self.get_snapshot_star(
+        self.get_snapshot_blob(
             args,
             |md: &ReadCanisterSnapshotMetadataResponse| md.wasm_memory_size,
             |offset, size| CanisterSnapshotDataKind::MainMemory { offset, size },
@@ -3401,7 +3401,7 @@ impl StateMachine {
         &self,
         args: &ReadCanisterSnapshotMetadataArgs,
     ) -> Result<Vec<u8>, UserError> {
-        self.get_snapshot_star(
+        self.get_snapshot_blob(
             args,
             |md: &ReadCanisterSnapshotMetadataResponse| md.stable_memory_size,
             |offset, size| CanisterSnapshotDataKind::StableMemory { offset, size },
@@ -3411,7 +3411,7 @@ impl StateMachine {
     /// Downloads one of the snapshot blobs as a whole.
     /// Takes two selector closures that determine which blob to target:
     /// Canister module, heap or stable memory.
-    fn get_snapshot_star(
+    fn get_snapshot_blob(
         &self,
         args: &ReadCanisterSnapshotMetadataArgs,
         size_extractor: impl Fn(&ReadCanisterSnapshotMetadataResponse) -> u64,
@@ -3497,7 +3497,7 @@ impl StateMachine {
         start_chunk: Option<usize>,
         end_chunk: Option<usize>,
     ) -> Result<(), UserError> {
-        self.upload_snapshot_star(
+        self.upload_snapshot_blob(
             canister_id,
             snapshot_id,
             data,
@@ -3520,7 +3520,7 @@ impl StateMachine {
         start_chunk: Option<usize>,
         end_chunk: Option<usize>,
     ) -> Result<(), UserError> {
-        self.upload_snapshot_star(
+        self.upload_snapshot_blob(
             canister_id,
             snapshot_id,
             data,
@@ -3543,7 +3543,7 @@ impl StateMachine {
         start_chunk: Option<usize>,
         end_chunk: Option<usize>,
     ) -> Result<(), UserError> {
-        self.upload_snapshot_star(
+        self.upload_snapshot_blob(
             canister_id,
             snapshot_id,
             data,
@@ -3560,7 +3560,7 @@ impl StateMachine {
     ///
     /// If given, skips `start_chunk` number of chunks.
     /// If given, only uploads until `end_chunk` (or until complete, whichever happens earlier).
-    fn upload_snapshot_star(
+    fn upload_snapshot_blob(
         &self,
         canister_id: CanisterId,
         snapshot_id: Vec<u8>,

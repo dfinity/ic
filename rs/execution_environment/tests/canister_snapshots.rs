@@ -12,30 +12,37 @@ fn upload_snapshot_with_checkpoint() {
         .with_snapshot_download_enabled(true)
         .with_snapshot_upload_enabled(true)
         .build();
-
-    let counter_canister_wasm = wat::parse_str(COUNTER_CANISTER_WAT).unwrap();
-
+    let counter_canister_wasm = wat::parse_str(COUNTER_GROW_CANISTER_WAT).unwrap();
     let canister_id = env
         .install_canister(counter_canister_wasm.clone(), vec![], None)
         .unwrap();
-    // grow stable by by 80 pages ~5.2MB
+    // grow stable by 80 pages ~5.2MB so that we have to upload in several slices.
+    // each grow also writes the counter value to the end of the page.
     let num_pages = 80;
     for _ in 0..num_pages {
         env.execute_ingress(canister_id, "inc", vec![]).unwrap();
     }
-    // upload a chunk
+    // upload some chunks
     let chunk = vec![1, 2, 3, 4, 5];
     let chunk_args = UploadChunkArgs {
         canister_id: canister_id.into(),
         chunk: chunk.clone(),
     };
     env.upload_chunk(chunk_args).unwrap();
+    let chunk = vec![6, 7, 8];
+    let chunk_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk: chunk.clone(),
+    };
+    env.upload_chunk(chunk_args).unwrap();
+    // take snapshot to learn valid metadata
     let snapshot_id_orig = env
         .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
         .unwrap()
         .snapshot_id();
     let md_args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id_orig);
     let md = env.read_canister_snapshot_metadata(&md_args).unwrap();
+    // download all data
     let module_dl = env.get_snapshot_module(&md_args).unwrap();
     assert_eq!(counter_canister_wasm, module_dl);
     let heap_dl = env.get_snapshot_heap(&md_args).unwrap();
@@ -128,7 +135,9 @@ fn upload_snapshot_with_checkpoint() {
 }
 
 /// Counter canister that also grows the stable memory by one page on "inc".
-const COUNTER_CANISTER_WAT: &str = r#"
+/// Also writes the counter value at the end of each new page, allowing
+/// us to verify the stable memory contents.
+const COUNTER_GROW_CANISTER_WAT: &str = r#"
 (module
   (import "ic0" "msg_reply" (func $msg_reply))
   (import "ic0" "msg_reply_data_append"
