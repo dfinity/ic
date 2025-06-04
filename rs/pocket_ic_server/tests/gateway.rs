@@ -218,6 +218,30 @@ async fn test_https_gateway() {
     test_gateway(server_url, true).await;
 }
 
+// Test that the HTTP gateway exits gracefully upon receiving a signal.
+
+fn kill_gateway_with_signal(shutdown_signal: Signal) {
+    let (server_url, child) = start_server_helper(None, None, false, false);
+    let mut pic = PocketIcBuilder::new()
+        .with_server_url(server_url)
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+    let _ = pic.make_live(None);
+
+    send_signal_to_pic(pic, child, Some(shutdown_signal));
+}
+
+#[test]
+fn kill_gateway_with_sigint() {
+    kill_gateway_with_signal(Signal::SIGINT);
+}
+
+#[test]
+fn kill_gateway_with_sigterm() {
+    kill_gateway_with_signal(Signal::SIGTERM);
+}
+
 // Test that the HTTP gateway handles `/_/dashboard` and `/_/topology` correctly.
 
 #[test]
@@ -325,37 +349,14 @@ fn test_gateway_ip_addr_host() {
     })
 }
 
-// Test that the HTTP gateway exits gracefully upon receiving a signal.
-
-fn kill_gateway_with_signal(shutdown_signal: Signal) {
-    let (server_url, child) = start_server_helper(None, None, false, false);
-    let mut pic = PocketIcBuilder::new()
-        .with_server_url(server_url)
-        .with_nns_subnet()
-        .with_application_subnet()
-        .build();
-    let _ = pic.make_live(None);
-
-    send_signal_to_pic(pic, child, Some(shutdown_signal));
-}
-
-#[test]
-fn kill_gateway_with_sigint() {
-    kill_gateway_with_signal(Signal::SIGINT);
-}
-
-#[test]
-fn kill_gateway_with_sigterm() {
-    kill_gateway_with_signal(Signal::SIGTERM);
-}
-
 // Test that the HTTP gateway fails gracefully in case of an unresponsive backend.
 
 #[test]
 fn test_unresponsive_gateway_backend() {
+    let client = Client::new();
+
     // Start a private server instance.
     let (backend_server_url, mut backend_process) = start_server_helper(None, None, false, false);
-    let client = Client::new();
 
     // Create a PocketIC instance on that server instance.
     let pic = PocketIcBuilder::new()
