@@ -32,10 +32,6 @@ struct VerifyArgs {
     /// The location of the CUP
     #[clap(long)]
     cup_path: PathBuf,
-
-    /// The NNS public key PEM file to be used to verify registry replies
-    #[clap(long)]
-    nns_pem: Option<PathBuf>,
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
@@ -50,6 +46,10 @@ struct CupExplorerArgs {
     /// The URL of an NNS entry point. That is, the URL of any replica on the
     /// NNS subnet.
     nns_url: Url,
+
+    /// The NNS public key PEM file to be used to verify registry replies
+    #[clap(long)]
+    nns_pem: Option<PathBuf>,
 
     #[clap(subcommand)]
     subcmd: SubCommand,
@@ -70,7 +70,7 @@ async fn main() {
         }
         SubCommand::VerifyCUPOfHaltedSubnet(verify_args) => verify(
             args.nns_url,
-            verify_args.nns_pem.clone(),
+            args.nns_pem,
             &verify_args.cup_path,
         ),
     }

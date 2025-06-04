@@ -20,6 +20,12 @@ A subsequent recovery proposal to restart the subnet should contain a `TIME` and
 
 ## Usage
 
+By default, the tool uses `https://ic0.app` and the mainnet public key as the NNS registry entrypoint. This can be overridden using the `--nns-url` and `--nns-pem` options:
+
+```bash
+bazel run rs/cup_explorer:cup_explorer_bin -- --nns-url http://[<NNS_NODE_IP>]:8080 --nns-pem /path/to/nns_public_key.pem <subcommand> ...
+```
+
 Run the binary with one of the available subcommands:
 
 ### Explore
@@ -33,7 +39,7 @@ bazel run rs/cup_explorer:cup_explorer_bin -- explore --subnet-id <SUBNET_ID> [-
 - `--subnet-id`: The target subnet to inspect (required).
 - `--download-path`: If specified, saves the latest CUP to the given path.
 
-### Verify
+### Verify CUP of halted subnet
 
 Verify a CUP file's integrity and threshold signature, and check if the subnet was halted at that height.
 
@@ -78,12 +84,4 @@ Getting registry value of key subnet_record_fuqsr-in2lc-zbcjj-ydmcw-pzq7h-4xm2z-
 Confirmed that subnet fuqsr-in2lc-zbcjj-ydmcw-pzq7h-4xm2z-pto4i-dcyee-5z4rz-x63ji-nae was halted on this CUP as of 2025-05-26 14:55:43.192946614 UTC.
 This means that the CUP represents the latest state of the subnet, UNTIL the subnet is restarted again.
 The subnet may ONLY be restarted via a recovery proposal using the same state hash as listed above.
-```
-
-## Configuration
-
-By default, the tool uses `https://ic0.app` as the NNS registry entrypoint. This can be overridden using the `--nns-url` option:
-
-```bash
-bazel run rs/cup_explorer:cup_explorer_bin -- --nns-url http://[<NNS_NODE_IP>]:8080 <subcommand> ...
 ```
