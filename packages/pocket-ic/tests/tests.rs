@@ -2816,14 +2816,21 @@ fn with_empty_subnet_state() {
 
 #[test]
 fn registry_after_instance_restart() {
-    // Create a PocketIC instance with 10 application subnets
+    // Create a PocketIC instance with NNS, SNS, II, fiduciary, bitcoin,
+    // 5 application, and 5 system subnets
     // (a sufficiently high number so that the order of their creation
     // is different from the order of their subnet IDs and
     // other hash-based footprints).
     let state = PocketIcState::new();
-    let mut builder = PocketIcBuilder::new();
-    for _ in 0..10 {
+    let mut builder = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_sns_subnet()
+        .with_ii_subnet()
+        .with_fiduciary_subnet()
+        .with_bitcoin_subnet();
+    for _ in 0..5 {
         builder = builder.with_application_subnet();
+        builder = builder.with_system_subnet();
     }
     let pic = builder.with_state(state).build();
 
