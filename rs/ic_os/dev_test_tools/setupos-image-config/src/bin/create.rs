@@ -76,7 +76,7 @@ async fn main() -> Result<(), Error> {
                 .unwrap_or("mainnet".to_string()),
         },
         logging: Logging {
-            elasticsearch_hosts: cli.deployment.elasticsearch_hosts.unwrap_or("".to_string()),
+            elasticsearch_hosts: cli.deployment.elasticsearch_hosts,
             elasticsearch_tags: cli.deployment.elasticsearch_tags,
         },
         nns: Nns {

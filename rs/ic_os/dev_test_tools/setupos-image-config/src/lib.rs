@@ -167,7 +167,7 @@ pub async fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<()
     }
 
     if let Some(elasticsearch_hosts) = &cfg.elasticsearch_hosts {
-        deployment_json.logging.elasticsearch_hosts = elasticsearch_hosts.to_owned();
+        deployment_json.logging.elasticsearch_hosts = Some(elasticsearch_hosts.to_owned());
     }
 
     if let Some(elasticsearch_tags) = &cfg.elasticsearch_tags {

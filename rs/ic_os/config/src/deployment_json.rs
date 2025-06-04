@@ -17,14 +17,12 @@ pub struct DeploymentSettings {
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct Deployment {
     pub deployment_environment: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub mgmt_mac: Option<String>,
 }
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct Logging {
-    pub elasticsearch_hosts: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    pub elasticsearch_hosts: Option<String>,
     pub elasticsearch_tags: Option<String>,
 }
 
@@ -39,10 +37,8 @@ pub struct Nns {
 pub struct VmResources {
     #[serde_as(as = "DisplayFromStr")]
     pub memory: u32,
-    #[serde(skip_serializing_if = "Option::is_none")]
     /// Can be "kvm" or "qemu". If None, is treated as "kvm".
     pub cpu: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     /// Maximum number of virtual CPUs allocated for the GuestOS,
     /// which must be between 1 and the maximum supported by the hypervisor.
     /// If None, defaults to 64.
@@ -138,7 +134,7 @@ mod test {
                 mgmt_mac: None,
             },
             logging: Logging {
-                elasticsearch_hosts: hosts,
+                elasticsearch_hosts: Some(hosts),
                 elasticsearch_tags: None,
             },
             nns: Nns {

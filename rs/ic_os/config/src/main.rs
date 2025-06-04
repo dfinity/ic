@@ -224,8 +224,7 @@ pub fn main() -> Result<()> {
                     .deployment_environment
                     .parse()?,
                 logging: Logging {
-                    elasticsearch_hosts: Some(deployment_json_settings.logging.elasticsearch_hosts)
-                        .filter(|v| !v.is_empty()),
+                    elasticsearch_hosts: deployment_json_settings.logging.elasticsearch_hosts,
                     elasticsearch_tags: deployment_json_settings.logging.elasticsearch_tags,
                 },
                 use_nns_public_key: Path::new("/data/nns_public_key.pem").exists(),

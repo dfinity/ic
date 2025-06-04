@@ -4,8 +4,8 @@
     "mgmt_mac": null
   },
   "logging": {
-    "elasticsearch_hosts": "",
-    "elasticsearch_tags": ""
+    "elasticsearch_hosts": null,
+    "elasticsearch_tags": null
   },
   "nns": {
     "url": "NNS_URL"
