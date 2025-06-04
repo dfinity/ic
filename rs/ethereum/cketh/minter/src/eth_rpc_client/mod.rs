@@ -112,22 +112,19 @@ impl EthRpcClient {
         &self,
         params: FeeHistoryArgs,
     ) -> Result<FeeHistory, MultiCallError<FeeHistory>> {
-        self.evm_rpc_client
-            .eth_fee_history(params)
-            .await
-            .reduce()
-            .into()
+        let results = self.evm_rpc_client.eth_fee_history(params).await;
+        ReduceWithStrategy::<StrictMajorityByKey>::reduce(results).into()
     }
 
     pub async fn eth_send_raw_transaction(
         &self,
         raw_signed_transaction_hex: String,
     ) -> Result<SendRawTransactionStatus, MultiCallError<SendRawTransactionStatus>> {
-        self.evm_rpc_client
+        let results = self
+            .evm_rpc_client
             .eth_send_raw_transaction(raw_signed_transaction_hex)
-            .await
-            .reduce()
-            .into()
+            .await;
+        ReduceWithStrategy::<AnyOf>::reduce(results).into()
     }
 
     pub async fn eth_get_finalized_transaction_count(
@@ -392,19 +389,16 @@ impl<T> ReducedResult<T> {
     }
 }
 
-trait Reduce {
-    type Item;
-    fn reduce(self) -> ReducedResult<Self::Item>;
-}
-
 trait ReduceWithStrategy<S> {
     type Item;
     fn reduce(self) -> ReducedResult<Self::Item>;
 }
 
 pub enum MinByKey {}
+pub enum AnyOf {}
+pub enum StrictMajorityByKey {}
 
-impl Reduce for EvmMultiRpcResult<Option<FeeHistory>> {
+impl ReduceWithStrategy<StrictMajorityByKey> for EvmMultiRpcResult<Option<FeeHistory>> {
     type Item = FeeHistory;
 
     fn reduce(self) -> ReducedResult<Self::Item> {
@@ -419,7 +413,7 @@ impl Reduce for EvmMultiRpcResult<Option<FeeHistory>> {
     }
 }
 
-impl Reduce for EvmMultiRpcResult<SendRawTransactionStatus> {
+impl ReduceWithStrategy<AnyOf> for EvmMultiRpcResult<SendRawTransactionStatus> {
     type Item = SendRawTransactionStatus;
 
     fn reduce(self) -> ReducedResult<Self::Item> {
