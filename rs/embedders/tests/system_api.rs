@@ -2201,7 +2201,7 @@ fn test_env_var_name_operations() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut env_vars = BTreeMap::new();
     env_vars.insert("TEST_VAR_1".to_string(), "TEST_VALUE_1".to_string());
-    env_vars.insert("TEST_VAR_02".to_string(), "TEST_VALUE_2".to_string());
+    env_vars.insert("TEST_VAR_22".to_string(), "TEST_VALUE_2".to_string());
 
     let api = get_system_api(
         ApiTypeBuilder::build_update_api(),
@@ -2215,15 +2215,15 @@ fn test_env_var_name_operations() {
     assert_eq!(api.ic0_env_var_count().unwrap(), 2);
 
     // Test ic0_env_var_name_size
-    assert_eq!(api.ic0_env_var_name_size(0).unwrap(), 9); // "TEST_VAR_1"
-    assert_eq!(api.ic0_env_var_name_size(1).unwrap(), 10); // "TEST_VAR_02"
+    assert_eq!(api.ic0_env_var_name_size(0).unwrap(), 10); // "TEST_VAR_1"
+    assert_eq!(api.ic0_env_var_name_size(1).unwrap(), 11); // "TEST_VAR_22"
 
     // Test ic0_env_var_name_size with invalid index
     assert!(matches!(
         api.ic0_env_var_name_size(2),
         Err(HypervisorError::EnvironmentVariableIndexOutOfBounds {
             index: 2,
-            length: 1
+            length: 2
         })
     ));
 
@@ -2231,31 +2231,31 @@ fn test_env_var_name_operations() {
     let mut heap = vec![0u8; 16];
 
     // Copy first variable name
-    api.ic0_env_var_name_copy(0, 0, 9, 0, &mut heap).unwrap();
-    assert_eq!(&heap[0..9], b"TEST_VAR_1");
+    api.ic0_env_var_name_copy(0, 0, 10, 0, &mut heap).unwrap();
+    assert_eq!(&heap[0..10], b"TEST_VAR_1");
 
     // Copy second variable name
-    api.ic0_env_var_name_copy(0, 0, 10, 1, &mut heap).unwrap();
-    assert_eq!(&heap[0..9], b"TEST_VAR_02");
+    api.ic0_env_var_name_copy(0, 0, 11, 1, &mut heap).unwrap();
+    assert_eq!(&heap[0..11], b"TEST_VAR_22");
 
     // Test invalid index
     assert!(matches!(
         api.ic0_env_var_name_copy(0, 0, 9, 2, &mut heap),
         Err(HypervisorError::EnvironmentVariableIndexOutOfBounds {
             index: 2,
-            length: 1
+            length: 2
         })
     ));
 
     // Test invalid offset
     assert!(matches!(
-        api.ic0_env_var_name_copy(0, 10, 9, 0, &mut heap),
+        api.ic0_env_var_name_copy(0, 10, 10, 0, &mut heap),
         Err(HypervisorError::ToolchainContractViolation { .. })
     ));
 
     // Test invalid size (destination buffer overflow)
     assert!(matches!(
-        api.ic0_env_var_name_copy(10, 0, 9, 0, &mut heap),
+        api.ic0_env_var_name_copy(10, 0, 10, 0, &mut heap),
         Err(HypervisorError::ToolchainContractViolation { .. })
     ));
 }
@@ -2296,10 +2296,9 @@ fn test_env_var_value_operations() {
     );
 
     // Test copying value for existing variable
-    let mut value_buf = vec![0u8; 11];
-    api.ic0_env_var_value_copy(0, 0, 11, 0, var_name.len(), &mut value_buf)
+    api.ic0_env_var_value_copy(0, 0, 11, 0, var_name.len(), &mut heap)
         .unwrap();
-    assert_eq!(&value_buf, b"Hello World");
+    assert_eq!(&heap[0..11], b"Hello World");
 
     // Test empty variable
     let empty_var = b"EMPTY_VAR";
@@ -2315,12 +2314,11 @@ fn test_env_var_value_operations() {
     assert_eq!(
         api.ic0_env_var_value_size(0, path_var.len(), &heap)
             .unwrap(),
-        19 // length of "/usr/local/bin:/usr/bin"
+        23 // length of "/usr/local/bin:/usr/bin"
     );
-    let mut path_buf = vec![0u8; 19];
-    api.ic0_env_var_value_copy(0, 0, 19, 0, path_var.len(), &mut path_buf)
+    api.ic0_env_var_value_copy(0, 0, 23, 0, path_var.len(), &mut heap)
         .unwrap();
-    assert_eq!(&path_buf, b"/usr/local/bin:/usr/bin");
+    assert_eq!(&heap[0..23], b"/usr/local/bin:/usr/bin");
 
     // Test non-existent variable
     let non_existent = b"NON_EXISTENT";
