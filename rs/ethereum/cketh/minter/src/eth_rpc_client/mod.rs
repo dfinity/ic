@@ -240,17 +240,6 @@ impl<T> MultiCallResults<T> {
 }
 
 impl<T: PartialEq> MultiCallResults<T> {
-    /// Expects all results to be ok or return the following error:
-    /// * MultiCallError::ConsistentJsonRpcError: all errors are the same JSON-RPC error.
-    /// * MultiCallError::ConsistentHttpOutcallError: all errors are the same HTTP outcall error.
-    /// * MultiCallError::InconsistentResults if there are different errors.
-    fn all_ok(self) -> Result<BTreeMap<EvmRpcService, T>, MultiCallError<T>> {
-        if self.errors.is_empty() {
-            return Ok(self.ok_results);
-        }
-        Err(self.expect_error())
-    }
-
     /// Expects at least 2 ok results to be ok or return the following error:
     /// * MultiCallError::ConsistentJsonRpcError: all errors are the same JSON-RPC error.
     /// * MultiCallError::ConsistentHttpOutcallError: all errors are the same HTTP outcall error.
@@ -479,30 +468,6 @@ impl<T> MultiCallError<T> {
 }
 
 impl<T: Debug + PartialEq> MultiCallResults<T> {
-    pub fn reduce_with_equality(self) -> Result<T, MultiCallError<T>> {
-        let mut results = self.all_ok()?.into_iter();
-        let (base_node_provider, base_result) = results
-            .next()
-            .expect("BUG: MultiCallResults is guaranteed to be non-empty");
-        let mut inconsistent_results: Vec<_> = results
-            .filter(|(_provider, result)| result != &base_result)
-            .collect();
-        if !inconsistent_results.is_empty() {
-            inconsistent_results.push((base_node_provider, base_result));
-            let error = MultiCallError::InconsistentResults(MultiCallResults::from_non_empty_iter(
-                inconsistent_results
-                    .into_iter()
-                    .map(|(provider, result)| (provider, Ok(result))),
-            ));
-            log!(
-                INFO,
-                "[reduce_with_equality]: inconsistent results {error:?}"
-            );
-            return Err(error);
-        }
-        Ok(base_result)
-    }
-
     pub fn reduce_with_min_by_key<F: FnMut(&T) -> K, K: Ord>(
         self,
         extractor: F,
