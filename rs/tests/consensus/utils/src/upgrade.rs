@@ -71,7 +71,7 @@ pub async fn fetch_update_file_sha256(version_str: &str) -> Result<String, Strin
         .map_err(|err| format!("Something went wrong reading the file: {:?}", err))?;
     for line in contents.lines() {
         let words: Vec<&str> = line.split(char::is_whitespace).collect();
-        let suffix = "-img.tar.zst";
+        let suffix = "update-img.tar.zst";
         if words.len() == 2 && words[1].ends_with(suffix) {
             return Ok(words[0].to_string());
         }

@@ -11,6 +11,7 @@ pub mod event;
 pub mod farm;
 pub mod group;
 pub mod ic;
+pub mod ic_gateway_vm;
 pub mod log_events;
 pub mod logger;
 pub mod nested;

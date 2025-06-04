@@ -345,10 +345,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "canbench": crate.spec(
-                version = "^0.1.9",
+                version = "^0.1.15",
             ),
             "canbench-rs": crate.spec(
-                version = "^0.1.9",
+                version = "^0.1.15",
             ),
             "candid": crate.spec(
                 version = "^0.10.13",
@@ -602,7 +602,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-bn-lib": crate.spec(
                 git = "https://github.com/dfinity/ic-bn-lib",
-                rev = "ec4a6b4abab2d94e09c4d5fee2d57d7bb1260835",
+                rev = "23b3b0b76795c9b75eed96742c2185da0ce9ee2a",
                 features = [
                     "acme_alpn",
                 ],
@@ -625,7 +625,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-cdk-next": crate.spec(
                 package = "ic-cdk",
-                version = "^0.18.0",
+                version = "^0.18.0-alpha.2",
             ),
             "ic-cdk-timers": crate.spec(
                 version = "^0.11.0",
@@ -641,7 +641,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-gateway": crate.spec(
                 git = "https://github.com/dfinity/ic-gateway",
-                rev = "ed8539d9edd45b97148c46b8020fa6d7ebd48c07",
+                rev = "73495da1d5ab99891a3580522958f0f635902a87",
                 default_features = False,
             ),
             "ic-http-certification": crate.spec(

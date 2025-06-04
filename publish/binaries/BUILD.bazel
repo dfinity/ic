@@ -132,6 +132,12 @@ artifact_bundle(
     name = "bundle-legacy",
     inputs = [":binaries"],
     prefix = "release",
+    # only create the bundle for a single platform since we don't prefix
+    # os_info
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
     visibility = ["//visibility:public"],
 )
 

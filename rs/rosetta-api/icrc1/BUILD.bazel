@@ -82,7 +82,7 @@ MACRO_DEV_DEPENDENCIES = [
 ALIASES = {
 }
 
-ROSETTA_VERSION = "1.2.2"
+ROSETTA_VERSION = "1.2.3"
 
 rust_library(
     name = "ic-icrc-rosetta",

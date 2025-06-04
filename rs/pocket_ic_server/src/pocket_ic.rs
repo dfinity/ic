@@ -988,6 +988,26 @@ impl PocketIc {
                 let (ranges, alloc_range, subnet_id, time) = if let Some(ref subnet_state_dir) =
                     subnet_state_dir
                 {
+                    match std::fs::read_dir(subnet_state_dir) {
+                        // Return a comprehensible error if the provided state directory is not a (readable) directory.
+                        Err(err) => {
+                            return Err(format!(
+                                "The path {} is not a (subnet state) directory: {}",
+                                subnet_state_dir.display(),
+                                err,
+                            ));
+                        }
+                        Ok(mut dir) => {
+                            // Return a comprehensible error if the provided state directory is empty.
+                            if dir.next().is_none() {
+                                return Err(format!(
+                                    "Provided an empty state directory at path {}.",
+                                    subnet_state_dir.display()
+                                ));
+                            }
+                        }
+                    };
+
                     let metadata = {
                         // We create a temporary state manager used to read the given state metadata.
                         // We first copy the subnet state directory into a temporary directory
@@ -1905,54 +1925,6 @@ impl TryFrom<RawMessageId> for MessageId {
             effective_principal,
             msg_id,
         })
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct AwaitIngressMessage(pub MessageId);
-
-impl Operation for AwaitIngressMessage {
-    fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        let subnet = route(pic, self.0.effective_principal.clone(), false);
-        match subnet {
-            Ok(subnet) => {
-                // Now, we execute on all subnets until we have the result
-                let max_rounds = 100;
-                for _i in 0..max_rounds {
-                    match subnet.ingress_status(&self.0.msg_id) {
-                        IngressStatus::Known {
-                            state: IngressState::Completed(result),
-                            ..
-                        } => {
-                            return OpOut::CanisterResult(wasm_result_to_canister_result(
-                                result, true,
-                            ));
-                        }
-                        IngressStatus::Known {
-                            state: IngressState::Failed(error),
-                            ..
-                        } => {
-                            return OpOut::CanisterResult(Err(user_error_to_reject_response(
-                                error, true,
-                            )));
-                        }
-                        _ => {}
-                    }
-                    for subnet_ in pic.subnets.get_all() {
-                        subnet_.state_machine.execute_round();
-                    }
-                }
-                OpOut::Error(PocketIcError::BadIngressMessage(format!(
-                    "Failed to answer to ingress {} after {} rounds.",
-                    self.0.msg_id, max_rounds
-                )))
-            }
-            Err(e) => OpOut::Error(PocketIcError::BadIngressMessage(e)),
-        }
-    }
-
-    fn id(&self) -> OpId {
-        OpId(format!("await_update_{}", self.0.msg_id))
     }
 }
 
