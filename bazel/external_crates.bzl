@@ -345,10 +345,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "canbench": crate.spec(
-                version = "^0.1.9",
+                version = "^0.1.15",
             ),
             "canbench-rs": crate.spec(
-                version = "^0.1.9",
+                version = "^0.1.15",
             ),
             "candid": crate.spec(
                 version = "^0.10.13",
@@ -625,7 +625,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-cdk-next": crate.spec(
                 package = "ic-cdk",
-                version = "^0.18.0",
+                version = "^0.18.0-alpha.2",
             ),
             "ic-cdk-timers": crate.spec(
                 version = "^0.11.0",

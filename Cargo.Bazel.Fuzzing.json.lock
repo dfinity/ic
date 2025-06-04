@@ -1,5 +1,5 @@
 {
-  "checksum": "fe491b00db50f2e4e298fd67fb26c2f45ae7d9644aaed62a538b21e9cb6071a2",
+  "checksum": "5e28c1de0af6e84f24865ae66dd1471bc2527274516e0e8a6c44110ad1328ca2",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11522,14 +11522,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "canbench 0.1.9": {
+    "canbench 0.1.15": {
       "name": "canbench",
-      "version": "0.1.9",
+      "version": "0.1.15",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/canbench/0.1.9/download",
-          "sha256": "c3eba78c84aa78e67f27c5c5a7d6c3d33cc301f95886171748e8f6ed8a31b258"
+          "url": "https://static.crates.io/crates/canbench/0.1.15/download",
+          "sha256": "5c346cb41bf01bac3c8494eef82943d4dc49267981c8bcb548ba8f4cc69f3161"
         }
       },
       "targets": [
@@ -11566,7 +11566,7 @@
         "deps": {
           "common": [
             {
-              "id": "canbench-rs 0.1.9",
+              "id": "canbench-rs 0.1.15",
               "target": "canbench_rs"
             },
             {
@@ -11590,12 +11590,20 @@
               "target": "hex"
             },
             {
-              "id": "pocket-ic 6.0.0",
+              "id": "inferno 0.11.19",
+              "target": "inferno"
+            },
+            {
+              "id": "pocket-ic 9.0.1",
               "target": "pocket_ic"
             },
             {
               "id": "reqwest 0.11.27",
               "target": "reqwest"
+            },
+            {
+              "id": "rustc-demangle 0.1.23",
+              "target": "rustc_demangle"
             },
             {
               "id": "semver 1.0.22",
@@ -11618,6 +11626,10 @@
               "target": "tempfile"
             },
             {
+              "id": "walrus 0.23.3",
+              "target": "walrus"
+            },
+            {
               "id": "wasmparser 0.119.0",
               "target": "wasmparser"
             }
@@ -11625,7 +11637,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.9"
+        "version": "0.1.15"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -11633,14 +11645,14 @@
       ],
       "license_file": null
     },
-    "canbench-rs 0.1.9": {
+    "canbench-rs 0.1.15": {
       "name": "canbench-rs",
-      "version": "0.1.9",
+      "version": "0.1.15",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/canbench-rs/0.1.9/download",
-          "sha256": "588701e2d05679b79603acca6a6f8b78fe0d21f5f7a9c06fe689f769ae797008"
+          "url": "https://static.crates.io/crates/canbench-rs/0.1.15/download",
+          "sha256": "c1c560e37bb75c6900e18e7d37174efaff09e266d138d9926e34f489d9d2f6a0"
         }
       },
       "targets": [
@@ -11669,7 +11681,7 @@
               "target": "candid"
             },
             {
-              "id": "ic-cdk 0.12.2",
+              "id": "ic-cdk 0.17.2",
               "target": "ic_cdk"
             },
             {
@@ -11683,13 +11695,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "canbench-rs-macros 0.1.9",
+              "id": "canbench-rs-macros 0.1.15",
               "target": "canbench_rs_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.1.9"
+        "version": "0.1.15"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -11697,14 +11709,14 @@
       ],
       "license_file": null
     },
-    "canbench-rs-macros 0.1.9": {
+    "canbench-rs-macros 0.1.15": {
       "name": "canbench-rs-macros",
-      "version": "0.1.9",
+      "version": "0.1.15",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/canbench-rs-macros/0.1.9/download",
-          "sha256": "e05fe21a7dfc85c3be8e40edbbcb3fe23b4c070fac4741eff18129f1d0f11aa9"
+          "url": "https://static.crates.io/crates/canbench-rs-macros/0.1.15/download",
+          "sha256": "866a310ae95dfd273c2f1d17c8382d0d893c35851e9252cca98bd3a80a7e5635"
         }
       },
       "targets": [
@@ -11744,7 +11756,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.9"
+        "version": "0.1.15"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -20174,11 +20186,11 @@
               "target": "cached"
             },
             {
-              "id": "canbench 0.1.9",
+              "id": "canbench 0.1.15",
               "target": "canbench"
             },
             {
-              "id": "canbench-rs 0.1.9",
+              "id": "canbench-rs 0.1.15",
               "target": "canbench_rs"
             },
             {
@@ -20462,7 +20474,7 @@
               "target": "ic_cdk"
             },
             {
-              "id": "ic-cdk 0.18.0",
+              "id": "ic-cdk 0.18.0-alpha.2",
               "target": "ic_cdk",
               "alias": "ic_cdk_next"
             },
@@ -33080,74 +33092,6 @@
       ],
       "license_file": null
     },
-    "ic-cdk 0.12.2": {
-      "name": "ic-cdk",
-      "version": "0.12.2",
-      "package_url": "https://github.com/dfinity/cdk-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk/0.12.2/download",
-          "sha256": "0e908da565d9e304e83732500069ebb959e3d2cad80f894889ea37207112c7a0"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ic_cdk",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ic_cdk",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "candid 0.10.13",
-              "target": "candid"
-            },
-            {
-              "id": "ic0 0.21.1",
-              "target": "ic0"
-            },
-            {
-              "id": "serde 1.0.217",
-              "target": "serde"
-            },
-            {
-              "id": "serde_bytes 0.11.15",
-              "target": "serde_bytes"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "ic-cdk-macros 0.8.4",
-              "target": "ic_cdk_macros"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.12.2"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "ic-cdk 0.17.2": {
       "name": "ic-cdk",
       "version": "0.17.2",
@@ -33220,14 +33164,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk 0.18.0": {
+    "ic-cdk 0.18.0-alpha.2": {
       "name": "ic-cdk",
-      "version": "0.18.0",
+      "version": "0.18.0-alpha.2",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk/0.18.0/download",
-          "sha256": "b11cc255410be6a7e47e1a756ea94c1f31a2397a79e696f6f7d207d5ebd3e144"
+          "url": "https://static.crates.io/crates/ic-cdk/0.18.0-alpha.2/download",
+          "sha256": "3c9c87d961de7d2935a0bf19f4d6afe76f3d508b853ff5267e999beadd7e9286"
         }
       },
       "targets": [
@@ -33290,13 +33234,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "ic-cdk-macros 0.18.0",
+              "id": "ic-cdk-macros 0.18.0-alpha.2",
               "target": "ic_cdk_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.18.0"
+        "version": "0.18.0-alpha.2"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -33375,73 +33319,6 @@
       ],
       "license_file": null
     },
-    "ic-cdk-macros 0.8.4": {
-      "name": "ic-cdk-macros",
-      "version": "0.8.4",
-      "package_url": "https://github.com/dfinity/cdk-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk-macros/0.8.4/download",
-          "sha256": "a5a618e4020cea88e933d8d2f8c7f86d570ec06213506a80d4f2c520a9bba512"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "ic_cdk_macros",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ic_cdk_macros",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "candid 0.10.13",
-              "target": "candid"
-            },
-            {
-              "id": "proc-macro2 1.0.95",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.40",
-              "target": "quote"
-            },
-            {
-              "id": "serde 1.0.217",
-              "target": "serde"
-            },
-            {
-              "id": "serde_tokenstream 0.1.7",
-              "target": "serde_tokenstream"
-            },
-            {
-              "id": "syn 1.0.109",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.8.4"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "ic-cdk-macros 0.17.2": {
       "name": "ic-cdk-macros",
       "version": "0.17.2",
@@ -33509,14 +33386,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk-macros 0.18.0": {
+    "ic-cdk-macros 0.18.0-alpha.2": {
       "name": "ic-cdk-macros",
-      "version": "0.18.0",
+      "version": "0.18.0-alpha.2",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk-macros/0.18.0/download",
-          "sha256": "30bab0b748bc4059f19abbd2c2609761ca6d6c731979f01148b49afcc4fe7a9f"
+          "url": "https://static.crates.io/crates/ic-cdk-macros/0.18.0-alpha.2/download",
+          "sha256": "4987a4c05c25d2871f8a0dd4b726733fbf4c55b5a82656976333ddd79d8e1ce6"
         }
       },
       "targets": [
@@ -33568,7 +33445,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.18.0"
+        "version": "0.18.0-alpha.2"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -33729,73 +33606,6 @@
         "Apache-2.0"
       ],
       "license_file": null
-    },
-    "ic-certification 2.6.0": {
-      "name": "ic-certification",
-      "version": "2.6.0",
-      "package_url": "https://github.com/dfinity/response-verification",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-certification/2.6.0/download",
-          "sha256": "e64ee3d8b6e81b51f245716d3e0badb63c283c00f3c9fb5d5219afc30b5bf821"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ic_certification",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ic_certification",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "serde",
-            "serde_bytes"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "hex 0.4.3",
-              "target": "hex"
-            },
-            {
-              "id": "serde 1.0.217",
-              "target": "serde"
-            },
-            {
-              "id": "serde_bytes 0.11.15",
-              "target": "serde_bytes"
-            },
-            {
-              "id": "sha2 0.10.9",
-              "target": "sha2"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "2.6.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
     },
     "ic-certification 3.0.3": {
       "name": "ic-certification",
@@ -34910,14 +34720,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-transport-types 0.37.1": {
+    "ic-transport-types 0.39.3": {
       "name": "ic-transport-types",
-      "version": "0.37.1",
+      "version": "0.39.3",
       "package_url": "https://github.com/dfinity/agent-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-transport-types/0.37.1/download",
-          "sha256": "875dc4704780383112e8e8b5063a1b98de114321d0c7d3e7f635dcf360a57fba"
+          "url": "https://static.crates.io/crates/ic-transport-types/0.39.3/download",
+          "sha256": "979ee7bee5a67150a4c090fb012c93c294a528b4a867bad9a15cc6d01cb4227f"
         }
       },
       "targets": [
@@ -34950,7 +34760,7 @@
               "target": "hex"
             },
             {
-              "id": "ic-certification 2.6.0",
+              "id": "ic-certification 3.0.3",
               "target": "ic_certification"
             },
             {
@@ -34966,11 +34776,15 @@
               "target": "serde_bytes"
             },
             {
+              "id": "serde_cbor 0.11.2",
+              "target": "serde_cbor"
+            },
+            {
               "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 2.0.12",
               "target": "thiserror"
             }
           ],
@@ -34986,7 +34800,7 @@
           ],
           "selects": {}
         },
-        "version": "0.37.1"
+        "version": "0.39.3"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -35662,44 +35476,6 @@
         ],
         "edition": "2021",
         "version": "0.18.11"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
-    "ic0 0.21.1": {
-      "name": "ic0",
-      "version": "0.21.1",
-      "package_url": "https://github.com/dfinity/cdk-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic0/0.21.1/download",
-          "sha256": "a54b5297861c651551676e8c43df805dad175cc33bc97dbd992edbbb85dcbcdf"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ic0",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ic0",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2021",
-        "version": "0.21.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -37701,7 +37477,11 @@
         ],
         "crate_features": {
           "common": [
+            "crossbeam-channel",
+            "crossbeam-utils",
+            "dashmap",
             "indexmap",
+            "multithreaded",
             "nameattr"
           ],
           "selects": {}
@@ -37711,6 +37491,18 @@
             {
               "id": "ahash 0.8.11",
               "target": "ahash"
+            },
+            {
+              "id": "crossbeam-channel 0.5.15",
+              "target": "crossbeam_channel"
+            },
+            {
+              "id": "crossbeam-utils 0.8.19",
+              "target": "crossbeam_utils"
+            },
+            {
+              "id": "dashmap 5.5.3",
+              "target": "dashmap"
             },
             {
               "id": "indexmap 2.7.1",
@@ -54556,14 +54348,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "pocket-ic 6.0.0": {
+    "pocket-ic 9.0.1": {
       "name": "pocket-ic",
-      "version": "6.0.0",
+      "version": "9.0.1",
       "package_url": "https://github.com/dfinity/ic",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/pocket-ic/6.0.0/download",
-          "sha256": "124a2380ca6f557adf8b02517cbfd2f564113230e14cda6f6aadd3dfe156293c"
+          "url": "https://static.crates.io/crates/pocket-ic/9.0.1/download",
+          "sha256": "bc8ef97f44d4a20b43695690f478f6bfc4058f3ead7d51aff79be29bcfd810c5"
         }
       },
       "targets": [
@@ -54588,6 +54380,10 @@
         "deps": {
           "common": [
             {
+              "id": "backoff 0.4.0",
+              "target": "backoff"
+            },
+            {
               "id": "base64 0.13.1",
               "target": "base64"
             },
@@ -54596,15 +54392,23 @@
               "target": "candid"
             },
             {
+              "id": "flate2 1.0.31",
+              "target": "flate2"
+            },
+            {
               "id": "hex 0.4.3",
               "target": "hex"
             },
             {
-              "id": "ic-certification 2.6.0",
+              "id": "ic-certification 3.0.3",
               "target": "ic_certification"
             },
             {
-              "id": "ic-transport-types 0.37.1",
+              "id": "ic-management-canister-types 0.3.0",
+              "target": "ic_management_canister_types"
+            },
+            {
+              "id": "ic-transport-types 0.39.3",
               "target": "ic_transport_types"
             },
             {
@@ -54644,7 +54448,11 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "tempfile 3.12.0",
+              "target": "tempfile"
+            },
+            {
+              "id": "thiserror 2.0.12",
               "target": "thiserror"
             },
             {
@@ -54683,7 +54491,7 @@
           ],
           "selects": {}
         },
-        "version": "6.0.0"
+        "version": "9.0.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -68660,61 +68468,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "serde_tokenstream 0.1.7": {
-      "name": "serde_tokenstream",
-      "version": "0.1.7",
-      "package_url": "https://github.com/oxidecomputer/serde_tokenstream",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/serde_tokenstream/0.1.7/download",
-          "sha256": "797ba1d80299b264f3aac68ab5d12e5825a561749db4df7cd7c8083900c5d4e9"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "serde_tokenstream",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "serde_tokenstream",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro2 1.0.95",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "serde 1.0.217",
-              "target": "serde"
-            },
-            {
-              "id": "syn 1.0.109",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.1.7"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "serde_tokenstream 0.2.1": {
       "name": "serde_tokenstream",
       "version": "0.2.1",
@@ -82527,6 +82280,87 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "walrus 0.23.3": {
+      "name": "walrus",
+      "version": "0.23.3",
+      "package_url": "https://github.com/rustwasm/walrus",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/walrus/0.23.3/download",
+          "sha256": "6481311b98508f4bc2d0abbfa5d42172e7a54b4b24d8f15e28b0dc650be0c59f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "walrus",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "walrus",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "anyhow 1.0.98",
+              "target": "anyhow"
+            },
+            {
+              "id": "gimli 0.26.2",
+              "target": "gimli"
+            },
+            {
+              "id": "id-arena 2.2.1",
+              "target": "id_arena"
+            },
+            {
+              "id": "leb128 0.2.5",
+              "target": "leb128"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "wasm-encoder 0.214.0",
+              "target": "wasm_encoder"
+            },
+            {
+              "id": "wasmparser 0.214.0",
+              "target": "wasmparser"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "walrus-macro 0.22.0",
+              "target": "walrus_macro"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.23.3"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "walrus-macro 0.19.0": {
       "name": "walrus-macro",
       "version": "0.19.0",
@@ -82579,6 +82413,66 @@
         },
         "edition": "2018",
         "version": "0.19.0"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "walrus-macro 0.22.0": {
+      "name": "walrus-macro",
+      "version": "0.22.0",
+      "package_url": "https://github.com/rustwasm/walrus/tree/crates/macro",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/walrus-macro/0.22.0/download",
+          "sha256": "439ad39ff894c43c9649fa724cdde9a6fc50b855d517ef071a93e5df82fe51d3"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "walrus_macro",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "walrus_macro",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "heck 0.5.0",
+              "target": "heck"
+            },
+            {
+              "id": "proc-macro2 1.0.95",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.40",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.101",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.22.0"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -83340,6 +83234,53 @@
       ],
       "license_file": "LICENSE"
     },
+    "wasm-encoder 0.214.0": {
+      "name": "wasm-encoder",
+      "version": "0.214.0",
+      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-encoder",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wasm-encoder/0.214.0/download",
+          "sha256": "ff694f02a8d7a50b6922b197ae03883fbf18cdb2ae9fbee7b6148456f5f44041"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasm_encoder",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasm_encoder",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "leb128 0.2.5",
+              "target": "leb128"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.214.0"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "wasm-encoder 0.228.0": {
       "name": "wasm-encoder",
       "version": "0.228.0",
@@ -83768,6 +83709,82 @@
         },
         "edition": "2021",
         "version": "0.212.0"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
+    },
+    "wasmparser 0.214.0": {
+      "name": "wasmparser",
+      "version": "0.214.0",
+      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wasmparser/0.214.0/download",
+          "sha256": "5309c1090e3e84dad0d382f42064e9933fdaedb87e468cc239f0eabea73ddcb6"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasmparser",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasmparser",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "serde",
+            "std",
+            "validate"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "ahash 0.8.11",
+              "target": "ahash"
+            },
+            {
+              "id": "bitflags 2.9.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "hashbrown 0.14.5",
+              "target": "hashbrown"
+            },
+            {
+              "id": "indexmap 2.7.1",
+              "target": "indexmap"
+            },
+            {
+              "id": "semver 1.0.22",
+              "target": "semver"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.214.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -91115,7 +91132,7 @@
     }
   },
   "binary_crates": [
-    "canbench 0.1.9",
+    "canbench 0.1.15",
     "ic-wasm 0.8.4",
     "metrics-proxy 0.1.0"
   ],
@@ -91462,8 +91479,8 @@
     "byteorder 1.5.0",
     "bytes 1.10.1",
     "cached 0.49.2",
-    "canbench 0.1.9",
-    "canbench-rs 0.1.9",
+    "canbench 0.1.15",
+    "canbench-rs 0.1.15",
     "candid 0.10.13",
     "candid_parser 0.1.4",
     "cargo_metadata 0.14.2",
@@ -91536,7 +91553,7 @@
     "ic-canister-sig-creation 1.1.0",
     "ic-cbor 3.0.3",
     "ic-cdk 0.17.2",
-    "ic-cdk 0.18.0",
+    "ic-cdk 0.18.0-alpha.2",
     "ic-cdk-timers 0.11.0",
     "ic-certificate-verification 3.0.3",
     "ic-certification 3.0.3",
