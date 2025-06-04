@@ -1,6 +1,7 @@
 use ic_management_canister_types_private::{
-    LoadCanisterSnapshotArgs, ReadCanisterSnapshotMetadataArgs, TakeCanisterSnapshotArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
+    CanisterSnapshotDataOffset, LoadCanisterSnapshotArgs, ReadCanisterSnapshotMetadataArgs,
+    TakeCanisterSnapshotArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    UploadChunkArgs,
 };
 use ic_state_machine_tests::StateMachineBuilder;
 use ic_types::SnapshotId;
@@ -22,11 +23,18 @@ fn upload_snapshot_with_checkpoint() {
     for _ in 0..num_pages {
         env.execute_ingress(canister_id, "inc", vec![]).unwrap();
     }
-    let snapshot_id = env
+    // upload a chunk
+    let chunk = vec![1, 2, 3, 4, 5];
+    let chunk_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk: chunk.clone(),
+    };
+    env.upload_chunk(chunk_args).unwrap();
+    let snapshot_id_orig = env
         .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
         .unwrap()
         .snapshot_id();
-    let md_args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id);
+    let md_args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id_orig);
     let md = env.read_canister_snapshot_metadata(&md_args).unwrap();
     let module_dl = env.get_snapshot_module(&md_args).unwrap();
     assert_eq!(counter_canister_wasm, module_dl);
@@ -40,6 +48,8 @@ fn upload_snapshot_with_checkpoint() {
     let chunk_store_dl = env.get_snapshot_chunk_store(&md_args).unwrap();
     assert_eq!(stable_memory_dl.len(), num_pages * (1 << 16));
     assert!(stable_memory_dl.ends_with(&[num_pages as u8, 0, 0, 0]));
+
+    // create a new snapshot via metadata upload
     let args = UploadCanisterSnapshotMetadataArgs::new(
         canister_id,
         None,
@@ -59,16 +69,16 @@ fn upload_snapshot_with_checkpoint() {
         .unwrap();
     env.upload_snapshot_heap(canister_id, snapshot_id.clone(), heap_dl, None, None)
         .unwrap();
-    // uplaod chunk store
-    let _ = chunk_store_dl
-        .iter()
-        .flat_map(|(_, chunk)| {
-            env.upload_chunk(UploadChunkArgs {
-                canister_id: canister_id.into(),
-                chunk: chunk.clone(),
-            })
-        })
-        .collect::<Vec<_>>();
+    // upload chunk store
+    for chunk in chunk_store_dl.values() {
+        env.upload_canister_snapshot_data(&UploadCanisterSnapshotDataArgs::new(
+            canister_id,
+            SnapshotId::try_from(snapshot_id.clone()).unwrap(),
+            CanisterSnapshotDataOffset::WasmChunk,
+            chunk.clone(),
+        ))
+        .unwrap();
+    }
     // spread stable memory upload over a checkpoint event
     env.upload_snapshot_stable_memory(
         canister_id,
@@ -103,6 +113,7 @@ fn upload_snapshot_with_checkpoint() {
     let md_args_2 = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id_2);
     let md_2 = env.read_canister_snapshot_metadata(&md_args_2).unwrap();
     assert_eq!(md.stable_memory_size, md_2.stable_memory_size);
+    assert_eq!(md.wasm_chunk_store, md_2.wasm_chunk_store);
     let stable_memory_dl_2 = env.get_snapshot_stable_memory(&md_args_2).unwrap();
     let stable_memory_nonzero_2: Vec<u8> = stable_memory_dl_2
         .clone()
