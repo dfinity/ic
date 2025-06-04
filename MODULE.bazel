@@ -824,8 +824,8 @@ http_file(
     # ci/container/container-run.sh
     # bazel build //publish/binaries:pocket-ic.gz
     # sha256sum bazel-bin/publish/binaries/pocket-ic.gz
-    sha256 = "0935ee6ece312719aae4eabddec2dfc6af34d5edbddf4d3af53bccd1b3636044",
-    url = "https://download.dfinity.systems/ic/172f8c78653c93ad101af75b94251439b4ccf098/binaries/x86_64-linux/pocket-ic.gz",
+    sha256 = "399596330c40a76effbbd20660ce8e892d5d74f3de6380cad4aac1598b9d6394",
+    url = "https://download.dfinity.systems/ic/c36a05a9d367bb6ba9068444e6d6f53e7911f1b0/binaries/x86_64-linux/pocket-ic.gz",
 )
 
 # Management canister candid interface
