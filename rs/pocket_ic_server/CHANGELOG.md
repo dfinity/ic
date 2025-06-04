@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
-## 9.0.3 - 2025-05-30
+## 9.0.3 - 2025-06-06
 
 ### Changed
 - The endpoint `/instances/<instance_id>/auto_progress` sets the (certified) time of the PocketIC instance
