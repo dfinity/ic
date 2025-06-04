@@ -1,6 +1,6 @@
 use ic_management_canister_types_private::{
     LoadCanisterSnapshotArgs, ReadCanisterSnapshotMetadataArgs, TakeCanisterSnapshotArgs,
-    UploadCanisterSnapshotMetadataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
 };
 use ic_state_machine_tests::StateMachineBuilder;
 use ic_types::SnapshotId;
@@ -59,6 +59,16 @@ fn upload_snapshot_with_checkpoint() {
         .unwrap();
     env.upload_snapshot_heap(canister_id, snapshot_id.clone(), heap_dl, None, None)
         .unwrap();
+    // uplaod chunk store
+    let _ = chunk_store_dl
+        .iter()
+        .flat_map(|(_, chunk)| {
+            env.upload_chunk(UploadChunkArgs {
+                canister_id: canister_id.into(),
+                chunk: chunk.clone(),
+            })
+        })
+        .collect::<Vec<_>>();
     // spread stable memory upload over a checkpoint event
     env.upload_snapshot_stable_memory(
         canister_id,
