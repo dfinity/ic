@@ -93,6 +93,10 @@ use serde::Serialize;
 use std::{convert::TryInto, time::Duration};
 
 /// This canister ID can be used as `specified_id` in tests on `state_machine_builder_for_nns_tests`.
+/// Canisters created in those tests without any `specified_id` are assigned to the default range
+/// from `CanisterId::from_u64(0x0000000)` to `CanisterId::from_u64(0x00FFFFF)` and thus
+/// canisters created with `specified_id` can only be assigned to the extra range
+/// from `CanisterId::from_u64(0x2100000)` to `CanisterId::from_u64(0x21FFFFE)`.
 pub const SPECIFIED_CANISTER_ID: CanisterId = CanisterId::from_u64(0x2100000);
 
 /// A `StateMachine` builder setting the IC time to the current time

@@ -27,6 +27,13 @@ mod neurons_fund;
 mod node_provider_rewards;
 mod stake_maturity;
 
+/// This canister ID can be used as `specified_id` in tests on `state_machine_builder_for_nns_tests`.
+/// Canisters created in those tests without any `specified_id` are assigned to the default range
+/// from `CanisterId::from_u64(0x0000000)` to `CanisterId::from_u64(0x00FFFFF)` and thus
+/// canisters created with `specified_id` can only be assigned to the extra range
+/// from `CanisterId::from_u64(0x2100000)` to `CanisterId::from_u64(0x21FFFFE)`.
+const SPECIFIED_CANISTER_ID: CanisterId = CanisterId::from_u64(0x2100000);
+
 #[test]
 fn test_time_warp() {
     let w = TimeWarp { delta_s: 0_i64 };
@@ -351,8 +358,7 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                 ),
                 dapp_canisters: Some(sns_init_pb::DappCanisters {
                     canisters: vec![pb::Canister {
-                        // must match `SPECIFIED_CANISTER_ID` defined in `ic-nns-test-utils`
-                        id: Some(CanisterId::from_u64(0x2100000).get())
+                        id: Some(SPECIFIED_CANISTER_ID.get())
                     }],
                 }),
                 min_participants: original_swap_parameters.minimum_participants,
@@ -690,8 +696,7 @@ mod convert_create_service_nervous_system_proposal_to_sns_init_payload_tests_wit
                 ),
                 dapp_canisters: Some(sns_init_pb::DappCanisters {
                     canisters: vec![pb::Canister {
-                        // must match `SPECIFIED_CANISTER_ID` defined in `ic-nns-test-utils`
-                        id: Some(CanisterId::from_u64(0x2100000).get())
+                        id: Some(SPECIFIED_CANISTER_ID.get())
                     }],
                 }),
                 min_participants: original_swap_parameters.minimum_participants,
