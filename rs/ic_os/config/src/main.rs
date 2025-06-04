@@ -221,8 +221,7 @@ pub fn main() -> Result<()> {
                 mgmt_mac,
                 deployment_environment: deployment_json_settings
                     .deployment
-                    .deployment_environment
-                    .parse()?,
+                    .deployment_environment,
                 logging: Logging {
                     elasticsearch_hosts: deployment_json_settings.logging.elasticsearch_hosts,
                     elasticsearch_tags: deployment_json_settings.logging.elasticsearch_tags,

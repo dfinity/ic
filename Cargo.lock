@@ -21362,6 +21362,7 @@ dependencies = [
  "anyhow",
  "clap 4.5.27",
  "config",
+ "config_types",
  "partition_tools",
  "serde_json",
  "tempfile",

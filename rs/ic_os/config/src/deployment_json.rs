@@ -2,6 +2,7 @@ use std::fs::File;
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use config_types::DeploymentEnvironment;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, CommaSeparator, DisplayFromStr, StringWithSeparator};
 use url::Url;
@@ -14,10 +15,12 @@ pub struct DeploymentSettings {
     pub vm_resources: VmResources,
 }
 
+#[serde_as]
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct Deployment {
     /// The deployment environment is either "mainnet" or "testnet"
-    pub deployment_environment: String,
+    #[serde_as(as = "DisplayFromStr")]
+    pub deployment_environment: DeploymentEnvironment,
     /// Optional management MAC address for network configuration, used for nested environments
     pub mgmt_mac: Option<String>,
 }
@@ -104,7 +107,7 @@ mod test {
         let hosts = ["elasticsearch.ch1-obsdev1.dfinity.network:443"].join(" ");
         DeploymentSettings {
             deployment: Deployment {
-                deployment_environment: "mainnet".to_string(),
+                deployment_environment: DeploymentEnvironment::Mainnet,
                 mgmt_mac: None,
             },
             logging: Logging {

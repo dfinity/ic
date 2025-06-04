@@ -4,6 +4,7 @@ use std::{
     io::Write,
     net::{Ipv4Addr, Ipv6Addr},
     path::Path,
+    str::FromStr,
 };
 
 use anyhow::{Context, Error};
@@ -11,6 +12,7 @@ use clap::Args;
 use url::Url;
 
 use config::deployment_json::DeploymentSettings;
+use config_types::DeploymentEnvironment;
 
 #[derive(Args)]
 pub struct ConfigIni {
@@ -163,7 +165,9 @@ pub async fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<()
     }
 
     if let Some(deployment_environment) = &cfg.deployment_environment {
-        deployment_json.deployment.deployment_environment = deployment_environment.to_owned();
+        deployment_json.deployment.deployment_environment =
+            DeploymentEnvironment::from_str(deployment_environment)
+                .context("Invalid deployment environment. Must be 'mainnet' or 'testnet'")?;
     }
 
     if let Some(elasticsearch_hosts) = &cfg.elasticsearch_hosts {

@@ -331,7 +331,7 @@ pub fn update_hostos_config(
         let icos_settings = ICOSSettings {
             node_reward_type,
             mgmt_mac,
-            deployment_environment: deployment_json_settings.deployment.deployment_environment.parse()?,
+            deployment_environment: deployment_json_settings.deployment.deployment_environment,
             logging: Logging::default(),
             use_nns_public_key,
             nns_urls: deployment_json_settings.nns.url.clone(),
