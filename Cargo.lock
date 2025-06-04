@@ -13412,6 +13412,7 @@ dependencies = [
  "candid",
  "ciborium",
  "clap 4.5.27",
+ "ed25519-dalek",
  "hex",
  "ic-artifact-pool",
  "ic-base-types",
