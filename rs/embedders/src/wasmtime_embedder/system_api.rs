@@ -1860,6 +1860,254 @@ impl SystemApi for SystemApiImpl {
         self.sandbox_safe_system_state.canister_id
     }
 
+    fn ic0_env_var_count(&self) -> HypervisorResult<usize> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0_env_var_count")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Update { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::InspectMessage { .. } => {
+                Ok(self.sandbox_safe_system_state.environment_variables().len())
+            }
+        };
+
+        trace_syscall!(self, EnvVarCount, result);
+        result
+    }
+
+    fn ic0_env_var_name_size(&self, index: usize) -> HypervisorResult<usize> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0_env_var_count")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Update { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::InspectMessage { .. } => {
+                let keys = self
+                    .sandbox_safe_system_state
+                    .environment_variables()
+                    .keys()
+                    .collect::<Vec<_>>();
+                match keys.get(index as usize) {
+                    Some(name) => Ok(name.len()),
+                    None => Err(EnvironmentVariableIndexOutOfBounds {
+                        index,
+                        length: keys.len(),
+                    }),
+                }
+            }
+        };
+
+        trace_syscall!(self, EnvVarNameSize, result);
+        result
+    }
+
+    fn ic0_env_var_name_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        index: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0_env_var_count")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Update { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::InspectMessage { .. } => {
+                let keys = self
+                    .sandbox_safe_system_state
+                    .environment_variables()
+                    .keys()
+                    .collect::<Vec<_>>();
+                match keys.get(index as usize) {
+                    Some(name) => {
+                        // Validate destination buffer
+                        valid_subslice(
+                            "ic0.env_var_name_copy heap",
+                            InternalAddress::new(dst),
+                            InternalAddress::new(size),
+                            heap,
+                        )?;
+                        let slice = valid_subslice(
+                            "ic0.env_var_name_copy name",
+                            InternalAddress::new(offset),
+                            InternalAddress::new(size),
+                            name.as_bytes(),
+                        )?;
+                        deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
+                        Ok(())
+                    }
+                    None => Err(EnvironmentVariableIndexOutOfBounds {
+                        index,
+                        length: keys.len(),
+                    }),
+                }
+            }
+        };
+
+        trace_syscall!(
+            self,
+            EnvVarNameCopy,
+            result,
+            dst,
+            offset,
+            size,
+            summarize(heap, dst, size)
+        );
+        result
+    }
+
+    fn ic0_env_var_value_size(
+        &self,
+        name_src: usize,
+        name_size: usize,
+        heap: &[u8],
+    ) -> HypervisorResult<usize> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0_env_var_count")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Update { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::InspectMessage { .. } => {
+                let name_bytes = valid_subslice(
+                    "ic0.env_var_value_size heap",
+                    InternalAddress::new(name_src),
+                    InternalAddress::new(name_size),
+                    heap,
+                )?;
+
+                let name = std::str::from_utf8(name_bytes).map_err(|_| {
+                    HypervisorError::UserContractViolation {
+                        error: "ic0.env_var_value_size: the name is not a valid UTF-8 string."
+                            .to_string(),
+                        suggestion:
+                            "Provide a valid UTF-8 string for the environment variable name."
+                                .to_string(),
+                        doc_link: "".to_string(),
+                    }
+                })?;
+                match &self
+                    .sandbox_safe_system_state
+                    .environment_variables()
+                    .get(name)
+                {
+                    Some(value) => Ok(value.len()),
+                    None => Err(EnvironmentVariableNotFound {
+                        name: name.to_string(),
+                    }),
+                }
+            }
+        };
+
+        trace_syscall!(self, EnvVarValueSize, result);
+        result
+    }
+
+    fn ic0_env_var_value_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        name_src: usize,
+        name_size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0_env_var_count")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Update { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::InspectMessage { .. } => {
+                let name_bytes = valid_subslice(
+                    "ic0.env_var_value_copy name",
+                    InternalAddress::new(name_src),
+                    InternalAddress::new(name_size),
+                    heap,
+                )?;
+
+                let name = std::str::from_utf8(name_bytes).map_err(|_| {
+                    HypervisorError::UserContractViolation {
+                        error: "ic0.env_var_value_size: the name is not a valid UTF-8 string."
+                            .to_string(),
+                        suggestion:
+                            "Provide a valid UTF-8 string for the environment variable name."
+                                .to_string(),
+                        doc_link: "".to_string(),
+                    }
+                })?;
+
+                match &self
+                    .sandbox_safe_system_state
+                    .environment_variables()
+                    .get(name)
+                {
+                    Some(value) => {
+                        // Validate destination buffer
+                        valid_subslice(
+                            "ic0.env_var_value_copy heap",
+                            InternalAddress::new(dst),
+                            InternalAddress::new(size),
+                            heap,
+                        )?;
+                        let slice = valid_subslice(
+                            "ic0.env_var_value_copy value",
+                            InternalAddress::new(offset),
+                            InternalAddress::new(size),
+                            value.as_bytes(),
+                        )?;
+                        deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
+                        Ok(())
+                    }
+                    None => Err(EnvironmentVariableNotFound {
+                        name: name.to_string(),
+                    }),
+                }
+            }
+        };
+
+        trace_syscall!(
+            self,
+            EnvVarNameCopy,
+            result,
+            dst,
+            offset,
+            size,
+            summarize(heap, dst, size)
+        );
+        result
+    }
+
     fn ic0_msg_caller_size(&self) -> HypervisorResult<usize> {
         let result = self
             .get_msg_caller_id("ic0_msg_caller_size")

@@ -650,6 +650,41 @@ pub trait SystemApi {
     /// Canister id of the executing canister.
     fn canister_id(&self) -> ic_types::CanisterId;
 
+    /// Returns the number of environment variables.
+    fn ic0_env_var_count(&self) -> HypervisorResult<usize>;
+
+    /// Returns the size of the environment variable name at the given index.
+    fn ic0_env_var_name_size(&self, index: usize) -> HypervisorResult<usize>;
+
+    /// Copies the environment variable name at the given index into memory.
+    fn ic0_env_var_name_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        index: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// Returns the size of the value for the environment variable with the given name.
+    fn ic0_env_var_value_size(
+        &self,
+        name_src: usize,
+        name_size: usize,
+        heap: &[u8],
+    ) -> HypervisorResult<usize>;
+
+    /// Copies the value of the environment variable with the given name into memory.
+    fn ic0_env_var_value_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        name_src: usize,
+        name_size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
     /// Copies `size` bytes starting from `offset` inside the opaque caller blob
     /// and copies them to heap[dst..dst+size]. The caller is the canister
     /// id in case of requests or the user id in case of an ingress message.

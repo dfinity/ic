@@ -35,7 +35,11 @@ use ic_types::{
 };
 use maplit::btreemap;
 use more_asserts::assert_le;
-use std::{collections::BTreeSet, convert::From, rc::Rc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    convert::From,
+    rc::Rc,
+};
 use strum::IntoEnumIterator;
 
 mod common;
@@ -2190,4 +2194,185 @@ fn get_system_api_for_best_effort_response(
         Rc::new(DefaultOutOfInstructionsHandler::default()),
         no_op_logger(),
     )
+}
+
+#[test]
+fn test_env_var_name_operations() {
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let mut env_vars = BTreeMap::new();
+    env_vars.insert("TEST_VAR_1".to_string(), "TEST_VALUE_1".to_string());
+    env_vars.insert("TEST_VAR_02".to_string(), "TEST_VALUE_2".to_string());
+
+    let api = get_system_api(
+        ApiTypeBuilder::build_update_api(),
+        &SystemStateBuilder::default()
+            .environment_variables(env_vars)
+            .build(),
+        cycles_account_manager,
+    );
+
+    // Test ic0_env_var_count
+    assert_eq!(api.ic0_env_var_count().unwrap(), 2);
+
+    // Test ic0_env_var_name_size
+    assert_eq!(api.ic0_env_var_name_size(0).unwrap(), 9); // "TEST_VAR_1"
+    assert_eq!(api.ic0_env_var_name_size(1).unwrap(), 10); // "TEST_VAR_02"
+
+    // Test ic0_env_var_name_size with invalid index
+    assert!(matches!(
+        api.ic0_env_var_name_size(2),
+        Err(HypervisorError::EnvironmentVariableIndexOutOfBounds {
+            index: 2,
+            length: 1
+        })
+    ));
+
+    // Test ic0_env_var_name_copy
+    let mut heap = vec![0u8; 16];
+
+    // Copy first variable name
+    api.ic0_env_var_name_copy(0, 0, 9, 0, &mut heap).unwrap();
+    assert_eq!(&heap[0..9], b"TEST_VAR_1");
+
+    // Copy second variable name
+    api.ic0_env_var_name_copy(0, 0, 10, 1, &mut heap).unwrap();
+    assert_eq!(&heap[0..9], b"TEST_VAR_02");
+
+    // Test invalid index
+    assert!(matches!(
+        api.ic0_env_var_name_copy(0, 0, 9, 2, &mut heap),
+        Err(HypervisorError::EnvironmentVariableIndexOutOfBounds {
+            index: 2,
+            length: 1
+        })
+    ));
+
+    // Test invalid offset
+    assert!(matches!(
+        api.ic0_env_var_name_copy(0, 10, 9, 0, &mut heap),
+        Err(HypervisorError::ToolchainContractViolation { .. })
+    ));
+
+    // Test invalid size (destination buffer overflow)
+    assert!(matches!(
+        api.ic0_env_var_name_copy(10, 0, 9, 0, &mut heap),
+        Err(HypervisorError::ToolchainContractViolation { .. })
+    ));
+}
+
+// Helper function to copy test data to heap
+fn copy_to_heap(heap: &mut [u8], data: &[u8]) {
+    heap[..data.len()].copy_from_slice(data);
+}
+
+#[test]
+fn test_env_var_value_operations() {
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let mut env_vars = BTreeMap::new();
+    env_vars.insert("TEST_VAR_1".to_string(), "Hello World".to_string());
+    env_vars.insert("EMPTY_VAR".to_string(), "".to_string());
+    env_vars.insert("PATH".to_string(), "/usr/local/bin:/usr/bin".to_string());
+
+    let api = get_system_api(
+        ApiTypeBuilder::build_update_api(),
+        &SystemStateBuilder::default()
+            .environment_variables(env_vars)
+            .build(),
+        cycles_account_manager,
+    );
+
+    // Test ic0_env_var_count
+    assert_eq!(api.ic0_env_var_count().unwrap(), 3);
+
+    let mut heap = vec![0u8; 64];
+
+    // Test getting value size for existing variable
+    let var_name = b"TEST_VAR_1";
+    copy_to_heap(&mut heap, var_name);
+    assert_eq!(
+        api.ic0_env_var_value_size(0, var_name.len(), &heap)
+            .unwrap(),
+        11 // length of "Hello World"
+    );
+
+    // Test copying value for existing variable
+    let mut value_buf = vec![0u8; 11];
+    api.ic0_env_var_value_copy(0, 0, 11, 0, var_name.len(), &mut value_buf)
+        .unwrap();
+    assert_eq!(&value_buf, b"Hello World");
+
+    // Test empty variable
+    let empty_var = b"EMPTY_VAR";
+    copy_to_heap(&mut heap, empty_var);
+    assert_eq!(
+        api.ic0_env_var_value_size(0, empty_var.len(), &heap)
+            .unwrap(),
+        0
+    );
+
+    let path_var = b"PATH";
+    copy_to_heap(&mut heap, path_var);
+    assert_eq!(
+        api.ic0_env_var_value_size(0, path_var.len(), &heap)
+            .unwrap(),
+        19 // length of "/usr/local/bin:/usr/bin"
+    );
+    let mut path_buf = vec![0u8; 19];
+    api.ic0_env_var_value_copy(0, 0, 19, 0, path_var.len(), &mut path_buf)
+        .unwrap();
+    assert_eq!(&path_buf, b"/usr/local/bin:/usr/bin");
+
+    // Test non-existent variable
+    let non_existent = b"NON_EXISTENT";
+    copy_to_heap(&mut heap, non_existent);
+    assert_eq!(
+        api.ic0_env_var_value_size(0, non_existent.len(), &heap),
+        Err(HypervisorError::EnvironmentVariableNotFound {
+            name: "NON_EXISTENT".to_string()
+        })
+    );
+
+    // Test invalid UTF-8 in variable name
+    let invalid_utf8 = &[0xFF, 0xFF];
+    copy_to_heap(&mut heap, invalid_utf8);
+    assert!(matches!(
+        api.ic0_env_var_value_size(0, invalid_utf8.len(), &heap),
+        Err(HypervisorError::UserContractViolation { .. })
+    ));
+}
+
+#[test]
+fn test_env_variables_empty() {
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let env_vars = BTreeMap::new();
+
+    let api = get_system_api(
+        ApiTypeBuilder::build_update_api(),
+        &SystemStateBuilder::default()
+            .environment_variables(env_vars)
+            .build(),
+        cycles_account_manager,
+    );
+
+    // Test ic0_env_var_count with empty variables
+    assert_eq!(api.ic0_env_var_count().unwrap(), 0);
+
+    // Test ic0_env_var_name_size with invalid index on empty variables
+    assert!(matches!(
+        api.ic0_env_var_name_size(0),
+        Err(HypervisorError::EnvironmentVariableIndexOutOfBounds {
+            index: 0,
+            length: 0
+        })
+    ));
+
+    // Test ic0_env_var_name_copy with invalid index on empty variables
+    let mut heap = vec![0u8; 16];
+    assert!(matches!(
+        api.ic0_env_var_name_copy(0, 0, 9, 0, &mut heap),
+        Err(HypervisorError::EnvironmentVariableIndexOutOfBounds {
+            index: 0,
+            length: 0
+        })
+    ));
 }
