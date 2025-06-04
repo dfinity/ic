@@ -4,7 +4,7 @@
 
 use ic_interfaces_registry::{
     empty_zero_registry_record, RegistryClient, RegistryClientVersionedResult,
-    RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
+    RegistryDataProvider, RegistryRecord, ZERO_REGISTRY_VERSION,
 };
 use ic_types::{registry::RegistryClientError, time::current_time, RegistryVersion, Time};
 use std::collections::BTreeMap;
@@ -13,7 +13,7 @@ use std::sync::{Arc, RwLock, RwLockReadGuard};
 type CacheState = (
     RegistryVersion,
     BTreeMap<RegistryVersion, Time>,
-    Vec<RegistryTransportRecord>,
+    Vec<RegistryRecord>,
 );
 
 pub struct FakeRegistryClient {

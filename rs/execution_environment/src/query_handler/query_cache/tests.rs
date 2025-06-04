@@ -1477,6 +1477,8 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::CanisterSelfSize
         | SystemApiCallId::CanisterStatus
         | SystemApiCallId::CanisterVersion
+        | SystemApiCallId::RootKeySize
+        | SystemApiCallId::RootKeyCopy
         | SystemApiCallId::CertifiedDataSet
         | SystemApiCallId::CostCall
         | SystemApiCallId::CostCreateCanister
