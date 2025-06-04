@@ -7,6 +7,59 @@ use ic_state_machine_tests::StateMachineBuilder;
 use ic_types::SnapshotId;
 
 #[test]
+fn upload_snapshot_module_with_checkpoint() {
+    let env = StateMachineBuilder::new()
+        .with_snapshot_download_enabled(true)
+        .with_snapshot_upload_enabled(true)
+        .build();
+    let counter_canister_wasm = wat::parse_str(COUNTER_GROW_CANISTER_WAT).unwrap();
+    let canister_id = env
+        .install_canister(counter_canister_wasm.clone(), vec![], None)
+        .unwrap();
+    const SLICE_SIZE: u64 = 1_000_000;
+    let num_slices = 10;
+    let args = UploadCanisterSnapshotMetadataArgs::new(
+        canister_id,
+        None,
+        SLICE_SIZE * num_slices,
+        vec![],
+        0,
+        0,
+        vec![],
+        None,
+        None,
+    );
+    let snapshot_id = env
+        .upload_canister_snapshot_metadata(&args)
+        .unwrap()
+        .snapshot_id;
+    let mut original_module = vec![];
+    for i in 0..num_slices {
+        let slice = [i as u8; SLICE_SIZE as usize];
+        env.upload_canister_snapshot_data(&UploadCanisterSnapshotDataArgs::new(
+            canister_id,
+            SnapshotId::try_from(snapshot_id.clone()).unwrap(),
+            CanisterSnapshotDataOffset::WasmModule {
+                offset: i * SLICE_SIZE,
+            },
+            slice.to_vec(),
+        ))
+        .unwrap();
+        original_module.append(&mut slice.to_vec());
+        if i % 3 == 0 {
+            env.checkpointed_tick();
+        }
+    }
+    // check if the module is as written
+    let md_args = ReadCanisterSnapshotMetadataArgs::new(
+        canister_id,
+        SnapshotId::try_from(snapshot_id.clone()).unwrap(),
+    );
+    let module_dl = env.get_snapshot_module(&md_args).unwrap();
+    assert_eq!(original_module, module_dl);
+}
+
+#[test]
 fn upload_snapshot_with_checkpoint() {
     let env = StateMachineBuilder::new()
         .with_snapshot_download_enabled(true)
@@ -23,16 +76,16 @@ fn upload_snapshot_with_checkpoint() {
         env.execute_ingress(canister_id, "inc", vec![]).unwrap();
     }
     // upload some chunks
-    let chunk = vec![1, 2, 3, 4, 5];
+    let chunk_1 = vec![1, 2, 3, 4, 5];
     let chunk_args = UploadChunkArgs {
         canister_id: canister_id.into(),
-        chunk: chunk.clone(),
+        chunk: chunk_1.clone(),
     };
     env.upload_chunk(chunk_args).unwrap();
-    let chunk = vec![6, 7, 8];
+    let chunk_2 = vec![6, 7, 8];
     let chunk_args = UploadChunkArgs {
         canister_id: canister_id.into(),
-        chunk: chunk.clone(),
+        chunk: chunk_2.clone(),
     };
     env.upload_chunk(chunk_args).unwrap();
     // take snapshot to learn valid metadata
@@ -76,16 +129,14 @@ fn upload_snapshot_with_checkpoint() {
         .unwrap();
     env.upload_snapshot_heap(canister_id, snapshot_id.clone(), heap_dl, None, None)
         .unwrap();
-    // upload chunk store
-    for chunk in chunk_store_dl.values() {
-        env.upload_canister_snapshot_data(&UploadCanisterSnapshotDataArgs::new(
-            canister_id,
-            SnapshotId::try_from(snapshot_id.clone()).unwrap(),
-            CanisterSnapshotDataOffset::WasmChunk,
-            chunk.clone(),
-        ))
-        .unwrap();
-    }
+    // upload first chunk before checkpoint
+    env.upload_canister_snapshot_data(&UploadCanisterSnapshotDataArgs::new(
+        canister_id,
+        SnapshotId::try_from(snapshot_id.clone()).unwrap(),
+        CanisterSnapshotDataOffset::WasmChunk,
+        chunk_1.clone(),
+    ))
+    .unwrap();
     // spread stable memory upload over a checkpoint event
     env.upload_snapshot_stable_memory(
         canister_id,
@@ -103,6 +154,14 @@ fn upload_snapshot_with_checkpoint() {
         Some(1),
         None,
     )
+    .unwrap();
+    // upload second chunk after checkpoint
+    env.upload_canister_snapshot_data(&UploadCanisterSnapshotDataArgs::new(
+        canister_id,
+        SnapshotId::try_from(snapshot_id.clone()).unwrap(),
+        CanisterSnapshotDataOffset::WasmChunk,
+        chunk_2.clone(),
+    ))
     .unwrap();
     // change state to be overwritten:
     let res_1 = env.execute_ingress(canister_id, "inc", vec![]).unwrap();
