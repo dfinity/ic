@@ -77,7 +77,7 @@ mod test {
               "vm_resources": {
                 "memory": "490",
                 "cpu": "kvm",
-                "nr_of_vcpus": null
+                "nr_of_vcpus": 64
               }
             }
         )
@@ -98,7 +98,7 @@ mod test {
   "vm_resources": {
     "memory": "490",
     "cpu": "kvm",
-    "nr_of_vcpus": "64"
+    "nr_of_vcpus": 64
   }
 }"#;
 
