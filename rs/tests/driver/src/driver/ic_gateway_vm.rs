@@ -29,7 +29,7 @@ const IC_GATEWAY_VM_FILE: &str = "vm.json";
 const IMAGE_PATH: &str = "rs/tests/ic_gateway_uvm_config_image.zst";
 const IC_GATEWAY_VMS_DIR: &str = "ic_gateway_vms";
 const PLAYNET_FILE: &str = "playnet.json";
-const BN_AAAA_RECORDS_CREATED_EVENT_NAME: &str = "bn_aaaa_records_created_event";
+const IC_GATEWAY_AAAA_RECORDS_CREATED_EVENT_NAME: &str = "bn_aaaa_records_created_event";
 const READY_TIMEOUT: Duration = Duration::from_secs(60);
 const RETRY_INTERVAL: Duration = Duration::from_secs(5);
 
@@ -87,14 +87,14 @@ impl IcGatewayVm {
 
         // Handle playnet configuration and DNS records
         let playnet = self.load_or_create_playnet(env, &vm_ipv6)?;
-        let bn_fqdn = playnet.playnet_cert.playnet.clone();
-        self.configure_dns_records(env, &playnet, &bn_fqdn)?;
+        let ic_gateway_fqdn = playnet.playnet_cert.playnet.clone();
+        self.configure_dns_records(env, &playnet, &ic_gateway_fqdn)?;
 
         // Emit log event for AAAA records
-        emit_bn_aaaa_records_event(&logger, &bn_fqdn, playnet.aaaa_records.clone());
+        emit_ic_gateway_aaaa_records_event(&logger, &ic_gateway_fqdn, playnet.aaaa_records.clone());
 
         // Save playnet configuration and start the gateway
-        let playnet_url = Url::parse(&format!("https://{}", bn_fqdn))?;
+        let playnet_url = Url::parse(&format!("https://{}", ic_gateway_fqdn))?;
         env.write_deployed_ic_gateway(&self.universal_vm.name, &playnet_url, &allocated_vm)?;
         self.start_gateway_container(&deployed_vm, &playnet, api_nodes_urls)?;
 
@@ -158,7 +158,12 @@ impl IcGatewayVm {
     }
 
     /// Configures DNS records based on infrastructure provider.
-    fn configure_dns_records(&self, env: &TestEnv, playnet: &Playnet, bn_fqdn: &str) -> Result<()> {
+    fn configure_dns_records(
+        &self,
+        env: &TestEnv,
+        playnet: &Playnet,
+        ic_gateway_fqdn: &str,
+    ) -> Result<()> {
         let records = match InfraProvider::read_attribute(env) {
             InfraProvider::Farm => vec![
                 DnsRecord {
@@ -169,29 +174,29 @@ impl IcGatewayVm {
                 DnsRecord {
                     name: "*".to_string(),
                     record_type: DnsRecordType::CNAME,
-                    records: vec![bn_fqdn.to_string()],
+                    records: vec![ic_gateway_fqdn.to_string()],
                 },
                 DnsRecord {
                     name: "*.raw".to_string(),
                     record_type: DnsRecordType::CNAME,
-                    records: vec![bn_fqdn.to_string()],
+                    records: vec![ic_gateway_fqdn.to_string()],
                 },
             ],
             _ => vec![
                 DnsRecord {
-                    name: bn_fqdn.to_string(),
+                    name: ic_gateway_fqdn.to_string(),
                     record_type: DnsRecordType::AAAA,
                     records: playnet.aaaa_records.clone(),
                 },
                 DnsRecord {
-                    name: format!("{}.{}", "*", bn_fqdn),
+                    name: format!("{}.{}", "*", ic_gateway_fqdn),
                     record_type: DnsRecordType::CNAME,
-                    records: vec![bn_fqdn.to_string()],
+                    records: vec![ic_gateway_fqdn.to_string()],
                 },
                 DnsRecord {
-                    name: format!("{}.{}", "*.raw", bn_fqdn),
+                    name: format!("{}.{}", "*.raw", ic_gateway_fqdn),
                     record_type: DnsRecordType::CNAME,
-                    records: vec![bn_fqdn.to_string()],
+                    records: vec![ic_gateway_fqdn.to_string()],
                 },
             ],
         };
@@ -262,18 +267,22 @@ struct Playnet {
     a_records: Vec<String>,
 }
 
-/// Emits a log event for boundary node AAAA records.
-pub fn emit_bn_aaaa_records_event(log: &slog::Logger, bn_fqdn: &str, aaaa_records: Vec<String>) {
+/// Emits a log event for IC gateway AAAA records.
+pub fn emit_ic_gateway_aaaa_records_event(
+    log: &slog::Logger,
+    ic_gateway_fqdn: &str,
+    aaaa_records: Vec<String>,
+) {
     #[derive(Deserialize, Serialize)]
-    struct BoundaryNodeAAAARecords {
+    struct IcGatewayAAAARecords {
         url: String,
         aaaa_records: Vec<String>,
     }
 
     let event = log_events::LogEvent::new(
-        BN_AAAA_RECORDS_CREATED_EVENT_NAME.to_string(),
-        BoundaryNodeAAAARecords {
-            url: bn_fqdn.to_string(),
+        IC_GATEWAY_AAAA_RECORDS_CREATED_EVENT_NAME.to_string(),
+        IcGatewayAAAARecords {
+            url: ic_gateway_fqdn.to_string(),
             aaaa_records,
         },
     );
