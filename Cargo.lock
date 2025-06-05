@@ -22494,7 +22494,6 @@ dependencies = [
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
- "ic-types",
  "ic-xrc-types",
  "ic_consensus_system_test_utils",
  "nns_dapp",
