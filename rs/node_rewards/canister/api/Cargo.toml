@@ -11,5 +11,8 @@ path = "src/lib.rs"
 
 [dependencies]
 candid = { workspace = true }
-ic-cdk = { workspace = true }
 serde = { workspace = true }
+ic-base-types = { path = "../../../types/base_types" }
+rewards-calculation = { path = "../../rewards_calculation" }
+chrono = { workspace = true }
+rust_decimal = "1.37.1"
