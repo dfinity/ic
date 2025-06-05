@@ -15,8 +15,8 @@ ic-types = { path = "../../types/types" }
 ic-base-types = { path = "../../types/base_types" }
 itertools = { workspace = true }
 ic-protobuf = { path = "../../protobuf" }
-rust_decimal = "1.37.1"
-rust_decimal_macros = "1.37.1"
+rust_decimal = { workspace = true }
+rust_decimal_macros = { workspace = true }
 
 [dev-dependencies]
 chrono = { workspace = true }
