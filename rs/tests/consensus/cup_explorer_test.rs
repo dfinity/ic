@@ -148,7 +148,6 @@ fn test(env: TestEnv) {
     info!(
         log,
         "Execute a random proposal to create a registry version in between halting and recovery",
-        app_subnet.subnet_id
     );
     let update_subnet_payload = UpdateSubnetPayload {
         subnet_id: app_subnet.subnet_id,
