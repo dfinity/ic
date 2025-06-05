@@ -33,22 +33,7 @@ pub struct GenerateGuestVmConfigArgs {
     config: PathBuf,
 }
 
-/// Generate the GuestOS VM configuration by assembling the bootstrap config media image
-/// and creating the libvirt XML configuration file.
-pub fn generate_guest_vm_config(args: GenerateGuestVmConfigArgs) -> Result<()> {
-    let metrics_writer = MetricsWriter::new(PathBuf::from(
-        "/run/node_exporter/collector_textfile/hostos_generate_guestos_config.prom",
-    ));
-
-    run(args, &metrics_writer, restorecon)
-}
-
-fn run(
-    args: GenerateGuestVmConfigArgs,
-    metrics_writer: &MetricsWriter,
-    // We pass a functor to allow mocking in tests.
-    restorecon: impl Fn(&Path) -> Result<()>,
-) -> Result<()> {
+fn run(args: GenerateGuestVmConfigArgs, metrics_writer: &MetricsWriter) -> Result<()> {
     let hostos_config: HostOSConfig =
         deserialize_config(&args.config).context("Failed to read HostOS config file")?;
 
@@ -81,11 +66,6 @@ fn run(
         .context("Failed to create output file")?
         .write_all(generate_vm_config(&hostos_config, &args.media)?.as_bytes())
         .context("Failed to write output file")?;
-
-    // Restore SELinux security context
-    if let Some(parent) = vm_config_path.parent() {
-        restorecon(parent)?
-    }
 
     println!(
         "Generating GuestOS configuration file: {}",
@@ -214,16 +194,6 @@ pub fn generate_vm_config(config: &HostOSConfig, media_path: &Path) -> Result<St
     .context("Failed to render GuestOS VM XML template")
 }
 
-fn restorecon(path: &Path) -> Result<()> {
-    Command::new("restorecon")
-        .arg("-R")
-        .arg(path)
-        .status()?
-        .success()
-        .then_some(())
-        .context("Failed to run restorecon")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -277,10 +247,6 @@ mod tests {
             },
             guestos_settings: Default::default(),
         }
-    }
-
-    fn mock_restorecon(_path: &Path) -> Result<()> {
-        Ok(())
     }
 
     #[test]
@@ -366,11 +332,7 @@ mod tests {
             config: hostos_config_path.clone(),
         };
 
-        let result = run(
-            args,
-            &MetricsWriter::new(metrics_path.clone()),
-            mock_restorecon,
-        );
+        let result = run(args, &MetricsWriter::new(metrics_path.clone()));
         assert!(result.is_ok(), "{result:?}");
 
         assert_eq!(
@@ -403,11 +365,7 @@ mod tests {
             config: hostos_config_path,
         };
 
-        let result = run(
-            args,
-            &MetricsWriter::new(metrics_path.clone()),
-            mock_restorecon,
-        );
+        let result = run(args, &MetricsWriter::new(metrics_path.clone()));
 
         assert!(result.is_ok());
 
