@@ -145,6 +145,23 @@ fn test(env: TestEnv) {
     let proto_cup = pb::CatchUpPackage::decode(bytes.as_slice()).expect("Failed to decode bytes");
     let cup = CatchUpPackage::try_from(&proto_cup).expect("Failed to deserialize CUP content");
 
+    info!(
+        log,
+        "Execute a random proposal to create a registry version in between halting and recovery",
+        app_subnet.subnet_id
+    );
+    let update_subnet_payload = UpdateSubnetPayload {
+        subnet_id: app_subnet.subnet_id,
+        dkg_interval_length: Some(14),
+        ..empty_subnet_update()
+    };
+    block_on(execute_update_subnet_proposal(
+        &governance,
+        update_subnet_payload,
+        "Update DKG length",
+        &log,
+    ));
+
     info!(log, "Recover subnet with unchanged state hash");
     let recover_subnet_payload = RecoverSubnetPayload {
         subnet_id: app_subnet.subnet_id.get(),

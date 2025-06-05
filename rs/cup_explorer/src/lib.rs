@@ -288,5 +288,5 @@ pub fn verify(handle: Handle, nns_url: Url, nns_pem: Option<PathBuf>, cup_path: 
     println!("The subnet has not been recovered yet.");
     println!("A recovery proposal should specify a time and height that is greater than the time and height of the CUP above.");
     println!("Additionally, the proposed state hash should be equal to the one in the provided CUP, to ensure there were no modifications to the state.");
-    return Status::SubnetHalted;
+    Status::SubnetHalted
 }
