@@ -153,7 +153,7 @@ fn main() -> Result<()> {
                 .add_test(systest!(test_max_url_length_exceeded))
                 // This section tests the transform function scenarios
                 .add_test(systest!(test_transform_function_is_executed))
-                .add_test(systest!(test_composite_transform_function_is_executed))
+                .add_test(systest!(test_composite_transform_function_is_not_allowed))
                 .add_test(systest!(check_caller_id_on_transform_function))
                 .add_test(systest!(
                     test_transform_that_bloats_response_above_2mb_limit
@@ -312,7 +312,7 @@ fn test_non_existent_transform_function(env: TestEnv) {
     );
 }
 
-fn test_composite_transform_function_is_executed(env: TestEnv) {
+fn test_composite_transform_function_is_not_allowed(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -337,13 +337,11 @@ fn test_composite_transform_function_is_executed(env: TestEnv) {
         },
     ));
 
-    let response = response.expect("Http call should succeed");
-
-    assert_eq!(response.headers.len(), 2, "Headers: {:?}", response.headers);
-    assert_eq!(response.headers[0].0, "hello");
-    assert_eq!(response.headers[0].1, "bonjour");
-    assert_eq!(response.headers[1].0, "caller");
-    assert_eq!(response.headers[1].1, "aaaaa-aa");
+    let err = response.unwrap_err();
+    assert_eq!(err.reject_code, RejectCode::CanisterError);
+    assert!(err
+        .reject_message
+        .contains("Composite query cannot be used as transform in canister http outcalls."));
 }
 
 fn test_no_cycles_attached(env: TestEnv) {
