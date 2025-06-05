@@ -1,18 +1,16 @@
-mod guest_vm;
-mod systemd;
-
-use std::path::Path;
-
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
-
 use config::{deserialize_config, DEFAULT_HOSTOS_CONFIG_OBJECT_PATH};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
 use network::generate_network_config;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
+use std::path::Path;
 use utils::to_cidr;
+
+mod guest_vm;
+mod systemd;
 
 #[derive(Subcommand)]
 pub enum Commands {
