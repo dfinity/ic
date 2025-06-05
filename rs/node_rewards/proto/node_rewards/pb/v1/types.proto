@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package ic_node_rewards_canister.pb.v1;
+
+import "ic_base_types/pb/v1/types.proto";
+
+message SubnetIdKey {
+  ic_base_types.pb.v1.PrincipalId subnet_id = 1;
+}
+
+message SubnetMetricsDailyKeyStored {
+  uint64 ts = 1;
+  ic_base_types.pb.v1.PrincipalId subnet_id = 2;
+}
+
+message SubnetMetricsDailyValueStored {
+  repeated NodeMetricsDailyStored nodes_metrics = 1;
+}
+
+message NodeMetricsDailyStored {
+  ic_base_types.pb.v1.PrincipalId node_id = 1;
+  uint64 num_blocks_proposed = 2;
+  uint64 num_blocks_failed = 3;
+}
