@@ -51,7 +51,6 @@ def icos_build(
 
     image_deps = image_deps_func(mode, malicious)
 
-
     # -------------------- Version management --------------------
 
     copy_file(

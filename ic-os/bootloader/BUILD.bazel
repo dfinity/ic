@@ -8,6 +8,9 @@ exports_files([
     "guestos_grub.cfg",
     "hostos_grub.cfg",
     "setupos_grub.cfg",
+    "guestos_boot_args.template",
+    "hostos_boot_args.template",
+    "setupos_boot_args.template",
 ])
 
 genrule(
