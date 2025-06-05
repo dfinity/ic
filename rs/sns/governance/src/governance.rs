@@ -89,7 +89,6 @@ use futures::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canister_profiler::SpanStats;
-use ic_cdk::println;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::spawn;
 use ic_ledger_core::Tokens;
