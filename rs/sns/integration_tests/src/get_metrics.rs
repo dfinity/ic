@@ -136,10 +136,10 @@ fn test_sns_metrics() {
         // Create proposals.
         {
             let state_machine_time = state_machine
-                    .time()
-                    .duration_since(UNIX_EPOCH)
-                    .expect("Time goes backward! Breaking the second law of thermodynamics")
-                    .as_secs(); 
+                .time()
+                .duration_since(UNIX_EPOCH)
+                .expect("Time goes backward! Breaking the second law of thermodynamics")
+                .as_secs();
 
             // Make 2 proposals, one for t0 + 2 * ONE_MONTH, one for t0,
             // where t0 ic the current time of the state machine.
@@ -148,7 +148,7 @@ fn test_sns_metrics() {
                 id: Some(ProposalId { id: proposal1_id }),
                 proposal_creation_timestamp_seconds: state_machine_time,
                 ..Default::default()
-            }; 
+            };
 
             governance.proposals.insert(proposal1_id, proposal1);
 
@@ -157,11 +157,11 @@ fn test_sns_metrics() {
                 id: Some(ProposalId { id: proposal2_id }),
                 proposal_creation_timestamp_seconds: state_machine_time + 2 * ONE_MONTH,
                 ..Default::default()
-            }; 
+            };
 
             governance.proposals.insert(proposal2_id, proposal2);
         }
-        
+
         // Create the transactions.
         {
             // We have 2 transactions: one at t0 and the other one after one month
