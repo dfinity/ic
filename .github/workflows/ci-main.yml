@@ -244,13 +244,16 @@ jobs:
         with:
           name: pocket-ic-server-arm64-linux
           path: ./build/pocket-ic-server-arm64-linux
+  # Upload arm64-linux artifacts, retrieved from the arm64 runner build.
   upload-arm64-linux-artifacts:
     name: Upload arm64 linux artifacts
     runs-on:
-      labels: dind-small
+      labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
-    timeout-minutes: 30
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache
+    timeout-minutes: 90
     needs: [bazel-test-arm64-linux, config]
     if: needs.config.outputs.release_build
     steps:
@@ -270,7 +273,13 @@ jobs:
         id: build-ic
         uses: ./.github/actions/bazel
         with:
-          run: bazel run //:artifact-uploader -- ./pocket-ic-server-arm64-linux/
+          run: |
+            rootdir=$(mktemp -d)
+
+            # Create a "bundle" that the uploader can digest
+            mkdir -p "$rootdir/binaries/arm64-linux/"
+            cp ./pocket-ic-server-arm64-linux/pocket-ic-server-arm64-linux "$rootdir/binaries/arm64-linux/pocket-ic-server-arm64-linux"
+            bazel run //:artifact-uploader -- "$rootdir"
         env:
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
