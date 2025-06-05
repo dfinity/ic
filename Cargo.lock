@@ -11527,6 +11527,7 @@ dependencies = [
  "candid",
  "candid_parser",
  "futures-util",
+ "ic-base-types",
  "ic-cdk 0.17.2",
  "ic-cdk-timers",
  "ic-interfaces-registry",
@@ -11547,6 +11548,9 @@ dependencies = [
  "maplit",
  "pocket-ic",
  "prost 0.13.4",
+ "rewards-calculation",
+ "serde",
+ "serde_cbor",
  "serde_json",
  "tokio",
 ]

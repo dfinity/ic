@@ -26,9 +26,13 @@ ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-node-provider-rewards = { path = "../../registry/node_provider_rewards" }
 ic-registry-transport = { path = "../../registry/transport" }
 ic-stable-structures = { workspace = true }
+ic-base-types = { path = "../../types/base_types" }
 ic-types = { path = "../../types/types" }
 ic-protobuf = { path = "../../protobuf" }
 prost = { workspace = true }
+rewards-calculation = { path = "../rewards_calculation" }
+serde = { workspace = true }
+serde_cbor = "0.11.2"
 
 [dev-dependencies]
 candid_parser = { workspace = true }

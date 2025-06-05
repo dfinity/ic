@@ -6,4 +6,5 @@
 // 5. Simple Organization
 
 pub mod canister;
+pub mod metrics_types;
 pub mod storage;
