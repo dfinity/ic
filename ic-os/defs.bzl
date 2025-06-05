@@ -51,6 +51,15 @@ def icos_build(
 
     image_deps = image_deps_func(mode, malicious)
 
+    # Validate that exactly one of boot_args_template or extra_boot_args is provided
+    has_boot_args_template = "boot_args_template" in image_deps
+    has_extra_boot_args = "extra_boot_args" in image_deps
+
+    if not has_boot_args_template and not has_extra_boot_args:
+        fail("Either 'boot_args_template' or 'extra_boot_args' must be provided in image_deps")
+    elif has_boot_args_template and has_extra_boot_args:
+        fail("Cannot provide both 'boot_args_template' and 'extra_boot_args' in image_deps - they are mutually exclusive")
+
     # -------------------- Version management --------------------
 
     copy_file(
