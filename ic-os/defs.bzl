@@ -51,14 +51,6 @@ def icos_build(
 
     image_deps = image_deps_func(mode, malicious)
 
-    # Validate that exactly one of boot_args_template or extra_boot_args is provided
-    has_boot_args_template = "boot_args_template" in image_deps
-    has_extra_boot_args = "extra_boot_args" in image_deps
-
-    if not has_boot_args_template and not has_extra_boot_args:
-        fail("Either 'boot_args_template' or 'extra_boot_args' must be provided in image_deps")
-    elif has_boot_args_template and has_extra_boot_args:
-        fail("Cannot provide both 'boot_args_template' and 'extra_boot_args' in image_deps - they are mutually exclusive")
 
     # -------------------- Version management --------------------
 
@@ -163,7 +155,6 @@ def icos_build(
         partition_boot_tzst = "partition-boot" + test_suffix + ".tzst"
         version_txt = "version" + test_suffix + ".txt"
         boot_args = "boot" + test_suffix + "_args"
-        extra_boot_args = "extra_boot" + test_suffix + "_args"
 
         ext4_image(
             name = partition_root_unsigned_tzst,
@@ -192,29 +183,29 @@ def icos_build(
                 for k, v in (
                     image_deps["bootfs"].items() + [
                         (version_txt, "/version.txt:0644"),
-                    ] + ([(extra_boot_args, "/extra_boot_args:0644")] if "boot_args_template" not in image_deps else []) +
-                    ([(boot_args, "/boot_args:0644")] if "boot_args_template" in image_deps else [])
+                        (boot_args, "/boot_args:0644"),
+                    ]
                 )
             },
             tags = ["manual", "no-cache"],
         )
 
-        # The kernel command line (boot args) was previously split into two parts:
-        # 1. Dynamic args calculated at boot time in grub.cfg
-        # 2. Static args stored in EXTRA_BOOT_ARGS on the boot partition
+        # The kernel command line (boot args) is generated from boot_args_template:
+        # - For GuestOS: Template includes ROOT_HASH placeholder that gets substituted with dm-verity hash
+        # - For HostOS/SetupOS: Template is used as-is without ROOT_HASH substitution
         #
-        # For stable and predictable measurements with AMD SEV, we now pre-calculate and combine both parts
-        # into a single complete kernel command line that is:
-        # - Generated during image build
-        # - Stored statically on the boot partition
-        # - Measured as part of the SEV launch measurement
-        #
-        # For backwards compatibility in the GuestOS and compatibility with the HostOS and SetupOS, we continue
-        # to support the old way of calculating the dynamic args (see :extra_boot_args) and we derive boot_args
-        # from it.
+        # This provides:
+        # - Consistent boot argument handling across all OS types
+        # - Predictable measurements for AMD SEV (especially important for GuestOS)
+        # - Static boot arguments stored on the boot partition
 
-        # Sign only for guestos builds (which have boot_args_template)
-        if "boot_args_template" in image_deps:
+        # Check if the boot_args_template contains ROOT_HASH (GuestOS case)
+        # We determine this by checking if this is a GuestOS build (has signing)
+        # GuestOS is identified by having an expanded_size set (only GuestOS sets this)
+        is_guestos = image_deps.get("expanded_size") != None
+
+        if is_guestos:
+            # GuestOS: Sign the root partition and substitute ROOT_HASH
             native.genrule(
                 name = "generate-" + partition_root_signed_tzst,
                 testonly = malicious,
@@ -242,8 +233,15 @@ def icos_build(
                 tags = ["manual"],
             )
         else:
+            # HostOS/SetupOS: No signing, no ROOT_HASH substitution
             native.alias(name = partition_root_signed_tzst, actual = partition_root_unsigned_tzst, tags = ["manual", "no-cache"])
-            native.alias(name = extra_boot_args, actual = image_deps["extra_boot_args"], tags = ["manual"])
+            native.genrule(
+                name = "generate-" + boot_args,
+                outs = [boot_args],
+                srcs = [":boot_args_template"],
+                cmd = "cp $(location :boot_args_template) $@",
+                tags = ["manual"],
+            )
 
     component_file_references_test(
         name = name + "_component_file_references_test",
@@ -253,11 +251,10 @@ def icos_build(
         tags = tags,
     )
 
-    if "boot_args_template" in image_deps:
-        native.alias(
-            name = "boot_args_template",
-            actual = image_deps["boot_args_template"],
-        )
+    native.alias(
+        name = "boot_args_template",
+        actual = image_deps["boot_args_template"],
+    )
 
     # -------------------- Assemble disk partitions ---------------
 

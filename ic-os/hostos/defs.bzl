@@ -46,7 +46,7 @@ def image_deps(mode, _malicious = False):
         "rootfs_size": "3G",
         "bootfs_size": "100M",
         "grub_config": Label("//ic-os/bootloader:hostos_grub.cfg"),
-        "extra_boot_args": Label("//ic-os/hostos/context:extra_boot_args"),
+        "boot_args_template": Label("//ic-os/hostos/context:boot_args.template"),
 
         # Add any custom partitions to the manifest
         "custom_partitions": _custom_partitions,
