@@ -414,3 +414,31 @@ EOF
 
 # end def icos_build
 
+def _tar_extract_impl(ctx):
+    in_tar = ctx.files.src[0]
+    out = ctx.actions.declare_file(ctx.label.name)
+
+    ctx.actions.run_shell(
+        inputs = [in_tar],
+        outputs = [out],
+        command = "tar xOf %s --occurrence=1 %s > %s" % (
+            in_tar.path,
+            ctx.attr.path,
+            out.path,
+        ),
+    )
+
+    return [DefaultInfo(files = depset([out]))]
+
+tar_extract = rule(
+    implementation = _tar_extract_impl,
+    attrs = {
+        "src": attr.label(
+            allow_files = True,
+            mandatory = True,
+        ),
+        "path": attr.string(
+            mandatory = True,
+        ),
+    },
+)
