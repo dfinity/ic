@@ -10283,9 +10283,9 @@ dependencies = [
 
 [[package]]
 name = "ic-management-canister-types"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90253c6ac92f9a0b548a53a02c2d29dfa0f04a6c1ae919b86a6f54d4767d78b9"
+checksum = "98554c2d8a30c00b6bfda18062fdcef21215cad07a52d8b8b1eb3130e51bfe71"
 dependencies = [
  "candid",
  "serde",
@@ -13412,6 +13412,7 @@ dependencies = [
  "candid",
  "ciborium",
  "clap 4.5.27",
+ "ed25519-dalek",
  "hex",
  "ic-artifact-pool",
  "ic-base-types",
@@ -18428,7 +18429,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic"
-version = "9.0.1"
+version = "9.0.2"
 dependencies = [
  "backoff",
  "base64 0.13.1",
@@ -18468,7 +18469,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic-server"
-version = "9.0.2"
+version = "9.0.3"
 dependencies = [
  "aide",
  "askama",
