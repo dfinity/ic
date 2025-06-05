@@ -14,10 +14,13 @@ path = "src/main.rs"
 path = "src/lib.rs"
 
 [dependencies]
+async-trait = { workspace = true }
 candid = { workspace = true }
+futures = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-node-rewards-canister-api = { path = "./api" }
@@ -29,6 +32,7 @@ ic-stable-structures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-types = { path = "../../types/types" }
 ic-protobuf = { path = "../../protobuf" }
+mockall = { workspace = true }
 prost = { workspace = true }
 rewards-calculation = { path = "../rewards_calculation" }
 serde = { workspace = true }
