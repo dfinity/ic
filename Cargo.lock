@@ -8960,6 +8960,7 @@ dependencies = [
  "ic-metrics",
  "ic-nns-constants",
  "ic-query-stats",
+ "ic-registry-proto-data-provider",
  "ic-registry-provisional-whitelist",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",

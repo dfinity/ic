@@ -476,6 +476,8 @@ pub(crate) enum CanisterManagerError {
         requested: u64,
         allowed: u64,
     },
+    RenameCanisterNotStopped(CanisterId),
+    RenameCanisterHasSnapshot(CanisterId),
 }
 
 impl AsErrorHelp for CanisterManagerError {
@@ -665,6 +667,18 @@ impl AsErrorHelp for CanisterManagerError {
             CanisterManagerError::SliceTooLarge { .. } => ErrorHelp::UserError {
                 suggestion: format!("Use a slice size at most {}", MAX_SLICE_SIZE_BYTES),
                 doc_link: "".to_string(),
+            },
+            CanisterManagerError::RenameCanisterNotStopped { .. } => {
+                ErrorHelp::UserError {
+                    suggestion: "Stop the canister before renaming.".to_string(),
+                    doc_link: "".to_string(),
+                }
+            },
+            CanisterManagerError::RenameCanisterHasSnapshot { .. } => {
+                ErrorHelp::UserError {
+                    suggestion: "Delete all snapshots before renaming.".to_string(),
+                    doc_link: "".to_string(),
+                }
             }
         }
     }
@@ -1005,6 +1019,23 @@ impl From<CanisterManagerError> for UserError {
                 Self::new(
                     ErrorCode::InvalidManagementPayload,
                     format!("Requested slice too large: {} > {}", requested, allowed),
+                )}
+            RenameCanisterNotStopped(canister_id) => {
+                Self::new(
+                    ErrorCode::CanisterNotStopped,
+                    format!(
+                        "Canister {} must be stopped before it is renamed.{additional_help}",
+                        canister_id,
+                    )
+                )
+            }
+            RenameCanisterHasSnapshot(canister_id) => {
+                Self::new(
+                    ErrorCode::CanisterNonEmpty,
+                    format!(
+                        "Canister {} must not have any snapshots before it is renamed.{additional_help}",
+                        canister_id,
+                    )
                 )
             }
         }

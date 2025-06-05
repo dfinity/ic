@@ -91,7 +91,8 @@ impl Ic00MethodPermissions {
             },
             Ic00Method::SetupInitialDKG
             | Ic00Method::ComputeInitialIDkgDealings
-            | Ic00Method::ReshareChainKey => Self {
+            | Ic00Method::ReshareChainKey
+            | Ic00Method::RenameCanister => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: true,

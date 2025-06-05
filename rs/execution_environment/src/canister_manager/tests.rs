@@ -20,7 +20,7 @@ use ic_config::{
         MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, SUBNET_CALLBACK_SOFT_LIMIT,
     },
     flag_status::FlagStatus,
-    subnet_config::SchedulerConfig,
+    subnet_config::{SchedulerConfig, SubnetConfig},
 };
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::{
@@ -37,11 +37,12 @@ use ic_management_canister_types_private::{
     CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions,
     ChunkHash, ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2,
     LoadCanisterSnapshotArgs, Method, NodeMetricsHistoryArgs, NodeMetricsHistoryResponse,
-    OnLowWasmMemoryHookStatus, Payload, StoredChunksArgs, StoredChunksReply, SubnetInfoArgs,
-    SubnetInfoResponse, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
-    UploadChunkReply, WasmMemoryPersistence,
+    OnLowWasmMemoryHookStatus, Payload, RenameCanisterArgs, RenameToArgs, StoredChunksArgs,
+    StoredChunksReply, SubnetInfoArgs, SubnetInfoResponse, TakeCanisterSnapshotArgs,
+    UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply, WasmMemoryPersistence, IC_00,
 };
 use ic_metrics::MetricsRegistry;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
@@ -55,7 +56,10 @@ use ic_replicated_state::{
     testing::{CanisterQueuesTesting, SystemStateTesting},
     CallContextManager, CallOrigin, CanisterState, CanisterStatus, ReplicatedState,
 };
-use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig};
+use ic_state_machine_tests::{
+    add_global_registry_records, add_initial_registry_records, StateMachine, StateMachineBuilder,
+    StateMachineConfig, Subnets,
+};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     state_manager::FakeStateManager,
@@ -82,12 +86,19 @@ use ic_types::{
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
     NumInstructions, SubnetId, UserId,
 };
+use ic_universal_canister::PayloadBuilder;
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use serde::Deserialize;
-use std::{collections::BTreeSet, convert::TryFrom, mem::size_of, path::Path, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    convert::TryFrom,
+    mem::size_of,
+    path::Path,
+    sync::{Arc, RwLock},
+};
 
 use super::InstallCodeResult;
 use prometheus::IntCounter;
@@ -2491,7 +2502,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
     assert_eq!(err.code(), ErrorCode::InsufficientMemoryAllocation);
     assert!(err
         .description()
-        .contains("Canister was given 64.35 KiB memory allocation but at least"));
+        .contains("Canister was given 64.44 KiB memory allocation but at least"));
 
     // canister history memory usage at the beginning of update_settings
     let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
@@ -6647,4 +6658,443 @@ fn memory_usage_updates_increment_subnet_available_memory() {
     // execution memory should get back to its initial value before growing stable memory
     let subnet_available_memory = test.subnet_available_memory();
     assert_eq!(initial_subnet_available_memory, subnet_available_memory);
+}
+
+struct SubnetsImpl {
+    subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
+}
+
+impl SubnetsImpl {
+    fn new() -> Self {
+        Self {
+            subnets: Arc::new(RwLock::new(BTreeMap::new())),
+        }
+    }
+}
+
+impl Subnets for SubnetsImpl {
+    fn insert(&self, state_machine: Arc<StateMachine>) {
+        self.subnets
+            .write()
+            .unwrap()
+            .insert(state_machine.get_subnet_id(), state_machine);
+    }
+    fn get(&self, subnet_id: SubnetId) -> Option<Arc<StateMachine>> {
+        self.subnets.read().unwrap().get(&subnet_id).cloned()
+    }
+}
+
+fn multi_subnet_setup(
+    subnets: Arc<SubnetsImpl>,
+    subnet_seed: u8,
+    subnet_type: SubnetType,
+    registry_data_provider: Arc<ProtoRegistryDataProvider>,
+) -> Arc<StateMachine> {
+    let config = StateMachineConfig::new(SubnetConfig::new(subnet_type), Config::default());
+    StateMachineBuilder::new()
+        .with_config(Some(config))
+        .with_subnet_seed([subnet_seed; 32])
+        .with_registry_data_provider(registry_data_provider)
+        .build_with_subnets(subnets)
+}
+
+/// Sets up two `StateMachine` that can communicate with each other.
+pub fn two_subnets_simple() -> (Arc<StateMachine>, Arc<StateMachine>) {
+    // Set up registry data provider.
+    let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
+
+    // Set up the two state machines for the two (app) subnets.
+    let subnets = Arc::new(SubnetsImpl::new());
+    let env1 = multi_subnet_setup(
+        subnets.clone(),
+        1,
+        SubnetType::Application,
+        registry_data_provider.clone(),
+    );
+    let env2 = multi_subnet_setup(
+        subnets.clone(),
+        2,
+        SubnetType::Application,
+        registry_data_provider.clone(),
+    );
+
+    // Set up routing table with two subnets.
+    let subnet_id1 = env1.get_subnet_id();
+    let subnet_id2 = env2.get_subnet_id();
+    let range1 = CanisterIdRange {
+        start: CanisterId::from_u64(0),
+        end: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET - 1),
+    };
+    let range2 = CanisterIdRange {
+        start: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET),
+        end: CanisterId::from_u64(2 * CANISTER_IDS_PER_SUBNET - 1),
+    };
+    let mut routing_table = RoutingTable::new();
+    routing_table.insert(range1, subnet_id1).unwrap();
+    routing_table.insert(range2, subnet_id2).unwrap();
+
+    // Set up subnet list for registry.
+    let subnet_list = vec![subnet_id1, subnet_id2];
+
+    // Add initial and global registry records.
+    add_initial_registry_records(registry_data_provider.clone());
+    add_global_registry_records(
+        subnet_id1,
+        routing_table,
+        subnet_list,
+        BTreeMap::new(),
+        registry_data_provider,
+    );
+
+    // Reload registry on the two state machines to make sure that
+    // both the state machines have a consistent view of the registry.
+    env1.reload_registry();
+    env2.reload_registry();
+
+    (env1, env2)
+}
+
+#[test]
+fn rename_canister() {
+    const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
+    const MAX_TICKS: usize = 100;
+    let user_id = user_test_id(1).get();
+
+    let (env1, env2) = two_subnets_simple();
+
+    // Create a canister on each of the two subnets.
+    let canister_id1 = env1
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+    let canister_id2 = env2
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_controllers(vec![PrincipalId::new_anonymous(), canister_id1.into()])
+                    .build(),
+            ),
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+
+    env2.stop_canister(canister_id2).unwrap();
+
+    let new_canister_id = CanisterId::from_u64(3 * CANISTER_IDS_PER_SUBNET - 1);
+    let new_version = 42;
+    let new_num_changes = 50;
+    let arguments = RenameCanisterArgs {
+        canister_id: canister_id2.into(),
+        rename_to: RenameToArgs {
+            canister_id: new_canister_id.into(),
+            version: new_version,
+            total_num_changes: new_num_changes,
+        },
+        sender_canister_version: 2,
+    };
+
+    let msg_id = env1
+        .submit_ingress_as(
+            user_id,
+            canister_id1,
+            "update",
+            wasm()
+                .call_simple(
+                    IC_00,
+                    Method::RenameCanister,
+                    call_args()
+                        .other_side(arguments.encode())
+                        .on_reject(PayloadBuilder::default().reject_message().reject().build()),
+                )
+                .build(),
+        )
+        .unwrap();
+
+    env1.execute_round();
+    env2.execute_round();
+    env1.execute_round();
+    env2.execute_round();
+    env1.execute_round();
+
+    let wasm_result = env1.await_ingress(msg_id, MAX_TICKS).unwrap();
+
+    assert_matches!(wasm_result, WasmResult::Reply(r) if r == EmptyBlob.encode());
+
+    let new_canister_exists = env2
+        .get_latest_state()
+        .canister_state(&new_canister_id)
+        .is_some();
+    let old_canister_exists = env2
+        .get_latest_state()
+        .canister_state(&canister_id2)
+        .is_some();
+    assert!(new_canister_exists);
+    assert!(!old_canister_exists);
+
+    // The version should have been updated
+    assert_eq!(
+        new_version + 1,
+        env2.get_latest_state()
+            .canister_state(&new_canister_id)
+            .unwrap()
+            .system_state
+            .canister_version
+    );
+    assert_eq!(
+        new_num_changes + 1,
+        env2.get_latest_state()
+            .canister_state(&new_canister_id)
+            .unwrap()
+            .system_state
+            .get_canister_history()
+            .get_total_num_changes()
+    );
+    let history_entry = env2
+        .get_latest_state()
+        .canister_state(&new_canister_id)
+        .unwrap()
+        .system_state
+        .get_canister_history()
+        .get_changes(1)
+        .next()
+        .unwrap()
+        .clone();
+
+    assert_eq!(history_entry.canister_version(), new_version + 1);
+    assert_matches!(
+        history_entry.details(),
+        CanisterChangeDetails::CanisterRename(_)
+    );
+
+    // Check that we can rename it a second time.
+    let third_canister_id = CanisterId::from_u64(4 * CANISTER_IDS_PER_SUBNET - 1);
+    let third_version = 82;
+    let third_num_changes = 104;
+    let arguments = RenameCanisterArgs {
+        canister_id: new_canister_id.into(),
+        rename_to: RenameToArgs {
+            canister_id: third_canister_id.into(),
+            version: third_version,
+            total_num_changes: third_num_changes,
+        },
+        sender_canister_version: 6,
+    };
+
+    let msg_id = env1
+        .submit_ingress_as(
+            user_id,
+            canister_id1,
+            "update",
+            wasm()
+                .call_simple(
+                    // We need to send it to the subnet id directly, as the canister is not in the routing table.
+                    CanisterId::from(env2.get_subnet_id()),
+                    Method::RenameCanister,
+                    call_args()
+                        .other_side(arguments.encode())
+                        .on_reject(PayloadBuilder::default().reject_message().reject().build()),
+                )
+                .build(),
+        )
+        .unwrap();
+
+    env1.execute_round();
+    env2.execute_round();
+    env1.execute_round();
+    env2.execute_round();
+    env1.execute_round();
+
+    let wasm_result = env1.await_ingress(msg_id, MAX_TICKS).unwrap();
+
+    assert_matches!(wasm_result, WasmResult::Reply(r) if r == EmptyBlob.encode());
+
+    let new_canister_exists = env2
+        .get_latest_state()
+        .canister_state(&new_canister_id)
+        .is_some();
+    let old_canister_exists = env2
+        .get_latest_state()
+        .canister_state(&canister_id2)
+        .is_some();
+    let third_canister_exists = env2
+        .get_latest_state()
+        .canister_state(&third_canister_id)
+        .is_some();
+    assert!(!new_canister_exists);
+    assert!(!old_canister_exists);
+    assert!(third_canister_exists);
+    assert_eq!(
+        third_version + 1,
+        env2.get_latest_state()
+            .canister_state(&third_canister_id)
+            .unwrap()
+            .system_state
+            .canister_version
+    );
+    assert_eq!(
+        third_num_changes + 1,
+        env2.get_latest_state()
+            .canister_state(&third_canister_id)
+            .unwrap()
+            .system_state
+            .get_canister_history()
+            .get_total_num_changes()
+    );
+    let history_entries: Vec<_> = env2
+        .get_latest_state()
+        .canister_state(&third_canister_id)
+        .unwrap()
+        .system_state
+        .get_canister_history()
+        .get_changes(2)
+        .cloned()
+        .collect();
+    assert_eq!(history_entries.len(), 2);
+    for entry in history_entries {
+        assert_matches!(entry.details(), CanisterChangeDetails::CanisterRename(_));
+    }
+
+    // Check that everything is the same after a checkpoint.
+    env2.checkpointed_tick();
+    let new_canister_exists = env2
+        .get_latest_state()
+        .canister_state(&new_canister_id)
+        .is_some();
+    let old_canister_exists = env2
+        .get_latest_state()
+        .canister_state(&canister_id2)
+        .is_some();
+    let third_canister_exists = env2
+        .get_latest_state()
+        .canister_state(&third_canister_id)
+        .is_some();
+    assert!(!new_canister_exists);
+    assert!(!old_canister_exists);
+    assert!(third_canister_exists);
+    assert_eq!(
+        third_version + 1,
+        env2.get_latest_state()
+            .canister_state(&third_canister_id)
+            .unwrap()
+            .system_state
+            .canister_version
+    );
+    assert_eq!(
+        third_num_changes + 1,
+        env2.get_latest_state()
+            .canister_state(&third_canister_id)
+            .unwrap()
+            .system_state
+            .get_canister_history()
+            .get_total_num_changes()
+    );
+    let history_entries: Vec<_> = env2
+        .get_latest_state()
+        .canister_state(&third_canister_id)
+        .unwrap()
+        .system_state
+        .get_canister_history()
+        .get_changes(2)
+        .cloned()
+        .collect();
+    assert_eq!(history_entries.len(), 2);
+    for entry in history_entries {
+        assert_matches!(entry.details(), CanisterChangeDetails::CanisterRename(_));
+    }
+}
+
+#[test]
+fn cannot_rename_from_ingress() {
+    let env = StateMachineBuilder::new().build();
+
+    let canister_id = env.install_canister_wat(EMPTY_WAT, vec![], None);
+
+    let new_canister_id = CanisterId::from_u64(3 * CANISTER_IDS_PER_SUBNET - 1);
+    let arguments = RenameCanisterArgs {
+        canister_id: canister_id.into(),
+        rename_to: RenameToArgs {
+            canister_id: new_canister_id.into(),
+            version: 0,
+            total_num_changes: 0,
+        },
+        sender_canister_version: 0,
+    };
+
+    let wasm_result = env.execute_ingress(IC_00, Method::RenameCanister, arguments.encode());
+
+    assert!(wasm_result.is_err());
+}
+
+#[test]
+fn cannot_rename_from_non_nns() {
+    const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
+    const MAX_TICKS: usize = 100;
+    let user_id = user_test_id(1).get();
+
+    let (env1, env2) = two_subnets_simple();
+
+    // Create a canister on each of the two subnets.
+    let canister_id1 = env1
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+    let canister_id2 = env2
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+
+    env1.stop_canister(canister_id1).unwrap();
+
+    let new_canister_id = CanisterId::from_u64(3 * CANISTER_IDS_PER_SUBNET - 1);
+
+    let arguments = RenameCanisterArgs {
+        canister_id: canister_id1.into(),
+        rename_to: RenameToArgs {
+            canister_id: new_canister_id.into(),
+            version: 0,
+            total_num_changes: 0,
+        },
+        sender_canister_version: 2,
+    };
+
+    let msg_id = env2
+        .submit_ingress_as(
+            user_id,
+            canister_id2,
+            "update",
+            wasm()
+                .call_simple(
+                    IC_00,
+                    Method::RenameCanister,
+                    call_args()
+                        .other_side(arguments.encode())
+                        .on_reject(PayloadBuilder::default().reject_message().reject().build()),
+                )
+                .build(),
+        )
+        .unwrap();
+
+    env2.execute_round();
+    env1.execute_round();
+    env2.execute_round();
+    env1.execute_round();
+    env2.execute_round();
+
+    let wasm_result = env2.await_ingress(msg_id, MAX_TICKS).unwrap();
+
+    assert_matches!(wasm_result, WasmResult::Reject(r) if r.contains("It can only be called by NNS."));
 }
