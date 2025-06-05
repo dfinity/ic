@@ -1953,7 +1953,8 @@ impl SystemState {
 
     /// Overwrite the `total_num_changes` of the canister history. This can happen in the context of canister migration.
     pub fn set_canister_history_total_num_changes(&mut self, total_num_changes: u64) {
-        self.canister_history.set_total_num_changes(total_num_changes);
+        self.canister_history
+            .set_total_num_changes(total_num_changes);
     }
 
     pub fn get_canister_history(&self) -> &CanisterHistory {
