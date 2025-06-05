@@ -225,7 +225,7 @@ fn restorecon(path: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use config::serialize_and_write_config;
+    use crate::serialize_and_write_config;
     use config_types::{
         DeploymentEnvironment, DeterministicIpv6Config, HostOSConfig, HostOSSettings, ICOSSettings,
         Ipv4Config, Ipv6Config, Logging, NetworkSettings,

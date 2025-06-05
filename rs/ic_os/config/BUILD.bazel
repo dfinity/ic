@@ -44,7 +44,6 @@ ALIASES = {}
 
 BIN_SOURCES = [
     "src/main.rs",
-    "src/guest_vm_config.rs",
 ]
 
 LIB_SOURCES = glob(
