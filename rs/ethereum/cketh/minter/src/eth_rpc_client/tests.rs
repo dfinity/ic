@@ -36,10 +36,10 @@ mod multi_call_results {
 
         #[test]
         fn should_get_unanimous_fee_history() {
-            let results: MultiRpcResult<Option<FeeHistory>> = MultiRpcResult::Inconsistent(vec![
-                (BLOCK_PI, Ok(Some(fee_history()))),
-                (PUBLIC_NODE, Ok(Some(fee_history()))),
-                (LLAMA_NODES, Ok(Some(fee_history()))),
+            let results: MultiRpcResult<FeeHistory> = MultiRpcResult::Inconsistent(vec![
+                (BLOCK_PI, Ok(fee_history())),
+                (PUBLIC_NODE, Ok(fee_history())),
+                (LLAMA_NODES, Ok(fee_history())),
             ]);
 
             let reduced: Result<FeeHistory, _> =
@@ -60,12 +60,11 @@ mod multi_call_results {
                 );
                 let majority_fee = fees[index_majority].clone();
                 let [block_pi_fee_history, llama_nodes_fee_history, public_node_fee_history] = fees;
-                let results: MultiRpcResult<Option<FeeHistory>> =
-                    MultiRpcResult::Inconsistent(vec![
-                        (BLOCK_PI, Ok(Some(block_pi_fee_history))),
-                        (LLAMA_NODES, Ok(Some(llama_nodes_fee_history))),
-                        (PUBLIC_NODE, Ok(Some(public_node_fee_history))),
-                    ]);
+                let results: MultiRpcResult<FeeHistory> = MultiRpcResult::Inconsistent(vec![
+                    (BLOCK_PI, Ok(block_pi_fee_history)),
+                    (LLAMA_NODES, Ok(llama_nodes_fee_history)),
+                    (PUBLIC_NODE, Ok(public_node_fee_history)),
+                ]);
 
                 let reduced: Result<FeeHistory, _> =
                     ReduceWithStrategy::<StrictMajorityByKey>::reduce(results).into();
@@ -76,8 +75,8 @@ mod multi_call_results {
 
         #[test]
         fn should_get_fee_history_with_2_out_of_3_when_third_is_error() {
-            let results: MultiRpcResult<Option<FeeHistory>> = MultiRpcResult::Inconsistent(vec![
-                (BLOCK_PI, Ok(Some(fee_history()))),
+            let results: MultiRpcResult<FeeHistory> = MultiRpcResult::Inconsistent(vec![
+                (BLOCK_PI, Ok(fee_history())),
                 (
                     PUBLIC_NODE,
                     Err(HttpOutcallError::IcError {
@@ -86,7 +85,7 @@ mod multi_call_results {
                     }
                     .into()),
                 ),
-                (LLAMA_NODES, Ok(Some(fee_history()))),
+                (LLAMA_NODES, Ok(fee_history())),
             ]);
 
             let reduced: Result<FeeHistory, _> =
@@ -109,11 +108,11 @@ mod multi_call_results {
                 oldest_block: 0x10f73fe_u32.into(),
                 ..fee_history()
             };
-            let three_distinct_results: MultiRpcResult<Option<FeeHistory>> =
+            let three_distinct_results: MultiRpcResult<FeeHistory> =
                 MultiRpcResult::Inconsistent(vec![
-                    (BLOCK_PI, Ok(Some(block_pi_fee_history.clone()))),
-                    (LLAMA_NODES, Ok(Some(llama_nodes_fee_history.clone()))),
-                    (PUBLIC_NODE, Ok(Some(public_node_fee_history.clone()))),
+                    (BLOCK_PI, Ok(block_pi_fee_history.clone())),
+                    (LLAMA_NODES, Ok(llama_nodes_fee_history.clone())),
+                    (PUBLIC_NODE, Ok(public_node_fee_history.clone())),
                 ]);
 
             let reduced: Result<FeeHistory, _> =
@@ -130,10 +129,10 @@ mod multi_call_results {
                 ))
             );
 
-            let two_distinct_results: MultiRpcResult<Option<FeeHistory>> =
+            let two_distinct_results: MultiRpcResult<FeeHistory> =
                 MultiRpcResult::Inconsistent(vec![
-                    (BLOCK_PI, Ok(Some(block_pi_fee_history.clone()))),
-                    (PUBLIC_NODE, Ok(Some(llama_nodes_fee_history.clone()))),
+                    (BLOCK_PI, Ok(block_pi_fee_history.clone())),
+                    (PUBLIC_NODE, Ok(llama_nodes_fee_history.clone())),
                 ]);
 
             let reduced: Result<FeeHistory, _> =
@@ -150,9 +149,9 @@ mod multi_call_results {
                 ))
             );
 
-            let two_distinct_results_and_error: MultiRpcResult<Option<FeeHistory>> =
+            let two_distinct_results_and_error: MultiRpcResult<FeeHistory> =
                 MultiRpcResult::Inconsistent(vec![
-                    (BLOCK_PI, Ok(Some(block_pi_fee_history.clone()))),
+                    (BLOCK_PI, Ok(block_pi_fee_history.clone())),
                     (
                         PUBLIC_NODE,
                         Err(JsonRpcError {
@@ -161,7 +160,7 @@ mod multi_call_results {
                         }
                         .into()),
                     ),
-                    (LLAMA_NODES, Ok(Some(llama_nodes_fee_history.clone()))),
+                    (LLAMA_NODES, Ok(llama_nodes_fee_history.clone())),
                 ]);
 
             let reduced: Result<FeeHistory, _> = ReduceWithStrategy::<StrictMajorityByKey>::reduce(
@@ -190,9 +189,9 @@ mod multi_call_results {
                 (fee, inconsistent_fee)
             };
 
-            let results: MultiRpcResult<Option<FeeHistory>> = MultiRpcResult::Inconsistent(vec![
-                (BLOCK_PI, Ok(Some(fee.clone()))),
-                (PUBLIC_NODE, Ok(Some(inconsistent_fee.clone()))),
+            let results: MultiRpcResult<FeeHistory> = MultiRpcResult::Inconsistent(vec![
+                (BLOCK_PI, Ok(fee.clone())),
+                (PUBLIC_NODE, Ok(inconsistent_fee.clone())),
             ]);
 
             let reduced: Result<FeeHistory, _> =
@@ -211,8 +210,8 @@ mod multi_call_results {
 
         #[test]
         fn should_fail_when_no_sufficient_ok_responses() {
-            let results: MultiRpcResult<Option<FeeHistory>> = MultiRpcResult::Inconsistent(vec![
-                (BLOCK_PI, Ok(Some(fee_history()))),
+            let results: MultiRpcResult<FeeHistory> = MultiRpcResult::Inconsistent(vec![
+                (BLOCK_PI, Ok(fee_history())),
                 (
                     PUBLIC_NODE,
                     Err(JsonRpcError {

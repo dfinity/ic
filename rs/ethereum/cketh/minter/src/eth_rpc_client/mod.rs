@@ -351,12 +351,12 @@ pub enum MinByKey {}
 pub enum AnyOf {}
 pub enum StrictMajorityByKey {}
 
-impl ReduceWithStrategy<StrictMajorityByKey> for EvmMultiRpcResult<Option<FeeHistory>> {
+impl ReduceWithStrategy<StrictMajorityByKey> for EvmMultiRpcResult<FeeHistory> {
     type Item = FeeHistory;
 
     fn reduce(self) -> ReducedResult<Self::Item> {
         ReducedResult::from_internal(self).map_reduce(
-            &|fee_history| fee_history.ok_or("No fee history available".to_string()),
+            &|fee_history| Ok::<FeeHistory, Infallible>(fee_history),
             |results| {
                 results.reduce_with_strict_majority_by_key(|fee_history| {
                     Nat::from(fee_history.oldest_block.clone())
