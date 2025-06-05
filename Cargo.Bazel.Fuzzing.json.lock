@@ -1,5 +1,5 @@
 {
-  "checksum": "5e28c1de0af6e84f24865ae66dd1471bc2527274516e0e8a6c44110ad1328ca2",
+  "checksum": "64c49509d47ed140ddc08b3efc7bfa814c2266d019d75d0e2e5c8b07861b577e",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -20507,7 +20507,7 @@
               "target": "ic_http_gateway"
             },
             {
-              "id": "ic-management-canister-types 0.3.0",
+              "id": "ic-management-canister-types 0.3.1",
               "target": "ic_management_canister_types"
             },
             {
@@ -33204,7 +33204,7 @@
               "target": "ic_error_types"
             },
             {
-              "id": "ic-management-canister-types 0.3.0",
+              "id": "ic-management-canister-types 0.3.1",
               "target": "ic_management_canister_types"
             },
             {
@@ -34293,14 +34293,14 @@
       ],
       "license_file": null
     },
-    "ic-management-canister-types 0.3.0": {
+    "ic-management-canister-types 0.3.1": {
       "name": "ic-management-canister-types",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-management-canister-types/0.3.0/download",
-          "sha256": "90253c6ac92f9a0b548a53a02c2d29dfa0f04a6c1ae919b86a6f54d4767d78b9"
+          "url": "https://static.crates.io/crates/ic-management-canister-types/0.3.1/download",
+          "sha256": "98554c2d8a30c00b6bfda18062fdcef21215cad07a52d8b8b1eb3130e51bfe71"
         }
       },
       "targets": [
@@ -34340,7 +34340,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.3.0"
+        "version": "0.3.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -54404,7 +54404,7 @@
               "target": "ic_certification"
             },
             {
-              "id": "ic-management-canister-types 0.3.0",
+              "id": "ic-management-canister-types 0.3.1",
               "target": "ic_management_canister_types"
             },
             {
@@ -91561,7 +91561,7 @@
     "ic-gateway 0.2.0",
     "ic-http-certification 3.0.3",
     "ic-http-gateway 0.3.0",
-    "ic-management-canister-types 0.3.0",
+    "ic-management-canister-types 0.3.1",
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 3.0.3",
     "ic-sha3 1.0.0",
