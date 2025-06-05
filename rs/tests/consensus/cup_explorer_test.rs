@@ -1,54 +1,52 @@
 /* tag::catalog[]
-Title:: Graceful node removal from the subnet
+Title:: CUP explorer test
 
-Goal:: Test whether graceful nodes removal (making nodes unassigned) from a subnet results in the consensus membership update.
+Goal:: Test that the CUP explorer tool can download and verify CUPs of a subnet
 
 Runbook::
 . Setup:
-    . System subnet comprising N nodes and all necessary NNS canisters.
-. Gracefully remove X=floor(N/3)+1 nodes from the subnet via proposal (committee rearrangement check requires that we remove X > f nodes, where N=3*f+1).
-. Assert all nodes have been removed from the subnet (assert that endpoints [IPv6]/api/v2/status are unreachable).
-. Kill X removed node.
-. Assert that `update` messages can be executed in the subnet (this additionally confirms that the nodes had been removed from the consensus membership).
-
-Success::
-. Status endpoints of gracefully removed nodes are unreachable.
-.`Update` message call executes successfully after killing the removed nodes.
+    . App subnet comprising 4 nodes.
+. Download the latest CUP of the subnet using the CUP explorer
+. Check that the CUP verification correctly returns that the subnet is still running
+. Halt the subnet at the next CUP height
+. Download und verify the latest CUP of the subnet until the CUP explorer correctly determines
+  that the subnet was halted
+. Recover the subnet using the same state hash as in the downloaded CUP
+. Ensure that the CUP explorer finds the new recovery CUP and confirms that the subnet was
+  recovered correctly
 
 end::catalog[] */
 use anyhow::bail;
-use ic_protobuf::types::v1 as pb;
 use canister_test::Canister;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
-use ic_consensus_threshold_sig_system_test_utils::{empty_subnet_update, execute_recover_subnet_proposal, execute_update_subnet_proposal};
+use ic_consensus_threshold_sig_system_test_utils::{
+    empty_subnet_update, execute_recover_subnet_proposal, execute_update_subnet_proposal,
+};
 use ic_cup_explorer::{explore, verify, Status};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_protobuf::types::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::HasIcPrepDir;
 use ic_system_test_driver::driver::test_env_api::{READY_WAIT_TIMEOUT, RETRY_BACKOFF};
-use ic_system_test_driver::{retry_with_msg, systest};
 use ic_system_test_driver::util::{get_app_subnet_and_node, get_nns_node, runtime_from_url};
 use ic_system_test_driver::{
     driver::ic::{InternetComputer, Subnet},
     driver::{
         test_env::TestEnv,
-        test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot,
-        },
+        test_env_api::{HasPublicApiUrl, HasTopologySnapshot},
     },
-    util::{
-        block_on,
-    },
+    util::block_on,
 };
+use ic_system_test_driver::{retry_with_msg, systest};
 use ic_types::consensus::{CatchUpPackage, HasHeight};
 use ic_types::Height;
 
 use anyhow::Result;
+use prost::Message;
 use registry_canister::mutations::do_recover_subnet::RecoverSubnetPayload;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::info;
-use prost::Message;
 use tempfile::NamedTempFile;
 use tokio::runtime::Runtime;
 
@@ -59,7 +57,7 @@ fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(
             Subnet::fast_single_node(SubnetType::System)
-                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
@@ -85,10 +83,19 @@ fn test(env: TestEnv) {
     let cup_path = tmp_file.path();
 
     info!(log, "Downloading initial CUP...");
-    block_on(explore(nns_node.get_public_url(), app_subnet.subnet_id, Some(cup_path.into())));
+    block_on(explore(
+        nns_node.get_public_url(),
+        app_subnet.subnet_id,
+        Some(cup_path.into()),
+    ));
     let runtime = Runtime::new().unwrap();
     info!(log, "Verifying that subnet is running according to CUP");
-    let status = verify(runtime.handle().clone(), nns_node.get_public_url(), Some(nns_public_key.clone()), cup_path);
+    let status = verify(
+        runtime.handle().clone(),
+        nns_node.get_public_url(),
+        Some(nns_public_key.clone()),
+        cup_path,
+    );
     assert_eq!(status, Status::SubnetRunning);
 
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
@@ -114,8 +121,17 @@ fn test(env: TestEnv) {
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
         || {
-            block_on(explore(nns_node.get_public_url(), app_subnet.subnet_id, Some(cup_path.into())));
-            let status = verify(runtime.handle().clone(), nns_node.get_public_url(), Some(nns_public_key.clone()), cup_path);
+            block_on(explore(
+                nns_node.get_public_url(),
+                app_subnet.subnet_id,
+                Some(cup_path.into()),
+            ));
+            let status = verify(
+                runtime.handle().clone(),
+                nns_node.get_public_url(),
+                Some(nns_public_key.clone()),
+                cup_path,
+            );
             if status == Status::SubnetHalted {
                 Ok(())
             } else {
@@ -133,19 +149,30 @@ fn test(env: TestEnv) {
     let recover_subnet_payload = RecoverSubnetPayload {
         subnet_id: app_subnet.subnet_id.get(),
         height: cup.height().get() + 1000,
-        time_ns: cup.content.block.get_value().context.time.as_nanos_since_unix_epoch() + 1000,
+        time_ns: cup
+            .content
+            .block
+            .get_value()
+            .context
+            .time
+            .as_nanos_since_unix_epoch()
+            + 1000,
         state_hash: cup.content.state_hash.get().0,
         replacement_nodes: None,
         registry_store_uri: None,
         chain_key_config: None,
-        
     };
     block_on(execute_recover_subnet_proposal(
         &governance,
         recover_subnet_payload,
         &log,
     ));
-    let status = verify(runtime.handle().clone(), nns_node.get_public_url(), Some(nns_public_key.clone()), cup_path);
+    let status = verify(
+        runtime.handle().clone(),
+        nns_node.get_public_url(),
+        Some(nns_public_key.clone()),
+        cup_path,
+    );
     assert_eq!(status, Status::SubnetRecovered);
 }
 

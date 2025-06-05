@@ -71,6 +71,8 @@ fn get_subnet_id(cup: &CatchUpPackage) -> Result<SubnetId, String> {
     }
 }
 
+/// Download the latest CUP of all nodes on the subnet at the latest registry version.
+/// Optionally persist the latest CUP under the specified file path.
 pub async fn explore(registry_url: Url, subnet_id: SubnetId, path: Option<PathBuf>) {
     let registry_canister = Arc::new(RegistryCanister::new(vec![registry_url]));
 
@@ -146,6 +148,11 @@ pub enum Status {
     SubnetRecovered,
 }
 
+/// 1. Verify the CUP against the subnet public key found in the registry
+/// 2. Print the latest subnet state (time, height, state hash) according to the CUP
+/// 3. Verify that the subnet was halted on this CUP (meaning the CUP represents the latest state)
+/// 4. Search for a subsequent recover proposal that restarted the subnet, and confirm that the
+///    correct parameters were used.
 pub fn verify(handle: Handle, nns_url: Url, nns_pem: Option<PathBuf>, cup_path: &Path) -> Status {
     let client = Arc::new(RegistryCanisterClient::new(nns_url, nns_pem));
     let latest_version = client.get_latest_version();
