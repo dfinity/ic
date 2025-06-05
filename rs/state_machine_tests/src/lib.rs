@@ -3256,16 +3256,20 @@ impl StateMachine {
         .map(|_| ())
     }
 
+    fn get_controller(&self, canister_id: &CanisterId) -> PrincipalId {
+        let state = self.state_manager.get_latest_state().take();
+        state
+            .canister_state(canister_id)
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap_or_else(PrincipalId::new_anonymous)
+    }
+
     /// Create a canister snapshot.
     pub fn take_canister_snapshot(
         &self,
         args: TakeCanisterSnapshotArgs,
     ) -> Result<CanisterSnapshotResponse, UserError> {
-        let state = self.state_manager.get_latest_state().take();
-        let sender = state
-            .canister_state(&args.get_canister_id())
-            .and_then(|s| s.controllers().iter().next().cloned())
-            .unwrap_or_else(PrincipalId::new_anonymous);
+        let sender = self.get_controller(&args.get_canister_id());
         self.execute_ingress_as(
             sender,
             ic00::IC_00,
@@ -3285,11 +3289,7 @@ impl StateMachine {
         &self,
         args: LoadCanisterSnapshotArgs,
     ) -> Result<Vec<u8>, UserError> {
-        let state = self.state_manager.get_latest_state().take();
-        let sender = state
-            .canister_state(&args.get_canister_id())
-            .and_then(|s| s.controllers().iter().next().cloned())
-            .unwrap_or_else(PrincipalId::new_anonymous);
+        let sender = self.get_controller(&args.get_canister_id());
         self.execute_ingress_as(
             sender,
             ic00::IC_00,
@@ -3308,11 +3308,7 @@ impl StateMachine {
         &self,
         args: &ReadCanisterSnapshotMetadataArgs,
     ) -> Result<ReadCanisterSnapshotMetadataResponse, UserError> {
-        let state = self.state_manager.get_latest_state().take();
-        let sender = state
-            .canister_state(&args.get_canister_id())
-            .and_then(|s| s.controllers().iter().next().cloned())
-            .unwrap();
+        let sender = self.get_controller(&args.get_canister_id());
         self.execute_ingress_as(
             sender,
             ic00::IC_00,
@@ -3331,11 +3327,7 @@ impl StateMachine {
         &self,
         args: &ReadCanisterSnapshotDataArgs,
     ) -> Result<ReadCanisterSnapshotDataResponse, UserError> {
-        let state = self.state_manager.get_latest_state().take();
-        let sender = state
-            .canister_state(&args.get_canister_id())
-            .and_then(|s| s.controllers().iter().next().cloned())
-            .unwrap();
+        let sender = self.get_controller(&args.get_canister_id());
         self.execute_ingress_as(
             sender,
             ic00::IC_00,
@@ -3439,11 +3431,7 @@ impl StateMachine {
         &self,
         args: &UploadCanisterSnapshotMetadataArgs,
     ) -> Result<UploadCanisterSnapshotMetadataResponse, UserError> {
-        let state = self.state_manager.get_latest_state().take();
-        let sender = state
-            .canister_state(&args.get_canister_id())
-            .and_then(|s| s.controllers().iter().next().cloned())
-            .unwrap_or_else(PrincipalId::new_anonymous);
+        let sender = self.get_controller(&args.get_canister_id());
         self.execute_ingress_as(
             sender,
             ic00::IC_00,
@@ -3465,11 +3453,7 @@ impl StateMachine {
         &self,
         args: &UploadCanisterSnapshotDataArgs,
     ) -> Result<(), UserError> {
-        let state = self.state_manager.get_latest_state().take();
-        let sender = state
-            .canister_state(&args.get_canister_id())
-            .and_then(|s| s.controllers().iter().next().cloned())
-            .unwrap_or_else(PrincipalId::new_anonymous);
+        let sender = self.get_controller(&args.get_canister_id());
         self.execute_ingress_as(
             sender,
             ic00::IC_00,
