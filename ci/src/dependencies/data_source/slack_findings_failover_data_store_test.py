@@ -91,9 +91,7 @@ def test_store_findings():
     v_old = Vulnerability("vid_old", "vname_old", "vdesc_old", 8)
     sf_old = SlackFinding("repo", "scanner", "did_old", "dvers_old", ["proj3"])
     v_old_events = [
-        SlackVulnerabilityEvent.vuln_removed(
-            "vid_old", SLACK_CHANNEL_CONFIG_BY_TEAM[Team.NODE_TEAM].channel_id
-        ),
+        SlackVulnerabilityEvent.vuln_removed("vid_old", SLACK_CHANNEL_CONFIG_BY_TEAM[Team.NODE_TEAM].channel_id),
         SlackVulnerabilityEvent.dep_removed(
             "vid_old", SLACK_CHANNEL_CONFIG_BY_TEAM[Team.NODE_TEAM].channel_id, sf_old.id(), ["proj3"]
         ),
