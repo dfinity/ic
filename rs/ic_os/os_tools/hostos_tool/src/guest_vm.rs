@@ -86,7 +86,7 @@ impl VirtualMachine {
         match domain.get_state() {
             Ok((state, _reason)) => state == VIR_DOMAIN_RUNNING,
             Err(err) => {
-                eprintln!("Failed to get domain state: {}", err);
+                eprintln!("Failed to get domain state: {err}");
                 false
             }
         }
@@ -138,8 +138,7 @@ pub struct GuestVmService {
 impl GuestVmService {
     pub fn new() -> Result<Self> {
         let metrics_writer = MetricsWriter::new(PathBuf::from(METRICS_FILE_PATH));
-        let libvirt_connection =
-            Connect::open(Some("test:///default")).context("Failed to connect to libvirt")?;
+        let libvirt_connection = Connect::open(None).context("Failed to connect to libvirt")?;
         let hostos_config: HostOSConfig =
             deserialize_config(config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)
                 .context("Failed to read HostOS config file")?;
@@ -250,7 +249,7 @@ impl GuestVmService {
 
         match generated_mac.calculate_slaac(&ipv6_config.prefix) {
             Ok(ipv6_addr) => ipv6_addr.to_string(),
-            Err(e) => format!("Error: Failed to get IPv6 address: {}", e),
+            Err(e) => format!("Error: Failed to get IPv6 address: {e}"),
         }
     }
 
@@ -400,6 +399,130 @@ mod tests {
     use std::sync::Mutex;
     use virt::sys::VIR_DOMAIN_RUNNING_BOOTED;
 
+    /// We must run each test case sequentially because they all work with the same libvirt mock
+    /// instance.
+    static LIBVIRT_CONN_MUTEX: Mutex<()> = Mutex::new(());
+
+    /// Test fixture for setting up test environment
+    struct TestFixture {
+        pub libvirt_connection: Connect,
+        pub systemd_notifier: Arc<MockSystemdNotifier>,
+        pub console_file: NamedTempFile,
+        pub metrics_file: NamedTempFile,
+        _libvirt_lock: std::sync::MutexGuard<'static, ()>,
+    }
+
+    impl TestFixture {
+        fn new() -> Self {
+            let _libvirt_lock = LIBVIRT_CONN_MUTEX.lock().unwrap();
+
+            Self {
+                libvirt_connection: Connect::open(Some("test:///default")).unwrap(),
+                systemd_notifier: Arc::new(MockSystemdNotifier::new()),
+                console_file: NamedTempFile::new().unwrap(),
+                metrics_file: NamedTempFile::new().unwrap(),
+                _libvirt_lock,
+            }
+        }
+
+        fn create_service(&self, config: HostOSConfig) -> GuestVmService {
+            let console_tty = Box::new(
+                File::options()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .open(self.console_file.path())
+                    .unwrap(),
+            );
+
+            GuestVmService {
+                metrics_writer: MetricsWriter::new(self.metrics_file.path().to_path_buf()),
+                libvirt_connection: self.libvirt_connection.clone(),
+                hostos_config: config,
+                systemd_notifier: self.systemd_notifier.clone(),
+                console_tty,
+            }
+        }
+
+        async fn wait_for_systemd_ready(&self) {
+            tokio::time::timeout(Duration::from_secs(5), self.systemd_notifier.await_ready())
+                .await
+                .expect("Guest VM creation timed out");
+        }
+
+        async fn wait_for_systemd_stopping(&self) {
+            tokio::time::timeout(
+                Duration::from_secs(5),
+                self.systemd_notifier.await_stopping(),
+            )
+            .await
+            .expect("Systemd was not notified about stopping");
+        }
+
+        fn get_domain(&self) -> Domain {
+            Domain::lookup_by_name(&self.libvirt_connection, GUESTOS_DOMAIN_NAME)
+                .expect("Failed to find VM domain")
+        }
+
+        fn assert_vm_running(&self) {
+            let domain = self.get_domain();
+            assert_eq!(
+                domain.get_state(),
+                Ok((VIR_DOMAIN_RUNNING, VIR_DOMAIN_RUNNING_BOOTED as _))
+            );
+        }
+
+        fn assert_vm_not_exists(&self) {
+            assert!(Domain::lookup_by_name(&self.libvirt_connection, GUESTOS_DOMAIN_NAME).is_err());
+        }
+
+        fn read_console(&self) -> String {
+            let console_content =
+                std::fs::read(&self.console_file).expect("Failed to read console log");
+            String::from_utf8(console_content).expect("Console log is not valid UTF-8")
+        }
+
+        fn assert_metrics_contains(&self, expected: &str) {
+            let metrics = std::fs::read_to_string(&self.metrics_file).unwrap();
+            assert!(
+                metrics.contains(expected),
+                "Metrics file does not contain expected content '{expected}'\n\
+                Metrics content:\n{metrics}",
+            );
+        }
+
+        fn assert_console_contains(&self, expected_parts: &[&str]) {
+            let console_content = self.read_console();
+            for part in expected_parts {
+                assert!(
+                    console_content.contains(part),
+                    "Console content does not contain '{part}'\nConsole content:\n{console_content}"
+                );
+            }
+        }
+
+        fn get_config_media_path(&self) -> PathBuf {
+            let domain = self.get_domain();
+            let vm_config = domain.get_xml_desc(0).unwrap();
+            let config_media_path = PathBuf::from(
+                &Regex::new("<source file='([^']+)'")
+                    .unwrap()
+                    .captures(&vm_config)
+                    .expect("Config media path not found in VM config")[1],
+            );
+            config_media_path
+        }
+
+        async fn assert_no_systemd_stopping_notification(&self) {
+            assert!(tokio::time::timeout(
+                Duration::from_secs(1),
+                self.systemd_notifier.await_stopping()
+            )
+            .await
+            .is_err());
+        }
+    }
+
     fn valid_hostos_config() -> HostOSConfig {
         HostOSConfig {
             config_version: "".to_string(),
@@ -440,123 +563,59 @@ mod tests {
         hostos_config
     }
 
-    /// We must run each test case sequentially because they all work with the same libvirt mock
-    /// instance.
-    /// Each test that opens a libvirt connection must start with:
-    /// ```
-    /// let _libvirt_conn_lock = LIBVIRT_CONN_MUTEX.lock().unwrap();
-    /// ```
-    static LIBVIRT_CONN_MUTEX: Mutex<()> = Mutex::new(());
-
     #[tokio::test]
     async fn test_run_guest_vm() {
-        let _libvirt_conn_lock = LIBVIRT_CONN_MUTEX.lock().unwrap();
-
-        let libvirt_connection = Connect::open(Some("test:///default")).unwrap();
-        let systemd_notifier = Arc::new(MockSystemdNotifier::new());
-        let console_tty = Box::new(NamedTempFile::new().unwrap());
-        let console_path = console_tty.path().to_path_buf();
-        let metrics = NamedTempFile::new().unwrap();
-
-        let mut service = GuestVmService {
-            metrics_writer: MetricsWriter::new(metrics.path().to_path_buf()),
-            libvirt_connection: libvirt_connection.clone(),
-            hostos_config: valid_hostos_config(),
-            systemd_notifier: systemd_notifier.clone(),
-            console_tty,
-        };
+        let fixture = TestFixture::new();
+        let mut service = fixture.create_service(valid_hostos_config());
 
         // Run the VM in the background
         tokio::spawn(async move { service.run().await });
 
-        // Wait for the service to start the VM and notify systemd.
-        tokio::time::timeout(Duration::from_secs(5), systemd_notifier.await_ready())
-            .await
-            .expect("Guest VM creation timed out");
+        // Wait for the service to start the VM and notify systemd
+        fixture.wait_for_systemd_ready().await;
 
-        assert!(std::fs::read_to_string(metrics)
-            .unwrap()
-            .contains("hostos_guestos_service_start 1"));
-
-        let domain = Domain::lookup_by_name(&libvirt_connection, GUESTOS_DOMAIN_NAME)
-            .expect("Failed to create VM");
-        // Verify that the VM is actually running.
-        assert_eq!(
-            domain.get_state(),
-            Ok((VIR_DOMAIN_RUNNING, VIR_DOMAIN_RUNNING_BOOTED as _))
-        );
-
-        let console_content = std::fs::read(console_path).expect("Failed to read console log");
-        let console_content =
-            String::from_utf8(console_content).expect("Console log is not valid UTF-8");
-
-        assert!(
-            console_content.contains("GuestOS virtual machine launched")
-                && console_content.contains("2001:db8::6800:d8ff:fecb:f597"),
-            "Console content:\n{console_content}"
-        );
+        fixture.assert_metrics_contains("hostos_guestos_service_start 1");
+        fixture.assert_vm_running();
+        fixture.assert_console_contains(&[
+            "GuestOS virtual machine launched",
+            "2001:db8::6800:d8ff:fecb:f597",
+        ]);
 
         // Ensure that the config media exists
-        let vm_config = domain.get_xml_desc(0).unwrap();
-        let config_media_path = PathBuf::from(
-            &Regex::new("<source file='([^']+)'")
-                .unwrap()
-                .captures(&vm_config)
-                .expect("Config media path not found in VM config")[1],
-        );
+        let config_media_path = fixture.get_config_media_path();
         assert!(config_media_path.exists());
 
         nix::sys::signal::raise(SIGTERM).expect("Failed to send SIGTERM");
 
-        // The service should not notify systemd when stopping after receiving SIGTERM.
-        assert!(
-            tokio::time::timeout(Duration::from_secs(1), systemd_notifier.await_stopping())
-                .await
-                .is_err()
-        );
+        // The service should not notify systemd when stopping after receiving SIGTERM
+        fixture.assert_no_systemd_stopping_notification().await;
 
-        // The domain should be destroyed.
+        // The domain should be destroyed
+        let domain = fixture.get_domain();
         assert!(domain.get_state().is_err());
-        assert!(Domain::lookup_by_name(&libvirt_connection, GUESTOS_DOMAIN_NAME).is_err());
+        fixture.assert_vm_not_exists();
     }
 
     #[tokio::test]
     async fn test_vm_killed() {
-        let _libvirt_conn_lock = LIBVIRT_CONN_MUTEX.lock().unwrap();
-
-        let libvirt_connection = Connect::open(Some("test:///default")).unwrap();
-        let systemd_notifier = Arc::new(MockSystemdNotifier::new());
-        let metrics = NamedTempFile::new().unwrap();
-        let mut service = GuestVmService {
-            metrics_writer: MetricsWriter::new(metrics.path().to_path_buf()),
-            libvirt_connection: libvirt_connection.clone(),
-            hostos_config: valid_hostos_config(),
-            systemd_notifier: systemd_notifier.clone(),
-            console_tty: Box::new(NamedTempFile::new().unwrap()),
-        };
+        let fixture = TestFixture::new();
+        let mut service = fixture.create_service(valid_hostos_config());
 
         // Run the VM in the background
         let vm_service_task = tokio::spawn(async move { service.run().await });
 
-        // Wait for the service to start the VM and notify systemd.
-        tokio::time::timeout(Duration::from_secs(5), systemd_notifier.await_ready())
-            .await
-            .expect("Guest VM creation timed out");
+        // Wait for the service to start the VM and notify systemd
+        fixture.wait_for_systemd_ready().await;
 
-        let domain = Domain::lookup_by_name(&libvirt_connection, GUESTOS_DOMAIN_NAME)
-            .expect("Failed to create VM");
+        let domain = fixture.get_domain();
 
-        // Kill the VM.
+        // Kill the VM
         domain.destroy().unwrap();
 
-        // The service should notify systemd about stopping.
-        tokio::time::timeout(Duration::from_secs(5), systemd_notifier.await_stopping())
-            .await
-            .expect("Systemd was not notified about stopping");
+        // The service should notify systemd about stopping
+        fixture.wait_for_systemd_stopping().await;
 
-        assert!(std::fs::read_to_string(metrics)
-            .unwrap()
-            .contains("hostos_guestos_service_unexpected_shutdown 1"));
+        fixture.assert_metrics_contains("hostos_guestos_service_unexpected_shutdown 1");
 
         assert!(vm_service_task
             .await
@@ -568,22 +627,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_vm_cannot_be_started() {
-        let _libvirt_conn_lock = LIBVIRT_CONN_MUTEX.lock().unwrap();
+        let fixture = TestFixture::new();
+        let mut service = fixture.create_service(invalid_hostos_config());
 
-        let libvirt_connection = Connect::open(Some("test:///default")).unwrap();
-        let systemd_notifier = Arc::new(MockSystemdNotifier::new());
-        let console_tty = Box::new(NamedTempFile::new().unwrap());
-        let console_path = console_tty.path().to_path_buf();
-        let metrics = NamedTempFile::new().unwrap();
-        let mut service = GuestVmService {
-            metrics_writer: MetricsWriter::new(metrics.path().to_path_buf()),
-            libvirt_connection: libvirt_connection.clone(),
-            hostos_config: invalid_hostos_config(),
-            systemd_notifier: systemd_notifier.clone(),
-            console_tty,
-        };
-
-        // Run the VM and wait until it fails.
+        // Run the VM and wait until it fails
         assert!(tokio::time::timeout(Duration::from_secs(5), service.run())
             .await
             .expect("Service should have failed but did not")
@@ -591,56 +638,29 @@ mod tests {
             .to_string()
             .contains("Failed to create domain"));
 
-        assert!(std::fs::read_to_string(metrics)
-            .unwrap()
-            .contains("hostos_guestos_service_start 0"));
-
-        assert!(Domain::lookup_by_name(&libvirt_connection, GUESTOS_DOMAIN_NAME).is_err());
-
-        let console_content = std::fs::read(console_path).expect("Failed to read console log");
-        let console_content =
-            String::from_utf8(console_content).expect("Console log is not valid UTF-8");
-
-        assert!(
-            console_content.contains("Failed to create domain")
-                && console_content.contains("2001:db8::6800:d8ff:fecb:f597"),
-            "Console content:\n{console_content}"
-        );
+        fixture.assert_metrics_contains("hostos_guestos_service_start 0");
+        fixture.assert_vm_not_exists();
+        fixture
+            .assert_console_contains(&["Failed to create domain", "2001:db8::6800:d8ff:fecb:f597"]);
     }
 
     #[tokio::test]
     async fn test_stops_already_running_vm() {
-        let _libvirt_conn_lock = LIBVIRT_CONN_MUTEX.lock().unwrap();
+        let fixture1 = TestFixture::new();
+        let mut service1 = fixture1.create_service(valid_hostos_config());
 
-        let libvirt_connection = Connect::open(Some("test:///default")).unwrap();
-
-        let systemd_notifier1 = Arc::new(MockSystemdNotifier::new());
-        let mut service1 = GuestVmService {
-            metrics_writer: MetricsWriter::new(PathBuf::from("/dev/null")),
-            libvirt_connection: libvirt_connection.clone(),
-            hostos_config: valid_hostos_config(),
-            systemd_notifier: systemd_notifier1.clone(),
-            console_tty: Box::new(NamedTempFile::new().unwrap()),
-        };
-
-        // Run the VM in the background
+        // Run the first VM in the background
         let task1 = tokio::spawn(async move { service1.run().await });
 
-        systemd_notifier1.await_ready().await;
+        fixture1.wait_for_systemd_ready().await;
 
-        let systemd_notifier2 = Arc::new(MockSystemdNotifier::new());
-        let mut service2 = GuestVmService {
-            metrics_writer: MetricsWriter::new(PathBuf::from("/dev/null")),
-            libvirt_connection: libvirt_connection.clone(),
-            hostos_config: valid_hostos_config(),
-            systemd_notifier: systemd_notifier2.clone(),
-            console_tty: Box::new(NamedTempFile::new().unwrap()),
-        };
+        let fixture2 = TestFixture::new();
+        let mut service2 = fixture2.create_service(valid_hostos_config());
 
-        // Start the second VM in the background.
+        // Start the second VM in the background
         tokio::spawn(async move { service2.run().await });
 
-        // Check that the first VM got stopped.
+        // Check that the first VM got stopped
         assert!(tokio::time::timeout(Duration::from_secs(5), task1)
             .await
             .expect("Task1 was not interrupted in time")
@@ -649,9 +669,7 @@ mod tests {
             .to_string()
             .contains("GuestOS VM stopped unexpectedly"));
 
-        // Check that the second VM started.
-        tokio::time::timeout(Duration::from_secs(5), systemd_notifier2.await_ready())
-            .await
-            .expect("Service2 was not ready in time");
+        // Check that the second VM started
+        fixture2.wait_for_systemd_ready().await;
     }
 }
