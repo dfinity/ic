@@ -358,7 +358,7 @@ impl BackupManager {
     pub fn do_backups(self: Arc<BackupManager>) {
         let size = self.subnet_backups.len();
 
-        for backup in &self.subnet_backups {
+        if let Some(backup) = self.subnet_backups.first() {
             backup
                 .backup_helper
                 .notification_client
