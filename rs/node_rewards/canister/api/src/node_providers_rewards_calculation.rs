@@ -54,14 +54,49 @@ pub struct NodeResults {
     /// The UTC day on which a node ceases to be rewardable (i.e., is last present in the registry) within the given reward period.
     /// If the node remains in the registry after the reward period's end_ts, this day aligns with the UTC day of the end_ts.
     pub rewardable_to: DayUTC,
+
+    /// Number of UTC days in which the node is rewardable (i.e., is present in the registry)
     pub rewardable_days: u64,
+
+    /// The node metrics for all the days the node was rewardable and assigned
     pub daily_metrics: Vec<NodeMetricsDaily>,
+
+    /// Average Relative Failure Rate (`ARFR`).
+    ///
+    /// Average of `RFR` for the entire reward period.
+    /// None if the node is unassigned in the entire reward period
     pub avg_relative_fr: Option<Percent>,
+
+    /// Average Extrapolated Failure Rate (`AEFR`).
+    ///
+    /// Failure rate average for the entire reward period
+    /// - On days when the node is unassigned `EFR` is used
+    /// - On days when the node is assigned `RFR` is used
     pub avg_extrapolated_fr: Percent,
+
+    /// Rewards reduction (`RR`).
+    ///
+    /// - For nodes with `AEFR` < 0.1, the rewards reduction is 0
+    /// - For nodes with `AEFR` > 0.6, the rewards reduction is 0.8
+    /// - For nodes with 0.1 <= `AEFR` <= 0.6, the rewards reduction is linearly interpolated between 0 and 0.8
     pub rewards_reduction: Percent,
+
+    /// Performance multiplier (`PM`).
+    ///
+    /// Calculated as 1 - 'RR'
     pub performance_multiplier: Percent,
     pub base_rewards_per_month: XDRPermyriad,
+
+    /// Base Rewards for the rewards period.
+    ///
+    /// Currently, 1/12 of a year: 365.25 / 12 = 30.4375
+    /// 365.25: This represents the average length of a year in days, accounting for leap years
+    /// Calculated as `base_rewards_per_month` / 30.4375 * `rewardable_days`
     pub base_rewards: XDRPermyriad,
+
+    /// Adjusted rewards (`AR`).
+    ///
+    /// Calculated as base_rewards * `PM`
     pub adjusted_rewards: XDRPermyriad,
 }
 
@@ -69,7 +104,15 @@ pub struct NodeResults {
 /// see [`rewards_calculator_results::RewardsCalculatorResults`]
 pub struct RewardsCalculatorResults {
     pub results_by_node: BTreeMap<NodeId, NodeResults>,
+
+    /// Extrapolated Failure Rate (`EFR`).
+    ///
+    /// Extrapolated failure rate used as replacement for days when the node is unassigned
     pub extrapolated_fr: Percent,
+
+    /// Rewards Total
+    ///
+    /// The total rewards for the entire reward period computed as sum of the `AR`
     pub rewards_total: XDRPermyriad,
 }
 
