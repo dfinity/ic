@@ -55,8 +55,8 @@ def image_deps(mode, malicious = False):
             # additional libraries to install
             "//rs/ic_os/release:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",  # Allows referring to the guest IPv6 by name guestos from host, and host as hostos from guest.
 
-            # TODO(NODE-1518): delete config tool from guestos after switch to new icos config
-            "//rs/ic_os/release:config": "/opt/ic/bin/config:0755",
+            # Use the same config target with transitions based on mode
+            ("//rs/ic_os/config:config_dev" if mode == "dev" else "//rs/ic_os/config:config"): "/opt/ic/bin/config:0755",
         },
 
         # Set various configuration values
@@ -90,16 +90,13 @@ def image_deps(mode, malicious = False):
             "build_args": dev_build_args,
             "file_build_arg": dev_file_build_arg,
         })
+
+        # Add console root access for dev mode
+        deps["rootfs"].update({"//ic-os/guestos/context:allow_console_root": "/etc/allow_console_root:0644"})
     else:
         deps.update({
             "build_args": prod_build_args,
             "file_build_arg": prod_file_build_arg,
         })
-
-    # Update dev rootfs
-    if "dev" in mode:
-        deps["rootfs"].pop("//rs/ic_os/release:config", None)
-        deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
-        deps["rootfs"].update({"//ic-os/guestos/context:allow_console_root": "/etc/allow_console_root:0644"})
 
     return deps
