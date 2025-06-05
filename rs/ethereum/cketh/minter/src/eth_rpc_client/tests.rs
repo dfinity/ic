@@ -28,23 +28,22 @@ mod multi_call_results {
 
     mod reduce_with_stable_majority_by_key {
         use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
-        use crate::eth_rpc_client::{MultiCallError, MultiCallResults};
-        use candid::Nat;
-        use evm_rpc_client::{FeeHistory, HttpOutcallError, JsonRpcError};
+        use crate::eth_rpc_client::{
+            MultiCallError, MultiCallResults, ReduceWithStrategy, StrictMajorityByKey,
+        };
+        use evm_rpc_client::{FeeHistory, HttpOutcallError, JsonRpcError, MultiRpcResult};
         use ic_cdk::api::call::RejectionCode;
 
         #[test]
         fn should_get_unanimous_fee_history() {
-            let results: MultiCallResults<FeeHistory> =
-                MultiCallResults::from_non_empty_iter(vec![
-                    (BLOCK_PI, Ok(fee_history())),
-                    (PUBLIC_NODE, Ok(fee_history())),
-                    (LLAMA_NODES, Ok(fee_history())),
-                ]);
+            let results: MultiRpcResult<Option<FeeHistory>> = MultiRpcResult::Inconsistent(vec![
+                (BLOCK_PI, Ok(Some(fee_history()))),
+                (PUBLIC_NODE, Ok(Some(fee_history()))),
+                (LLAMA_NODES, Ok(Some(fee_history()))),
+            ]);
 
-            let reduced = results.reduce_with_strict_majority_by_key(|fee_history| {
-                Nat::from(fee_history.oldest_block.clone())
-            });
+            let reduced: Result<FeeHistory, _> =
+                ReduceWithStrategy::<StrictMajorityByKey>::reduce(results).into();
 
             assert_eq!(reduced, Ok(fee_history()));
         }
@@ -61,16 +60,15 @@ mod multi_call_results {
                 );
                 let majority_fee = fees[index_majority].clone();
                 let [block_pi_fee_history, llama_nodes_fee_history, public_node_fee_history] = fees;
-                let results: MultiCallResults<FeeHistory> =
-                    MultiCallResults::from_non_empty_iter(vec![
-                        (BLOCK_PI, Ok(block_pi_fee_history)),
-                        (LLAMA_NODES, Ok(llama_nodes_fee_history)),
-                        (PUBLIC_NODE, Ok(public_node_fee_history)),
+                let results: MultiRpcResult<Option<FeeHistory>> =
+                    MultiRpcResult::Inconsistent(vec![
+                        (BLOCK_PI, Ok(Some(block_pi_fee_history))),
+                        (LLAMA_NODES, Ok(Some(llama_nodes_fee_history))),
+                        (PUBLIC_NODE, Ok(Some(public_node_fee_history))),
                     ]);
 
-                let reduced = results.reduce_with_strict_majority_by_key(|fee_history| {
-                    Nat::from(fee_history.oldest_block.clone())
-                });
+                let reduced: Result<FeeHistory, _> =
+                    ReduceWithStrategy::<StrictMajorityByKey>::reduce(results).into();
 
                 assert_eq!(reduced, Ok(majority_fee));
             }
@@ -78,23 +76,21 @@ mod multi_call_results {
 
         #[test]
         fn should_get_fee_history_with_2_out_of_3_when_third_is_error() {
-            let results: MultiCallResults<FeeHistory> =
-                MultiCallResults::from_non_empty_iter(vec![
-                    (BLOCK_PI, Ok(fee_history())),
-                    (
-                        PUBLIC_NODE,
-                        Err(HttpOutcallError::IcError {
-                            code: RejectionCode::SysTransient,
-                            message: "no consensus".to_string(),
-                        }
-                        .into()),
-                    ),
-                    (LLAMA_NODES, Ok(fee_history())),
-                ]);
+            let results: MultiRpcResult<Option<FeeHistory>> = MultiRpcResult::Inconsistent(vec![
+                (BLOCK_PI, Ok(Some(fee_history()))),
+                (
+                    PUBLIC_NODE,
+                    Err(HttpOutcallError::IcError {
+                        code: RejectionCode::SysTransient,
+                        message: "no consensus".to_string(),
+                    }
+                    .into()),
+                ),
+                (LLAMA_NODES, Ok(Some(fee_history()))),
+            ]);
 
-            let reduced = results.reduce_with_strict_majority_by_key(|fee_history| {
-                Nat::from(fee_history.oldest_block.clone())
-            });
+            let reduced: Result<FeeHistory, _> =
+                ReduceWithStrategy::<StrictMajorityByKey>::reduce(results).into();
 
             assert_eq!(reduced, Ok(fee_history()));
         }
@@ -113,17 +109,16 @@ mod multi_call_results {
                 oldest_block: 0x10f73fe_u32.into(),
                 ..fee_history()
             };
-            let three_distinct_results: MultiCallResults<FeeHistory> =
-                MultiCallResults::from_non_empty_iter(vec![
-                    (BLOCK_PI, Ok(block_pi_fee_history.clone())),
-                    (PUBLIC_NODE, Ok(public_node_fee_history.clone())),
+            let three_distinct_results: MultiRpcResult<Option<FeeHistory>> =
+                MultiRpcResult::Inconsistent(vec![
+                    (BLOCK_PI, Ok(Some(block_pi_fee_history.clone()))),
+                    (LLAMA_NODES, Ok(Some(llama_nodes_fee_history.clone()))),
+                    (PUBLIC_NODE, Ok(Some(public_node_fee_history.clone()))),
                 ]);
 
-            let reduced = three_distinct_results
-                .clone()
-                .reduce_with_strict_majority_by_key(|fee_history| {
-                    Nat::from(fee_history.oldest_block.clone())
-                });
+            let reduced: Result<FeeHistory, _> =
+                ReduceWithStrategy::<StrictMajorityByKey>::reduce(three_distinct_results.clone())
+                    .into();
 
             assert_eq!(
                 reduced,
@@ -135,17 +130,15 @@ mod multi_call_results {
                 ))
             );
 
-            let two_distinct_results: MultiCallResults<FeeHistory> =
-                MultiCallResults::from_non_empty_iter(vec![
-                    (BLOCK_PI, Ok(block_pi_fee_history.clone())),
-                    (PUBLIC_NODE, Ok(llama_nodes_fee_history.clone())),
+            let two_distinct_results: MultiRpcResult<Option<FeeHistory>> =
+                MultiRpcResult::Inconsistent(vec![
+                    (BLOCK_PI, Ok(Some(block_pi_fee_history.clone()))),
+                    (PUBLIC_NODE, Ok(Some(llama_nodes_fee_history.clone()))),
                 ]);
 
-            let reduced = two_distinct_results
-                .clone()
-                .reduce_with_strict_majority_by_key(|fee_history| {
-                    Nat::from(fee_history.oldest_block.clone())
-                });
+            let reduced: Result<FeeHistory, _> =
+                ReduceWithStrategy::<StrictMajorityByKey>::reduce(two_distinct_results.clone())
+                    .into();
 
             assert_eq!(
                 reduced,
@@ -157,9 +150,9 @@ mod multi_call_results {
                 ))
             );
 
-            let two_distinct_results_and_error: MultiCallResults<FeeHistory> =
-                MultiCallResults::from_non_empty_iter(vec![
-                    (BLOCK_PI, Ok(block_pi_fee_history.clone())),
+            let two_distinct_results_and_error: MultiRpcResult<Option<FeeHistory>> =
+                MultiRpcResult::Inconsistent(vec![
+                    (BLOCK_PI, Ok(Some(block_pi_fee_history.clone()))),
                     (
                         PUBLIC_NODE,
                         Err(JsonRpcError {
@@ -168,14 +161,13 @@ mod multi_call_results {
                         }
                         .into()),
                     ),
-                    (LLAMA_NODES, Ok(llama_nodes_fee_history.clone())),
+                    (LLAMA_NODES, Ok(Some(llama_nodes_fee_history.clone()))),
                 ]);
 
-            let reduced = two_distinct_results_and_error
-                .clone()
-                .reduce_with_strict_majority_by_key(|fee_history| {
-                    Nat::from(fee_history.oldest_block.clone())
-                });
+            let reduced: Result<FeeHistory, _> = ReduceWithStrategy::<StrictMajorityByKey>::reduce(
+                two_distinct_results_and_error.clone(),
+            )
+            .into();
 
             assert_eq!(
                 reduced,
@@ -198,15 +190,13 @@ mod multi_call_results {
                 (fee, inconsistent_fee)
             };
 
-            let results: MultiCallResults<FeeHistory> =
-                MultiCallResults::from_non_empty_iter(vec![
-                    (BLOCK_PI, Ok(fee.clone())),
-                    (PUBLIC_NODE, Ok(inconsistent_fee.clone())),
-                ]);
+            let results: MultiRpcResult<Option<FeeHistory>> = MultiRpcResult::Inconsistent(vec![
+                (BLOCK_PI, Ok(Some(fee.clone()))),
+                (PUBLIC_NODE, Ok(Some(inconsistent_fee.clone()))),
+            ]);
 
-            let reduced = results.reduce_with_strict_majority_by_key(|fee_history| {
-                Nat::from(fee_history.oldest_block.clone())
-            });
+            let reduced: Result<FeeHistory, _> =
+                ReduceWithStrategy::<StrictMajorityByKey>::reduce(results).into();
 
             assert_eq!(
                 reduced,
@@ -221,26 +211,37 @@ mod multi_call_results {
 
         #[test]
         fn should_fail_when_no_sufficient_ok_responses() {
-            let results: MultiCallResults<FeeHistory> =
-                MultiCallResults::from_non_empty_iter(vec![
-                    (BLOCK_PI, Ok(fee_history())),
-                    (
-                        PUBLIC_NODE,
-                        Err(JsonRpcError {
-                            code: -32700,
-                            message: "error".to_string(),
-                        }
-                        .into()),
-                    ),
-                ]);
+            let results: MultiRpcResult<Option<FeeHistory>> = MultiRpcResult::Inconsistent(vec![
+                (BLOCK_PI, Ok(Some(fee_history()))),
+                (
+                    PUBLIC_NODE,
+                    Err(JsonRpcError {
+                        code: -32700,
+                        message: "error".to_string(),
+                    }
+                    .into()),
+                ),
+            ]);
 
-            let reduced = results
-                .clone()
-                .reduce_with_strict_majority_by_key(|fee_history| {
-                    Nat::from(fee_history.oldest_block.clone())
-                });
+            let reduced: Result<FeeHistory, _> =
+                ReduceWithStrategy::<StrictMajorityByKey>::reduce(results.clone()).into();
 
-            assert_eq!(reduced, Err(MultiCallError::InconsistentResults(results)));
+            assert_eq!(
+                reduced,
+                Err(MultiCallError::InconsistentResults(
+                    MultiCallResults::from_non_empty_iter(vec![
+                        (BLOCK_PI, Ok(fee_history())),
+                        (
+                            PUBLIC_NODE,
+                            Err(JsonRpcError {
+                                code: -32700,
+                                message: "error".to_string(),
+                            }
+                            .into()),
+                        ),
+                    ])
+                ))
+            );
         }
 
         fn fee_history() -> FeeHistory {
