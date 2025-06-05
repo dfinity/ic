@@ -66,7 +66,7 @@ def image_deps(mode, malicious = False):
         "expanded_size": "50G",
         "rootfs_size": "3G",
         "bootfs_size": "1G",
-        "grub_config": Label("//ic-os/guestos:grub.cfg"),
+        "grub_config": Label("//ic-os/bootloader:guestos_grub.cfg"),
 
         # Add any custom partitions to the manifest
         "custom_partitions": lambda _: [Label("//ic-os/guestos:partition-config.tzst")],
