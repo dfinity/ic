@@ -11,6 +11,7 @@ path = "src/lib.rs"
 
 [dependencies]
 candid = { workspace = true }
+ic-cdk = { workspace = true }
 chrono = { workspace = true }
 serde = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
