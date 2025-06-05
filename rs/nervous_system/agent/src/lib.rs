@@ -13,6 +13,7 @@ pub mod mock;
 pub mod nns;
 mod null_request;
 pub mod pocketic_impl;
+pub mod cdk_impl;
 mod registry;
 pub mod sns;
 #[cfg(feature = "test")]
