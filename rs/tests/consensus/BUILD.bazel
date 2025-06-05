@@ -205,10 +205,10 @@ system_test_nns(
         # Keep sorted.
         "//rs/cup_explorer",
         "//rs/nns/constants",
-        "//rs/rust_canisters/canister_test",
         "//rs/protobuf",
         "//rs/registry/canister",
         "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
         "//rs/tests/consensus/tecdsa/utils",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
