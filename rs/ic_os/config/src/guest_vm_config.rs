@@ -62,10 +62,12 @@ fn run(
             "HostOS generate GuestOS config",
         )])?;
 
-        bail!(
-            "GuestOS configuration file already exists: {}",
+        println!(
+            "GuestOS VM config file already exists: {}",
             args.output.display()
         );
+
+        return Ok(());
     }
 
     let vm_config_path = &args.output;
