@@ -21,10 +21,6 @@ path = "tests/governance.rs"
 name = "governance-interleaving-test"
 path = "tests/interleaving_tests.rs"
 
-[[bench]]
-name = "scale"
-harness = false
-
 [dependencies]
 build-info = { workspace = true }
 
