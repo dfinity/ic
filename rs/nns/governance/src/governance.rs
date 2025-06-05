@@ -43,6 +43,7 @@ use crate::{
                 claim_or_refresh::{By, MemoAndController},
                 ClaimOrRefresh, Command, NeuronIdOrSubaccount,
             },
+            maturity_disbursement::Destination,
             neuron::Followees,
             neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
             proposal::Action,
@@ -114,7 +115,6 @@ use ic_sns_wasm::pb::v1::{
 };
 use ic_stable_structures::{storable::Bound, Storable};
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens, TOKEN_SUBDIVIDABLE_BY};
-use icrc_ledger_types::icrc1::account::Account as Icrc1Account;
 use itertools::Itertools;
 use maplit::hashmap;
 use registry_canister::{
@@ -1581,12 +1581,14 @@ impl Governance {
     /// Initializes Governance for the first time from init payload. When restoring after an upgrade
     /// with its persisted state, `Governance::new_restored` should be called instead.
     pub fn new(
-        mut governance_proto: GovernanceProto,
+        initial_governance: api::Governance,
         env: Arc<dyn Environment>,
         ledger: Arc<dyn IcpLedger>,
         cmc: Arc<dyn CMC>,
         randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
+        let mut governance_proto = GovernanceProto::from(initial_governance);
+
         // Step 1: Populate some fields governance_proto if they are blank.
 
         // Step 1.1: genesis_timestamp_seconds. 0 indicates it hasn't been set already.
@@ -1836,7 +1838,7 @@ impl Governance {
     /// - the maximum number of neurons has been reached, or
     /// - the given `neuron_id` already exists in `self.neuron_store.neurons`, or
     /// - the neuron's controller `PrincipalId` is not self-authenticating.
-    fn add_neuron(
+    pub(crate) fn add_neuron(
         &mut self,
         neuron_id: u64,
         neuron: Neuron,
@@ -4759,6 +4761,11 @@ impl Governance {
             )
         })?;
 
+        let controller = self
+            .with_neuron_by_neuron_id_or_subaccount(&managed_id, |managed_neuron| {
+                managed_neuron.controller()
+            })?;
+
         // Early exit for deprecated commands.
         if let Command::MergeMaturity(_) = command {
             return Self::merge_maturity_removed_error();
@@ -4781,13 +4788,16 @@ impl Governance {
             // command is not implemented yet, and before we implement it we should also validate
             // its subaccount.
             Command::DisburseMaturity(disburse_maturity) => {
-                if let Some(to_account) = &disburse_maturity.to_account {
-                    if Icrc1Account::try_from(to_account.clone()).is_err() {
-                        return Err(GovernanceError::new_with_message(
-                            ErrorType::InvalidCommand,
-                            "The to_account field is invalid",
-                        ));
-                    }
+                let destination = Destination::try_new(
+                    &disburse_maturity.to_account,
+                    &disburse_maturity.to_account_identifier,
+                    controller,
+                );
+                if destination.is_err() {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidCommand,
+                        "The disburse destination is invalid",
+                    ));
                 }
             }
             // Similar to DisburseMaturity, Disburse has a blob as the ICP account address. A
