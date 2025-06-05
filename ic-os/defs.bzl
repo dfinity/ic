@@ -191,21 +191,16 @@ def icos_build(
         )
 
         # The kernel command line (boot args) is generated from boot_args_template:
-        # - For GuestOS: Template includes ROOT_HASH placeholder that gets substituted with dm-verity hash
-        # - For HostOS/SetupOS: Template is used as-is without ROOT_HASH substitution
+        # - For OS requiring root signing: Template includes ROOT_HASH placeholder that gets substituted with dm-verity hash
+        # - For OS not requiring root signing: Template is used as-is without ROOT_HASH substitution
         #
         # This provides:
         # - Consistent boot argument handling across all OS types
-        # - Predictable measurements for AMD SEV (especially important for GuestOS)
+        # - Predictable measurements for AMD SEV (especially important for signed root partitions)
         # - Static boot arguments stored on the boot partition
 
-        # Check if the boot_args_template contains ROOT_HASH (GuestOS case)
-        # We determine this by checking if this is a GuestOS build (has signing)
-        # GuestOS is identified by having an expanded_size set (only GuestOS sets this)
-        is_guestos = image_deps.get("expanded_size") != None
-
-        if is_guestos:
-            # GuestOS: Sign the root partition and substitute ROOT_HASH
+        if image_deps.get("requires_root_signing", False):
+            # Sign the root partition and substitute ROOT_HASH in boot args
             native.genrule(
                 name = "generate-" + partition_root_signed_tzst,
                 testonly = malicious,
@@ -233,7 +228,7 @@ def icos_build(
                 tags = ["manual"],
             )
         else:
-            # HostOS/SetupOS: No signing, no ROOT_HASH substitution
+            # No signing required, no ROOT_HASH substitution
             native.alias(name = partition_root_signed_tzst, actual = partition_root_unsigned_tzst, tags = ["manual", "no-cache"])
             native.genrule(
                 name = "generate-" + boot_args,

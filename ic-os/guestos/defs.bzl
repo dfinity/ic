@@ -71,9 +71,9 @@ def image_deps(mode, malicious = False):
         # Add any custom partitions to the manifest
         "custom_partitions": lambda _: [Label("//ic-os/guestos:partition-config.tzst")],
 
-        # We will install boot_args_template onto the system, after substituting the
-        # hash of the root filesystem into it.
         "boot_args_template": Label("//ic-os/guestos/context:boot_args.template"),
+        # GuestOS requires dm-verity root partition signing for security
+        "requires_root_signing": True,
     }
 
     dev_build_args = ["BUILD_TYPE=dev", "ROOT_PASSWORD=root"]
