@@ -277,7 +277,7 @@ jobs:
 
   upload-arm64-linux-artifacts:
     name: Upload arm64 linux artifacts
-    <<: *dind-small-setup
+    <<: *dind-large-setup
     needs: [bazel-test-arm64-linux, config]
     # if: needs.config.outputs.release_build
     steps:
