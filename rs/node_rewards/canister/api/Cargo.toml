@@ -13,6 +13,6 @@ path = "src/lib.rs"
 candid = { workspace = true }
 serde = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
-rewards-calculation = { path = "../../rewards-calculation" }
+rewards-calculation = { path = "../../rewards_calculation" }
 chrono = { workspace = true }
 rust_decimal = "1.37.1"
