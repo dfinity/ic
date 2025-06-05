@@ -185,7 +185,7 @@ def icos_build(
                 for k, v in (
                     image_deps["bootfs"].items() + [
                         (version_txt, "/version.txt:0644"),
-                    ] + ([(extra_boot_args, "/extra_boot_args:0644")] if "boot_args_template" not in image_deps else []) + 
+                    ] + ([(extra_boot_args, "/extra_boot_args:0644")] if "boot_args_template" not in image_deps else []) +
                     ([(boot_args, "/boot_args:0644")] if "boot_args_template" in image_deps else [])
                 )
             },
@@ -205,7 +205,6 @@ def icos_build(
         # For backwards compatibility in the GuestOS and compatibility with the HostOS and SetupOS, we continue
         # to support the old way of calculating the dynamic args (see :extra_boot_args) and we derive boot_args
         # from it.
-        
 
         # Sign only for guestos builds (which have boot_args_template)
         if "boot_args_template" in image_deps:
@@ -232,7 +231,7 @@ def icos_build(
                 outs = [boot_args],
                 srcs = [partition_root_hash, ":boot_args_template"],
                 cmd = "sed -e s/ROOT_HASH/$$(cat $(location " + partition_root_hash + "))/ " +
-                    "< $(location :boot_args_template) > $@",
+                      "< $(location :boot_args_template) > $@",
                 tags = ["manual"],
             )
         else:
