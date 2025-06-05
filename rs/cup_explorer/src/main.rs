@@ -1,5 +1,5 @@
 use clap::Parser;
-use ic_cup_explorer::{explore, verify, Status};
+use ic_cup_explorer::{explore, verify, SubnetStatus};
 use ic_types::SubnetId;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -76,7 +76,7 @@ async fn main() {
                 args.nns_pem,
                 &verify_args.cup_path,
             );
-            if status == Status::SubnetRunning {
+            if status == SubnetStatus::Running {
                 panic!(
                     "Verification failed: Subnet wasn't instructed to halt on this CUP. Therefore, this CUP is NOT guaranteed to represent the latest state of the subnet!"
                 );

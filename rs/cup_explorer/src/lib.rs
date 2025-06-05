@@ -142,10 +142,10 @@ pub async fn explore(registry_url: Url, subnet_id: SubnetId, path: Option<PathBu
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Status {
-    SubnetRunning,
-    SubnetHalted,
-    SubnetRecovered,
+pub enum SubnetStatus {
+    Running,
+    Halted,
+    Recovered,
 }
 
 /// 1. Verify the CUP against the subnet public key found in the registry
@@ -153,7 +153,12 @@ pub enum Status {
 /// 3. Verify that the subnet was halted on this CUP (meaning the CUP represents the latest state)
 /// 4. Search for a subsequent recover proposal that restarted the subnet, and confirm that the
 ///    correct parameters were used.
-pub fn verify(handle: Handle, nns_url: Url, nns_pem: Option<PathBuf>, cup_path: &Path) -> Status {
+pub fn verify(
+    handle: Handle,
+    nns_url: Url,
+    nns_pem: Option<PathBuf>,
+    cup_path: &Path,
+) -> SubnetStatus {
     let client = Arc::new(RegistryCanisterClient::new(nns_url, nns_pem));
     let latest_version = client.get_latest_version();
     println!(
@@ -232,7 +237,7 @@ pub fn verify(handle: Handle, nns_url: Url, nns_pem: Option<PathBuf>, cup_path: 
         .unwrap()
         .unwrap();
     if !halted {
-        return Status::SubnetRunning;
+        return SubnetStatus::Running;
     }
     println!(
         "\nConfirmed that subnet {} was halted on this CUP as of {}.",
@@ -271,7 +276,7 @@ pub fn verify(handle: Handle, nns_url: Url, nns_pem: Option<PathBuf>, cup_path: 
                     println!(
                         "The subnet was correctly recovered without modifications to the state!"
                     );
-                    return Status::SubnetRecovered;
+                    return SubnetStatus::Recovered;
                 } else {
                     println!("No Recovery proposal found at version {}", version);
                 }
@@ -288,5 +293,5 @@ pub fn verify(handle: Handle, nns_url: Url, nns_pem: Option<PathBuf>, cup_path: 
     println!("The subnet has not been recovered yet.");
     println!("A recovery proposal should specify a time and height that is greater than the time and height of the CUP above.");
     println!("Additionally, the proposed state hash should be equal to the one in the provided CUP, to ensure there were no modifications to the state.");
-    Status::SubnetHalted
+    SubnetStatus::Halted
 }

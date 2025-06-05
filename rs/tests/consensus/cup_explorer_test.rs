@@ -22,7 +22,7 @@ use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_consensus_threshold_sig_system_test_utils::{
     empty_subnet_update, execute_recover_subnet_proposal, execute_update_subnet_proposal,
 };
-use ic_cup_explorer::{explore, verify, Status};
+use ic_cup_explorer::{explore, verify, SubnetStatus};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
@@ -96,7 +96,7 @@ fn test(env: TestEnv) {
         Some(nns_public_key.clone()),
         cup_path,
     );
-    assert_eq!(status, Status::SubnetRunning);
+    assert_eq!(status, SubnetStatus::Running);
 
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
@@ -132,7 +132,7 @@ fn test(env: TestEnv) {
                 Some(nns_public_key.clone()),
                 cup_path,
             );
-            if status == Status::SubnetHalted {
+            if status == SubnetStatus::Halted {
                 Ok(())
             } else {
                 bail!("Subnet not yet halted")
@@ -189,7 +189,7 @@ fn test(env: TestEnv) {
         Some(nns_public_key.clone()),
         cup_path,
     );
-    assert_eq!(status, Status::SubnetRecovered);
+    assert_eq!(status, SubnetStatus::Recovered);
 }
 
 fn main() -> Result<()> {
