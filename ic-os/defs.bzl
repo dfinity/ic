@@ -209,7 +209,7 @@ def icos_build(
         # - Stored statically on the boot partition
         # - Measured as part of the SEV launch measurement
         #
-        # For backwards compatibility in the GuestOS and compatibility with the HostOS and SetupOS, we continue
+        # For HostOS and SetupOS, we continue
         # to support the old way of calculating the dynamic args (see :extra_boot_args) and we derive boot_args
         # from it.
 
