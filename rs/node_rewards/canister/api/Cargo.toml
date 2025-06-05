@@ -14,5 +14,5 @@ candid = { workspace = true }
 chrono = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 rewards-calculation = { path = "../../rewards_calculation" }
-rust_decimal = { workspace = true }
+rust_decimal = "1.36.0"
 serde = { workspace = true }
