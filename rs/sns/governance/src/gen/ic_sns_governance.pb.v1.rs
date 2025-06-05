@@ -2242,7 +2242,6 @@ pub struct GetMetricsRequest {
     PartialEq,
     ::prost::Message,
 )]
-
 pub struct Metrics {
     #[prost(uint64, tag = "1")]
     pub num_recently_submitted_proposals: u64,
