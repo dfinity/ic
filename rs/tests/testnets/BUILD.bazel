@@ -90,8 +90,6 @@ system_test_nns(
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
-        "//rs/types/base_types",
-        "//rs/types/types",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
