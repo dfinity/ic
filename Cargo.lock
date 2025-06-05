@@ -912,6 +912,7 @@ checksum = "021e862c184ae977658b36c4500f7feac3221ca5da43e3f25bd04ab6c79a29b5"
 dependencies = [
  "axum-core 0.5.2",
  "axum-macros",
+ "base64 0.22.1",
  "bytes",
  "form_urlencoded",
  "futures-util",
@@ -931,8 +932,10 @@ dependencies = [
  "serde_json",
  "serde_path_to_error",
  "serde_urlencoded",
+ "sha1",
  "sync_wrapper 1.0.2",
  "tokio",
+ "tokio-tungstenite 0.26.2",
  "tower 0.5.2",
  "tower-layer",
  "tower-service",
@@ -6221,7 +6224,6 @@ dependencies = [
  "rand 0.8.5",
  "reqwest 0.12.15",
  "rustls 0.23.27",
- "rustls-acme",
  "rustls-pemfile 2.2.0",
  "rustls-platform-verifier",
  "scopeguard",
@@ -6242,6 +6244,65 @@ dependencies = [
  "url",
  "uuid",
  "vrl",
+ "webpki-root-certs",
+ "x509-parser 0.17.0",
+ "zeroize",
+]
+
+[[package]]
+name = "ic-bn-lib"
+version = "0.1.0"
+source = "git+https://github.com/dfinity/ic-bn-lib?rev=54e61f4624b7a3759163a1ecf0c2be4ccd066578#54e61f4624b7a3759163a1ecf0c2be4ccd066578"
+dependencies = [
+ "ahash 0.8.11",
+ "anyhow",
+ "arc-swap",
+ "async-trait",
+ "axum 0.8.4",
+ "base64 0.22.1",
+ "bytes",
+ "candid",
+ "chacha20poly1305",
+ "clap 4.5.27",
+ "derive-new",
+ "fqdn 0.4.5",
+ "futures",
+ "futures-util",
+ "hickory-proto 0.25.2",
+ "hickory-resolver 0.25.2",
+ "http 1.3.1",
+ "http-body 1.0.1",
+ "http-body-util",
+ "humantime",
+ "hyper 1.6.0",
+ "hyper-util",
+ "moka",
+ "parse-size",
+ "ppp",
+ "prometheus 0.14.0",
+ "rand 0.8.5",
+ "reqwest 0.12.15",
+ "rustls 0.23.27",
+ "rustls-acme",
+ "rustls-pemfile 2.2.0",
+ "rustls-platform-verifier",
+ "scopeguard",
+ "serde",
+ "serde_json",
+ "sha1",
+ "strum 0.27.1",
+ "strum_macros 0.27.1",
+ "systemstat",
+ "thiserror 2.0.12",
+ "tokio",
+ "tokio-io-timeout",
+ "tokio-rustls 0.26.1",
+ "tokio-util",
+ "tower 0.5.2",
+ "tower-service",
+ "tracing",
+ "url",
+ "uuid",
  "webpki-root-certs",
  "x509-parser 0.17.0",
  "zeroize",
@@ -6271,7 +6332,7 @@ dependencies = [
  "humantime",
  "ic-agent",
  "ic-base-types",
- "ic-bn-lib",
+ "ic-bn-lib 0.1.0 (git+https://github.com/dfinity/ic-bn-lib?rev=54e61f4624b7a3759163a1ecf0c2be4ccd066578)",
  "ic-certification-test-utils",
  "ic-config",
  "ic-crypto",
@@ -9065,7 +9126,7 @@ dependencies = [
  "http-body-util",
  "humantime",
  "ic-agent",
- "ic-bn-lib",
+ "ic-bn-lib 0.1.0 (git+https://github.com/dfinity/ic-bn-lib?rev=23b3b0b76795c9b75eed96742c2185da0ce9ee2a)",
  "ic-http-gateway",
  "ic-transport-types",
  "itertools 0.14.0",
@@ -18638,6 +18699,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "439ee305def115ba05938db6eb1644ff94165c5ab5e9420d1c1bcedbba909391"
 
 [[package]]
+name = "ppp"
+version = "2.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a7a2049cd2570bd67bf0228e86bf850f8ceb5190a345c471d03a909da6049e0"
+dependencies = [
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "pprof"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -19599,7 +19669,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "humantime",
- "ic-bn-lib",
+ "ic-bn-lib 0.1.0 (git+https://github.com/dfinity/ic-bn-lib?rev=54e61f4624b7a3759163a1ecf0c2be4ccd066578)",
  "indoc",
  "ipnet",
  "regex",
@@ -22902,7 +22972,19 @@ dependencies = [
  "futures-util",
  "log",
  "tokio",
- "tungstenite",
+ "tungstenite 0.21.0",
+]
+
+[[package]]
+name = "tokio-tungstenite"
+version = "0.26.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a9daff607c6d2bf6c16fd681ccb7eecc83e4e2cdc1ca067ffaadfca5de7f084"
+dependencies = [
+ "futures-util",
+ "log",
+ "tokio",
+ "tungstenite 0.26.2",
 ]
 
 [[package]]
@@ -23363,6 +23445,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "tungstenite"
+version = "0.26.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4793cb5e56680ecbb1d843515b23b6de9a75eb04b66643e256a396d43be33c13"
+dependencies = [
+ "bytes",
+ "data-encoding",
+ "http 1.3.1",
+ "httparse",
+ "log",
+ "rand 0.9.0",
+ "sha1",
+ "thiserror 2.0.12",
+ "utf-8",
+]
+
+[[package]]
 name = "turmoil"
 version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -23790,7 +23889,7 @@ dependencies = [
  "serde_urlencoded",
  "tokio",
  "tokio-rustls 0.25.0",
- "tokio-tungstenite",
+ "tokio-tungstenite 0.21.0",
  "tokio-util",
  "tower-service",
  "tracing",

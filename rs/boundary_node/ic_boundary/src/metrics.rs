@@ -14,18 +14,24 @@ use axum::{
     response::{IntoResponse, Response},
     Extension,
 };
+use bytes::Bytes;
+use candid::Principal;
 use http::header::CONTENT_TYPE;
-use ic_bn_lib::prometheus::{
-    proto::MetricFamily, register_histogram_vec_with_registry,
-    register_int_counter_vec_with_registry, register_int_gauge_vec_with_registry,
-    register_int_gauge_with_registry, Encoder, HistogramOpts, HistogramVec, IntCounterVec,
-    IntGauge, IntGaugeVec, Registry, TextEncoder,
-};
 use ic_bn_lib::{
     http::{body::CountingBody, cache::CacheStatus, http_version, ConnInfo},
     tasks::Run,
 };
+use ic_bn_lib::{
+    prometheus::{
+        proto::MetricFamily, register_histogram_vec_with_registry,
+        register_int_counter_vec_with_registry, register_int_gauge_vec_with_registry,
+        register_int_gauge_with_registry, Encoder, HistogramOpts, HistogramVec, IntCounterVec,
+        IntGauge, IntGaugeVec, Registry, TextEncoder,
+    },
+    pubsub::Broker,
+};
 use ic_types::{messages::ReplicaHealthStatus, CanisterId, SubnetId};
+use serde_json::json;
 use sha3::{Digest, Sha3_256};
 use tikv_jemalloc_ctl::{epoch, stats};
 use tokio_util::sync::CancellationToken;
@@ -286,6 +292,7 @@ pub struct HttpMetricParams {
     pub request_sizer: HistogramVec,
     pub response_sizer: HistogramVec,
     pub anonymization_salt: Arc<ArcSwapOption<Vec<u8>>>,
+    pub logs_broker: Option<Arc<Broker<Bytes, Principal>>>,
 }
 
 impl HttpMetricParams {
@@ -294,6 +301,7 @@ impl HttpMetricParams {
         action: &str,
         log_failed_requests_only: bool,
         anonymization_salt: Arc<ArcSwapOption<Vec<u8>>>,
+        logs_broker: Option<Arc<Broker<Bytes, Principal>>>,
     ) -> Self {
         const LABELS_HTTP: &[&str] = &[
             "request_type",
@@ -345,6 +353,7 @@ impl HttpMetricParams {
             .unwrap(),
 
             anonymization_salt,
+            logs_broker,
         }
     }
 }
@@ -458,10 +467,8 @@ pub async fn metrics_middleware(
         .unwrap_or("N/A".into());
 
     // for canister requests we extract canister_id
-    let canister_id = request
-        .extensions()
-        .get::<CanisterId>()
-        .map(|x| x.to_string());
+    let canister_id = request.extensions().get::<CanisterId>().map(|x| x.get().0);
+    let canister_id_str = canister_id.map(|x| x.to_string());
 
     // for /api/v2/subnet requests we extract subnet_id directly from extension
     let subnet_id = request
@@ -514,6 +521,7 @@ pub async fn metrics_middleware(
         request_sizer,
         response_sizer,
         anonymization_salt,
+        logs_broker,
     } = metric_params;
 
     let (parts, body) = response.into_parts();
@@ -610,7 +618,7 @@ pub async fn metrics_middleware(
                 status = status_code.as_u16(),
                 subnet_id,
                 node_id,
-                canister_id,
+                canister_id_str,
                 canister_id_actual = canister_id_actual.map(|x| x.to_string()),
                 canister_id_cbor = ctx.canister_id.map(|x| x.to_string()),
                 sender,
@@ -621,12 +629,44 @@ pub async fn metrics_middleware(
                 request_size = ctx.request_size,
                 response_size,
                 retry_count = &retry_result.as_ref().map(|x| x.retries),
-                retry_success = &retry_result.map(|x| x.success),
+                retry_success = &retry_result.as_ref().map(|x| x.success),
                 %cache_status,
-                cache_bypass_reason = cache_bypass_reason.map(|x| x.to_string()),
+                cache_bypass_reason = cache_bypass_reason_lbl,
                 country_code,
                 client_ip_family = ip_family,
             );
+        }
+
+        // See if have a broker and a canister id
+        if let (Some(broker), Some(canister_id)) = (logs_broker, canister_id) {
+            // Send only if the topic exists to avoid useless work
+            if broker.topic_exists(&canister_id) {
+                let msg = json!({
+                    "cache_status": cache_status.to_string(),
+                    "cache_bypass_reason": cache_bypass_reason_lbl,
+                    "client_addr": remote_addr,
+                    "client_ip_family": ip_family,
+                    "client_country_code": country_code,
+                    "duration": proc_duration,
+                    "error_cause": error_cause,
+                    "error_details": error_details,
+                    "http_status": status_code.as_u16(),
+                    "http_version": http_version,
+                    "ic_canister_id": canister_id_str,
+                    "ic_node_id": node_id,
+                    "ic_subnet_id": subnet_id,
+                    "ic_method": ctx.method_name,
+                    "ic_sender": sender,
+                    "request_id": request_id,
+                    "request_size": ctx.request_size,
+                    "request_type": request_type,
+                    "response_size": response_size,
+                    "retry_count": retry_result.as_ref().map(|x| x.retries).unwrap_or(0),
+                    "retry_success": &retry_result.map(|x| x.success),
+                });
+
+                let _ = broker.publish(&canister_id, Bytes::from(msg.to_string()));
+            }
         }
     });
 

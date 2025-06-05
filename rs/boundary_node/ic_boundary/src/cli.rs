@@ -242,6 +242,10 @@ pub struct Observability {
     #[clap(env, long)]
     pub obs_log_journald: bool,
 
+    /// Enables Websocket endpoint to subscribe to logs
+    #[clap(env, long)]
+    pub obs_log_websocket: bool,
+
     /// Enables logging to /dev/null (to benchmark logging)
     #[clap(env, long)]
     pub obs_log_null: bool,

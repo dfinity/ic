@@ -12,7 +12,7 @@ use axum::{
     extract::Request,
     middleware,
     response::IntoResponse,
-    routing::method_routing::{get, post},
+    routing::method_routing::{any, get, post},
     Router,
 };
 use axum_extra::middleware::option_layer;
@@ -28,6 +28,7 @@ use ic_bn_lib::{
         },
     },
     prometheus::Registry,
+    pubsub::BrokerBuilder,
     tasks::TaskManager,
     tls::verify::NoopServerCertVerifier,
     types::RequestType,
@@ -64,7 +65,7 @@ use crate::{
     errors::ErrorCause,
     firewall::{FirewallGenerator, SystemdReloader},
     http::{
-        handlers::{self},
+        handlers::{self, logs_canister, LogsState},
         middleware::{
             cache::{cache_middleware, CacheState},
             geoip::{self},
@@ -873,6 +874,15 @@ pub fn setup_router(
     // Init it early to avoid race conditions
     lazy_static::initialize(&UUID_REGEX);
 
+    let logs_broker = cli.obs.obs_log_websocket.then(|| {
+        Arc::new(
+            BrokerBuilder::new()
+                .with_buffer_size(10_000)
+                .with_idle_timeout(Duration::from_secs(1800))
+                .build(),
+        )
+    });
+
     let proxy_router = ProxyRouter::new(
         http_client.clone(),
         Arc::clone(&routing_table),
@@ -945,6 +955,7 @@ pub fn setup_router(
                 "http_request",
                 cli.obs.obs_log_failed_requests_only,
                 anonymization_salt,
+                logs_broker.clone(),
             ),
             metrics::metrics_middleware,
         ),
@@ -1069,10 +1080,22 @@ pub fn setup_router(
         })
         .layer(service_subnet_read);
 
-    canister_read_call_query_routes
+    let mut router = canister_read_call_query_routes
         .merge(subnet_read_state_route)
         .merge(status_route)
-        .merge(health_route)
+        .merge(health_route);
+
+    if let Some(v) = logs_broker {
+        let state = LogsState::new(v);
+        let logs_canister_router =
+            Router::new().route("/canister/{canister_id}", any(logs_canister));
+        let logs_router = Router::new()
+            .nest("/logs", logs_canister_router)
+            .with_state(state);
+        router = router.merge(logs_router);
+    }
+
+    router
 }
 
 // Process error chain trying to find given error type
