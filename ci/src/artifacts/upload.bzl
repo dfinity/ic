@@ -69,7 +69,7 @@ def _upload_artifact_impl(ctx):
     rclone = ctx.file._rclone
 
     uploader = ctx.file._artifacts_uploader
-    exe = ctx.actions.declare_file("run-upload")
+    exe = ctx.actions.declare_file("run-upload-" + ctx.attr.name)
     cmds = ["{uploader} {bundle}".format(uploader = uploader.path, bundle = bundle.short_path) for bundle in ctx.files.inputs]
     ctx.actions.write(
         output = exe,

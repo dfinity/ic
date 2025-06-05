@@ -299,7 +299,12 @@ jobs:
         id: build-ic
         uses: ./.github/actions/bazel
         with:
-          run: bazel run //:artifact-uploader -- ./pocket-ic-server-arm64-linux/
+          run: |
+            rootdir=$(mktemp -d)
+
+            mkdir -p "$rootdir/binaries/arm64-linux/"
+            cp ./pocket-ic-server-arm64-linux/pocket-ic-server-arm64-linux "$rootdir/binaries/arm64-linux/pocket-ic-server-arm64-linux"
+            bazel run //:artifact-uploader -- "$rootdir"
         env:
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
