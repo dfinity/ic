@@ -11556,7 +11556,10 @@ name = "ic-node-rewards-canister-api"
 version = "0.9.0"
 dependencies = [
  "candid",
- "ic-cdk 0.17.2",
+ "chrono",
+ "ic-base-types",
+ "rewards-calculation",
+ "rust_decimal",
  "serde",
 ]
 
