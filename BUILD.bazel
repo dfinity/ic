@@ -176,3 +176,8 @@ upload_artifacts(
     }),
     visibility = ["//visibility:public"],
 )
+
+# Artifact uploader that can be run with `bazel run ... -- BUNDLE...`
+upload_artifacts(
+    name = "artifact-uploader",
+)
