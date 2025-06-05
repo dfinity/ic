@@ -11558,6 +11558,7 @@ dependencies = [
  "candid",
  "chrono",
  "ic-base-types",
+ "ic-cdk 0.17.2",
  "rewards-calculation",
  "rust_decimal",
  "serde",
