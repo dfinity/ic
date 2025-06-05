@@ -4,7 +4,9 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 
 exports_files([
     "grubenv",
-    "grub.cfg",
+    "guestos_grub.cfg",
+    "hostos_grub.cfg",
+    "setupos_grub.cfg",
 ])
 
 genrule(
