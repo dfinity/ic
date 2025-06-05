@@ -460,7 +460,7 @@ def boundary_node_icos_build(
         tags = ["manual"],
     )
 
-    build_grub_partition("partition-grub.tzst", tags = ["manual"])
+    build_grub_partition("partition-grub.tzst", grub_config = "//ic-os/guestos:grub.cfg", tags = ["manual"])
 
     build_container_filesystem(
         name = "rootfs-tree.tar",
