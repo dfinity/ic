@@ -53,6 +53,7 @@ The tool will:
 - Decode and validate the CUP contents.
 - Verify the combined threshold signature against the subnet public key in registry.
 - Confirm the subnet was configured to halt at the CUP’s height.
+- Check if the subnet was recovered with the correct parameters.
 
 ## Example Output
 
@@ -82,6 +83,11 @@ Verifying that the subnet was halted on this CUP...
 Getting registry value of key subnet_record_fuqsr-in2lc-zbcjj-ydmcw-pzq7h-4xm2z-pto4i-dcyee-5z4rz-x63ji-nae at version 50690...
 
 Confirmed that subnet fuqsr-in2lc-zbcjj-ydmcw-pzq7h-4xm2z-pto4i-dcyee-5z4rz-x63ji-nae was halted on this CUP as of 2025-05-26 14:55:43.192946614 UTC.
-This means that the CUP represents the latest state of the subnet, UNTIL the subnet is restarted again.
+This means that the CUP represents the latest state of the subnet while the subnet remains halted.
 The subnet may ONLY be restarted via a recovery proposal using the same state hash as listed above.
+
+Searching for a recovery proposal...
+The subnet has not been recovered yet.
+A recovery proposal should specify a time and height that is greater than the time and height of the CUP above.
+Additionally, the proposed state hash should be equal to the one in the provided CUP, to ensure there were no modifications to the state.
 ```

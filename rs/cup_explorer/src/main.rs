@@ -1,8 +1,9 @@
 use clap::Parser;
-use ic_cup_explorer::{explore, verify};
+use ic_cup_explorer::{explore, verify, Status};
 use ic_types::SubnetId;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use tokio::runtime::Handle;
 use url::Url;
 
 /// Subcommands for handling CUPs
@@ -68,10 +69,18 @@ async fn main() {
             )
             .await;
         }
-        SubCommand::VerifyCUPOfHaltedSubnet(verify_args) => verify(
-            args.nns_url,
-            args.nns_pem,
-            &verify_args.cup_path,
-        ),
+        SubCommand::VerifyCUPOfHaltedSubnet(verify_args) => {
+            let status = verify(
+                Handle::current(),
+                args.nns_url,
+                args.nns_pem,
+                &verify_args.cup_path,
+            );
+            if status == Status::SubnetRunning {
+                panic!(
+                    "Verification failed: Subnet wasn't instructed to halt on this CUP. Therefore, this CUP is NOT guaranteed to represent the latest state of the subnet!"
+                );
+            }
+        }
     }
 }

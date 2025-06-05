@@ -30,7 +30,7 @@ impl RegistryCanisterClient {
             temp.path().into()
         });
 
-        let content = std::fs::read_to_string(temp.path()).unwrap();
+        let content = std::fs::read_to_string(nns_pem_path.as_path()).unwrap();
         println!("NNS public key being used: \n{}", content);
 
         let nns_public_key = parse_threshold_sig_key(nns_pem_path.as_path()).unwrap();

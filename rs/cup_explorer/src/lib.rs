@@ -16,10 +16,10 @@ use ic_types::{
     crypto::{
         threshold_sig::ni_dkg::NiDkgTargetSubnet, CombinedThresholdSig, CombinedThresholdSigOf,
     },
-    SubnetId,
+    RegistryVersion, SubnetId,
 };
 use prost::Message;
-use tokio::{fs, task};
+use tokio::{fs, runtime::Handle, task};
 use url::Url;
 
 use crate::{
@@ -139,24 +139,29 @@ pub async fn explore(registry_url: Url, subnet_id: SubnetId, path: Option<PathBu
     }
 }
 
-pub fn verify(nns_url: Url, nns_pem: Option<PathBuf>, cup_path: &Path) {
+#[derive(Debug, PartialEq)]
+pub enum Status {
+    SubnetRunning,
+    SubnetHalted,
+    SubnetRecovered,
+}
+
+pub fn verify(handle: Handle, nns_url: Url, nns_pem: Option<PathBuf>, cup_path: &Path) -> Status {
     let client = Arc::new(RegistryCanisterClient::new(nns_url, nns_pem));
+    let latest_version = client.get_latest_version();
     println!(
         "Registry client created. Latest registry version: {}",
-        client.get_latest_version()
+        latest_version,
     );
 
     println!("\nCreating crypto component...");
     let (crypto_config, _tmp) = CryptoConfig::new_in_temp_dir();
-    ic_crypto_node_key_generation::generate_node_keys_once(
-        &crypto_config,
-        Some(tokio::runtime::Handle::current()),
-    )
-    .expect("error generating node public keys");
+    ic_crypto_node_key_generation::generate_node_keys_once(&crypto_config, Some(handle.clone()))
+        .expect("error generating node public keys");
     let client_clone = Arc::clone(&client);
     let crypto = Arc::new(CryptoComponent::new(
         &crypto_config,
-        Some(tokio::runtime::Handle::current()),
+        Some(handle),
         client_clone,
         make_logger().into(),
         None,
@@ -219,14 +224,62 @@ pub fn verify(nns_url: Url, nns_pem: Option<PathBuf>, cup_path: &Path) {
         .get_halt_at_cup_height(subnet_id, dkg_version)
         .unwrap()
         .unwrap();
-    assert!(
-        halted,
-        "Verification failed: Subnet wasn't instructed to halt on this CUP. Therefore, this CUP is NOT guaranteed to represent the latest state of the subnet!"
-    );
+    if !halted {
+        return Status::SubnetRunning;
+    }
     println!(
         "\nConfirmed that subnet {} was halted on this CUP as of {}.",
         subnet_id, block.context.time
     );
-    println!("This means that the CUP represents the latest state of the subnet, UNTIL the subnet is restarted again.");
+    println!("This means that the CUP represents the latest state of the subnet while the subnet remains halted.");
     println!("The subnet may ONLY be restarted via a recovery proposal using the same state hash as listed above.");
+
+    println!("\nSearching for a recovery proposal...");
+    for version in dkg_version.get() + 1..=latest_version.get() {
+        let version = RegistryVersion::new(version);
+        match client.get_cup_contents(subnet_id, version) {
+            Ok(contents) => {
+                if contents.value.is_some() && contents.version == version {
+                    let cup_contents = contents.value.unwrap();
+                    println!("Found Recovery proposal at version {}:", version);
+                    println!("{:>20}: {}", "TIME", cup_contents.time);
+                    println!("{:>20}: {}", "HEIGHT", cup_contents.height);
+                    println!(
+                        "{:>20}: {}",
+                        "HASH",
+                        hex::encode(&cup_contents.state_hash[..])
+                    );
+                    println!("Ensuring recovery time is greater than CUP time...");
+                    assert!(cup_contents.time > block.context.time.as_nanos_since_unix_epoch());
+                    println!("Success!");
+                    println!("Ensuring recovery height is greater than CUP height...");
+                    assert!(cup_contents.height > block.height.get());
+                    println!("Success!");
+                    println!("Ensuring recovery state hash is equal to CUP state hash...");
+                    assert_eq!(
+                        cup_contents.state_hash[..],
+                        cup.content.state_hash.get_ref().0[..]
+                    );
+                    println!("Success!");
+                    println!(
+                        "The subnet was correctly recovered without modifications to the state!"
+                    );
+                    return Status::SubnetRecovered;
+                } else {
+                    println!("No Recovery proposal found at version {}", version);
+                }
+            }
+            Err(err) => {
+                println!(
+                    "Failed to fetch CUP contents at version {}: {}",
+                    version, err
+                )
+            }
+        }
+    }
+
+    println!("The subnet has not been recovered yet.");
+    println!("A recovery proposal should specify a time and height that is greater than the time and height of the CUP above.");
+    println!("Additionally, the proposed state hash should be equal to the one in the provided CUP, to ensure there were no modifications to the state.");
+    return Status::SubnetHalted;
 }
