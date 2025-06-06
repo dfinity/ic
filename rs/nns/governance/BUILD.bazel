@@ -2,7 +2,7 @@ load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canbench.bzl", "rust_canbench")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
+load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
 load(":feature_flags.bzl", "test_with_tla")
 
@@ -275,7 +275,9 @@ rust_canister(
     compile_data = ["canister/governance_test.did"],
     crate_features = test_with_tla(),
     crate_root = "canister/canister.rs",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES + [
+        "//rs/tla_instrumentation:proc_macros",
+    ],
     service_file = ":canister/governance_test.did",
     visibility = ["//visibility:public"],
     deps = DEPENDENCIES + [
@@ -350,17 +352,6 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
     ],
-)
-
-rust_bench(
-    name = "scale_bench",
-    srcs = ["benches/scale.rs"],
-    proc_macro_deps = ["@crate_index//:async-trait"],
-    deps = [
-        # Keep sorted.
-        ":governance",
-        "@crate_index//:criterion",
-    ] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 # all TLA models

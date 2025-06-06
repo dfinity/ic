@@ -36,6 +36,9 @@ pub struct ConfigIni {
     domain: Option<String>,
 
     #[arg(long)]
+    enable_trusted_execution_environment: Option<bool>,
+
+    #[arg(long)]
     verbose: Option<String>,
 }
 
@@ -81,6 +84,7 @@ pub async fn write_config(path: &Path, cfg: &ConfigIni) -> Result<(), Error> {
         ipv4_address,
         ipv4_gateway,
         ipv4_prefix_length,
+        enable_trusted_execution_environment,
         domain,
         verbose,
     } = cfg;
@@ -103,6 +107,14 @@ pub async fn write_config(path: &Path, cfg: &ConfigIni) -> Result<(), Error> {
         writeln!(&mut f, "ipv4_gateway={}", ipv4_gateway)?;
         writeln!(&mut f, "ipv4_prefix_length={}", ipv4_prefix_length)?;
         writeln!(&mut f, "domain={}", domain)?;
+    }
+
+    if let Some(enable_trusted_execution_environment) = enable_trusted_execution_environment {
+        writeln!(
+            &mut f,
+            "enable_trusted_execution_environment={}",
+            enable_trusted_execution_environment
+        )?;
     }
 
     if let Some(verbose) = verbose {
