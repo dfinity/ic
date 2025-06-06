@@ -1,7 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:prost.bzl", "generated_files_check")
 
-package(default_visibility = ["//rs/nervous_system:default_visibility"])
+package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "protos",
