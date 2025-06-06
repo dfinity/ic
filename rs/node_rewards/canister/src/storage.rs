@@ -14,7 +14,7 @@ const SUBNETS_TO_RETRY_MEMORY_ID: MemoryId = MemoryId::new(3);
 
 type VM = VirtualMemory<DefaultMemoryImpl>;
 
-pub fn stable_btreemap_init<K: Storable + Clone + Ord, V: Storable>(
+fn stable_btreemap_init<K: Storable + Clone + Ord, V: Storable>(
     memory_id: MemoryId,
 ) -> StableBTreeMap<K, V, VM> {
     with_memory_manager(|mgr| StableBTreeMap::init(mgr.get(memory_id)))
