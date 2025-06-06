@@ -34,7 +34,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:797497ee4e9e5f06466eafa85cf8882ad9522d4fe27e9d97bfccee98e346065e
+    image: ghcr.io/dfinity/ic-build@sha256:efe6edcd9a9e169843a02f91af98b29514c00cda858ad6612cda28b231b80896
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
@@ -233,7 +233,7 @@ jobs:
         with:
           upload-artifacts: ${{ needs.config.outputs.release_build && needs.config.outputs.full_macos_build }}
           BAZEL_COMMAND: ${{ steps.cfg.outputs.build-command }}
-          BAZEL_TARGETS: //rs/... //:upload-artifacts
+          BAZEL_TARGETS: //...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ''
       - name: Purge Bazel Output

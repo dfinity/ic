@@ -45,7 +45,7 @@ def image_deps(mode, _malicious = False):
         "volume_table": Label("//ic-os/hostos:volumes.csv"),
         "rootfs_size": "3G",
         "bootfs_size": "100M",
-        "grub_config": Label("//ic-os/hostos:grub.cfg"),
+        "grub_config": Label("//ic-os/bootloader:hostos_grub.cfg"),
         "extra_boot_args": Label("//ic-os/hostos/context:extra_boot_args"),
 
         # Add any custom partitions to the manifest
@@ -57,27 +57,19 @@ def image_deps(mode, _malicious = False):
     dev_file_build_arg = "BASE_IMAGE=docker-base.dev"
     prod_file_build_arg = "BASE_IMAGE=docker-base.prod"
 
-    image_variants = {
-        "dev": {
+    # Determine build configuration based on mode name
+    if "dev" in mode:
+        deps.update({
             "build_args": dev_build_args,
             "file_build_arg": dev_file_build_arg,
-        },
-        "local-base-dev": {
-            "build_args": dev_build_args,
-            "file_build_arg": dev_file_build_arg,
-        },
-        "local-base-prod": {
+        })
+    else:
+        deps.update({
             "build_args": prod_build_args,
             "file_build_arg": prod_file_build_arg,
-        },
-        "prod": {
-            "build_args": prod_build_args,
-            "file_build_arg": prod_file_build_arg,
-        },
-    }
+        })
 
-    deps.update(image_variants[mode])
-
+    # Update dev rootfs
     if "dev" in mode:
         deps["rootfs"].pop("//rs/ic_os/release:config", None)
         deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
