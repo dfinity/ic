@@ -60,11 +60,11 @@ const BACKLOG_DELAY_MILLIS: u64 = 2_000;
 
 /// In order to have a bound on the advertised consensus pool, we place a limit on
 /// the notarization/certification gap.
-const ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP: u64 = 70;
+pub(crate) const ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP: u64 = 70;
 
 /// In order to have a bound on the advertised consensus pool, we place a limit on
 /// the gap between notarized height and the height of the next pending CUP.
-pub(crate) const ACCEPTABLE_NOTARIZATION_CUP_GAP: u64 = 70;
+pub(crate) const ACCEPTABLE_NOTARIZATION_CUP_GAP: u64 = 130;
 
 pub struct Notary {
     time_source: Arc<dyn TimeSource>,
