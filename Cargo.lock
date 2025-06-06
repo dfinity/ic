@@ -12014,6 +12014,7 @@ name = "ic-registry-keys"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "hex",
  "ic-base-types",
  "ic-management-canister-types-private",
  "ic-types",
@@ -19845,6 +19846,7 @@ dependencies = [
  "dfn_http_metrics",
  "futures",
  "getrandom 0.2.15",
+ "hex",
  "ic-base-types",
  "ic-canister-client-sender",
  "ic-cdk 0.17.2",
