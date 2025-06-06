@@ -37,7 +37,8 @@ jobs:
         uses:  ./.github/actions/bazel-test-all/
         with:
           BAZEL_COMMAND: build --config=ci --repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA}
-          BAZEL_TARGETS: //...
+          # XXX Focus on repro
+          BAZEL_TARGETS: //rs/repro:concurrent_repro
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
           # 'upload-artifacts' is required for the BNs as they rely for both dev and prod deployment
