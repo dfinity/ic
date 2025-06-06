@@ -10,12 +10,17 @@ DEPENDENCIES = [
     "//rs/nervous_system/canisters",
     "//rs/nns/constants",
     "//rs/node_rewards/canister/api",
+    "//rs/node_rewards/proto",
+    "//rs/node_rewards/rewards_calculation",
     "//rs/protobuf",
     "//rs/registry/canister-client",
     "//rs/registry/keys",
     "//rs/registry/node_provider_rewards",
+    "//rs/types/base_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:candid",
+    "@crate_index//:futures",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-stable-structures",
@@ -39,6 +44,7 @@ DEV_DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
+    "@crate_index//:async-trait",
 ]
 
 DEV_MACRO_DEPENDENCIES = [
