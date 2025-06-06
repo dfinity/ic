@@ -249,20 +249,20 @@ package(default_visibility = ["//visibility:public"])
         deps = ["@crate_index//:candid_parser"] + extra_deps,
     )
     for (name_suffix, features, extra_deps) in [
-            (
-                "",
-                [],
-                [
-                    "//rs/ledger_suite/icrc1/tokens_u64",
-                ],
-            ),
-            (
-                "_u256",
-                ["u256-tokens"],
-                [
-                    "//rs/ledger_suite/icrc1/tokens_u256",
-                ],
-            ),
+        (
+            "",
+            [],
+            [
+                "//rs/ledger_suite/icrc1/tokens_u64",
+            ],
+        ),
+        (
+            "_u256",
+            ["u256-tokens"],
+            [
+                "//rs/ledger_suite/icrc1/tokens_u256",
+            ],
+        ),
     ]
 ]
 
