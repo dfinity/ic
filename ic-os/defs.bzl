@@ -51,15 +51,6 @@ def icos_build(
 
     image_deps = image_deps_func(mode, malicious)
 
-    # Validate that exactly one of boot_args_template or extra_boot_args is provided
-    has_boot_args_template = "boot_args_template" in image_deps
-    has_extra_boot_args = "extra_boot_args" in image_deps
-
-    if not has_boot_args_template and not has_extra_boot_args:
-        fail("Either 'boot_args_template' or 'extra_boot_args' must be provided in image_deps")
-    elif has_boot_args_template and has_extra_boot_args:
-        fail("Cannot provide both 'boot_args_template' and 'extra_boot_args' in image_deps - they are mutually exclusive")
-
     # -------------------- Version management --------------------
 
     copy_file(
@@ -163,6 +154,7 @@ def icos_build(
         partition_boot_tzst = "partition-boot" + test_suffix + ".tzst"
         version_txt = "version" + test_suffix + ".txt"
         boot_args = "boot" + test_suffix + "_args"
+        extra_boot_args = "extra_boot" + test_suffix + "_args"
 
         ext4_image(
             name = partition_root_unsigned_tzst,
@@ -192,6 +184,7 @@ def icos_build(
                     image_deps["bootfs"].items() + [
                         (version_txt, "/version.txt:0644"),
                         (boot_args, "/boot_args:0644"),
+                        (extra_boot_args, "/extra_boot_args:0644"),
                     ]
                 )
             },
@@ -235,6 +228,14 @@ def icos_build(
                       "< $(location :boot_args_template) > $@",
                 tags = ["manual"],
             )
+            native.genrule(
+                name = "generate-" + extra_boot_args,
+                outs = [extra_boot_args],
+                srcs = [partition_root_hash, ":extra_boot_args_template"],
+                cmd = "sed -e s/ROOT_HASH/$$(cat $(location " + partition_root_hash + "))/ " +
+                      "< $(location :extra_boot_args_template) > $@",
+                tags = ["manual"],
+            )
         else:
             # No signing required, no ROOT_HASH substitution
             native.alias(name = partition_root_signed_tzst, actual = partition_root_unsigned_tzst, tags = ["manual", "no-cache"])
@@ -245,6 +246,7 @@ def icos_build(
                 cmd = "cp $(location :boot_args_template) $@",
                 tags = ["manual"],
             )
+            native.alias(name = extra_boot_args, actual = image_deps["extra_boot_args"], tags = ["manual"])
 
     component_file_references_test(
         name = name + "_component_file_references_test",
@@ -258,6 +260,12 @@ def icos_build(
         name = "boot_args_template",
         actual = image_deps["boot_args_template"],
     )
+
+    if "extra_boot_args_template" in image_deps:
+        native.alias(
+            name = "extra_boot_args_template",
+            actual = image_deps["extra_boot_args_template"],
+        )
 
     # -------------------- Assemble disk partitions ---------------
 
