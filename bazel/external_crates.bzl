@@ -370,7 +370,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.10.0",
             ),
             "chrono": crate.spec(
-                version = "^0.4.38",
+                version = "0.4.38",
                 default_features = False,
                 features = [
                     "alloc",
