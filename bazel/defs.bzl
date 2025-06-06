@@ -14,7 +14,7 @@ _COMPRESS_CONCURRENCY = 16
 # Until then, it appears that the bug is only triggered on release builds with `opt-level=2`.
 # Until we’ve upgraded to the newest rustc (for which we’ll probably need to wait for a new rules_rust version)
 # we will run the macos tests with `opt-level=0` to avoid the bug.
-workaround_apple_linker_bug = select({
+rustc_flags_fixing_apple_linker_bug = select({
     "//bazel:x86_64-darwin": [
         "-C",
         "opt-level=0",
