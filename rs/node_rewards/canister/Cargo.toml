@@ -22,12 +22,12 @@ ic-cdk-timers = { workspace = true }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
+ic-node-rewards-proto = { path = "../proto" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-node-rewards-canister-api = { path = "./api" }
 ic-registry-canister-client = { path = "../../registry/canister-client" }
 ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-node-provider-rewards = { path = "../../registry/node_provider_rewards" }
-ic-registry-transport = { path = "../../registry/transport" }
 ic-stable-structures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-types = { path = "../../types/types" }
@@ -36,7 +36,6 @@ mockall = { workspace = true }
 prost = { workspace = true }
 rewards-calculation = { path = "../rewards_calculation" }
 serde = { workspace = true }
-serde_cbor = "0.11.2"
 
 [dev-dependencies]
 candid_parser = { workspace = true }

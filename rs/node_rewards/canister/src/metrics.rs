@@ -1,12 +1,12 @@
-use crate::metrics_types::{
-    KeyRange, NodeMetricsDailyStored, SubnetIdKey, SubnetMetricsDailyKeyStored,
-    SubnetMetricsDailyValueStored,
-};
 use async_trait::async_trait;
 use candid::Principal;
 use ic_base_types::SubnetId;
 use ic_cdk::api::call::CallResult;
 use ic_management_canister_types_private::{NodeMetricsHistoryArgs, NodeMetricsHistoryResponse};
+use ic_node_rewards_proto::pb::v1::{
+    NodeMetricsDailyStored, SubnetIdKey, SubnetMetricsDailyKeyStored, SubnetMetricsDailyValueStored,
+};
+use ic_node_rewards_proto::KeyRange;
 use ic_stable_structures::StableBTreeMap;
 use rewards_calculation::types::{NodeMetricsDailyRaw, SubnetMetricsDailyKey, UnixTsNanos};
 use std::cell::RefCell;
@@ -64,7 +64,7 @@ where
             .subnets_to_retry
             .borrow()
             .keys()
-            .map(|key| key.0)
+            .map(|key| key.into())
             .collect();
 
         if !subnets_to_retry.is_empty() {
@@ -134,7 +134,7 @@ where
 
             self.subnets_metrics.borrow_mut().insert(
                 SubnetMetricsDailyKeyStored {
-                    subnet_id,
+                    subnet_id: Some(subnet_id.get()),
                     ts: one_day_update.timestamp_nanos,
                 },
                 SubnetMetricsDailyValueStored {
@@ -190,10 +190,7 @@ where
         let last_timestamp_per_subnet: BTreeMap<SubnetId, _> = subnets
             .into_iter()
             .map(|subnet| {
-                let last_timestamp = self
-                    .last_timestamp_per_subnet
-                    .borrow()
-                    .get(&SubnetIdKey(subnet));
+                let last_timestamp = self.last_timestamp_per_subnet.borrow().get(&subnet.into());
 
                 (subnet, last_timestamp)
             })

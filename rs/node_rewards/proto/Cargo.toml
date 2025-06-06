@@ -8,11 +8,9 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-comparable = { version = "0.5.1", features = ["derive"] }
+rewards-calculation = { path = "../rewards_calculation" }
+ic-stable-structures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 prost = { workspace = true }
 rust_decimal = "1.36.0"
 serde = { workspace = true }
-
-[dev-dependencies]
-tempfile = { workspace = true }

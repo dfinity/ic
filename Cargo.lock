@@ -11540,11 +11540,11 @@ dependencies = [
  "ic-nns-constants",
  "ic-nns-test-utils",
  "ic-node-rewards-canister-api",
+ "ic-node-rewards-proto",
  "ic-protobuf",
  "ic-registry-canister-client",
  "ic-registry-keys",
  "ic-registry-node-provider-rewards",
- "ic-registry-transport",
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-types",
@@ -11554,7 +11554,6 @@ dependencies = [
  "prost 0.13.4",
  "rewards-calculation",
  "serde",
- "serde_cbor",
  "serde_json",
  "tokio",
 ]
@@ -11576,12 +11575,12 @@ name = "ic-node-rewards-proto"
 version = "0.9.0"
 dependencies = [
  "candid",
- "comparable",
  "ic-base-types",
+ "ic-stable-structures",
  "prost 0.13.4",
+ "rewards-calculation",
  "rust_decimal",
  "serde",
- "tempfile",
 ]
 
 [[package]]
