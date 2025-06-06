@@ -12,7 +12,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 
 mod mock {
-    use super::*;
+    use super::{CallResult, NodeMetricsHistoryArgs, NodeMetricsHistoryResponse};
     use crate::metrics::ManagementCanisterClient;
     use async_trait::async_trait;
     use mockall::mock;
@@ -121,7 +121,7 @@ async fn multiple_subnets_metrics_added_correctly() {
         for i in 0..days {
             let key = SubnetMetricsDailyKeyStored {
                 ts: i * ONE_DAY_NANOS,
-                subnet_id: Some(*subnet.get()),
+                subnet_id: Some(subnet.get()),
             };
             assert!(
                 mm.subnets_metrics.borrow().get(&key).is_some(),

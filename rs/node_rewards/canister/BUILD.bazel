@@ -38,6 +38,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:candid_parser",
     "@crate_index//:futures-util",
     "@crate_index//:maplit",
+    "@crate_index//:mockall",
     "@crate_index//:serde_json",
     "@crate_index//:tokio",
 ]
