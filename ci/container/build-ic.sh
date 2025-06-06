@@ -110,7 +110,7 @@ export VERSION="$(git rev-parse HEAD)"
 BAZEL_TARGETS=()
 
 BAZEL_COMMON_ARGS=(
-    --config=local
+    --noremote_accept_cached
     --color=yes
 )
 
