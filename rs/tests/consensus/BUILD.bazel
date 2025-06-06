@@ -195,6 +195,36 @@ system_test_nns(
 )
 
 system_test_nns(
+    name = "cup_explorer_test",
+    tags = [
+        "k8s",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/cup_explorer",
+        "//rs/nns/constants",
+        "//rs/protobuf",
+        "//rs/registry/canister",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:prost",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:slog",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test_nns(
     name = "subnet_splitting_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [

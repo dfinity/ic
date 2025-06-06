@@ -94,7 +94,7 @@ use std::str::FromStr;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{remove_file, File},
-    io::{BufReader, Write},
+    io::{BufReader, Read, Write},
     net::SocketAddr,
     path::PathBuf,
     sync::{Arc, Mutex, RwLock},
@@ -180,13 +180,14 @@ fn compute_subnet_seed(
     if let Some(range) = alloc_range {
         ranges.push(range);
     }
+    ranges.sort();
     hasher.write(format!("{:?}", ranges).as_bytes());
     hasher.finish()
 }
 
 #[derive(Clone, Deserialize, Serialize)]
 struct RawTopologyInternal {
-    pub subnet_configs: BTreeMap<String, RawSubnetConfigInternal>,
+    pub subnet_configs: Vec<RawSubnetConfigInternal>,
     pub default_effective_canister_id: RawCanisterId,
     pub icp_features: Option<IcpFeatures>,
     pub synced_registry_version: Option<u64>,
@@ -200,7 +201,7 @@ struct RawSubnetConfigInternal {
 
 #[derive(Clone)]
 struct TopologyInternal {
-    pub subnet_configs: BTreeMap<[u8; 32], SubnetConfigInternal>,
+    pub subnet_configs: Vec<SubnetConfigInternal>,
     pub default_effective_canister_id: Principal,
 }
 
@@ -609,10 +610,7 @@ impl PocketIcSubnets {
             .unwrap_or(GENESIS.into())
     }
 
-    fn create_subnet(
-        &mut self,
-        subnet_config_info: SubnetConfigInfo,
-    ) -> ([u8; 32], SubnetConfigInternal) {
+    fn create_subnet(&mut self, subnet_config_info: SubnetConfigInfo) -> SubnetConfigInternal {
         let SubnetConfigInfo {
             ranges,
             alloc_range,
@@ -806,14 +804,13 @@ impl PocketIcSubnets {
             }
         }
 
-        let subnet_config_internal = SubnetConfigInternal {
+        SubnetConfigInternal {
             subnet_id,
             subnet_kind,
             instruction_config,
             ranges,
             alloc_range,
-        };
-        (subnet_seed, subnet_config_internal)
+        }
     }
 
     fn get_nns(&self) -> Option<Arc<StateMachine>> {
@@ -937,15 +934,12 @@ impl Drop for PocketIc {
                 .topology
                 .subnet_configs
                 .iter()
-                .map(|(seed, config)| {
+                .map(|config| {
                     let time = self.subnets.get(config.subnet_id).unwrap().time();
-                    (
-                        hex::encode(seed),
-                        RawSubnetConfigInternal {
-                            subnet_config: config.clone(),
-                            time,
-                        },
-                    )
+                    RawSubnetConfigInternal {
+                        subnet_config: config.clone(),
+                        time,
+                    }
                 })
                 .collect();
             let raw_topology: RawTopologyInternal = RawTopologyInternal {
@@ -994,16 +988,17 @@ impl Drop for PocketIc {
 impl PocketIc {
     pub(crate) fn topology(&self) -> Topology {
         let mut subnet_configs = BTreeMap::new();
-        for (subnet_seed, config) in self.topology.subnet_configs.iter() {
+        for config in self.topology.subnet_configs.iter() {
             // What will be returned to the client:
             let mut canister_ranges: Vec<rest::CanisterIdRange> =
                 config.ranges.iter().map(from_range).collect();
             if let Some(alloc_range) = config.alloc_range {
                 canister_ranges.push(from_range(&alloc_range));
             }
+            let subnet_seed = compute_subnet_seed(config.ranges.clone(), config.alloc_range);
             let subnet_config = pocket_ic::common::rest::SubnetConfig {
                 subnet_kind: config.subnet_kind,
-                subnet_seed: *subnet_seed,
+                subnet_seed,
                 node_ids: self
                     .subnets
                     .get(config.subnet_id)
@@ -1037,6 +1032,18 @@ impl PocketIc {
             subnet_configs = subnet_configs.with_icp_features(icp_features);
         }
 
+        let registry: Option<Vec<u8>> = if let Some(ref state_dir) = state_dir {
+            let registry_file_path = state_dir.join("registry.proto");
+            File::open(registry_file_path).ok().map(|file| {
+                let mut reader = BufReader::new(file);
+                let mut buffer = Vec::new();
+                reader.read_to_end(&mut buffer).unwrap();
+                buffer
+            })
+        } else {
+            None
+        };
+
         let topology: Option<RawTopologyInternal> = if let Some(ref state_dir) = state_dir {
             let topology_file_path = state_dir.join("topology.json");
             File::open(topology_file_path).ok().map(|file| {
@@ -1060,7 +1067,7 @@ impl PocketIc {
         let mut subnet_config_info: Vec<SubnetConfigInfo> = if let Some(topology) = topology {
             topology
                 .subnet_configs
-                .into_values()
+                .into_iter()
                 .map(|config| {
                     range_gen
                         .add_assigned(config.subnet_config.ranges.clone())
@@ -1249,24 +1256,32 @@ impl PocketIc {
             icp_features,
             synced_registry_version,
         );
-        let mut subnet_configs = BTreeMap::new();
+        let mut subnet_configs = Vec::new();
         for subnet_config_info in subnet_config_info.into_iter() {
-            let (subnet_seed, subnet_config_internal) = subnets.create_subnet(subnet_config_info);
-            subnet_configs.insert(subnet_seed, subnet_config_internal);
+            let subnet_config_internal = subnets.create_subnet(subnet_config_info);
+            subnet_configs.push(subnet_config_internal);
+        }
+
+        if let Some(registry) = registry {
+            let mut buffer = Vec::new();
+            subnets.registry_data_provider.encode(&mut buffer);
+            if registry != buffer {
+                return Err("Registry could not be restored.".to_string());
+            }
         }
 
         let default_effective_canister_id = subnet_configs
-            .values()
+            .iter()
             .find(|config| config.subnet_kind == SubnetKind::Application)
             .unwrap_or_else(|| {
                 subnet_configs
-                    .values()
+                    .iter()
                     .find(|config| config.subnet_kind == SubnetKind::VerifiedApplication)
                     .unwrap_or_else(|| {
                         subnet_configs
-                            .values()
+                            .iter()
                             .find(|config| config.subnet_kind == SubnetKind::System)
-                            .unwrap_or_else(|| subnet_configs.values().next().unwrap())
+                            .unwrap_or_else(|| subnet_configs.first().unwrap())
                     })
             })
             .default_effective_canister_id();
@@ -2992,19 +3007,16 @@ fn route(
                     // and all existing canister ranges within the PocketIC instance and thus we use
                     // `RangeGen::next_range()` to produce such a canister range.
                     let canister_allocation_range = pic.range_gen.next_range();
-                    let (subnet_seed, subnet_config_internal) =
-                        pic.subnets.create_subnet(SubnetConfigInfo {
-                            ranges: vec![range],
-                            alloc_range: Some(canister_allocation_range),
-                            subnet_id: None,
-                            subnet_state_dir: None,
-                            subnet_kind,
-                            instruction_config,
-                            time: GENESIS.into(),
-                        });
-                    pic.topology
-                        .subnet_configs
-                        .insert(subnet_seed, subnet_config_internal);
+                    let subnet_config_internal = pic.subnets.create_subnet(SubnetConfigInfo {
+                        ranges: vec![range],
+                        alloc_range: Some(canister_allocation_range),
+                        subnet_id: None,
+                        subnet_state_dir: None,
+                        subnet_kind,
+                        instruction_config,
+                        time: GENESIS.into(),
+                    });
+                    pic.topology.subnet_configs.push(subnet_config_internal);
                     Ok(pic.try_route_canister(canister_id).unwrap())
                 } else {
                     // If the request is not an update call to create a canister using the provisional API,

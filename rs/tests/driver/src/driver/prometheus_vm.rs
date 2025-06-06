@@ -15,7 +15,6 @@ use serde_json::json;
 use slog::{debug, info, warn, Logger};
 
 use crate::driver::{
-    boundary_node::BoundaryNodeVm,
     constants::SSH_USERNAME,
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
@@ -83,9 +82,7 @@ const BITCOIN_WATCHDOG_MAINNET_CANISTER_PROMETHEUS_TARGET: &str =
     "bitcoin_watchdog_mainnet_canister.json";
 const BITCOIN_WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET: &str =
     "bitcoin_watchdog_testnet_canister.json";
-const BN_PROMETHEUS_TARGET: &str = "boundary_nodes.json";
 const IC_GATEWAY_PROMETHEUS_TARGET: &str = "ic_gateways.json";
-const BN_EXPORTER_PROMETHEUS_TARGET: &str = "boundary_nodes_exporter.json";
 const IC_BOUNDARY_PROMETHEUS_TARGET: &str = "ic_boundary.json";
 const GRAFANA_DASHBOARDS: &str = "grafana_dashboards";
 
@@ -385,18 +382,9 @@ pub trait HasPrometheus {
     /// This allows this function to be used in a finalizer where no prometheus
     /// server has been setup.
     fn download_prometheus_data_dir_if_exists(&self);
-
-    /// Get the playnet Domain of the boundary node with the given name.
-    fn get_playnet_domain(&self, boundary_node_name: &str) -> Option<String>;
 }
 
 impl HasPrometheus for TestEnv {
-    fn get_playnet_domain(&self, boundary_node_name: &str) -> Option<String> {
-        self.get_deployed_boundary_node(boundary_node_name)
-            .ok()
-            .and_then(|bn| bn.get_snapshot().ok()?.get_playnet())
-    }
-
     fn sync_with_prometheus(&self) {
         self.sync_with_prometheus_by_name("", None)
     }
@@ -417,12 +405,6 @@ impl HasPrometheus for TestEnv {
             &playnet_domain,
         )
         .expect("Failed to synchronize prometheus config with the latest IC topology!");
-        sync_prometheus_config_dir_with_boundary_nodes(
-            self,
-            prometheus_config_dir.clone(),
-            group_name.clone(),
-        )
-        .expect("Failed to synchronize prometheus config with the last deployments of the boundary nodes");
         sync_prometheus_config_dir_with_ic_gateways(
             self,
             prometheus_config_dir.clone(),
@@ -441,8 +423,6 @@ impl HasPrometheus for TestEnv {
             REPLICA_PROMETHEUS_TARGET,
             ORCHESTRATOR_PROMETHEUS_TARGET,
             NODE_EXPORTER_PROMETHEUS_TARGET,
-            BN_PROMETHEUS_TARGET,
-            BN_EXPORTER_PROMETHEUS_TARGET,
             IC_BOUNDARY_PROMETHEUS_TARGET,
             IC_GATEWAY_PROMETHEUS_TARGET,
         ];
@@ -540,10 +520,6 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
     let prometheus_config_dir = config_dir.join(PROMETHEUS_CONFIG_DIR_NAME);
     fs::create_dir_all(prometheus_config_dir.clone())?;
 
-    let boundary_nodes_scraping_targets_path =
-        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(BN_PROMETHEUS_TARGET);
-    let boundary_nodes_exporter_scraping_targets_path =
-        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(BN_EXPORTER_PROMETHEUS_TARGET);
     let ic_boundary_scraping_targets_path =
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(IC_BOUNDARY_PROMETHEUS_TARGET);
     let ic_gateways_scraping_targets_path =
@@ -570,16 +546,6 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
     let prometheus_config = json!({
         "global": {"scrape_interval": scrape_interval_str},
         "scrape_configs": [
-            {
-                "job_name": "boundary_nodes",
-                "fallback_scrape_protocol": "PrometheusText0.0.4",
-                "file_sd_configs": [{"files": [boundary_nodes_scraping_targets_path]}],
-            },
-            {
-                "job_name": "boundary_nodes_exporter",
-                "fallback_scrape_protocol": "PrometheusText0.0.4",
-                "file_sd_configs": [{"files": [boundary_nodes_exporter_scraping_targets_path]}],
-            },
             {
                 "job_name": "ic_gateways",
                 "fallback_scrape_protocol": "PrometheusText0.0.4",
@@ -662,55 +628,6 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
     let prometheus_config_path = prometheus_config_dir.join("prometheus.yml");
     let prometheus_config_file = File::create(prometheus_config_path)?;
     serde_json::to_writer(prometheus_config_file, &prometheus_config)?;
-    Ok(())
-}
-
-fn sync_prometheus_config_dir_with_boundary_nodes(
-    env: &TestEnv,
-    prometheus_config_dir: PathBuf,
-    group_name: String,
-) -> Result<()> {
-    let mut boundary_nodes_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
-    let mut boundary_nodes_exporter_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
-
-    let bns: Vec<(String, Ipv6Addr)> = env
-        .get_deployed_boundary_nodes()
-        .into_iter()
-        .map(|bn| {
-            let vm = bn.get_vm().unwrap();
-            (vm.hostname, vm.ipv6)
-        })
-        .collect();
-
-    for (name, ipv6) in bns.iter() {
-        let labels: HashMap<String, String> = [
-            ("ic".to_string(), group_name.clone()),
-            ("ic_boundary_node".to_string(), name.to_string()),
-        ]
-        .iter()
-        .cloned()
-        .collect();
-        boundary_nodes_p8s_static_configs.push(PrometheusStaticConfig {
-            targets: vec![format!("[{:?}]:{:?}", ipv6, IC_BOUNDARY_METRICS_PORT)],
-            labels: labels.clone(),
-        });
-        boundary_nodes_exporter_p8s_static_configs.push(PrometheusStaticConfig {
-            targets: vec![format!("[{:?}]:{:?}", ipv6, NODE_EXPORTER_METRICS_PORT)],
-            labels: labels.clone(),
-        });
-    }
-    for (name, p8s_static_configs) in &[
-        (BN_PROMETHEUS_TARGET, boundary_nodes_p8s_static_configs),
-        (
-            BN_EXPORTER_PROMETHEUS_TARGET,
-            boundary_nodes_exporter_p8s_static_configs,
-        ),
-    ] {
-        ::serde_json::to_writer(
-            &File::create(prometheus_config_dir.join(name))?,
-            &p8s_static_configs,
-        )?;
-    }
     Ok(())
 }
 

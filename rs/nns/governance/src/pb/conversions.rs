@@ -984,6 +984,7 @@ impl From<pb::manage_neuron::DisburseMaturity> for pb_api::manage_neuron::Disbur
         Self {
             percentage_to_disburse: item.percentage_to_disburse,
             to_account: item.to_account.map(|x| x.into()),
+            to_account_identifier: item.to_account_identifier,
         }
     }
 }
@@ -992,6 +993,7 @@ impl From<pb_api::manage_neuron::DisburseMaturity> for pb::manage_neuron::Disbur
         Self {
             percentage_to_disburse: item.percentage_to_disburse,
             to_account: item.to_account.map(|x| x.into()),
+            to_account_identifier: item.to_account_identifier,
         }
     }
 }
@@ -2632,59 +2634,6 @@ impl From<pb_api::update_canister_settings::LogVisibility>
     }
 }
 
-impl From<pb_api::Governance> for pb::Governance {
-    fn from(item: pb_api::Governance) -> Self {
-        Self {
-            neurons: item
-                .neurons
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            proposals: item
-                .proposals
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            to_claim_transfers: item
-                .to_claim_transfers
-                .into_iter()
-                .map(|x| x.into())
-                .collect(),
-            wait_for_quiet_threshold_seconds: item.wait_for_quiet_threshold_seconds,
-            economics: item.economics.map(|x| x.into()),
-            latest_reward_event: item.latest_reward_event.map(|x| x.into()),
-            in_flight_commands: item
-                .in_flight_commands
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            genesis_timestamp_seconds: item.genesis_timestamp_seconds,
-            node_providers: item.node_providers.into_iter().map(|x| x.into()).collect(),
-            default_followees: item
-                .default_followees
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            short_voting_period_seconds: item.short_voting_period_seconds,
-            neuron_management_voting_period_seconds: item.neuron_management_voting_period_seconds,
-            metrics: item.metrics.map(|x| x.into()),
-            most_recent_monthly_node_provider_rewards: item
-                .most_recent_monthly_node_provider_rewards
-                .map(|x| x.into()),
-            cached_daily_maturity_modulation_basis_points: item
-                .cached_daily_maturity_modulation_basis_points,
-            maturity_modulation_last_updated_at_timestamp_seconds: item
-                .maturity_modulation_last_updated_at_timestamp_seconds,
-            spawning_neurons: item.spawning_neurons,
-            making_sns_proposal: item.making_sns_proposal.map(|x| x.into()),
-            xdr_conversion_rate: item.xdr_conversion_rate.map(|x| x.into()),
-            restore_aging_summary: item.restore_aging_summary.map(|x| x.into()),
-            // This is not intended to be initialized from outside of canister.
-            rng_seed: None,
-        }
-    }
-}
-
 impl From<pb_api::governance::NeuronInFlightCommand> for pb::governance::NeuronInFlightCommand {
     fn from(item: pb_api::governance::NeuronInFlightCommand) -> Self {
         Self {
@@ -4007,7 +3956,15 @@ impl From<pb::MaturityDisbursement> for pb_api::MaturityDisbursement {
     fn from(item: pb::MaturityDisbursement) -> Self {
         Self {
             amount_e8s: Some(item.amount_e8s),
-            account_to_disburse_to: item.account_to_disburse_to.map(|x| x.into()),
+            account_to_disburse_to: item
+                .destination
+                .as_ref()
+                .and_then(|x| x.into_account())
+                .map(|x| x.into()),
+            account_identifier_to_disburse_to: item
+                .destination
+                .as_ref()
+                .and_then(|x| x.into_account_identifier_proto()),
             timestamp_of_disbursement_seconds: Some(item.timestamp_of_disbursement_seconds),
             finalize_disbursement_timestamp_seconds: Some(
                 item.finalize_disbursement_timestamp_seconds,
