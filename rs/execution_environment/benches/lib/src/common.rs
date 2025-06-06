@@ -41,7 +41,7 @@ use lazy_static::lazy_static;
 use std::{convert::TryFrom, path::Path, sync::Arc};
 
 pub const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(500_000_000_000);
-// Note: this canister ID is required for the `ic0_mint_cycles()`
+// Note: this canister ID is required for the `ic0_mint_cycles128()`
 pub const LOCAL_CANISTER_ID: u64 = CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
 pub const REMOTE_CANISTER_ID: u64 = 1;
 pub const USER_ID: u64 = 0;
