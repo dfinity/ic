@@ -11,6 +11,20 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-06-06: Proposal 136892
+
+http://dashboard.internetcomputer.org/proposal/136892
+
+## Security
+
+Enforce a lower bound for `min_participant_icp_e8s` of `1_000_000`.
+
+TODO: Due to the common dependency of NNS Governance and SNS-W on rs/sns/init,
+TODO: it is required that the NNS Governance release with the change announces above
+TODO: is released *before* the analogous SNS-W release. Therefore, SNS-W should not
+TODO: be released until May 30th.
+
+
 # 2025-05-02: Proposal 136430
 
 https://dashboard.internetcomputer.org/proposal/136430
