@@ -53,18 +53,3 @@ rust_test(
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )
 
-generated_files_check(
-    name = "check_generated_files",
-    srcs = ["tests/check_generated_files.rs"],
-    data = glob(["src/gen/**/*.rs"]) + [
-        ":protos",
-        "//rs/types/base_types:protos",
-    ],
-    manifest_dir = "rs/nervous_system/proto",
-    deps = [
-        # Keep sorted.
-        "//rs/nervous_system/proto/protobuf_generator:lib",
-        "//rs/test_utilities/compare_dirs",
-        "@crate_index//:tempfile",
-    ],
-)
