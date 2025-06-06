@@ -1,4 +1,4 @@
-use chrono::DateTime;
+use chrono_canisters::DateTime;
 use rewards_calculation::rewards_calculator_results;
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;

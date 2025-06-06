@@ -1,5 +1,5 @@
 {
-  "checksum": "21430b16e8a299a0a20d265771513910a8fa53d6b3b1030a86ad10485eda72d8",
+  "checksum": "eaf412dcfb16cf17bf2705bc68b5fff35d4f1f293911596b6d12e9e443f37d37",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -20042,6 +20042,11 @@
             {
               "id": "chrono 0.4.38",
               "target": "chrono"
+            },
+            {
+              "id": "chrono 0.4.38",
+              "target": "chrono",
+              "alias": "chrono_canisters"
             },
             {
               "id": "ciborium 0.2.1",

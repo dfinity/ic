@@ -378,6 +378,15 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "serde",
                 ],
             ),
+            "chrono_canisters": crate.spec(
+                git = "https://github.com/chronotope/chrono.git",
+                package = "chrono",
+                tag = "v0.4.38",
+                default_features = False,
+                features = [
+                    "alloc",
+                ],
+            ),
             "ciborium": crate.spec(
                 version = "^0.2.1",
             ),
