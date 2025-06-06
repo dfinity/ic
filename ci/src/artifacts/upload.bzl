@@ -15,7 +15,7 @@ def _upload_artifact_impl(ctx):
 
     uploader = ctx.file._artifacts_uploader
     exe = ctx.actions.declare_file("run-upload-" + ctx.attr.name)
-    cmds = [uploader.path + " " + bundle.short_path for bundle in ctx.files.inputs]
+    cmds = ["$UPLOADER " + bundle.short_path for bundle in ctx.files.inputs]
     ctx.actions.write(
         output = exe,
         content = """
@@ -23,6 +23,7 @@ def _upload_artifact_impl(ctx):
 
         set -euo pipefail
 
+        UPLOADER={uploader}
         VERSION_FILE={version_file}
         export RCLONE={rclone}
         export VERSION=$(cat $VERSION_FILE)
@@ -32,13 +33,13 @@ def _upload_artifact_impl(ctx):
         do
             p=$(cd "$BUILD_WORKSPACE_DIRECTORY"; realpath "$1")
             shift
-            {uploader} "$p"
+            $UPLOADER "$p"
         done
 
         # upload any artifacts baked into the uploader (for local bazel targets)
         {cmds}
 
-        """.format(cmds = "\n".join(cmds), version_file = version_file.short_path, rclone = rclone.short_path, uploader = uploader.path),
+        """.format(uploader = uploader.path, cmds = "\n".join(cmds), version_file = version_file.short_path, rclone = rclone.short_path),
         is_executable = True,
     )
 
