@@ -1,5 +1,5 @@
 {
-  "checksum": "eaf412dcfb16cf17bf2705bc68b5fff35d4f1f293911596b6d12e9e443f37d37",
+  "checksum": "dfbcc1a9f4be502ed18931e87254cce95567075dc6a74d18931fb19eae77cc16",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -12779,6 +12779,66 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "chrono 0.4.19": {
+      "name": "chrono",
+      "version": "0.4.19",
+      "package_url": "https://github.com/chronotope/chrono",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/chronotope/chrono.git",
+          "commitish": {
+            "Rev": "4eeedcfcc409f19d965f477d767d05f3418c4df1"
+          }
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "chrono",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "chrono",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "num-integer 0.1.46",
+              "target": "num_integer"
+            },
+            {
+              "id": "num-traits 0.2.19",
+              "target": "num_traits"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "0.4.19"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE.txt"
+    },
     "chrono 0.4.38": {
       "name": "chrono",
       "version": "0.4.38",
@@ -20040,13 +20100,13 @@
               "target": "chacha20poly1305"
             },
             {
-              "id": "chrono 0.4.38",
-              "target": "chrono"
+              "id": "chrono 0.4.19",
+              "target": "chrono",
+              "alias": "chrono_canisters"
             },
             {
               "id": "chrono 0.4.38",
-              "target": "chrono",
-              "alias": "chrono_canisters"
+              "target": "chrono"
             },
             {
               "id": "ciborium 0.2.1",
@@ -91458,6 +91518,7 @@
     "cddl 0.9.4",
     "cfg-if 1.0.0",
     "chacha20poly1305 0.10.1",
+    "chrono 0.4.19",
     "chrono 0.4.38",
     "ciborium 0.2.1",
     "cidr 0.2.3",

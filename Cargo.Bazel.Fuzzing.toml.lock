@@ -2181,6 +2181,15 @@ dependencies = [
 
 [[package]]
 name = "chrono"
+version = "0.4.19"
+source = "git+https://github.com/chronotope/chrono.git?tag=v0.4.19#4eeedcfcc409f19d965f477d767d05f3418c4df1"
+dependencies = [
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
+name = "chrono"
 version = "0.4.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a21f936df1771bf62b77f047b726c4625ff2e8aa607c01ec06e5a05bd8463401"
@@ -2192,14 +2201,6 @@ dependencies = [
  "serde",
  "wasm-bindgen",
  "windows-targets 0.52.6",
-]
-
-[[package]]
-name = "chrono"
-version = "0.4.38"
-source = "git+https://github.com/chronotope/chrono.git?tag=v0.4.38#352a35203a140e2352e5a5be62ba8dfd03b616e1"
-dependencies = [
- "num-traits",
 ]
 
 [[package]]
@@ -3443,7 +3444,7 @@ dependencies = [
  "cddl",
  "cfg-if 1.0.0",
  "chacha20poly1305",
- "chrono 0.4.38",
+ "chrono 0.4.19",
  "chrono 0.4.38",
  "ciborium",
  "cidr",
