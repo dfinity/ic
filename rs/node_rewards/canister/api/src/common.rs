@@ -42,8 +42,9 @@ impl TryFrom<rewards_calculator_results::Percent> for Percent {
 }
 
 #[derive(candid::CandidType, candid::Deserialize)]
-#[allow(deprecated)]
 pub struct DayUTC(String);
+
+#[allow(deprecated)]
 impl From<rewards_calculator_results::DayUTC> for DayUTC {
     fn from(value: rewards_calculator_results::DayUTC) -> Self {
         let secs = value.unix_ts_at_day_end() as i64 / 1_000_000_000;
