@@ -100,11 +100,6 @@ fn upload_snapshot_with_checkpoint() {
     assert_eq!(counter_canister_wasm, module_dl);
     let heap_dl = env.get_snapshot_heap(&md_args).unwrap();
     let stable_memory_dl = env.get_snapshot_stable_memory(&md_args).unwrap();
-    let stable_memory_nonzero: Vec<u8> = stable_memory_dl
-        .clone()
-        .into_iter()
-        .filter(|x| *x != 0)
-        .collect();
     let chunk_store_dl = env.get_snapshot_chunk_store(&md_args).unwrap();
     assert_eq!(stable_memory_dl.len(), num_pages * (1 << 16));
     assert!(stable_memory_dl.ends_with(&[num_pages as u8, 0, 0, 0]));
@@ -181,12 +176,6 @@ fn upload_snapshot_with_checkpoint() {
     assert_eq!(md.stable_memory_size, md_2.stable_memory_size);
     assert_eq!(md.wasm_chunk_store, md_2.wasm_chunk_store);
     let stable_memory_dl_2 = env.get_snapshot_stable_memory(&md_args_2).unwrap();
-    let stable_memory_nonzero_2: Vec<u8> = stable_memory_dl_2
-        .clone()
-        .into_iter()
-        .filter(|x| *x != 0)
-        .collect();
-    assert_eq!(stable_memory_nonzero, stable_memory_nonzero_2);
     assert_eq!(stable_memory_dl, stable_memory_dl_2);
     let res_2 = env.execute_ingress(canister_id, "inc", vec![]).unwrap();
     // this implies that the module and heap were restored properly
