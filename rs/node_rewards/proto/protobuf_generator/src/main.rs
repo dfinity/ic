@@ -1,4 +1,4 @@
-use ic_registry_transport_protobuf_generator::{generate_prost_files, ProtoPaths};
+use ic_node_rewards_protobuf_generator::{generate_prost_files, ProtoPaths};
 use std::path::PathBuf;
 
 fn main() {
@@ -7,8 +7,8 @@ fn main() {
             .expect("CARGO_MANIFEST_DIR env variable is not defined"),
     );
     let out = manifest_dir.join("../src/gen");
-    let transport_proto = manifest_dir.join("../proto");
-    let protobuf_proto = manifest_dir.join("../../../protobuf/def");
+    let node_rewards_proto = manifest_dir.join("../proto");
+    let base_types_proto = manifest_dir.join("../../../types/base_types/proto");
 
     match std::fs::remove_dir_all(&out) {
         Ok(_) => (),
@@ -21,8 +21,8 @@ fn main() {
     }
     generate_prost_files(
         ProtoPaths {
-            transport: &transport_proto,
-            protobuf: &protobuf_proto,
+            node_rewards: &node_rewards_proto,
+            base_types: &base_types_proto,
         },
         out.as_ref(),
     );

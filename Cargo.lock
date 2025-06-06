@@ -11572,6 +11572,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-node-rewards-proto"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "comparable",
+ "ic-base-types",
+ "prost 0.13.4",
+ "rust_decimal",
+ "serde",
+ "tempfile",
+]
+
+[[package]]
+name = "ic-node-rewards-protobuf-generator"
+version = "0.9.0"
+dependencies = [
+ "ic-utils-rustfmt",
+ "prost-build 0.13.4",
+]
+
+[[package]]
 name = "ic-p2p-test-utils"
 version = "0.9.0"
 dependencies = [

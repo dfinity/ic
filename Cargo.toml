@@ -242,6 +242,8 @@ members = [
     "rs/nns/sns-wasm/protobuf_generator",
     "rs/node_rewards/canister",
     "rs/node_rewards/canister/api",
+    "rs/node_rewards/proto",
+    "rs/node_rewards/proto/protobuf_generator",
     "rs/node_rewards/rewards_calculation",
     "rs/determinism_test",
     "rs/orchestrator",
