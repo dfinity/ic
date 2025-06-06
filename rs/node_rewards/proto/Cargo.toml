@@ -1,0 +1,16 @@
+[package]
+name = "ic-node-rewards-proto"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+rewards-calculation = { path = "../rewards_calculation" }
+ic-stable-structures = { workspace = true }
+ic-base-types = { path = "../../types/base_types" }
+prost = { workspace = true }
+rust_decimal = "1.36.0"
+serde = { workspace = true }
