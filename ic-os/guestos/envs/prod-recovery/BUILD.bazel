@@ -15,7 +15,6 @@ icos_images = icos_build(
     ],
     visibility = [
         "//rs:ic-os-pkg",
-        "//testnet/tools:icos_deploy-pkg",
     ],
 )
 
@@ -25,7 +24,9 @@ artifact_bundle(
     name = "bundle-disk",
     inputs = [icos_images.disk_image],
     prefix = "guest-os/disk-img-prod-recovery",
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//rs:ic-os-pkg",
+    ],
 )
 
 artifact_bundle(
@@ -35,5 +36,7 @@ artifact_bundle(
         icos_images.update_image_test,
     ],
     prefix = "guest-os/update-img-prod-recovery",
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//rs:ic-os-pkg",
+    ],
 )

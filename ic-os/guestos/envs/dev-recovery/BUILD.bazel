@@ -16,17 +16,17 @@ icos_images = icos_build(
     visibility = [
         "//rs:ic-os-pkg",
         "//rs:system-tests-pkg",
-        "//testnet/tools:icos_deploy-pkg",
     ],
 )
 
-# The icos_deploy testnet script needs this
 artifact_bundle(
     name = "bundle-disk",
     testonly = True,
     inputs = [icos_images.disk_image],
     prefix = "guest-os/disk-img-dev-recovery",
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//rs:ic-os-pkg",
+    ],
 )
 
 artifact_bundle(
@@ -34,5 +34,7 @@ artifact_bundle(
     testonly = True,
     inputs = [icos_images.update_image],
     prefix = "guest-os/update-img-dev-recovery",
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//rs:ic-os-pkg",
+    ],
 )
