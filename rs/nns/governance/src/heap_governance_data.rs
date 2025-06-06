@@ -5,6 +5,9 @@ use crate::pb::v1::{
     NeuronStakeTransfer, NodeProvider, ProposalData, RestoreAgingSummary, RewardEvent,
     XdrConversionRate as XdrConversionRatePb,
 };
+use ic_nns_governance_api::{
+    Governance as ApiGovernance, XdrConversionRate as ApiXdrConversionRate,
+};
 use std::collections::{BTreeMap, HashMap};
 
 /// A GovernanceProto representation on the heap, which should have everything except for neurons.
@@ -34,7 +37,7 @@ pub struct HeapGovernanceData {
 }
 
 /// Internal representation for `XdrConversionRatePb`.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct XdrConversionRate {
     /// Time at which this rate has been fetched.
     pub timestamp_seconds: u64,
@@ -81,10 +84,125 @@ impl From<XdrConversionRate> for XdrConversionRatePb {
     }
 }
 
+impl From<Option<ApiXdrConversionRate>> for XdrConversionRate {
+    fn from(src: Option<ApiXdrConversionRate>) -> Self {
+        let timestamp_seconds = src.as_ref().and_then(|x| x.timestamp_seconds);
+        let xdr_permyriad_per_icp = src.as_ref().and_then(|x| x.xdr_permyriad_per_icp);
+
+        match (timestamp_seconds, xdr_permyriad_per_icp) {
+            (Some(timestamp_seconds), Some(xdr_permyriad_per_icp)) => Self {
+                timestamp_seconds,
+                xdr_permyriad_per_icp,
+            },
+            _ => Self {
+                timestamp_seconds: 0,
+                xdr_permyriad_per_icp: 10_000,
+            },
+        }
+    }
+}
+
 /// Converts a vector of u8s to array of length 32, which is the length needed for our rng seed.
 /// If the array is the wrong size, this returns an error.
 fn vec_to_array(v: Vec<u8>) -> Result<[u8; 32], String> {
     <[u8; 32]>::try_from(v).map_err(|v| format!("Expected 32 bytes, got {}", v.len()))
+}
+
+/// Initializes the heap governance data from the api type (init arg).
+pub fn initialize_heap_governance_data(
+    initial_governance: ApiGovernance,
+    now_seconds: u64,
+) -> (BTreeMap<u64, Neuron>, HeapGovernanceData) {
+    // First, destructure the ApiGovernance.
+    let ApiGovernance {
+        neurons,
+        proposals,
+        to_claim_transfers,
+        wait_for_quiet_threshold_seconds,
+        economics,
+        latest_reward_event,
+        in_flight_commands,
+        genesis_timestamp_seconds,
+        node_providers,
+        default_followees,
+        short_voting_period_seconds,
+        neuron_management_voting_period_seconds,
+        metrics,
+        most_recent_monthly_node_provider_rewards,
+        cached_daily_maturity_modulation_basis_points,
+        maturity_modulation_last_updated_at_timestamp_seconds,
+        spawning_neurons,
+        making_sns_proposal,
+        xdr_conversion_rate,
+        restore_aging_summary,
+    } = initial_governance;
+
+    // Second, do trivial conversions.
+    let neurons = neurons.into_iter().map(|(k, v)| (k, v.into())).collect();
+    let proposals = proposals.into_iter().map(|(k, v)| (k, v.into())).collect();
+    let to_claim_transfers = to_claim_transfers.into_iter().map(|x| x.into()).collect();
+    let economics = economics.map(|x| x.into());
+    let in_flight_commands = in_flight_commands
+        .into_iter()
+        .map(|(k, v)| (k, v.into()))
+        .collect();
+    let node_providers = node_providers.into_iter().map(|x| x.into()).collect();
+    let default_followees = default_followees
+        .into_iter()
+        .map(|(k, v)| (k, v.into()))
+        .collect();
+    let metrics = metrics.map(|x| x.into());
+    let most_recent_monthly_node_provider_rewards =
+        most_recent_monthly_node_provider_rewards.map(|x| x.into());
+    let making_sns_proposal = making_sns_proposal.map(|x| x.into());
+    let restore_aging_summary = restore_aging_summary.map(|x| x.into());
+
+    // Third, fill in the missing fields.
+    let genesis_timestamp_seconds = if genesis_timestamp_seconds == 0 {
+        now_seconds
+    } else {
+        genesis_timestamp_seconds
+    };
+    let latest_reward_event = Some(latest_reward_event.map(RewardEvent::from).unwrap_or(
+        RewardEvent {
+            actual_timestamp_seconds: now_seconds,
+            day_after_genesis: 0,
+            settled_proposals: vec![],
+            distributed_e8s_equivalent: 0,
+            total_available_e8s_equivalent: 0,
+            rounds_since_last_distribution: Some(0),
+            latest_round_available_e8s_equivalent: Some(0),
+        },
+    ));
+    let neuron_management_voting_period_seconds =
+        neuron_management_voting_period_seconds.unwrap_or(48 * 60 * 60);
+    let xdr_conversion_rate = XdrConversionRate::from(xdr_conversion_rate);
+
+    // Fourth, assemble the HeapGovernanceData.
+    let heap_governance_data = HeapGovernanceData {
+        proposals,
+        to_claim_transfers,
+        wait_for_quiet_threshold_seconds,
+        economics,
+        latest_reward_event,
+        in_flight_commands,
+        genesis_timestamp_seconds,
+        node_providers,
+        default_followees,
+        short_voting_period_seconds,
+        neuron_management_voting_period_seconds,
+        metrics,
+        most_recent_monthly_node_provider_rewards,
+        cached_daily_maturity_modulation_basis_points,
+        maturity_modulation_last_updated_at_timestamp_seconds,
+        spawning_neurons,
+        making_sns_proposal,
+        xdr_conversion_rate,
+        restore_aging_summary,
+    };
+
+    // Finally, return the result.
+    (neurons, heap_governance_data)
 }
 
 /// Splits the governance proto (from UPGRADES_MEMORY) into HeapGovernanceData and neurons, because
@@ -124,8 +242,8 @@ pub fn split_governance_proto(
         rng_seed,
     } = governance_proto;
 
-    let neuron_management_voting_period_seconds =
-        neuron_management_voting_period_seconds.unwrap_or(48 * 60 * 60);
+    let neuron_management_voting_period_seconds = neuron_management_voting_period_seconds
+        .expect("Governance.neuron_management_voting_period_seconds must be specified.");
 
     let xdr_conversion_rate =
         xdr_conversion_rate.expect("Governance.xdr_conversion_rate must be specified.");
@@ -233,7 +351,7 @@ pub fn reassemble_governance_proto(
 mod tests {
     use super::*;
 
-    use crate::pb::v1::{Neuron, ProposalData};
+    use crate::pb::v1::ProposalData;
 
     use maplit::{btreemap, hashmap};
 
@@ -285,37 +403,34 @@ mod tests {
     }
 
     #[test]
-    fn split_and_reassemble_not_equal() {
-        let governance_proto = GovernanceProto {
-            neuron_management_voting_period_seconds: None,
-            ..simple_governance_proto()
-        };
-
-        let (heap_neurons, heap_governance_data, rng_seed) =
-            split_governance_proto(governance_proto.clone());
-        let reassembled_governance_proto =
-            reassemble_governance_proto(heap_neurons, heap_governance_data, rng_seed);
+    fn initialize_heap_governance_data_fills_in_missing_fields() {
+        let now_seconds = 1749068771;
+        let (_, heap_governance_data) =
+            initialize_heap_governance_data(ApiGovernance::default(), now_seconds);
 
         assert_eq!(
-            reassembled_governance_proto,
-            GovernanceProto {
-                neuron_management_voting_period_seconds: Some(48 * 60 * 60),
-                ..governance_proto
+            heap_governance_data.neuron_management_voting_period_seconds,
+            48 * 60 * 60
+        );
+        assert_eq!(heap_governance_data.genesis_timestamp_seconds, now_seconds);
+        assert_eq!(
+            heap_governance_data.xdr_conversion_rate,
+            XdrConversionRate {
+                timestamp_seconds: 0,
+                xdr_permyriad_per_icp: 10_000,
             }
         );
-    }
-
-    #[test]
-    fn private_voting_period_assumed_to_be_48h() {
-        let governance_proto = GovernanceProto {
-            xdr_conversion_rate: Some(XdrConversionRatePb::with_default_values()),
-            ..GovernanceProto::default()
-        };
-        // split_governance_proto should return a HeapGovernanceData where the neuron_management_voting_period_seconds is 0 when given a default input
-        let (_, heap_governance_proto, _) = split_governance_proto(governance_proto);
         assert_eq!(
-            heap_governance_proto.neuron_management_voting_period_seconds,
-            48 * 60 * 60
+            heap_governance_data.latest_reward_event,
+            Some(RewardEvent {
+                actual_timestamp_seconds: now_seconds,
+                day_after_genesis: 0,
+                settled_proposals: vec![],
+                distributed_e8s_equivalent: 0,
+                total_available_e8s_equivalent: 0,
+                rounds_since_last_distribution: Some(0),
+                latest_round_available_e8s_equivalent: Some(0),
+            })
         );
     }
 }
