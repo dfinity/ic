@@ -203,7 +203,6 @@ def icos_build(
         # For backwards compatibility in GuestOS and HostOS,
         # we continue to support the old way of calculating the dynamic args (see :extra_boot_args).
 
-
         if image_deps.get("requires_root_signing", False):
             # Sign the root partition and substitute ROOT_HASH in boot args
             native.genrule(
@@ -250,7 +249,13 @@ def icos_build(
                 cmd = "cp $(location :boot_args_template) $@",
                 tags = ["manual"],
             )
-            native.alias(name = extra_boot_args, actual = image_deps["extra_boot_args"], tags = ["manual"])
+            native.genrule(
+                name = "generate-" + extra_boot_args,
+                outs = [extra_boot_args],
+                srcs = [":extra_boot_args_template"],
+                cmd = "cp $(location :extra_boot_args_template) $@",
+                tags = ["manual"],
+            )
 
     component_file_references_test(
         name = name + "_component_file_references_test",
@@ -265,11 +270,10 @@ def icos_build(
         actual = image_deps["boot_args_template"],
     )
 
-    if "extra_boot_args_template" in image_deps:
-        native.alias(
-            name = "extra_boot_args_template",
-            actual = image_deps["extra_boot_args_template"],
-        )
+    native.alias(
+        name = "extra_boot_args_template",
+        actual = image_deps["extra_boot_args_template"],
+    )
 
     # -------------------- Assemble disk partitions ---------------
 
