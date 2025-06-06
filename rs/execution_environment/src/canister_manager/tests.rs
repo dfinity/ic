@@ -6874,8 +6874,9 @@ fn rename_canister() {
 
     // Check that we can rename it a second time.
     let third_canister_id = CanisterId::from_u64(4 * CANISTER_IDS_PER_SUBNET - 1);
-    let third_version = 82;
-    let third_num_changes = 104;
+    // Version and num_changes are lower than before. Version should just increment, but num_changes will go down.
+    let third_version = 15;
+    let third_num_changes = 10;
     let arguments = RenameCanisterArgs {
         canister_id: new_canister_id.into(),
         rename_to: RenameToArgs {
@@ -6930,7 +6931,7 @@ fn rename_canister() {
     assert!(!old_canister_exists);
     assert!(third_canister_exists);
     assert_eq!(
-        third_version + 1,
+        new_version + 2, // `third_version` is smaller, so it only got incremented
         env2.get_latest_state()
             .canister_state(&third_canister_id)
             .unwrap()
@@ -6938,7 +6939,7 @@ fn rename_canister() {
             .canister_version
     );
     assert_eq!(
-        third_num_changes + 1,
+        third_num_changes + 1, // smaller than before the second rename
         env2.get_latest_state()
             .canister_state(&third_canister_id)
             .unwrap()
@@ -6978,7 +6979,7 @@ fn rename_canister() {
     assert!(!old_canister_exists);
     assert!(third_canister_exists);
     assert_eq!(
-        third_version + 1,
+        new_version + 2,
         env2.get_latest_state()
             .canister_state(&third_canister_id)
             .unwrap()

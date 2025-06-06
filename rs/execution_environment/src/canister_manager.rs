@@ -2390,7 +2390,8 @@ impl CanisterManager {
         canister
             .system_state
             .set_canister_history_total_num_changes(to_total_num_changes);
-        canister.system_state.canister_version = to_version + 1;
+        let old_version = canister.system_state.canister_version;
+        canister.system_state.canister_version = std::cmp::max(old_version, to_version) + 1;
         canister.system_state.add_canister_change(
             state.time(),
             origin,
