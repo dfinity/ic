@@ -13,6 +13,7 @@ rclone_common_flags=(
     --immutable
     --s3-upload-cutoff=5G
     --s3-no-check-bucket
+    --config /dev/null # don't use a config file
 )
 
 log() {

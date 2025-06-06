@@ -163,8 +163,6 @@ upload_artifacts(
         "//conditions:default": [
             "//publish/binaries:bundle-legacy",  # avoid overwriting legacy artifacts
             "//publish/canisters:bundle",
-            "//ic-os/boundary-guestos/envs/dev:bundle",
-            "//ic-os/boundary-guestos/envs/prod:bundle",
             "//ic-os/guestos/envs/dev:bundle-disk",
             "//ic-os/guestos/envs/dev:bundle-update",
             "//ic-os/guestos/envs/prod:bundle-disk",
