@@ -6,7 +6,7 @@ package(default_visibility = ["//visibility:public"])
 rust_library(
     name = "lib",
     srcs = ["src/lib.rs"],
-    crate_name = "ic_registry_transport_protobuf_generator",
+    crate_name = "ic-node-rewards-protobuf-generator",
     version = "0.9.0",
     deps = [
         # Keep sorted.
@@ -18,6 +18,6 @@ rust_library(
 protobuf_generator(
     name = "protobuf_generator",
     srcs = ["src/main.rs"],
-    manifest_dir = "rs/registry/transport/protobuf_generator",
+    manifest_dir = "rs/node_rewards/proto/protobuf_generator",
     deps = [":lib"],
 )

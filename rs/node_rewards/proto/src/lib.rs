@@ -8,7 +8,6 @@ use ic_stable_structures::Storable;
 use prost::Message;
 use rewards_calculation::types::{NodeMetricsDailyRaw, SubnetMetricsDailyKey};
 use std::borrow::Cow;
-use std::str::FromStr;
 
 pub mod pb;
 
