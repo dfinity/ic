@@ -1,4 +1,4 @@
-use chrono::DateTime;
+use chrono::{DateTime, Utc};
 use rewards_calculation::rewards_calculator_results;
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
@@ -45,10 +45,15 @@ impl TryFrom<rewards_calculator_results::Percent> for Percent {
 pub struct DayUTC(String);
 impl From<rewards_calculator_results::DayUTC> for DayUTC {
     fn from(value: rewards_calculator_results::DayUTC) -> Self {
-        let dd_mm_yyyy = DateTime::from_timestamp_nanos(value.unix_ts_at_day_end() as i64)
-            .naive_utc()
-            .format("%d-%m-%Y")
-            .to_string();
+        let secs = value.unix_ts_at_day_end() as i64 / 1_000_000_000;
+        let nsecs = (value.unix_ts_at_day_end() % 1_000_000_000) as u32;
+
+        let dd_mm_yyyy = DateTime::<Utc>::from_utc(
+            chrono::NaiveDateTime::from_timestamp_opt(secs, nsecs).unwrap(),
+            Utc,
+        )
+        .format("%d-%m-%Y")
+        .to_string();
 
         Self(dd_mm_yyyy)
     }
