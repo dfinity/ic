@@ -48,10 +48,10 @@ fn get_maximum_validated_artifacts(node_count: usize, dkg_interval: usize) -> Ar
     let e = MINIMUM_CHAIN_LENGTH as usize;
     /*
      * To derive our bounds, we consider a worst-case scenario in which we have
-     * notarizations (or finalizations) for d rounds above the i-th summary
-     * height, without having a CUP for it yet. That means we have artifacts from
-     * potentially three consecutive DKG intervals. The below diagram shows a
-     * section of the blockchain for such a scenario.
+     * notarizations (or finalizations) for d rounds above the latest certified
+     * height, without having a CUP for the i-th summary yet. That means we have
+     * artifacts from potentially three consecutive DKG intervals. The below
+     * diagram shows a section of the blockchain for such a scenario.
      *
      *       [B] Ordinary blocks          [C] Latest certified block
      *       [S] Summary blocks           [h0...h4] Labeled heights
