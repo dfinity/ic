@@ -1641,13 +1641,6 @@ impl Governance {
         reassemble_governance_proto(BTreeMap::new(), heap_governance_proto, rng_seed)
     }
 
-    pub fn __get_state_for_test(&self) -> GovernanceProto {
-        let neurons = self.neuron_store.__get_neurons_for_tests();
-        let heap_governance_proto = self.heap_data.clone();
-        let rng_seed = self.randomness.get_rng_seed();
-        reassemble_governance_proto(neurons, heap_governance_proto, rng_seed)
-    }
-
     pub fn seed_rng(&mut self, seed: [u8; 32]) {
         self.randomness.seed_rng(seed);
     }
