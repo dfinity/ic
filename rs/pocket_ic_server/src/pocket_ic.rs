@@ -1029,7 +1029,7 @@ impl PocketIc {
         icp_features: Option<IcpFeatures>,
     ) -> Result<Self, String> {
         if let Some(ref icp_features) = icp_features {
-            subnet_configs = subnet_configs.with_icp_features(icp_features);
+            subnet_configs = subnet_configs.try_with_icp_features(icp_features)?;
         }
 
         let registry: Option<Vec<u8>> = if let Some(ref state_dir) = state_dir {

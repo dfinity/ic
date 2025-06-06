@@ -1818,7 +1818,7 @@ async fn download_pocketic_server(
 }
 
 /// Attempt to start a new PocketIC server if it's not already running.
-pub(crate) async fn start_or_reuse_server(server_binary: Option<PathBuf>) -> Url {
+pub async fn start_or_reuse_server(server_binary: Option<PathBuf>) -> Url {
     let default_bin_dir =
         std::env::temp_dir().join(format!("pocket-ic-server-{}", EXPECTED_SERVER_VERSION));
     let default_bin_path = default_bin_dir.join("pocket-ic");

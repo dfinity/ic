@@ -9,14 +9,17 @@ use ic_management_canister_types::{
 };
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::{Call, ReadState};
-use pocket_ic::common::rest::{BlockmakerConfigs, RawSubnetBlockmaker, TickConfigs};
+use pocket_ic::common::rest::{
+    BlockmakerConfigs, ExtendedSubnetConfigSet, IcpFeatures, InstanceConfig, RawSubnetBlockmaker,
+    SubnetSpec, TickConfigs,
+};
 use pocket_ic::{
     common::rest::{
         BlobCompression, CanisterHttpReply, CanisterHttpResponse, MockCanisterHttpResponse,
         RawEffectivePrincipal, RawMessageId, SubnetKind,
     },
-    query_candid, update_candid, DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult,
-    PocketIc, PocketIcBuilder, PocketIcState, RejectCode, Time,
+    query_candid, start_or_reuse_server, update_candid, DefaultEffectiveCanisterIdError, ErrorCode,
+    IngressStatusResult, PocketIc, PocketIcBuilder, PocketIcState, RejectCode, Time,
 };
 use reqwest::blocking::Client;
 use reqwest::header::CONTENT_LENGTH;
@@ -2963,4 +2966,57 @@ fn read_registry() {
     // Check that the subnet from the registry matches
     // the subnet from the PocketIC topology.
     assert_eq!(get_subnet_from_registry(&pic, canister_2), subnet_2);
+}
+
+#[test]
+#[should_panic(
+    expected = "The NNS subnet must be empty when specifying the `registry` ICP feature."
+)]
+fn with_registry_and_nns_state() {
+    let state_dir = TempDir::new().unwrap();
+    #[cfg(not(windows))]
+    let state_dir_path_buf = state_dir.path().to_path_buf();
+    #[cfg(windows)]
+    let state_dir_path_buf = windows_to_wsl(state_dir.path().as_os_str().to_str().unwrap())
+        .unwrap()
+        .into();
+
+    let _pic = PocketIcBuilder::new()
+        .with_registry()
+        .with_nns_state(state_dir_path_buf)
+        .build();
+}
+
+#[tokio::test]
+async fn with_registry_and_nns_subnet_state() {
+    let state_dir = TempDir::new().unwrap();
+    #[cfg(not(windows))]
+    let state_dir_path_buf = state_dir.path().to_path_buf();
+    #[cfg(windows)]
+    let state_dir_path_buf = windows_to_wsl(state_dir.path().as_os_str().to_str().unwrap())
+        .unwrap()
+        .into();
+
+    let url = start_or_reuse_server(None).await;
+    let client = reqwest::Client::new();
+    let instance_config = InstanceConfig {
+        subnet_config_set: ExtendedSubnetConfigSet {
+            nns: Some(SubnetSpec::default().with_state_dir(state_dir_path_buf)),
+            ..Default::default()
+        },
+        state_dir: None,
+        nonmainnet_features: false,
+        log_level: None,
+        bitcoind_addr: None,
+        icp_features: Some(IcpFeatures { registry: true }),
+    };
+    let response = client
+        .post(url.join("instances").unwrap())
+        .json(&instance_config)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert!(response.text().await.unwrap().contains("Subnet config failed to validate: The NNS subnet must be empty when specifying the `registry` ICP feature."));
 }
