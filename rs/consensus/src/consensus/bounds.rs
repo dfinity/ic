@@ -2,9 +2,7 @@
 //! be always bounded in size. This module contains checks for invariants that we
 //! want to uphold at all times.
 
-use crate::consensus::notary::ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP;
-
-use super::notary::ACCEPTABLE_NOTARIZATION_CUP_GAP;
+use super::notary::{ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP, ACCEPTABLE_NOTARIZATION_CUP_GAP};
 use ic_consensus_utils::{
     pool_reader::PoolReader, registry_version_at_height, MINIMUM_CHAIN_LENGTH,
 };
