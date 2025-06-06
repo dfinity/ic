@@ -8,7 +8,8 @@ use crate::{
         split_neuron::{calculate_split_neuron_effect, SplitNeuronEffect},
     },
     heap_governance_data::{
-        reassemble_governance_proto, split_governance_proto, HeapGovernanceData, XdrConversionRate,
+        initialize_heap_governance_data, reassemble_governance_proto, split_governance_proto,
+        HeapGovernanceData, XdrConversionRate,
     },
     is_disburse_maturity_enabled,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
@@ -64,7 +65,7 @@ use crate::{
             RewardNodeProvider, RewardNodeProviders, SettleNeuronsFundParticipationRequest,
             SettleNeuronsFundParticipationResponse, StopOrStartCanister, Tally, Topic,
             UpdateCanisterSettings, UpdateNodeProvider, Vote, VotingPowerEconomics,
-            WaitForQuietState, XdrConversionRate as XdrConversionRatePb,
+            WaitForQuietState,
         },
     },
     proposals::{call_canister::CallCanister, sum_weighted_voting_power},
@@ -1521,18 +1522,6 @@ impl TryFrom<SettleNeuronsFundParticipationRequest>
     }
 }
 
-impl XdrConversionRatePb {
-    /// This constructor should be used only at canister creation, and not, e.g., after upgrades.
-    /// The reason this function exists is because `Default::default` is already defined by prost.
-    /// However, the Governance canister relies on the fields of this structure being `Some`.
-    pub fn with_default_values() -> Self {
-        Self {
-            timestamp_seconds: Some(0),
-            xdr_permyriad_per_icp: Some(10_000),
-        }
-    }
-}
-
 /// This function is used to spawn a future in a way that is compatible with both the WASM and
 /// non-WASM environments that are used for testing.  This only actually spawns in the case where
 /// the WASM is running in the IC, or has some other source of asynchrony.  Otherwise, it
@@ -1587,46 +1576,9 @@ impl Governance {
         cmc: Arc<dyn CMC>,
         randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
-        let mut governance_proto = GovernanceProto::from(initial_governance);
+        let (neurons, heap_governance_proto) =
+            initialize_heap_governance_data(initial_governance, env.now());
 
-        // Step 1: Populate some fields governance_proto if they are blank.
-
-        // Step 1.1: genesis_timestamp_seconds. 0 indicates it hasn't been set already.
-        if governance_proto.genesis_timestamp_seconds == 0 {
-            governance_proto.genesis_timestamp_seconds = env.now();
-        }
-
-        // Step 1.2: latest_reward_event.
-        if governance_proto.latest_reward_event.is_none() {
-            // Introduce a dummy reward event to mark the origin of the IC era.
-            // This is required to be able to compute accurately the rewards for the
-            // very first reward distribution.
-            governance_proto.latest_reward_event = Some(RewardEvent {
-                actual_timestamp_seconds: env.now(),
-                day_after_genesis: 0,
-                settled_proposals: vec![],
-                distributed_e8s_equivalent: 0,
-                total_available_e8s_equivalent: 0,
-                rounds_since_last_distribution: Some(0),
-                latest_round_available_e8s_equivalent: Some(0),
-            })
-        }
-
-        // Step 1.3: xdr_conversion_rate.
-        if governance_proto.xdr_conversion_rate.is_none() {
-            governance_proto.xdr_conversion_rate = Some(XdrConversionRatePb::with_default_values());
-        }
-
-        // Step 2: Break out Neurons from governance_proto. Neurons are managed separately by
-        // NeuronStore. NeuronStore is in charge of Neurons, because some are stored in stable
-        // memory, while others are stored in heap. "inactive" Neurons live in stable memory, while
-        // the rest live in heap.
-
-        // Note: We do not carry over the RNG seed in new governance, only in restored governance.
-        let (neurons, heap_governance_proto, _maybe_rng_seed) =
-            split_governance_proto(governance_proto);
-
-        // Step 3: Final assembly.
         Self {
             heap_data: heap_governance_proto,
             neuron_store: NeuronStore::new(
