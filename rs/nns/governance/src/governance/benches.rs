@@ -10,9 +10,9 @@ use crate::{
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
     neuron_store::NeuronStore,
     pb::v1::{
-        install_code::CanisterInstallMode, neuron::Followees, proposal::Action, Ballot, BallotInfo,
-        CreateServiceNervousSystem, ExecuteNnsFunction, InstallCode, KnownNeuron, ListProposalInfo,
-        NnsFunction, Proposal, ProposalData, Topic, Vote,
+        install_code::CanisterInstallMode, proposal::Action, Ballot, BallotInfo,
+        CreateServiceNervousSystem, ExecuteNnsFunction, Followees, InstallCode, KnownNeuron,
+        ListProposalInfo, NnsFunction, Proposal, ProposalData, Topic, Vote,
     },
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };

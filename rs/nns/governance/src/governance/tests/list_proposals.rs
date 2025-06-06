@@ -6,10 +6,9 @@ use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{
         manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
-        neuron::Followees,
         proposal::Action,
-        ExecuteNnsFunction, ListProposalInfo, ManageNeuron, Motion, NetworkEconomics, NnsFunction,
-        Proposal, ProposalRewardStatus, ProposalStatus, Topic, WaitForQuietState,
+        ExecuteNnsFunction, Followees, ListProposalInfo, ManageNeuron, Motion, NetworkEconomics,
+        NnsFunction, Proposal, ProposalRewardStatus, ProposalStatus, Topic, WaitForQuietState,
     },
     test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger},
 };

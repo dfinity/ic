@@ -29,8 +29,6 @@ use ic_nns_governance::{
     pb::v1::{
         manage_neuron,
         manage_neuron::{Command, Merge, MergeMaturity, NeuronIdOrSubaccount},
-        neuron,
-        neuron::DissolveState,
         proposal, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, ManageNeuron,
         Motion, NetworkEconomics, Neuron, NeuronType, NnsFunction, Proposal, ProposalData,
         RewardEvent, Topic, Vote, XdrConversionRate as XdrConversionRatePb,
