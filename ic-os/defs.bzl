@@ -200,6 +200,10 @@ def icos_build(
         # - Predictable measurements for AMD SEV (especially important for signed root partitions)
         # - Static boot arguments stored on the boot partition
 
+        # For backwards compatibility in GuestOS and HostOS,
+        # we continue to support the old way of calculating the dynamic args (see :extra_boot_args).
+
+
         if image_deps.get("requires_root_signing", False):
             # Sign the root partition and substitute ROOT_HASH in boot args
             native.genrule(
