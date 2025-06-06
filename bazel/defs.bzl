@@ -7,6 +7,21 @@ load("//publish:defs.bzl", "release_nostrip_binary")
 
 _COMPRESS_CONCURRENCY = 16
 
+# TODO: rust >= 1.86.0 in contains / triggers a bug in the Apple linker on x86_64-darwin which causes incorrect code generation.
+# Full context in: https://github.com/rust-lang/rust/issues/140686#issuecomment-2869525604.
+# LLVM has a workaround: https://github.com/rust-lang/llvm-project/pull/181 that they merged and rustc will integrate it soon.
+#
+# Until then, it appears that the bug is only triggered on release builds with `opt-level=2`.
+# Until we’ve upgraded to the newest rustc (for which we’ll probably need to wait for a new rules_rust version)
+# we will run the macos tests with `opt-level=0` to avoid the bug.
+workaround_apple_linker_bug = select({
+    "//bazel:x86_64-darwin": [
+        "-C",
+        "opt-level=0",
+    ],
+    "//conditions:default": [],
+})
+
 def _compress_resources(_os, _input_size):
     """ The function returns resource hints to bazel so it can properly schedule actions.
 

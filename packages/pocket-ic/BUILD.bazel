@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
+load("//bazel:defs.bzl", "workaround_apple_linker_bug")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -113,13 +114,7 @@ rust_test_suite(
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
     },
     proc_macro_deps = MACRO_DEPENDENCIES,
-    rustc_flags = select({
-        "//bazel:x86_64-darwin": [
-            "-C",
-            "opt-level=0",
-        ],
-        "//conditions:default": [],
-    }),
+    rustc_flags = workaround_apple_linker_bug,
     tags = [
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
         # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
@@ -144,13 +139,7 @@ rust_test_suite(
         "TEST_WASM": "$(rootpath //packages/pocket-ic/test_canister:test_canister.wasm.gz)",
     },
     proc_macro_deps = MACRO_DEPENDENCIES,
-    rustc_flags = select({
-        "//bazel:x86_64-darwin": [
-            "-C",
-            "opt-level=0",
-        ],
-        "//conditions:default": [],
-    }),
+    rustc_flags = workaround_apple_linker_bug,
     tags = [
         "cpu:16",
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
