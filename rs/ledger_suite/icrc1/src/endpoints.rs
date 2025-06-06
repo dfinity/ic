@@ -55,6 +55,11 @@ impl<Tokens: TokensType> TryFrom<EndpointsTransferError<Tokens>> for TransferErr
             CTE::BadBurn { min_burn_amount } => TE::BadBurn {
                 min_burn_amount: min_burn_amount.into(),
             },
+            CTE::UnsupportedTransaction => {
+                return Err(
+                    "UnsupportedTransaction error should not happen for transfer".to_string(),
+                );
+            }
         })
     }
 }
@@ -97,6 +102,11 @@ impl<Tokens: TokensType> TryFrom<EndpointsTransferError<Tokens>> for ApproveErro
             CTE::BadBurn { .. } => {
                 return Err("BadBurn error should not happen for Approve".to_string());
             }
+            CTE::UnsupportedTransaction => {
+                return Err(
+                    "UnsupportedTransaction error should not happen for approve".to_string()
+                );
+            }
         })
     }
 }
@@ -137,6 +147,11 @@ impl<Tokens: TokensType> TryFrom<EndpointsTransferError<Tokens>> for TransferFro
             CTE::BadBurn { min_burn_amount } => TFE::BadBurn {
                 min_burn_amount: min_burn_amount.into(),
             },
+            CTE::UnsupportedTransaction => {
+                return Err(
+                    "UnsupportedTransaction error should not happen for transfer_from".to_string(),
+                );
+            }
         })
     }
 }
@@ -164,69 +179,71 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
         let created_at_time = b.transaction.created_at_time;
         let memo = b.transaction.memo;
 
-        match b.transaction.operation {
-            Operation::Mint { to, amount } => {
-                tx.kind = "mint".to_string();
-                tx.mint = Some(Mint {
-                    to,
-                    amount: amount.into(),
-                    created_at_time,
-                    memo,
-                });
-            }
-            Operation::Burn {
-                from,
-                spender,
-                amount,
-            } => {
-                tx.kind = "burn".to_string();
-                tx.burn = Some(Burn {
+        if let Some(op) = b.transaction.operation {
+            match op {
+                Operation::Mint { to, amount } => {
+                    tx.kind = "mint".to_string();
+                    tx.mint = Some(Mint {
+                        to,
+                        amount: amount.into(),
+                        created_at_time,
+                        memo,
+                    });
+                }
+                Operation::Burn {
                     from,
                     spender,
-                    amount: amount.into(),
-                    created_at_time,
-                    memo,
-                });
-            }
-            Operation::Transfer {
-                from,
-                to,
-                spender,
-                amount,
-                fee,
-            } => {
-                tx.kind = "transfer".to_string();
-                tx.transfer = Some(Transfer {
+                    amount,
+                } => {
+                    tx.kind = "burn".to_string();
+                    tx.burn = Some(Burn {
+                        from,
+                        spender,
+                        amount: amount.into(),
+                        created_at_time,
+                        memo,
+                    });
+                }
+                Operation::Transfer {
                     from,
                     to,
                     spender,
-                    amount: amount.into(),
-                    fee: fee.or(b.effective_fee).map(Into::into),
-                    created_at_time,
-                    memo,
-                });
-            }
-            Operation::Approve {
-                from,
-                spender,
-                amount,
-                expected_allowance,
-                expires_at,
-                fee,
-            } => {
-                tx.kind = "approve".to_string();
-                tx.approve = Some(Approve {
+                    amount,
+                    fee,
+                } => {
+                    tx.kind = "transfer".to_string();
+                    tx.transfer = Some(Transfer {
+                        from,
+                        to,
+                        spender,
+                        amount: amount.into(),
+                        fee: fee.or(b.effective_fee).map(Into::into),
+                        created_at_time,
+                        memo,
+                    });
+                }
+                Operation::Approve {
                     from,
                     spender,
-                    amount: amount.into(),
-                    expected_allowance: expected_allowance.map(Into::into),
+                    amount,
+                    expected_allowance,
                     expires_at,
-                    fee: fee
-                        .map(Into::into)
-                        .or_else(|| b.effective_fee.map(Into::into)),
-                    created_at_time,
-                    memo,
-                });
+                    fee,
+                } => {
+                    tx.kind = "approve".to_string();
+                    tx.approve = Some(Approve {
+                        from,
+                        spender,
+                        amount: amount.into(),
+                        expected_allowance: expected_allowance.map(Into::into),
+                        expires_at,
+                        fee: fee
+                            .map(Into::into)
+                            .or_else(|| b.effective_fee.map(Into::into)),
+                        created_at_time,
+                        memo,
+                    });
+                }
             }
         }
 

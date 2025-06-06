@@ -701,7 +701,7 @@ fn append_block(block_index: BlockIndex64, block: GenericBlock) {
 
         // add the block idx to the indices
         with_account_block_ids(|account_block_ids| {
-            for account in get_accounts(&decoded_block) {
+            for account in get_accounts(block_index, &decoded_block) {
                 account_block_ids.insert(account_block_ids_key(account, block_index), ());
             }
         });
@@ -782,15 +782,15 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
         &PROFILING_DATA,
         "append_blocks.process_balance_changes",
         move || match block.transaction.operation {
-            Operation::Burn { from, amount, .. } => debit(block_index, from, amount),
-            Operation::Mint { to, amount } => credit(block_index, to, amount),
-            Operation::Transfer {
+            Some(Operation::Burn { from, amount, .. }) => debit(block_index, from, amount),
+            Some(Operation::Mint { to, amount }) => credit(block_index, to, amount),
+            Some(Operation::Transfer {
                 from,
                 to,
                 amount,
                 fee,
                 ..
-            } => {
+            }) => {
                 let fee = block.effective_fee.or(fee).unwrap_or_else(|| {
                     ic_cdk::trap(&format!(
                         "Block {} is of type Transfer but has no fee or effective fee!",
@@ -812,9 +812,9 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                     credit(block_index, fee_collector, fee);
                 }
             }
-            Operation::Approve {
+            Some(Operation::Approve {
                 from, fee, spender, ..
-            } => {
+            }) => {
                 let fee = match fee.or(block.effective_fee) {
                     Some(fee) => fee,
                     // NB. There was a bug in the ledger which would create
@@ -840,6 +840,13 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                 change_balance(spender, |balance| balance);
 
                 debit(block_index, from, fee);
+            }
+            None => {
+                // FIXME: What to do here?
+                trap(&format!(
+                    "Block with index {} has a transaction operation of None",
+                    block_index
+                ))
             }
         },
     );
@@ -884,12 +891,20 @@ fn decode_encoded_block_or_trap(block_index: BlockIndex64, block: EncodedBlock) 
     })
 }
 
-fn get_accounts(block: &Block<Tokens>) -> Vec<Account> {
+fn get_accounts(block_index: BlockIndex64, block: &Block<Tokens>) -> Vec<Account> {
     match block.transaction.operation {
-        Operation::Burn { from, .. } => vec![from],
-        Operation::Mint { to, .. } => vec![to],
-        Operation::Transfer { from, to, .. } => vec![from, to],
-        Operation::Approve { from, .. } => vec![from],
+        None => {
+            // FIXME: For new block types, this may need to be handled differently. It may also be
+            //  that this is unreachable code, since some new block types do not affect any accounts.
+            trap(&format!(
+                "Block with index {} has a transaction operation of None",
+                block_index
+            ))
+        }
+        Some(Operation::Burn { from, .. }) => vec![from],
+        Some(Operation::Mint { to, .. }) => vec![to],
+        Some(Operation::Transfer { from, to, .. }) => vec![from, to],
+        Some(Operation::Approve { from, .. }) => vec![from],
     }
 }
 
