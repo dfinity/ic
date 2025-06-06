@@ -878,6 +878,8 @@ impl PocketIcSubnets {
         self.synced_registry_version = self.registry_data_provider.latest_version();
     }
 
+    // This function should only be called for ingress messages that complete quickly
+    // (within 100 rounds).
     fn execute_ingress_on(
         &self,
         subnet: Arc<Subnet>,
@@ -890,7 +892,7 @@ impl PocketIcSubnets {
             .state_machine
             .submit_ingress_as(sender, canister_id, &method, payload)
             .unwrap();
-        loop {
+        for _ in 0..100 {
             for subnet in self.get_all() {
                 subnet.state_machine.execute_round();
             }
@@ -898,7 +900,7 @@ impl PocketIcSubnets {
                 IngressStatus::Known {
                     state: IngressState::Completed(_),
                     ..
-                } => break,
+                } => return,
                 IngressStatus::Known {
                     state: IngressState::Failed(error),
                     ..
@@ -909,6 +911,10 @@ impl PocketIcSubnets {
                 _ => (),
             }
         }
+        panic!(
+            "Failed to complete execution of method {} on canister {} after 100 rounds.",
+            method, canister_id
+        );
     }
 }
 
