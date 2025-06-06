@@ -11596,6 +11596,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-node-rewards-protobuf-generator"
+version = "0.9.0"
+dependencies = [
+ "ic-utils-rustfmt",
+ "prost-build 0.13.4",
+]
+
+[[package]]
 name = "ic-p2p-test-utils"
 version = "0.9.0"
 dependencies = [
