@@ -9,29 +9,30 @@ use maplit::btreemap;
 #[test]
 fn test_recent_proposals() {
     use maplit::btreemap;
-    pub const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
-
     const ONE_MONTH: u64 = 30 * 24 * 3600;
 
-    #[allow(clippy::identity_op)]
     let proposal1 = ProposalData {
-        proposal_creation_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS - 1 * ONE_MONTH,
+        proposal_creation_timestamp_seconds: NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS
+            - 3 * ONE_MONTH,
         ..Default::default()
     };
     let proposal2 = ProposalData {
-        proposal_creation_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS - 2 * ONE_MONTH,
+        proposal_creation_timestamp_seconds: NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS
+            - 2 * ONE_MONTH,
         ..Default::default()
     };
+    #[allow(clippy::identity_op)]
     let proposal3 = ProposalData {
-        proposal_creation_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS - 3 * ONE_MONTH,
+        proposal_creation_timestamp_seconds: NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS
+            - 1 * ONE_MONTH,
         ..Default::default()
     };
 
     let governance_proto = pb::Governance {
         proposals: btreemap! {
-            1_u64 => proposal3,
+            1_u64 => proposal1,
             2_u64 => proposal2,
-            3_u64 => proposal1
+            3_u64 => proposal3
         },
         ..basic_governance_proto()
     };
@@ -47,6 +48,7 @@ fn test_recent_proposals() {
     #[allow(clippy::identity_op)]
     let test_cases = [
         ("zero-size window", 0_u64, 0),
+        ("sub-month window", 1 * ONE_MONTH - 1, 0),
         ("one-month window", 1 * ONE_MONTH, 1),
         ("two-months window", 2 * ONE_MONTH, 2),
         ("three-months window", 3 * ONE_MONTH, 3),
