@@ -296,7 +296,8 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: pocket-ic-server-arm64-linux
-          path: pocket-ic-server-arm64-linux
+          # avoid downloading to workspace to avoid version being marked as dirty
+          path: ~/.cache/pocket-ic-server-arm64-linux
       - name: Write AWS credentials
         shell: bash
         run: |
@@ -312,7 +313,7 @@ jobs:
 
             # Create a "bundle" that the uploader can digest
             mkdir -p "$rootdir/binaries/arm64-linux/"
-            cp ./pocket-ic-server-arm64-linux/pocket-ic-server-arm64-linux "$rootdir/binaries/arm64-linux/pocket-ic-server-arm64-linux"
+            cp ~/.cache/pocket-ic-server-arm64-linux/pocket-ic-server-arm64-linux "$rootdir/binaries/arm64-linux/pocket-ic-server-arm64-linux"
             bazel run --config=stamped //:artifact-uploader -- "$rootdir"
         env:
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
