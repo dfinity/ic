@@ -10,6 +10,7 @@ filegroup(
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/node_rewards/rewards_calculation",
     "//rs/types/base_types",
     "@crate_index//:candid",
     "@crate_index//:comparable",
