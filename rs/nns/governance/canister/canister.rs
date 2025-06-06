@@ -137,9 +137,8 @@ fn canister_init_(init_payload: ApiGovernanceProto) {
         init_payload.neurons.len()
     );
 
-    let governance_proto = InternalGovernanceProto::from(init_payload);
     set_governance(Governance::new(
-        governance_proto,
+        init_payload,
         Arc::new(CanisterEnv::new()),
         Arc::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
         Arc::new(CMCCanister::<CdkRuntime>::new()),

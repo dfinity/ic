@@ -46,8 +46,10 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::system_state::wasm_chunk_store::ChunkValidationResult,
-    canister_state::system_state::{wasm_chunk_store, CyclesUseCase},
+    canister_state::system_state::{
+        wasm_chunk_store::{self, ChunkValidationResult},
+        CyclesUseCase,
+    },
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
     page_map::TestPageAllocatorFileDescriptorImpl,
     testing::{CanisterQueuesTesting, SystemStateTesting},
