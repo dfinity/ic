@@ -820,8 +820,9 @@ impl PocketIcSubnets {
     }
 
     fn update_registry(&mut self) {
-        // The NNS subnet is always created if registry is to be deployed.
-        let nns_subnet = self.nns_subnet.clone().unwrap();
+        let nns_subnet = self.nns_subnet.clone().expect(
+            "The NNS subnet is supposed to already exist if the registry is to be deployed.",
+        );
 
         if !nns_subnet
             .state_machine
