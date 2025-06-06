@@ -107,11 +107,9 @@ def image_deps(mode, malicious = False):
 
     # Update recovery rootfs
     if "recovery" in mode:
-        recovery_component_files = dict(component_files)
-        recovery_component_files.update({
-            Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh"): "/opt/ic/bin/guestos-recovery-engine.sh",
-            Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service"): "/etc/systemd/system/guestos-recovery-engine.service",
+        deps["rootfs"].update({
+            "//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh": "/opt/ic/bin/guestos-recovery-engine.sh:0755",
+            "//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service": "/etc/systemd/system/guestos-recovery-engine.service:0644",
         })
-        deps["component_files"] = recovery_component_files
 
     return deps
