@@ -1,3 +1,4 @@
+use chrono::DateTime;
 #[cfg(any(feature = "test", test))]
 use ic_cdk::query;
 use ic_cdk::{init, post_upgrade, pre_upgrade, spawn, update};
@@ -31,6 +32,7 @@ thread_local! {
 
 #[init]
 fn canister_init() {
+    println!("{:?}", DateTime::to_utc(&chrono::Utc::now()));
     schedule_timers();
 }
 

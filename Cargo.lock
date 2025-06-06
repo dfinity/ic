@@ -11541,6 +11541,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "candid_parser",
+ "chrono",
  "futures-util",
  "ic-cdk 0.17.2",
  "ic-cdk-timers",

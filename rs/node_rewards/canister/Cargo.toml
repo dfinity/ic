@@ -16,6 +16,7 @@ path = "src/lib.rs"
 [dependencies]
 candid = { workspace = true }
 ic-cdk = { workspace = true }
+chrono = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
