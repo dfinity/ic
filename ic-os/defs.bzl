@@ -242,18 +242,14 @@ def icos_build(
         else:
             # No signing required, no ROOT_HASH substitution
             native.alias(name = partition_root_signed_tzst, actual = partition_root_unsigned_tzst, tags = ["manual", "no-cache"])
-            native.genrule(
-                name = "generate-" + boot_args,
-                outs = [boot_args],
-                srcs = [":boot_args_template"],
-                cmd = "cp $(location :boot_args_template) $@",
+            native.alias(
+                name = boot_args,
+                actual = ":boot_args_template",
                 tags = ["manual"],
             )
-            native.genrule(
-                name = "generate-" + extra_boot_args,
-                outs = [extra_boot_args],
-                srcs = [":extra_boot_args_template"],
-                cmd = "cp $(location :extra_boot_args_template) $@",
+            native.alias(
+                name = extra_boot_args,
+                actual = ":extra_boot_args_template",
                 tags = ["manual"],
             )
 
