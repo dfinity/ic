@@ -5538,7 +5538,6 @@ pub mod archiving {
     use std::cmp::Ordering;
     use std::fmt::Debug;
     use std::ops::Range;
-
     // ----- Tests -----
 
     /// Test that while archiving blocks in chunks, the ledger never reports a block to be present
@@ -5604,7 +5603,7 @@ pub mod archiving {
             "icrc1_transfer",
             encode_transfer_args(p1.0, p2.0, 10_000),
         );
-        let mut transfer_status = message_status(&env, &transfer_message_id);
+        let mut transfer_status = message_status(&env, &transfer_message_id).unwrap();
         assert!(transfer_status.is_none());
 
         // Keep listing the archives and calling env.tick() until the ledger reports that an
@@ -5622,10 +5621,7 @@ pub mod archiving {
             get_blocks_res
         );
         // Verify that the ledger response contained no archive info.
-        assert_eq!(
-            check_if_block_in_ledger_and_archive(&env, 0, &get_blocks_res, get_blocks_fn),
-            BlockInLedgerAndArchive::NoArchiveInfo
-        );
+        assert!(get_blocks_res.archived_ranges.is_empty());
         // Verify that the block was already archived. Since the archiving is done in chunks, the
         // archiving is not yet completed, so the ledger reports the block `0` to be present only
         // in the ledger, even though it is also present in the archive by now.
@@ -5650,7 +5646,7 @@ pub mod archiving {
             env.tick();
             ticks += 1;
             assert!(ticks < MAX_TICKS);
-            transfer_status = message_status(&env, &transfer_message_id);
+            transfer_status = message_status(&env, &transfer_message_id).unwrap();
         }
         let transfer_result = Decode!(
             &transfer_status.unwrap()
@@ -5751,12 +5747,12 @@ pub mod archiving {
             // Tick until the transfer completes, meaning the archiving also completes.
             const MAX_TICKS: usize = 500;
             let mut ticks = 0;
-            let mut transfer_status = message_status(&env, &transfer_message_id);
+            let mut transfer_status = message_status(&env, &transfer_message_id).unwrap();
             while transfer_status.is_none() {
                 env.tick();
                 ticks += 1;
                 assert!(ticks < MAX_TICKS);
-                transfer_status = message_status(&env, &transfer_message_id);
+                transfer_status = message_status(&env, &transfer_message_id).unwrap();
                 // Verify that block `0` is only reported to exist in one place.
                 let get_blocks_res = get_blocks_fn(&env, ledger_id, 0, 1);
                 assert!(!ledger_reports_first_block_in_two_places(
@@ -5910,6 +5906,192 @@ pub mod archiving {
                 },
             )
             .unwrap();
+    }
+
+    /// Test that when archiving lots of blocks at once, the ledger hits the instruction limit when
+    /// purging the archived blocks from the ledger, even though sending the blocks to the archive
+    /// is done in chunks.
+    pub fn test_archiving_hits_instruction_limit_purging_blocks_from_ledger<T, B>(
+        ledger_wasm: Vec<u8>,
+        encode_init_args: fn(InitArgs) -> T,
+        num_initial_balances: u64,
+        get_blocks_fn: fn(&StateMachine, CanisterId, u64, usize) -> GenericGetBlocksResponse<B>,
+        get_archives: fn(&StateMachine, CanisterId) -> Vec<Principal>,
+        archive_get_blocks_fn: fn(
+            &StateMachine,
+            CanisterId,
+            u64,
+            usize,
+        ) -> GenericGetBlocksResponse<B>,
+    ) where
+        T: CandidType,
+        B: Eq + Debug,
+    {
+        /// Assert that a transfer hits the instruction limit when purging blocks from the ledger.
+        fn assert_transfer_hits_instruction_limit(
+            env: &StateMachine,
+            ledger_id: CanisterId,
+            from: PrincipalId,
+            to: PrincipalId,
+        ) {
+            let transfer_error = env
+                .execute_ingress_as(
+                    from,
+                    ledger_id,
+                    "icrc1_transfer",
+                    encode_transfer_args(from.0, to.0, 12_344),
+                )
+                .expect_err("transfer should not fit in the instruction limit");
+            assert_eq!(
+                transfer_error.code(),
+                ErrorCode::CanisterInstructionLimitExceeded
+            );
+        }
+
+        /// Verify that the first block can be retrieved both from the ledger and the archive.
+        fn verify_first_block_in_ledger_and_archive<B>(
+            env: &StateMachine,
+            ledger_id: CanisterId,
+            archive_canister_id: CanisterId,
+            get_blocks_fn: fn(&StateMachine, CanisterId, u64, usize) -> GenericGetBlocksResponse<B>,
+            archive_get_blocks_fn: fn(
+                &StateMachine,
+                CanisterId,
+                u64,
+                usize,
+            ) -> GenericGetBlocksResponse<B>,
+        ) where
+            B: Eq + Debug,
+        {
+            let ledger_blocks_res = get_blocks_fn(env, ledger_id, 0, 1);
+            let archive_blocks_res = archive_get_blocks_fn(env, archive_canister_id, 0, 1);
+            assert_eq!(
+                ledger_blocks_res
+                    .blocks
+                    .first()
+                    .expect("ledger should contain block 0"),
+                archive_blocks_res
+                    .blocks
+                    .first()
+                    .expect("archive should contain block 0")
+            );
+        }
+
+        /// Get the remaining capacity of the archive canister.
+        fn get_archive_remaining_capacity(
+            env: &StateMachine,
+            ledger_canister_id: CanisterId,
+            archive_canister_id: CanisterId,
+        ) -> u64 {
+            Decode!(
+                &env.execute_ingress_as(
+                    ledger_canister_id.get(),
+                    archive_canister_id,
+                    "remaining_capacity",
+                    Encode!().unwrap(),
+                )
+                .expect("failed to query remaining capacity")
+                .bytes(),
+                u64
+            )
+            .expect("failed to decode remaining capacity response")
+        }
+
+        const NUM_BLOCKS_TO_ARCHIVE: usize = 800_000;
+        const TRIGGER_THRESHOLD: usize = 2_000;
+        let p1 = PrincipalId::new_user_test_id(1);
+        let p2 = PrincipalId::new_user_test_id(2);
+        let archive_controller = PrincipalId::new_user_test_id(1_000_000);
+        let mut initial_balances = vec![];
+        for i in 0..num_initial_balances {
+            initial_balances.push((
+                Account::from(PrincipalId::new_user_test_id(i).0),
+                10_000_000,
+            ));
+        }
+
+        // Install a ledger with a lot of initial balances
+        let env = StateMachine::new();
+        let args = encode_init_args(InitArgs {
+            archive_options: ArchiveOptions {
+                trigger_threshold: TRIGGER_THRESHOLD,
+                num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE,
+                node_max_memory_size_bytes: None,
+                max_message_size_bytes: Some(2 * 1024 * 1024),
+                controller_id: archive_controller,
+                more_controller_ids: None,
+                cycles_for_archive_creation: Some(0),
+                max_transactions_per_response: None,
+            },
+            ..init_args(initial_balances)
+        });
+        let args = Encode!(&args).unwrap();
+        let ledger_id = env
+            .install_canister(ledger_wasm.clone(), args, None)
+            .unwrap();
+
+        let initial_chain_length = get_blocks_fn(&env, ledger_id, 0, 1).chain_length;
+
+        // Perform a transaction. This should spawn an archive, and archive `num_blocks_to_archive`,
+        // but since there are so many blocks to archive, the archiving will be done in chunks.
+        // Finally, the blocks that were archived should be purged from the ledger - however, since
+        // blocks are purged from the stable BTreeMap one at a time, this consumes so many
+        // instructions that the instruction limit is hit, and the response to the transfer is an
+        // error.
+        assert_transfer_hits_instruction_limit(&env, ledger_id, p1, p2);
+
+        // However, since the archiving is done using asynchronous inter-canister calls, the
+        // transfer actually succeeded and was committed.
+        let chain_length = get_blocks_fn(&env, ledger_id, initial_chain_length, 1).chain_length;
+        assert_eq!(initial_chain_length + 1, chain_length);
+
+        // Get the canister ID of the archive that was created.
+        let archive_ids = get_archives(&env, ledger_id);
+        let archive_canister_id = CanisterId::unchecked_from_principal(PrincipalId::from(
+            *archive_ids.first().expect("should have one archive"),
+        ));
+
+        // Since a number of blocks were sent to the archive, but not successfully purged from the
+        // ledger, it is possible to get some of them from either location. In particular, block 0
+        // should appear in both locations.
+        verify_first_block_in_ledger_and_archive(
+            &env,
+            ledger_id,
+            archive_canister_id,
+            get_blocks_fn,
+            archive_get_blocks_fn,
+        );
+
+        let archive_initial_remaining_capacity =
+            get_archive_remaining_capacity(&env, ledger_id, archive_canister_id);
+
+        // Attempt another transfer, and verify that it also fails with the same error.
+        assert_transfer_hits_instruction_limit(&env, ledger_id, p1, p2);
+
+        let archive_subsequent_remaining_capacity =
+            get_archive_remaining_capacity(&env, ledger_id, archive_canister_id);
+
+        // Verify that the remaining capacity of the archive canister has decreased after the
+        // second transfer. This is because the same blocks were sent to the archive twice, since
+        // they were not purged from the ledger after the first archiving operation that was
+        // triggered by the first transfer.
+        assert!(
+            archive_initial_remaining_capacity > archive_subsequent_remaining_capacity,
+            "archive remaining capacity should have decreased after the transfer, since the same blocks were sent to the archive twice ({} vs {})",
+            archive_initial_remaining_capacity,
+            archive_subsequent_remaining_capacity
+        );
+
+        let archive_blocks_res =
+            archive_get_blocks_fn(&env, archive_canister_id, num_initial_balances + 5, 1);
+        // The archive returned a block with index `num_initial_balances` + 5, which shouldn't be
+        // possible, since only `num_initial_balances` + 2 transactions were sent to the ledger.
+        assert_eq!(
+            archive_blocks_res.blocks.len(),
+            1,
+            "expected the archive to return one block, but it returned {} blocks",
+            archive_blocks_res.blocks.len()
+        );
     }
 
     // ----- Helper structures -----
@@ -6160,46 +6342,6 @@ pub mod archiving {
         )
     }
 
-    #[derive(Debug, Eq, PartialEq)]
-    enum BlockInLedgerAndArchive {
-        True,
-        NoArchiveInfo,
-    }
-
-    fn check_if_block_in_ledger_and_archive<B>(
-        env: &StateMachine,
-        block_id: u64,
-        icrc3_get_blocks_result: &GenericGetBlocksResponse<B>,
-        get_blocks_fn: fn(&StateMachine, CanisterId, u64, usize) -> GenericGetBlocksResponse<B>,
-    ) -> BlockInLedgerAndArchive
-    where
-        B: Eq + Debug,
-    {
-        assert_eq!(block_id, icrc3_get_blocks_result.first_block_index);
-        // Verify that the ledger also reported that the first block exists in the archive.
-        let Some(archive_info) = icrc3_get_blocks_result.archived_ranges.first() else {
-            return BlockInLedgerAndArchive::NoArchiveInfo;
-        };
-        assert_eq!(archive_info.archived_range.start, block_id);
-        assert_eq!(range_utils::range_len(&archive_info.archived_range), 1);
-        let archive_blocks_res = get_blocks_fn(
-            env,
-            CanisterId::try_from(PrincipalId::from(archive_info.canister_id)).unwrap(),
-            block_id,
-            1,
-        );
-        let first_block_from_archive = archive_blocks_res
-            .blocks
-            .first()
-            .expect("archive should return one block");
-        let first_block_from_ledger = icrc3_get_blocks_result
-            .blocks
-            .first()
-            .expect("ledger should return one block");
-        assert_eq!(first_block_from_ledger, first_block_from_archive);
-        BlockInLedgerAndArchive::True
-    }
-
     fn encode_transfer_args(
         from: impl Into<Account>,
         to: impl Into<Account>,
@@ -6243,13 +6385,26 @@ pub mod archiving {
             && range_utils::range_len(&first_archived_range.archived_range) == 1
     }
 
-    fn message_status(env: &StateMachine, message_id: &MessageId) -> Option<WasmResult> {
+    fn message_status(
+        env: &StateMachine,
+        message_id: &MessageId,
+    ) -> Result<Option<WasmResult>, UserError> {
         match env.ingress_status(message_id) {
             IngressStatus::Known {
                 state: IngressState::Completed(result),
                 ..
-            } => Some(result),
-            _ => None,
+            } => Ok(Some(result)),
+            IngressStatus::Known {
+                state: IngressState::Processing,
+                ..
+            } => Ok(None),
+            IngressStatus::Known {
+                state: IngressState::Failed(error),
+                ..
+            } => Err(error),
+            s => {
+                panic!("Unexpected ingress status: {:?}", s);
+            }
         }
     }
 }

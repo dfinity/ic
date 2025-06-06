@@ -13058,6 +13058,7 @@ dependencies = [
  "ic-protobuf",
  "ic-registry-subnet-type",
  "ic-sns-governance",
+ "ic-sns-governance-api",
  "ic-sns-init",
  "ic-sns-root",
  "ic-sns-swap",
