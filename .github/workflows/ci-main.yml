@@ -244,7 +244,6 @@ jobs:
         with:
           name: pocket-ic-server-arm64-linux
           path: ./build/pocket-ic-server-arm64-linux
-<<<<<<< HEAD
   bazel-test-arm64-darwin:
     name: Bazel Test macOS Apple Silicon
     timeout-minutes: 120
@@ -279,7 +278,6 @@ jobs:
         with:
           name: pocket-ic-server-arm64-darwin
           path: ./build/pocket-ic-server-arm64-darwin
-=======
   # Upload arm64-linux artifacts, retrieved from the arm64 runner build.
   upload-arm64-linux-artifacts:
     name: Upload arm64 linux artifacts
@@ -321,7 +319,6 @@ jobs:
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ON_DIFF_ONLY: ${{ needs.config.outputs.diff_only }}
           RELEASE_BUILD: ${{ needs.config.outputs.release_build }}
->>>>>>> master
   bazel-build-fuzzers:
     name: Bazel Build Fuzzers
     runs-on:
