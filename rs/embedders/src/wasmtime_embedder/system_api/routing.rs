@@ -11,10 +11,11 @@ use ic_management_canister_types_private::{
     ECDSAPublicKeyArgs, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
     Payload, ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs,
-    ReadCanisterSnapshotMetadataArgs, ReshareChainKeyArgs, SchnorrPublicKeyArgs, SignWithECDSAArgs,
-    SignWithSchnorrArgs, StoredChunksArgs, SubnetInfoArgs, TakeCanisterSnapshotArgs,
-    UninstallCodeArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs, VetKdDeriveKeyArgs, VetKdPublicKeyArgs,
+    ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs, ReshareChainKeyArgs,
+    SchnorrPublicKeyArgs, SignWithECDSAArgs, SignWithSchnorrArgs, StoredChunksArgs, SubnetInfoArgs,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
+    VetKdDeriveKeyArgs, VetKdPublicKeyArgs,
 };
 use ic_replicated_state::NetworkTopology;
 use itertools::Itertools;
@@ -337,6 +338,11 @@ pub(super) fn resolve_destination(
                 Ic00Method::UploadCanisterSnapshotData,
                 network_topology,
             )
+        }
+        Ok(Ic00Method::RenameCanister) => {
+            let args = RenameCanisterArgs::decode(payload)?;
+            let canister_id = args.get_canister_id();
+            route_canister_id(canister_id, Ic00Method::RenameCanister, network_topology)
         }
         Err(_) => Err(ResolveDestinationError::MethodNotFound(
             method_name.to_string(),
