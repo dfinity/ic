@@ -87,9 +87,9 @@ runs:
             # errors).
             #
             # To work around this, we build jemalloc separately.
-            if [ $(uname -o) != "Darwin" ]; then
-              bazel build "${bazel_args[@]}" @@jemalloc//:libjemalloc
-            fi
+            # if [ $(uname -o) != "Darwin" ]; then
+            #   bazel build "${bazel_args[@]}" @@jemalloc//:libjemalloc
+            # fi
 
             if [[ $diff_only == "true" ]]; then
                 target_pattern_file=$(mktemp)
