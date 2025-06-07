@@ -30,7 +30,6 @@ members = [
     "rs/bitcoin/service",
     "rs/bitcoin/ckbtc/agent",
     "rs/bitcoin/ckbtc/minter",
-    "rs/bitcoin/ckbtc/kyt",
     "rs/bitcoin/consensus",
     "rs/bitcoin/checker",
     "rs/bitcoin/mock",
