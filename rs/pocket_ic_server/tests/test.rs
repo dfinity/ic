@@ -3,19 +3,12 @@ use candid::{Encode, Principal};
 use ic_agent::agent::CallResponse;
 use ic_cdk::api::management_canister::main::CanisterIdRecord;
 use ic_cdk::api::management_canister::provisional::ProvisionalCreateCanisterWithCyclesArgument;
-use ic_interfaces_registry::{
-    RegistryDataProvider, RegistryVersionedRecord, ZERO_REGISTRY_VERSION,
-};
 use ic_management_canister_types_private::ProvisionalCreateCanisterWithCyclesArgs;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_registry_transport::pb::v1::{
-    registry_mutation::Type, RegistryAtomicMutateRequest, RegistryMutation,
-};
 use ic_utils::interfaces::ManagementCanister;
 use nix::sys::signal::Signal;
 use pocket_ic::common::rest::{InstanceConfig, SubnetConfigSet, SubnetKind};
 use pocket_ic::{update_candid, PocketIc, PocketIcBuilder, PocketIcState};
-use registry_canister::init::RegistryCanisterInitPayload;
 use reqwest::blocking::Client;
 use reqwest::StatusCode;
 use slog::Level;
@@ -136,6 +129,7 @@ fn test_creation_of_instance_extended() {
         nonmainnet_features: false,
         log_level: None,
         bitcoind_addr: None,
+        icp_features: None,
     };
     let response = client
         .post(url.join("instances").unwrap())
@@ -459,12 +453,11 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
         .build();
 
     // Check the registry version.
-    // The registry version should be 5 as we have two subnets on the PocketIC instance,
-    // every subnet creation bumps the registry version twice, and initial registry records
-    // are added at a separate registry version.
+    // The registry version should be 2 as we have two subnets on the PocketIC instance
+    // and every subnet is created at a separate registry version.
     let registry_proto_path = state_dir_path_buf.join("registry.proto");
     let registry_data_provider = ProtoRegistryDataProvider::load_from_file(registry_proto_path);
-    assert_eq!(registry_data_provider.latest_version(), 5.into());
+    assert_eq!(registry_data_provider.latest_version(), 2.into());
 
     // There is one application subnet in the initial topology.
     let initial_topology = pic.topology();
@@ -485,11 +478,11 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     deploy_counter_canister_to_id(&pic, spec_canister_id, 3);
 
     // Check the registry version.
-    // The registry version should be 7 as a new subnet has been created and
-    // every subnet creation bumps the registry version twice.
+    // The registry version should be 3 as we now have three subnets on the PocketIC instance
+    // and every subnet is created at a separate registry version.
     let registry_proto_path = state_dir_path_buf.join("registry.proto");
     let registry_data_provider = ProtoRegistryDataProvider::load_from_file(registry_proto_path);
-    assert_eq!(registry_data_provider.latest_version(), 7.into());
+    assert_eq!(registry_data_provider.latest_version(), 3.into());
 
     // There are two application subnets in the final topology.
     let final_topology = pic.topology();
@@ -1065,74 +1058,6 @@ fn test_subnet_read_state() {
         let metrics = agent.read_state_subnet_metrics(app_subnet).await.unwrap();
         assert_eq!(metrics.num_canisters, 1);
     })
-}
-
-fn record_to_mutation(r: RegistryVersionedRecord<Vec<u8>>) -> RegistryMutation {
-    let mut m = RegistryMutation::default();
-
-    let t = if r.value.is_none() {
-        Type::Delete
-    } else {
-        Type::Insert
-    };
-    m.set_mutation_type(t);
-    m.key = r.key.as_bytes().to_vec();
-    m.value = r.value.unwrap_or_default();
-
-    m
-}
-
-#[test]
-fn registry_canister() {
-    // Create a temporary state directory persisted throughout the test.
-    let state_dir = TempDir::new().unwrap();
-    let state_dir_path_buf = state_dir.path().to_path_buf();
-
-    // Create a PocketIC instance with NNS, II and two app subnets.
-    let pic = PocketIcBuilder::new()
-        .with_state_dir(state_dir_path_buf.clone())
-        .with_nns_subnet()
-        .with_ii_subnet()
-        .with_application_subnet()
-        .with_application_subnet()
-        .build();
-
-    // Encode the local registry into a registry canister initial payload.
-    let registry_proto_path = state_dir_path_buf.join("registry.proto");
-    let registry_data_provider = ProtoRegistryDataProvider::load_from_file(registry_proto_path);
-    let updates = registry_data_provider
-        .get_updates_since(ZERO_REGISTRY_VERSION)
-        .unwrap();
-    let mutations = updates
-        .into_iter()
-        .map(record_to_mutation)
-        .collect::<Vec<RegistryMutation>>();
-    let mutate_request = RegistryAtomicMutateRequest {
-        mutations,
-        ..Default::default()
-    };
-    let registry_init_payload = RegistryCanisterInitPayload {
-        mutations: vec![mutate_request],
-    };
-
-    // Create the registry canister.
-    let registry_canister_id = Principal::from_text("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
-    let actual_registry_canister_id = pic
-        .create_canister_with_id(None, None, registry_canister_id)
-        .unwrap();
-    assert_eq!(registry_canister_id, actual_registry_canister_id);
-
-    // Install the registry canister.
-    let registry_path = std::env::var_os("REGISTRY_WASM")
-        .expect("Missing REGISTRY_WASM (path to REGISTRY wasm) in env.");
-    let registry_canister_wasm =
-        std::fs::read(registry_path).expect("Could not read REGISTRY wasm file.");
-    pic.install_canister(
-        registry_canister_id,
-        registry_canister_wasm,
-        Encode!(&registry_init_payload).unwrap(),
-        None,
-    );
 }
 
 #[test]
