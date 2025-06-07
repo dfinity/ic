@@ -213,6 +213,7 @@ type Init = record {
   restricted_countries : opt Countries;
   min_icp_e8s : opt nat64;
   max_direct_participation_icp_e8s : opt nat64;
+  testflight: opt bool;
 };
 
 type InvalidUserAmount = record {
