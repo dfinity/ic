@@ -73,6 +73,9 @@ const MIN_OPERATION_DELAY: Duration = Duration::from_millis(100);
 // The minimum delay between consecutive attempts to read the graph in auto progress mode.
 const READ_GRAPH_DELAY: Duration = Duration::from_millis(100);
 
+// Produced by the HTTP gateway upon HTTP errors from the backend.
+const UPSTREAM_ERROR: &str = "upstream error";
+
 pub const STATE_LABEL_HASH_SIZE: usize = 16;
 
 /// Uniquely identifies a state.
@@ -625,7 +628,7 @@ impl ApiState {
             );
             proxy(Url::parse(&url).unwrap(), request, &client)
                 .await
-                .map_err(|_| ErrorCause("error: upstream_error".to_string()))
+                .map_err(|_| ErrorCause(UPSTREAM_ERROR.to_string()))
         }
 
         let https_config = if let Some(ref https_config) = http_gateway_config.https_config {
@@ -666,8 +669,8 @@ impl ApiState {
             .unwrap();
         time::timeout(DEFAULT_SYNC_WAIT_DURATION, agent.fetch_root_key())
             .await
-            .map_err(|_| format!("Timed out fetching root key from {}", replica_url))?
-            .map_err(|e| e.to_string())?;
+            .map_err(|_| format!("{}: timeout", UPSTREAM_ERROR))?
+            .map_err(|e| format!("{}: {}", UPSTREAM_ERROR, e))?;
 
         let handle = Handle::new();
         let axum_handle = handle.clone();
