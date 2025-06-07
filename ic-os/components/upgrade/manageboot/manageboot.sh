@@ -105,7 +105,7 @@ usage() {
 Usage:
   manageboot.sh [ -f grubenvfile] system_type action
 
-  -f specify alternative grubenv file (defaults to /boot/grub/grubenv).
+  -f specify alternative grubenv file (defaults to /grub/grubenv).
      Primarily useful for testing
 
   Arguments:
@@ -166,7 +166,7 @@ if [ $(id -u) != 0 ]; then
 fi
 
 # Parsing options first
-GRUBENV_FILE=/boot/grub/grubenv
+GRUBENV_FILE=/grub/grubenv
 while getopts ":f:" OPT; do
     case "${OPT}" in
         f)
