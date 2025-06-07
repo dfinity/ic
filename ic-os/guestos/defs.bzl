@@ -95,8 +95,18 @@ def image_deps(mode, malicious = False):
 
     # Update dev rootfs
     if "dev" in mode:
+        # Allow console access
+        deps["rootfs"].update({"//ic-os/guestos/context:allow_console_root": "/etc/allow_console_root:0644"})
+
+        # Dev config tool
         deps["rootfs"].pop("//rs/ic_os/release:config", None)
         deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
-        deps["rootfs"].update({"//ic-os/guestos/context:allow_console_root": "/etc/allow_console_root:0644"})
+
+    # Update recovery rootfs
+    if "recovery" in mode:
+        deps["rootfs"].update({
+            "//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh": "/opt/ic/bin/guestos-recovery-engine.sh:0755",
+            "//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service": "/etc/systemd/system/guestos-recovery-engine.service:0644",
+        })
 
     return deps

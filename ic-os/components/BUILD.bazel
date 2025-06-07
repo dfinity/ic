@@ -47,6 +47,8 @@ REPO_COMPONENTS = glob(
 ignored_repo_components = [
     "networking/dev-certs/canister_http_test_ca.key",
     "networking/dev-certs/root_cert_gen.sh",
+    "misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh",
+    "misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service",
 ]
 
 check_unused_components_test(
