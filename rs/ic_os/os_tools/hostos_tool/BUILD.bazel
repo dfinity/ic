@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -7,10 +7,21 @@ DEPENDENCIES = [
     "//rs/ic_os/config:config_lib",
     "//rs/ic_os/config_types",
     "//rs/ic_os/deterministic_ips",
+    "//rs/ic_os/metrics_tool",
     "//rs/ic_os/network",
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",
     "@crate_index//:clap",
+    "@crate_index//:systemd",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+    "@crate_index//:virt",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:nix",
+    "@crate_index//:regex",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -27,4 +38,10 @@ rust_binary(
         "@platforms//os:linux",
     ],
     deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "hostos_tool_test",
+    crate = ":hostos_tool",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

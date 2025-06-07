@@ -1300,6 +1300,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "syscalls": crate.spec(
                 version = "^0.6.18",
             ),
+            "systemd": crate.spec(
+                version = "0.10",
+            ),
             "tar": crate.spec(
                 version = "^0.4.38",
             ),
@@ -1463,6 +1466,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "v4",
                     "serde",
                 ],
+            ),
+            "virt": crate.spec(
+                version = "0.4",
             ),
             "vsock": crate.spec(
                 version = "^0.4",
