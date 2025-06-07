@@ -918,6 +918,7 @@ impl SnsInitPayload {
         self.join_validation_results(&validation_fns)
     }
 
+    #[allow(clippy::manual_ok_err)]
     fn join_validation_results(
         &self,
         validation_fns: &[Result<(), String>],
