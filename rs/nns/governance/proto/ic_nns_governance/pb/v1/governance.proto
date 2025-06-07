@@ -2060,8 +2060,6 @@ message UpdateCanisterSettings {
 // information about the NNS governance system that must be kept
 // across upgrades of the NNS governance system.
 message Governance {
-  // Current set of neurons.
-  map<fixed64, Neuron> neurons = 1;
   // Proposals.
   map<uint64, ProposalData> proposals = 2;
   // The transfers that have been made to stake new neurons, but
@@ -2322,6 +2320,10 @@ message Governance {
   // Reserved id for deprecated `topic_followee_index`
   reserved 22;
   reserved "topic_followee_index";
+
+  // Reserved id for deprecated `neurons`
+  reserved 1;
+  reserved "neurons";
 }
 
 message XdrConversionRate {

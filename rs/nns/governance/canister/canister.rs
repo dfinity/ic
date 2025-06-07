@@ -137,9 +137,8 @@ fn canister_init_(init_payload: ApiGovernanceProto) {
         init_payload.neurons.len()
     );
 
-    let governance_proto = InternalGovernanceProto::from(init_payload);
     set_governance(Governance::new(
-        governance_proto,
+        init_payload,
         Arc::new(CanisterEnv::new()),
         Arc::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
         Arc::new(CMCCanister::<CdkRuntime>::new()),
@@ -178,11 +177,10 @@ fn canister_post_upgrade() {
 
     println!(
         "{}canister_post_upgrade: Initializing with: economics: \
-          {:?}, genesis_timestamp_seconds: {}, neuron count: {}, xdr_conversion_rate: {:?}",
+          {:?}, genesis_timestamp_seconds: {}, xdr_conversion_rate: {:?}",
         LOG_PREFIX,
         restored_state.economics,
         restored_state.genesis_timestamp_seconds,
-        restored_state.neurons.len(),
         restored_state.xdr_conversion_rate,
     );
 

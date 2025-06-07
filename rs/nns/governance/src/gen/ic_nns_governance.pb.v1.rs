@@ -2917,9 +2917,6 @@ pub mod update_canister_settings {
 #[compare_default]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Governance {
-    /// Current set of neurons.
-    #[prost(btree_map = "fixed64, message", tag = "1")]
-    pub neurons: ::prost::alloc::collections::BTreeMap<u64, Neuron>,
     /// Proposals.
     #[prost(btree_map = "uint64, message", tag = "2")]
     pub proposals: ::prost::alloc::collections::BTreeMap<u64, ProposalData>,
