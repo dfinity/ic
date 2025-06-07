@@ -81,10 +81,7 @@ impl<R: Runtime, L: Sink> EvmRpcClient<R, L> {
         .await
     }
 
-    pub async fn eth_fee_history(
-        &self,
-        args: FeeHistoryArgs,
-    ) -> MultiRpcResult<Option<FeeHistory>> {
+    pub async fn eth_fee_history(&self, args: FeeHistoryArgs) -> MultiRpcResult<FeeHistory> {
         self.call_internal(
             "eth_feeHistory",
             self.override_rpc_config.eth_fee_history.clone(),
