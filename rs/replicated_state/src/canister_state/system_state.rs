@@ -398,6 +398,9 @@ pub struct SystemState {
     /// This amount contributes to the total `memory_usage` of the canister as
     /// reported by `CanisterState::memory_usage`.
     pub snapshots_memory_usage: NumBytes,
+
+    /// Environment variables.
+    pub environment_variables: BTreeMap<String, String>,
 }
 
 /// A wrapper around the different canister statuses.
@@ -766,6 +769,7 @@ impl SystemState {
             reserved_balance: Cycles::zero(),
             reserved_balance_limit: None,
             memory_allocation: MemoryAllocation::BestEffort,
+            environment_variables: Default::default(),
             wasm_memory_threshold: NumBytes::new(0),
             freeze_threshold,
             status,
@@ -839,6 +843,8 @@ impl SystemState {
             wasm_memory_limit,
             next_snapshot_id,
             snapshots_memory_usage,
+            //TODO(EXC-2055): Read the environment variables from the checkpoint
+            environment_variables: Default::default(),
         };
         system_state.check_invariants().unwrap_or_else(|msg| {
             metrics.observe_broken_soft_invariant(msg);
@@ -2329,6 +2335,7 @@ pub mod testing {
             wasm_memory_limit: Default::default(),
             next_snapshot_id: Default::default(),
             snapshots_memory_usage: Default::default(),
+            environment_variables: Default::default(),
         };
     }
 }
