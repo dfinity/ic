@@ -2,12 +2,14 @@ use std::{
     fs::{self},
     io::Write,
     path::PathBuf,
+    str::FromStr,
 };
 
 use anyhow::{bail, Context, Error};
 use clap::Parser;
 
-use config::deployment_json::{Deployment, DeploymentSettings, Logging, Nns, Resources};
+use config::deployment_json::{Deployment, DeploymentSettings, Logging, Nns, VmResources};
+use config_types::DeploymentEnvironment;
 use setupos_image_config::{write_config, ConfigIni, DeploymentConfig};
 
 #[derive(Parser)]
@@ -70,22 +72,22 @@ async fn main() -> Result<(), Error> {
     let deployment_settings = DeploymentSettings {
         deployment: Deployment {
             mgmt_mac: cli.deployment.mgmt_mac,
-            name: cli
-                .deployment
-                .deployment_environment
-                .unwrap_or("mainnet".to_string()),
+            deployment_environment: match cli.deployment.deployment_environment {
+                Some(env) => DeploymentEnvironment::from_str(&env)?,
+                None => DeploymentEnvironment::Mainnet,
+            },
         },
         logging: Logging {
-            hosts: cli.deployment.elasticsearch_hosts.unwrap_or("".to_string()),
-            tags: cli.deployment.elasticsearch_tags,
+            elasticsearch_hosts: cli.deployment.elasticsearch_hosts,
+            elasticsearch_tags: cli.deployment.elasticsearch_tags,
         },
         nns: Nns {
             url: cli.deployment.nns_url.into_iter().collect(),
         },
-        resources: Resources {
+        vm_resources: VmResources {
             memory: cli.deployment.memory_gb.unwrap_or(490),
-            cpu: cli.deployment.cpu,
-            nr_of_vcpus: cli.deployment.nr_of_vcpus,
+            cpu: cli.deployment.cpu.unwrap_or("kvm".to_string()),
+            nr_of_vcpus: cli.deployment.nr_of_vcpus.unwrap_or(64),
         },
     };
 
