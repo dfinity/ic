@@ -100,8 +100,7 @@ function process_bootstrap() {
         fi
     done
 
-    # TODO(NODE-1518): remove parsing for old config
-    for FILE in config.json filebeat.conf network.conf reward.conf nns.conf backup.conf malicious_behavior.conf query_stats.conf bitcoind_addr.conf jaeger_addr.conf socks_proxy.conf; do
+    for FILE in config.json; do
         if [ -e "${TMPDIR}/${FILE}" ]; then
             echo "Setting up ${FILE}"
             cp "${TMPDIR}/${FILE}" "${CONFIG_ROOT}/${FILE}"
