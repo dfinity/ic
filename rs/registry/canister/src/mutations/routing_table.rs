@@ -72,7 +72,7 @@ pub(crate) fn mutations_for_canister_ranges(
     // diff here.
     let version = registry.latest_version();
     let (range_starts, current_shards): (Vec<u64>, BTreeMap<u64, pb::RoutingTable>) =
-        get_key_family_iter_at_version(&registry, CANISTER_RANGES_PREFIX, version)
+        get_key_family_iter_at_version(registry, CANISTER_RANGES_PREFIX, version)
             .map(|(k, v)| {
                 let bytes = hex::decode(k).unwrap();
                 let mut buf = [0u8; 8];
@@ -149,7 +149,7 @@ pub(crate) fn mutations_for_canister_ranges(
         // on (None, None).
         match (old_shard_iterator.peek(), new_shard_iterator.peek()) {
             (Some(&(o_key, old_rt_fragment)), Some(&(n_key, new_rt_fragment))) => match o_key
-                .cmp(&n_key)
+                .cmp(n_key)
             {
                 Ordering::Less => {
                     println!("Less {} {}", o_key, n_key);
@@ -428,7 +428,7 @@ mod tests {
     use std::ops::{Range, RangeBounds};
 
     use super::*;
-    use crate::mutations::node_management::common::get_key_family_iter;
+    use crate::mutations::node_management::common::{get_key_family, get_key_family_iter};
     use assert_matches::assert_matches;
     use ic_base_types::CanisterId;
     use ic_registry_keys::CANISTER_RANGES_PREFIX;
@@ -486,25 +486,27 @@ mod tests {
             PrincipalId::try_from(registry.get_subnet_list_record().subnets.first().unwrap())
                 .unwrap();
 
-        let mut rt = RoutingTable::new();
-        rt.insert(
-            CanisterIdRange {
-                start: CanisterId::from(5000),
-                end: CanisterId::from(6000),
-            },
-            system_subnet.into(),
-        )
-        .unwrap();
-        rt.insert(
-            CanisterIdRange {
-                start: CanisterId::from(6001),
-                end: CanisterId::from(7000),
-            },
-            system_subnet.into(),
-        )
-        .unwrap();
+        let mut original = RoutingTable::new();
+        original
+            .insert(
+                CanisterIdRange {
+                    start: CanisterId::from(5000),
+                    end: CanisterId::from(6000),
+                },
+                system_subnet.into(),
+            )
+            .unwrap();
+        original
+            .insert(
+                CanisterIdRange {
+                    start: CanisterId::from(6001),
+                    end: CanisterId::from(7000),
+                },
+                system_subnet.into(),
+            )
+            .unwrap();
 
-        let new_routing_table = pb::RoutingTable::from(rt.clone());
+        let new_routing_table = pb::RoutingTable::from(original.clone());
         let mutations = vec![upsert(
             make_routing_table_record_key().as_bytes(),
             new_routing_table.encode_to_vec(),
@@ -516,52 +518,20 @@ mod tests {
 
         assert_eq!(recovered, RoutingTable::new());
 
-        // Now we are in a situation where there is no difference between what's stored in routing_table
-        // and what's being saved BUT we should still generate canister_range_* records b/c they're empty
-        let mutations = routing_table_into_registry_mutation(&registry, rt.clone());
+        // Now we are in a situation where there is no difference between what's stored under the
+        // `routing_table` key and what's being saved BUT we should still generate canister_ranges_*
+        // records b/c they're empty
+        let mutations = routing_table_into_registry_mutation(&registry, original.clone());
         registry.maybe_apply_mutation_internal(mutations);
 
         let recovered = registry
             .get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
 
-        assert_eq!(recovered, rt);
+        assert_eq!(recovered, original);
     }
 
     #[test]
-    fn test_routing_table_saves_as_canister_range_records_correctly() {
-        let mut registry = invariant_compliant_registry(0);
-        let system_subnet =
-            PrincipalId::try_from(registry.get_subnet_list_record().subnets.first().unwrap())
-                .unwrap();
-
-        let mut rt = RoutingTable::new();
-        rt.insert(
-            CanisterIdRange {
-                start: CanisterId::from(5000),
-                end: CanisterId::from(6000),
-            },
-            system_subnet.into(),
-        )
-        .unwrap();
-        rt.insert(
-            CanisterIdRange {
-                start: CanisterId::from(6001),
-                end: CanisterId::from(7000),
-            },
-            system_subnet.into(),
-        )
-        .unwrap();
-        let mutations = routing_table_into_registry_mutation(&registry, rt.clone());
-        registry.maybe_apply_mutation_internal(mutations);
-
-        let recovered = registry
-            .get_routing_table_from_canister_range_records_or_panic(registry.latest_version());
-
-        assert_eq!(recovered, rt);
-    }
-
-    #[test]
-    fn test_routing_table_updates_and_deletes_canister_ranges_as_expected() {
+    fn test_routing_table_updates_and_deletes_entries_as_expected() {
         let mut registry = invariant_compliant_registry(0);
         let system_subnet =
             PrincipalId::try_from(registry.get_subnet_list_record().subnets.first().unwrap())
@@ -619,33 +589,13 @@ mod tests {
     }
 
     /// Helper to build a RoutingTable from a Vec of ((start, end), subnet_id)
-    fn make_routing_table(ranges: Vec<((u64, u64), SubnetId)>) -> RoutingTable {
-        let mut rt = RoutingTable::new();
-        for ((start, end), subnet) in ranges {
-            rt.insert(
-                CanisterIdRange {
-                    start: CanisterId::from(start),
-                    end: CanisterId::from(end),
-                },
-                subnet,
-            )
-            .expect("Couldn't insert");
-        }
-        rt
-    }
-
-    fn make_entry(start: u64, end: u64, subnet: SubnetId) -> pb::routing_table::Entry {
-        pb::routing_table::Entry {
-            range: Some(pb::CanisterIdRange {
-                start_canister_id: Some(CanisterId::from(start).into()),
-                end_canister_id: Some(CanisterId::from(end).into()),
-            }),
-            subnet_id: Some(pb_subnet_id(subnet)),
-        }
+    fn rt_from_ranges(ranges: Vec<((u64, u64), SubnetId)>) -> RoutingTable {
+        let pb_rt = shard_pb_rt(ranges);
+        RoutingTable::try_from(pb_rt).unwrap()
     }
 
     /// Given a list of (start,end,subnet), spit back a `pb::RoutingTable` fragment.
-    fn shard(ranges: Vec<((u64, u64), SubnetId)>) -> pb::RoutingTable {
+    fn shard_pb_rt(ranges: Vec<((u64, u64), SubnetId)>) -> pb::RoutingTable {
         let mut rt = pb::RoutingTable {
             entries: Vec::new(),
         };
@@ -666,13 +616,13 @@ mod tests {
         shards
             .into_iter()
             .map(|(start, ranges)| {
-                let rt = shard(ranges);
+                let rt = shard_pb_rt(ranges);
                 (start, rt)
             })
             .collect()
     }
 
-    fn routing_table_from_shards(shards: &Vec<(u64, pb::RoutingTable)>) -> RoutingTable {
+    fn rt_from_shards(shards: &Vec<(u64, pb::RoutingTable)>) -> RoutingTable {
         let entries = shards
             .iter()
             .flat_map(|(_, rt_proto)| rt_proto.entries.clone())
@@ -743,10 +693,13 @@ mod tests {
     #[test]
     fn empty_old_and_new_yields_no_mutations() {
         let mut registry = invariant_compliant_registry(0);
-        let old = make_routing_table(vec![]);
+        let old = rt_from_shards(&vec![]);
         registry.apply_mutations_for_test(mutations_for_canister_ranges(&registry, &old));
 
-        let new = make_routing_table(vec![]);
+        let entries = get_key_family::<pb::RoutingTable>(&registry, CANISTER_RANGES_PREFIX);
+        assert!(entries.is_empty());
+
+        let new = rt_from_shards(&vec![]);
         let mutations = mutations_for_canister_ranges(&registry, &new);
         assert!(mutations.is_empty());
 
@@ -760,10 +713,10 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
         let subnet = SubnetId::new(PrincipalId::new_user_test_id(1));
         let old_shards = shards(vec![(0, vec![((10, 20), subnet)])]);
-        let old = routing_table_from_shards(&old_shards);
+        let old = rt_from_shards(&old_shards);
         registry.apply_mutations_for_test(mutations_for_canister_ranges(&registry, &old));
 
-        let new = make_routing_table(vec![]);
+        let new = rt_from_shards(&vec![]);
         let mutations = mutations_for_canister_ranges(&registry, &new);
 
         let expected = vec![delete(make_canister_ranges_key(CanisterId::from(0)))];
@@ -774,11 +727,11 @@ mod tests {
     fn up_to_limit_all_entries_are_in_same_table() {
         let mut registry = invariant_compliant_registry(0);
         let subnet = SubnetId::new(PrincipalId::new_user_test_id(2));
-        let old = make_routing_table(vec![]);
+        let old = rt_from_shards(&vec![]);
         registry.apply_mutations_for_test(mutations_for_canister_ranges(&registry, &old));
 
         let new_ranges = make_rt_entry_definitions(1..=20, 10);
-        let new = make_routing_table(new_ranges);
+        let new = rt_from_ranges(new_ranges);
         let mutations = mutations_for_canister_ranges(&registry, &new);
 
         let expected_pb_rt = pb::RoutingTable::from(new);
@@ -794,30 +747,24 @@ mod tests {
     fn new_has_enough_extra_ranges_generates_upsert_with_new_range() {
         let mut registry = invariant_compliant_registry(0);
         let subnet = SubnetId::new(PrincipalId::new_user_test_id(2));
-        let old = make_routing_table(vec![]);
+        let old = rt_from_ranges(vec![]);
         registry.apply_mutations_for_test(mutations_for_canister_ranges(&registry, &old));
 
-        // TODO make a function to create these sets of rt entries
-        // so I can pump out a lot and show the way that they create splits
-        // etc..
-
         let new_ranges = make_rt_entry_definitions(1..=21, 10);
-        let new = make_routing_table(new_ranges);
+        let new = rt_from_ranges(new_ranges);
         let mutations = mutations_for_canister_ranges(&registry, &new);
 
-        let expected_pb_rt_1 =
-            pb::RoutingTable::from(make_routing_table(make_rt_entry_definitions(1..=10, 10)));
-        let expected_pb_rt_2 =
-            pb::RoutingTable::from(make_routing_table(make_rt_entry_definitions(11..=21, 10)));
+        let shard_1 = shard_pb_rt(make_rt_entry_definitions(1..=10, 10));
+        let shard_2 = shard_pb_rt(make_rt_entry_definitions(11..=21, 10));
 
         let expected = vec![
             upsert(
                 make_canister_ranges_key(CanisterId::from(0)),
-                expected_pb_rt_1.encode_to_vec(),
+                shard_1.encode_to_vec(),
             ),
             upsert(
                 make_canister_ranges_key(CanisterId::from(110)),
-                expected_pb_rt_2.encode_to_vec(),
+                shard_2.encode_to_vec(),
             ),
         ];
 
@@ -828,10 +775,10 @@ mod tests {
     fn identical_range_generates_no_mutation() {
         let mut registry = invariant_compliant_registry(0);
         let subnet = SubnetId::new(PrincipalId::new_user_test_id(3));
-        let old = make_routing_table(vec![((100, 200), subnet)]);
+        let old = rt_from_ranges(vec![((100, 200), subnet)]);
         registry.apply_mutations_for_test(mutations_for_canister_ranges(&registry, &old));
 
-        let new = make_routing_table(vec![((100, 200), subnet)]);
+        let new = rt_from_ranges(vec![((100, 200), subnet)]);
         let mutations = mutations_for_canister_ranges(&registry, &new);
 
         let expected = vec![];
@@ -854,25 +801,23 @@ mod tests {
             (110, vec![]),
             (200, make_rt_entry_definitions(20..=41, 10)),
         ]);
-        let new = routing_table_from_shards(&new_shards);
+        let new = rt_from_shards(&new_shards);
         // Note, the shards are not passed in directly, so the logic has to work by figuring out
         // what changes given the existing shards it ought to make.
         let mutations = mutations_for_canister_ranges(&registry, &new);
 
-        let expected_pb_rt_1 =
-            pb::RoutingTable::from(make_routing_table(make_rt_entry_definitions(20..=29, 10)));
-        let expected_pb_rt_2 =
-            pb::RoutingTable::from(make_routing_table(make_rt_entry_definitions(30..=41, 10)));
+        let expected_shard_1 = shard_pb_rt(make_rt_entry_definitions(20..=29, 10));
+        let expected_shard_2 = shard_pb_rt(make_rt_entry_definitions(30..=41, 10));
 
         let expected = vec![
             delete(make_canister_ranges_key(CanisterId::from(110))),
             upsert(
                 make_canister_ranges_key(CanisterId::from(200)),
-                expected_pb_rt_1.encode_to_vec(),
+                expected_shard_1.encode_to_vec(),
             ),
             upsert(
                 make_canister_ranges_key(CanisterId::from(300)),
-                expected_pb_rt_2.encode_to_vec(),
+                expected_shard_2.encode_to_vec(),
             ),
         ];
         compare_rt_mutations(expected, mutations);
