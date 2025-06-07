@@ -441,7 +441,7 @@ fn test_gateway_invalid_forward_to() {
     for (forward_to, expected_err) in [
         (
             HttpGatewayBackend::Replica(invalid_backend_url.to_string()),
-            "upstream error",
+            "error: upstream_error",
         ),
         (
             HttpGatewayBackend::PocketIcInstance(invalid_instance_id),

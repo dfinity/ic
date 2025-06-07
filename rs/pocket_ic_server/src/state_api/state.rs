@@ -74,7 +74,7 @@ const MIN_OPERATION_DELAY: Duration = Duration::from_millis(100);
 const READ_GRAPH_DELAY: Duration = Duration::from_millis(100);
 
 // Produced by the HTTP gateway upon HTTP errors from the backend.
-const UPSTREAM_ERROR: &str = "upstream error";
+const UPSTREAM_ERROR: &str = "error: upstream_error";
 
 pub const STATE_LABEL_HASH_SIZE: usize = 16;
 
@@ -669,8 +669,8 @@ impl ApiState {
             .unwrap();
         time::timeout(DEFAULT_SYNC_WAIT_DURATION, agent.fetch_root_key())
             .await
-            .map_err(|_| format!("{}: timeout", UPSTREAM_ERROR))?
-            .map_err(|e| format!("{}: {}", UPSTREAM_ERROR, e))?;
+            .map_err(|_| format!("{} (timeout)", UPSTREAM_ERROR))?
+            .map_err(|e| format!("{} ({})", UPSTREAM_ERROR, e))?;
 
         let handle = Handle::new();
         let axum_handle = handle.clone();
