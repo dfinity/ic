@@ -1,6 +1,6 @@
 ---
 - name: Stop guest
-  shell: |
+  ansible.builtin.shell: |
     set -eExu
     virsh stop "{{ item }}"
     virsh autostart --disable "{{ item }}"

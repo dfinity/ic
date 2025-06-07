@@ -127,11 +127,14 @@ crate_universe_dependencies()
 
 rust_register_toolchains(
     edition = "2021",
-    strip_level = {"x86_64-unknown-linux-gnu": {
-        "dbg": "none",
-        "fastbuild": "none",
-        "opt": "none",
-    }},
+    strip_level = {
+        "x86_64-unknown-linux-gnu": {
+            "dbg": "none",
+            "fastbuild": "none",
+            "opt": "none",
+        },
+        "nop": {},
+    },
     # The nightly version is required to compile fuzz tests from Bazel.
     # The version below is chosen so that it is in sync with the non-nightly version.
     versions = [

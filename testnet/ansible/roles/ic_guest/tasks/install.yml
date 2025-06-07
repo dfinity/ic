@@ -1,6 +1,6 @@
 ---
 - name: Wait for replica to listen on all NNS nodes on port 8080
-  include_tasks:
+  ansible.builtin.include_tasks:
     file: url_waitfor_connect.yml
   loop: "{{ groups['nns'] }}"
   loop_control:
@@ -8,21 +8,21 @@
   tags: [ic_guest]
 
 - name: Check if the initial neuron config exists
-  stat:
+  ansible.builtin.stat:
     path: "{{ inventory_file | dirname }}/initial-neurons.csv"
   register: stat_result
   become: false
   delegate_to: localhost
   run_once: true
 
-- debug:
+- ansible.builtin.debug:
     msg: Using the initial neuron configuration from {{ inventory_file | dirname }}/initial-neurons.csv
   delegate_to: localhost
   run_once: true
   when: stat_result.stat.exists
 
 - name: Set initial_neurons to path to csv file it is exists and is not set already
-  set_fact:
+  ansible.builtin.set_fact:
     initial_neurons: "{{ stat_result.stat.path }}"
   delegate_to: localhost
   run_once: true
@@ -30,14 +30,15 @@
   when: stat_result.stat.exists and initial_neurons is undefined
 
 - name: Print value of initial_neurons
-  debug:
+  ansible.builtin.debug:
     var: initial_neurons
+    cmd: ""
   delegate_to: localhost
   run_once: true
   become: false
 
 - name: Get Custom NNS canisters
-  shell: |
+  ansible.builtin.shell: |
     set -exuo pipefail
       echo "Media path: {{ ic_media_path }}"
       echo "Adding canisters from '{{ custom_canister_dir }}'"
@@ -53,12 +54,13 @@
   tags: [ic_guest]
   when: custom_canister_dir is defined
 
-- debug:
+- ansible.builtin.debug:
     var: nns_canisters.stdout_lines
+    cmd: ""
   when: custom_canister_dir is defined
 
 - name: Install NNS canisters
-  shell: |
+  ansible.builtin.shell: |
     set -exuo pipefail
 
     NODE0_NAME={{ groups['nns'][0] }}
@@ -116,7 +118,7 @@
   tags: [ic_guest]
 
 - name: Wait for all nodes to listen on port 8080
-  include_tasks:
+  ansible.builtin.include_tasks:
     file: url_waitfor_connect.yml
   when:
     - "'subnet_unassigned' not in hostvars[item].group_names and 'api' not in hostvars[item].group_names
