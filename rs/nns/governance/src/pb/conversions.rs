@@ -118,14 +118,14 @@ impl From<pb_api::Neuron> for pb::Neuron {
     }
 }
 
-impl From<pb::neuron::Followees> for pb_api::neuron::Followees {
-    fn from(item: pb::neuron::Followees) -> Self {
+impl From<pb::Followees> for pb_api::neuron::Followees {
+    fn from(item: pb::Followees) -> Self {
         Self {
             followees: item.followees,
         }
     }
 }
-impl From<pb_api::neuron::Followees> for pb::neuron::Followees {
+impl From<pb_api::neuron::Followees> for pb::Followees {
     fn from(item: pb_api::neuron::Followees) -> Self {
         Self {
             followees: item.followees,
