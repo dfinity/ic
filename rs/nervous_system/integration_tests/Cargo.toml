@@ -22,6 +22,7 @@ ic-nervous-system-common = { path = "../common" }
 ic-nervous-system-proto = { path = "../proto" }
 ic-nervous-system-root = { path = "../root" }
 ic-nervous-system-runtime = { path = "../runtime" }
+sns-treasury-manager = { path = "../../sns/treasury_manager" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-governance = { path = "../../nns/governance" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }

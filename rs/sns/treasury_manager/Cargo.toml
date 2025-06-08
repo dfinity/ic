@@ -1,0 +1,12 @@
+[package]
+name = "sns-treasury-manager"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+candid = { workspace = true }
+serde = { workspace = true }
