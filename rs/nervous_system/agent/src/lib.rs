@@ -5,6 +5,7 @@ use std::time::Duration;
 use std::{fmt::Display, future::Future};
 
 pub mod agent_impl;
+pub mod cdk_impl;
 pub mod helpers;
 pub mod icrc2;
 pub mod ledger;
@@ -13,7 +14,6 @@ pub mod mock;
 pub mod nns;
 mod null_request;
 pub mod pocketic_impl;
-pub mod cdk_impl;
 mod registry;
 pub mod sns;
 #[cfg(feature = "test")]
