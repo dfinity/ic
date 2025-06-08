@@ -670,7 +670,7 @@ impl AsErrorHelp for CanisterManagerError {
                 doc_link: "".to_string(),
             },
             CanisterManagerError::InvalidSpecifiedId { .. } => ErrorHelp::UserError {
-                suggestion: "Use a `specified_id` that matches a canister ID on the ICP mainnet.".to_string(),
+                suggestion: "Use a `specified_id` that matches a canister ID on the ICP mainnet and a test environment that supports canister creation with `specified_id` (e.g., PocketIC).".to_string(),
                 doc_link: "".to_string(),
             }
         }
